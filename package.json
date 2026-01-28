@@ -1,0 +1,19 @@
+{
+  "name": "claudeos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reactive AI interface where the AI decides what to show and do next",
+  "scripts": {
+    "dev": "./scripts/dev.sh",
+    "dev:server": "pnpm --filter @claudeos/server dev",
+    "dev:frontend": "pnpm --filter @claudeos/frontend dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

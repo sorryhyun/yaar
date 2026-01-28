@@ -1,28 +1,17 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-*.egg
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# Virtual environments
-.venv/
-venv/
-ENV/
+# Build outputs
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 
 # IDE
 .idea/
@@ -31,38 +20,14 @@ ENV/
 *.swo
 *~
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# Type checking
-.mypy_cache/
-.dmypy.json
-
-# Node/Frontend
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Build outputs
-frontend/dist/
-bundled/*.js
-bundled/*.css
-!bundled/.gitkeep
-
 # OS
 .DS_Store
 Thumbs.db
 
 # Logs
 *.log
+
+# Bundled assets
+bundled/*.js
+bundled/*.css
+!bundled/.gitkeep
