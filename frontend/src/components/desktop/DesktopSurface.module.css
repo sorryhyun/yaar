@@ -1,0 +1,54 @@
+.desktop {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.statusBar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 20px;
+  color: #fff;
+  font-size: 12px;
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+}
+
+.statusDot[data-status="connected"] {
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
+.statusDot[data-status="connecting"] {
+  background: #fbbf24;
+  animation: pulse 1s infinite;
+}
+
+.statusDot[data-status="error"] {
+  background: #f87171;
+}
+
+.statusText {
+  opacity: 0.9;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

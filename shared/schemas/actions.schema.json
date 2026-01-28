@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://claudeos.dev/schemas/actions.json",
+  "title": "OS Actions",
+  "description": "Actions the AI agent can emit to control the desktop",
+  "oneOf": [
+    { "$ref": "#/$defs/windowCreate" },
+    { "$ref": "#/$defs/windowClose" },
+    { "$ref": "#/$defs/windowFocus" },
+    { "$ref": "#/$defs/windowMinimize" },
+    { "$ref": "#/$defs/windowMaximize" },
+    { "$ref": "#/$defs/windowRestore" },
+    { "$ref": "#/$defs/windowMove" },
+    { "$ref": "#/$defs/windowResize" },
+    { "$ref": "#/$defs/windowSetTitle" },
+    { "$ref": "#/$defs/windowSetContent" },
+    { "$ref": "#/$defs/notificationShow" },
+    { "$ref": "#/$defs/notificationDismiss" },
+    { "$ref": "#/$defs/toastShow" },
+    { "$ref": "#/$defs/toastDismiss" }
+  ],
+  "$defs": {
+    "bounds": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "minimum": 100 },
+        "h": { "type": "number", "minimum": 50 }
+      },
+      "required": ["x", "y", "w", "h"]
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "renderer": {
+          "type": "string",
+          "enum": ["markdown", "table", "html", "text"]
+        },
+        "data": {}
+      },
+      "required": ["renderer", "data"]
+    },
+    "windowCreate": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.create" },
+        "windowId": { "type": "string" },
+        "title": { "type": "string" },
+        "bounds": { "$ref": "#/$defs/bounds" },
+        "content": { "$ref": "#/$defs/content" }
+      },
+      "required": ["type", "windowId", "title", "bounds", "content"]
+    },
+    "windowClose": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.close" },
+        "windowId": { "type": "string" }
+      },
+      "required": ["type", "windowId"]
+    },
+    "windowFocus": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.focus" },
+        "windowId": { "type": "string" }
+      },
+      "required": ["type", "windowId"]
+    },
+    "windowMinimize": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.minimize" },
+        "windowId": { "type": "string" }
+      },
+      "required": ["type", "windowId"]
+    },
+    "windowMaximize": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.maximize" },
+        "windowId": { "type": "string" }
+      },
+      "required": ["type", "windowId"]
+    },
+    "windowRestore": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.restore" },
+        "windowId": { "type": "string" }
+      },
+      "required": ["type", "windowId"]
+    },
+    "windowMove": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.move" },
+        "windowId": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "required": ["type", "windowId", "x", "y"]
+    },
+    "windowResize": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.resize" },
+        "windowId": { "type": "string" },
+        "w": { "type": "number", "minimum": 100 },
+        "h": { "type": "number", "minimum": 50 }
+      },
+      "required": ["type", "windowId", "w", "h"]
+    },
+    "windowSetTitle": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.setTitle" },
+        "windowId": { "type": "string" },
+        "title": { "type": "string" }
+      },
+      "required": ["type", "windowId", "title"]
+    },
+    "windowSetContent": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "window.setContent" },
+        "windowId": { "type": "string" },
+        "content": { "$ref": "#/$defs/content" }
+      },
+      "required": ["type", "windowId", "content"]
+    },
+    "notificationShow": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "notification.show" },
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "icon": { "type": "string" },
+        "duration": { "type": "number" }
+      },
+      "required": ["type", "id", "title", "body"]
+    },
+    "notificationDismiss": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "notification.dismiss" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    },
+    "toastShow": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "toast.show" },
+        "id": { "type": "string" },
+        "message": { "type": "string" },
+        "variant": {
+          "type": "string",
+          "enum": ["info", "success", "warning", "error"]
+        },
+        "duration": { "type": "number" }
+      },
+      "required": ["type", "id", "message"]
+    },
+    "toastDismiss": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "toast.dismiss" },
+        "id": { "type": "string" }
+      },
+      "required": ["type", "id"]
+    }
+  }
+}
