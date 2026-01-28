@@ -9,13 +9,17 @@ ClaudeOS is a reactive AI interface where the AI decides what to show and do nex
 **Prerequisites:**
 - Node.js >= 18
 - pnpm >= 8
-- Claude CLI installed globally (`npm install -g @anthropic-ai/claude-code`)
+- Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
+
+**SDK:** The server uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access.
 
 ## Commands
 
 ```bash
 pnpm install                     # Install all dependencies
-make dev                         # Start server and frontend together
+make claude                      # Start with Claude provider
+make codex                       # Start with Codex provider
+make dev                         # Start with auto-detected provider
 make server                      # Start server only
 make frontend                    # Start frontend only
 make build                       # Build all packages
@@ -66,9 +70,9 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 ### Transport System
 
 - `types.ts` - Interfaces: `AITransport`, `StreamMessage`, `TransportOptions`
-- `factory.ts` - Transport factory with availability checking
-- `agent-sdk.ts` - Claude Agent SDK implementation
-- `stub.ts` - Codex placeholder (not implemented)
+- `factory.ts` - Transport factory with availability checking and `PROVIDER` env var support
+- `providers/claude/` - Claude Agent SDK implementation
+- `providers/codex/` - Codex SDK implementation
 
 ### Frontend State
 
@@ -88,7 +92,7 @@ Content types: `markdown`, `table`, `text`, `html`
 - `packages/shared/src/` - Shared type definitions
 - `packages/server/src/index.ts` - WebSocket server with CORS
 - `packages/server/src/agent-session.ts` - Session management and action extraction
-- `packages/server/src/transports/agent-sdk.ts` - Claude Agent SDK transport
+- `packages/server/src/transports/factory.ts` - Transport factory and provider selection
 - `packages/frontend/src/store/desktop.ts` - Central state store
 - `packages/frontend/vite.config.ts` - Dev server config with WebSocket/API proxy
 

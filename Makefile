@@ -1,8 +1,16 @@
-.PHONY: dev server frontend install lint typecheck build clean
+.PHONY: dev claude codex server frontend install lint build clean
 
-# Run both server and frontend
+# Run both server and frontend (auto-select provider)
 dev:
 	@./scripts/dev.sh
+
+# Run with Claude provider
+claude:
+	@./scripts/dev.sh claude
+
+# Run with Codex provider
+codex:
+	@./scripts/dev.sh codex
 
 # Run server only
 server:
@@ -19,10 +27,6 @@ install:
 # Lint all packages
 lint:
 	pnpm -r lint
-
-# Type check all packages
-typecheck:
-	pnpm -r typecheck
 
 # Build all packages
 build:

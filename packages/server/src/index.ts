@@ -112,11 +112,16 @@ server.listen(PORT, '127.0.0.1', () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+function shutdown() {
   console.log('\nShutting down...');
   wss.close(() => {
     server.close(() => {
       process.exit(0);
     });
   });
-});
+  // Force exit after 2 seconds if graceful shutdown hangs
+  setTimeout(() => process.exit(0), 2000);
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

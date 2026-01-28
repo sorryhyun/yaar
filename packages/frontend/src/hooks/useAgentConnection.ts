@@ -19,6 +19,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const ws = useRef<WebSocket | null>(null)
   const reconnectAttempts = useRef(0)
   const reconnectTimeout = useRef<number | null>(null)
+  const mountedRef = useRef(true) // Track if component is mounted (handles StrictMode)
 
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -83,7 +84,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   // Connect to WebSocket
   const connect = useCallback(() => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
+    // Skip if already open or connecting
+    if (ws.current?.readyState === WebSocket.OPEN ||
+        ws.current?.readyState === WebSocket.CONNECTING) {
       return
     }
 
@@ -93,6 +96,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     ws.current = new WebSocket(WS_URL)
 
     ws.current.onopen = () => {
+      if (!mountedRef.current) return
       console.log('WebSocket connected')
       setIsConnected(true)
       setIsConnecting(false)
@@ -103,6 +107,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     ws.current.onmessage = handleMessage
 
     ws.current.onclose = (event) => {
+      if (!mountedRef.current) return
       console.log('WebSocket closed:', event.code, event.reason)
       setIsConnected(false)
       setIsConnecting(false)
@@ -118,6 +123,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
 
     ws.current.onerror = (error) => {
+      if (!mountedRef.current) return
       console.error('WebSocket error:', error)
       setConnectionStatus('error', 'Connection failed')
     }
@@ -131,7 +137,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
     reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS // Prevent auto-reconnect
 
-    if (ws.current) {
+    // Only close if already connected (not while connecting - avoids StrictMode issues)
+    if (ws.current?.readyState === WebSocket.OPEN) {
       ws.current.close(1000, 'User disconnect')
       ws.current = null
     }
@@ -165,15 +172,21 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   }, [send])
 
   // Auto-connect on mount
+  // Note: We intentionally use an empty dependency array to run this effect only once.
+  // The connect/disconnect functions use refs internally, so they don't need to be deps.
   useEffect(() => {
+    mountedRef.current = true
+
     if (autoConnect) {
       connect()
     }
 
     return () => {
+      mountedRef.current = false
       disconnect()
     }
-  }, [autoConnect, connect, disconnect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return {
     isConnected,

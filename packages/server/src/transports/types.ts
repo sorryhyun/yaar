@@ -2,10 +2,34 @@
  * Transport layer interfaces for AI providers.
  *
  * The transport layer abstracts how we communicate with AI providers,
- * allowing different implementations (Agent SDK, JSON-RPC, etc.) without
+ * allowing different implementations (Agent SDK, Codex SDK, etc.) without
  * changing the session logic.
  */
 
+/**
+ * Available provider types.
+ */
+export type ProviderType = 'claude' | 'codex';
+
+/**
+ * Provider metadata for the registry.
+ */
+export interface ProviderInfo {
+  /** Provider type identifier */
+  type: ProviderType;
+  /** Human-readable display name */
+  displayName: string;
+  /** Short description of the provider */
+  description: string;
+  /** Required CLI tool (if any) for availability check */
+  requiredCli?: string;
+  /** Required environment variables (if any) */
+  requiredEnvVars?: string[];
+}
+
+/**
+ * Messages streamed from the transport during a query.
+ */
 export interface StreamMessage {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'complete' | 'error';
   content?: string;
@@ -15,15 +39,24 @@ export interface StreamMessage {
   error?: string;
 }
 
+/**
+ * Options passed to transport queries.
+ */
 export interface TransportOptions {
   systemPrompt: string;
   model?: string;
   sessionId?: string; // For session resumption
 }
 
+/**
+ * Interface that all AI transports must implement.
+ */
 export interface AITransport {
   /** Human-readable name */
   readonly name: string;
+
+  /** Provider type identifier */
+  readonly providerType: ProviderType;
 
   /** Check if this transport is available */
   isAvailable(): Promise<boolean>;

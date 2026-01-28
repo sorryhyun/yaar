@@ -5,7 +5,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { AITransport, TransportOptions } from './transports/types.js';
+import type { AITransport, TransportOptions, ProviderType } from './transports/types.js';
 import {
   createTransport,
   getFirstAvailableTransport,
@@ -176,7 +176,7 @@ export class AgentSession {
   /**
    * Switch to a different provider.
    */
-  async setProvider(providerType: string): Promise<void> {
+  async setProvider(providerType: ProviderType): Promise<void> {
     const available = await getAvailableTransports();
     if (!available.includes(providerType)) {
       await this.sendEvent({
@@ -191,14 +191,15 @@ export class AgentSession {
       await this.transport.dispose();
     }
 
-    // Create new transport
-    this.transport = createTransport(providerType);
+    // Create new transport (async with dynamic import)
+    const newTransport = await createTransport(providerType);
+    this.transport = newTransport;
     this.sessionId = null;
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
       status: 'connected',
-      provider: this.transport.name,
+      provider: newTransport.name,
     });
   }
 
