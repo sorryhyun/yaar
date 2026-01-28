@@ -1,20 +1,21 @@
 /**
- * ClaudeOS Custom Tools.
+ * System utility tools for ClaudeOS.
  *
- * Provides tools for Claude to interact with the ClaudeOS interface:
- * - System information
- * - Time and date
+ * Provides tools for:
+ * - System time and date
  * - Calculator
- * - Web fetch
+ * - System information
+ * - Environment variables
+ * - Random number generation
  */
 
-import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 
 /**
  * Get current system time tool.
  */
-const getSystemTime = tool(
+export const getSystemTime = tool(
   'get_system_time',
   'Get the current system time and date in various formats',
   {
@@ -53,7 +54,7 @@ const getSystemTime = tool(
 /**
  * Calculator tool for mathematical expressions.
  */
-const calculate = tool(
+export const calculate = tool(
   'calculate',
   'Evaluate a mathematical expression safely. Supports basic arithmetic (+, -, *, /, %), powers (**), and common math functions (sqrt, sin, cos, tan, log, exp, abs, floor, ceil, round).',
   {
@@ -123,7 +124,7 @@ const calculate = tool(
 /**
  * System information tool.
  */
-const getSystemInfo = tool(
+export const getSystemInfo = tool(
   'get_system_info',
   'Get information about the ClaudeOS system environment',
   {},
@@ -149,7 +150,7 @@ const getSystemInfo = tool(
 /**
  * Environment variable reader (safe subset).
  */
-const getEnvVar = tool(
+export const getEnvVar = tool(
   'get_env_var',
   'Get the value of a safe environment variable. Only allows reading non-sensitive variables.',
   {
@@ -202,7 +203,7 @@ const getEnvVar = tool(
 /**
  * Random number generator tool.
  */
-const generateRandom = tool(
+export const generateRandom = tool(
   'generate_random',
   'Generate random numbers or strings',
   {
@@ -253,29 +254,12 @@ const generateRandom = tool(
 );
 
 /**
- * Create the ClaudeOS MCP server with all custom tools.
+ * All system tools.
  */
-export const claudeOSTools = createSdkMcpServer({
-  name: 'claudeos',
-  version: '1.0.0',
-  tools: [
-    getSystemTime,
-    calculate,
-    getSystemInfo,
-    getEnvVar,
-    generateRandom
-  ]
-});
-
-/**
- * Get the allowed tool names for ClaudeOS.
- */
-export function getClaudeOSToolNames(): string[] {
-  return [
-    'mcp__claudeos__get_system_time',
-    'mcp__claudeos__calculate',
-    'mcp__claudeos__get_system_info',
-    'mcp__claudeos__get_env_var',
-    'mcp__claudeos__generate_random'
-  ];
-}
+export const systemTools = [
+  getSystemTime,
+  calculate,
+  getSystemInfo,
+  getEnvVar,
+  generateRandom
+];

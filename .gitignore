@@ -27,6 +27,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Sessions (AI conversation logs)
+sessions/
+
 # Bundled assets
 bundled/*.js
 bundled/*.css

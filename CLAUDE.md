@@ -23,7 +23,7 @@ make dev                         # Start with auto-detected provider
 make server                      # Start server only
 make frontend                    # Start frontend only
 make build                       # Build all packages
-make typecheck                   # Type check all packages
+pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
 ```

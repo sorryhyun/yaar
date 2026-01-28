@@ -30,7 +30,12 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
     return { type: 'complete', sessionId: msg.session_id };
   }
 
-  // Skip user messages and other types
+  // Handle user messages containing tool results
+  if (msg.type === 'user') {
+    return extractToolResult(msg.message);
+  }
+
+  // Skip other types
   return null;
 }
 
@@ -84,4 +89,58 @@ function extractAssistantContent(message: unknown): string {
   }
 
   return '';
+}
+
+/**
+ * Extract tool result from a user message.
+ * User messages in Claude's conversation format contain tool_result blocks.
+ */
+function extractToolResult(message: unknown): StreamMessage | null {
+  if (!message || typeof message !== 'object') return null;
+
+  const msg = message as Record<string, unknown>;
+  const content = msg.content;
+
+  if (!Array.isArray(content)) return null;
+
+  // Look for tool_result blocks
+  for (const block of content) {
+    if (
+      typeof block === 'object' &&
+      block !== null &&
+      (block as Record<string, unknown>).type === 'tool_result'
+    ) {
+      const toolResult = block as {
+        type: string;
+        tool_use_id?: string;
+        content?: unknown;
+      };
+
+      // Extract the text content from the tool result
+      let resultText = '';
+      if (typeof toolResult.content === 'string') {
+        resultText = toolResult.content;
+      } else if (Array.isArray(toolResult.content)) {
+        resultText = toolResult.content
+          .filter(
+            (item): item is { type: string; text: string } =>
+              typeof item === 'object' &&
+              item !== null &&
+              (item as Record<string, unknown>).type === 'text'
+          )
+          .map((item) => item.text)
+          .join('');
+      }
+
+      if (resultText) {
+        return {
+          type: 'tool_result',
+          toolName: 'mcp_tool',
+          content: resultText,
+        };
+      }
+    }
+  }
+
+  return null;
 }

@@ -11,18 +11,35 @@ import {
   getFirstAvailableTransport,
   getAvailableTransports,
 } from './transports/factory.js';
-import { extractActions, extractToolCallInfo } from './action-parser.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import type { ServerEvent, OSAction } from '@claudeos/shared';
+import type { ServerEvent } from '@claudeos/shared';
+import { createSession, SessionLogger } from './sessions/index.js';
+import { actionEmitter, type ActionEvent } from './tools/index.js';
 
 export class AgentSession {
   private ws: WebSocket;
   private transport: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
+  private sessionLogger: SessionLogger | null = null;
+  private unsubscribeAction: (() => void) | null = null;
 
   constructor(ws: WebSocket) {
     this.ws = ws;
+    // Subscribe to actions emitted directly from tools
+    this.unsubscribeAction = actionEmitter.onAction(this.handleToolAction.bind(this));
+  }
+
+  /**
+   * Handle actions emitted directly from tools.
+   */
+  private async handleToolAction(event: ActionEvent): Promise<void> {
+    await this.sendEvent({
+      type: 'ACTIONS',
+      actions: [event.action],
+    });
+    // Log action
+    await this.sessionLogger?.logAction(event.action);
   }
 
   /**
@@ -38,6 +55,10 @@ export class AgentSession {
       });
       return false;
     }
+
+    // Create session logger
+    const sessionInfo = await createSession(this.transport.name);
+    this.sessionLogger = new SessionLogger(sessionInfo);
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
@@ -59,6 +80,9 @@ export class AgentSession {
 
     this.running = true;
 
+    // Log user message
+    await this.sessionLogger?.logUserMessage(content);
+
     try {
       const options: TransportOptions = {
         systemPrompt: SYSTEM_PROMPT,
@@ -67,8 +91,6 @@ export class AgentSession {
 
       let responseText = '';
       let thinkingText = '';
-      let lastActions: OSAction[] = [];
-      let lastToolCallCount = 0;
 
       for await (const message of this.transport.query(content, options)) {
         if (!this.running) break;
@@ -86,45 +108,9 @@ export class AgentSession {
               });
             }
 
-            // Accumulate response text
+            // Accumulate response text and send update
             if (message.content) {
               responseText += message.content;
-
-              // Check for tool calls and show progress
-              const toolCalls = extractToolCallInfo(responseText);
-              if (toolCalls.length > lastToolCallCount) {
-                const newTools = toolCalls.slice(lastToolCallCount);
-                for (const tool of newTools) {
-                  await this.sendEvent({
-                    type: 'TOOL_PROGRESS',
-                    toolName: tool.name,
-                    status: 'running',
-                  });
-                }
-                lastToolCallCount = toolCalls.length;
-              }
-
-              // Extract and send actions
-              const actions = extractActions(responseText);
-              if (actions.length > lastActions.length) {
-                // Only send new actions
-                const newActions = actions.slice(lastActions.length);
-                await this.sendEvent({
-                  type: 'ACTIONS',
-                  actions: newActions,
-                });
-                // Mark tools as complete
-                for (const tool of toolCalls.slice(0, newActions.length)) {
-                  await this.sendEvent({
-                    type: 'TOOL_PROGRESS',
-                    toolName: tool.name,
-                    status: 'complete',
-                  });
-                }
-                lastActions = actions;
-              }
-
-              // Send response update
               await this.sendEvent({
                 type: 'AGENT_RESPONSE',
                 content: responseText,
@@ -152,9 +138,10 @@ export class AgentSession {
             break;
 
           case 'tool_result':
+            // Actions are emitted directly from tools via actionEmitter
             await this.sendEvent({
               type: 'TOOL_PROGRESS',
-              toolName: 'tool',
+              toolName: message.toolName ?? 'tool',
               status: 'complete',
             });
             break;
@@ -162,6 +149,11 @@ export class AgentSession {
           case 'complete':
             if (message.sessionId) {
               this.sessionId = message.sessionId;
+            }
+            // Log assistant response
+            if (responseText) {
+              await this.sessionLogger?.logAssistantMessage(responseText);
+              await this.sessionLogger?.updateLastActivity();
             }
             await this.sendEvent({
               type: 'AGENT_RESPONSE',
@@ -239,6 +231,11 @@ export class AgentSession {
    * Clean up resources.
    */
   async cleanup(): Promise<void> {
+    // Unsubscribe from action emitter
+    if (this.unsubscribeAction) {
+      this.unsubscribeAction();
+      this.unsubscribeAction = null;
+    }
     if (this.transport) {
       await this.transport.dispose();
       this.transport = null;

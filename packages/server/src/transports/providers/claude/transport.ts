@@ -30,7 +30,7 @@ export class ClaudeTransport extends BaseTransport {
       const sdkOptions: SDKOptions = {
         abortController,
         systemPrompt: options.systemPrompt,
-        model: options.model ?? 'claude-sonnet-4-20250514',
+        model: options.model ?? "claude-opus-4-5-20251101",
         resume: options.sessionId,
         // Include custom ClaudeOS tools
         allowedTools: getClaudeOSToolNames(),
