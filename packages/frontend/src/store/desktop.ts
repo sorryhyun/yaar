@@ -22,6 +22,8 @@ const initialState: DesktopState = {
   activityLog: [],
   providerType: null,
   sessionId: null,
+  debugLog: [],
+  debugPanelOpen: false,
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -228,6 +230,27 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
     dismissNotification: (id) => set((state) => {
       delete state.notifications[id]
+    }),
+
+    addDebugEntry: (entry) => set((state) => {
+      const newEntry = {
+        ...entry,
+        id: `debug-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: Date.now(),
+      }
+      state.debugLog.push(newEntry)
+      // Keep only last 100 entries
+      if (state.debugLog.length > 100) {
+        state.debugLog = state.debugLog.slice(-100)
+      }
+    }),
+
+    toggleDebugPanel: () => set((state) => {
+      state.debugPanelOpen = !state.debugPanelOpen
+    }),
+
+    clearDebugLog: () => set((state) => {
+      state.debugLog = []
     }),
   }))
 )

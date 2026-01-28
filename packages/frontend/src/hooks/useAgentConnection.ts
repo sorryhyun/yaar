@@ -28,12 +28,30 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     applyActions,
     setConnectionStatus,
     setSession,
+    addDebugEntry,
   } = useDesktopStore()
 
   // Handle incoming messages
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const message = JSON.parse(event.data) as ServerEvent
+
+      // Only log significant events to debug panel (skip streaming chunks)
+      const shouldLog =
+        message.type === 'ACTIONS' ||
+        message.type === 'CONNECTION_STATUS' ||
+        message.type === 'ERROR' ||
+        message.type === 'REQUEST_PERMISSION' ||
+        (message.type === 'AGENT_RESPONSE' && (message as { isComplete?: boolean }).isComplete) ||
+        (message.type === 'TOOL_PROGRESS' && (message as { status?: string }).status !== 'running')
+
+      if (shouldLog) {
+        addDebugEntry({
+          direction: 'in',
+          type: message.type,
+          data: message,
+        })
+      }
 
       switch (message.type) {
         case 'ACTIONS':
@@ -80,7 +98,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     } catch (e) {
       console.error('Failed to parse message:', e)
     }
-  }, [applyActions, setConnectionStatus, setSession])
+  }, [applyActions, setConnectionStatus, setSession, addDebugEntry])
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -150,11 +168,17 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   // Send message
   const send = useCallback((event: ClientEvent) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
+      // Log outgoing messages to debug panel
+      addDebugEntry({
+        direction: 'out',
+        type: event.type,
+        data: event,
+      })
       ws.current.send(JSON.stringify(event))
     } else {
       console.warn('WebSocket not connected, cannot send:', event)
     }
-  }, [])
+  }, [addDebugEntry])
 
   // Send user message
   const sendMessage = useCallback((content: string) => {

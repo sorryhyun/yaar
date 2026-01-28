@@ -30,6 +30,14 @@ export interface ToastModel {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
+export interface DebugEntry {
+  id: string
+  timestamp: number
+  direction: 'in' | 'out'
+  type: string
+  data: unknown
+}
+
 export interface DesktopState {
   // Windows managed by the AI
   windows: Record<string, WindowModel>
@@ -50,6 +58,10 @@ export interface DesktopState {
 
   // Activity log (debugging)
   activityLog: OSAction[]
+
+  // Debug log (raw WebSocket events)
+  debugLog: DebugEntry[]
+  debugPanelOpen: boolean
 }
 
 export interface DesktopActions {
@@ -70,4 +82,9 @@ export interface DesktopActions {
   // Dismissals
   dismissToast: (id: string) => void
   dismissNotification: (id: string) => void
+
+  // Debug panel
+  addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void
+  toggleDebugPanel: () => void
+  clearDebugLog: () => void
 }
