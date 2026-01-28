@@ -11,7 +11,7 @@ import {
   getFirstAvailableTransport,
   getAvailableTransports,
 } from './transports/factory.js';
-import { extractActions } from './action-parser.js';
+import { extractActions, extractToolCallInfo } from './action-parser.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import type { ServerEvent, OSAction } from '@claudeos/shared';
 
@@ -68,6 +68,7 @@ export class AgentSession {
       let responseText = '';
       let thinkingText = '';
       let lastActions: OSAction[] = [];
+      let lastToolCallCount = 0;
 
       for await (const message of this.transport.query(content, options)) {
         if (!this.running) break;
@@ -89,6 +90,20 @@ export class AgentSession {
             if (message.content) {
               responseText += message.content;
 
+              // Check for tool calls and show progress
+              const toolCalls = extractToolCallInfo(responseText);
+              if (toolCalls.length > lastToolCallCount) {
+                const newTools = toolCalls.slice(lastToolCallCount);
+                for (const tool of newTools) {
+                  await this.sendEvent({
+                    type: 'TOOL_PROGRESS',
+                    toolName: tool.name,
+                    status: 'running',
+                  });
+                }
+                lastToolCallCount = toolCalls.length;
+              }
+
               // Extract and send actions
               const actions = extractActions(responseText);
               if (actions.length > lastActions.length) {
@@ -98,6 +113,14 @@ export class AgentSession {
                   type: 'ACTIONS',
                   actions: newActions,
                 });
+                // Mark tools as complete
+                for (const tool of toolCalls.slice(0, newActions.length)) {
+                  await this.sendEvent({
+                    type: 'TOOL_PROGRESS',
+                    toolName: tool.name,
+                    status: 'complete',
+                  });
+                }
                 lastActions = actions;
               }
 

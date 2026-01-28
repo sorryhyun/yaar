@@ -31,7 +31,7 @@ export class ClaudeTransport extends BaseTransport {
         systemPrompt: options.systemPrompt,
         model: options.model ?? 'claude-sonnet-4-20250514',
         resume: options.sessionId,
-        allowedTools: [], // Text generation only, no file tools
+        allowedTools: [], // No file tools, UI control via parsed tool calls
         includePartialMessages: true, // Enable streaming
       };
 

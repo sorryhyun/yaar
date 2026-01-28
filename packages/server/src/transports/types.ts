@@ -36,6 +36,7 @@ export interface StreamMessage {
   sessionId?: string;
   toolName?: string;
   toolInput?: unknown;
+  toolUseId?: string;
   error?: string;
 }
 
