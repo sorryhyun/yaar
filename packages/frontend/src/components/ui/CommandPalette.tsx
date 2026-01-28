@@ -5,7 +5,7 @@ import { useState, useCallback, KeyboardEvent } from 'react'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import { useDesktopStore } from '@/store'
 import { DebugPanel } from './DebugPanel'
-import styles from './CommandPalette.module.css'
+import styles from '@/styles/CommandPalette.module.css'
 
 export function CommandPalette() {
   const [input, setInput] = useState('')

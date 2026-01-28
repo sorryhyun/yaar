@@ -1,7 +1,7 @@
 /**
  * TextRenderer - Simple plain text display.
  */
-import styles from './renderers.module.css'
+import styles from '@/styles/renderers.module.css'
 
 interface TextRendererProps {
   data: string

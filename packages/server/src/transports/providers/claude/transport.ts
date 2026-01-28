@@ -9,6 +9,7 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
+import { claudeOSTools, getClaudeOSToolNames } from '../../../tools/index.js';
 
 export class ClaudeTransport extends BaseTransport {
   readonly name = 'claude';
@@ -31,7 +32,12 @@ export class ClaudeTransport extends BaseTransport {
         systemPrompt: options.systemPrompt,
         model: options.model ?? 'claude-sonnet-4-20250514',
         resume: options.sessionId,
-        allowedTools: [], // No file tools, UI control via parsed tool calls
+        // Include custom ClaudeOS tools
+        allowedTools: getClaudeOSToolNames(),
+        // Register the MCP server with custom tools
+        mcpServers: {
+          claudeos: claudeOSTools
+        },
         includePartialMessages: true, // Enable streaming
       };
 
