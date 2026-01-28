@@ -1,7 +1,7 @@
 /**
  * Comprehensive tests for desktop store.
  */
-import { useDesktopStore, selectVisibleWindows, selectWindowsInOrder } from '../desktop'
+import { useDesktopStore, selectVisibleWindows, selectWindowsInOrder } from '../../store/desktop'
 
 describe('Desktop Store', () => {
   beforeEach(() => {

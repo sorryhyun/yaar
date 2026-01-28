@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react'
 import { useDesktopStore } from '@/store'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
-import styles from './WindowFrame.module.css'
+import styles from '@/styles/WindowFrame.module.css'
 
 interface WindowFrameProps {
   window: WindowModel

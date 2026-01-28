@@ -1,7 +1,7 @@
 /**
  * TableRenderer - Renders tabular data.
  */
-import styles from './renderers.module.css'
+import styles from '@/styles/renderers.module.css'
 
 interface TableRendererProps {
   data: {

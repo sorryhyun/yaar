@@ -2,7 +2,7 @@
  * NotificationCenter - Displays persistent notifications.
  */
 import { useDesktopStore, selectNotifications } from '@/store'
-import styles from './NotificationCenter.module.css'
+import styles from '@/styles/NotificationCenter.module.css'
 
 export function NotificationCenter() {
   const notifications = useDesktopStore(selectNotifications)

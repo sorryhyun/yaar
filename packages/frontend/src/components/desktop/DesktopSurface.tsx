@@ -12,7 +12,7 @@ import { WindowManager } from './WindowManager'
 import { ToastContainer } from '../ui/ToastContainer'
 import { NotificationCenter } from '../ui/NotificationCenter'
 import { CommandPalette } from '../ui/CommandPalette'
-import styles from './DesktopSurface.module.css'
+import styles from '@/styles/DesktopSurface.module.css'
 
 export function DesktopSurface() {
   const connectionStatus = useDesktopStore(s => s.connectionStatus)

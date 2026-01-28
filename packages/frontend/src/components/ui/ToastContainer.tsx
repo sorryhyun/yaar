@@ -3,7 +3,7 @@
  */
 import { useEffect } from 'react'
 import { useDesktopStore, selectToasts } from '@/store'
-import styles from './ToastContainer.module.css'
+import styles from '@/styles/ToastContainer.module.css'
 
 export function ToastContainer() {
   const toasts = useDesktopStore(selectToasts)
