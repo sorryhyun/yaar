@@ -115,8 +115,18 @@ export const updateWindow = tool(
       renderer: args.renderer
     };
 
-    // Emit action directly to frontend
-    actionEmitter.emitAction(osAction);
+    // Use feedback mechanism to detect lock status
+    const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
+
+    if (feedback && !feedback.success) {
+      // Blocked by another agent's lock
+      return ok(`Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`);
+    }
+
+    // Check if window is still locked (by this agent) - remind to unlock
+    if (feedback?.success && feedback.error === 'locked') {
+      return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock_window when done to allow rendering.`);
+    }
 
     return ok(`Updated window "${args.windowId}" (${args.operation}${args.renderer ? `, renderer: ${args.renderer}` : ''})`);
 
@@ -138,8 +148,12 @@ export const closeWindow = tool(
       windowId: args.windowId
     };
 
-    // Emit action directly to frontend
-    actionEmitter.emitAction(osAction);
+    // Use feedback mechanism to detect if window is locked
+    const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
+
+    if (feedback && !feedback.success) {
+      return ok(`Failed to close window "${args.windowId}": ${feedback.error}`);
+    }
 
     return ok(`Closed window "${args.windowId}"`);
 

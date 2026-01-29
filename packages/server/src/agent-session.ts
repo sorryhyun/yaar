@@ -22,6 +22,7 @@ export class AgentSession {
   private sessionId: string | null = null;
   private running = false;
   private sessionLogger: SessionLogger | null = null;
+  private ownsLogger = false;  // Whether this session created the logger (vs shared)
   private unsubscribeAction: (() => void) | null = null;
   private windowId?: string;
   private forkFromSessionId?: string;
@@ -33,12 +34,20 @@ export class AgentSession {
    * @param sessionId - Session ID for this agent (optional, assigned by SDK if not provided)
    * @param windowId - Window ID if this is a window-specific agent
    * @param forkFromSessionId - Parent session ID to fork from (for window agents)
+   * @param sharedLogger - Optional shared logger (for window agents to use main session's log)
    */
-  constructor(ws: WebSocket, sessionId?: string, windowId?: string, forkFromSessionId?: string) {
+  constructor(
+    ws: WebSocket,
+    sessionId?: string,
+    windowId?: string,
+    forkFromSessionId?: string,
+    sharedLogger?: SessionLogger
+  ) {
     this.ws = ws;
     this.sessionId = sessionId ?? null;
     this.windowId = windowId;
     this.forkFromSessionId = forkFromSessionId;
+    this.sessionLogger = sharedLogger ?? null;
     // Subscribe to actions emitted directly from tools
     this.unsubscribeAction = actionEmitter.onAction(this.handleToolAction.bind(this));
   }
@@ -99,8 +108,8 @@ export class AgentSession {
       actions: [action],
       agentId: this.getSessionId(),
     });
-    // Log action
-    await this.sessionLogger?.logAction(action);
+    // Log action with agent identifier
+    await this.sessionLogger?.logAction(action, this.getSessionId());
   }
 
   /**
@@ -117,9 +126,12 @@ export class AgentSession {
       return false;
     }
 
-    // Create session logger
-    const sessionInfo = await createSession(this.transport.name);
-    this.sessionLogger = new SessionLogger(sessionInfo);
+    // Create session logger only if not using a shared one
+    if (!this.sessionLogger) {
+      const sessionInfo = await createSession(this.transport.name);
+      this.sessionLogger = new SessionLogger(sessionInfo);
+      this.ownsLogger = true;
+    }
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
@@ -132,6 +144,13 @@ export class AgentSession {
   }
 
   /**
+   * Get the session logger (for sharing with subagents).
+   */
+  getSessionLogger(): SessionLogger | null {
+    return this.sessionLogger;
+  }
+
+  /**
    * Process a user message through the AI provider.
    */
   async handleMessage(content: string): Promise<void> {
@@ -141,8 +160,8 @@ export class AgentSession {
 
     this.running = true;
 
-    // Log user message
-    await this.sessionLogger?.logUserMessage(content);
+    // Log user message with agent identifier
+    await this.sessionLogger?.logUserMessage(content, this.getSessionId());
 
     try {
       // For the first message of a forked session, use the parent session ID with forkSession flag
@@ -233,9 +252,9 @@ export class AgentSession {
             if (message.sessionId) {
               this.sessionId = message.sessionId;
             }
-            // Log assistant response
+            // Log assistant response with agent identifier
             if (responseText) {
-              await this.sessionLogger?.logAssistantMessage(responseText);
+              await this.sessionLogger?.logAssistantMessage(responseText, this.getSessionId());
               await this.sessionLogger?.updateLastActivity();
             }
             await this.sendEvent({

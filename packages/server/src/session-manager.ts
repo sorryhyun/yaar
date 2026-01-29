@@ -91,8 +91,10 @@ export class SessionManager {
 
       // Create new window session, forking from main session's context
       // Session ID will be assigned by the SDK and captured from the stream
+      // Share the main session's logger so all logs go to one place
       const mainSessionId = this.mainSession?.getRawSessionId() ?? undefined;
-      session = new AgentSession(this.ws, undefined, windowId, mainSessionId);
+      const sharedLogger = this.mainSession?.getSessionLogger() ?? undefined;
+      session = new AgentSession(this.ws, undefined, windowId, mainSessionId, sharedLogger);
 
       // Initialize the session
       const initialized = await session.initialize();

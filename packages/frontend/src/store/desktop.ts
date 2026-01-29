@@ -60,8 +60,20 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
         case 'window.close': {
           const win = state.windows[action.windowId]
+          const actionAgentId = (action as { agentId?: string }).agentId
+          const reqId = (action as { requestId?: string }).requestId
           // Respect lock: only owner agent can close a locked window
-          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+          if (win?.locked && win.lockedBy !== actionAgentId) {
+            // Send feedback if there's a requestId
+            if (reqId) {
+              state.pendingFeedback.push({
+                requestId: reqId,
+                windowId: action.windowId,
+                renderer: 'lock',
+                success: false,
+                error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
+              })
+            }
             break
           }
           delete state.windows[action.windowId]
@@ -141,8 +153,19 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
         case 'window.setContent': {
           const win = state.windows[action.windowId]
+          const actionAgentId = (action as { agentId?: string }).agentId
+          const reqId = (action as { requestId?: string }).requestId
           // Respect lock: only owner agent can modify locked window content
-          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+          if (win?.locked && win.lockedBy !== actionAgentId) {
+            if (reqId) {
+              state.pendingFeedback.push({
+                requestId: reqId,
+                windowId: action.windowId,
+                renderer: 'lock',
+                success: false,
+                error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
+              })
+            }
             break
           }
           if (win) {
@@ -153,8 +176,19 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
         case 'window.updateContent': {
           const win = state.windows[action.windowId]
+          const actionAgentId = (action as { agentId?: string }).agentId
+          const reqId = (action as { requestId?: string }).requestId
           // Respect lock: only owner agent can update locked window content
-          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+          if (win?.locked && win.lockedBy !== actionAgentId) {
+            if (reqId) {
+              state.pendingFeedback.push({
+                requestId: reqId,
+                windowId: action.windowId,
+                renderer: 'lock',
+                success: false,
+                error: `Window is currently locked by another agent. Use unlock_window to release the lock before updating.`,
+              })
+            }
             break
           }
           if (win) {
@@ -180,6 +214,16 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             }
             if (action.renderer) {
               win.content.renderer = action.renderer
+            }
+            // Send success feedback with lock status so agent knows to unlock
+            if (reqId && win.locked) {
+              state.pendingFeedback.push({
+                requestId: reqId,
+                windowId: action.windowId,
+                renderer: 'lock',
+                success: true,
+                error: 'locked', // Signal that window is still locked
+              })
             }
           }
           break

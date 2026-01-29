@@ -87,51 +87,54 @@ export class SessionLogger {
   /**
    * Log a user message.
    */
-  async logUserMessage(content: string): Promise<void> {
+  async logUserMessage(content: string, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
+    const agent = agentId ?? 'main';
 
     // Append to transcript
     await appendFile(
       join(this.sessionInfo.directory, 'transcript.md'),
-      `\n## User (${timestamp})\n\n${content}\n`
+      `\n## User → ${agent} (${timestamp})\n\n${content}\n`
     );
 
     // Append to messages log
     await appendFile(
       join(this.sessionInfo.directory, 'messages.jsonl'),
-      JSON.stringify({ type: 'user', timestamp, content }) + '\n'
+      JSON.stringify({ type: 'user', timestamp, agentId: agent, content }) + '\n'
     );
   }
 
   /**
    * Log an assistant message.
    */
-  async logAssistantMessage(content: string): Promise<void> {
+  async logAssistantMessage(content: string, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
+    const agent = agentId ?? 'main';
 
     // Append to transcript
     await appendFile(
       join(this.sessionInfo.directory, 'transcript.md'),
-      `\n## Assistant (${timestamp})\n\n${content}\n`
+      `\n## ${agent} (${timestamp})\n\n${content}\n`
     );
 
     // Append to messages log
     await appendFile(
       join(this.sessionInfo.directory, 'messages.jsonl'),
-      JSON.stringify({ type: 'assistant', timestamp, content }) + '\n'
+      JSON.stringify({ type: 'assistant', timestamp, agentId: agent, content }) + '\n'
     );
   }
 
   /**
    * Log an OS action.
    */
-  async logAction(action: OSAction): Promise<void> {
+  async logAction(action: OSAction, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
+    const agent = agentId ?? 'main';
 
     // Append to messages log
     await appendFile(
       join(this.sessionInfo.directory, 'messages.jsonl'),
-      JSON.stringify({ type: 'action', timestamp, action }) + '\n'
+      JSON.stringify({ type: 'action', timestamp, agentId: agent, action }) + '\n'
     );
   }
 
