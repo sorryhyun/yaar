@@ -66,6 +66,7 @@ export interface RenderingFeedback {
   success: boolean
   error?: string
   url?: string
+  locked?: boolean
 }
 
 export interface DesktopState {

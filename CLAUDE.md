@@ -75,7 +75,8 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 ```
 server/src/
 ├── index.ts              # WebSocket server entry point
-├── agent-session.ts      # Session management and action extraction
+├── session-manager.ts    # Manages default + window agents per connection
+├── agent-session.ts      # Individual agent session (transport, logging)
 ├── system-prompt.ts      # System prompt configuration
 ├── providers/            # Pluggable AI backends
 │   ├── factory.ts        # Provider factory with auto-detection
@@ -84,11 +85,11 @@ server/src/
 │   ├── claude/           # Claude Agent SDK implementation
 │   └── codex/            # Codex SDK implementation
 ├── tools/                # MCP tools the AI can use
-│   ├── window.ts         # Window management tools
+│   ├── window.ts         # Window management tools (with lock feedback)
 │   ├── storage.ts        # Persistent storage tools
 │   ├── system.ts         # System tools
-│   └── action-emitter.ts # Emits OS actions to frontend
-├── sessions/             # Session state management
+│   └── action-emitter.ts # Emits OS actions to frontend (with feedback)
+├── sessions/             # Session logging (shared across agents)
 └── storage/              # Persistent storage utilities
 ```
 
@@ -102,10 +103,26 @@ server/src/
 - `store/desktop.ts` - Zustand store with Immer; all UI state flows through `applyAction()` reducer
 - `hooks/useAgentConnection.ts` - WebSocket connection with auto-reconnect
 
+### Agent Types
+
+| Agent | ID Format | Description |
+|-------|-----------|-------------|
+| **Default agent** | `'default'` | Primary agent for the session, handles user input from main input field |
+| **Window agent** | `'window-{windowId}'` | Spawned for specific windows via context menu, runs in parallel with default agent |
+| **Subagent** | SDK-assigned | Spawned by default/window agents via Claude Agent SDK's native subagent feature |
+
+**Session management:**
+- `SessionManager` manages all agents for a WebSocket connection
+- Window agents fork from the default agent's context and share its session log
+- Window locking prevents concurrent modifications (`window.lock`, `window.unlock`)
+- Tools return feedback when blocked (e.g., "Window is locked, use unlock_window...")
+
 ### OS Actions DSL
 
 AI controls UI through actions like:
 - `window.create`, `window.setContent`, `window.close`, `window.focus`
+- `window.lock`, `window.unlock` - Prevent concurrent modifications
+- `window.updateContent` - Diff-based content updates (append, prepend, replace, etc.)
 - `toast.show`, `notification.show`
 
 Content renderers: `markdown`, `table`, `text`, `html`, `iframe`
@@ -114,10 +131,12 @@ Content renderers: `markdown`, `table`, `text`, `html`, `iframe`
 
 - `packages/shared/src/actions.ts` - OS Actions type definitions
 - `packages/server/src/index.ts` - WebSocket server entry point
-- `packages/server/src/agent-session.ts` - Session management and action extraction
+- `packages/server/src/session-manager.ts` - Multi-agent session management
+- `packages/server/src/agent-session.ts` - Individual agent session (transport, logging)
 - `packages/server/src/providers/factory.ts` - Provider factory and selection
-- `packages/server/src/tools/window.ts` - Window management tools
-- `packages/frontend/src/store/desktop.ts` - Central state store
+- `packages/server/src/tools/window.ts` - Window management tools (with lock feedback)
+- `packages/server/src/tools/action-emitter.ts` - Action emission with feedback mechanism
+- `packages/frontend/src/store/desktop.ts` - Central state store (handles locking)
 - `packages/frontend/src/components/windows/ContentRenderer.tsx` - Window content rendering
 
 ## Code Style

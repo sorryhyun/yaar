@@ -2,7 +2,7 @@
  * WindowFrame - Draggable, resizable window container.
  */
 import { useCallback, useRef, useState } from 'react'
-import { useDesktopStore, selectWindowAgent } from '@/store'
+import { useDesktopStore } from '@/store'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
@@ -17,7 +17,6 @@ interface WindowFrameProps {
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback } =
     useDesktopStore()
-  const windowAgent = useDesktopStore(selectWindowAgent(window.id))
 
   const frameRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -124,17 +123,12 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       >
         <div className={styles.titleSection}>
           <div className={styles.title}>{window.title}</div>
-          {windowAgent && (
+          {window.locked && (
             <div
-              className={styles.agentBadge}
-              data-status={windowAgent.status}
-              title={`Window agent: ${windowAgent.status}`}
+              className={styles.lockBadge}
+              title={`Locked by: ${window.lockedBy || 'unknown'}`}
             >
-              {windowAgent.status === 'active' ? (
-                <span className={styles.agentSpinner}>⟳</span>
-              ) : (
-                <span className={styles.agentIcon}>◉</span>
-              )}
+              <span className={styles.lockIcon}>🔒</span>
             </div>
           )}
         </div>

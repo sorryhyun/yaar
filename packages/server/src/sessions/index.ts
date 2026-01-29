@@ -89,7 +89,7 @@ export class SessionLogger {
    */
   async logUserMessage(content: string, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
-    const agent = agentId ?? 'main';
+    const agent = agentId ?? 'default';
 
     // Append to transcript
     await appendFile(
@@ -109,7 +109,7 @@ export class SessionLogger {
    */
   async logAssistantMessage(content: string, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
-    const agent = agentId ?? 'main';
+    const agent = agentId ?? 'default';
 
     // Append to transcript
     await appendFile(
@@ -129,7 +129,7 @@ export class SessionLogger {
    */
   async logAction(action: OSAction, agentId?: string): Promise<void> {
     const timestamp = new Date().toISOString();
-    const agent = agentId ?? 'main';
+    const agent = agentId ?? 'default';
 
     // Append to messages log
     await appendFile(

@@ -1,8 +1,10 @@
 /**
  * Session manager - manages multiple agent sessions per WebSocket connection.
  *
- * Enables fork-session functionality where users can spawn window-specific
- * agents that run in parallel with the main agent.
+ * Agent types:
+ * - Default agent: The primary agent for the session
+ * - Window agent: Spawned for specific windows, runs in parallel with default agent
+ * - Subagent: Spawned by default/window agents via SDK native feature
  */
 
 import type { WebSocket } from 'ws';
@@ -14,7 +16,7 @@ const MAX_WINDOW_AGENTS = 5;
 
 export class SessionManager {
   private ws: WebSocket;
-  private mainSession: AgentSession | null = null;
+  private defaultSession: AgentSession | null = null;
   private windowSessions: Map<string, AgentSession> = new Map();
 
   constructor(ws: WebSocket) {
@@ -26,8 +28,8 @@ export class SessionManager {
    */
   async initialize(): Promise<boolean> {
     // Main session: no pre-assigned sessionId, no windowId, no fork
-    this.mainSession = new AgentSession(this.ws);
-    return this.mainSession.initialize();
+    this.defaultSession = new AgentSession(this.ws);
+    return this.defaultSession.initialize();
   }
 
   /**
@@ -37,7 +39,7 @@ export class SessionManager {
     switch (event.type) {
       case 'USER_MESSAGE':
         // Route to main session
-        await this.mainSession?.handleMessage(event.content);
+        await this.defaultSession?.handleMessage(event.content);
         break;
 
       case 'WINDOW_MESSAGE':
@@ -46,7 +48,7 @@ export class SessionManager {
 
       case 'INTERRUPT':
         // Interrupt main session
-        await this.mainSession?.interrupt();
+        await this.defaultSession?.interrupt();
         break;
 
       case 'INTERRUPT_AGENT':
@@ -55,18 +57,19 @@ export class SessionManager {
         break;
 
       case 'SET_PROVIDER':
-        await this.mainSession?.setProvider(event.provider);
+        await this.defaultSession?.setProvider(event.provider);
         break;
 
       case 'RENDERING_FEEDBACK':
         // Rendering feedback goes to all sessions (action emitter handles it)
-        this.mainSession?.handleRenderingFeedback(
+        this.defaultSession?.handleRenderingFeedback(
           event.requestId,
           event.windowId,
           event.renderer,
           event.success,
           event.error,
-          event.url
+          event.url,
+          event.locked
         );
         break;
     }
@@ -92,9 +95,9 @@ export class SessionManager {
       // Create new window session, forking from main session's context
       // Session ID will be assigned by the SDK and captured from the stream
       // Share the main session's logger so all logs go to one place
-      const mainSessionId = this.mainSession?.getRawSessionId() ?? undefined;
-      const sharedLogger = this.mainSession?.getSessionLogger() ?? undefined;
-      session = new AgentSession(this.ws, undefined, windowId, mainSessionId, sharedLogger);
+      const defaultSessionId = this.defaultSession?.getRawSessionId() ?? undefined;
+      const sharedLogger = this.defaultSession?.getSessionLogger() ?? undefined;
+      session = new AgentSession(this.ws, undefined, windowId, defaultSessionId, sharedLogger);
 
       // Initialize the session
       const initialized = await session.initialize();
@@ -151,8 +154,8 @@ export class SessionManager {
    * Interrupt a specific agent by ID.
    */
   private async interruptAgent(agentId: string): Promise<void> {
-    if (agentId === 'main') {
-      await this.mainSession?.interrupt();
+    if (agentId === 'default') {
+      await this.defaultSession?.interrupt();
       return;
     }
 
@@ -228,9 +231,9 @@ export class SessionManager {
     this.windowSessions.clear();
 
     // Cleanup main session
-    if (this.mainSession) {
-      await this.mainSession.cleanup();
-      this.mainSession = null;
+    if (this.defaultSession) {
+      await this.defaultSession.cleanup();
+      this.defaultSession = null;
     }
   }
 }

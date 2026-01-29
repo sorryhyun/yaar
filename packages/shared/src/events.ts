@@ -39,6 +39,7 @@ export interface RenderingFeedbackEvent {
   success: boolean;
   error?: string;
   url?: string;
+  locked?: boolean;
 }
 
 export type ClientEvent =

@@ -124,8 +124,8 @@ export const updateWindow = tool(
     }
 
     // Check if window is still locked (by this agent) - remind to unlock
-    if (feedback?.success && feedback.error === 'locked') {
-      return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock_window when done to allow rendering.`);
+    if (feedback?.locked) {
+      return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock_window when done.`);
     }
 
     return ok(`Updated window "${args.windowId}" (${args.operation}${args.renderer ? `, renderer: ${args.renderer}` : ''})`);

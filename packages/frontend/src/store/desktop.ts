@@ -222,7 +222,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
                 windowId: action.windowId,
                 renderer: 'lock',
                 success: true,
-                error: 'locked', // Signal that window is still locked
+                locked: true,
               })
             }
           }

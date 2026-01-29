@@ -75,7 +75,7 @@ export function WindowContextMenu({
         // Send to window-specific agent (fork or continue)
         onSendToWindow(windowId, trimmed)
       } else {
-        // Send to main agent
+        // Send to default agent
         onSend(trimmed)
       }
       onClose()

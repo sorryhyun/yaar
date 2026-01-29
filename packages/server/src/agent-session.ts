@@ -5,6 +5,7 @@
  */
 
 import type { WebSocket } from 'ws';
+import { AsyncLocalStorage } from 'async_hooks';
 import type { AITransport, TransportOptions, ProviderType } from './providers/types.js';
 import {
   createTransport,
@@ -16,13 +17,30 @@ import type { ServerEvent } from '@claudeos/shared';
 import { createSession, SessionLogger } from './sessions/index.js';
 import { actionEmitter, type ActionEvent } from './tools/index.js';
 
+/**
+ * Agent context - tracks which agent is currently executing so tools
+ * can include the agentId in their actions.
+ */
+interface AgentContext {
+  agentId: string;
+}
+
+const agentContext = new AsyncLocalStorage<AgentContext>();
+
+/**
+ * Get the current agent ID from context.
+ * Used by tools to include agentId in actions for lock verification.
+ */
+export function getAgentId(): string | undefined {
+  return agentContext.getStore()?.agentId;
+}
+
 export class AgentSession {
   private ws: WebSocket;
   private transport: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
   private sessionLogger: SessionLogger | null = null;
-  private ownsLogger = false;  // Whether this session created the logger (vs shared)
   private unsubscribeAction: (() => void) | null = null;
   private windowId?: string;
   private forkFromSessionId?: string;
@@ -61,7 +79,7 @@ export class AgentSession {
 
   /**
    * Get the agent identifier.
-   * Returns 'main' for the main agent, or 'window-{windowId}' for window agents.
+   * Returns 'default' for the default agent, or 'window-{windowId}' for window agents.
    * Once the SDK assigns a session ID, returns that for resumption purposes.
    */
   getSessionId(): string {
@@ -73,15 +91,27 @@ export class AgentSession {
     if (this.windowId) {
       return `window-${this.windowId}`;
     }
-    // Main agent
-    return 'main';
+    // Default agent
+    return 'default';
   }
 
   /**
-   * Get the raw session ID (may be null for main agent before first message).
+   * Get the raw session ID (may be null for default agent before first message).
    */
   getRawSessionId(): string | null {
     return this.sessionId;
+  }
+
+  /**
+   * Get the stable agent ID for filtering actions.
+   * For window agents, this is always 'window-{windowId}' regardless of SDK session ID.
+   * This ensures consistency since the agentContext is set before SDK assigns session ID.
+   */
+  private getFilterAgentId(): string {
+    if (this.windowId) {
+      return `window-${this.windowId}`;
+    }
+    return 'default';
   }
 
   /**
@@ -89,19 +119,23 @@ export class AgentSession {
    * Filters actions to only handle ones matching this session's agentId.
    */
   private async handleToolAction(event: ActionEvent): Promise<void> {
+    const myAgentId = this.getFilterAgentId();
+
     // Filter: only handle actions for this agent (or unspecified agentId for main)
-    if (event.agentId && event.agentId !== this.getSessionId()) {
+    if (event.agentId && event.agentId !== myAgentId) {
       return;
     }
-    // For main agent, also skip if action is explicitly for another agent
-    if (this.getSessionId() === 'main' && event.agentId && event.agentId !== 'main') {
+    // For default agent, also skip if action is explicitly for another agent
+    if (myAgentId === 'default' && event.agentId && event.agentId !== 'default') {
       return;
     }
 
-    // Include requestId in the action if present (for iframe feedback tracking)
-    const action = event.requestId
-      ? { ...event.action, requestId: event.requestId }
-      : event.action;
+    // Include requestId and agentId in the action for frontend tracking
+    const action = {
+      ...event.action,
+      ...(event.requestId && { requestId: event.requestId }),
+      ...(event.agentId && { agentId: event.agentId }),
+    };
 
     await this.sendEvent({
       type: 'ACTIONS',
@@ -130,7 +164,6 @@ export class AgentSession {
     if (!this.sessionLogger) {
       const sessionInfo = await createSession(this.transport.name);
       this.sessionLogger = new SessionLogger(sessionInfo);
-      this.ownsLogger = true;
     }
 
     await this.sendEvent({
@@ -190,90 +223,94 @@ export class AgentSession {
       let responseText = '';
       let thinkingText = '';
 
-      for await (const message of this.transport.query(content, options)) {
-        if (!this.running) break;
+      // Run within agent context so tools can access the agentId
+      const currentAgentId = this.getSessionId();
+      await agentContext.run({ agentId: currentAgentId }, async () => {
+        for await (const message of this.transport!.query(content, options)) {
+          if (!this.running) break;
 
-        switch (message.type) {
-          case 'text':
-            // Update session ID if provided
-            if (message.sessionId) {
-              this.sessionId = message.sessionId;
+          switch (message.type) {
+            case 'text':
+              // Update session ID if provided
+              if (message.sessionId) {
+                this.sessionId = message.sessionId;
+                await this.sendEvent({
+                  type: 'CONNECTION_STATUS',
+                  status: 'connected',
+                  provider: this.transport!.name,
+                  sessionId: this.sessionId,
+                });
+              }
+
+              // Accumulate response text and send update
+              if (message.content) {
+                responseText += message.content;
+                await this.sendEvent({
+                  type: 'AGENT_RESPONSE',
+                  content: responseText,
+                  isComplete: false,
+                  agentId: this.getSessionId(),
+                });
+              }
+              break;
+
+            case 'thinking':
+              if (message.content) {
+                thinkingText += message.content;
+                await this.sendEvent({
+                  type: 'AGENT_THINKING',
+                  content: thinkingText,
+                  agentId: this.getSessionId(),
+                });
+              }
+              break;
+
+            case 'tool_use':
               await this.sendEvent({
-                type: 'CONNECTION_STATUS',
-                status: 'connected',
-                provider: this.transport.name,
-                sessionId: this.sessionId,
+                type: 'TOOL_PROGRESS',
+                toolName: message.toolName ?? 'unknown',
+                status: 'running',
+                agentId: this.getSessionId(),
               });
-            }
+              break;
 
-            // Accumulate response text and send update
-            if (message.content) {
-              responseText += message.content;
+            case 'tool_result':
+              // Actions are emitted directly from tools via actionEmitter
+              await this.sendEvent({
+                type: 'TOOL_PROGRESS',
+                toolName: message.toolName ?? 'tool',
+                status: 'complete',
+                agentId: this.getSessionId(),
+              });
+              break;
+
+            case 'complete':
+              if (message.sessionId) {
+                this.sessionId = message.sessionId;
+              }
+              // Log assistant response with agent identifier
+              if (responseText) {
+                await this.sessionLogger?.logAssistantMessage(responseText, this.getSessionId());
+                await this.sessionLogger?.updateLastActivity();
+              }
               await this.sendEvent({
                 type: 'AGENT_RESPONSE',
                 content: responseText,
-                isComplete: false,
+                isComplete: true,
                 agentId: this.getSessionId(),
               });
-            }
-            break;
+              break;
 
-          case 'thinking':
-            if (message.content) {
-              thinkingText += message.content;
+            case 'error':
               await this.sendEvent({
-                type: 'AGENT_THINKING',
-                content: thinkingText,
+                type: 'ERROR',
+                error: message.error ?? 'Unknown error',
                 agentId: this.getSessionId(),
               });
-            }
-            break;
-
-          case 'tool_use':
-            await this.sendEvent({
-              type: 'TOOL_PROGRESS',
-              toolName: message.toolName ?? 'unknown',
-              status: 'running',
-              agentId: this.getSessionId(),
-            });
-            break;
-
-          case 'tool_result':
-            // Actions are emitted directly from tools via actionEmitter
-            await this.sendEvent({
-              type: 'TOOL_PROGRESS',
-              toolName: message.toolName ?? 'tool',
-              status: 'complete',
-              agentId: this.getSessionId(),
-            });
-            break;
-
-          case 'complete':
-            if (message.sessionId) {
-              this.sessionId = message.sessionId;
-            }
-            // Log assistant response with agent identifier
-            if (responseText) {
-              await this.sessionLogger?.logAssistantMessage(responseText, this.getSessionId());
-              await this.sessionLogger?.updateLastActivity();
-            }
-            await this.sendEvent({
-              type: 'AGENT_RESPONSE',
-              content: responseText,
-              isComplete: true,
-              agentId: this.getSessionId(),
-            });
-            break;
-
-          case 'error':
-            await this.sendEvent({
-              type: 'ERROR',
-              error: message.error ?? 'Unknown error',
-              agentId: this.getSessionId(),
-            });
-            break;
+              break;
+          }
         }
-      }
+      });
     } catch (err) {
       await this.sendEvent({
         type: 'ERROR',
@@ -302,7 +339,8 @@ export class AgentSession {
     renderer: string,
     success: boolean,
     error?: string,
-    url?: string
+    url?: string,
+    locked?: boolean
   ): void {
     const resolved = actionEmitter.resolveFeedback({
       requestId,
@@ -311,10 +349,11 @@ export class AgentSession {
       success,
       error,
       url,
+      locked,
     });
 
     if (resolved) {
-      console.log('[Rendering Feedback] Resolved:', { requestId, success, error });
+      console.log('[Rendering Feedback] Resolved:', { requestId, success, locked });
     } else {
       console.log('[Rendering Feedback] No pending request:', { requestId });
     }

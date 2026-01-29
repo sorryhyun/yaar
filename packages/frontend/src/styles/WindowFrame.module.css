@@ -47,41 +47,16 @@
   text-overflow: ellipsis;
 }
 
-.agentBadge {
+.lockBadge {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(137, 180, 250, 0.2);
-  color: #89b4fa;
-  font-size: 12px;
   flex-shrink: 0;
 }
 
-.agentBadge[data-status="active"] {
-  background: rgba(166, 227, 161, 0.2);
-  color: #a6e3a1;
-}
-
-.agentBadge[data-status="idle"] {
-  background: rgba(137, 180, 250, 0.15);
-  color: #89b4fa;
-  opacity: 0.7;
-}
-
-.agentSpinner {
-  animation: spin 1s linear infinite;
-}
-
-.agentIcon {
-  font-size: 10px;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.lockIcon {
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 .controls {

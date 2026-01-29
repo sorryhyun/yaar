@@ -102,13 +102,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           break
 
         case 'AGENT_THINKING': {
-          const agentId = (message as { agentId?: string }).agentId || 'main'
+          const agentId = (message as { agentId?: string }).agentId || 'default'
           setAgentActive(agentId, 'Thinking...')
           break
         }
 
         case 'AGENT_RESPONSE': {
-          const agentId = (message as { agentId?: string }).agentId || 'main'
+          const agentId = (message as { agentId?: string }).agentId || 'default'
           const isComplete = (message as { isComplete?: boolean }).isComplete
           if (isComplete) {
             clearAgent(agentId)
@@ -121,7 +121,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         }
 
         case 'TOOL_PROGRESS': {
-          const agentId = (message as { agentId?: string }).agentId || 'main'
+          const agentId = (message as { agentId?: string }).agentId || 'default'
           const toolName = (message as { toolName?: string }).toolName || 'tool'
           const status = (message as { status?: string }).status
           if (status === 'running') {
@@ -294,6 +294,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
             success: item.success,
             error: item.error,
             url: item.url,
+            locked: item.locked,
           })
         }
       }

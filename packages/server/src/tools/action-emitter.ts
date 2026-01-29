@@ -8,6 +8,7 @@
 
 import { EventEmitter } from 'events';
 import type { OSAction } from '@claudeos/shared';
+import { getAgentId } from '../agent-session.js';
 
 /**
  * Action event data.
@@ -29,6 +30,7 @@ export interface RenderingFeedback {
   success: boolean;
   error?: string;
   url?: string;
+  locked?: boolean;
 }
 
 /**
@@ -63,6 +65,7 @@ class ActionEmitter extends EventEmitter {
   /**
    * Emit an OS Action and wait for feedback from frontend.
    * Used for iframe rendering where we want to know if it succeeded.
+   * Automatically includes the current agent's ID from context.
    */
   async emitActionWithFeedback(
     action: OSAction,
@@ -70,6 +73,9 @@ class ActionEmitter extends EventEmitter {
     sessionId?: string
   ): Promise<RenderingFeedback | null> {
     const requestId = this.generateRequestId();
+    // Get current agent ID from context and include in action
+    const agentId = getAgentId();
+    const actionWithAgent = agentId ? { ...action, agentId } : action;
 
     // Create promise that resolves when feedback is received or timeout
     const feedbackPromise = new Promise<RenderingFeedback | null>((resolve) => {
@@ -81,8 +87,8 @@ class ActionEmitter extends EventEmitter {
       this.pendingRequests.set(requestId, { resolve, timeoutId });
     });
 
-    // Emit action with request ID (agentId not used for feedback)
-    this.emit('action', { action, requestId, sessionId } as ActionEvent);
+    // Emit action with request ID and agentId from context
+    this.emit('action', { action: actionWithAgent, requestId, sessionId, agentId } as ActionEvent);
 
     return feedbackPromise;
   }
