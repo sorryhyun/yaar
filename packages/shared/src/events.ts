@@ -6,9 +6,18 @@ import type { OSAction } from './actions.js';
 
 // ============ Client → Server Events ============
 
+export interface UserInteraction {
+  type: 'window.close' | 'window.focus' | 'window.move' | 'window.resize' | 'window.minimize' | 'window.maximize' | 'toast.dismiss' | 'notification.dismiss' | 'icon.click';
+  timestamp: number;
+  windowId?: string;
+  windowTitle?: string;
+  details?: string;
+}
+
 export interface UserMessageEvent {
   type: 'USER_MESSAGE';
   content: string;
+  interactions?: UserInteraction[];
 }
 
 export interface WindowMessageEvent {

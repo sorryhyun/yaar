@@ -16,9 +16,6 @@ export function CommandPalette() {
   const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel)
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen)
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
-  const activeAgents = useDesktopStore((state) => state.activeAgents)
-
-  const agentList = Object.values(activeAgents)
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
@@ -85,16 +82,6 @@ export function CommandPalette() {
           >
             {'{ }'} Debug
           </button>
-          {agentList.length > 0 && (
-            <div className={styles.spinnerBox}>
-              {agentList.map((agent) => (
-                <div key={agent.id} className={styles.spinnerItem} title={agent.status}>
-                  <span className={styles.spinner} />
-                  <span className={styles.spinnerLabel}>{agent.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </>

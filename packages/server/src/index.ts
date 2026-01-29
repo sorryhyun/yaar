@@ -98,17 +98,22 @@ wss.on('connection', async (ws: WebSocket) => {
 
   const manager = new SessionManager(ws);
 
-  // Initialize main session
-  const initialized = await manager.initialize();
-  if (!initialized) {
-    ws.close(1011, 'No provider available');
-    return;
-  }
+  // Track initialization state and queue early messages
+  let initialized = false;
+  const messageQueue: ClientEvent[] = [];
 
-  // Handle messages
+  // Register message handler IMMEDIATELY to capture any early messages
   ws.on('message', async (data) => {
     try {
       const event = JSON.parse(data.toString()) as ClientEvent;
+
+      if (!initialized) {
+        // Queue messages that arrive before initialization completes
+        console.log('Queuing early message:', event.type);
+        messageQueue.push(event);
+        return;
+      }
+
       await manager.routeMessage(event);
     } catch (err) {
       console.error('Failed to process message:', err);
@@ -125,6 +130,27 @@ wss.on('connection', async (ws: WebSocket) => {
   ws.on('error', (err) => {
     console.error('WebSocket error:', err);
   });
+
+  // Initialize main session (async)
+  const initSuccess = await manager.initialize();
+  if (!initSuccess) {
+    ws.close(1011, 'No provider available');
+    return;
+  }
+
+  // Mark as initialized and process any queued messages
+  initialized = true;
+
+  if (messageQueue.length > 0) {
+    console.log(`Processing ${messageQueue.length} queued message(s)`);
+    for (const event of messageQueue) {
+      try {
+        await manager.routeMessage(event);
+      } catch (err) {
+        console.error('Failed to process queued message:', err);
+      }
+    }
+  }
 });
 
 // Initialize storage and start server

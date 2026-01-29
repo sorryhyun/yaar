@@ -23,7 +23,10 @@ export function DesktopSurface() {
   const hideContextMenu = useDesktopStore(s => s.hideContextMenu)
   const showContextMenu = useDesktopStore(s => s.showContextMenu)
   const windowAgents = useDesktopStore(s => s.windowAgents)
+  const activeAgents = useDesktopStore(s => s.activeAgents)
   const { sendMessage, sendWindowMessage } = useAgentConnection({ autoConnect: false })
+
+  const agentList = Object.values(activeAgents)
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     // Only handle clicks directly on the desktop
@@ -42,6 +45,10 @@ export function DesktopSurface() {
     }
   }, [showContextMenu])
 
+  const handleStorageClick = useCallback(() => {
+    sendMessage('user clicked storage')
+  }, [sendMessage])
+
   return (
     <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu}>
       {/* Connection status indicator */}
@@ -54,6 +61,25 @@ export function DesktopSurface() {
             ? 'Connecting...'
             : 'Disconnected'}
         </span>
+        {agentList.length > 0 && (
+          <>
+            <span className={styles.statusDivider} />
+            {agentList.map((agent) => (
+              <div key={agent.id} className={styles.agentIndicator}>
+                <span className={styles.agentSpinner} />
+                <span className={styles.agentStatus}>{agent.status}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Desktop icons */}
+      <div className={styles.desktopIcons}>
+        <button className={styles.desktopIcon} onClick={handleStorageClick}>
+          <span className={styles.iconImage}>🗄️</span>
+          <span className={styles.iconLabel}>Storage</span>
+        </button>
       </div>
 
       {/* Window container */}

@@ -15,7 +15,7 @@ interface WindowFrameProps {
 }
 
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback } =
+  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback, logInteraction } =
     useDesktopStore()
 
   const frameRef = useRef<HTMLDivElement>(null)
@@ -136,20 +136,26 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           <button
             className={styles.controlBtn}
             data-action="minimize"
-            onClick={() => useDesktopStore.getState().applyAction({
-              type: 'window.minimize',
-              windowId: window.id,
-            })}
+            onClick={() => {
+              logInteraction({ type: 'window.minimize', windowId: window.id, windowTitle: window.title })
+              useDesktopStore.getState().applyAction({
+                type: 'window.minimize',
+                windowId: window.id,
+              })
+            }}
           >
             −
           </button>
           <button
             className={styles.controlBtn}
             data-action="maximize"
-            onClick={() => useDesktopStore.getState().applyAction({
-              type: window.maximized ? 'window.restore' : 'window.maximize',
-              windowId: window.id,
-            })}
+            onClick={() => {
+              logInteraction({ type: 'window.maximize', windowId: window.id, windowTitle: window.title })
+              useDesktopStore.getState().applyAction({
+                type: window.maximized ? 'window.restore' : 'window.maximize',
+                windowId: window.id,
+              })
+            }}
           >
             □
           </button>

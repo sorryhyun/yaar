@@ -30,7 +30,7 @@ export class ClaudeTransport extends BaseTransport {
       const sdkOptions: SDKOptions = {
         abortController,
         systemPrompt: options.systemPrompt,
-        model: options.model ?? "claude-opus-4-5-20251101",
+        model: options.model ?? "claude-sonnet-4-5-20250929", // "claude-opus-4-5-20251101"
         resume: options.sessionId,
         forkSession: options.forkSession, // When true, creates a new session with context from resumed session
         // Disable all default Claude Code tools - only use ClaudeOS MCP tools

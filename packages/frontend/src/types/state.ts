@@ -69,6 +69,8 @@ export interface RenderingFeedback {
   locked?: boolean
 }
 
+import type { UserInteraction } from '@claudeos/shared'
+
 export interface DesktopState {
   // Windows managed by the AI
   windows: Record<string, WindowModel>
@@ -108,6 +110,9 @@ export interface DesktopState {
 
   // Pending feedback to send to the server
   pendingFeedback: RenderingFeedback[]
+
+  // User interaction log (for context when sending messages)
+  interactionLog: UserInteraction[]
 }
 
 export interface DesktopActions {
@@ -154,4 +159,8 @@ export interface DesktopActions {
   // Rendering feedback
   addRenderingFeedback: (feedback: RenderingFeedback) => void
   consumePendingFeedback: () => RenderingFeedback[]
+
+  // User interaction logging
+  logInteraction: (interaction: Omit<UserInteraction, 'timestamp'>) => void
+  consumeInteractions: () => UserInteraction[]
 }

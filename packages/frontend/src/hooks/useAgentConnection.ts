@@ -59,6 +59,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAgent,
     clearAllAgents,
     consumePendingFeedback,
+    consumeInteractions,
     registerWindowAgent,
     updateWindowAgentStatus,
   } = useDesktopStore()
@@ -91,6 +92,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           break
 
         case 'CONNECTION_STATUS':
+          // Agent is ready - update connection status
+          setIsConnecting(false)
           setConnectionStatus(
             message.status === 'connected' ? 'connected' :
             message.status === 'error' ? 'error' : 'disconnected',
@@ -180,9 +183,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     wsManager.ws = new WebSocket(WS_URL)
 
     wsManager.ws.onopen = () => {
-      console.log('WebSocket connected')
-      setIsConnecting(false)
-      setConnectionStatus('connected')
+      console.log('WebSocket connected, waiting for agent...')
+      // Keep status as 'connecting' until server sends CONNECTION_STATUS
+      // This ensures user doesn't send messages before agent is ready
       wsManager.reconnectAttempts = 0
       wsManager.notify()
     }
@@ -246,11 +249,15 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   // Send user message
   const sendMessage = useCallback((content: string) => {
-    send({ type: 'USER_MESSAGE', content })
-  }, [send])
+    // Don't show thinking indicator here - let server events drive the UI
+    // This prevents duplicate indicators when server sends AGENT_THINKING
+    const interactions = consumeInteractions()
+    send({ type: 'USER_MESSAGE', content, interactions: interactions.length > 0 ? interactions : undefined })
+  }, [send, consumeInteractions])
 
   // Send message to a specific window agent
   const sendWindowMessage = useCallback((windowId: string, content: string) => {
+    // Don't show thinking indicator here - let server events drive the UI
     send({ type: 'WINDOW_MESSAGE', windowId, content })
   }, [send])
 

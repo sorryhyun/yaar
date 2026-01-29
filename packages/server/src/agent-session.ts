@@ -13,7 +13,7 @@ import {
   getAvailableTransports,
 } from './providers/factory.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import type { ServerEvent } from '@claudeos/shared';
+import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from './sessions/index.js';
 import { actionEmitter, type ActionEvent } from './tools/index.js';
 
@@ -184,17 +184,46 @@ export class AgentSession {
   }
 
   /**
+   * Format user interactions into context string.
+   */
+  private formatInteractions(interactions: UserInteraction[]): string {
+    if (interactions.length === 0) return '';
+
+    const lines = interactions.map(i => {
+      const time = new Date(i.timestamp).toLocaleTimeString();
+      let desc = i.type;
+      if (i.windowTitle) desc += ` "${i.windowTitle}"`;
+      if (i.details) desc += ` (${i.details})`;
+      return `- [${time}] ${desc}`;
+    });
+
+    return `<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>\n\n`;
+  }
+
+  /**
    * Process a user message through the AI provider.
    */
-  async handleMessage(content: string): Promise<void> {
+  async handleMessage(content: string, interactions?: UserInteraction[]): Promise<void> {
     if (!this.transport) {
       return;
     }
 
     this.running = true;
 
+    // Immediately notify frontend that agent is thinking
+    const stableAgentId = this.getFilterAgentId();
+    await this.sendEvent({
+      type: 'AGENT_THINKING',
+      content: '',
+      agentId: stableAgentId,
+    });
+
+    // Prepend interaction context if available
+    const interactionContext = interactions ? this.formatInteractions(interactions) : '';
+    const fullContent = interactionContext + content;
+
     // Log user message with agent identifier
-    await this.sessionLogger?.logUserMessage(content, this.getSessionId());
+    await this.sessionLogger?.logUserMessage(fullContent, stableAgentId);
 
     try {
       // For the first message of a forked session, use the parent session ID with forkSession flag
@@ -224,14 +253,15 @@ export class AgentSession {
       let thinkingText = '';
 
       // Run within agent context so tools can access the agentId
-      const currentAgentId = this.getSessionId();
+      // Use getFilterAgentId() for stable UI tracking ('default' or 'window-{id}')
+      const currentAgentId = this.getFilterAgentId();
       await agentContext.run({ agentId: currentAgentId }, async () => {
-        for await (const message of this.transport!.query(content, options)) {
+        for await (const message of this.transport!.query(fullContent, options)) {
           if (!this.running) break;
 
           switch (message.type) {
             case 'text':
-              // Update session ID if provided
+              // Update session ID if provided (for session resumption)
               if (message.sessionId) {
                 this.sessionId = message.sessionId;
                 await this.sendEvent({
@@ -243,13 +273,14 @@ export class AgentSession {
               }
 
               // Accumulate response text and send update
+              // Use stable agentId for UI tracking (currentAgentId captured at start)
               if (message.content) {
                 responseText += message.content;
                 await this.sendEvent({
                   type: 'AGENT_RESPONSE',
                   content: responseText,
                   isComplete: false,
-                  agentId: this.getSessionId(),
+                  agentId: currentAgentId,
                 });
               }
               break;
@@ -260,7 +291,7 @@ export class AgentSession {
                 await this.sendEvent({
                   type: 'AGENT_THINKING',
                   content: thinkingText,
-                  agentId: this.getSessionId(),
+                  agentId: currentAgentId,
                 });
               }
               break;
@@ -270,7 +301,7 @@ export class AgentSession {
                 type: 'TOOL_PROGRESS',
                 toolName: message.toolName ?? 'unknown',
                 status: 'running',
-                agentId: this.getSessionId(),
+                agentId: currentAgentId,
               });
               break;
 
@@ -280,7 +311,7 @@ export class AgentSession {
                 type: 'TOOL_PROGRESS',
                 toolName: message.toolName ?? 'tool',
                 status: 'complete',
-                agentId: this.getSessionId(),
+                agentId: currentAgentId,
               });
               break;
 
@@ -290,14 +321,14 @@ export class AgentSession {
               }
               // Log assistant response with agent identifier
               if (responseText) {
-                await this.sessionLogger?.logAssistantMessage(responseText, this.getSessionId());
+                await this.sessionLogger?.logAssistantMessage(responseText, currentAgentId);
                 await this.sessionLogger?.updateLastActivity();
               }
               await this.sendEvent({
                 type: 'AGENT_RESPONSE',
                 content: responseText,
                 isComplete: true,
-                agentId: this.getSessionId(),
+                agentId: currentAgentId,
               });
               break;
 
@@ -305,7 +336,7 @@ export class AgentSession {
               await this.sendEvent({
                 type: 'ERROR',
                 error: message.error ?? 'Unknown error',
-                agentId: this.getSessionId(),
+                agentId: currentAgentId,
               });
               break;
           }

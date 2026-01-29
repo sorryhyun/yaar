@@ -10,6 +10,72 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopState, DesktopActions, WindowModel } from '@/types/state'
+import type { UserInteraction } from '@claudeos/shared'
+
+/**
+ * Consolidate consecutive move/resize events into single "from → to" entries.
+ * This reduces verbosity when dragging windows.
+ */
+function consolidateInteractions(interactions: UserInteraction[]): UserInteraction[] {
+  if (interactions.length === 0) return interactions
+
+  const result: UserInteraction[] = []
+  let i = 0
+
+  while (i < interactions.length) {
+    const current = interactions[i]
+
+    // Only consolidate move and resize events
+    if (current.type !== 'window.move' && current.type !== 'window.resize') {
+      result.push(current)
+      i++
+      continue
+    }
+
+    // Find the end of consecutive same-type events for the same window
+    let j = i + 1
+    while (
+      j < interactions.length &&
+      interactions[j].type === current.type &&
+      interactions[j].windowId === current.windowId
+    ) {
+      j++
+    }
+
+    // If there's only one event, keep it as-is
+    if (j === i + 1) {
+      result.push(current)
+      i++
+      continue
+    }
+
+    // Consolidate: extract first and last positions
+    const first = current
+    const last = interactions[j - 1]
+
+    // Parse coordinates from details (format: "moved to (x, y)" or "resized to (w, h)")
+    const parseCoords = (details?: string): string => {
+      const match = details?.match(/\(([^)]+)\)/)
+      return match ? match[1] : '?'
+    }
+
+    const fromCoords = parseCoords(first.details)
+    const toCoords = parseCoords(last.details)
+    const verb = current.type === 'window.move' ? 'moved' : 'resized'
+
+    result.push({
+      type: current.type,
+      timestamp: last.timestamp,
+      windowId: current.windowId,
+      windowTitle: current.windowTitle,
+      details: `${verb} from (${fromCoords}) to (${toCoords})`,
+    })
+
+    i = j
+  }
+
+  return result
+}
 
 const initialState: DesktopState = {
   windows: {},
@@ -29,6 +95,7 @@ const initialState: DesktopState = {
   activeAgents: {},
   windowAgents: {},
   pendingFeedback: [],
+  interactionLog: [],
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -304,20 +371,35 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
     }),
 
     userFocusWindow: (windowId) => set((state) => {
-      if (state.windows[windowId]) {
+      const win = state.windows[windowId]
+      if (win) {
         state.zOrder = state.zOrder.filter(id => id !== windowId)
         state.zOrder.push(windowId)
         state.focusedWindowId = windowId
-        state.windows[windowId].minimized = false
+        win.minimized = false
+        state.interactionLog.push({
+          type: 'window.focus',
+          timestamp: Date.now(),
+          windowId,
+          windowTitle: win.title,
+        })
       }
     }),
 
     userCloseWindow: (windowId) => set((state) => {
+      const win = state.windows[windowId]
+      const title = win?.title
       delete state.windows[windowId]
       state.zOrder = state.zOrder.filter(id => id !== windowId)
       if (state.focusedWindowId === windowId) {
         state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
       }
+      state.interactionLog.push({
+        type: 'window.close',
+        timestamp: Date.now(),
+        windowId,
+        windowTitle: title,
+      })
     }),
 
     userMoveWindow: (windowId, x, y) => set((state) => {
@@ -326,6 +408,13 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         win.bounds.x = x
         win.bounds.y = y
         win.maximized = false
+        state.interactionLog.push({
+          type: 'window.move',
+          timestamp: Date.now(),
+          windowId,
+          windowTitle: win.title,
+          details: `moved to (${x}, ${y})`,
+        })
       }
     }),
 
@@ -335,15 +424,34 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         win.bounds.w = w
         win.bounds.h = h
         win.maximized = false
+        state.interactionLog.push({
+          type: 'window.resize',
+          timestamp: Date.now(),
+          windowId,
+          windowTitle: win.title,
+          details: `resized to ${w}x${h}`,
+        })
       }
     }),
 
     dismissToast: (id) => set((state) => {
+      const toast = state.toasts[id]
       delete state.toasts[id]
+      state.interactionLog.push({
+        type: 'toast.dismiss',
+        timestamp: Date.now(),
+        details: toast?.message,
+      })
     }),
 
     dismissNotification: (id) => set((state) => {
+      const notification = state.notifications[id]
       delete state.notifications[id]
+      state.interactionLog.push({
+        type: 'notification.dismiss',
+        timestamp: Date.now(),
+        details: notification?.title,
+      })
     }),
 
     addDebugEntry: (entry) => set((state) => {
@@ -433,6 +541,28 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         })
       }
       return feedback
+    },
+
+    logInteraction: (interaction) => set((state) => {
+      state.interactionLog.push({
+        ...interaction,
+        timestamp: Date.now(),
+      })
+      // Keep only last 50 interactions
+      if (state.interactionLog.length > 50) {
+        state.interactionLog = state.interactionLog.slice(-50)
+      }
+    }),
+
+    consumeInteractions: () => {
+      const interactions = get().interactionLog
+      if (interactions.length > 0) {
+        set((state) => {
+          state.interactionLog = []
+        })
+      }
+      // Consolidate consecutive move/resize events into single "from → to" entries
+      return consolidateInteractions(interactions)
     },
   }))
 )

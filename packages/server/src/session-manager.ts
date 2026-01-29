@@ -9,7 +9,6 @@
 
 import type { WebSocket } from 'ws';
 import { AgentSession } from './agent-session.js';
-import { actionEmitter } from './tools/index.js';
 import type { ClientEvent, ServerEvent } from '@claudeos/shared';
 
 const MAX_WINDOW_AGENTS = 5;
@@ -38,8 +37,8 @@ export class SessionManager {
   async routeMessage(event: ClientEvent): Promise<void> {
     switch (event.type) {
       case 'USER_MESSAGE':
-        // Route to main session
-        await this.defaultSession?.handleMessage(event.content);
+        // Route to main session with interaction context
+        await this.defaultSession?.handleMessage(event.content, event.interactions);
         break;
 
       case 'WINDOW_MESSAGE':
@@ -114,13 +113,6 @@ export class SessionManager {
       // Use windowId as the agent identifier (the SDK session ID will be captured later)
       const agentId = `window-${windowId}`;
 
-      // Lock the window for this agent
-      actionEmitter.emitAction(
-        { type: 'window.lock', windowId, agentId },
-        undefined,
-        agentId
-      );
-
       // Notify frontend about new agent
       await this.sendEvent({
         type: 'WINDOW_AGENT_STATUS',
@@ -176,13 +168,6 @@ export class SessionManager {
     if (!session) return;
 
     const agentId = session.getSessionId();
-
-    // Unlock the window
-    actionEmitter.emitAction(
-      { type: 'window.unlock', windowId, agentId },
-      undefined,
-      agentId
-    );
 
     // Notify frontend
     await this.sendEvent({
