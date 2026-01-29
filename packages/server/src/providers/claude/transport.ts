@@ -6,10 +6,10 @@
  */
 
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
-import { BaseTransport } from '../../base-transport.js';
-import type { StreamMessage, TransportOptions, ProviderType } from '../../types.js';
+import { BaseTransport } from '../base-transport.js';
+import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { claudeOSTools, getClaudeOSToolNames } from '../../../tools/index.js';
+import { claudeOSTools, getClaudeOSToolNames } from '../../tools/index.js';
 
 export class ClaudeTransport extends BaseTransport {
   readonly name = 'claude';
@@ -33,7 +33,7 @@ export class ClaudeTransport extends BaseTransport {
         model: options.model ?? "claude-opus-4-5-20251101",
         resume: options.sessionId,
         // Disable all default Claude Code tools - only use ClaudeOS MCP tools
-        tools: [],
+        tools: ['WebFetch','WebSearch'],
         allowedTools: getClaudeOSToolNames(),
         // Register the MCP server with custom tools
         mcpServers: {

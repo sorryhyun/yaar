@@ -14,7 +14,7 @@ import type {
   ReasoningItem,
   WebSearchItem,
 } from '@openai/codex-sdk';
-import type { StreamMessage } from '../../types.js';
+import type { StreamMessage } from '../types.js';
 
 /**
  * Map a Codex thread event to a StreamMessage.

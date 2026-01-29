@@ -1,5 +1,5 @@
 /**
- * Transport factory for creating AI transport instances.
+ * Provider factory for creating AI provider instances.
  *
  * Uses dynamic imports to avoid loading SDK dependencies until needed.
  */
@@ -47,11 +47,11 @@ function getForcedProvider(): ProviderType | null {
  */
 const providerLoaders: Record<ProviderType, () => Promise<AITransport>> = {
   claude: async () => {
-    const { ClaudeTransport } = await import('./providers/claude/index.js');
+    const { ClaudeTransport } = await import('./claude/index.js');
     return new ClaudeTransport();
   },
   codex: async () => {
-    const { CodexTransport } = await import('./providers/codex/index.js');
+    const { CodexTransport } = await import('./codex/index.js');
     return new CodexTransport();
   },
 };

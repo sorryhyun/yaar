@@ -29,6 +29,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     setConnectionStatus,
     setSession,
     addDebugEntry,
+    setAgentActive,
+    clearAgent,
+    clearAllAgents,
   } = useDesktopStore()
 
   // Handle incoming messages
@@ -69,20 +72,37 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           }
           break
 
-        case 'AGENT_THINKING':
-          // Could update UI to show thinking indicator
+        case 'AGENT_THINKING': {
+          const agentId = (message as { agentId?: string }).agentId || 'main'
+          setAgentActive(agentId, 'Thinking...')
           console.log('[Agent Thinking]', message.content)
           break
+        }
 
-        case 'AGENT_RESPONSE':
-          // Could stream response text to UI
+        case 'AGENT_RESPONSE': {
+          const agentId = (message as { agentId?: string }).agentId || 'main'
+          if ((message as { isComplete?: boolean }).isComplete) {
+            clearAgent(agentId)
+          } else {
+            setAgentActive(agentId, 'Responding...')
+          }
           console.log('[Agent Response]', message.content)
           break
+        }
 
-        case 'TOOL_PROGRESS':
-          // Could show tool execution status
-          console.log('[Tool]', message.toolName, message.status)
+        case 'TOOL_PROGRESS': {
+          const agentId = (message as { agentId?: string }).agentId || 'main'
+          const toolName = (message as { toolName?: string }).toolName || 'tool'
+          const status = (message as { status?: string }).status
+          if (status === 'running') {
+            setAgentActive(agentId, `Running: ${toolName}`)
+          } else if (status === 'complete' || status === 'error') {
+            // Tool done, but agent may still be working - show thinking
+            setAgentActive(agentId, 'Thinking...')
+          }
+          console.log('[Tool]', toolName, status)
           break
+        }
 
         case 'REQUEST_PERMISSION':
           // Show permission dialog
@@ -98,7 +118,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     } catch (e) {
       console.error('Failed to parse message:', e)
     }
-  }, [applyActions, setConnectionStatus, setSession, addDebugEntry])
+  }, [applyActions, setConnectionStatus, setSession, addDebugEntry, setAgentActive, clearAgent])
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -163,7 +183,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
     setIsConnected(false)
     setConnectionStatus('disconnected')
-  }, [setConnectionStatus])
+    clearAllAgents()
+  }, [setConnectionStatus, clearAllAgents])
 
   // Send message
   const send = useCallback((event: ClientEvent) => {

@@ -8,7 +8,7 @@
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AgentSession } from './agent-session.js';
-import { getAvailableTransports } from './transports/factory.js';
+import { getAvailableTransports } from './providers/factory.js';
 import { listSessions, readSessionTranscript } from './sessions/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import type { ClientEvent } from '@claudeos/shared';

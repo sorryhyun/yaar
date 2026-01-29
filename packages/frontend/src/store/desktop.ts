@@ -26,6 +26,7 @@ const initialState: DesktopState = {
   debugPanelOpen: false,
   contextMenu: null,
   sessionsModalOpen: false,
+  activeAgents: {},
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -333,6 +334,22 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
     toggleSessionsModal: () => set((state) => {
       state.sessionsModalOpen = !state.sessionsModalOpen
     }),
+
+    setAgentActive: (agentId, status) => set((state) => {
+      state.activeAgents[agentId] = {
+        id: agentId,
+        status,
+        startedAt: state.activeAgents[agentId]?.startedAt ?? Date.now(),
+      }
+    }),
+
+    clearAgent: (agentId) => set((state) => {
+      delete state.activeAgents[agentId]
+    }),
+
+    clearAllAgents: () => set((state) => {
+      state.activeAgents = {}
+    }),
   }))
 )
 
@@ -351,3 +368,6 @@ export const selectToasts = (state: DesktopState & DesktopActions) =>
 
 export const selectNotifications = (state: DesktopState & DesktopActions) =>
   Object.values(state.notifications)
+
+export const selectActiveAgents = (state: DesktopState & DesktopActions) =>
+  Object.values(state.activeAgents)

@@ -6,8 +6,8 @@
  */
 
 import { Codex, type Thread, type ThreadOptions } from '@openai/codex-sdk';
-import { BaseTransport } from '../../base-transport.js';
-import type { StreamMessage, TransportOptions, ProviderType } from '../../types.js';
+import { BaseTransport } from '../base-transport.js';
+import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapCodexEvent } from './message-mapper.js';
 
 export class CodexTransport extends BaseTransport {

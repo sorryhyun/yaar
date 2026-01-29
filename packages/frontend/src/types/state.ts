@@ -47,6 +47,12 @@ export interface DebugEntry {
   data: unknown
 }
 
+export interface ActiveAgent {
+  id: string
+  status: string  // e.g., "Thinking...", "Running: read_file"
+  startedAt: number
+}
+
 export interface DesktopState {
   // Windows managed by the AI
   windows: Record<string, WindowModel>
@@ -77,6 +83,9 @@ export interface DesktopState {
 
   // Sessions modal
   sessionsModalOpen: boolean
+
+  // Active agents (for spinner display)
+  activeAgents: Record<string, ActiveAgent>
 }
 
 export interface DesktopActions {
@@ -109,4 +118,9 @@ export interface DesktopActions {
 
   // Sessions modal
   toggleSessionsModal: () => void
+
+  // Active agents
+  setAgentActive: (agentId: string, status: string) => void
+  clearAgent: (agentId: string) => void
+  clearAllAgents: () => void
 }

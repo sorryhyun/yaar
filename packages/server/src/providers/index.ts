@@ -1,7 +1,7 @@
 /**
- * Transport layer exports.
+ * Provider layer exports.
  *
- * This module provides the public API for the transport layer.
+ * This module provides the public API for AI providers.
  * All imports should go through this file.
  */
 
@@ -11,12 +11,9 @@ export * from './types.js';
 // Factory functions
 export * from './factory.js';
 
-// Base class (for creating custom transports)
+// Base class (for creating custom providers)
 export { BaseTransport } from './base-transport.js';
 
 // Provider implementations
-export {
-  ClaudeTransport,
-  AgentSDKTransport, // Legacy alias for ClaudeTransport
-  CodexTransport,
-} from './providers/index.js';
+export { ClaudeTransport, AgentSDKTransport, mapClaudeMessage } from './claude/index.js';
+export { CodexTransport, mapCodexEvent } from './codex/index.js';

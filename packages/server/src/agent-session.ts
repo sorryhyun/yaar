@@ -5,12 +5,12 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { AITransport, TransportOptions, ProviderType } from './transports/types.js';
+import type { AITransport, TransportOptions, ProviderType } from './providers/types.js';
 import {
   createTransport,
   getFirstAvailableTransport,
   getAvailableTransports,
-} from './transports/factory.js';
+} from './providers/factory.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import type { ServerEvent } from '@claudeos/shared';
 import { createSession, SessionLogger } from './sessions/index.js';

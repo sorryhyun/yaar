@@ -5,7 +5,7 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { StreamMessage } from '../../types.js';
+import type { StreamMessage } from '../types.js';
 
 /**
  * Map a Claude SDK message to a StreamMessage.
