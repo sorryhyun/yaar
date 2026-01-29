@@ -26,7 +26,17 @@ make build                       # Build all packages
 pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
+
+# Testing (frontend only)
+cd packages/frontend && pnpm vitest          # Run tests in watch mode
+cd packages/frontend && pnpm vitest run      # Run tests once
+cd packages/frontend && pnpm vitest run src/__tests__/store/desktop.test.ts  # Single test file
 ```
+
+## Environment Variables
+
+- `PROVIDER` - Force a specific AI provider (`claude` or `codex`). Auto-detected if not set.
+- `PORT` - Server port (default: 8000)
 
 ## Monorepo Structure
 
@@ -100,3 +110,15 @@ Content types: `markdown`, `table`, `text`, `html`
 
 - All packages: TypeScript strict mode
 - Frontend: path alias `@/` → `src/`
+
+## Adding a New AI Provider
+
+1. Create `packages/server/src/transports/providers/<name>/transport.ts` implementing `AITransport`
+2. Add loader to `providerLoaders` in `packages/server/src/transports/factory.ts`
+3. Add availability check to `isProviderAvailable()` in the factory
+
+## Adding a New OS Action
+
+1. Define the action type in `packages/shared/src/actions.ts`
+2. Handle it in `applyAction()` in `packages/frontend/src/store/desktop.ts`
+3. Optionally add an MCP tool in `packages/server/src/tools/` to let the AI emit it

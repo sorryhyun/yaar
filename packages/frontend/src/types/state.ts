@@ -74,6 +74,9 @@ export interface DesktopState {
 
   // Context menu state
   contextMenu: ContextMenuState | null
+
+  // Sessions modal
+  sessionsModalOpen: boolean
 }
 
 export interface DesktopActions {
@@ -103,4 +106,7 @@ export interface DesktopActions {
   // Context menu
   showContextMenu: (x: number, y: number, windowId: string) => void
   hideContextMenu: () => void
+
+  // Sessions modal
+  toggleSessionsModal: () => void
 }

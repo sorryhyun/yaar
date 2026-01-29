@@ -25,6 +25,7 @@ const initialState: DesktopState = {
   debugLog: [],
   debugPanelOpen: false,
   contextMenu: null,
+  sessionsModalOpen: false,
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -327,6 +328,10 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
     hideContextMenu: () => set((state) => {
       state.contextMenu = null
+    }),
+
+    toggleSessionsModal: () => set((state) => {
+      state.sessionsModalOpen = !state.sessionsModalOpen
     }),
   }))
 )

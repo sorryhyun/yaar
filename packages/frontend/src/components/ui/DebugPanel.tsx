@@ -1,7 +1,7 @@
 /**
  * DebugPanel - Shows raw WebSocket interaction with the AI.
  */
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useDesktopStore } from '@/store'
 import type { DebugEntry } from '@/types/state'
 import styles from '@/styles/DebugPanel.module.css'
@@ -42,7 +42,36 @@ function truncate(str: string, max: number): string {
 export function DebugPanel() {
   const debugLog = useDesktopStore((state) => state.debugLog)
   const clearDebugLog = useDesktopStore((state) => state.clearDebugLog)
+  const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [position, setPosition] = useState({ x: 100, y: 100 })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    setIsDragging(true)
+    dragOffset.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: e.clientX - dragOffset.current.x,
+        y: e.clientY - dragOffset.current.y
+      })
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [position])
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp)
@@ -77,14 +106,28 @@ export function DebugPanel() {
   }
 
   return (
-    <div className={styles.panel}>
-      <div className={styles.header}>
+    <div
+      className={styles.window}
+      style={{ left: position.x, top: position.y }}
+      data-dragging={isDragging}
+    >
+      <div className={styles.titleBar} onMouseDown={handleMouseDown}>
         <span className={styles.title}>Debug Log</span>
-        <button className={styles.clearButton} onClick={clearDebugLog}>
-          Clear
-        </button>
+        <div className={styles.controls}>
+          <button className={styles.controlBtn} onClick={clearDebugLog} title="Clear log">
+            Clear
+          </button>
+          <button
+            className={styles.controlBtn}
+            data-action="close"
+            onClick={toggleDebugPanel}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
       </div>
-      <div className={styles.logContainer}>
+      <div className={styles.content}>
         {debugLog.length === 0 ? (
           <div className={styles.empty}>No events yet. Send a message to see raw interactions.</div>
         ) : (

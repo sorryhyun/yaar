@@ -59,40 +59,34 @@
   cursor: not-allowed;
 }
 
-.debugButton {
-  padding: 8px 12px;
+.toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.toolbarButton {
+  padding: 6px 14px;
   background: transparent;
   color: #6c7086;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
   font-size: 12px;
-  font-family: monospace;
-  font-weight: 600;
+  font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.debugButton:hover {
+.toolbarButton:hover {
   background: rgba(255, 255, 255, 0.05);
   color: #cdd6f4;
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
-.debugButton[data-active="true"] {
+.toolbarButton[data-active="true"] {
   background: rgba(137, 180, 250, 0.15);
   color: #89b4fa;
   border-color: #89b4fa;
-}
-
-.hint {
-  margin-top: 8px;
-  text-align: center;
-  font-size: 11px;
-  color: #6c7086;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.container[data-expanded="true"] .hint {
-  opacity: 1;
 }

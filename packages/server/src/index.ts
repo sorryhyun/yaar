@@ -9,6 +9,8 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AgentSession } from './agent-session.js';
 import { getAvailableTransports } from './transports/factory.js';
+import { listSessions, readSessionTranscript } from './sessions/index.js';
+import { ensureStorageDir } from './storage/index.js';
 import type { ClientEvent } from '@claudeos/shared';
 
 const PORT = parseInt(process.env.PORT ?? '8000', 10);
@@ -47,6 +49,39 @@ const server = createServer(async (req, res) => {
     const providers = await getAvailableTransports();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ providers }));
+    return;
+  }
+
+  // List all sessions
+  if (url.pathname === '/api/sessions' && req.method === 'GET') {
+    try {
+      const sessions = await listSessions();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ sessions }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to list sessions' }));
+    }
+    return;
+  }
+
+  // Get session transcript
+  const transcriptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/transcript$/);
+  if (transcriptMatch && req.method === 'GET') {
+    const sessionId = transcriptMatch[1];
+    try {
+      const transcript = await readSessionTranscript(sessionId);
+      if (transcript === null) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ transcript }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read transcript' }));
+    }
     return;
   }
 
@@ -105,10 +140,12 @@ wss.on('connection', async (ws: WebSocket) => {
   });
 });
 
-// Start server
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`ClaudeOS server running at http://127.0.0.1:${PORT}`);
-  console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
+// Initialize storage and start server
+ensureStorageDir().then(() => {
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`ClaudeOS server running at http://127.0.0.1:${PORT}`);
+    console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
+  });
 });
 
 // Graceful shutdown

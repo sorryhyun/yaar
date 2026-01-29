@@ -5,7 +5,8 @@
  */
 
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
-import { join, normalize, relative } from 'path';
+import { join, normalize, relative, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type {
   StorageEntry,
   StorageReadResult,
@@ -14,7 +15,10 @@ import type {
   StorageDeleteResult,
 } from './types.js';
 
-const STORAGE_DIR = join(process.cwd(), 'storage');
+// Project root: storage-manager.ts -> storage -> src -> server -> packages -> root
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
+const STORAGE_DIR = join(PROJECT_ROOT, 'storage');
 
 /**
  * Validate and normalize a path within the storage directory.

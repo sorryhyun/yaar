@@ -5,6 +5,7 @@ import { useState, useCallback, KeyboardEvent } from 'react'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import { useDesktopStore } from '@/store'
 import { DebugPanel } from './DebugPanel'
+import { SessionsModal } from './SessionsModal'
 import styles from '@/styles/CommandPalette.module.css'
 
 export function CommandPalette() {
@@ -13,6 +14,8 @@ export function CommandPalette() {
   const { isConnected, sendMessage, interrupt } = useAgentConnection()
   const debugPanelOpen = useDesktopStore((state) => state.debugPanelOpen)
   const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel)
+  const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen)
+  const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
@@ -35,23 +38,22 @@ export function CommandPalette() {
   return (
     <>
       {debugPanelOpen && <DebugPanel />}
+      {sessionsModalOpen && <SessionsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
         <div className={styles.inputWrapper}>
-          <button
-            className={styles.debugButton}
-            onClick={toggleDebugPanel}
-            title="Toggle debug panel"
-            data-active={debugPanelOpen}
-          >
-            {'{ }'}
-          </button>
           <textarea
             className={styles.input}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onFocus={() => setIsExpanded(true)}
-            placeholder={isConnected ? "Ask the agent anything..." : "Connecting..."}
+            placeholder={
+              !isConnected
+                ? "Connecting..."
+                : isExpanded
+                  ? "Enter to send, Shift+Enter for new line, Esc to cancel"
+                  : "Ask the agent anything..."
+            }
             disabled={!isConnected}
             rows={isExpanded ? 3 : 1}
           />
@@ -63,8 +65,23 @@ export function CommandPalette() {
             Send
           </button>
         </div>
-        <div className={styles.hint}>
-          Press Enter to send, Shift+Enter for new line, Esc to cancel
+        <div className={styles.toolbar}>
+          <button
+            className={styles.toolbarButton}
+            onClick={toggleSessionsModal}
+            title="View sessions"
+            data-active={sessionsModalOpen}
+          >
+            Sessions
+          </button>
+          <button
+            className={styles.toolbarButton}
+            onClick={toggleDebugPanel}
+            title="Toggle debug panel"
+            data-active={debugPanelOpen}
+          >
+            {'{ }'} Debug
+          </button>
         </div>
       </div>
     </>
