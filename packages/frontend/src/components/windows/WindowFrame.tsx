@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react'
 import { useDesktopStore } from '@/store'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
+import { LockOverlay } from './LockOverlay'
 import styles from '@/styles/WindowFrame.module.css'
 
 interface WindowFrameProps {
@@ -14,7 +15,7 @@ interface WindowFrameProps {
 }
 
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow } =
+  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu } =
     useDesktopStore()
 
   const frameRef = useRef<HTMLDivElement>(null)
@@ -145,8 +146,15 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       </div>
 
       {/* Content area */}
-      <div className={styles.content}>
+      <div
+        className={styles.content}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          showContextMenu(e.clientX, e.clientY, window.id)
+        }}
+      >
         <ContentRenderer content={window.content} />
+        {window.locked && <LockOverlay />}
       </div>
 
       {/* Resize handle */}

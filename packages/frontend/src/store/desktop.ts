@@ -24,6 +24,7 @@ const initialState: DesktopState = {
   sessionId: null,
   debugLog: [],
   debugPanelOpen: false,
+  contextMenu: null,
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -53,6 +54,11 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         }
 
         case 'window.close': {
+          const win = state.windows[action.windowId]
+          // Respect lock: only owner agent can close a locked window
+          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+            break
+          }
           delete state.windows[action.windowId]
           state.zOrder = state.zOrder.filter(id => id !== action.windowId)
           if (state.focusedWindowId === action.windowId) {
@@ -129,14 +135,23 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         }
 
         case 'window.setContent': {
-          if (state.windows[action.windowId]) {
-            state.windows[action.windowId].content = { ...action.content }
+          const win = state.windows[action.windowId]
+          // Respect lock: only owner agent can modify locked window content
+          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+            break
+          }
+          if (win) {
+            win.content = { ...action.content }
           }
           break
         }
 
         case 'window.updateContent': {
           const win = state.windows[action.windowId]
+          // Respect lock: only owner agent can update locked window content
+          if (win?.locked && win.lockedBy !== (action as { agentId?: string }).agentId) {
+            break
+          }
           if (win) {
             const currentData = (win.content.data as string) ?? ''
             switch (action.operation.op) {
@@ -197,6 +212,26 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
         case 'toast.dismiss': {
           delete state.toasts[action.id]
+          break
+        }
+
+        // ======== Window Lock Actions ========
+
+        case 'window.lock': {
+          const win = state.windows[action.windowId]
+          if (win && !win.locked) {
+            win.locked = true
+            win.lockedBy = action.agentId
+          }
+          break
+        }
+
+        case 'window.unlock': {
+          const win = state.windows[action.windowId]
+          if (win && win.locked && win.lockedBy === action.agentId) {
+            win.locked = false
+            win.lockedBy = undefined
+          }
           break
         }
       }
@@ -281,6 +316,17 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
     clearDebugLog: () => set((state) => {
       state.debugLog = []
+    }),
+
+    showContextMenu: (x, y, windowId) => set((state) => {
+      const win = state.windows[windowId]
+      if (win) {
+        state.contextMenu = { x, y, windowId, windowTitle: win.title }
+      }
+    }),
+
+    hideContextMenu: () => set((state) => {
+      state.contextMenu = null
     }),
   }))
 )

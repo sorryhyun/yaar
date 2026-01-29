@@ -11,6 +11,8 @@ export interface WindowModel {
   minimized: boolean
   maximized: boolean
   previousBounds?: WindowBounds  // For restore after maximize
+  locked?: boolean
+  lockedBy?: string  // Agent ID that holds the lock
 }
 
 export interface NotificationModel {
@@ -29,6 +31,13 @@ export interface ToastModel {
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+
+export interface ContextMenuState {
+  x: number
+  y: number
+  windowId: string
+  windowTitle: string
+}
 
 export interface DebugEntry {
   id: string
@@ -62,6 +71,9 @@ export interface DesktopState {
   // Debug log (raw WebSocket events)
   debugLog: DebugEntry[]
   debugPanelOpen: boolean
+
+  // Context menu state
+  contextMenu: ContextMenuState | null
 }
 
 export interface DesktopActions {
@@ -87,4 +99,8 @@ export interface DesktopActions {
   addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void
   toggleDebugPanel: () => void
   clearDebugLog: () => void
+
+  // Context menu
+  showContextMenu: (x: number, y: number, windowId: string) => void
+  hideContextMenu: () => void
 }

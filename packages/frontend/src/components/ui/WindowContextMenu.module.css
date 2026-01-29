@@ -1,0 +1,67 @@
+.menu {
+  position: fixed;
+  background: #1e1e2e;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  min-width: 280px;
+  max-width: 400px;
+  z-index: 10000;
+}
+
+.header {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a6adc8;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  background: #181825;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #cdd6f4;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.input::placeholder {
+  color: #6c7086;
+}
+
+.input:focus {
+  border-color: rgba(137, 180, 250, 0.5);
+}
+
+.sendButton {
+  padding: 8px 16px;
+  background: #89b4fa;
+  color: #1e1e2e;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sendButton:hover:not(:disabled) {
+  background: #b4befe;
+}
+
+.sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

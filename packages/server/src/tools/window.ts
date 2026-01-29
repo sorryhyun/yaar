@@ -180,11 +180,69 @@ export const showToast = tool(
 );
 
 /**
+ * Lock a window to prevent other agents from modifying it.
+ */
+export const lockWindow = tool(
+  'lock_window',
+  'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
+  {
+    windowId: z.string().describe('ID of the window to lock'),
+    agentId: z.string().describe('Unique identifier for the agent acquiring the lock')
+  },
+  async (args) => {
+    const osAction: OSAction = {
+      type: 'window.lock',
+      windowId: args.windowId,
+      agentId: args.agentId
+    };
+
+    actionEmitter.emitAction(osAction);
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" locked by agent "${args.agentId}"` })
+      }]
+    };
+  }
+);
+
+/**
+ * Unlock a window to allow other agents to modify it.
+ */
+export const unlockWindow = tool(
+  'unlock_window',
+  'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
+  {
+    windowId: z.string().describe('ID of the window to unlock'),
+    agentId: z.string().describe('Unique identifier for the agent releasing the lock (must match the locking agent)')
+  },
+  async (args) => {
+    const osAction: OSAction = {
+      type: 'window.unlock',
+      windowId: args.windowId,
+      agentId: args.agentId
+    };
+
+    actionEmitter.emitAction(osAction);
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" unlocked by agent "${args.agentId}"` })
+      }]
+    };
+  }
+);
+
+/**
  * All window/UI tools.
  */
 export const windowTools = [
   createWindow,
   updateWindow,
   closeWindow,
-  showToast
+  showToast,
+  lockWindow,
+  unlockWindow
 ];

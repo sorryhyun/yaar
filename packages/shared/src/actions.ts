@@ -94,6 +94,18 @@ export interface WindowUpdateContentAction {
   renderer?: string; // Optional: change renderer type
 }
 
+export interface WindowLockAction {
+  type: 'window.lock';
+  windowId: string;
+  agentId: string;
+}
+
+export interface WindowUnlockAction {
+  type: 'window.unlock';
+  windowId: string;
+  agentId: string;
+}
+
 // ============ Notification Actions ============
 
 export interface NotificationShowAction {
@@ -136,7 +148,9 @@ export type WindowAction =
   | WindowResizeAction
   | WindowSetTitleAction
   | WindowSetContentAction
-  | WindowUpdateContentAction;
+  | WindowUpdateContentAction
+  | WindowLockAction
+  | WindowUnlockAction;
 
 export type NotificationAction = NotificationShowAction | NotificationDismissAction;
 
