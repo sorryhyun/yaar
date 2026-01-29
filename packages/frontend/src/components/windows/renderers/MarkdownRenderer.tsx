@@ -14,7 +14,7 @@ interface MarkdownRendererProps {
 export function MarkdownRenderer({ data }: MarkdownRendererProps) {
   // Simple markdown conversion (production should use proper library)
   const html = useMemo(() => {
-    let result = data
+    const result = data
       // Escape HTML
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

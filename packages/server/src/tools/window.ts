@@ -3,24 +3,25 @@
  *
  * Provides tools for:
  * - Creating and managing windows
+ * - Updating window content with diff-based operations
  * - Toast notifications
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { WINDOW_PRESETS, type WindowPreset, type OSAction } from '@claudeos/shared';
+import { WINDOW_PRESETS, type WindowPreset, type OSAction, type ContentUpdateOperation } from '@claudeos/shared';
 import { actionEmitter } from './action-emitter.js';
 
 /**
- * Show a window on the ClaudeOS desktop.
+ * Create a window on the ClaudeOS desktop.
  */
-export const showWindow = tool(
-  'show_window',
-  'Display content in a window on the ClaudeOS desktop. Use presets for consistent styling.',
+export const createWindow = tool(
+  'create_window',
+  'Create a new window on the ClaudeOS desktop. Use presets for consistent styling. Content is optional and defaults to empty.',
   {
     windowId: z.string().describe('Unique identifier for the window'),
     title: z.string().describe('Window title'),
-    content: z.string().describe('Content to display in the window'),
+    content: z.string().optional().describe('Initial content to display in the window. Defaults to empty string'),
     preset: z.enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog']).optional().describe('Window preset for consistent styling. Defaults to "default"'),
     renderer: z.enum(['markdown', 'text', 'html']).optional().describe('Content renderer. Defaults to "markdown"'),
     x: z.number().optional().describe('X position (overrides preset)'),
@@ -44,7 +45,7 @@ export const showWindow = tool(
       },
       content: {
         renderer: args.renderer || 'markdown',
-        data: args.content
+        data: args.content ?? ''
       }
     };
 
@@ -55,6 +56,66 @@ export const showWindow = tool(
       content: [{
         type: 'text' as const,
         text: JSON.stringify({ osAction, success: true, message: `Window "${args.title}" created` })
+      }]
+    };
+  }
+);
+
+/**
+ * Update window content with diff-based operations.
+ */
+export const updateWindow = tool(
+  'update_window',
+  'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear.',
+  {
+    windowId: z.string().describe('ID of the window to update'),
+    operation: z.enum(['append', 'prepend', 'replace', 'insertAt', 'clear']).describe('The operation to perform on the content'),
+    content: z.string().optional().describe('Content for the operation (not needed for clear)'),
+    position: z.number().optional().describe('Character position for insertAt operation')
+  },
+  async (args) => {
+    // Build the operation based on the operation type
+    let operation: ContentUpdateOperation;
+
+    switch (args.operation) {
+      case 'append':
+        operation = { op: 'append', data: args.content ?? '' };
+        break;
+      case 'prepend':
+        operation = { op: 'prepend', data: args.content ?? '' };
+        break;
+      case 'replace':
+        operation = { op: 'replace', data: args.content ?? '' };
+        break;
+      case 'insertAt':
+        if (args.position === undefined) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({ success: false, error: 'position is required for insertAt operation' })
+            }]
+          };
+        }
+        operation = { op: 'insertAt', position: args.position, data: args.content ?? '' };
+        break;
+      case 'clear':
+        operation = { op: 'clear' };
+        break;
+    }
+
+    const osAction = {
+      type: 'window.updateContent' as const,
+      windowId: args.windowId,
+      operation
+    };
+
+    // Emit action directly to frontend
+    actionEmitter.emitAction(osAction);
+
+    return {
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" content updated (${args.operation})` })
       }]
     };
   }
@@ -122,7 +183,8 @@ export const showToast = tool(
  * All window/UI tools.
  */
 export const windowTools = [
-  showWindow,
+  createWindow,
+  updateWindow,
   closeWindow,
   showToast
 ];

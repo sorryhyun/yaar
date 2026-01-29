@@ -135,6 +135,36 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
           break
         }
 
+        case 'window.updateContent': {
+          const win = state.windows[action.windowId]
+          if (win) {
+            const currentData = (win.content.data as string) ?? ''
+            switch (action.operation.op) {
+              case 'append':
+                win.content.data = currentData + (action.operation.data as string)
+                break
+              case 'prepend':
+                win.content.data = (action.operation.data as string) + currentData
+                break
+              case 'replace':
+                win.content.data = action.operation.data
+                break
+              case 'insertAt': {
+                const pos = action.operation.position
+                win.content.data = currentData.slice(0, pos) + (action.operation.data as string) + currentData.slice(pos)
+                break
+              }
+              case 'clear':
+                win.content.data = ''
+                break
+            }
+            if (action.renderer) {
+              win.content.renderer = action.renderer
+            }
+          }
+          break
+        }
+
         // ======== Notification Actions ========
 
         case 'notification.show': {

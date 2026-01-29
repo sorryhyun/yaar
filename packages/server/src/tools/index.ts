@@ -46,7 +46,8 @@ export function getClaudeOSToolNames(): string[] {
     'mcp__claudeos__get_env_var',
     'mcp__claudeos__generate_random',
     // Window tools
-    'mcp__claudeos__show_window',
+    'mcp__claudeos__create_window',
+    'mcp__claudeos__update_window',
     'mcp__claudeos__close_window',
     'mcp__claudeos__show_toast',
     // Storage tools

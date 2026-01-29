@@ -78,6 +78,22 @@ export interface WindowSetContentAction {
   content: WindowContent;
 }
 
+// ============ Content Update Operations ============
+
+export type ContentUpdateOperation =
+  | { op: 'append'; data: unknown }
+  | { op: 'prepend'; data: unknown }
+  | { op: 'replace'; data: unknown }
+  | { op: 'insertAt'; position: number; data: unknown }
+  | { op: 'clear' };
+
+export interface WindowUpdateContentAction {
+  type: 'window.updateContent';
+  windowId: string;
+  operation: ContentUpdateOperation;
+  renderer?: string; // Optional: change renderer type
+}
+
 // ============ Notification Actions ============
 
 export interface NotificationShowAction {
@@ -119,7 +135,8 @@ export type WindowAction =
   | WindowMoveAction
   | WindowResizeAction
   | WindowSetTitleAction
-  | WindowSetContentAction;
+  | WindowSetContentAction
+  | WindowUpdateContentAction;
 
 export type NotificationAction = NotificationShowAction | NotificationDismissAction;
 
