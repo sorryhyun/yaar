@@ -7,7 +7,7 @@
 
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AgentSession } from './agent-session.js';
+import { SessionManager } from './session-manager.js';
 import { getAvailableTransports } from './providers/factory.js';
 import { listSessions, readSessionTranscript } from './sessions/index.js';
 import { ensureStorageDir } from './storage/index.js';
@@ -96,10 +96,10 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', async (ws: WebSocket) => {
   console.log('WebSocket client connected');
 
-  const session = new AgentSession(ws);
+  const manager = new SessionManager(ws);
 
-  // Initialize provider
-  const initialized = await session.initialize();
+  // Initialize main session
+  const initialized = await manager.initialize();
   if (!initialized) {
     ws.close(1011, 'No provider available');
     return;
@@ -108,32 +108,8 @@ wss.on('connection', async (ws: WebSocket) => {
   // Handle messages
   ws.on('message', async (data) => {
     try {
-      const message = JSON.parse(data.toString()) as ClientEvent;
-
-      switch (message.type) {
-        case 'USER_MESSAGE':
-          await session.handleMessage(message.content);
-          break;
-
-        case 'INTERRUPT':
-          await session.interrupt();
-          break;
-
-        case 'SET_PROVIDER':
-          await session.setProvider(message.provider);
-          break;
-
-        case 'RENDERING_FEEDBACK':
-          session.handleRenderingFeedback(
-            message.requestId,
-            message.windowId,
-            message.renderer,
-            message.success ?? false,
-            message.error,
-            message.url
-          );
-          break;
-      }
+      const event = JSON.parse(data.toString()) as ClientEvent;
+      await manager.routeMessage(event);
     } catch (err) {
       console.error('Failed to process message:', err);
     }
@@ -142,7 +118,7 @@ wss.on('connection', async (ws: WebSocket) => {
   // Handle close
   ws.on('close', async () => {
     console.log('WebSocket client disconnected');
-    await session.cleanup();
+    await manager.cleanup();
   });
 
   // Handle errors

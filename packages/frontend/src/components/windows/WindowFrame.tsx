@@ -2,7 +2,7 @@
  * WindowFrame - Draggable, resizable window container.
  */
 import { useCallback, useRef, useState } from 'react'
-import { useDesktopStore } from '@/store'
+import { useDesktopStore, selectWindowAgent } from '@/store'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
@@ -17,6 +17,7 @@ interface WindowFrameProps {
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback } =
     useDesktopStore()
+  const windowAgent = useDesktopStore(selectWindowAgent(window.id))
 
   const frameRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -121,7 +122,22 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           showContextMenu(e.clientX, e.clientY, window.id)
         }}
       >
-        <div className={styles.title}>{window.title}</div>
+        <div className={styles.titleSection}>
+          <div className={styles.title}>{window.title}</div>
+          {windowAgent && (
+            <div
+              className={styles.agentBadge}
+              data-status={windowAgent.status}
+              title={`Window agent: ${windowAgent.status}`}
+            >
+              {windowAgent.status === 'active' ? (
+                <span className={styles.agentSpinner}>⟳</span>
+              ) : (
+                <span className={styles.agentIcon}>◉</span>
+              )}
+            </div>
+          )}
+        </div>
         <div className={styles.controls}>
           <button
             className={styles.controlBtn}

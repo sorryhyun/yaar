@@ -27,6 +27,7 @@ const initialState: DesktopState = {
   contextMenu: null,
   sessionsModalOpen: false,
   activeAgents: {},
+  windowAgents: {},
   pendingFeedback: [],
 }
 
@@ -358,6 +359,24 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
       state.activeAgents = {}
     }),
 
+    registerWindowAgent: (windowId, agentId, status) => set((state) => {
+      state.windowAgents[windowId] = { agentId, status }
+    }),
+
+    updateWindowAgentStatus: (windowId, status) => set((state) => {
+      if (state.windowAgents[windowId]) {
+        if (status === 'destroyed') {
+          delete state.windowAgents[windowId]
+        } else {
+          state.windowAgents[windowId].status = status
+        }
+      }
+    }),
+
+    removeWindowAgent: (windowId) => set((state) => {
+      delete state.windowAgents[windowId]
+    }),
+
     addRenderingFeedback: (feedback) => set((state) => {
       state.pendingFeedback.push(feedback)
     }),
@@ -392,3 +411,9 @@ export const selectNotifications = (state: DesktopState & DesktopActions) =>
 
 export const selectActiveAgents = (state: DesktopState & DesktopActions) =>
   Object.values(state.activeAgents)
+
+export const selectWindowAgents = (state: DesktopState & DesktopActions) =>
+  state.windowAgents
+
+export const selectWindowAgent = (windowId: string) => (state: DesktopState & DesktopActions) =>
+  state.windowAgents[windowId]

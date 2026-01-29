@@ -11,8 +11,19 @@ export interface UserMessageEvent {
   content: string;
 }
 
+export interface WindowMessageEvent {
+  type: 'WINDOW_MESSAGE';
+  windowId: string;
+  content: string;
+}
+
 export interface InterruptEvent {
   type: 'INTERRUPT';
+}
+
+export interface InterruptAgentEvent {
+  type: 'INTERRUPT_AGENT';
+  agentId: string;
 }
 
 export interface SetProviderEvent {
@@ -30,24 +41,33 @@ export interface RenderingFeedbackEvent {
   url?: string;
 }
 
-export type ClientEvent = UserMessageEvent | InterruptEvent | SetProviderEvent | RenderingFeedbackEvent;
+export type ClientEvent =
+  | UserMessageEvent
+  | WindowMessageEvent
+  | InterruptEvent
+  | InterruptAgentEvent
+  | SetProviderEvent
+  | RenderingFeedbackEvent;
 
 // ============ Server → Client Events ============
 
 export interface ActionsEvent {
   type: 'ACTIONS';
   actions: OSAction[];
+  agentId?: string;
 }
 
 export interface AgentThinkingEvent {
   type: 'AGENT_THINKING';
   content: string;
+  agentId?: string;
 }
 
 export interface AgentResponseEvent {
   type: 'AGENT_RESPONSE';
   content: string;
   isComplete: boolean;
+  agentId?: string;
 }
 
 export interface ConnectionStatusEvent {
@@ -63,6 +83,7 @@ export interface ToolProgressEvent {
   toolName: string;
   status: 'running' | 'complete' | 'error';
   message?: string;
+  agentId?: string;
 }
 
 export interface RequestPermissionEvent {
@@ -75,6 +96,14 @@ export interface RequestPermissionEvent {
 export interface ErrorEvent {
   type: 'ERROR';
   error: string;
+  agentId?: string;
+}
+
+export interface WindowAgentStatusEvent {
+  type: 'WINDOW_AGENT_STATUS';
+  windowId: string;
+  agentId: string;
+  status: 'created' | 'active' | 'idle' | 'destroyed';
 }
 
 export type ServerEvent =
@@ -84,4 +113,5 @@ export type ServerEvent =
   | ConnectionStatusEvent
   | ToolProgressEvent
   | RequestPermissionEvent
-  | ErrorEvent;
+  | ErrorEvent
+  | WindowAgentStatusEvent;

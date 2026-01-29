@@ -22,7 +22,8 @@ export function DesktopSurface() {
   const contextMenu = useDesktopStore(s => s.contextMenu)
   const hideContextMenu = useDesktopStore(s => s.hideContextMenu)
   const showContextMenu = useDesktopStore(s => s.showContextMenu)
-  const { sendMessage } = useAgentConnection({ autoConnect: false })
+  const windowAgents = useDesktopStore(s => s.windowAgents)
+  const { sendMessage, sendWindowMessage } = useAgentConnection({ autoConnect: false })
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
     // Only handle clicks directly on the desktop
@@ -74,7 +75,9 @@ export function DesktopSurface() {
           y={contextMenu.y}
           windowId={contextMenu.windowId}
           windowTitle={contextMenu.windowTitle}
+          hasWindowAgent={contextMenu.windowId ? !!windowAgents[contextMenu.windowId] : false}
           onSend={sendMessage}
+          onSendToWindow={sendWindowMessage}
           onClose={hideContextMenu}
         />
       )}

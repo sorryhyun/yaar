@@ -16,6 +16,7 @@ export interface ActionEvent {
   action: OSAction;
   requestId?: string;
   sessionId?: string;
+  agentId?: string;
 }
 
 /**
@@ -55,8 +56,8 @@ class ActionEmitter extends EventEmitter {
   /**
    * Emit an OS Action to all listeners.
    */
-  emitAction(action: OSAction, sessionId?: string): void {
-    this.emit('action', { action, sessionId } as ActionEvent);
+  emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
+    this.emit('action', { action, sessionId, agentId } as ActionEvent);
   }
 
   /**
@@ -80,7 +81,7 @@ class ActionEmitter extends EventEmitter {
       this.pendingRequests.set(requestId, { resolve, timeoutId });
     });
 
-    // Emit action with request ID
+    // Emit action with request ID (agentId not used for feedback)
     this.emit('action', { action, requestId, sessionId } as ActionEvent);
 
     return feedbackPromise;

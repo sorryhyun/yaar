@@ -32,6 +32,7 @@ export class ClaudeTransport extends BaseTransport {
         systemPrompt: options.systemPrompt,
         model: options.model ?? "claude-opus-4-5-20251101",
         resume: options.sessionId,
+        forkSession: options.forkSession, // When true, creates a new session with context from resumed session
         // Disable all default Claude Code tools - only use ClaudeOS MCP tools
         tools: ['WebFetch','WebSearch'],
         allowedTools: getClaudeOSToolNames(),

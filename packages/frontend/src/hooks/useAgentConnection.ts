@@ -1,13 +1,39 @@
 /**
  * useAgentConnection - WebSocket connection to the agent backend.
+ * Uses a singleton pattern to share the WebSocket across all components.
  */
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useSyncExternalStore } from 'react'
 import { useDesktopStore } from '@/store'
 import type { ClientEvent, ServerEvent } from '@/types/events'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 const RECONNECT_DELAY = 3000
 const MAX_RECONNECT_ATTEMPTS = 5
+
+// Singleton WebSocket manager
+const wsManager = {
+  ws: null as WebSocket | null,
+  reconnectAttempts: 0,
+  reconnectTimeout: null as number | null,
+  listeners: new Set<() => void>(),
+
+  getSnapshot() {
+    return this.ws?.readyState === WebSocket.OPEN
+  },
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  },
+
+  notify() {
+    this.listeners.forEach(l => l())
+  },
+
+  getSocket() {
+    return this.ws
+  }
+}
 
 interface UseAgentConnectionOptions {
   autoConnect?: boolean
@@ -16,12 +42,12 @@ interface UseAgentConnectionOptions {
 export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const { autoConnect = true } = options
 
-  const ws = useRef<WebSocket | null>(null)
-  const reconnectAttempts = useRef(0)
-  const reconnectTimeout = useRef<number | null>(null)
-  const mountedRef = useRef(true) // Track if component is mounted (handles StrictMode)
-
-  const [isConnected, setIsConnected] = useState(false)
+  // Use external store for connection state to share across all hook instances
+  const isConnected = useSyncExternalStore(
+    (cb) => wsManager.subscribe(cb),
+    () => wsManager.getSnapshot(),
+    () => false
+  )
   const [isConnecting, setIsConnecting] = useState(false)
 
   const {
@@ -33,6 +59,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAgent,
     clearAllAgents,
     consumePendingFeedback,
+    registerWindowAgent,
+    updateWindowAgentStatus,
   } = useDesktopStore()
 
   // Handle incoming messages
@@ -116,54 +144,67 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           console.error('[Agent Error]', message.error)
           setConnectionStatus('error', message.error)
           break
+
+        case 'WINDOW_AGENT_STATUS': {
+          const { windowId, agentId, status } = message as {
+            windowId: string
+            agentId: string
+            status: 'created' | 'active' | 'idle' | 'destroyed'
+          }
+          if (status === 'created') {
+            registerWindowAgent(windowId, agentId, status)
+          } else if (status === 'destroyed') {
+            updateWindowAgentStatus(windowId, status)
+          } else {
+            updateWindowAgentStatus(windowId, status)
+          }
+          break
+        }
       }
     } catch (e) {
       console.error('Failed to parse message:', e)
     }
-  }, [applyActions, setConnectionStatus, setSession, addDebugEntry, setAgentActive, clearAgent])
+  }, [applyActions, setConnectionStatus, setSession, addDebugEntry, setAgentActive, clearAgent, registerWindowAgent, updateWindowAgentStatus])
 
   // Connect to WebSocket
   const connect = useCallback(() => {
     // Skip if already open or connecting
-    if (ws.current?.readyState === WebSocket.OPEN ||
-        ws.current?.readyState === WebSocket.CONNECTING) {
+    if (wsManager.ws?.readyState === WebSocket.OPEN ||
+        wsManager.ws?.readyState === WebSocket.CONNECTING) {
       return
     }
 
     setIsConnecting(true)
     setConnectionStatus('connecting')
 
-    ws.current = new WebSocket(WS_URL)
+    wsManager.ws = new WebSocket(WS_URL)
 
-    ws.current.onopen = () => {
-      if (!mountedRef.current) return
+    wsManager.ws.onopen = () => {
       console.log('WebSocket connected')
-      setIsConnected(true)
       setIsConnecting(false)
       setConnectionStatus('connected')
-      reconnectAttempts.current = 0
+      wsManager.reconnectAttempts = 0
+      wsManager.notify()
     }
 
-    ws.current.onmessage = handleMessage
+    wsManager.ws.onmessage = handleMessage
 
-    ws.current.onclose = (event) => {
-      if (!mountedRef.current) return
+    wsManager.ws.onclose = (event) => {
       console.log('WebSocket closed:', event.code, event.reason)
-      setIsConnected(false)
       setIsConnecting(false)
       setConnectionStatus('disconnected')
-      ws.current = null
+      wsManager.ws = null
+      wsManager.notify()
 
       // Auto-reconnect if not a clean close
-      if (event.code !== 1000 && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts.current++
-        console.log(`Reconnecting in ${RECONNECT_DELAY}ms (attempt ${reconnectAttempts.current})`)
-        reconnectTimeout.current = window.setTimeout(connect, RECONNECT_DELAY)
+      if (event.code !== 1000 && wsManager.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        wsManager.reconnectAttempts++
+        console.log(`Reconnecting in ${RECONNECT_DELAY}ms (attempt ${wsManager.reconnectAttempts})`)
+        wsManager.reconnectTimeout = window.setTimeout(connect, RECONNECT_DELAY)
       }
     }
 
-    ws.current.onerror = (error) => {
-      if (!mountedRef.current) return
+    wsManager.ws.onerror = (error) => {
       console.error('WebSocket error:', error)
       setConnectionStatus('error', 'Connection failed')
     }
@@ -171,33 +212,33 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   // Disconnect
   const disconnect = useCallback(() => {
-    if (reconnectTimeout.current) {
-      clearTimeout(reconnectTimeout.current)
-      reconnectTimeout.current = null
+    if (wsManager.reconnectTimeout) {
+      clearTimeout(wsManager.reconnectTimeout)
+      wsManager.reconnectTimeout = null
     }
-    reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS // Prevent auto-reconnect
+    wsManager.reconnectAttempts = MAX_RECONNECT_ATTEMPTS // Prevent auto-reconnect
 
     // Only close if already connected (not while connecting - avoids StrictMode issues)
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.close(1000, 'User disconnect')
-      ws.current = null
+    if (wsManager.ws?.readyState === WebSocket.OPEN) {
+      wsManager.ws.close(1000, 'User disconnect')
+      wsManager.ws = null
+      wsManager.notify()
     }
 
-    setIsConnected(false)
     setConnectionStatus('disconnected')
     clearAllAgents()
   }, [setConnectionStatus, clearAllAgents])
 
   // Send message
   const send = useCallback((event: ClientEvent) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
+    if (wsManager.ws?.readyState === WebSocket.OPEN) {
       // Log outgoing messages to debug panel
       addDebugEntry({
         direction: 'out',
         type: event.type,
         data: event,
       })
-      ws.current.send(JSON.stringify(event))
+      wsManager.ws.send(JSON.stringify(event))
     } else {
       console.warn('WebSocket not connected, cannot send:', event)
     }
@@ -206,6 +247,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   // Send user message
   const sendMessage = useCallback((content: string) => {
     send({ type: 'USER_MESSAGE', content })
+  }, [send])
+
+  // Send message to a specific window agent
+  const sendWindowMessage = useCallback((windowId: string, content: string) => {
+    send({ type: 'WINDOW_MESSAGE', windowId, content })
   }, [send])
 
   // Interrupt current operation
@@ -218,27 +264,26 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: 'SET_PROVIDER', provider })
   }, [send])
 
-  // Auto-connect on mount
-  // Note: We intentionally use an empty dependency array to run this effect only once.
-  // The connect/disconnect functions use refs internally, so they don't need to be deps.
-  useEffect(() => {
-    mountedRef.current = true
+  // Interrupt a specific agent
+  const interruptAgent = useCallback((agentId: string) => {
+    send({ type: 'INTERRUPT_AGENT', agentId })
+  }, [send])
 
+  // Auto-connect on mount (only when autoConnect is true)
+  // With the singleton pattern, only the first hook instance that calls connect() will create the connection
+  useEffect(() => {
     if (autoConnect) {
       connect()
     }
-
-    return () => {
-      mountedRef.current = false
-      disconnect()
-    }
+    // We don't disconnect on unmount since the connection is shared
+    // The connection stays alive as long as the app is running
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Subscribe to pending feedback and send to server
   useEffect(() => {
     const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingFeedback.length > 0 && ws.current?.readyState === WebSocket.OPEN) {
+      if (state.pendingFeedback.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
         const feedback = consumePendingFeedback()
         for (const item of feedback) {
           send({
@@ -262,7 +307,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     connect,
     disconnect,
     sendMessage,
+    sendWindowMessage,
     interrupt,
+    interruptAgent,
     setProvider,
   }
 }

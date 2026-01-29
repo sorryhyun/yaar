@@ -9,15 +9,20 @@ interface WindowContextMenuProps {
   y: number
   windowId?: string
   windowTitle?: string
+  hasWindowAgent?: boolean
   onSend: (message: string) => void
+  onSendToWindow: (windowId: string, message: string) => void
   onClose: () => void
 }
 
 export function WindowContextMenu({
   x,
   y,
+  windowId,
   windowTitle,
+  hasWindowAgent,
   onSend,
+  onSendToWindow,
   onClose,
 }: WindowContextMenuProps) {
   const [input, setInput] = useState('')
@@ -66,13 +71,16 @@ export function WindowContextMenu({
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
     if (trimmed) {
-      const message = windowTitle
-        ? `[Re: "${windowTitle}"] ${trimmed}`
-        : trimmed
-      onSend(message)
+      if (windowId) {
+        // Send to window-specific agent (fork or continue)
+        onSendToWindow(windowId, trimmed)
+      } else {
+        // Send to main agent
+        onSend(trimmed)
+      }
       onClose()
     }
-  }, [input, windowTitle, onSend, onClose])
+  }, [input, windowId, onSend, onSendToWindow, onClose])
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -89,6 +97,13 @@ export function WindowContextMenu({
     e.stopPropagation()
   }, [])
 
+  // Determine header text based on whether a window agent exists
+  const headerText = windowId
+    ? hasWindowAgent
+      ? `Continue with "${windowTitle}" agent`
+      : `Fork agent for "${windowTitle}"`
+    : 'Quick message'
+
   return (
     <div
       ref={menuRef}
@@ -97,7 +112,7 @@ export function WindowContextMenu({
       onClick={handleClick}
     >
       <div className={styles.header}>
-        {windowTitle ? `Ask about "${windowTitle}"` : 'Quick message'}
+        {headerText}
       </div>
       <div className={styles.inputRow}>
         <input
@@ -106,7 +121,13 @@ export function WindowContextMenu({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={windowTitle ? 'Type your question...' : 'Type your message...'}
+          placeholder={
+            windowId
+              ? hasWindowAgent
+                ? 'Continue the conversation...'
+                : 'What should this agent do?'
+              : 'Type your message...'
+          }
         />
         <button
           className={styles.sendButton}

@@ -46,7 +46,8 @@ export interface StreamMessage {
 export interface TransportOptions {
   systemPrompt: string;
   model?: string;
-  sessionId?: string; // For session resumption
+  sessionId?: string; // For session resumption, or parent session when forking
+  forkSession?: boolean; // When true with sessionId, creates a fork instead of continuing
 }
 
 /**

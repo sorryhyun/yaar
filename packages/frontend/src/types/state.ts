@@ -54,6 +54,11 @@ export interface ActiveAgent {
   startedAt: number
 }
 
+export interface WindowAgent {
+  agentId: string
+  status: 'created' | 'active' | 'idle' | 'destroyed'
+}
+
 export interface RenderingFeedback {
   requestId: string
   windowId: string
@@ -97,6 +102,9 @@ export interface DesktopState {
   // Active agents (for spinner display)
   activeAgents: Record<string, ActiveAgent>
 
+  // Window agents (for fork session feature)
+  windowAgents: Record<string, WindowAgent>
+
   // Pending feedback to send to the server
   pendingFeedback: RenderingFeedback[]
 }
@@ -136,6 +144,11 @@ export interface DesktopActions {
   setAgentActive: (agentId: string, status: string) => void
   clearAgent: (agentId: string) => void
   clearAllAgents: () => void
+
+  // Window agents
+  registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void
+  updateWindowAgentStatus: (windowId: string, status: WindowAgent['status']) => void
+  removeWindowAgent: (windowId: string) => void
 
   // Rendering feedback
   addRenderingFeedback: (feedback: RenderingFeedback) => void

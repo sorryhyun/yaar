@@ -23,17 +23,72 @@ export class AgentSession {
   private running = false;
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
+  private windowId?: string;
+  private forkFromSessionId?: string;
+  private hasSentFirstMessage = false;
 
-  constructor(ws: WebSocket) {
+  /**
+   * Create an agent session.
+   * @param ws - WebSocket connection
+   * @param sessionId - Session ID for this agent (optional, assigned by SDK if not provided)
+   * @param windowId - Window ID if this is a window-specific agent
+   * @param forkFromSessionId - Parent session ID to fork from (for window agents)
+   */
+  constructor(ws: WebSocket, sessionId?: string, windowId?: string, forkFromSessionId?: string) {
     this.ws = ws;
+    this.sessionId = sessionId ?? null;
+    this.windowId = windowId;
+    this.forkFromSessionId = forkFromSessionId;
     // Subscribe to actions emitted directly from tools
     this.unsubscribeAction = actionEmitter.onAction(this.handleToolAction.bind(this));
   }
 
   /**
+   * Get the window ID this session is associated with (if any).
+   */
+  getWindowId(): string | undefined {
+    return this.windowId;
+  }
+
+  /**
+   * Get the agent identifier.
+   * Returns 'main' for the main agent, or 'window-{windowId}' for window agents.
+   * Once the SDK assigns a session ID, returns that for resumption purposes.
+   */
+  getSessionId(): string {
+    // If we have an SDK-assigned session ID, use it
+    if (this.sessionId) {
+      return this.sessionId;
+    }
+    // For window agents without SDK session yet, use window-based ID
+    if (this.windowId) {
+      return `window-${this.windowId}`;
+    }
+    // Main agent
+    return 'main';
+  }
+
+  /**
+   * Get the raw session ID (may be null for main agent before first message).
+   */
+  getRawSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  /**
    * Handle actions emitted directly from tools.
+   * Filters actions to only handle ones matching this session's agentId.
    */
   private async handleToolAction(event: ActionEvent): Promise<void> {
+    // Filter: only handle actions for this agent (or unspecified agentId for main)
+    if (event.agentId && event.agentId !== this.getSessionId()) {
+      return;
+    }
+    // For main agent, also skip if action is explicitly for another agent
+    if (this.getSessionId() === 'main' && event.agentId && event.agentId !== 'main') {
+      return;
+    }
+
     // Include requestId in the action if present (for iframe feedback tracking)
     const action = event.requestId
       ? { ...event.action, requestId: event.requestId }
@@ -42,6 +97,7 @@ export class AgentSession {
     await this.sendEvent({
       type: 'ACTIONS',
       actions: [action],
+      agentId: this.getSessionId(),
     });
     // Log action
     await this.sessionLogger?.logAction(action);
@@ -89,10 +145,28 @@ export class AgentSession {
     await this.sessionLogger?.logUserMessage(content);
 
     try {
+      // For the first message of a forked session, use the parent session ID with forkSession flag
+      const shouldFork = !this.hasSentFirstMessage && !!this.forkFromSessionId;
+
+      // Determine the session ID to use:
+      // - For forking: use the parent session ID to fork from (SDK will create new session and return its ID)
+      // - For resumption: use our session ID only if we've already sent a message (it's a real session)
+      // - For new sessions: don't pass a session ID (let SDK create one)
+      let sessionIdToUse: string | undefined;
+      if (shouldFork) {
+        sessionIdToUse = this.forkFromSessionId;
+      } else if (this.hasSentFirstMessage && this.sessionId) {
+        // Only resume if we've already sent a message (session exists in SDK)
+        sessionIdToUse = this.sessionId;
+      }
+      // If neither, sessionIdToUse is undefined -> creates new session
+
       const options: TransportOptions = {
         systemPrompt: SYSTEM_PROMPT,
-        sessionId: this.sessionId ?? undefined,
+        sessionId: sessionIdToUse,
+        forkSession: shouldFork ? true : undefined,
       };
+      this.hasSentFirstMessage = true;
 
       let responseText = '';
       let thinkingText = '';
@@ -120,6 +194,7 @@ export class AgentSession {
                 type: 'AGENT_RESPONSE',
                 content: responseText,
                 isComplete: false,
+                agentId: this.getSessionId(),
               });
             }
             break;
@@ -130,6 +205,7 @@ export class AgentSession {
               await this.sendEvent({
                 type: 'AGENT_THINKING',
                 content: thinkingText,
+                agentId: this.getSessionId(),
               });
             }
             break;
@@ -139,6 +215,7 @@ export class AgentSession {
               type: 'TOOL_PROGRESS',
               toolName: message.toolName ?? 'unknown',
               status: 'running',
+              agentId: this.getSessionId(),
             });
             break;
 
@@ -148,6 +225,7 @@ export class AgentSession {
               type: 'TOOL_PROGRESS',
               toolName: message.toolName ?? 'tool',
               status: 'complete',
+              agentId: this.getSessionId(),
             });
             break;
 
@@ -164,6 +242,7 @@ export class AgentSession {
               type: 'AGENT_RESPONSE',
               content: responseText,
               isComplete: true,
+              agentId: this.getSessionId(),
             });
             break;
 
@@ -171,6 +250,7 @@ export class AgentSession {
             await this.sendEvent({
               type: 'ERROR',
               error: message.error ?? 'Unknown error',
+              agentId: this.getSessionId(),
             });
             break;
         }
