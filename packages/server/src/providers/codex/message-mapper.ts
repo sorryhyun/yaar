@@ -1,200 +1,224 @@
 /**
- * Codex SDK message mapper.
+ * Codex app-server notification mapper.
  *
- * Converts Codex SDK events and items to StreamMessage format.
+ * Converts JSON-RPC notifications from the app-server to StreamMessage format.
  */
 
-import type {
-  ThreadEvent,
-  ThreadItem,
-  CommandExecutionItem,
-  McpToolCallItem,
-  FileChangeItem,
-  AgentMessageItem,
-  ReasoningItem,
-  WebSearchItem,
-} from '@openai/codex-sdk';
 import type { StreamMessage } from '../types.js';
+import type {
+  AgentMessageDeltaParams,
+  AgentMessageCompletedParams,
+  ReasoningDeltaParams,
+  ReasoningCompletedParams,
+  TurnCompletedParams,
+  TurnFailedParams,
+  McpToolCallParams,
+  CommandExecutionParams,
+  ErrorParams,
+} from './types.js';
 
 /**
- * Map a Codex thread event to a StreamMessage.
- * Returns null for events that should be skipped.
+ * Map a JSON-RPC notification to a StreamMessage.
+ * Returns null for notifications that should be skipped.
+ *
+ * @param method - The notification method name
+ * @param params - The notification parameters
+ * @returns A StreamMessage or null if the notification should be skipped
  */
-export function mapCodexEvent(event: ThreadEvent): StreamMessage | null {
-  switch (event.type) {
-    case 'thread.started':
-      return { type: 'text', sessionId: event.thread_id };
+export function mapNotification(
+  method: string,
+  params: unknown
+): StreamMessage | null {
+  switch (method) {
+    // ========================================================================
+    // Turn lifecycle events
+    // ========================================================================
 
-    case 'item.completed':
-      return mapCompletedItem(event.item);
+    case 'turn/started':
+      // Turn started, no content to yield
+      return null;
 
-    case 'item.updated':
-      return mapUpdatedItem(event.item);
-
-    case 'turn.completed':
+    case 'turn/completed': {
+      const turnParams = params as TurnCompletedParams | undefined;
+      // Check if interrupted vs completed
+      if (turnParams?.status === 'interrupted') {
+        return { type: 'error', error: 'Turn was interrupted' };
+      }
       return { type: 'complete' };
+    }
 
-    case 'turn.failed':
-      return { type: 'error', error: event.error?.message ?? 'Turn failed' };
+    case 'turn/failed': {
+      const failParams = params as TurnFailedParams | undefined;
+      const errorMessage =
+        failParams?.error ?? failParams?.message ?? 'Turn failed';
+      return { type: 'error', error: errorMessage };
+    }
 
-    case 'error':
-      return { type: 'error', error: event.message ?? 'Thread error' };
+    // ========================================================================
+    // Agent message events (streaming text response)
+    // ========================================================================
 
-    // Skip turn.started and item.started as they don't carry useful content
-    case 'turn.started':
-    case 'item.started':
-    default:
+    case 'item/agentMessage/delta': {
+      const deltaParams = params as AgentMessageDeltaParams | undefined;
+      if (deltaParams?.delta) {
+        return { type: 'text', content: deltaParams.delta };
+      }
       return null;
-  }
-}
-
-/**
- * Map a completed thread item to a StreamMessage.
- */
-function mapCompletedItem(item: ThreadItem): StreamMessage | null {
-  switch (item.type) {
-    case 'agent_message':
-      return { type: 'text', content: (item as AgentMessageItem).text };
-
-    case 'reasoning':
-      return { type: 'thinking', content: (item as ReasoningItem).text };
-
-    case 'command_execution': {
-      const cmdItem = item as CommandExecutionItem;
-      return {
-        type: 'tool_result',
-        toolName: 'command',
-        content: formatCommandResult(cmdItem),
-      };
     }
 
-    case 'mcp_tool_call': {
-      const mcpItem = item as McpToolCallItem;
-      return {
-        type: 'tool_result',
-        toolName: mcpItem.tool ?? 'mcp_tool',
-        content: formatMcpResult(mcpItem),
-      };
-    }
-
-    case 'file_change': {
-      const fileItem = item as FileChangeItem;
-      const paths = fileItem.changes.map((c) => c.path).join(', ');
-      return {
-        type: 'tool_result',
-        toolName: 'file_edit',
-        content: `Files: ${paths}`,
-      };
-    }
-
-    case 'web_search': {
-      const searchItem = item as WebSearchItem;
-      return {
-        type: 'tool_result',
-        toolName: 'web_search',
-        content: searchItem.query ?? 'web search',
-      };
-    }
-
-    case 'error':
-      return { type: 'error', error: item.message };
-
-    case 'todo_list':
-      // Skip todo list items for now
+    case 'item/agentMessage/completed': {
+      // We already streamed the deltas, so we can skip the completed event
+      // But we could emit it if we wanted the full text
+      const completedParams = params as AgentMessageCompletedParams | undefined;
+      if (completedParams?.text) {
+        // Optionally emit full text - but this would duplicate streamed content
+        // For now, skip it
+      }
       return null;
+    }
 
-    default:
+    // ========================================================================
+    // Reasoning events (thinking/chain-of-thought)
+    // ========================================================================
+
+    case 'item/reasoning/textDelta': {
+      const reasoningParams = params as ReasoningDeltaParams | undefined;
+      if (reasoningParams?.delta) {
+        return { type: 'thinking', content: reasoningParams.delta };
+      }
       return null;
-  }
-}
+    }
 
-/**
- * Map an updated thread item to a StreamMessage.
- * Used for streaming partial content.
- */
-function mapUpdatedItem(item: ThreadItem): StreamMessage | null {
-  switch (item.type) {
-    case 'agent_message':
-      // Stream partial agent messages
-      return { type: 'text', content: (item as AgentMessageItem).text };
+    case 'item/reasoning/completed': {
+      // Similar to agentMessage/completed, we already streamed the deltas
+      const reasoningParams = params as ReasoningCompletedParams | undefined;
+      if (reasoningParams?.text) {
+        // Optionally emit full reasoning text
+      }
+      return null;
+    }
 
-    case 'reasoning':
-      // Stream partial reasoning
-      return { type: 'thinking', content: (item as ReasoningItem).text };
+    // ========================================================================
+    // MCP tool call events
+    // ========================================================================
 
-    case 'command_execution': {
-      // Show tool is running
-      const cmdItem = item as CommandExecutionItem;
+    case 'item/mcpToolCall/started': {
+      const mcpParams = params as McpToolCallParams | undefined;
+      return {
+        type: 'tool_use',
+        toolName: mcpParams?.tool ?? 'mcp_tool',
+        toolInput: mcpParams?.arguments,
+      };
+    }
+
+    case 'item/mcpToolCall/completed': {
+      const mcpParams = params as McpToolCallParams | undefined;
+      if (mcpParams?.error) {
+        return {
+          type: 'tool_result',
+          toolName: mcpParams?.tool ?? 'mcp_tool',
+          content: `Error: ${mcpParams.error.message}`,
+        };
+      }
+      return {
+        type: 'tool_result',
+        toolName: mcpParams?.tool ?? 'mcp_tool',
+        content: formatMcpResult(mcpParams),
+      };
+    }
+
+    // ========================================================================
+    // Command execution events (shell commands)
+    // ========================================================================
+
+    case 'item/commandExecution/started': {
+      const cmdParams = params as CommandExecutionParams | undefined;
       return {
         type: 'tool_use',
         toolName: 'command',
-        toolInput: { command: cmdItem.command },
+        toolInput: { command: cmdParams?.command },
       };
     }
 
-    case 'mcp_tool_call': {
-      const mcpItem = item as McpToolCallItem;
+    case 'item/commandExecution/completed': {
+      const cmdParams = params as CommandExecutionParams | undefined;
       return {
-        type: 'tool_use',
-        toolName: mcpItem.tool ?? 'mcp_tool',
-        toolInput: mcpItem.arguments,
+        type: 'tool_result',
+        toolName: 'command',
+        content: formatCommandResult(cmdParams),
       };
     }
+
+    // ========================================================================
+    // Error events
+    // ========================================================================
+
+    case 'error': {
+      const errorParams = params as ErrorParams | undefined;
+      return {
+        type: 'error',
+        error: errorParams?.message ?? 'Unknown error',
+      };
+    }
+
+    // ========================================================================
+    // Unknown/unhandled events
+    // ========================================================================
 
     default:
+      // Log unknown events for debugging
+      console.debug(`[codex] Unknown notification: ${method}`, params);
       return null;
   }
-}
-
-/**
- * Format command execution result as a string.
- */
-function formatCommandResult(item: CommandExecutionItem): string {
-  const parts: string[] = [];
-
-  if (item.command) {
-    parts.push(`$ ${item.command}`);
-  }
-
-  if (item.aggregated_output) {
-    parts.push(item.aggregated_output);
-  }
-
-  if (item.exit_code !== undefined && item.exit_code !== 0) {
-    parts.push(`[exit code: ${item.exit_code}]`);
-  }
-
-  return parts.join('\n') || 'Command completed';
 }
 
 /**
  * Format MCP tool call result as a string.
  */
-function formatMcpResult(item: McpToolCallItem): string {
-  if (item.error) {
-    return `Error: ${item.error.message}`;
+function formatMcpResult(params: McpToolCallParams | undefined): string {
+  if (!params?.result) {
+    return 'Tool completed';
   }
 
-  if (item.result) {
-    // Format the content blocks
-    const contentParts = item.result.content
-      .map((block) => {
-        if ('text' in block) {
-          return block.text;
-        }
-        return JSON.stringify(block);
-      })
-      .filter(Boolean);
+  // Format the content blocks
+  const contentParts = params.result.content
+    .map((block) => {
+      if (block.text) {
+        return block.text;
+      }
+      return JSON.stringify(block);
+    })
+    .filter(Boolean);
 
-    if (contentParts.length > 0) {
-      return contentParts.join('\n');
-    }
+  if (contentParts.length > 0) {
+    return contentParts.join('\n');
+  }
 
-    // Fall back to structured content
-    if (item.result.structured_content !== undefined) {
-      return JSON.stringify(item.result.structured_content, null, 2);
-    }
+  // Fall back to structured content
+  if (params.result.structured_content !== undefined) {
+    return JSON.stringify(params.result.structured_content, null, 2);
   }
 
   return 'Tool completed';
+}
+
+/**
+ * Format command execution result as a string.
+ */
+function formatCommandResult(params: CommandExecutionParams | undefined): string {
+  const parts: string[] = [];
+
+  if (params?.command) {
+    parts.push(`$ ${params.command}`);
+  }
+
+  if (params?.aggregated_output) {
+    parts.push(params.aggregated_output);
+  }
+
+  if (params?.exit_code !== undefined && params.exit_code !== 0) {
+    parts.push(`[exit code: ${params.exit_code}]`);
+  }
+
+  return parts.join('\n') || 'Command completed';
 }

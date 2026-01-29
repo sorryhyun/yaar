@@ -1,22 +1,34 @@
 /**
- * Codex SDK Transport.
+ * Codex App-Server Transport.
  *
- * Uses the @openai/codex-sdk to communicate with OpenAI's Codex agent.
- * Requires the Codex CLI to be installed and OPENAI_API_KEY to be set.
+ * Uses `codex app-server` for long-running JSON-RPC communication.
+ * This provides:
+ * - System prompts via baseInstructions in thread/start
+ * - Session persistence via thread IDs
+ * - Streaming via JSON-RPC notifications
  */
 
-import { Codex, type Thread, type ThreadOptions } from '@openai/codex-sdk';
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
-import { mapCodexEvent } from './message-mapper.js';
+import { AppServer, type AppServerConfig } from './app-server.js';
+import { mapNotification } from './message-mapper.js';
+
+/**
+ * Session state for a thread.
+ */
+interface ThreadSession {
+  threadId: string;
+  systemPrompt: string;
+}
 
 export class CodexTransport extends BaseTransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
 
-  private codex: Codex | null = null;
-  private thread: Thread | null = null;
-  private threadOptions: ThreadOptions = {};
+  private appServer: AppServer | null = null;
+  private currentSession: ThreadSession | null = null;
+  private pendingMessages: StreamMessage[] = [];
+  private resolveMessage: ((done: boolean) => void) | null = null;
 
   async isAvailable(): Promise<boolean> {
     // Check if Codex CLI is installed
@@ -48,55 +60,163 @@ export class CodexTransport extends BaseTransport {
     this.createAbortController();
 
     try {
-      // Initialize Codex instance if needed
-      if (!this.codex) {
-        this.codex = new Codex();
+      // Ensure app-server is running
+      await this.ensureAppServer(options.model);
+
+      // Check if we need a new thread (system prompt changed or no session)
+      const needsNewThread =
+        !this.currentSession ||
+        this.currentSession.systemPrompt !== options.systemPrompt;
+
+      if (needsNewThread) {
+        // Start a new thread with the system prompt
+        const result = await this.appServer!.threadStart({
+          baseInstructions: options.systemPrompt,
+        });
+
+        this.currentSession = {
+          threadId: result.threadId,
+          systemPrompt: options.systemPrompt,
+        };
+
+        // Emit the session ID
+        yield { type: 'text', sessionId: this.currentSession.threadId };
       }
 
-      // Set thread options including model
-      this.threadOptions = {
-        model: options.model ?? 'gpt-5.2',
+      // Set up notification handling
+      this.pendingMessages = [];
+      this.resolveMessage = null;
+
+      const notificationHandler = (method: string, params: unknown) => {
+        const message = mapNotification(method, params);
+        if (message) {
+          this.pendingMessages.push(message);
+          // Signal that a message is available
+          if (this.resolveMessage) {
+            this.resolveMessage(false);
+            this.resolveMessage = null;
+          }
+        }
+
+        // Check for turn completion
+        if (
+          method === 'turn/completed' ||
+          method === 'turn/failed' ||
+          method === 'error'
+        ) {
+          if (this.resolveMessage) {
+            this.resolveMessage(true);
+            this.resolveMessage = null;
+          }
+        }
       };
 
-      // Resume or start thread
-      if (options.sessionId && !this.thread) {
-        try {
-          this.thread = this.codex.resumeThread(options.sessionId, this.threadOptions);
-        } catch {
-          // Thread not found, start a new one
-          this.thread = this.codex.startThread(this.threadOptions);
+      this.appServer!.on('notification', notificationHandler);
+
+      try {
+        // Start the turn
+        await this.appServer!.turnStart({
+          threadId: this.currentSession!.threadId,
+          input: [{ type: 'text', text: prompt }],
+        });
+
+        // Yield messages as they arrive
+        while (true) {
+          if (this.isAborted()) break;
+
+          // Check for pending messages
+          while (this.pendingMessages.length > 0) {
+            const message = this.pendingMessages.shift()!;
+            yield message;
+
+            // Stop yielding after complete or error
+            if (message.type === 'complete' || message.type === 'error') {
+              return;
+            }
+          }
+
+          // Wait for the next message or turn completion
+          const done = await new Promise<boolean>((resolve) => {
+            this.resolveMessage = resolve;
+          });
+
+          if (done && this.pendingMessages.length === 0) {
+            break;
+          }
         }
-      } else if (!this.thread) {
-        this.thread = this.codex.startThread(this.threadOptions);
-      }
-
-      // Run the query with streaming
-      const { events } = await this.thread.runStreamed(prompt);
-
-      for await (const event of events) {
-        if (this.isAborted()) break;
-
-        const mapped = mapCodexEvent(event);
-        if (mapped) yield mapped;
+      } finally {
+        this.appServer!.off('notification', notificationHandler);
       }
     } catch (err) {
       if (this.isAbortError(err)) {
         // Expected when interrupted
         return;
       }
+
+      // Check for session recovery error (invalid thread)
+      if (
+        err instanceof Error &&
+        (err.message.includes('thread') || err.message.includes('invalid'))
+      ) {
+        // Invalidate the session and retry
+        this.currentSession = null;
+        yield* this.query(prompt, options);
+        return;
+      }
+
       yield this.createErrorMessage(err);
     }
   }
 
   interrupt(): void {
     super.interrupt();
-    // Codex SDK doesn't have a direct abort mechanism,
-    // but the async generator will stop iterating when aborted
+    // Signal any pending waiters to stop
+    if (this.resolveMessage) {
+      this.resolveMessage(true);
+      this.resolveMessage = null;
+    }
   }
 
   async dispose(): Promise<void> {
     await super.dispose();
-    this.thread = null;
-    this.codex = null;
+
+    if (this.appServer) {
+      await this.appServer.stop();
+      this.appServer = null;
+    }
+
+    this.currentSession = null;
+    this.pendingMessages = [];
+    this.resolveMessage = null;
+  }
+
+  /**
+   * Ensure the app-server is running.
+   */
+  private async ensureAppServer(model?: string): Promise<void> {
+    if (this.appServer?.isRunning) {
+      return;
+    }
+
+    const config: AppServerConfig = {};
+    if (model) {
+      config.model = model;
+    }
+
+    this.appServer = new AppServer(config);
+
+    // Handle errors
+    this.appServer.on('error', (err) => {
+      console.error('[codex] App-server error:', err);
+    });
+
+    // Handle restarts
+    this.appServer.on('restart', (attempt) => {
+      console.log(`[codex] App-server restarting (attempt ${attempt})`);
+      // Invalidate session on restart
+      this.currentSession = null;
+    });
+
+    await this.appServer.start();
   }
 }

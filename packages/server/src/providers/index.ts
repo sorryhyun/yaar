@@ -16,4 +16,4 @@ export { BaseTransport } from './base-transport.js';
 
 // Provider implementations
 export { ClaudeTransport, AgentSDKTransport, mapClaudeMessage } from './claude/index.js';
-export { CodexTransport, mapCodexEvent } from './codex/index.js';
+export { CodexTransport, mapNotification as mapCodexEvent } from './codex/index.js';

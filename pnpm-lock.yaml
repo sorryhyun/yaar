@@ -80,9 +80,6 @@ importers:
       '@claudeos/shared':
         specifier: workspace:*
         version: link:../shared
-      '@openai/codex-sdk':
-        specifier: ^0.92.0
-        version: 0.92.0
       ws:
         specifier: ^8.18.0
         version: 8.19.0
@@ -706,10 +703,6 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
-
-  '@openai/codex-sdk@0.92.0':
-    resolution: {integrity: sha512-3NdbpydiFdhhS5dauv5DrFl0dKwAsN+DvaPGKzuq/IeyEOH+A0af6GnTcvUmjTVAn6JvIf6vToaWKbvRhrI14A==}
-    engines: {node: '>=18'}
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
@@ -2576,8 +2569,6 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
-
-  '@openai/codex-sdk@0.92.0': {}
 
   '@polka/url@1.0.0-next.29': {}
 
