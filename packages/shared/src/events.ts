@@ -20,7 +20,17 @@ export interface SetProviderEvent {
   provider: 'claude' | 'codex';
 }
 
-export type ClientEvent = UserMessageEvent | InterruptEvent | SetProviderEvent;
+export interface RenderingFeedbackEvent {
+  type: 'RENDERING_FEEDBACK';
+  requestId: string;
+  windowId: string;
+  renderer: string;
+  success: boolean;
+  error?: string;
+  url?: string;
+}
+
+export type ClientEvent = UserMessageEvent | InterruptEvent | SetProviderEvent | RenderingFeedbackEvent;
 
 // ============ Server → Client Events ============
 

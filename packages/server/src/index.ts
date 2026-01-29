@@ -122,6 +122,17 @@ wss.on('connection', async (ws: WebSocket) => {
         case 'SET_PROVIDER':
           await session.setProvider(message.provider);
           break;
+
+        case 'RENDERING_FEEDBACK':
+          session.handleRenderingFeedback(
+            message.requestId,
+            message.windowId,
+            message.renderer,
+            message.success ?? false,
+            message.error,
+            message.url
+          );
+          break;
       }
     } catch (err) {
       console.error('Failed to process message:', err);

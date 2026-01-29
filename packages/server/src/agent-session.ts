@@ -34,12 +34,17 @@ export class AgentSession {
    * Handle actions emitted directly from tools.
    */
   private async handleToolAction(event: ActionEvent): Promise<void> {
+    // Include requestId in the action if present (for iframe feedback tracking)
+    const action = event.requestId
+      ? { ...event.action, requestId: event.requestId }
+      : event.action;
+
     await this.sendEvent({
       type: 'ACTIONS',
-      actions: [event.action],
+      actions: [action],
     });
     // Log action
-    await this.sessionLogger?.logAction(event.action);
+    await this.sessionLogger?.logAction(action);
   }
 
   /**
@@ -186,6 +191,34 @@ export class AgentSession {
   async interrupt(): Promise<void> {
     this.running = false;
     this.transport?.interrupt();
+  }
+
+  /**
+   * Handle rendering feedback from the frontend.
+   * Routes feedback to the action emitter to resolve pending tool calls.
+   */
+  handleRenderingFeedback(
+    requestId: string,
+    windowId: string,
+    renderer: string,
+    success: boolean,
+    error?: string,
+    url?: string
+  ): void {
+    const resolved = actionEmitter.resolveFeedback({
+      requestId,
+      windowId,
+      renderer,
+      success,
+      error,
+      url,
+    });
+
+    if (resolved) {
+      console.log('[Rendering Feedback] Resolved:', { requestId, success, error });
+    } else {
+      console.log('[Rendering Feedback] No pending request:', { requestId });
+    }
   }
 
   /**

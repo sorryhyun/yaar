@@ -32,6 +32,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     setAgentActive,
     clearAgent,
     clearAllAgents,
+    consumePendingFeedback,
   } = useDesktopStore()
 
   // Handle incoming messages
@@ -75,18 +76,19 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         case 'AGENT_THINKING': {
           const agentId = (message as { agentId?: string }).agentId || 'main'
           setAgentActive(agentId, 'Thinking...')
-          console.log('[Agent Thinking]', message.content)
           break
         }
 
         case 'AGENT_RESPONSE': {
           const agentId = (message as { agentId?: string }).agentId || 'main'
-          if ((message as { isComplete?: boolean }).isComplete) {
+          const isComplete = (message as { isComplete?: boolean }).isComplete
+          if (isComplete) {
             clearAgent(agentId)
+            // Only log the final complete response
+            console.log('[Agent Response Complete]', message.content)
           } else {
             setAgentActive(agentId, 'Responding...')
           }
-          console.log('[Agent Response]', message.content)
           break
         }
 
@@ -96,17 +98,17 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           const status = (message as { status?: string }).status
           if (status === 'running') {
             setAgentActive(agentId, `Running: ${toolName}`)
+            console.log('[Tool Start]', toolName)
           } else if (status === 'complete' || status === 'error') {
             // Tool done, but agent may still be working - show thinking
             setAgentActive(agentId, 'Thinking...')
           }
-          console.log('[Tool]', toolName, status)
           break
         }
 
         case 'REQUEST_PERMISSION':
           // Show permission dialog
-          console.log('[Permission Request]', message.action, message.description)
+          console.log('[Permission Request]', (message as { action?: string }).action)
           // TODO: Show modal and send permission response
           break
 
@@ -232,6 +234,27 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Subscribe to pending feedback and send to server
+  useEffect(() => {
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.pendingFeedback.length > 0 && ws.current?.readyState === WebSocket.OPEN) {
+        const feedback = consumePendingFeedback()
+        for (const item of feedback) {
+          send({
+            type: 'RENDERING_FEEDBACK',
+            requestId: item.requestId,
+            windowId: item.windowId,
+            renderer: item.renderer,
+            success: item.success,
+            error: item.error,
+            url: item.url,
+          })
+        }
+      }
+    })
+    return unsubscribe
+  }, [consumePendingFeedback, send])
 
   return {
     isConnected,

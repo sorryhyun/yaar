@@ -7,8 +7,8 @@ import styles from './WindowContextMenu.module.css'
 interface WindowContextMenuProps {
   x: number
   y: number
-  windowId: string
-  windowTitle: string
+  windowId?: string
+  windowTitle?: string
   onSend: (message: string) => void
   onClose: () => void
 }
@@ -66,7 +66,10 @@ export function WindowContextMenu({
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
     if (trimmed) {
-      onSend(`[Re: "${windowTitle}"] ${trimmed}`)
+      const message = windowTitle
+        ? `[Re: "${windowTitle}"] ${trimmed}`
+        : trimmed
+      onSend(message)
       onClose()
     }
   }, [input, windowTitle, onSend, onClose])
@@ -93,7 +96,9 @@ export function WindowContextMenu({
       style={{ left: adjustedPos.x, top: adjustedPos.y }}
       onClick={handleClick}
     >
-      <div className={styles.header}>Ask about "{windowTitle}"</div>
+      <div className={styles.header}>
+        {windowTitle ? `Ask about "${windowTitle}"` : 'Quick message'}
+      </div>
       <div className={styles.inputRow}>
         <input
           ref={inputRef}
@@ -101,7 +106,7 @@ export function WindowContextMenu({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your question..."
+          placeholder={windowTitle ? 'Type your question...' : 'Type your message...'}
         />
         <button
           className={styles.sendButton}

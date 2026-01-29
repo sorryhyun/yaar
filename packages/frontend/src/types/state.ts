@@ -13,6 +13,7 @@ export interface WindowModel {
   previousBounds?: WindowBounds  // For restore after maximize
   locked?: boolean
   lockedBy?: string  // Agent ID that holds the lock
+  requestId?: string  // For tracking iframe feedback
 }
 
 export interface NotificationModel {
@@ -35,8 +36,8 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface ContextMenuState {
   x: number
   y: number
-  windowId: string
-  windowTitle: string
+  windowId?: string
+  windowTitle?: string
 }
 
 export interface DebugEntry {
@@ -51,6 +52,15 @@ export interface ActiveAgent {
   id: string
   status: string  // e.g., "Thinking...", "Running: read_file"
   startedAt: number
+}
+
+export interface RenderingFeedback {
+  requestId: string
+  windowId: string
+  renderer: string
+  success: boolean
+  error?: string
+  url?: string
 }
 
 export interface DesktopState {
@@ -86,6 +96,9 @@ export interface DesktopState {
 
   // Active agents (for spinner display)
   activeAgents: Record<string, ActiveAgent>
+
+  // Pending feedback to send to the server
+  pendingFeedback: RenderingFeedback[]
 }
 
 export interface DesktopActions {
@@ -113,7 +126,7 @@ export interface DesktopActions {
   clearDebugLog: () => void
 
   // Context menu
-  showContextMenu: (x: number, y: number, windowId: string) => void
+  showContextMenu: (x: number, y: number, windowId?: string) => void
   hideContextMenu: () => void
 
   // Sessions modal
@@ -123,4 +136,8 @@ export interface DesktopActions {
   setAgentActive: (agentId: string, status: string) => void
   clearAgent: (agentId: string) => void
   clearAllAgents: () => void
+
+  // Rendering feedback
+  addRenderingFeedback: (feedback: RenderingFeedback) => void
+  consumePendingFeedback: () => RenderingFeedback[]
 }

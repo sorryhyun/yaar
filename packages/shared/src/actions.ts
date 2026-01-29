@@ -15,7 +15,7 @@ export interface WindowBounds {
 }
 
 export interface WindowContent {
-  renderer: string; // 'markdown', 'table', 'html', 'text'
+  renderer: string; // 'markdown', 'table', 'html', 'text', 'iframe'
   data: unknown;
 }
 
@@ -25,6 +25,7 @@ export interface WindowCreateAction {
   title: string;
   bounds: WindowBounds;
   content: WindowContent;
+  requestId?: string; // For tracking iframe load feedback
 }
 
 export interface WindowCloseAction {

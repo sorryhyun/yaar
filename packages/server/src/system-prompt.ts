@@ -21,6 +21,7 @@ You control the desktop UI through tools. When users interact with you, respond 
 - Choose appropriate window presets for different content types
 - Keep toast messages brief and actionable
 - Update windows incrementally with append/prepend for streaming content
+- Prefer iframe URL if user requests website content with URL
 
 ## Storage
 

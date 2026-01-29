@@ -21,6 +21,7 @@ export function DesktopSurface() {
   const providerType = useDesktopStore(s => s.providerType)
   const contextMenu = useDesktopStore(s => s.contextMenu)
   const hideContextMenu = useDesktopStore(s => s.hideContextMenu)
+  const showContextMenu = useDesktopStore(s => s.showContextMenu)
   const { sendMessage } = useAgentConnection({ autoConnect: false })
 
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
@@ -32,8 +33,16 @@ export function DesktopSurface() {
     hideContextMenu()
   }, [hideContextMenu])
 
+  const handleBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
+    // Only handle right-clicks directly on the desktop background
+    if (e.target === e.currentTarget) {
+      e.preventDefault()
+      showContextMenu(e.clientX, e.clientY)
+    }
+  }, [showContextMenu])
+
   return (
-    <div className={styles.desktop} onClick={handleBackgroundClick}>
+    <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu}>
       {/* Connection status indicator */}
       <div className={styles.statusBar}>
         <span className={styles.statusDot} data-status={connectionStatus} />

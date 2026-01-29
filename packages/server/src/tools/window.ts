@@ -26,7 +26,7 @@ export const createWindow = tool(
     title: z.string().describe('Window title'),
     content: z.string().optional().describe('Initial content to display in the window. Defaults to empty string'),
     preset: z.enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog']).optional().describe('Window preset for consistent styling. Defaults to "default"'),
-    renderer: z.enum(['markdown', 'text', 'html']).optional().describe('Content renderer. Defaults to "markdown"'),
+    renderer: z.enum(['markdown', 'text', 'html', 'iframe']).optional().describe('Content renderer. Use "iframe" with a URL to embed a website. Defaults to "markdown"'),
     x: z.number().optional().describe('X position (overrides preset)'),
     y: z.number().optional().describe('Y position (overrides preset)'),
     width: z.number().optional().describe('Width (overrides preset)'),
@@ -35,6 +35,7 @@ export const createWindow = tool(
   async (args) => {
     const presetName = (args.preset || 'default') as WindowPreset;
     const preset = WINDOW_PRESETS[presetName];
+    const renderer = args.renderer || 'markdown';
 
     const osAction: OSAction = {
       type: 'window.create',
@@ -47,16 +48,25 @@ export const createWindow = tool(
         h: args.height ?? preset.height
       },
       content: {
-        renderer: args.renderer || 'markdown',
+        renderer,
         data: args.content ?? ''
       }
     };
 
-    // Emit action directly to frontend
+    // For iframe renderer, wait for feedback to check if embedding succeeded
+    if (renderer === 'iframe' && args.content) {
+      const feedback = await actionEmitter.emitActionWithFeedback(osAction, 2000);
+
+      if (feedback && !feedback.success) {
+        return ok(`Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding via CSP or X-Frame-Options. Consider showing content differently (e.g., markdown summary with a link).`);
+      }
+
+      return ok(`Created window "${args.windowId}" with embedded iframe`);
+    }
+
+    // For other renderers, emit directly
     actionEmitter.emitAction(osAction);
-
     return ok(`Created window "${args.windowId}"`);
-
   }
 );
 
@@ -65,12 +75,13 @@ export const createWindow = tool(
  */
 export const updateWindow = tool(
   'update_window',
-  'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear.',
+  'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear. Can also change the renderer type (e.g., to "iframe" with a URL).',
   {
     windowId: z.string().describe('ID of the window to update'),
     operation: z.enum(['append', 'prepend', 'replace', 'insertAt', 'clear']).describe('The operation to perform on the content'),
-    content: z.string().optional().describe('Content for the operation (not needed for clear)'),
-    position: z.number().optional().describe('Character position for insertAt operation')
+    content: z.string().optional().describe('Content for the operation (not needed for clear). For iframe renderer, this should be a URL'),
+    position: z.number().optional().describe('Character position for insertAt operation'),
+    renderer: z.enum(['markdown', 'text', 'html', 'iframe']).optional().describe('Change the renderer type. Use "iframe" to embed a website URL')
   },
   async (args) => {
     // Build the operation based on the operation type
@@ -100,13 +111,14 @@ export const updateWindow = tool(
     const osAction = {
       type: 'window.updateContent' as const,
       windowId: args.windowId,
-      operation
+      operation,
+      renderer: args.renderer
     };
 
     // Emit action directly to frontend
     actionEmitter.emitAction(osAction);
 
-    return ok(`Updated window "${args.windowId}" (${args.operation})`);
+    return ok(`Updated window "${args.windowId}" (${args.operation}${args.renderer ? `, renderer: ${args.renderer}` : ''})`);
 
   }
 );

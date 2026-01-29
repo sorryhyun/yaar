@@ -27,6 +27,7 @@ const initialState: DesktopState = {
   contextMenu: null,
   sessionsModalOpen: false,
   activeAgents: {},
+  pendingFeedback: [],
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -48,6 +49,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             content: { ...action.content },
             minimized: false,
             maximized: false,
+            requestId: action.requestId,
           }
           state.windows[action.windowId] = window
           state.zOrder.push(action.windowId)
@@ -320,10 +322,15 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
       state.debugLog = []
     }),
 
-    showContextMenu: (x, y, windowId) => set((state) => {
-      const win = state.windows[windowId]
-      if (win) {
-        state.contextMenu = { x, y, windowId, windowTitle: win.title }
+    showContextMenu: (x, y, windowId?) => set((state) => {
+      if (windowId) {
+        const win = state.windows[windowId]
+        if (win) {
+          state.contextMenu = { x, y, windowId, windowTitle: win.title }
+        }
+      } else {
+        // Background or header context menu without specific window content context
+        state.contextMenu = { x, y }
       }
     }),
 
@@ -350,6 +357,20 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
     clearAllAgents: () => set((state) => {
       state.activeAgents = {}
     }),
+
+    addRenderingFeedback: (feedback) => set((state) => {
+      state.pendingFeedback.push(feedback)
+    }),
+
+    consumePendingFeedback: () => {
+      const feedback = get().pendingFeedback
+      if (feedback.length > 0) {
+        set((state) => {
+          state.pendingFeedback = []
+        })
+      }
+      return feedback
+    },
   }))
 )
 

@@ -64,25 +64,38 @@ claudeos/
 User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actions → Frontend Renders UI
 ```
 
-### Three-Layer Design
+### Two-Layer Design
 
 1. **Frontend** (`@claudeos/frontend`): React + Zustand + Vite. Renders windows/toasts based on OS Actions. Vite proxies `/ws` to `ws://localhost:8000` and `/api` to `http://localhost:8000`.
 
-2. **Server** (`@claudeos/server`): TypeScript + ws. WebSocket server that connects frontend to AI providers via transport layer. Entry point: `packages/server/src/index.ts`.
+2. **Server** (`@claudeos/server`): TypeScript + ws. WebSocket server with pluggable AI providers. Entry point: `packages/server/src/index.ts`.
 
-3. **Transport Layer** (`packages/server/src/transports/`): Pluggable AI backends. Currently implements Claude via the Agent SDK.
+### Server Structure (`packages/server/src/`)
+
+```
+server/src/
+├── index.ts              # WebSocket server entry point
+├── agent-session.ts      # Session management and action extraction
+├── system-prompt.ts      # System prompt configuration
+├── providers/            # Pluggable AI backends
+│   ├── factory.ts        # Provider factory with auto-detection
+│   ├── types.ts          # AITransport interface
+│   ├── base-transport.ts # Base transport implementation
+│   ├── claude/           # Claude Agent SDK implementation
+│   └── codex/            # Codex SDK implementation
+├── tools/                # MCP tools the AI can use
+│   ├── window.ts         # Window management tools
+│   ├── storage.ts        # Persistent storage tools
+│   ├── system.ts         # System tools
+│   └── action-emitter.ts # Emits OS actions to frontend
+├── sessions/             # Session state management
+└── storage/              # Persistent storage utilities
+```
 
 ### Shared Types (`@claudeos/shared`)
 
 - `actions.ts` - OS Actions DSL (window.create, toast.show, etc.)
 - `events.ts` - WebSocket event types (client→server and server→client)
-
-### Transport System
-
-- `types.ts` - Interfaces: `AITransport`, `StreamMessage`, `TransportOptions`
-- `factory.ts` - Transport factory with availability checking and `PROVIDER` env var support
-- `providers/claude/` - Claude Agent SDK implementation
-- `providers/codex/` - Codex SDK implementation
 
 ### Frontend State
 
@@ -95,16 +108,17 @@ AI controls UI through actions like:
 - `window.create`, `window.setContent`, `window.close`, `window.focus`
 - `toast.show`, `notification.show`
 
-Content types: `markdown`, `table`, `text`, `html`
+Content renderers: `markdown`, `table`, `text`, `html`, `iframe`
 
 ## Key Files
 
-- `packages/shared/src/` - Shared type definitions
-- `packages/server/src/index.ts` - WebSocket server with CORS
+- `packages/shared/src/actions.ts` - OS Actions type definitions
+- `packages/server/src/index.ts` - WebSocket server entry point
 - `packages/server/src/agent-session.ts` - Session management and action extraction
-- `packages/server/src/transports/factory.ts` - Transport factory and provider selection
+- `packages/server/src/providers/factory.ts` - Provider factory and selection
+- `packages/server/src/tools/window.ts` - Window management tools
 - `packages/frontend/src/store/desktop.ts` - Central state store
-- `packages/frontend/vite.config.ts` - Dev server config with WebSocket/API proxy
+- `packages/frontend/src/components/windows/ContentRenderer.tsx` - Window content rendering
 
 ## Code Style
 
@@ -113,8 +127,8 @@ Content types: `markdown`, `table`, `text`, `html`
 
 ## Adding a New AI Provider
 
-1. Create `packages/server/src/transports/providers/<name>/transport.ts` implementing `AITransport`
-2. Add loader to `providerLoaders` in `packages/server/src/transports/factory.ts`
+1. Create `packages/server/src/providers/<name>/transport.ts` implementing `AITransport`
+2. Add loader to `providerLoaders` in `packages/server/src/providers/factory.ts`
 3. Add availability check to `isProviderAvailable()` in the factory
 
 ## Adding a New OS Action
@@ -122,3 +136,10 @@ Content types: `markdown`, `table`, `text`, `html`
 1. Define the action type in `packages/shared/src/actions.ts`
 2. Handle it in `applyAction()` in `packages/frontend/src/store/desktop.ts`
 3. Optionally add an MCP tool in `packages/server/src/tools/` to let the AI emit it
+
+## Adding a New Content Renderer
+
+1. Create `packages/frontend/src/components/windows/renderers/<Name>Renderer.tsx`
+2. Add the case in `packages/frontend/src/components/windows/ContentRenderer.tsx`
+3. Add styles in `packages/frontend/src/styles/renderers.module.css`
+4. Update renderer enum in `packages/server/src/tools/window.ts`

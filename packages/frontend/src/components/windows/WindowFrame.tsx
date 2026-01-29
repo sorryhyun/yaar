@@ -15,7 +15,7 @@ interface WindowFrameProps {
 }
 
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu } =
+  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback } =
     useDesktopStore()
 
   const frameRef = useRef<HTMLDivElement>(null)
@@ -112,7 +112,15 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       onMouseDown={handleMouseDown}
     >
       {/* Title bar */}
-      <div className={styles.titleBar} onMouseDown={handleDragStart}>
+      <div
+        className={styles.titleBar}
+        onMouseDown={handleDragStart}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          showContextMenu(e.clientX, e.clientY, window.id)
+        }}
+      >
         <div className={styles.title}>{window.title}</div>
         <div className={styles.controls}>
           <button
@@ -153,7 +161,17 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           showContextMenu(e.clientX, e.clientY, window.id)
         }}
       >
-        <ContentRenderer content={window.content} />
+        <ContentRenderer
+          content={window.content}
+          windowId={window.id}
+          requestId={window.requestId}
+          onRenderSuccess={(requestId, windowId, renderer) => {
+            addRenderingFeedback({ requestId, windowId, renderer, success: true })
+          }}
+          onRenderError={(requestId, windowId, renderer, error, url) => {
+            addRenderingFeedback({ requestId, windowId, renderer, success: false, error, url })
+          }}
+        />
         {window.locked && <LockOverlay />}
       </div>
 
