@@ -17,6 +17,9 @@ import {
   storageDelete,
 } from '../storage/index.js';
 
+/** Helper to create MCP tool result */
+const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
+
 /**
  * Read a file from storage.
  */
@@ -28,15 +31,7 @@ export const storageReadTool = tool(
   },
   async (args) => {
     const result = await storageRead(args.path);
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: result.success
-          ? result.content!
-          : JSON.stringify({ success: false, error: result.error })
-      }]
-    };
+    return ok(result.success ? result.content! : `Error: ${result.error}`);
   }
 );
 
@@ -52,13 +47,7 @@ export const storageWriteTool = tool(
   },
   async (args) => {
     const result = await storageWrite(args.path, args.content);
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    return ok(result.success ? `Written to ${args.path}` : `Error: ${result.error}`);
   }
 );
 
@@ -73,13 +62,11 @@ export const storageListTool = tool(
   },
   async (args) => {
     const result = await storageList(args.path || '');
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    if (!result.success) return ok(`Error: ${result.error}`);
+    const text = result.entries!.length === 0
+      ? 'Directory is empty'
+      : result.entries!.map(e => `${e.isDirectory ? '📁' : '📄'} ${e.path}`).join('\n');
+    return ok(text);
   }
 );
 
@@ -94,13 +81,7 @@ export const storageDeleteTool = tool(
   },
   async (args) => {
     const result = await storageDelete(args.path);
-
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify(result, null, 2)
-      }]
-    };
+    return ok(result.success ? `Deleted ${args.path}` : `Error: ${result.error}`);
   }
 );
 

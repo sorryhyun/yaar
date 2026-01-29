@@ -32,7 +32,8 @@ export class ClaudeTransport extends BaseTransport {
         systemPrompt: options.systemPrompt,
         model: options.model ?? "claude-opus-4-5-20251101",
         resume: options.sessionId,
-        // Include custom ClaudeOS tools
+        // Disable all default Claude Code tools - only use ClaudeOS MCP tools
+        tools: [],
         allowedTools: getClaudeOSToolNames(),
         // Register the MCP server with custom tools
         mcpServers: {

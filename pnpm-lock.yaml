@@ -75,8 +75,8 @@ importers:
   packages/server:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.1.0
-        version: 0.1.77(zod@4.3.6)
+        specifier: ^0.2.22
+        version: 0.2.23(zod@4.3.6)
       '@claudeos/shared':
         specifier: workspace:*
         version: link:../shared
@@ -123,11 +123,11 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@anthropic-ai/claude-agent-sdk@0.1.77':
-    resolution: {integrity: sha512-ZEjWQtkoB2MEY6K16DWMmF+8OhywAynH0m08V265cerbZ8xPD/2Ng2jPzbbO40mPeFSsMDJboShL+a3aObP0Jg==}
+  '@anthropic-ai/claude-agent-sdk@0.2.23':
+    resolution: {integrity: sha512-pkY8vQu4cVoy43JaGNlnV7cl7RiaBjwt5kwiYucLqs37B/EUmvcM2LK44CgC9YyPSM0OTTAXaTYy7Bp4hje4UQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
+      zod: ^4.0.0
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -2123,7 +2123,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.1.77(zod@4.3.6)':
+  '@anthropic-ai/claude-agent-sdk@0.2.23(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
     optionalDependencies:

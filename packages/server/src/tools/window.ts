@@ -12,6 +12,9 @@ import { z } from 'zod';
 import { WINDOW_PRESETS, type WindowPreset, type OSAction, type ContentUpdateOperation } from '@claudeos/shared';
 import { actionEmitter } from './action-emitter.js';
 
+/** Helper to create MCP tool result */
+const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
+
 /**
  * Create a window on the ClaudeOS desktop.
  */
@@ -52,12 +55,8 @@ export const createWindow = tool(
     // Emit action directly to frontend
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: `Window "${args.title}" created` })
-      }]
-    };
+    return ok(`Created window "${args.windowId}"`);
+
   }
 );
 
@@ -89,12 +88,7 @@ export const updateWindow = tool(
         break;
       case 'insertAt':
         if (args.position === undefined) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: JSON.stringify({ success: false, error: 'position is required for insertAt operation' })
-            }]
-          };
+          return ok('Error: position is required for insertAt operation');
         }
         operation = { op: 'insertAt', position: args.position, data: args.content ?? '' };
         break;
@@ -112,12 +106,8 @@ export const updateWindow = tool(
     // Emit action directly to frontend
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" content updated (${args.operation})` })
-      }]
-    };
+    return ok(`Updated window "${args.windowId}" (${args.operation})`);
+
   }
 );
 
@@ -139,12 +129,8 @@ export const closeWindow = tool(
     // Emit action directly to frontend
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" closed` })
-      }]
-    };
+    return ok(`Closed window "${args.windowId}"`);
+
   }
 );
 
@@ -170,12 +156,8 @@ export const showToast = tool(
     // Emit action directly to frontend
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: 'Toast displayed' })
-      }]
-    };
+    return ok('Toast displayed');
+
   }
 );
 
@@ -198,12 +180,8 @@ export const lockWindow = tool(
 
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" locked by agent "${args.agentId}"` })
-      }]
-    };
+    return ok(`Locked window "${args.windowId}"`);
+
   }
 );
 
@@ -226,12 +204,8 @@ export const unlockWindow = tool(
 
     actionEmitter.emitAction(osAction);
 
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({ osAction, success: true, message: `Window "${args.windowId}" unlocked by agent "${args.agentId}"` })
-      }]
-    };
+    return ok(`Unlocked window "${args.windowId}"`);
+
   }
 );
 

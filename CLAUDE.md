@@ -11,7 +11,7 @@ ClaudeOS is a reactive AI interface where the AI decides what to show and do nex
 - pnpm >= 8
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
-**SDK:** The server uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access.
+**SDK:** The server uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access. See [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) for API documentation.
 
 ## Commands
 
