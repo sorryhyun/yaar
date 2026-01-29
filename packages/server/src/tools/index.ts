@@ -8,13 +8,11 @@ import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 
 import { systemTools } from './system.js';
 import { windowTools } from './window.js';
-import { sessionTools } from './session.js';
 import { storageTools } from './storage.js';
 
 // Re-export individual tool modules
 export * from './system.js';
 export * from './window.js';
-export * from './session.js';
 export * from './storage.js';
 export * from './action-emitter.js';
 
@@ -24,7 +22,6 @@ export * from './action-emitter.js';
 export const allTools = [
   ...systemTools,
   ...windowTools,
-  ...sessionTools,
   ...storageTools
 ];
 
@@ -52,10 +49,6 @@ export function getClaudeOSToolNames(): string[] {
     'mcp__claudeos__show_window',
     'mcp__claudeos__close_window',
     'mcp__claudeos__show_toast',
-    // Session tools
-    'mcp__claudeos__list_sessions',
-    'mcp__claudeos__read_session_transcript',
-    'mcp__claudeos__read_session_messages',
     // Storage tools
     'mcp__claudeos__storage_read',
     'mcp__claudeos__storage_write',

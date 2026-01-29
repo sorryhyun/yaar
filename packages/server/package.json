@@ -17,7 +17,7 @@
     "@claudeos/shared": "workspace:*",
     "@openai/codex-sdk": "^0.92.0",
     "ws": "^8.18.0",
-    "zod": "^3.23.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
