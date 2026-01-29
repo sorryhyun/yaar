@@ -45,6 +45,11 @@ export class SessionManager {
         await this.handleWindowMessage(event.windowId, event.content);
         break;
 
+      case 'COMPONENT_ACTION':
+        // Route component action to the appropriate agent
+        await this.handleComponentAction(event.windowId, event.action);
+        break;
+
       case 'INTERRUPT':
         // Interrupt main session
         await this.defaultSession?.interrupt();
@@ -71,6 +76,38 @@ export class SessionManager {
           event.locked
         );
         break;
+    }
+  }
+
+  /**
+   * Handle a component action (button click) from a window.
+   * Routes to window agent if one exists, otherwise to default agent.
+   */
+  private async handleComponentAction(windowId: string, action: string): Promise<void> {
+    // Check if window has its own agent
+    const windowSession = this.windowSessions.get(windowId);
+
+    if (windowSession) {
+      // Send to window agent
+      await this.sendEvent({
+        type: 'WINDOW_AGENT_STATUS',
+        windowId,
+        agentId: windowSession.getSessionId(),
+        status: 'active',
+      });
+
+      await windowSession.handleMessage(action);
+
+      await this.sendEvent({
+        type: 'WINDOW_AGENT_STATUS',
+        windowId,
+        agentId: windowSession.getSessionId(),
+        status: 'idle',
+      });
+    } else {
+      // Route to default session with context about which window triggered it
+      const contextualMessage = `[Component action from window "${windowId}"] ${action}`;
+      await this.defaultSession?.handleMessage(contextualMessage);
     }
   }
 

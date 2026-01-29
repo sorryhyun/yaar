@@ -9,6 +9,7 @@
 import { useCallback } from 'react'
 import { useDesktopStore } from '@/store'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
+import { ComponentActionProvider } from '@/contexts/ComponentActionContext'
 import { WindowManager } from './WindowManager'
 import { ToastContainer } from '../ui/ToastContainer'
 import { NotificationCenter } from '../ui/NotificationCenter'
@@ -24,7 +25,7 @@ export function DesktopSurface() {
   const showContextMenu = useDesktopStore(s => s.showContextMenu)
   const windowAgents = useDesktopStore(s => s.windowAgents)
   const activeAgents = useDesktopStore(s => s.activeAgents)
-  const { sendMessage, sendWindowMessage } = useAgentConnection({ autoConnect: false })
+  const { sendMessage, sendWindowMessage, sendComponentAction } = useAgentConnection({ autoConnect: false })
 
   const agentList = Object.values(activeAgents)
 
@@ -83,7 +84,9 @@ export function DesktopSurface() {
       </div>
 
       {/* Window container */}
-      <WindowManager />
+      <ComponentActionProvider sendComponentAction={sendComponentAction}>
+        <WindowManager />
+      </ComponentActionProvider>
 
       {/* Command input */}
       <CommandPalette />

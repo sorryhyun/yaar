@@ -20,18 +20,42 @@ import {
 /** Helper to create MCP tool result */
 const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 
+/** Helper to create MCP tool result with images */
+const okWithImages = (text: string, images: Array<{ data: string; mimeType: string }>) => ({
+  content: [
+    { type: 'text' as const, text },
+    ...images.map(img => ({
+      type: 'image' as const,
+      data: img.data,
+      mimeType: img.mimeType,
+    }))
+  ]
+});
+
 /**
  * Read a file from storage.
  */
 export const storageReadTool = tool(
   'storage_read',
-  'Read a file from the persistent storage directory',
+  'Read a file from the persistent storage directory. For PDF files, returns rendered page images.',
   {
     path: z.string().describe('Path to the file relative to storage/')
   },
   async (args) => {
     const result = await storageRead(args.path);
-    return ok(result.success ? result.content! : `Error: ${result.error}`);
+    if (!result.success) {
+      return ok(`Error: ${result.error}`);
+    }
+
+    // If we have images (PDF), return them along with text
+    if (result.images && result.images.length > 0) {
+      return okWithImages(
+        result.content!,
+        result.images.map(img => ({ data: img.data, mimeType: img.mimeType }))
+      );
+    }
+
+    return ok(result.content!);
   }
 );
 

@@ -51,13 +51,20 @@ export interface RenderingFeedbackEvent {
   locked?: boolean;
 }
 
+export interface ComponentActionEvent {
+  type: 'COMPONENT_ACTION';
+  windowId: string;
+  action: string;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
   | InterruptEvent
   | InterruptAgentEvent
   | SetProviderEvent
-  | RenderingFeedbackEvent;
+  | RenderingFeedbackEvent
+  | ComponentActionEvent;
 
 // ============ Server → Client Events ============
 

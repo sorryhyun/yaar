@@ -3,6 +3,7 @@
  */
 import { useCallback, useRef, useState } from 'react'
 import { useDesktopStore } from '@/store'
+import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
@@ -17,6 +18,7 @@ interface WindowFrameProps {
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback, logInteraction } =
     useDesktopStore()
+  const sendComponentAction = useComponentAction()
 
   const frameRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -186,6 +188,9 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           }}
           onRenderError={(requestId, windowId, renderer, error, url) => {
             addRenderingFeedback({ requestId, windowId, renderer, success: false, error, url })
+          }}
+          onComponentAction={(action) => {
+            sendComponentAction?.(window.id, action)
           }}
         />
         {window.locked && <LockOverlay />}

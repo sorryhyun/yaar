@@ -261,6 +261,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: 'WINDOW_MESSAGE', windowId, content })
   }, [send])
 
+  // Send component action (button click) to agent
+  const sendComponentAction = useCallback((windowId: string, action: string) => {
+    send({ type: 'COMPONENT_ACTION', windowId, action })
+  }, [send])
+
   // Interrupt current operation
   const interrupt = useCallback(() => {
     send({ type: 'INTERRUPT' })
@@ -316,6 +321,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     disconnect,
     sendMessage,
     sendWindowMessage,
+    sendComponentAction,
     interrupt,
     interruptAgent,
     setProvider,

@@ -5,14 +5,17 @@
  */
 
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
-import { join, normalize, relative, dirname } from 'path';
+import { join, normalize, relative, dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
+import { pdf } from 'pdf-to-img';
+import sharp from 'sharp';
 import type {
   StorageEntry,
   StorageReadResult,
   StorageWriteResult,
   StorageListResult,
   StorageDeleteResult,
+  StorageImageContent,
 } from './types.js';
 
 // Project root: storage-manager.ts -> storage -> src -> server -> packages -> root
@@ -44,6 +47,45 @@ export async function ensureStorageDir(): Promise<void> {
 }
 
 /**
+ * Check if a file is a PDF based on extension.
+ */
+function isPdfFile(filePath: string): boolean {
+  return extname(filePath).toLowerCase() === '.pdf';
+}
+
+/**
+ * Convert a PDF file to images (WebP format for efficiency).
+ */
+async function convertPdfToImages(filePath: string): Promise<StorageImageContent[]> {
+  const images: StorageImageContent[] = [];
+  const document = await pdf(filePath, {
+    scale: 1.5,
+    docInitParams: {
+      // Suppress font warnings
+      verbosity: 0,
+    },
+  });
+  let pageNumber = 1;
+
+  for await (const page of document) {
+    // Convert PNG to WebP for better compression
+    const webpBuffer = await sharp(page)
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    images.push({
+      type: 'image',
+      data: webpBuffer.toString('base64'),
+      mimeType: 'image/webp',
+      pageNumber,
+    });
+    pageNumber++;
+  }
+
+  return images;
+}
+
+/**
  * Read a file from storage.
  */
 export async function storageRead(filePath: string): Promise<StorageReadResult> {
@@ -53,6 +95,17 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
   }
 
   try {
+    // Handle PDF files by converting to images
+    if (isPdfFile(validatedPath)) {
+      const images = await convertPdfToImages(validatedPath);
+      return {
+        success: true,
+        content: `PDF with ${images.length} page(s)`,
+        images
+      };
+    }
+
+    // Regular text file
     const content = await readFile(validatedPath, 'utf-8');
     return { success: true, content };
   } catch (err) {

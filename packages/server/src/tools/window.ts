@@ -9,7 +9,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { WINDOW_PRESETS, type WindowPreset, type OSAction, type ContentUpdateOperation } from '@claudeos/shared';
+import { WINDOW_PRESETS, type WindowPreset, type OSAction, type ContentUpdateOperation, type ComponentNode } from '@claudeos/shared';
 import { actionEmitter } from './action-emitter.js';
 
 /** Helper to create MCP tool result */
@@ -20,13 +20,14 @@ const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
  */
 export const createWindow = tool(
   'create_window',
-  'Create a new window on the ClaudeOS desktop. Use presets for consistent styling. Content is optional and defaults to empty.',
+  'Create a new window on the ClaudeOS desktop. Use presets for consistent styling. Content is optional and defaults to empty. Use renderer: "component" with components parameter for interactive UI with buttons.',
   {
     windowId: z.string().describe('Unique identifier for the window'),
     title: z.string().describe('Window title'),
-    content: z.string().optional().describe('Initial content to display in the window. Defaults to empty string'),
+    content: z.string().optional().describe('Initial content to display in the window (for markdown/text/html/iframe renderers). Defaults to empty string'),
+    components: z.any().optional().describe('Component tree for component renderer. Use this for interactive UI with buttons, cards, etc.'),
     preset: z.enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog']).optional().describe('Window preset for consistent styling. Defaults to "default"'),
-    renderer: z.enum(['markdown', 'text', 'html', 'iframe']).optional().describe('Content renderer. Use "iframe" with a URL to embed a website. Defaults to "markdown"'),
+    renderer: z.enum(['markdown', 'text', 'html', 'iframe', 'component']).optional().describe('Content renderer. Use "component" for interactive UI with buttons. Defaults to "markdown"'),
     x: z.number().optional().describe('X position (overrides preset)'),
     y: z.number().optional().describe('Y position (overrides preset)'),
     width: z.number().optional().describe('Width (overrides preset)'),
@@ -36,6 +37,14 @@ export const createWindow = tool(
     const presetName = (args.preset || 'default') as WindowPreset;
     const preset = WINDOW_PRESETS[presetName];
     const renderer = args.renderer || 'markdown';
+
+    // Determine content data based on renderer
+    let contentData: unknown;
+    if (renderer === 'component' && args.components) {
+      contentData = args.components as ComponentNode;
+    } else {
+      contentData = args.content ?? '';
+    }
 
     const osAction: OSAction = {
       type: 'window.create',
@@ -49,7 +58,7 @@ export const createWindow = tool(
       },
       content: {
         renderer,
-        data: args.content ?? ''
+        data: contentData
       }
     };
 
@@ -75,33 +84,37 @@ export const createWindow = tool(
  */
 export const updateWindow = tool(
   'update_window',
-  'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear. Can also change the renderer type (e.g., to "iframe" with a URL).',
+  'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear. Can also change the renderer type (e.g., to "iframe" with a URL, or "component" for interactive UI).',
   {
     windowId: z.string().describe('ID of the window to update'),
     operation: z.enum(['append', 'prepend', 'replace', 'insertAt', 'clear']).describe('The operation to perform on the content'),
     content: z.string().optional().describe('Content for the operation (not needed for clear). For iframe renderer, this should be a URL'),
+    components: z.any().optional().describe('Component tree for component renderer (use with operation: "replace"). Use this for interactive UI with buttons, cards, etc.'),
     position: z.number().optional().describe('Character position for insertAt operation'),
-    renderer: z.enum(['markdown', 'text', 'html', 'iframe']).optional().describe('Change the renderer type. Use "iframe" to embed a website URL')
+    renderer: z.enum(['markdown', 'text', 'html', 'iframe', 'component']).optional().describe('Change the renderer type. Use "component" for interactive UI with buttons')
   },
   async (args) => {
     // Build the operation based on the operation type
     let operation: ContentUpdateOperation;
 
+    // Determine content data - use components if renderer is component, otherwise use content string
+    const contentData = (args.renderer === 'component' && args.components) ? args.components : (args.content ?? '');
+
     switch (args.operation) {
       case 'append':
-        operation = { op: 'append', data: args.content ?? '' };
+        operation = { op: 'append', data: contentData };
         break;
       case 'prepend':
-        operation = { op: 'prepend', data: args.content ?? '' };
+        operation = { op: 'prepend', data: contentData };
         break;
       case 'replace':
-        operation = { op: 'replace', data: args.content ?? '' };
+        operation = { op: 'replace', data: contentData };
         break;
       case 'insertAt':
         if (args.position === undefined) {
           return ok('Error: position is required for insertAt operation');
         }
-        operation = { op: 'insertAt', position: args.position, data: args.content ?? '' };
+        operation = { op: 'insertAt', position: args.position, data: contentData };
         break;
       case 'clear':
         operation = { op: 'clear' };

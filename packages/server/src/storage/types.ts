@@ -9,9 +9,17 @@ export interface StorageEntry {
   modifiedAt: string;
 }
 
+export interface StorageImageContent {
+  type: 'image';
+  data: string; // base64 encoded
+  mimeType: string;
+  pageNumber?: number;
+}
+
 export interface StorageReadResult {
   success: boolean;
   content?: string;
+  images?: StorageImageContent[];
   error?: string;
 }
 
