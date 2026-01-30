@@ -9,7 +9,7 @@
  */
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { DesktopState, DesktopActions, WindowModel } from '@/types/state'
+import type { DesktopState, DesktopActions, WindowModel, QueuedComponentAction } from '@/types/state'
 import { isContentUpdateOperationValid, isWindowContentData, type UserInteraction } from '@claudeos/shared'
 
 /**
@@ -130,6 +130,7 @@ const initialState: DesktopState = {
   windowAgents: {},
   pendingFeedback: [],
   interactionLog: [],
+  queuedActions: {},
 }
 
 export const useDesktopStore = create<DesktopState & DesktopActions>()(
@@ -180,6 +181,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             break
           }
           delete state.windows[action.windowId]
+          delete state.queuedActions[action.windowId]  // Clear queued actions on close
           state.zOrder = state.zOrder.filter(id => id !== action.windowId)
           if (state.focusedWindowId === action.windowId) {
             state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
@@ -456,6 +458,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
       const win = state.windows[windowId]
       const title = win?.title
       delete state.windows[windowId]
+      delete state.queuedActions[windowId]  // Clear queued actions on close
       state.zOrder = state.zOrder.filter(id => id !== windowId)
       if (state.focusedWindowId === windowId) {
         state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
@@ -630,6 +633,28 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
       // Consolidate consecutive move/resize events into single "from → to" entries
       return consolidateInteractions(interactions)
     },
+
+    queueComponentAction: (action: QueuedComponentAction) => set((state) => {
+      const { windowId } = action
+      if (!state.queuedActions[windowId]) {
+        state.queuedActions[windowId] = []
+      }
+      state.queuedActions[windowId].push(action)
+    }),
+
+    consumeQueuedActions: (windowId: string) => {
+      const actions = get().queuedActions[windowId] || []
+      if (actions.length > 0) {
+        set((state) => {
+          state.queuedActions[windowId] = []
+        })
+      }
+      return actions
+    },
+
+    clearQueuedActions: (windowId: string) => set((state) => {
+      delete state.queuedActions[windowId]
+    }),
   }))
 )
 
@@ -657,3 +682,6 @@ export const selectWindowAgents = (state: DesktopState & DesktopActions) =>
 
 export const selectWindowAgent = (windowId: string) => (state: DesktopState & DesktopActions) =>
   state.windowAgents[windowId]
+
+export const selectQueuedActionsCount = (windowId: string) => (state: DesktopState & DesktopActions) =>
+  state.queuedActions[windowId]?.length ?? 0

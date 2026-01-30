@@ -348,6 +348,38 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     return unsubscribe
   }, [consumePendingFeedback, send])
 
+  // Subscribe to window unlock events and execute queued actions
+  useEffect(() => {
+    let previousWindows = useDesktopStore.getState().windows
+    const consumeQueuedActions = useDesktopStore.getState().consumeQueuedActions
+
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      // Check for windows that just transitioned from locked to unlocked
+      for (const [windowId, window] of Object.entries(state.windows)) {
+        const previousWindow = previousWindows[windowId]
+        // Window was locked and is now unlocked
+        if (previousWindow?.locked && !window.locked) {
+          const queuedActions = consumeQueuedActions(windowId)
+          // Execute queued actions sequentially
+          for (const action of queuedActions) {
+            sendComponentAction(
+              action.windowId,
+              action.windowTitle,
+              action.action,
+              action.parallel,
+              action.formData,
+              action.formId,
+              action.componentPath
+            )
+          }
+        }
+      }
+      previousWindows = state.windows
+    })
+
+    return unsubscribe
+  }, [sendComponentAction])
+
   return {
     isConnected,
     isConnecting,

@@ -71,6 +71,17 @@ export interface RenderingFeedback {
 
 import type { UserInteraction } from '@claudeos/shared'
 
+export interface QueuedComponentAction {
+  windowId: string
+  windowTitle: string
+  action: string
+  parallel?: boolean
+  formData?: Record<string, string | number | boolean>
+  formId?: string
+  componentPath?: string[]
+  queuedAt: number
+}
+
 export interface DesktopState {
   // Windows managed by the AI
   windows: Record<string, WindowModel>
@@ -113,6 +124,9 @@ export interface DesktopState {
 
   // User interaction log (for context when sending messages)
   interactionLog: UserInteraction[]
+
+  // Queued component actions for locked windows
+  queuedActions: Record<string, QueuedComponentAction[]>
 }
 
 export interface DesktopActions {
@@ -163,4 +177,9 @@ export interface DesktopActions {
   // User interaction logging
   logInteraction: (interaction: Omit<UserInteraction, 'timestamp'>) => void
   consumeInteractions: () => UserInteraction[]
+
+  // Queued component actions
+  queueComponentAction: (action: QueuedComponentAction) => void
+  consumeQueuedActions: (windowId: string) => QueuedComponentAction[]
+  clearQueuedActions: (windowId: string) => void
 }

@@ -32,3 +32,13 @@
     transform: rotate(360deg);
   }
 }
+
+.queueBadge {
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1e1e2e;
+  background: #f9e2af;
+  border-radius: 12px;
+}

@@ -2,7 +2,7 @@
  * WindowFrame - Draggable, resizable window container.
  */
 import { useCallback, useRef, useState } from 'react'
-import { useDesktopStore } from '@/store'
+import { useDesktopStore, selectQueuedActionsCount } from '@/store'
 import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
@@ -18,6 +18,7 @@ interface WindowFrameProps {
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback, logInteraction } =
     useDesktopStore()
+  const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
   const sendComponentAction = useComponentAction()
 
   const frameRef = useRef<HTMLDivElement>(null)
@@ -193,7 +194,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
             sendComponentAction?.(window.id, window.title, action, parallel, formData, formId, componentPath)
           }}
         />
-        {window.locked && <LockOverlay />}
+        {window.locked && <LockOverlay queuedCount={queuedCount} />}
       </div>
 
       {/* Resize handle */}

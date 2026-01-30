@@ -9,12 +9,13 @@
 import { useCallback } from 'react'
 import { useDesktopStore } from '@/store'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
-import { ComponentActionProvider } from '@/contexts/ComponentActionContext'
+import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext'
 import { WindowManager } from './WindowManager'
 import { ToastContainer } from '../ui/ToastContainer'
 import { NotificationCenter } from '../ui/NotificationCenter'
 import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
+import { CursorSpinner } from '../ui/CursorSpinner'
 import styles from '@/styles/DesktopSurface.module.css'
 
 export function DesktopSurface() {
@@ -84,9 +85,9 @@ export function DesktopSurface() {
       </div>
 
       {/* Window container */}
-      <ComponentActionProvider sendComponentAction={sendComponentAction}>
+      <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>
         <WindowManager />
-      </ComponentActionProvider>
+      </QueueAwareComponentActionProvider>
 
       {/* Command input */}
       <CommandPalette />
@@ -110,6 +111,9 @@ export function DesktopSurface() {
           onClose={hideContextMenu}
         />
       )}
+
+      {/* Cursor spinner when AI is thinking */}
+      <CursorSpinner />
     </div>
   )
 }

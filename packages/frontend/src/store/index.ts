@@ -7,4 +7,5 @@ export {
   selectActiveAgents,
   selectWindowAgents,
   selectWindowAgent,
+  selectQueuedActionsCount,
 } from './desktop'

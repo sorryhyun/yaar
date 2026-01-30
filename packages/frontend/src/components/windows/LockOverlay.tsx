@@ -3,7 +3,11 @@
  */
 import styles from './LockOverlay.module.css'
 
-export function LockOverlay() {
+interface LockOverlayProps {
+  queuedCount?: number
+}
+
+export function LockOverlay({ queuedCount = 0 }: LockOverlayProps) {
   return (
     <div className={styles.overlay}>
       <svg className={styles.gear} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -23,6 +27,9 @@ export function LockOverlay() {
         />
       </svg>
       <span className={styles.label}>Working...</span>
+      {queuedCount > 0 && (
+        <span className={styles.queueBadge}>{queuedCount} queued</span>
+      )}
     </div>
   )
 }

@@ -1,7 +1,8 @@
 /**
  * ComponentActionContext - Provides component action handling to the window tree.
  */
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useCallback } from 'react'
+import { useDesktopStore } from '@/store'
 
 export type FormValue = string | number | boolean
 
@@ -26,6 +27,57 @@ export function ComponentActionProvider({
 }) {
   return (
     <ComponentActionContext.Provider value={sendComponentAction}>
+      {children}
+    </ComponentActionContext.Provider>
+  )
+}
+
+/**
+ * Queue-aware wrapper that checks window lock state before sending.
+ * If window is locked, queues the action for later execution.
+ */
+export function QueueAwareComponentActionProvider({
+  children,
+  sendComponentAction,
+}: {
+  children: React.ReactNode
+  sendComponentAction: SendComponentAction
+}) {
+  const windows = useDesktopStore(s => s.windows)
+  const queueComponentAction = useDesktopStore(s => s.queueComponentAction)
+
+  const queueAwareSend: SendComponentAction = useCallback((
+    windowId,
+    windowTitle,
+    action,
+    parallel,
+    formData,
+    formId,
+    componentPath
+  ) => {
+    const window = windows[windowId]
+
+    // If window is locked, queue the action
+    if (window?.locked) {
+      queueComponentAction({
+        windowId,
+        windowTitle,
+        action,
+        parallel,
+        formData,
+        formId,
+        componentPath,
+        queuedAt: Date.now(),
+      })
+      return
+    }
+
+    // Otherwise send immediately
+    sendComponentAction(windowId, windowTitle, action, parallel, formData, formId, componentPath)
+  }, [windows, queueComponentAction, sendComponentAction])
+
+  return (
+    <ComponentActionContext.Provider value={queueAwareSend}>
       {children}
     </ComponentActionContext.Provider>
   )
