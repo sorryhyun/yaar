@@ -34,6 +34,7 @@ export interface Task {
   windowId?: string; // Required for window tasks
   content: string;
   interactions?: UserInteraction[];
+  actionId?: string; // For parallel button actions - use as processing key instead of windowId
 }
 
 /**
@@ -57,6 +58,14 @@ interface QueuedMainTask {
 }
 
 /**
+ * Queued window task for per-window sequential processing.
+ */
+interface QueuedWindowTask {
+  task: Task;
+  timestamp: number;
+}
+
+/**
  * ContextPool manages a unified pool of agents with dynamic role assignment.
  */
 export class ContextPool {
@@ -70,8 +79,10 @@ export class ContextPool {
   private mainQueue: QueuedMainTask[] = [];
   private processingMain = false;
 
-  // Window status tracking
+  // Window task tracking and queuing
   private windowAgentMap: Map<string, string> = new Map(); // windowId -> agentId
+  private windowProcessing: Map<string, boolean> = new Map(); // windowId -> isProcessing
+  private windowQueues: Map<string, QueuedWindowTask[]> = new Map(); // windowId -> queued tasks
 
   constructor(connectionId: ConnectionId) {
     this.connectionId = connectionId;
@@ -235,7 +246,8 @@ export class ContextPool {
   }
 
   /**
-   * Handle a window task (parallel processing).
+   * Handle a window task (parallel across windows, sequential within a window).
+   * When actionId is provided (parallel buttons), each action runs independently.
    */
   private async handleWindowTask(task: Task): Promise<void> {
     if (!task.windowId) {
@@ -244,18 +256,46 @@ export class ContextPool {
     }
 
     const windowId = task.windowId;
-    console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId}`);
+    // Use actionId as processing key for parallel actions, otherwise use windowId
+    const processingKey = task.actionId ?? windowId;
+    const isParallel = !!task.actionId;
+    console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (key: ${processingKey}, parallel: ${isParallel})`);
+
+    // Check if this processing key is already busy (only queue if not a parallel action)
+    if (!isParallel && this.windowProcessing.get(processingKey)) {
+      // Queue the task for later processing
+      let queue = this.windowQueues.get(processingKey);
+      if (!queue) {
+        queue = [];
+        this.windowQueues.set(processingKey, queue);
+      }
+      queue.push({ task, timestamp: Date.now() });
+      console.log(`[ContextPool] Queued task ${task.messageId} for ${processingKey}, queue size: ${queue.length}`);
+
+      await this.sendEvent({
+        type: 'MESSAGE_QUEUED',
+        messageId: task.messageId,
+        position: queue.length,
+      });
+      return;
+    }
+
+    // Mark processing key as busy
+    this.windowProcessing.set(processingKey, true);
 
     // Acquire global agent slot
     const limiter = getAgentLimiter();
     try {
       await limiter.acquire(30000); // 30 second timeout
     } catch (err) {
+      this.windowProcessing.set(processingKey, false);
       console.error(`[ContextPool] Failed to acquire limiter for ${task.messageId}:`, err);
       await this.sendEvent({
         type: 'ERROR',
         error: `Failed to acquire agent slot: ${err instanceof Error ? err.message : String(err)}`,
       });
+      // Process any queued tasks (only for non-parallel actions)
+      if (!isParallel) await this.processWindowQueue(processingKey);
       return;
     }
 
@@ -264,11 +304,14 @@ export class ContextPool {
       const agent = await this.acquireAgent(`window-${windowId}`);
       if (!agent) {
         limiter.release();
+        this.windowProcessing.set(processingKey, false);
         console.error(`[ContextPool] Failed to acquire agent for window ${windowId}`);
         await this.sendEvent({
           type: 'ERROR',
           error: `Failed to acquire agent for window ${windowId}`,
         });
+        // Process any queued tasks (only for non-parallel actions)
+        if (!isParallel) await this.processWindowQueue(processingKey);
         return;
       }
 
@@ -308,6 +351,28 @@ export class ContextPool {
       await this.sendWindowStatus(windowId, `window-${windowId}`, 'idle');
     } finally {
       limiter.release();
+      this.windowProcessing.set(processingKey, false);
+
+      // Process any queued tasks (only for non-parallel actions)
+      if (!isParallel) await this.processWindowQueue(processingKey);
+    }
+  }
+
+  /**
+   * Process queued tasks for a specific window.
+   */
+  private async processWindowQueue(windowId: string): Promise<void> {
+    const queue = this.windowQueues.get(windowId);
+    if (!queue || queue.length === 0) {
+      return;
+    }
+
+    // Take the next task from the queue
+    const next = queue.shift();
+    if (next) {
+      console.log(`[ContextPool] Processing queued task ${next.task.messageId} for window ${windowId}`);
+      // Process it (will recursively process more if needed)
+      await this.handleWindowTask(next.task);
     }
   }
 
@@ -536,6 +601,7 @@ export class ContextPool {
     idleAgents: number;
     busyAgents: number;
     mainQueueSize: number;
+    windowQueueSizes: Record<string, number>;
     contextTapeSize: number;
   } {
     let idle = 0;
@@ -547,11 +613,20 @@ export class ContextPool {
         idle++;
       }
     }
+
+    const windowQueueSizes: Record<string, number> = {};
+    for (const [windowId, queue] of this.windowQueues) {
+      if (queue.length > 0) {
+        windowQueueSizes[windowId] = queue.length;
+      }
+    }
+
     return {
       totalAgents: this.agents.length,
       idleAgents: idle,
       busyAgents: busy,
       mainQueueSize: this.mainQueue.length,
+      windowQueueSizes,
       contextTapeSize: this.contextTape.length,
     };
   }
@@ -571,6 +646,8 @@ export class ContextPool {
     this.agents = [];
     this.mainQueue = [];
     this.windowAgentMap.clear();
+    this.windowProcessing.clear();
+    this.windowQueues.clear();
     this.contextTape.clear();
     this.sharedLogger = null;
   }

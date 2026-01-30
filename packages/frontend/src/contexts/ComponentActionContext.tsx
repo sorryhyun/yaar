@@ -3,7 +3,7 @@
  */
 import { createContext, useContext } from 'react'
 
-type SendComponentAction = (windowId: string, action: string) => void
+type SendComponentAction = (windowId: string, action: string, parallel?: boolean) => void
 
 const ComponentActionContext = createContext<SendComponentAction | null>(null)
 

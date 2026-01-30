@@ -27,7 +27,7 @@ import styles from '@/styles/renderers.module.css'
 interface ComponentRendererProps {
   data: ComponentNode
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }
 
 export const ComponentRenderer = memo(function ComponentRenderer({
@@ -45,7 +45,7 @@ export const ComponentRenderer = memo(function ComponentRenderer({
 interface NodeRendererProps {
   node: ComponentNode
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }
 
 function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
@@ -102,7 +102,7 @@ function CardRenderer({
 }: {
   node: CardComponent
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }) {
   const variantClass = node.variant === 'outlined'
     ? styles.cardOutlined
@@ -137,7 +137,7 @@ function StackRenderer({
 }: {
   node: StackComponent
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }) {
   const direction = node.direction || 'vertical'
   const gap = node.gap || 'md'
@@ -169,7 +169,7 @@ function GridRenderer({
 }: {
   node: GridComponent
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }) {
   const columns = node.columns || 'auto'
   const gap = node.gap || 'md'
@@ -198,13 +198,15 @@ function ButtonRenderer({
   onAction,
 }: {
   node: ButtonComponent
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }) {
   const handleClick = useCallback(() => {
     if (!node.disabled && onAction) {
-      onAction(node.action)
+      // Default to parallel execution (parallel: true unless explicitly set to false)
+      const isParallel = node.parallel !== false
+      onAction(node.action, isParallel)
     }
-  }, [node.action, node.disabled, onAction])
+  }, [node.action, node.disabled, node.parallel, onAction])
 
   const variant = node.variant || 'secondary'
   const size = node.size || 'md'
@@ -251,7 +253,7 @@ function ListRenderer({
 }: {
   node: ListComponent
   windowId: string
-  onAction?: (action: string) => void
+  onAction?: (action: string, parallel?: boolean) => void
 }) {
   const Tag = node.variant === 'ordered' ? 'ol' : 'ul'
 

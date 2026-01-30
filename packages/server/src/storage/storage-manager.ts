@@ -23,7 +23,7 @@ const IS_BUNDLED_EXE =
   process.argv[0]?.endsWith('.exe') ||
   process.argv[0]?.includes('claudeos');
 
-function getStorageDir(): string {
+export function getStorageDir(): string {
   if (process.env.CLAUDEOS_STORAGE) {
     return process.env.CLAUDEOS_STORAGE;
   }

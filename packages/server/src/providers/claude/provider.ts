@@ -9,7 +9,11 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { claudeOSTools, getClaudeOSToolNames } from '../../tools/index.js';
+import { getToolNames } from '../../mcp/index.js';
+import { getStorageDir } from '../../storage/index.js';
+
+// Port for the MCP HTTP server (same as main server)
+const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
 
 export class ClaudeProvider extends BaseTransport {
   readonly name = 'claude';
@@ -33,13 +37,18 @@ export class ClaudeProvider extends BaseTransport {
         model: options.model ?? "claude-sonnet-4-5-20250929", // "claude-opus-4-5-20251101"
         resume: options.sessionId,
         forkSession: options.forkSession, // When true, creates a new session with context from resumed session
+        // Set working directory to storage folder
+        cwd: getStorageDir(),
         // Disable all default Claude Code tools - only use ClaudeOS MCP tools
         tools: ['WebFetch','WebSearch'],
-        allowedTools: getClaudeOSToolNames(),
+        allowedTools: getToolNames(),
         maxThinkingTokens: 4096,
-        // Register the MCP server with custom tools
+        // Connect to the HTTP MCP server for ClaudeOS tools
         mcpServers: {
-          claudeos: claudeOSTools
+          claudeos: {
+            type: 'http',
+            url: `http://127.0.0.1:${MCP_PORT}/mcp`,
+          },
         },
         includePartialMessages: true, // Enable streaming
         env: {

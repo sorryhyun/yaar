@@ -41,6 +41,7 @@ export interface ButtonComponent {
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   icon?: string;
+  parallel?: boolean; // Actions run in parallel by default; set to false for sequential
 }
 
 export interface TextComponent {

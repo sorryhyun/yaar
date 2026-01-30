@@ -120,6 +120,8 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             requestId: action.requestId,
           }
           state.windows[action.windowId] = window
+          // Remove from zOrder first to prevent duplicates, then add at top
+          state.zOrder = state.zOrder.filter(id => id !== action.windowId)
           state.zOrder.push(action.windowId)
           state.focusedWindowId = action.windowId
           break

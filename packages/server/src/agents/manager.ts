@@ -51,11 +51,13 @@ export class SessionManager {
 
       case 'COMPONENT_ACTION':
         // Route component action as a window task
+        // If actionId is provided (parallel button), use it as the processing key
         await this.pool?.handleTask({
           type: 'window',
-          messageId: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          messageId: event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           windowId: event.windowId,
           content: event.action,
+          actionId: event.actionId, // Pass through for parallel processing
         });
         break;
 

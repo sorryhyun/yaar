@@ -35,11 +35,17 @@ src/
 │   ├── factory.ts        # Provider factory with auto-detection
 │   ├── claude/           # Claude Agent SDK implementation
 │   └── codex/            # Codex app-server implementation
-├── tools/
-│   ├── window.ts         # create_window, update_window, lock_window, etc.
-│   ├── storage.ts        # storage_read, storage_write, etc.
-│   ├── system.ts         # get_system_time, calculate, etc.
-│   └── action-emitter.ts # Emits OS Actions with feedback mechanism
+├── mcp/
+│   ├── index.ts          # MCP module exports
+│   ├── server.ts         # MCP HTTP server init & request handling
+│   ├── action-emitter.ts # Emits OS Actions with feedback mechanism
+│   ├── window-state.ts   # Server-side window state tracker
+│   ├── utils.ts          # Shared helpers (ok, okWithImages)
+│   └── tools/
+│       ├── index.ts      # Tool registration aggregator
+│       ├── system.ts     # get_system_time, calculate, etc.
+│       ├── window.ts     # create_window, update_window, lock_window, etc.
+│       └── storage.ts    # storage_read, storage_write, etc.
 ├── logging/              # SessionLogger for transcript persistence
 └── storage/              # StorageManager for persistent data
 ```

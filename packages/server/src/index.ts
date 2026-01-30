@@ -17,6 +17,7 @@ import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders } from './providers/factory.js';
 import { listSessions, readSessionTranscript } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
+import { initMcpServer, handleMcpRequest } from './mcp/server.js';
 import type { ClientEvent } from '@claudeos/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
@@ -109,6 +110,12 @@ const server = createServer(async (req, res) => {
   }
 
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+
+  // MCP endpoint for tool calls
+  if (url.pathname === '/mcp' && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
+    await handleMcpRequest(req, res);
+    return;
+  }
 
   // Health check
   if (url.pathname === '/health' && req.method === 'GET') {
@@ -360,13 +367,19 @@ wss.on('connection', async (ws: WebSocket) => {
   }
 });
 
-// Initialize storage and start server
-ensureStorageDir().then(() => {
+// Initialize storage and MCP server, then start HTTP server
+async function startup() {
+  await ensureStorageDir();
+  await initMcpServer();
+
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`ClaudeOS server running at http://127.0.0.1:${PORT}`);
     console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
+    console.log('MCP endpoint: http://127.0.0.1:' + PORT + '/mcp');
   });
-});
+}
+
+startup();
 
 // Graceful shutdown
 function shutdown() {

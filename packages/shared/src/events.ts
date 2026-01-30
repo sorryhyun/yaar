@@ -57,6 +57,7 @@ export interface ComponentActionEvent {
   type: 'COMPONENT_ACTION';
   windowId: string;
   action: string;
+  actionId?: string; // Unique ID for parallel execution (generated for parallel buttons)
 }
 
 export type ClientEvent =

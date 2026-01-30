@@ -15,7 +15,7 @@ interface ContentRendererProps {
   requestId?: string
   onRenderSuccess?: (requestId: string, windowId: string, renderer: string) => void
   onRenderError?: (requestId: string, windowId: string, renderer: string, error: string, url?: string) => void
-  onComponentAction?: (action: string) => void
+  onComponentAction?: (action: string, parallel?: boolean) => void
 }
 
 export function ContentRenderer({ content, windowId, requestId, onRenderSuccess, onRenderError, onComponentAction }: ContentRendererProps) {
