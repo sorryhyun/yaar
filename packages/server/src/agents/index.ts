@@ -3,14 +3,14 @@
  *
  * This module provides all agent-related functionality:
  * - AgentSession: Individual agent session management
- * - SessionManager: Routes messages to appropriate agents
+ * - SessionManager: Routes messages to context pool
  * - AgentLimiter: Global semaphore for agent limit enforcement
- * - DefaultAgentPool: Pool for default agents
- * - WindowAgentPool: Pool for window agents
+ * - ContextPool: Unified pool with dynamic role assignment
+ * - ContextTape: Hierarchical conversation context management
  */
 
 export * from './session.js';
 export * from './manager.js';
 export * from './limiter.js';
-export * from './default-pool.js';
-export * from './window-pool.js';
+export * from './context.js';
+export * from './context-pool.js';

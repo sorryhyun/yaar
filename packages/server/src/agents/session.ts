@@ -2,6 +2,7 @@
  * Agent session management.
  *
  * Manages a single WebSocket session with an AI provider via the transport layer.
+ * Role is assigned dynamically per-message via handleMessage options.
  */
 
 import { AsyncLocalStorage } from 'async_hooks';
@@ -16,14 +17,22 @@ import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { actionEmitter, type ActionEvent } from '../tools/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import type { ContextSource } from './context.js';
 
 /**
- * Queued message structure for sequential processing.
+ * Options for handling a message with dynamic role assignment.
  */
-interface QueuedMessage {
-  messageId: string;
-  content: string;
+export interface HandleMessageOptions {
+  /** Role to use for this message ('default' or 'window-{id}') */
+  role: string;
+  /** Source for context recording */
+  source: ContextSource;
+  /** User interactions to include as context */
   interactions?: UserInteraction[];
+  /** Message ID for tracking */
+  messageId?: string;
+  /** Callback to record messages to context tape */
+  onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
 }
 
 /**
@@ -51,40 +60,27 @@ export class AgentSession {
   private running = false;
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
-  private windowId?: string;
-  private forkFromSessionId?: string;
-  private parentAgentId?: string;
-  private instanceId?: string; // Unique ID for this agent instance (for action filtering)
+  private instanceId: string; // Unique ID for this agent instance (for action filtering)
   private hasSentFirstMessage = false;
   private currentMessageId: string | null = null;
-  private messageQueue: QueuedMessage[] = [];
-  private processingQueue = false;
+  private currentRole: string | null = null; // Current role being used
 
   /**
    * Create an agent session.
    * @param connectionId - Connection ID for routing events via broadcast center
    * @param sessionId - Session ID for this agent (optional, assigned by SDK if not provided)
-   * @param windowId - Window ID if this is a window-specific agent
-   * @param forkFromSessionId - Parent session ID to fork from (for window agents)
-   * @param sharedLogger - Optional shared logger (for window agents to use main session's log)
-   * @param parentAgentId - Parent agent ID for logging hierarchy (e.g., 'default' or 'window-win1')
-   * @param instanceId - Unique instance ID for this agent (for action filtering when multiple agents handle same window)
+   * @param sharedLogger - Optional shared logger
+   * @param instanceId - Unique instance ID for this agent (for action filtering)
    */
   constructor(
     connectionId: ConnectionId,
     sessionId?: string,
-    windowId?: string,
-    forkFromSessionId?: string,
     sharedLogger?: SessionLogger,
-    parentAgentId?: string,
     instanceId?: string
   ) {
     this.connectionId = connectionId;
     this.sessionId = sessionId ?? null;
-    this.windowId = windowId;
-    this.forkFromSessionId = forkFromSessionId;
-    this.parentAgentId = parentAgentId;
-    this.instanceId = instanceId;
+    this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.sessionLogger = sharedLogger ?? null;
     // Subscribe to actions emitted directly from tools
     this.unsubscribeAction = actionEmitter.onAction(this.handleToolAction.bind(this));
@@ -98,10 +94,10 @@ export class AgentSession {
   }
 
   /**
-   * Get the window ID this session is associated with (if any).
+   * Get the instance ID for this session.
    */
-  getWindowId(): string | undefined {
-    return this.windowId;
+  getInstanceId(): string {
+    return this.instanceId;
   }
 
   /**
@@ -119,41 +115,25 @@ export class AgentSession {
   }
 
   /**
-   * Get the number of queued messages.
+   * Get the current role being used (for debugging).
    */
-  getQueueLength(): number {
-    return this.messageQueue.length;
-  }
-
-  /**
-   * Queue a message for later processing (used by window agents).
-   * Returns the position in the queue.
-   */
-  queueMessage(messageId: string, content: string, interactions?: UserInteraction[]): number {
-    this.messageQueue.push({ messageId, content, interactions });
-    return this.messageQueue.length;
+  getCurrentRole(): string | null {
+    return this.currentRole;
   }
 
   /**
    * Get the agent identifier.
-   * Returns 'default' for the default agent, or 'window-{windowId}' for window agents.
-   * Once the SDK assigns a session ID, returns that for resumption purposes.
+   * Returns the current role if active, otherwise 'default'.
    */
   getSessionId(): string {
-    // If we have an SDK-assigned session ID, use it
     if (this.sessionId) {
       return this.sessionId;
     }
-    // For window agents without SDK session yet, use window-based ID
-    if (this.windowId) {
-      return `window-${this.windowId}`;
-    }
-    // Default agent
-    return 'default';
+    return this.currentRole ?? 'default';
   }
 
   /**
-   * Get the raw session ID (may be null for default agent before first message).
+   * Get the raw session ID (may be null before first message).
    */
   getRawSessionId(): string | null {
     return this.sessionId;
@@ -161,19 +141,10 @@ export class AgentSession {
 
   /**
    * Get the stable agent ID for filtering actions.
-   * For window agents with instanceId, use the unique instance ID to prevent cross-talk.
-   * For window agents without instanceId (legacy), use 'window-{windowId}'.
-   * For default agent, use 'default'.
+   * Uses the instance ID to prevent cross-talk between concurrent agents.
    */
   private getFilterAgentId(): string {
-    // Use unique instance ID if available (prevents cross-talk between concurrent agents)
-    if (this.instanceId) {
-      return this.instanceId;
-    }
-    if (this.windowId) {
-      return `window-${this.windowId}`;
-    }
-    return 'default';
+    return this.instanceId;
   }
 
   /**
@@ -183,29 +154,27 @@ export class AgentSession {
   private async handleToolAction(event: ActionEvent): Promise<void> {
     const myAgentId = this.getFilterAgentId();
 
-    // Filter: only handle actions for this agent (or unspecified agentId for main)
+    // Filter: only handle actions for this agent
     if (event.agentId && event.agentId !== myAgentId) {
-      return;
-    }
-    // For default agent, also skip if action is explicitly for another agent
-    if (myAgentId === 'default' && event.agentId && event.agentId !== 'default') {
       return;
     }
 
     // Include requestId and agentId in the action for frontend tracking
+    // Use currentRole for the UI-facing agentId (not instanceId)
+    const uiAgentId = this.currentRole ?? 'default';
     const action = {
       ...event.action,
       ...(event.requestId && { requestId: event.requestId }),
-      ...(event.agentId && { agentId: event.agentId }),
+      agentId: uiAgentId,
     };
 
     await this.sendEvent({
       type: 'ACTIONS',
       actions: [action],
-      agentId: this.getSessionId(),
+      agentId: uiAgentId,
     });
     // Log action with agent identifier
-    await this.sessionLogger?.logAction(action, this.getSessionId());
+    await this.sessionLogger?.logAction(action, uiAgentId);
   }
 
   /**
@@ -226,17 +195,6 @@ export class AgentSession {
     if (!this.sessionLogger) {
       const sessionInfo = await createSession(this.provider.name);
       this.sessionLogger = new SessionLogger(sessionInfo);
-    }
-
-    // Register this agent in the session hierarchy
-    const agentId = this.getFilterAgentId();
-    if (agentId !== 'default') {
-      // Window agents need to be registered with their parent
-      await this.sessionLogger.registerAgent(
-        agentId,
-        this.parentAgentId ?? 'default',
-        this.windowId
-      );
     }
 
     await this.sendEvent({
@@ -275,13 +233,17 @@ export class AgentSession {
 
   /**
    * Process a user message through the AI provider.
+   * Role is assigned dynamically via options.
    */
-  async handleMessage(content: string, interactions?: UserInteraction[], messageId?: string): Promise<void> {
-    const stableAgentId = this.getFilterAgentId();
-    console.log(`[AgentSession] handleMessage started for ${stableAgentId}, content: "${content.slice(0, 50)}..."`);
+  async handleMessage(content: string, options: HandleMessageOptions): Promise<void> {
+    const { role, interactions, messageId, onContextMessage } = options;
+
+    this.currentRole = role;
+    const stableAgentId = this.instanceId;
+    console.log(`[AgentSession] handleMessage started for ${role} (${stableAgentId}), content: "${content.slice(0, 50)}..."`);
 
     if (!this.provider) {
-      console.log(`[AgentSession] No provider for ${stableAgentId}, returning early`);
+      console.log(`[AgentSession] No provider for ${role}, returning early`);
       return;
     }
 
@@ -292,38 +254,29 @@ export class AgentSession {
     await this.sendEvent({
       type: 'AGENT_THINKING',
       content: '',
-      agentId: stableAgentId,
+      agentId: role,
     });
 
     // Prepend interaction context if available
     const interactionContext = interactions ? this.formatInteractions(interactions) : '';
     const fullContent = interactionContext + content;
 
-    // Log user message with agent identifier
-    await this.sessionLogger?.logUserMessage(fullContent, stableAgentId);
+    // Log user message with role identifier
+    await this.sessionLogger?.logUserMessage(fullContent, role);
+
+    // Record to context tape
+    onContextMessage?.('user', fullContent);
 
     try {
-      // For the first message of a forked session, use the parent session ID with forkSession flag
-      const shouldFork = !this.hasSentFirstMessage && !!this.forkFromSessionId;
-      console.log(`[AgentSession] ${stableAgentId} shouldFork=${shouldFork}, forkFromSessionId=${this.forkFromSessionId}`);
-
-      // Determine the session ID to use:
-      // - For forking: use the parent session ID to fork from (SDK will create new session and return its ID)
-      // - For resumption: use our session ID only if we've already sent a message (it's a real session)
-      // - For new sessions: don't pass a session ID (let SDK create one)
+      // Determine the session ID to use for resumption
       let sessionIdToUse: string | undefined;
-      if (shouldFork) {
-        sessionIdToUse = this.forkFromSessionId;
-      } else if (this.hasSentFirstMessage && this.sessionId) {
-        // Only resume if we've already sent a message (session exists in SDK)
+      if (this.hasSentFirstMessage && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
-      // If neither, sessionIdToUse is undefined -> creates new session
 
-      const options: TransportOptions = {
+      const transportOptions: TransportOptions = {
         systemPrompt: SYSTEM_PROMPT,
         sessionId: sessionIdToUse,
-        forkSession: shouldFork ? true : undefined,
       };
       this.hasSentFirstMessage = true;
 
@@ -331,12 +284,11 @@ export class AgentSession {
       let thinkingText = '';
 
       // Run within agent context so tools can access the agentId
-      // Use getFilterAgentId() for stable UI tracking ('default' or 'window-{id}')
-      const currentAgentId = this.getFilterAgentId();
-      console.log(`[AgentSession] ${currentAgentId} starting query with content: "${fullContent.slice(0, 50)}..."`);
-      await agentContext.run({ agentId: currentAgentId }, async () => {
-        console.log(`[AgentSession] ${currentAgentId} entered agentContext.run`);
-        for await (const message of this.provider!.query(fullContent, options)) {
+      // Use instanceId for action filtering (prevents cross-talk)
+      console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);
+      await agentContext.run({ agentId: stableAgentId }, async () => {
+        console.log(`[AgentSession] ${role} entered agentContext.run`);
+        for await (const message of this.provider!.query(fullContent, transportOptions)) {
           if (!this.running) break;
 
           switch (message.type) {
@@ -353,14 +305,13 @@ export class AgentSession {
               }
 
               // Accumulate response text and send update
-              // Use stable agentId for UI tracking (currentAgentId captured at start)
               if (message.content) {
                 responseText += message.content;
                 await this.sendEvent({
                   type: 'AGENT_RESPONSE',
                   content: responseText,
                   isComplete: false,
-                  agentId: currentAgentId,
+                  agentId: role,
                   messageId: this.currentMessageId ?? undefined,
                 });
               }
@@ -372,7 +323,7 @@ export class AgentSession {
                 await this.sendEvent({
                   type: 'AGENT_THINKING',
                   content: thinkingText,
-                  agentId: currentAgentId,
+                  agentId: role,
                 });
               }
               break;
@@ -382,17 +333,16 @@ export class AgentSession {
                 type: 'TOOL_PROGRESS',
                 toolName: message.toolName ?? 'unknown',
                 status: 'running',
-                agentId: currentAgentId,
+                agentId: role,
               });
               break;
 
             case 'tool_result':
-              // Actions are emitted directly from tools via actionEmitter
               await this.sendEvent({
                 type: 'TOOL_PROGRESS',
                 toolName: message.toolName ?? 'tool',
                 status: 'complete',
-                agentId: currentAgentId,
+                agentId: role,
               });
               break;
 
@@ -400,16 +350,18 @@ export class AgentSession {
               if (message.sessionId) {
                 this.sessionId = message.sessionId;
               }
-              // Log assistant response with agent identifier
+              // Log assistant response
               if (responseText) {
-                await this.sessionLogger?.logAssistantMessage(responseText, currentAgentId);
+                await this.sessionLogger?.logAssistantMessage(responseText, role);
                 await this.sessionLogger?.updateLastActivity();
+                // Record to context tape
+                onContextMessage?.('assistant', responseText);
               }
               await this.sendEvent({
                 type: 'AGENT_RESPONSE',
                 content: responseText,
                 isComplete: true,
-                agentId: currentAgentId,
+                agentId: role,
                 messageId: this.currentMessageId ?? undefined,
               });
               break;
@@ -418,48 +370,24 @@ export class AgentSession {
               await this.sendEvent({
                 type: 'ERROR',
                 error: message.error ?? 'Unknown error',
-                agentId: currentAgentId,
+                agentId: role,
               });
               break;
           }
         }
-        console.log(`[AgentSession] ${currentAgentId} query loop completed`);
+        console.log(`[AgentSession] ${role} query loop completed`);
       });
     } catch (err) {
-      console.error(`[AgentSession] ${stableAgentId} error:`, err);
+      console.error(`[AgentSession] ${role} error:`, err);
       await this.sendEvent({
         type: 'ERROR',
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
-      console.log(`[AgentSession] ${stableAgentId} handleMessage completed`);
+      console.log(`[AgentSession] ${role} handleMessage completed`);
       this.running = false;
       this.currentMessageId = null;
-
-      // Process queued messages (for window agents)
-      await this.processQueue();
-    }
-  }
-
-  /**
-   * Process queued messages sequentially.
-   * Called automatically after handleMessage completes.
-   */
-  private async processQueue(): Promise<void> {
-    if (this.processingQueue || this.messageQueue.length === 0) {
-      return;
-    }
-
-    this.processingQueue = true;
-    try {
-      while (this.messageQueue.length > 0 && !this.running) {
-        const next = this.messageQueue.shift();
-        if (next) {
-          await this.handleMessage(next.content, next.interactions, next.messageId);
-        }
-      }
-    } finally {
-      this.processingQueue = false;
+      this.currentRole = null;
     }
   }
 

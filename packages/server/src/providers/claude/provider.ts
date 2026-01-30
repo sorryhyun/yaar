@@ -53,10 +53,17 @@ export class ClaudeProvider extends BaseTransport {
         options: sdkOptions,
       });
 
+      let messageCount = 0;
       for await (const msg of stream) {
+        messageCount++;
         if (this.isAborted()) break;
         const mapped = mapClaudeMessage(msg);
         if (mapped) yield mapped;
+      }
+      if (messageCount === 0) {
+        console.warn(`[ClaudeProvider] SDK returned empty stream for prompt: "${prompt.slice(0, 50)}..."`);
+      } else {
+        console.log(`[ClaudeProvider] SDK returned ${messageCount} messages`);
       }
     } catch (err) {
       if (this.isAbortError(err)) {

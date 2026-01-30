@@ -12,6 +12,13 @@ import type { StreamMessage } from '../types.js';
  * Returns null for messages that should be skipped.
  */
 export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
+  // Log important message types (skip noisy stream_event)
+  const msgType = (msg as { type: string; subtype?: string }).type;
+  const msgSubtype = (msg as { subtype?: string }).subtype;
+  if (msgType !== 'stream_event') {
+    console.log(`[message-mapper] Received: type=${msgType}, subtype=${msgSubtype ?? 'none'}`);
+  }
+
   // SDK message types: system, assistant, user, result, stream_event
   if (msg.type === 'system' && msg.subtype === 'init') {
     return { type: 'text', sessionId: msg.session_id };
@@ -27,7 +34,23 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   }
 
   if (msg.type === 'result') {
-    return { type: 'complete', sessionId: msg.session_id };
+    // SDK result can be success or error - check for error subtypes
+    const result = msg as {
+      type: 'result';
+      subtype?: string;
+      is_error?: boolean;
+      errors?: string[];
+      session_id: string;
+    };
+
+    // Check for errors (SDKResultError type)
+    if (result.is_error || result.subtype?.startsWith('error')) {
+      const errorMessage = result.errors?.join('; ') || 'Unknown SDK error';
+      console.error(`[message-mapper] SDK error: ${errorMessage} (subtype: ${result.subtype})`);
+      return { type: 'error', error: errorMessage, sessionId: result.session_id };
+    }
+
+    return { type: 'complete', sessionId: result.session_id };
   }
 
   // Handle user messages containing tool results

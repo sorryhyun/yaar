@@ -22,11 +22,11 @@ src/
 ├── index.ts              # WebSocket server + REST API endpoints
 ├── system-prompt.ts      # System prompt for Claude
 ├── agents/
-│   ├── manager.ts        # SessionManager - routes messages to pools
-│   ├── session.ts        # AgentSession - individual agent with provider
+│   ├── manager.ts        # SessionManager - routes messages to ContextPool
+│   ├── session.ts        # AgentSession - individual agent with dynamic role
 │   ├── limiter.ts        # AgentLimiter - global semaphore
-│   ├── default-pool.ts   # Pool for main user messages
-│   └── window-pool.ts    # Pool for window-specific agents
+│   ├── context.ts        # ContextTape - hierarchical conversation context
+│   └── context-pool.ts   # Unified pool with dynamic role assignment
 ├── events/
 │   └── broadcast-center.ts  # Centralized WebSocket event hub
 ├── providers/
@@ -46,22 +46,32 @@ src/
 
 ## Architecture
 
-### Agent Hierarchy
+### Context-Centric Agent Architecture
 
 ```
 SessionManager (per WebSocket connection)
-├── DefaultAgentPool (1-3 agents for user messages)
-│   └── AgentSession → AITransport
-└── WindowAgentPool (per-window agents, forked from default)
-    └── AgentSession → AITransport
+└── ContextPool (unified pool)
+    ├── ContextTape (hierarchical message history)
+    │   ├── [main] user/assistant messages
+    │   └── [window:id] branch messages
+    └── Agents (dynamic role assignment)
+        └── AgentSession → AITransport
 ```
+
+Key concepts:
+- **Single pool**: Agents are just agents, role determined by task
+- **Hierarchical context**: Messages tagged with source (main vs window)
+- **Dynamic roles**: `default` for main, `window-{id}` for windows
+- **Sequential main**: USER_MESSAGE tasks processed one at a time
+- **Parallel windows**: WINDOW_MESSAGE tasks run concurrently
 
 ### Message Flow
 
 ```
 WebSocket → SessionManager.routeMessage()
-  → DefaultAgentPool or WindowAgentPool
-  → AgentSession.handleMessage()
+  → ContextPool.handleTask()
+  → Main queue (sequential) or Window handler (parallel)
+  → AgentSession.handleMessage(content, { role, source, ... })
   → AITransport.query() [async generator]
   → Tools emit actions via actionEmitter
   → BroadcastCenter.publishToConnection()
@@ -72,7 +82,8 @@ WebSocket → SessionManager.routeMessage()
 | Pattern | Location | Purpose |
 |---------|----------|---------|
 | Semaphore | `AgentLimiter` | Global agent limit with queue |
-| Pool | `DefaultAgentPool` | Reuse agents, handle concurrency |
+| Pool | `ContextPool` | Unified agent reuse with dynamic roles |
+| Context Tape | `ContextTape` | Track messages by source for injection |
 | Factory | `providers/factory.ts` | Auto-detect and create providers |
 | Observer | `actionEmitter` | Decouple tools from sessions |
 | AsyncLocalStorage | `AgentSession` | Track agentId in async context |

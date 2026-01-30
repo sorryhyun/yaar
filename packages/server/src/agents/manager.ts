@@ -1,86 +1,80 @@
 /**
- * Session manager - manages multiple agent sessions per WebSocket connection.
+ * Session manager - manages the unified context pool for a WebSocket connection.
  *
- * Agent types:
- * - Default agent pool: Pool of agents for handling concurrent user messages
- * - Window agent pool: Shared pool for parallel window message handling
- * - Subagent: Spawned by default/window agents via SDK native feature
+ * Routes messages to the appropriate handler based on type:
+ * - USER_MESSAGE: Main conversation (sequential)
+ * - WINDOW_MESSAGE: Window-specific (parallel)
  */
 
-import { DefaultAgentPool } from './default-pool.js';
-import { WindowAgentPool } from './window-pool.js';
-import type { ClientEvent, ServerEvent } from '@claudeos/shared';
-import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import { ContextPool } from './context-pool.js';
+import type { ClientEvent } from '@claudeos/shared';
+import type { ConnectionId } from '../events/broadcast-center.js';
 
 export class SessionManager {
   private connectionId: ConnectionId;
-  private defaultPool: DefaultAgentPool | null = null;
-  private windowPool: WindowAgentPool | null = null;
+  private pool: ContextPool | null = null;
 
   constructor(connectionId: ConnectionId) {
     this.connectionId = connectionId;
   }
 
   /**
-   * Initialize the main session pool and window pool.
+   * Initialize the context pool.
    */
   async initialize(): Promise<boolean> {
-    this.defaultPool = new DefaultAgentPool(this.connectionId);
-    const success = await this.defaultPool.initialize();
-
-    if (success) {
-      // Initialize window pool with shared logger and base session from default pool
-      this.windowPool = new WindowAgentPool(
-        this.connectionId,
-        this.defaultPool.getSessionLogger() ?? undefined,
-        () => this.defaultPool?.getBaseSessionId() ?? undefined
-      );
-    }
-
-    return success;
+    this.pool = new ContextPool(this.connectionId);
+    return await this.pool.initialize();
   }
 
   /**
-   * Route incoming messages to the appropriate session.
+   * Route incoming messages to the appropriate handler.
    */
   async routeMessage(event: ClientEvent): Promise<void> {
     switch (event.type) {
       case 'USER_MESSAGE':
-        // Route to pool which handles concurrent messages
-        await this.defaultPool?.handleMessage(event.messageId, event.content, event.interactions);
+        await this.pool?.handleTask({
+          type: 'main',
+          messageId: event.messageId,
+          content: event.content,
+          interactions: event.interactions,
+        });
         break;
 
       case 'WINDOW_MESSAGE':
-        // Window messages are now handled by the window pool in parallel
-        await this.windowPool?.handleMessage(
-          event.messageId,
-          event.windowId,
-          event.content
-        );
+        await this.pool?.handleTask({
+          type: 'window',
+          messageId: event.messageId,
+          windowId: event.windowId,
+          content: event.content,
+        });
         break;
 
       case 'COMPONENT_ACTION':
-        // Route component action to window pool
-        await this.windowPool?.handleComponentAction(event.windowId, event.action);
+        // Route component action as a window task
+        await this.pool?.handleTask({
+          type: 'window',
+          messageId: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          windowId: event.windowId,
+          content: event.action,
+        });
         break;
 
       case 'INTERRUPT':
-        // Interrupt all agents in the pool
-        await this.defaultPool?.interruptAll();
+        // Interrupt all agents
+        await this.pool?.interruptAll();
         break;
 
       case 'INTERRUPT_AGENT':
         // Interrupt specific agent by ID
-        await this.interruptAgent(event.agentId);
+        await this.pool?.interruptAgent(event.agentId);
         break;
 
       case 'SET_PROVIDER':
-        await this.defaultPool?.getPrimaryAgent()?.setProvider(event.provider);
+        await this.pool?.getPrimaryAgent()?.setProvider(event.provider);
         break;
 
       case 'RENDERING_FEEDBACK':
-        // Rendering feedback goes to primary session (action emitter handles it)
-        this.defaultPool?.getPrimaryAgent()?.handleRenderingFeedback(
+        this.pool?.getPrimaryAgent()?.handleRenderingFeedback(
           event.requestId,
           event.windowId,
           event.renderer,
@@ -94,56 +88,33 @@ export class SessionManager {
   }
 
   /**
-   * Interrupt a specific agent by ID.
-   */
-  private async interruptAgent(agentId: string): Promise<void> {
-    if (agentId === 'default') {
-      await this.defaultPool?.interruptAll();
-      return;
-    }
-
-    // Try to interrupt window agent
-    const interrupted = await this.windowPool?.interruptAgent(agentId);
-    if (!interrupted) {
-      console.warn(`[SessionManager] Could not find agent to interrupt: ${agentId}`);
-    }
-  }
-
-  /**
    * Check if a window has an active agent.
    */
   hasWindowAgent(windowId: string): boolean {
-    return this.windowPool?.hasActiveAgent(windowId) ?? false;
+    return this.pool?.hasActiveAgent(windowId) ?? false;
   }
 
   /**
    * Get the agent ID for a window (if any).
    */
   getWindowAgentId(windowId: string): string | undefined {
-    return this.windowPool?.getWindowAgentId(windowId);
+    return this.pool?.getWindowAgentId(windowId);
   }
 
   /**
-   * Send an event to the client via broadcast center.
+   * Get the context pool (for stats/debugging).
    */
-  private async sendEvent(event: ServerEvent): Promise<void> {
-    getBroadcastCenter().publishToConnection(event, this.connectionId);
+  getPool(): ContextPool | null {
+    return this.pool;
   }
 
   /**
-   * Clean up all sessions.
+   * Clean up all resources.
    */
   async cleanup(): Promise<void> {
-    // Cleanup window pool
-    if (this.windowPool) {
-      await this.windowPool.cleanup();
-      this.windowPool = null;
-    }
-
-    // Cleanup default pool
-    if (this.defaultPool) {
-      await this.defaultPool.cleanup();
-      this.defaultPool = null;
+    if (this.pool) {
+      await this.pool.cleanup();
+      this.pool = null;
     }
   }
 }
