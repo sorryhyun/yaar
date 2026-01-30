@@ -9,13 +9,15 @@ import { TextRenderer } from './renderers/TextRenderer'
 import { IframeRenderer } from './renderers/IframeRenderer'
 import { ComponentRenderer } from './renderers/ComponentRenderer'
 
+type FormValue = string | number | boolean
+
 interface ContentRendererProps {
   content: WindowContent
   windowId: string
   requestId?: string
   onRenderSuccess?: (requestId: string, windowId: string, renderer: string) => void
   onRenderError?: (requestId: string, windowId: string, renderer: string, error: string, url?: string) => void
-  onComponentAction?: (action: string, parallel?: boolean) => void
+  onComponentAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
 }
 
 export function ContentRenderer({ content, windowId, requestId, onRenderSuccess, onRenderError, onComponentAction }: ContentRendererProps) {

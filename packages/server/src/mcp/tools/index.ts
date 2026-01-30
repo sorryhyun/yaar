@@ -43,6 +43,8 @@ export function getToolNames(): string[] {
     'mcp__claudeos__unlock_window',
     'mcp__claudeos__list_windows',
     'mcp__claudeos__view_window',
+    'mcp__claudeos__show_notification',
+    'mcp__claudeos__dismiss_notification',
     // Storage tools
     'mcp__claudeos__storage_read',
     'mcp__claudeos__storage_write',

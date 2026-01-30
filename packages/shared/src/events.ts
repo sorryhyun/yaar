@@ -58,6 +58,8 @@ export interface ComponentActionEvent {
   windowId: string;
   action: string;
   actionId?: string; // Unique ID for parallel execution (generated for parallel buttons)
+  formData?: Record<string, string | number | boolean>; // Form field values when submitForm is used
+  formId?: string; // Form ID when submitForm is used
 }
 
 export type ClientEvent =

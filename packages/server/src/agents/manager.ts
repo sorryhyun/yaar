@@ -49,17 +49,25 @@ export class SessionManager {
         });
         break;
 
-      case 'COMPONENT_ACTION':
+      case 'COMPONENT_ACTION': {
         // Route component action as a window task
         // If actionId is provided (parallel button), use it as the processing key
+
+        // Format content with form data if present
+        let content = `User clicked: ${event.action}`;
+        if (event.formData && event.formId) {
+          content += `\n\nForm data (${event.formId}):\n${JSON.stringify(event.formData, null, 2)}`;
+        }
+
         await this.pool?.handleTask({
           type: 'window',
           messageId: event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           windowId: event.windowId,
-          content: event.action,
+          content,
           actionId: event.actionId, // Pass through for parallel processing
         });
         break;
+      }
 
       case 'INTERRUPT':
         // Interrupt all agents

@@ -15,7 +15,7 @@ import { dirname } from 'path';
 import { renderPdfPage } from './pdf/index.js';
 import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders } from './providers/factory.js';
-import { listSessions, readSessionTranscript } from './logging/index.js';
+import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest } from './mcp/server.js';
 import type { ClientEvent } from '@claudeos/shared';
@@ -165,6 +165,49 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Get session messages (for replay)
+  const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+  if (messagesMatch && req.method === 'GET') {
+    const sessionId = messagesMatch[1];
+    try {
+      const messagesJsonl = await readSessionMessages(sessionId);
+      if (messagesJsonl === null) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+      const messages = parseSessionMessages(messagesJsonl);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ messages }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to read messages' }));
+    }
+    return;
+  }
+
+  // Restore session (returns window create actions to recreate window state)
+  const restoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/restore$/);
+  if (restoreMatch && req.method === 'POST') {
+    const sessionId = restoreMatch[1];
+    try {
+      const messagesJsonl = await readSessionMessages(sessionId);
+      if (messagesJsonl === null) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+      const messages = parseSessionMessages(messagesJsonl);
+      const restoreActions = getWindowRestoreActions(messages);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ actions: restoreActions }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to restore session' }));
+    }
+    return;
+  }
+
   // Render PDF page as image
   // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
   const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);
@@ -256,7 +299,7 @@ const server = createServer(async (req, res) => {
   // Serve static frontend files (for bundled exe or production)
   if (existsSync(FRONTEND_DIST)) {
     // Determine file path
-    let staticPath = join(FRONTEND_DIST, url.pathname === '/' ? 'index.html' : url.pathname);
+    const staticPath = join(FRONTEND_DIST, url.pathname === '/' ? 'index.html' : url.pathname);
 
     try {
       const fileStat = await stat(staticPath);

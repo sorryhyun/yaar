@@ -67,7 +67,55 @@ Use renderer: "component" with the components parameter for interactive content 
 }
 \`\`\`
 
-**Button actions:** When user clicks a button, you receive its action string as input. For example, clicking a button with \`"action": "open_document_pdf"\` sends you the message \`"open_document_pdf"\`.
+**Button actions:** When user clicks a button, you receive its action string as input. For example, clicking a button with \`"action": "open_document_pdf"\` sends you the message \`"User clicked: open_document_pdf"\`.
+
+### Form Components
+
+Forms collect user input locally without sending anything to you until a submit button is clicked. Use forms for user data collection.
+
+**Example - Contact form:**
+\`\`\`json
+{
+  "renderer": "component",
+  "components": {
+    "type": "form",
+    "id": "contact",
+    "layout": "vertical",
+    "gap": "md",
+    "children": [
+      { "type": "input", "name": "name", "label": "Name", "placeholder": "Your name" },
+      { "type": "input", "name": "email", "label": "Email", "variant": "email" },
+      { "type": "textarea", "name": "message", "label": "Message", "rows": 4 },
+      { "type": "select", "name": "priority", "label": "Priority", "options": [
+        { "value": "low", "label": "Low" },
+        { "value": "normal", "label": "Normal" },
+        { "value": "high", "label": "High" }
+      ]},
+      { "type": "button", "label": "Send", "action": "send_contact", "variant": "primary" }
+    ]
+  }
+}
+\`\`\`
+
+When the user clicks "Send", you receive:
+\`\`\`
+User clicked: send_contact
+
+Form data (contact):
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "message": "Hello!",
+  "priority": "normal"
+}
+\`\`\`
+
+**Form input types:**
+- **input**: Single-line text. Variants: text, email, password, number, url
+- **textarea**: Multi-line text. Use \`rows\` to set height
+- **select**: Dropdown. Provide \`options\` array with \`value\` and \`label\`
+
+**Important:** Buttons inside a form automatically submit that form's data. Use \`submitForm: "form-id"\` on buttons outside a form to submit a specific form.
 
 ### Available Components
 
@@ -76,7 +124,7 @@ Use renderer: "component" with the components parameter for interactive content 
 | **card** | Container with title/actions | title, subtitle, content, actions, variant |
 | **stack** | Flex layout | direction (horizontal/vertical), gap, align, justify, children |
 | **grid** | Grid layout | columns, gap, children |
-| **button** | Clickable action | label, action, variant (primary/secondary/ghost/danger), size |
+| **button** | Clickable action | label, action, variant, size, submitForm |
 | **text** | Styled text | content, variant (body/heading/subheading/caption/code), color |
 | **list** | Lists | variant (ordered/unordered), items |
 | **badge** | Status indicator | label, variant (default/success/warning/error/info) |
@@ -86,6 +134,10 @@ Use renderer: "component" with the components parameter for interactive content 
 | **markdown** | Embedded markdown | content |
 | **divider** | Horizontal line | variant (solid/dashed) |
 | **spacer** | Empty space | size (sm/md/lg) |
+| **form** | Form container | id (required), layout, gap, children |
+| **input** | Text input field | name (required), label, placeholder, variant, defaultValue |
+| **textarea** | Multi-line text | name (required), label, placeholder, rows, defaultValue |
+| **select** | Dropdown select | name (required), label, options, placeholder, defaultValue |
 
 ### Image Handling
 
@@ -152,6 +204,16 @@ When you encounter images (from reading files, URLs, or any visual content):
 - Prefer iframe URL if user requests website content with URL
 - **Use component renderer with buttons for interactive content** - users can click buttons to trigger actions
 - **Display images visually** - never describe image contents when you can show them directly
+
+## Notifications
+
+Use **show_notification** for important alerts that should persist until dismissed. Unlike toasts (which auto-dismiss), notifications stay visible in the notification center.
+
+**When to use notifications vs toasts:**
+- **Toasts**: Quick feedback, auto-dismiss (e.g., "Saved!", "Error occurred")
+- **Notifications**: Important alerts requiring attention (e.g., "Download complete", "New message")
+
+**Example:** After a long operation completes, show a notification so the user sees it even if they weren't watching.
 
 ## Storage
 

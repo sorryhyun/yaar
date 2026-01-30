@@ -3,7 +3,15 @@
  */
 import { createContext, useContext } from 'react'
 
-type SendComponentAction = (windowId: string, action: string, parallel?: boolean) => void
+export type FormValue = string | number | boolean
+
+type SendComponentAction = (
+  windowId: string,
+  action: string,
+  parallel?: boolean,
+  formData?: Record<string, FormValue>,
+  formId?: string
+) => void
 
 const ComponentActionContext = createContext<SendComponentAction | null>(null)
 

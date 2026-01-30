@@ -312,4 +312,46 @@ export function registerWindowTools(server: McpServer): void {
       return ok(JSON.stringify(windowInfo, null, 2));
     }
   );
+
+  // show_notification
+  server.tool(
+    'show_notification',
+    'Show a persistent notification that requires manual dismissal. Use for important alerts that should stay visible.',
+    {
+      id: z.string().describe('Unique notification ID'),
+      title: z.string().describe('Notification title'),
+      body: z.string().describe('Notification body text'),
+      icon: z.string().optional().describe('Optional icon name'),
+    },
+    async (args) => {
+      const osAction: OSAction = {
+        type: 'notification.show',
+        id: args.id,
+        title: args.title,
+        body: args.body,
+        icon: args.icon,
+      };
+
+      actionEmitter.emitAction(osAction);
+      return ok(`Notification "${args.title}" shown`);
+    }
+  );
+
+  // dismiss_notification
+  server.tool(
+    'dismiss_notification',
+    'Dismiss a notification by ID',
+    {
+      id: z.string().describe('Notification ID to dismiss'),
+    },
+    async (args) => {
+      const osAction: OSAction = {
+        type: 'notification.dismiss',
+        id: args.id,
+      };
+
+      actionEmitter.emitAction(osAction);
+      return ok(`Notification ${args.id} dismissed`);
+    }
+  );
 }

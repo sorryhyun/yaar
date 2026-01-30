@@ -42,6 +42,45 @@ export interface ButtonComponent {
   disabled?: boolean;
   icon?: string;
   parallel?: boolean; // Actions run in parallel by default; set to false for sequential
+  submitForm?: string; // Form ID to collect data from on click
+}
+
+export interface FormComponent {
+  type: 'form';
+  id: string; // Required - referenced by button's submitForm
+  children: ComponentNode[];
+  layout?: 'vertical' | 'horizontal';
+  gap?: 'none' | 'sm' | 'md' | 'lg';
+}
+
+export interface InputComponent {
+  type: 'input';
+  name: string; // Required - key in form data
+  label?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  variant?: 'text' | 'email' | 'password' | 'number' | 'url';
+  disabled?: boolean;
+}
+
+export interface TextareaComponent {
+  type: 'textarea';
+  name: string;
+  label?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  rows?: number;
+  disabled?: boolean;
+}
+
+export interface SelectComponent {
+  type: 'select';
+  name: string;
+  label?: string;
+  options: Array<{ value: string; label: string }>;
+  defaultValue?: string;
+  placeholder?: string;
+  disabled?: boolean;
 }
 
 export interface TextComponent {
@@ -118,7 +157,11 @@ export type Component =
   | ImageComponent
   | MarkdownComponent
   | DividerComponent
-  | SpacerComponent;
+  | SpacerComponent
+  | FormComponent
+  | InputComponent
+  | TextareaComponent
+  | SelectComponent;
 
 /**
  * ComponentNode can be a component object or a plain string (text shorthand).
@@ -181,4 +224,20 @@ export function isDividerComponent(node: ComponentNode): node is DividerComponen
 
 export function isSpacerComponent(node: ComponentNode): node is SpacerComponent {
   return isComponent(node) && node.type === 'spacer';
+}
+
+export function isFormComponent(node: ComponentNode): node is FormComponent {
+  return isComponent(node) && node.type === 'form';
+}
+
+export function isInputComponent(node: ComponentNode): node is InputComponent {
+  return isComponent(node) && node.type === 'input';
+}
+
+export function isTextareaComponent(node: ComponentNode): node is TextareaComponent {
+  return isComponent(node) && node.type === 'textarea';
+}
+
+export function isSelectComponent(node: ComponentNode): node is SelectComponent {
+  return isComponent(node) && node.type === 'select';
 }
