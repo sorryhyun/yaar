@@ -78,7 +78,7 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 server/src/
 ├── index.ts              # WebSocket server entry point
 ├── session-manager.ts    # Manages default + window agents per connection
-├── agent-session.ts      # Individual agent session (transport, logging)
+├── agent-session.ts      # Individual agent session (provider, logging)
 ├── system-prompt.ts      # System prompt configuration
 ├── providers/            # Pluggable AI backends
 │   ├── factory.ts        # Provider factory with auto-detection
@@ -134,7 +134,7 @@ Content renderers: `markdown`, `table`, `text`, `html`, `iframe`
 - `packages/shared/src/actions.ts` - OS Actions type definitions
 - `packages/server/src/index.ts` - WebSocket server entry point
 - `packages/server/src/session-manager.ts` - Multi-agent session management
-- `packages/server/src/agent-session.ts` - Individual agent session (transport, logging)
+- `packages/server/src/agent-session.ts` - Individual agent session (provider, logging)
 - `packages/server/src/providers/factory.ts` - Provider factory and selection
 - `packages/server/src/tools/window.ts` - Window management tools (with lock feedback)
 - `packages/server/src/tools/action-emitter.ts` - Action emission with feedback mechanism
@@ -148,9 +148,9 @@ Content renderers: `markdown`, `table`, `text`, `html`, `iframe`
 
 ## Adding a New AI Provider
 
-1. Create `packages/server/src/providers/<name>/transport.ts` implementing `AITransport`
+1. Create `packages/server/src/providers/<name>/provider.ts` implementing `AITransport`
 2. Add loader to `providerLoaders` in `packages/server/src/providers/factory.ts`
-3. Add availability check to `isProviderAvailable()` in the factory
+3. Export the provider class from `packages/server/src/providers/<name>/index.ts`
 
 ## Adding a New OS Action
 

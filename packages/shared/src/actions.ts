@@ -19,6 +19,20 @@ export interface WindowContent {
   data: unknown;
 }
 
+/**
+ * Window state representation used by both server and frontend.
+ */
+export interface WindowState {
+  id: string;
+  title: string;
+  bounds: WindowBounds;
+  content: WindowContent;
+  locked: boolean;
+  lockedBy?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface WindowCreateAction {
   type: 'window.create';
   windowId: string;

@@ -11,6 +11,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { WINDOW_PRESETS, type WindowPreset, type OSAction, type ContentUpdateOperation, type ComponentNode } from '@claudeos/shared';
 import { actionEmitter } from './action-emitter.js';
+import { windowState } from './window-state.js';
 
 /** Helper to create MCP tool result */
 const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
@@ -249,6 +250,65 @@ export const unlockWindow = tool(
 );
 
 /**
+ * List all windows currently on the desktop.
+ */
+export const listWindows = tool(
+  'list_windows',
+  'List all windows currently open on the ClaudeOS desktop. Returns window IDs, titles, positions, sizes, and lock status.',
+  {},
+  async () => {
+    const windows = windowState.listWindows();
+
+    if (windows.length === 0) {
+      return ok('No windows are currently open.');
+    }
+
+    const windowList = windows.map(win => ({
+      id: win.id,
+      title: win.title,
+      position: `(${win.bounds.x}, ${win.bounds.y})`,
+      size: `${win.bounds.w}x${win.bounds.h}`,
+      renderer: win.content.renderer,
+      locked: win.locked,
+      lockedBy: win.lockedBy,
+    }));
+
+    return ok(JSON.stringify(windowList, null, 2));
+  }
+);
+
+/**
+ * View the content of a specific window.
+ */
+export const viewWindow = tool(
+  'view_window',
+  'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content.',
+  {
+    windowId: z.string().describe('ID of the window to view')
+  },
+  async (args) => {
+    const win = windowState.getWindow(args.windowId);
+
+    if (!win) {
+      return ok(`Window "${args.windowId}" not found. Use list_windows to see available windows.`);
+    }
+
+    const windowInfo = {
+      id: win.id,
+      title: win.title,
+      renderer: win.content.renderer,
+      content: win.content.data,
+      position: { x: win.bounds.x, y: win.bounds.y },
+      size: { width: win.bounds.w, height: win.bounds.h },
+      locked: win.locked,
+      lockedBy: win.lockedBy,
+    };
+
+    return ok(JSON.stringify(windowInfo, null, 2));
+  }
+);
+
+/**
  * All window/UI tools.
  */
 export const windowTools = [
@@ -257,5 +317,7 @@ export const windowTools = [
   closeWindow,
   showToast,
   lockWindow,
-  unlockWindow
+  unlockWindow,
+  listWindows,
+  viewWindow
 ];

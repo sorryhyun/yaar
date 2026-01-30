@@ -81,36 +81,90 @@ export class SessionManager {
 
   /**
    * Handle a component action (button click) from a window.
-   * Routes to window agent if one exists, otherwise to default agent.
+   * Creates a window-specific agent that forks from the default agent if one doesn't exist.
    */
   private async handleComponentAction(windowId: string, action: string): Promise<void> {
-    // Check if window has its own agent
-    const windowSession = this.windowSessions.get(windowId);
+    let session = this.windowSessions.get(windowId);
 
-    if (windowSession) {
-      // Send to window agent
+    if (!session) {
+      // Check limit
+      if (this.windowSessions.size >= MAX_WINDOW_AGENTS) {
+        await this.sendEvent({
+          type: 'ERROR',
+          error: `Maximum of ${MAX_WINDOW_AGENTS} window agents reached. Close a window to create more.`,
+        });
+        return;
+      }
+
+      // Create new window session, forking from main session's context
+      const defaultSessionId = this.defaultPool?.getRawSessionId() ?? undefined;
+      const sharedLogger = this.defaultPool?.getSessionLogger() ?? undefined;
+      session = new AgentSession(this.ws, undefined, windowId, defaultSessionId, sharedLogger);
+
+      // Initialize the session
+      const initialized = await session.initialize();
+      if (!initialized) {
+        await this.sendEvent({
+          type: 'ERROR',
+          error: `Failed to initialize window agent for ${windowId}`,
+        });
+        return;
+      }
+
+      this.windowSessions.set(windowId, session);
+
+      // Use windowId as the agent identifier
+      const agentId = `window-${windowId}`;
+
+      // Notify frontend about new agent
       await this.sendEvent({
         type: 'WINDOW_AGENT_STATUS',
         windowId,
-        agentId: windowSession.getSessionId(),
-        status: 'active',
+        agentId,
+        status: 'created',
       });
-
-      await windowSession.handleMessage(action);
-
-      await this.sendEvent({
-        type: 'WINDOW_AGENT_STATUS',
-        windowId,
-        agentId: windowSession.getSessionId(),
-        status: 'idle',
-      });
-    } else {
-      // Route to pool with context about which window triggered it
-      // Generate a messageId for component actions
-      const messageId = `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const contextualMessage = `[Component action from window "${windowId}"] ${action}`;
-      await this.defaultPool?.handleMessage(messageId, contextualMessage);
     }
+
+    // Check if window agent is busy - if so, queue the message
+    if (session.isRunning()) {
+      const messageId = `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const queuePosition = session.queueMessage(messageId, action);
+      await this.sendEvent({
+        type: 'MESSAGE_QUEUED',
+        messageId,
+        position: queuePosition,
+      });
+      console.log(`[SessionManager] Queued component action ${messageId} for window ${windowId}, position: ${queuePosition}`);
+      return;
+    }
+
+    // Send status update
+    await this.sendEvent({
+      type: 'WINDOW_AGENT_STATUS',
+      windowId,
+      agentId: session.getSessionId(),
+      status: 'active',
+    });
+
+    // Process the action
+    const messageId = `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // Notify frontend that message is accepted
+    await this.sendEvent({
+      type: 'MESSAGE_ACCEPTED',
+      messageId,
+      agentId: session.getSessionId(),
+    });
+
+    await session.handleMessage(action, undefined, messageId);
+
+    // Send idle status after completion
+    await this.sendEvent({
+      type: 'WINDOW_AGENT_STATUS',
+      windowId,
+      agentId: session.getSessionId(),
+      status: 'idle',
+    });
   }
 
   /**

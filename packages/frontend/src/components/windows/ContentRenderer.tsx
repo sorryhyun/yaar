@@ -1,7 +1,7 @@
 /**
  * ContentRenderer - Renders window content based on renderer type.
  */
-import type { WindowContent, ComponentNode } from '@/types/actions'
+import type { WindowContent, ComponentNode } from '@/types'
 import { MarkdownRenderer } from './renderers/MarkdownRenderer'
 import { TableRenderer } from './renderers/TableRenderer'
 import { HtmlRenderer } from './renderers/HtmlRenderer'

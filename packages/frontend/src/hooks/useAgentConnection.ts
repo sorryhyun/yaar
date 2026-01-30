@@ -4,7 +4,7 @@
  */
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react'
 import { useDesktopStore } from '@/store'
-import type { ClientEvent, ServerEvent } from '@/types/events'
+import type { ClientEvent, ServerEvent } from '@/types'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 const RECONNECT_DELAY = 3000

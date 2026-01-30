@@ -15,6 +15,7 @@ export * from './system.js';
 export * from './window.js';
 export * from './storage.js';
 export * from './action-emitter.js';
+export * from './window-state.js';
 
 /**
  * All ClaudeOS tools combined.
@@ -39,6 +40,9 @@ export const claudeOSTools = createSdkMcpServer({
  */
 export function getClaudeOSToolNames(): string[] {
   return [
+    // Built-in Claude tools
+    'WebFetch',
+    'WebSearch',
     // System tools
     'mcp__claudeos__get_system_time',
     'mcp__claudeos__calculate',
@@ -50,6 +54,10 @@ export function getClaudeOSToolNames(): string[] {
     'mcp__claudeos__update_window',
     'mcp__claudeos__close_window',
     'mcp__claudeos__show_toast',
+    'mcp__claudeos__lock_window',
+    'mcp__claudeos__unlock_window',
+    'mcp__claudeos__list_windows',
+    'mcp__claudeos__view_window',
     // Storage tools
     'mcp__claudeos__storage_read',
     'mcp__claudeos__storage_write',
