@@ -5,6 +5,9 @@
  * The frontend applies them to create windows, toasts, and notifications.
  */
 
+import type { ComponentNode } from './components'
+import { isComponent } from './components'
+
 // ============ Window Actions ============
 
 export interface WindowBounds {
@@ -205,4 +208,70 @@ export function isNotificationAction(action: OSAction): action is NotificationAc
 
 export function isToastAction(action: OSAction): action is ToastAction {
   return action.type.startsWith('toast.');
+}
+
+// ============ Runtime Validation Helpers ============
+
+export interface TableContentData {
+  headers: string[];
+  rows: string[][];
+}
+
+export interface IframeContentData {
+  url: string;
+  sandbox?: string;
+}
+
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+export function isTableContentData(value: unknown): value is TableContentData {
+  if (!value || typeof value !== 'object') return false
+  const data = value as { headers?: unknown; rows?: unknown }
+  return isStringArray(data.headers) && Array.isArray(data.rows) && data.rows.every((row) => isStringArray(row))
+}
+
+export function isIframeContentData(value: unknown): value is string | IframeContentData {
+  if (typeof value === 'string') return true
+  if (!value || typeof value !== 'object') return false
+  const data = value as { url?: unknown; sandbox?: unknown }
+  return typeof data.url === 'string' && (data.sandbox === undefined || typeof data.sandbox === 'string')
+}
+
+export function isComponentNode(value: unknown): value is ComponentNode {
+  return typeof value === 'string' || (typeof value === 'object' && value !== null && isComponent(value as ComponentNode))
+}
+
+export function isWindowContentData(renderer: string, value: unknown): boolean {
+  switch (renderer) {
+    case 'markdown':
+    case 'html':
+    case 'text':
+      return typeof value === 'string'
+    case 'table':
+      return isTableContentData(value)
+    case 'component':
+      return isComponentNode(value)
+    case 'iframe':
+      return isIframeContentData(value)
+    default:
+      return value !== undefined
+  }
+}
+
+export function isContentUpdateOperationValid(renderer: string, operation: ContentUpdateOperation): boolean {
+  switch (operation.op) {
+    case 'append':
+    case 'prepend':
+      return ['markdown', 'html', 'text'].includes(renderer) && typeof operation.data === 'string'
+    case 'insertAt':
+      return ['markdown', 'html', 'text'].includes(renderer)
+        && typeof operation.data === 'string'
+        && Number.isFinite(operation.position)
+    case 'replace':
+      return isWindowContentData(renderer, operation.data)
+    case 'clear':
+      return true
+    default:
+      return false
+  }
 }
