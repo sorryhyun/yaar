@@ -28,6 +28,7 @@ make build                       # Build all packages
 pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
+pnpm --filter @claudeos/frontend vitest run  # Run frontend tests
 ```
 
 ## Environment Variables
@@ -61,7 +62,7 @@ claudeos/
 User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actions → Frontend Renders UI
 ```
 
-### Two-Layer Design
+### Key Packages
 
 1. **Frontend** (`@claudeos/frontend`): React + Zustand + Vite. Renders windows/toasts based on OS Actions. See `packages/frontend/CLAUDE.md`.
 

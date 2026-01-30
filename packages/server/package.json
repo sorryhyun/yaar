@@ -15,8 +15,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.22",
     "@claudeos/shared": "workspace:*",
-    "pdf-to-img": "^5.0.0",
-    "sharp": "^0.33.5",
+    "node-poppler": "^7.2.0",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
@@ -28,6 +27,9 @@
     "eslint": "^8.56.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0"
+  },
+  "optionalDependencies": {
+    "node-poppler-win32": "^24.11.0"
   },
   "engines": {
     "node": ">=18"

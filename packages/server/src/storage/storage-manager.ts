@@ -6,9 +6,7 @@
 
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
-import { fileURLToPath } from 'url';
-import { pdf } from 'pdf-to-img';
-import sharp from 'sharp';
+import { pdfToImages } from '../pdf/index.js';
 import type {
   StorageEntry,
   StorageReadResult,
@@ -18,10 +16,27 @@ import type {
   StorageImageContent,
 } from './types.js';
 
-// Project root: storage-manager.ts -> storage -> src -> server -> packages -> root
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
-const STORAGE_DIR = join(PROJECT_ROOT, 'storage');
+// Import storage directory from main index (will be set by index.ts)
+// For now, calculate it here as fallback
+const IS_BUNDLED_EXE =
+  typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
+  process.argv[0]?.endsWith('.exe') ||
+  process.argv[0]?.includes('claudeos');
+
+function getStorageDir(): string {
+  if (process.env.CLAUDEOS_STORAGE) {
+    return process.env.CLAUDEOS_STORAGE;
+  }
+  if (IS_BUNDLED_EXE) {
+    return join(dirname(process.execPath), 'storage');
+  }
+  // Development: calculate from file location
+  const __dirname = dirname(new URL(import.meta.url).pathname);
+  const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
+  return join(PROJECT_ROOT, 'storage');
+}
+
+const STORAGE_DIR = getStorageDir();
 
 /**
  * Validate and normalize a path within the storage directory.
@@ -54,35 +69,17 @@ function isPdfFile(filePath: string): boolean {
 }
 
 /**
- * Convert a PDF file to images (WebP format for efficiency).
+ * Convert a PDF file to images (PNG format via poppler).
  */
 async function convertPdfToImages(filePath: string): Promise<StorageImageContent[]> {
-  const images: StorageImageContent[] = [];
-  const document = await pdf(filePath, {
-    scale: 1.5,
-    docInitParams: {
-      // Suppress font warnings
-      verbosity: 0,
-    },
-  });
-  let pageNumber = 1;
+  const pdfPages = await pdfToImages(filePath, 1.5);
 
-  for await (const page of document) {
-    // Convert PNG to WebP for better compression
-    const webpBuffer = await sharp(page)
-      .webp({ quality: 85 })
-      .toBuffer();
-
-    images.push({
-      type: 'image',
-      data: webpBuffer.toString('base64'),
-      mimeType: 'image/webp',
-      pageNumber,
-    });
-    pageNumber++;
-  }
-
-  return images;
+  return pdfPages.map(page => ({
+    type: 'image' as const,
+    data: page.data.toString('base64'),
+    mimeType: page.mimeType,
+    pageNumber: page.pageNumber,
+  }));
 }
 
 /**

@@ -2,6 +2,7 @@
   "name": "claudeos",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Reactive AI interface where the AI decides what to show and do next",
   "scripts": {
     "dev": "./scripts/dev.sh",
@@ -10,7 +11,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
+    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
+    "build:exe": "pnpm build:exe:prepare && pnpm build:exe:bundle && pnpm build:exe:assets",
+    "build:exe:prepare": "pnpm -r build",
+    "build:exe:bundle": "bun build packages/server/src/exe-entry.ts --compile --target=bun-windows-x64 --outfile=dist/claudeos.exe --minify",
+    "build:exe:bundle:linux": "bun build packages/server/src/exe-entry.ts --compile --target=bun-linux-x64 --outfile=dist/claudeos --minify",
+    "build:exe:bundle:macos": "bun build packages/server/src/exe-entry.ts --compile --target=bun-darwin-x64 --outfile=dist/claudeos --minify",
+    "build:exe:assets": "node scripts/copy-exe-assets.js"
   },
   "engines": {
     "node": ">=18",

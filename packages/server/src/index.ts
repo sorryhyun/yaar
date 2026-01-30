@@ -7,12 +7,12 @@
 
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { readFile } from 'fs/promises';
+import { readFile, stat } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join, normalize, relative, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { pdf } from 'pdf-to-img';
-import sharp from 'sharp';
+import { renderPdfPage } from './pdf/index.js';
 import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders } from './providers/factory.js';
 import { listSessions, readSessionTranscript } from './logging/index.js';
@@ -20,10 +20,54 @@ import { ensureStorageDir } from './storage/index.js';
 import type { ClientEvent } from '@claudeos/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
+// Detect if running as bundled executable
+const IS_BUNDLED_EXE =
+  typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
+  process.argv[0]?.endsWith('.exe') ||
+  process.argv[0]?.includes('claudeos');
+
 // Storage directory path
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..', '..');
-const STORAGE_DIR = join(PROJECT_ROOT, 'storage');
+
+/**
+ * Get the storage directory path.
+ * - Environment variable override
+ * - Bundled exe: ./storage/ alongside executable
+ * - Development: project root /storage/
+ */
+function getStorageDir(): string {
+  if (process.env.CLAUDEOS_STORAGE) {
+    return process.env.CLAUDEOS_STORAGE;
+  }
+  if (IS_BUNDLED_EXE) {
+    return join(dirname(process.execPath), 'storage');
+  }
+  return join(PROJECT_ROOT, 'storage');
+}
+
+const STORAGE_DIR = getStorageDir();
+
+// Export for use by other modules
+export { STORAGE_DIR };
+
+/**
+ * Get the frontend dist directory path.
+ * - Environment variable override
+ * - Bundled exe: ./public/ alongside executable
+ * - Development: packages/frontend/dist/
+ */
+function getFrontendDist(): string {
+  if (process.env.FRONTEND_DIST) {
+    return process.env.FRONTEND_DIST;
+  }
+  if (IS_BUNDLED_EXE) {
+    return join(dirname(process.execPath), 'public');
+  }
+  return join(PROJECT_ROOT, 'packages', 'frontend', 'dist');
+}
+
+const FRONTEND_DIST = getFrontendDist();
 
 // MIME type mapping for common file types
 const MIME_TYPES: Record<string, string> = {
@@ -138,32 +182,23 @@ const server = createServer(async (req, res) => {
     }
 
     try {
-      const document = await pdf(normalizedPath, {
-        scale: 1.5,
-        docInitParams: { verbosity: 0 },
+      // Use poppler-based PDF rendering
+      const pngBuffer = await renderPdfPage(normalizedPath, pageNum, 1.5);
+
+      res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=3600'
       });
-
-      let currentPage = 0;
-      for await (const page of document) {
-        currentPage++;
-        if (currentPage === pageNum) {
-          // Convert to WebP for efficiency
-          const webpBuffer = await sharp(page).webp({ quality: 85 }).toBuffer();
-          res.writeHead(200, {
-            'Content-Type': 'image/webp',
-            'Cache-Control': 'public, max-age=3600'
-          });
-          res.end(webpBuffer);
-          return;
-        }
-      }
-
-      // Page not found
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: `Page ${pageNum} not found (PDF has ${currentPage} pages)` }));
+      res.end(pngBuffer);
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to render PDF page' }));
+      const error = err instanceof Error ? err.message : 'Unknown error';
+      if (error.includes('Failed to render page')) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error }));
+      } else {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to render PDF page' }));
+      }
     }
     return;
   }
@@ -209,6 +244,41 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'File not found' }));
     }
     return;
+  }
+
+  // Serve static frontend files (for bundled exe or production)
+  if (existsSync(FRONTEND_DIST)) {
+    // Determine file path
+    let staticPath = join(FRONTEND_DIST, url.pathname === '/' ? 'index.html' : url.pathname);
+
+    try {
+      const fileStat = await stat(staticPath);
+      if (fileStat.isFile()) {
+        const content = await readFile(staticPath);
+        const ext = extname(staticPath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(content);
+        return;
+      }
+    } catch {
+      // File doesn't exist, continue to SPA fallback
+    }
+
+    // SPA fallback: serve index.html for non-API/non-WS routes
+    if (!url.pathname.startsWith('/api') && !url.pathname.startsWith('/ws')) {
+      const indexPath = join(FRONTEND_DIST, 'index.html');
+      if (existsSync(indexPath)) {
+        try {
+          const content = await readFile(indexPath);
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(content);
+          return;
+        } catch {
+          // Fall through to 404
+        }
+      }
+    }
   }
 
   // 404 for unknown routes

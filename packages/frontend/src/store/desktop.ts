@@ -429,7 +429,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
           timestamp: Date.now(),
           windowId,
           windowTitle: win.title,
-          details: `resized to ${w}x${h}`,
+          details: `resized to (${w}x${h})`,
         })
       }
     }),

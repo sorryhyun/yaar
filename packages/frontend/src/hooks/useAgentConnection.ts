@@ -6,7 +6,12 @@ import { useEffect, useCallback, useState, useSyncExternalStore } from 'react'
 import { useDesktopStore } from '@/store'
 import type { ClientEvent, ServerEvent } from '@/types'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+// Use relative URL for production (same host as page)
+// In development, Vite proxy handles /ws, so we can use relative path
+const WS_URL = import.meta.env.VITE_WS_URL ||
+  (typeof window !== 'undefined'
+    ? `ws://${window.location.host}/ws`
+    : 'ws://localhost:8000/ws')
 const RECONNECT_DELAY = 3000
 const MAX_RECONNECT_ATTEMPTS = 5
 
