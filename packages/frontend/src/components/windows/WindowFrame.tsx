@@ -189,8 +189,8 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           onRenderError={(requestId, windowId, renderer, error, url) => {
             addRenderingFeedback({ requestId, windowId, renderer, success: false, error, url })
           }}
-          onComponentAction={(action, parallel, formData, formId) => {
-            sendComponentAction?.(window.id, action, parallel, formData, formId)
+          onComponentAction={(action, parallel, formData, formId, componentPath) => {
+            sendComponentAction?.(window.id, window.title, action, parallel, formData, formId, componentPath)
           }}
         />
         {window.locked && <LockOverlay />}

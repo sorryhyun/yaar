@@ -25,8 +25,9 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   }
 
   if (msg.type === 'assistant') {
-    const content = extractAssistantContent(msg.message);
-    return { type: 'text', content, sessionId: msg.session_id };
+    // Don't return content here - it was already streamed via stream_event.
+    // Only return sessionId for session tracking.
+    return { type: 'text', sessionId: msg.session_id };
   }
 
   if (msg.type === 'stream_event') {
@@ -84,34 +85,6 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
 
   // Skip other stream events
   return null;
-}
-
-/**
- * Extract text content from an assistant message.
- */
-function extractAssistantContent(message: unknown): string {
-  if (!message || typeof message !== 'object') return '';
-
-  const msg = message as Record<string, unknown>;
-  const content = msg.content;
-
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .filter(
-        (block): block is { type: string; text: string } =>
-          typeof block === 'object' &&
-          block !== null &&
-          (block as Record<string, unknown>).type === 'text'
-      )
-      .map((block) => block.text)
-      .join('');
-  }
-
-  return '';
 }
 
 /**

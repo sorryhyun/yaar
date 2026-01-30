@@ -56,10 +56,12 @@ export interface RenderingFeedbackEvent {
 export interface ComponentActionEvent {
   type: 'COMPONENT_ACTION';
   windowId: string;
+  windowTitle?: string; // Title of the window containing the component
   action: string;
   actionId?: string; // Unique ID for parallel execution (generated for parallel buttons)
   formData?: Record<string, string | number | boolean>; // Form field values when submitForm is used
   formId?: string; // Form ID when submitForm is used
+  componentPath?: string[]; // Path through component tree (e.g., ["Card:Settings", "Form:config", "Button:Save"])
 }
 
 export type ClientEvent =

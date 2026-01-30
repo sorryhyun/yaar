@@ -7,10 +7,12 @@ export type FormValue = string | number | boolean
 
 type SendComponentAction = (
   windowId: string,
+  windowTitle: string,
   action: string,
   parallel?: boolean,
   formData?: Record<string, FormValue>,
-  formId?: string
+  formId?: string,
+  componentPath?: string[]
 ) => void
 
 const ComponentActionContext = createContext<SendComponentAction | null>(null)

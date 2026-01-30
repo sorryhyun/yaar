@@ -36,10 +36,17 @@ function useCurrentFormId(): string | undefined {
   return useContext(FormIdContext)
 }
 
+// Context to track component path through the tree
+const ComponentPathContext = createContext<string[]>([])
+
+function useComponentPath(): string[] {
+  return useContext(ComponentPathContext)
+}
+
 interface ComponentRendererProps {
   data: ComponentNode
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }
 
 import { FormProvider } from '@/contexts/FormContext'
@@ -61,7 +68,7 @@ export const ComponentRenderer = memo(function ComponentRenderer({
 interface NodeRendererProps {
   node: ComponentNode
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }
 
 function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
@@ -126,8 +133,11 @@ function CardRenderer({
 }: {
   node: CardComponent
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
+  const parentPath = useComponentPath()
+  const cardPath = [...parentPath, `Card${node.title ? `:${node.title}` : ''}`]
+
   const variantClass = node.variant === 'outlined'
     ? styles.cardOutlined
     : node.variant === 'elevated'
@@ -135,22 +145,24 @@ function CardRenderer({
     : styles.cardDefault
 
   return (
-    <div className={`${styles.card} ${variantClass}`}>
-      {(node.title || node.subtitle) && (
-        <div className={styles.cardHeader}>
-          {node.title && <div className={styles.cardTitle}>{node.title}</div>}
-          {node.subtitle && <div className={styles.cardSubtitle}>{node.subtitle}</div>}
+    <ComponentPathContext.Provider value={cardPath}>
+      <div className={`${styles.card} ${variantClass}`}>
+        {(node.title || node.subtitle) && (
+          <div className={styles.cardHeader}>
+            {node.title && <div className={styles.cardTitle}>{node.title}</div>}
+            {node.subtitle && <div className={styles.cardSubtitle}>{node.subtitle}</div>}
+          </div>
+        )}
+        <div className={styles.cardContent}>
+          <NodeRenderer node={node.content} windowId={windowId} onAction={onAction} />
         </div>
-      )}
-      <div className={styles.cardContent}>
-        <NodeRenderer node={node.content} windowId={windowId} onAction={onAction} />
+        {node.actions && (
+          <div className={styles.cardActions}>
+            <NodeRenderer node={node.actions} windowId={windowId} onAction={onAction} />
+          </div>
+        )}
       </div>
-      {node.actions && (
-        <div className={styles.cardActions}>
-          <NodeRenderer node={node.actions} windowId={windowId} onAction={onAction} />
-        </div>
-      )}
-    </div>
+    </ComponentPathContext.Provider>
   )
 }
 
@@ -161,7 +173,7 @@ function StackRenderer({
 }: {
   node: StackComponent
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const direction = node.direction || 'vertical'
   const gap = node.gap || 'md'
@@ -193,7 +205,7 @@ function GridRenderer({
 }: {
   node: GridComponent
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const columns = node.columns || 'auto'
   const gap = node.gap || 'md'
@@ -222,10 +234,14 @@ function ButtonRenderer({
   onAction,
 }: {
   node: ButtonComponent
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const formContext = useFormContext()
   const currentFormId = useCurrentFormId()
+  const parentPath = useComponentPath()
+
+  // Build full component path including this button
+  const fullPath = [...parentPath, `Button:${node.label}`]
 
   const handleClick = useCallback(() => {
     if (!node.disabled && onAction) {
@@ -235,16 +251,16 @@ function ButtonRenderer({
       // If submitForm is specified, collect form data
       if (node.submitForm && formContext) {
         const formData = formContext.getFormData(node.submitForm)
-        onAction(node.action, isParallel, formData, node.submitForm)
+        onAction(node.action, isParallel, formData, node.submitForm, fullPath)
       } else if (currentFormId && formContext) {
         // If inside a form, submit that form's data
         const formData = formContext.getFormData(currentFormId)
-        onAction(node.action, isParallel, formData, currentFormId)
+        onAction(node.action, isParallel, formData, currentFormId, fullPath)
       } else {
-        onAction(node.action, isParallel)
+        onAction(node.action, isParallel, undefined, undefined, fullPath)
       }
     }
-  }, [node.action, node.disabled, node.parallel, node.submitForm, onAction, formContext, currentFormId])
+  }, [node.action, node.disabled, node.parallel, node.submitForm, onAction, formContext, currentFormId, fullPath])
 
   const variant = node.variant || 'secondary'
   const size = node.size || 'md'
@@ -291,7 +307,7 @@ function ListRenderer({
 }: {
   node: ListComponent
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const Tag = node.variant === 'ordered' ? 'ol' : 'ul'
 
@@ -412,9 +428,11 @@ function FormRenderer({
 }: {
   node: FormComponent
   windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string) => void
+  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const formContext = useFormContext()
+  const parentPath = useComponentPath()
+  const formPath = [...parentPath, `Form:${node.id}`]
   const layout = node.layout || 'vertical'
   const gap = node.gap || 'md'
 
@@ -434,19 +452,22 @@ function FormRenderer({
 
   return (
     <FormIdContext.Provider value={node.id}>
-      <div className={className}>
-        {node.children.map((child, i) => (
-          <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
-        ))}
-      </div>
+      <ComponentPathContext.Provider value={formPath}>
+        <div className={className}>
+          {node.children.map((child, i) => (
+            <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
+          ))}
+        </div>
+      </ComponentPathContext.Provider>
     </FormIdContext.Provider>
   )
 }
 
 function InputRenderer({ node }: { node: InputComponent }) {
   const formId = useCurrentFormId()
-  const { setValue } = useFormField(formId, node.name, node.defaultValue)
-  const [localValue, setLocalValue] = useState(node.defaultValue || '')
+  const initialValue = node.defaultValue ?? ''
+  const { setValue } = useFormField(formId, node.name, initialValue)
+  const [localValue, setLocalValue] = useState(String(initialValue))
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = node.variant === 'number' ? e.target.valueAsNumber || e.target.value : e.target.value
@@ -474,8 +495,9 @@ function InputRenderer({ node }: { node: InputComponent }) {
 
 function TextareaRenderer({ node }: { node: TextareaComponent }) {
   const formId = useCurrentFormId()
-  const { setValue } = useFormField(formId, node.name, node.defaultValue)
-  const [localValue, setLocalValue] = useState(node.defaultValue || '')
+  const initialValue = node.defaultValue ?? ''
+  const { setValue } = useFormField(formId, node.name, initialValue)
+  const [localValue, setLocalValue] = useState(String(initialValue))
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setLocalValue(e.target.value)
@@ -499,8 +521,9 @@ function TextareaRenderer({ node }: { node: TextareaComponent }) {
 
 function SelectRenderer({ node }: { node: SelectComponent }) {
   const formId = useCurrentFormId()
-  const { setValue } = useFormField(formId, node.name, node.defaultValue)
-  const [localValue, setLocalValue] = useState(node.defaultValue || '')
+  const initialValue = node.defaultValue ?? ''
+  const { setValue } = useFormField(formId, node.name, initialValue)
+  const [localValue, setLocalValue] = useState(String(initialValue))
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setLocalValue(e.target.value)

@@ -80,8 +80,11 @@ export function useFormContext(): FormContextType | null {
 
 /**
  * Hook for form fields to update their value in the form context.
+ * @param formId - The ID of the form this field belongs to
+ * @param fieldName - The name of the field (used as key in form data)
+ * @param initialValue - The initial value for the field (defaults to empty string)
  */
-export function useFormField(formId: string | undefined, fieldName: string, defaultValue?: FormValue) {
+export function useFormField(formId: string | undefined, fieldName: string, initialValue: FormValue = '') {
   const formContext = useFormContext()
 
   const setValue = useCallback((value: FormValue) => {
@@ -90,10 +93,11 @@ export function useFormField(formId: string | undefined, fieldName: string, defa
     }
   }, [formId, fieldName, formContext])
 
-  // Initialize with default value if provided
+  // Always register field with its initial value on mount
+  // This ensures all fields appear in form data even if user hasn't typed
   const initialized = useRef(false)
-  if (!initialized.current && formId && formContext && defaultValue !== undefined) {
-    formContext.setFieldValue(formId, fieldName, defaultValue)
+  if (!initialized.current && formId && formContext) {
+    formContext.setFieldValue(formId, fieldName, initialValue)
     initialized.current = true
   }
 

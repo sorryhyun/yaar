@@ -288,14 +288,16 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   // Send component action (button click) to agent
   const sendComponentAction = useCallback((
     windowId: string,
+    windowTitle: string,
     action: string,
     parallel?: boolean,
     formData?: Record<string, string | number | boolean>,
-    formId?: string
+    formId?: string,
+    componentPath?: string[]
   ) => {
     // Generate unique actionId for parallel actions to enable concurrent execution
     const actionId = parallel ? `action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` : undefined
-    send({ type: 'COMPONENT_ACTION', windowId, action, actionId, formData, formId })
+    send({ type: 'COMPONENT_ACTION', windowId, windowTitle, action, actionId, formData, formId, componentPath })
   }, [send])
 
   // Interrupt current operation

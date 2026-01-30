@@ -53,8 +53,19 @@ export class SessionManager {
         // Route component action as a window task
         // If actionId is provided (parallel button), use it as the processing key
 
-        // Format content with form data if present
-        let content = `User clicked: ${event.action}`;
+        // Format content with rich context about the interaction
+        const windowContext = event.windowTitle
+          ? `in window "${event.windowTitle}"`
+          : `in window ${event.windowId}`;
+
+        let content = `User clicked button "${event.action}" ${windowContext}`;
+
+        // Add component path for context about where in the UI hierarchy the click occurred
+        if (event.componentPath && event.componentPath.length > 0) {
+          content += `\nComponent path: ${event.componentPath.join(' → ')}`;
+        }
+
+        // Add form data if present
         if (event.formData && event.formId) {
           content += `\n\nForm data (${event.formId}):\n${JSON.stringify(event.formData, null, 2)}`;
         }
