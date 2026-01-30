@@ -9,10 +9,11 @@
  * All agents share the session logger for unified history.
  */
 
-import type { WebSocket } from 'ws';
-import { AgentSession } from './agent-session.js';
+import { AgentSession } from './session.js';
 import type { ServerEvent, UserInteraction } from '@claudeos/shared';
-import type { SessionLogger } from './sessions/index.js';
+import type { SessionLogger } from '../logging/index.js';
+import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import { getAgentLimiter } from './limiter.js';
 
 const POOL_CONFIG = {
   maxAgents: 3,
@@ -35,15 +36,15 @@ interface PoolAgent {
 }
 
 export class DefaultAgentPool {
-  private ws: WebSocket;
+  private connectionId: ConnectionId;
   private agents: PoolAgent[] = [];
   private messageQueue: QueuedMessage[] = [];
   private sharedLogger: SessionLogger | null = null;
   private nextAgentId = 0;
   private processingQueue = false;
 
-  constructor(ws: WebSocket) {
-    this.ws = ws;
+  constructor(connectionId: ConnectionId) {
+    this.connectionId = connectionId;
   }
 
   /**
@@ -62,11 +63,19 @@ export class DefaultAgentPool {
 
   /**
    * Create a new agent in the pool.
+   * Acquires a slot from the global agent limiter.
    */
   private async createAgent(): Promise<PoolAgent | null> {
+    // Acquire global agent slot
+    const limiter = getAgentLimiter();
+    if (!limiter.tryAcquire()) {
+      console.log('[DefaultAgentPool] Global agent limit reached, cannot create new agent');
+      return null;
+    }
+
     const id = this.nextAgentId++;
     const session = new AgentSession(
-      this.ws,
+      this.connectionId,
       undefined,
       undefined,
       undefined,
@@ -75,6 +84,8 @@ export class DefaultAgentPool {
 
     const initialized = await session.initialize();
     if (!initialized) {
+      // Release the slot if initialization failed
+      limiter.release();
       return null;
     }
 
@@ -211,6 +222,7 @@ export class DefaultAgentPool {
 
   /**
    * Remove an agent from the pool.
+   * Releases the slot back to the global agent limiter.
    */
   private async removeAgent(agent: PoolAgent): Promise<void> {
     const index = this.agents.indexOf(agent);
@@ -220,6 +232,8 @@ export class DefaultAgentPool {
         clearTimeout(agent.idleTimer);
       }
       await agent.session.cleanup();
+      // Release global agent slot
+      getAgentLimiter().release();
       console.log(`[DefaultAgentPool] Removed agent ${agent.id}, pool size: ${this.agents.length}`);
     }
   }
@@ -283,26 +297,35 @@ export class DefaultAgentPool {
   }
 
   /**
-   * Send an event to the client.
+   * Send an event to the client via broadcast center.
    */
   private async sendEvent(event: ServerEvent): Promise<void> {
-    if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(JSON.stringify(event));
-    }
+    getBroadcastCenter().publishToConnection(event, this.connectionId);
   }
 
   /**
    * Clean up all agents in the pool.
+   * Releases all slots back to the global agent limiter.
    */
   async cleanup(): Promise<void> {
+    const limiter = getAgentLimiter();
     for (const agent of this.agents) {
       if (agent.idleTimer) {
         clearTimeout(agent.idleTimer);
       }
       await agent.session.cleanup();
+      // Release global agent slot
+      limiter.release();
     }
     this.agents = [];
     this.messageQueue = [];
     this.sharedLogger = null;
+  }
+
+  /**
+   * Get the base session ID for forking window agents.
+   */
+  getBaseSessionId(): string | null {
+    return this.getRawSessionId();
   }
 }

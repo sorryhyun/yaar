@@ -13,11 +13,12 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { pdf } from 'pdf-to-img';
 import sharp from 'sharp';
-import { SessionManager } from './session-manager.js';
+import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders } from './providers/factory.js';
-import { listSessions, readSessionTranscript } from './sessions/index.js';
+import { listSessions, readSessionTranscript } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import type { ClientEvent } from '@claudeos/shared';
+import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
 // Storage directory path
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -167,6 +168,18 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Agent stats endpoint
+  if (url.pathname === '/api/agents/stats' && req.method === 'GET') {
+    const limiterStats = getAgentLimiter().getStats();
+    const broadcastStats = getBroadcastCenter().getStats();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      agents: limiterStats,
+      connections: broadcastStats,
+    }));
+    return;
+  }
+
   // Serve storage files
   if (url.pathname.startsWith('/api/storage/') && req.method === 'GET') {
     const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));
@@ -207,13 +220,20 @@ const server = createServer(async (req, res) => {
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', async (ws: WebSocket) => {
-  console.log('WebSocket client connected');
+  // Generate unique connection ID for this WebSocket
+  const connectionId = generateConnectionId();
+  const broadcastCenter = getBroadcastCenter();
 
-  const manager = new SessionManager(ws);
+  console.log(`WebSocket client connected: ${connectionId}`);
+
+  // Register connection with broadcast center
+  broadcastCenter.subscribe(connectionId, ws);
+
+  const manager = new SessionManager(connectionId);
 
   // Track initialization state and queue early messages
   let initialized = false;
-  const messageQueue: ClientEvent[] = [];
+  const earlyMessageQueue: ClientEvent[] = [];
 
   // Register message handler IMMEDIATELY to capture any early messages
   ws.on('message', async (data) => {
@@ -223,7 +243,7 @@ wss.on('connection', async (ws: WebSocket) => {
       if (!initialized) {
         // Queue messages that arrive before initialization completes
         console.log('Queuing early message:', event.type);
-        messageQueue.push(event);
+        earlyMessageQueue.push(event);
         return;
       }
 
@@ -235,8 +255,11 @@ wss.on('connection', async (ws: WebSocket) => {
 
   // Handle close
   ws.on('close', async () => {
-    console.log('WebSocket client disconnected');
+    console.log(`WebSocket client disconnected: ${connectionId}`);
+    // Cleanup manager first (releases agent slots)
     await manager.cleanup();
+    // Then unsubscribe from broadcast center
+    broadcastCenter.unsubscribe(connectionId);
   });
 
   // Handle errors
@@ -247,6 +270,7 @@ wss.on('connection', async (ws: WebSocket) => {
   // Initialize main session (async)
   const initSuccess = await manager.initialize();
   if (!initSuccess) {
+    broadcastCenter.unsubscribe(connectionId);
     ws.close(1011, 'No provider available');
     return;
   }
@@ -254,9 +278,9 @@ wss.on('connection', async (ws: WebSocket) => {
   // Mark as initialized and process any queued messages
   initialized = true;
 
-  if (messageQueue.length > 0) {
-    console.log(`Processing ${messageQueue.length} queued message(s)`);
-    for (const event of messageQueue) {
+  if (earlyMessageQueue.length > 0) {
+    console.log(`Processing ${earlyMessageQueue.length} queued message(s)`);
+    for (const event of earlyMessageQueue) {
       try {
         await manager.routeMessage(event);
       } catch (err) {

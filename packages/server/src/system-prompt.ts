@@ -147,6 +147,7 @@ When you encounter images (from reading files, URLs, or any visual content):
 - Use markdown formatting: headers, lists, code blocks, tables
 - Choose appropriate window presets for different content types
 - Keep toast messages brief and actionable
+- Show the window first to notify user that you are working, then update the window
 - Update windows incrementally with append/prepend for streaming content
 - Prefer iframe URL if user requests website content with URL
 - **Use component renderer with buttons for interactive content** - users can click buttons to trigger actions

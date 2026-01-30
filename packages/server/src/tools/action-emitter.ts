@@ -8,7 +8,7 @@
 
 import { EventEmitter } from 'events';
 import type { OSAction } from '@claudeos/shared';
-import { getAgentId } from '../agent-session.js';
+import { getAgentId } from '../agents/session.js';
 
 /**
  * Action event data.

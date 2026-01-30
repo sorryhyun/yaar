@@ -4,18 +4,18 @@
  * Manages a single WebSocket session with an AI provider via the transport layer.
  */
 
-import type { WebSocket } from 'ws';
 import { AsyncLocalStorage } from 'async_hooks';
-import type { AITransport, TransportOptions, ProviderType } from './providers/types.js';
+import type { AITransport, TransportOptions, ProviderType } from '../providers/types.js';
 import {
   createProvider,
   getFirstAvailableProvider,
   getAvailableProviders,
-} from './providers/factory.js';
-import { SYSTEM_PROMPT } from './system-prompt.js';
+} from '../providers/factory.js';
+import { SYSTEM_PROMPT } from '../system-prompt.js';
 import type { ServerEvent, UserInteraction } from '@claudeos/shared';
-import { createSession, SessionLogger } from './sessions/index.js';
-import { actionEmitter, type ActionEvent } from './tools/index.js';
+import { createSession, SessionLogger } from '../logging/index.js';
+import { actionEmitter, type ActionEvent } from '../tools/index.js';
+import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 
 /**
  * Queued message structure for sequential processing.
@@ -45,7 +45,7 @@ export function getAgentId(): string | undefined {
 }
 
 export class AgentSession {
-  private ws: WebSocket;
+  private connectionId: ConnectionId;
   private provider: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
@@ -53,6 +53,8 @@ export class AgentSession {
   private unsubscribeAction: (() => void) | null = null;
   private windowId?: string;
   private forkFromSessionId?: string;
+  private parentAgentId?: string;
+  private instanceId?: string; // Unique ID for this agent instance (for action filtering)
   private hasSentFirstMessage = false;
   private currentMessageId: string | null = null;
   private messageQueue: QueuedMessage[] = [];
@@ -60,26 +62,39 @@ export class AgentSession {
 
   /**
    * Create an agent session.
-   * @param ws - WebSocket connection
+   * @param connectionId - Connection ID for routing events via broadcast center
    * @param sessionId - Session ID for this agent (optional, assigned by SDK if not provided)
    * @param windowId - Window ID if this is a window-specific agent
    * @param forkFromSessionId - Parent session ID to fork from (for window agents)
    * @param sharedLogger - Optional shared logger (for window agents to use main session's log)
+   * @param parentAgentId - Parent agent ID for logging hierarchy (e.g., 'default' or 'window-win1')
+   * @param instanceId - Unique instance ID for this agent (for action filtering when multiple agents handle same window)
    */
   constructor(
-    ws: WebSocket,
+    connectionId: ConnectionId,
     sessionId?: string,
     windowId?: string,
     forkFromSessionId?: string,
-    sharedLogger?: SessionLogger
+    sharedLogger?: SessionLogger,
+    parentAgentId?: string,
+    instanceId?: string
   ) {
-    this.ws = ws;
+    this.connectionId = connectionId;
     this.sessionId = sessionId ?? null;
     this.windowId = windowId;
     this.forkFromSessionId = forkFromSessionId;
+    this.parentAgentId = parentAgentId;
+    this.instanceId = instanceId;
     this.sessionLogger = sharedLogger ?? null;
     // Subscribe to actions emitted directly from tools
     this.unsubscribeAction = actionEmitter.onAction(this.handleToolAction.bind(this));
+  }
+
+  /**
+   * Get the connection ID for this session.
+   */
+  getConnectionId(): ConnectionId {
+    return this.connectionId;
   }
 
   /**
@@ -146,10 +161,15 @@ export class AgentSession {
 
   /**
    * Get the stable agent ID for filtering actions.
-   * For window agents, this is always 'window-{windowId}' regardless of SDK session ID.
-   * This ensures consistency since the agentContext is set before SDK assigns session ID.
+   * For window agents with instanceId, use the unique instance ID to prevent cross-talk.
+   * For window agents without instanceId (legacy), use 'window-{windowId}'.
+   * For default agent, use 'default'.
    */
   private getFilterAgentId(): string {
+    // Use unique instance ID if available (prevents cross-talk between concurrent agents)
+    if (this.instanceId) {
+      return this.instanceId;
+    }
     if (this.windowId) {
       return `window-${this.windowId}`;
     }
@@ -208,6 +228,17 @@ export class AgentSession {
       this.sessionLogger = new SessionLogger(sessionInfo);
     }
 
+    // Register this agent in the session hierarchy
+    const agentId = this.getFilterAgentId();
+    if (agentId !== 'default') {
+      // Window agents need to be registered with their parent
+      await this.sessionLogger.registerAgent(
+        agentId,
+        this.parentAgentId ?? 'default',
+        this.windowId
+      );
+    }
+
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
       status: 'connected',
@@ -246,7 +277,11 @@ export class AgentSession {
    * Process a user message through the AI provider.
    */
   async handleMessage(content: string, interactions?: UserInteraction[], messageId?: string): Promise<void> {
+    const stableAgentId = this.getFilterAgentId();
+    console.log(`[AgentSession] handleMessage started for ${stableAgentId}, content: "${content.slice(0, 50)}..."`);
+
     if (!this.provider) {
+      console.log(`[AgentSession] No provider for ${stableAgentId}, returning early`);
       return;
     }
 
@@ -254,7 +289,6 @@ export class AgentSession {
     this.currentMessageId = messageId ?? null;
 
     // Immediately notify frontend that agent is thinking
-    const stableAgentId = this.getFilterAgentId();
     await this.sendEvent({
       type: 'AGENT_THINKING',
       content: '',
@@ -271,6 +305,7 @@ export class AgentSession {
     try {
       // For the first message of a forked session, use the parent session ID with forkSession flag
       const shouldFork = !this.hasSentFirstMessage && !!this.forkFromSessionId;
+      console.log(`[AgentSession] ${stableAgentId} shouldFork=${shouldFork}, forkFromSessionId=${this.forkFromSessionId}`);
 
       // Determine the session ID to use:
       // - For forking: use the parent session ID to fork from (SDK will create new session and return its ID)
@@ -298,7 +333,9 @@ export class AgentSession {
       // Run within agent context so tools can access the agentId
       // Use getFilterAgentId() for stable UI tracking ('default' or 'window-{id}')
       const currentAgentId = this.getFilterAgentId();
+      console.log(`[AgentSession] ${currentAgentId} starting query with content: "${fullContent.slice(0, 50)}..."`);
       await agentContext.run({ agentId: currentAgentId }, async () => {
+        console.log(`[AgentSession] ${currentAgentId} entered agentContext.run`);
         for await (const message of this.provider!.query(fullContent, options)) {
           if (!this.running) break;
 
@@ -386,13 +423,16 @@ export class AgentSession {
               break;
           }
         }
+        console.log(`[AgentSession] ${currentAgentId} query loop completed`);
       });
     } catch (err) {
+      console.error(`[AgentSession] ${stableAgentId} error:`, err);
       await this.sendEvent({
         type: 'ERROR',
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
+      console.log(`[AgentSession] ${stableAgentId} handleMessage completed`);
       this.running = false;
       this.currentMessageId = null;
 
@@ -492,12 +532,10 @@ export class AgentSession {
   }
 
   /**
-   * Send an event to the client.
+   * Send an event to the client via broadcast center.
    */
   private async sendEvent(event: ServerEvent): Promise<void> {
-    if (this.ws.readyState === this.ws.OPEN) {
-      this.ws.send(JSON.stringify(event));
-    }
+    getBroadcastCenter().publishToConnection(event, this.connectionId);
   }
 
   /**

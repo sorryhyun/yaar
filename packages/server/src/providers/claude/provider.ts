@@ -36,6 +36,7 @@ export class ClaudeProvider extends BaseTransport {
         // Disable all default Claude Code tools - only use ClaudeOS MCP tools
         tools: ['WebFetch','WebSearch'],
         allowedTools: getClaudeOSToolNames(),
+        maxThinkingTokens: 4096,
         // Register the MCP server with custom tools
         mcpServers: {
           claudeos: claudeOSTools
