@@ -10,7 +10,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopState, DesktopActions, WindowModel } from '@/types/state'
-import type { UserInteraction } from '@claudeos/shared'
+import { isContentUpdateOperationValid, isWindowContentData, type UserInteraction } from '@claudeos/shared'
 
 /**
  * Consolidate consecutive move/resize events into single "from → to" entries.
@@ -75,6 +75,40 @@ function consolidateInteractions(interactions: UserInteraction[]): UserInteracti
   }
 
   return result
+}
+
+const emptyContentByRenderer = (renderer: string): unknown => {
+  switch (renderer) {
+    case 'markdown':
+    case 'html':
+    case 'text':
+      return ''
+    case 'table':
+      return { headers: [], rows: [] }
+    case 'component':
+      return ''
+    case 'iframe':
+      return ''
+    default:
+      return null
+  }
+}
+
+const addDebugLogEntry = (
+  state: DesktopState,
+  type: string,
+  data: unknown,
+) => {
+  state.debugLog.push({
+    id: `debug-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: Date.now(),
+    direction: 'in',
+    type,
+    data,
+  })
+  if (state.debugLog.length > 100) {
+    state.debugLog = state.debugLog.slice(-100)
+  }
 }
 
 const initialState: DesktopState = {
@@ -261,28 +295,58 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             break
           }
           if (win) {
-            const currentData = (win.content.data as string) ?? ''
-            switch (action.operation.op) {
-              case 'append':
-                win.content.data = currentData + (action.operation.data as string)
-                break
-              case 'prepend':
-                win.content.data = (action.operation.data as string) + currentData
-                break
-              case 'replace':
-                win.content.data = action.operation.data
-                break
-              case 'insertAt': {
-                const pos = action.operation.position
-                win.content.data = currentData.slice(0, pos) + (action.operation.data as string) + currentData.slice(pos)
-                break
-              }
-              case 'clear':
-                win.content.data = ''
-                break
+            const targetRenderer = action.renderer ?? win.content.renderer
+            const operation = action.operation
+            const operationValid = isContentUpdateOperationValid(targetRenderer, operation)
+
+            const applyReplace = (data: unknown) => {
+              win.content.data = data
             }
-            if (action.renderer) {
-              win.content.renderer = action.renderer
+
+            const applyStringUpdate = (data: string) => {
+              const currentData = typeof win.content.data === 'string' ? win.content.data : ''
+              switch (operation.op) {
+                case 'append':
+                  win.content.data = currentData + data
+                  break
+                case 'prepend':
+                  win.content.data = data + currentData
+                  break
+                case 'insertAt': {
+                  const pos = operation.position
+                  win.content.data = currentData.slice(0, pos) + data + currentData.slice(pos)
+                  break
+                }
+                case 'replace':
+                  applyReplace(data)
+                  break
+                case 'clear':
+                  win.content.data = ''
+                  break
+              }
+            }
+
+            if (operationValid) {
+              if (operation.op === 'clear') {
+                win.content.data = emptyContentByRenderer(targetRenderer)
+              } else if (operation.op === 'replace') {
+                applyReplace(operation.data)
+              } else if (typeof operation.data === 'string') {
+                applyStringUpdate(operation.data)
+              }
+            } else {
+              addDebugLogEntry(state, 'window.updateContent.invalid', {
+                windowId: action.windowId,
+                renderer: targetRenderer,
+                operation,
+              })
+              if ('data' in operation && isWindowContentData(targetRenderer, operation.data)) {
+                applyReplace(operation.data)
+              }
+            }
+
+            if (action.renderer && isWindowContentData(targetRenderer, win.content.data)) {
+              win.content.renderer = targetRenderer
             }
             // Send success feedback with lock status so agent knows to unlock
             if (reqId && win.locked) {
