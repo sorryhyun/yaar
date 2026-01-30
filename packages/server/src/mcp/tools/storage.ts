@@ -9,11 +9,14 @@ import { ok, okWithImages } from '../utils.js';
 
 export function registerStorageTools(server: McpServer): void {
   // storage_read
-  server.tool(
+  server.registerTool(
     'storage_read',
-    'Read a file from the persistent storage directory. For PDF files, returns page count - use /api/pdf/<path>/<page> URLs to display pages visually instead of describing them.',
     {
-      path: z.string().describe('Path to the file relative to storage/'),
+      description:
+        'Read a file from the persistent storage directory. For PDF files, returns page count - use /api/pdf/<path>/<page> URLs to display pages visually instead of describing them.',
+      inputSchema: {
+        path: z.string().describe('Path to the file relative to storage/'),
+      },
     },
     async (args) => {
       const result = await storageRead(args.path);
@@ -35,12 +38,14 @@ export function registerStorageTools(server: McpServer): void {
   );
 
   // storage_write
-  server.tool(
+  server.registerTool(
     'storage_write',
-    'Write a file to the persistent storage directory',
     {
-      path: z.string().describe('Path to the file relative to storage/'),
-      content: z.string().describe('Content to write to the file'),
+      description: 'Write a file to the persistent storage directory',
+      inputSchema: {
+        path: z.string().describe('Path to the file relative to storage/'),
+        content: z.string().describe('Content to write to the file'),
+      },
     },
     async (args) => {
       const result = await storageWrite(args.path, args.content);
@@ -49,11 +54,13 @@ export function registerStorageTools(server: McpServer): void {
   );
 
   // storage_list
-  server.tool(
+  server.registerTool(
     'storage_list',
-    'List files and directories in the persistent storage directory',
     {
-      path: z.string().optional().describe('Path to list relative to storage/. Defaults to root.'),
+      description: 'List files and directories in the persistent storage directory',
+      inputSchema: {
+        path: z.string().optional().describe('Path to list relative to storage/. Defaults to root.'),
+      },
     },
     async (args) => {
       const result = await storageList(args.path || '');
@@ -67,11 +74,13 @@ export function registerStorageTools(server: McpServer): void {
   );
 
   // storage_delete
-  server.tool(
+  server.registerTool(
     'storage_delete',
-    'Delete a file from the persistent storage directory',
     {
-      path: z.string().describe('Path to the file to delete relative to storage/'),
+      description: 'Delete a file from the persistent storage directory',
+      inputSchema: {
+        path: z.string().describe('Path to the file to delete relative to storage/'),
+      },
     },
     async (args) => {
       const result = await storageDelete(args.path);

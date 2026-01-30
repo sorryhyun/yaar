@@ -68,6 +68,8 @@ make codex      # Start with Codex provider
 make dev        # Start with auto-detected provider
 ```
 
+`sudo apt-get install poppler-data poppler-utils`
+
 Open http://localhost:5173 to see ClaudeOS.
 
 ## OS Actions DSL

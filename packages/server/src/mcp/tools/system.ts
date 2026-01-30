@@ -8,18 +8,20 @@ import { ok } from '../utils.js';
 
 export function registerSystemTools(server: McpServer): void {
   // get_system_time
-  server.tool(
+  server.registerTool(
     'get_system_time',
-    'Get the current system time and date in various formats',
     {
-      timezone: z
-        .string()
-        .optional()
-        .describe('Timezone (e.g., "America/New_York"). Defaults to system timezone.'),
-      format: z
-        .enum(['iso', 'locale', 'unix'])
-        .optional()
-        .describe('Output format: iso (ISO 8601), locale (localized string), or unix (timestamp). Defaults to iso.'),
+      description: 'Get the current system time and date in various formats',
+      inputSchema: {
+        timezone: z
+          .string()
+          .optional()
+          .describe('Timezone (e.g., "America/New_York"). Defaults to system timezone.'),
+        format: z
+          .enum(['iso', 'locale', 'unix'])
+          .optional()
+          .describe('Output format: iso (ISO 8601), locale (localized string), or unix (timestamp). Defaults to iso.'),
+      },
     },
     async (args) => {
       const now = new Date();
@@ -46,17 +48,20 @@ export function registerSystemTools(server: McpServer): void {
   );
 
   // calculate
-  server.tool(
+  server.registerTool(
     'calculate',
-    'Evaluate a mathematical expression safely. Supports basic arithmetic (+, -, *, /, %), powers (**), and common math functions (sqrt, sin, cos, tan, log, exp, abs, floor, ceil, round).',
     {
-      expression: z
-        .string()
-        .describe('Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "sin(3.14159/2)")'),
-      precision: z
-        .number()
-        .optional()
-        .describe('Number of decimal places for the result. Defaults to 10.'),
+      description:
+        'Evaluate a mathematical expression safely. Supports basic arithmetic (+, -, *, /, %), powers (**), and common math functions (sqrt, sin, cos, tan, log, exp, abs, floor, ceil, round).',
+      inputSchema: {
+        expression: z
+          .string()
+          .describe('Mathematical expression to evaluate (e.g., "2 + 2", "sqrt(16)", "sin(3.14159/2)")'),
+        precision: z
+          .number()
+          .optional()
+          .describe('Number of decimal places for the result. Defaults to 10.'),
+      },
     },
     async (args) => {
       try {
@@ -102,10 +107,11 @@ export function registerSystemTools(server: McpServer): void {
   );
 
   // get_system_info
-  server.tool(
+  server.registerTool(
     'get_system_info',
-    'Get information about the ClaudeOS system environment',
-    {},
+    {
+      description: 'Get information about the ClaudeOS system environment',
+    },
     async () => {
       const info = {
         platform: process.platform,
@@ -121,11 +127,13 @@ export function registerSystemTools(server: McpServer): void {
   );
 
   // get_env_var
-  server.tool(
+  server.registerTool(
     'get_env_var',
-    'Get the value of a safe environment variable. Only allows reading non-sensitive variables.',
     {
-      name: z.string().describe('Name of the environment variable to read'),
+      description: 'Get the value of a safe environment variable. Only allows reading non-sensitive variables.',
+      inputSchema: {
+        name: z.string().describe('Name of the environment variable to read'),
+      },
     },
     async (args) => {
       const sensitivePatterns = [
@@ -156,14 +164,16 @@ export function registerSystemTools(server: McpServer): void {
   );
 
   // generate_random
-  server.tool(
+  server.registerTool(
     'generate_random',
-    'Generate random numbers or strings',
     {
-      type: z.enum(['integer', 'float', 'uuid', 'hex']).describe('Type of random value to generate'),
-      min: z.number().optional().describe('Minimum value for integer/float (default: 0)'),
-      max: z.number().optional().describe('Maximum value for integer/float (default: 100)'),
-      length: z.number().optional().describe('Length for hex string (default: 16)'),
+      description: 'Generate random numbers or strings',
+      inputSchema: {
+        type: z.enum(['integer', 'float', 'uuid', 'hex']).describe('Type of random value to generate'),
+        min: z.number().optional().describe('Minimum value for integer/float (default: 0)'),
+        max: z.number().optional().describe('Maximum value for integer/float (default: 100)'),
+        length: z.number().optional().describe('Length for hex string (default: 16)'),
+      },
     },
     async (args) => {
       let result: string;

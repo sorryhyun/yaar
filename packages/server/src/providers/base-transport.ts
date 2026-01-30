@@ -12,6 +12,7 @@ import type { AITransport, StreamMessage, TransportOptions, ProviderType } from 
 export abstract class BaseTransport implements AITransport {
   abstract readonly name: string;
   abstract readonly providerType: ProviderType;
+  abstract readonly systemPrompt: string;
 
   protected abortController?: AbortController;
 

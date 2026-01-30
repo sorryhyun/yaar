@@ -9,8 +9,9 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { getToolNames } from '../../mcp/index.js';
+import { getToolNames, getMcpToken } from '../../mcp/index.js';
 import { getStorageDir } from '../../storage/index.js';
+import { SYSTEM_PROMPT } from './system-prompt.js';
 
 // Port for the MCP HTTP server (same as main server)
 const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
@@ -18,6 +19,7 @@ const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
 export class ClaudeProvider extends BaseTransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
+  readonly systemPrompt = SYSTEM_PROMPT;
 
   async isAvailable(): Promise<boolean> {
     // Agent SDK uses Claude CLI auth - check if CLI is installed
@@ -48,6 +50,9 @@ export class ClaudeProvider extends BaseTransport {
           claudeos: {
             type: 'http',
             url: `http://127.0.0.1:${MCP_PORT}/mcp`,
+            headers: {
+              Authorization: `Bearer ${getMcpToken()}`,
+            },
           },
         },
         includePartialMessages: true, // Enable streaming

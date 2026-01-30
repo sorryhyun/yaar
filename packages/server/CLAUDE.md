@@ -20,7 +20,6 @@ pnpm build                  # Build for production
 ```
 src/
 ├── index.ts              # WebSocket server + REST API endpoints
-├── system-prompt.ts      # System prompt for Claude
 ├── agents/
 │   ├── manager.ts        # SessionManager - routes messages to ContextPool
 │   ├── session.ts        # AgentSession - individual agent with dynamic role
@@ -34,7 +33,11 @@ src/
 │   ├── base-transport.ts # Abstract base class
 │   ├── factory.ts        # Provider factory with auto-detection
 │   ├── claude/           # Claude Agent SDK implementation
+│   │   ├── provider.ts   # ClaudeProvider class
+│   │   └── system-prompt.ts  # Claude-specific system prompt
 │   └── codex/            # Codex app-server implementation
+│       ├── provider.ts   # CodexProvider class
+│       └── system-prompt.ts  # Codex-specific system prompt
 ├── mcp/
 │   ├── index.ts          # MCP module exports
 │   ├── server.ts         # MCP HTTP server init & request handling
@@ -97,6 +100,7 @@ WebSocket → SessionManager.routeMessage()
 ## Providers
 
 **AITransport interface:**
+- `systemPrompt` - Provider-specific system prompt
 - `isAvailable()` - Check if provider can be used
 - `query(prompt, options)` - Returns async iterable of StreamMessages
 - `interrupt()` - Cancel ongoing query
@@ -104,8 +108,9 @@ WebSocket → SessionManager.routeMessage()
 
 **Adding a new provider:**
 1. Create `src/providers/<name>/provider.ts` implementing `AITransport`
-2. Add to `providerLoaders` in `src/providers/factory.ts`
-3. Export from `src/providers/<name>/index.ts`
+2. Create `src/providers/<name>/system-prompt.ts` with provider-specific prompt
+3. Add to `providerLoaders` in `src/providers/factory.ts`
+4. Export from `src/providers/<name>/index.ts`
 
 ## Tools (MCP)
 

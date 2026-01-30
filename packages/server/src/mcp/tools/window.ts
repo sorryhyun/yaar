@@ -17,34 +17,37 @@ import { ok } from '../utils.js';
 
 export function registerWindowTools(server: McpServer): void {
   // create_window
-  server.tool(
+  server.registerTool(
     'create_window',
-    'Create a new window on the ClaudeOS desktop. Use presets for consistent styling. Content is optional and defaults to empty. Use renderer: "component" with components parameter for interactive UI with buttons.',
     {
-      windowId: z.string().describe('Unique identifier for the window'),
-      title: z.string().describe('Window title'),
-      content: z
-        .string()
-        .optional()
-        .describe(
-          'Initial content to display in the window (for markdown/text/html/iframe renderers). Defaults to empty string'
-        ),
-      components: z
-        .any()
-        .optional()
-        .describe('Component tree for component renderer. Use this for interactive UI with buttons, cards, etc.'),
-      preset: z
-        .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
-        .optional()
-        .describe('Window preset for consistent styling. Defaults to "default"'),
-      renderer: z
-        .enum(['markdown', 'text', 'html', 'iframe', 'component'])
-        .optional()
-        .describe('Content renderer. Use "component" for interactive UI with buttons. Defaults to "markdown"'),
-      x: z.number().optional().describe('X position (overrides preset)'),
-      y: z.number().optional().describe('Y position (overrides preset)'),
-      width: z.number().optional().describe('Width (overrides preset)'),
-      height: z.number().optional().describe('Height (overrides preset)'),
+      description:
+        'Create a new window on the ClaudeOS desktop. Use presets for consistent styling. Content is optional and defaults to empty. Use renderer: "component" with components parameter for interactive UI with buttons.',
+      inputSchema: {
+        windowId: z.string().describe('Unique identifier for the window'),
+        title: z.string().describe('Window title'),
+        content: z
+          .string()
+          .optional()
+          .describe(
+            'Initial content to display in the window (for markdown/text/html/iframe renderers). Defaults to empty string'
+          ),
+        components: z
+          .any()
+          .optional()
+          .describe('Component tree for component renderer. Use this for interactive UI with buttons, cards, etc.'),
+        preset: z
+          .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
+          .optional()
+          .describe('Window preset for consistent styling. Defaults to "default"'),
+        renderer: z
+          .enum(['markdown', 'text', 'html', 'iframe', 'component'])
+          .optional()
+          .describe('Content renderer. Use "component" for interactive UI with buttons. Defaults to "markdown"'),
+        x: z.number().optional().describe('X position (overrides preset)'),
+        y: z.number().optional().describe('Y position (overrides preset)'),
+        width: z.number().optional().describe('Width (overrides preset)'),
+        height: z.number().optional().describe('Height (overrides preset)'),
+      },
     },
     async (args) => {
       const presetName = (args.preset || 'default') as WindowPreset;
@@ -92,29 +95,32 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // update_window
-  server.tool(
+  server.registerTool(
     'update_window',
-    'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear. Can also change the renderer type (e.g., to "iframe" with a URL, or "component" for interactive UI).',
     {
-      windowId: z.string().describe('ID of the window to update'),
-      operation: z
-        .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
-        .describe('The operation to perform on the content'),
-      content: z
-        .string()
-        .optional()
-        .describe('Content for the operation (not needed for clear). For iframe renderer, this should be a URL'),
-      components: z
-        .any()
-        .optional()
-        .describe(
-          'Component tree for component renderer (use with operation: "replace"). Use this for interactive UI with buttons, cards, etc.'
-        ),
-      position: z.number().optional().describe('Character position for insertAt operation'),
-      renderer: z
-        .enum(['markdown', 'text', 'html', 'iframe', 'component'])
-        .optional()
-        .describe('Change the renderer type. Use "component" for interactive UI with buttons'),
+      description:
+        'Update the content of an existing window using diff-based operations: append, prepend, replace, insertAt, or clear. Can also change the renderer type (e.g., to "iframe" with a URL, or "component" for interactive UI).',
+      inputSchema: {
+        windowId: z.string().describe('ID of the window to update'),
+        operation: z
+          .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
+          .describe('The operation to perform on the content'),
+        content: z
+          .string()
+          .optional()
+          .describe('Content for the operation (not needed for clear). For iframe renderer, this should be a URL'),
+        components: z
+          .any()
+          .optional()
+          .describe(
+            'Component tree for component renderer (use with operation: "replace"). Use this for interactive UI with buttons, cards, etc.'
+          ),
+        position: z.number().optional().describe('Character position for insertAt operation'),
+        renderer: z
+          .enum(['markdown', 'text', 'html', 'iframe', 'component'])
+          .optional()
+          .describe('Change the renderer type. Use "component" for interactive UI with buttons'),
+      },
     },
     async (args) => {
       let operation: ContentUpdateOperation;
@@ -166,11 +172,13 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // close_window
-  server.tool(
+  server.registerTool(
     'close_window',
-    'Close a window on the ClaudeOS desktop',
     {
-      windowId: z.string().describe('ID of the window to close'),
+      description: 'Close a window on the ClaudeOS desktop',
+      inputSchema: {
+        windowId: z.string().describe('ID of the window to close'),
+      },
     },
     async (args) => {
       const osAction: OSAction = {
@@ -188,41 +196,17 @@ export function registerWindowTools(server: McpServer): void {
     }
   );
 
-  // show_toast
-  server.tool(
-    'show_toast',
-    'Display a toast notification on the ClaudeOS desktop',
-    {
-      id: z
-        .string()
-        .optional()
-        .describe('Optional unique identifier for the toast. Auto-generated if not provided'),
-      message: z.string().describe('Toast message to display'),
-      variant: z
-        .enum(['info', 'success', 'warning', 'error'])
-        .optional()
-        .describe('Toast variant. Defaults to "info"'),
-    },
-    async (args) => {
-      const osAction: OSAction = {
-        type: 'toast.show',
-        id: args.id || `toast-${Date.now()}`,
-        message: args.message,
-        variant: args.variant || 'info',
-      };
-
-      actionEmitter.emitAction(osAction);
-      return ok('Toast displayed');
-    }
-  );
 
   // lock_window
-  server.tool(
+  server.registerTool(
     'lock_window',
-    'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
     {
-      windowId: z.string().describe('ID of the window to lock'),
-      agentId: z.string().describe('Unique identifier for the agent acquiring the lock'),
+      description:
+        'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
+      inputSchema: {
+        windowId: z.string().describe('ID of the window to lock'),
+        agentId: z.string().describe('Unique identifier for the agent acquiring the lock'),
+      },
     },
     async (args) => {
       const osAction: OSAction = {
@@ -237,14 +221,16 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // unlock_window
-  server.tool(
+  server.registerTool(
     'unlock_window',
-    'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
     {
-      windowId: z.string().describe('ID of the window to unlock'),
-      agentId: z
-        .string()
-        .describe('Unique identifier for the agent releasing the lock (must match the locking agent)'),
+      description: 'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
+      inputSchema: {
+        windowId: z.string().describe('ID of the window to unlock'),
+        agentId: z
+          .string()
+          .describe('Unique identifier for the agent releasing the lock (must match the locking agent)'),
+      },
     },
     async (args) => {
       const osAction: OSAction = {
@@ -259,10 +245,12 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // list_windows
-  server.tool(
+  server.registerTool(
     'list_windows',
-    'List all windows currently open on the ClaudeOS desktop. Returns window IDs, titles, positions, sizes, and lock status.',
-    {},
+    {
+      description:
+        'List all windows currently open on the ClaudeOS desktop. Returns window IDs, titles, positions, sizes, and lock status.',
+    },
     async () => {
       const windows = windowState.listWindows();
 
@@ -285,11 +273,14 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // view_window
-  server.tool(
+  server.registerTool(
     'view_window',
-    'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content.',
     {
-      windowId: z.string().describe('ID of the window to view'),
+      description:
+        'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content.',
+      inputSchema: {
+        windowId: z.string().describe('ID of the window to view'),
+      },
     },
     async (args) => {
       const win = windowState.getWindow(args.windowId);
@@ -314,14 +305,17 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // show_notification
-  server.tool(
+  server.registerTool(
     'show_notification',
-    'Show a persistent notification that requires manual dismissal. Use for important alerts that should stay visible.',
     {
-      id: z.string().describe('Unique notification ID'),
-      title: z.string().describe('Notification title'),
-      body: z.string().describe('Notification body text'),
-      icon: z.string().optional().describe('Optional icon name'),
+      description:
+        'Show a persistent notification that requires manual dismissal. Use for important alerts that should stay visible.',
+      inputSchema: {
+        id: z.string().describe('Unique notification ID'),
+        title: z.string().describe('Notification title'),
+        body: z.string().describe('Notification body text'),
+        icon: z.string().optional().describe('Optional icon name'),
+      },
     },
     async (args) => {
       const osAction: OSAction = {
@@ -338,11 +332,13 @@ export function registerWindowTools(server: McpServer): void {
   );
 
   // dismiss_notification
-  server.tool(
+  server.registerTool(
     'dismiss_notification',
-    'Dismiss a notification by ID',
     {
-      id: z.string().describe('Notification ID to dismiss'),
+      description: 'Dismiss a notification by ID',
+      inputSchema: {
+        id: z.string().describe('Notification ID to dismiss'),
+      },
     },
     async (args) => {
       const osAction: OSAction = {

@@ -3,7 +3,7 @@
  */
 
 // Server
-export { initMcpServer, handleMcpRequest } from './server.js';
+export { initMcpServer, handleMcpRequest, getMcpToken } from './server.js';
 
 // Tools
 export { registerAllTools, getToolNames } from './tools/index.js';

@@ -12,7 +12,6 @@ import {
   getFirstAvailableProvider,
   getAvailableProviders,
 } from '../providers/factory.js';
-import { SYSTEM_PROMPT } from '../system-prompt.js';
 import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { actionEmitter, type ActionEvent } from '../mcp/index.js';
@@ -275,7 +274,7 @@ export class AgentSession {
       }
 
       const transportOptions: TransportOptions = {
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: this.provider!.systemPrompt,
         sessionId: sessionIdToUse,
       };
       this.hasSentFirstMessage = true;

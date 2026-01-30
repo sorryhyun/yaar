@@ -12,12 +12,16 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcClient, type JsonRpcClientOptions } from './jsonrpc-client.js';
+import { getMcpToken } from '../../mcp/index.js';
 import type {
   ThreadStartParams,
   ThreadStartResult,
   TurnStartParams,
   ThreadResumeParams,
 } from './types.js';
+
+// MCP server port (same as main server)
+const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
 
 const MAX_RESTARTS = 3;
 const RESTART_DELAY_MS = 1000;
@@ -106,6 +110,9 @@ export class AppServer {
       '-c', 'features.shell_tool=false',
       // Disable web search
       '-c', 'web_search=disabled',
+      // Configure ClaudeOS MCP server
+      '-c', `mcp_servers.claudeos.url=http://127.0.0.1:${MCP_PORT}/mcp`,
+      '-c', 'mcp_servers.claudeos.bearer_token_env_var=CLAUDEOS_MCP_TOKEN',
     ];
 
     // Add model if specified
@@ -120,6 +127,8 @@ export class AppServer {
         ...process.env,
         // Ensure no interactive prompts
         CI: '1',
+        // MCP authentication token
+        CLAUDEOS_MCP_TOKEN: getMcpToken(),
       },
     });
 

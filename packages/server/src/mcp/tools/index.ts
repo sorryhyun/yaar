@@ -38,7 +38,6 @@ export function getToolNames(): string[] {
     'mcp__claudeos__create_window',
     'mcp__claudeos__update_window',
     'mcp__claudeos__close_window',
-    'mcp__claudeos__show_toast',
     'mcp__claudeos__lock_window',
     'mcp__claudeos__unlock_window',
     'mcp__claudeos__list_windows',

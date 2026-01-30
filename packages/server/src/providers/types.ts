@@ -60,6 +60,9 @@ export interface AITransport {
   /** Provider type identifier */
   readonly providerType: ProviderType;
 
+  /** System prompt for this provider */
+  readonly systemPrompt: string;
+
   /** Check if this transport is available */
   isAvailable(): Promise<boolean>;
 

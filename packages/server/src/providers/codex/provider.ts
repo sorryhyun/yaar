@@ -12,6 +12,7 @@ import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { AppServer, type AppServerConfig } from './app-server.js';
 import { mapNotification } from './message-mapper.js';
+import { SYSTEM_PROMPT } from './system-prompt.js';
 
 /**
  * Session state for a thread.
@@ -24,6 +25,7 @@ interface ThreadSession {
 export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
+  readonly systemPrompt = SYSTEM_PROMPT;
 
   private appServer: AppServer | null = null;
   private currentSession: ThreadSession | null = null;
