@@ -7,11 +7,39 @@
 
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { readFile } from 'fs/promises';
+import { join, normalize, relative, extname } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { pdf } from 'pdf-to-img';
+import sharp from 'sharp';
 import { SessionManager } from './session-manager.js';
-import { getAvailableTransports } from './providers/factory.js';
+import { getAvailableProviders } from './providers/factory.js';
 import { listSessions, readSessionTranscript } from './sessions/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import type { ClientEvent } from '@claudeos/shared';
+
+// Storage directory path
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, '..', '..', '..');
+const STORAGE_DIR = join(PROJECT_ROOT, 'storage');
+
+// MIME type mapping for common file types
+const MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
+  '.json': 'application/json',
+  '.txt': 'text/plain',
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+};
 
 const PORT = parseInt(process.env.PORT ?? '8000', 10);
 
@@ -46,7 +74,7 @@ const server = createServer(async (req, res) => {
 
   // List available providers
   if (url.pathname === '/api/providers' && req.method === 'GET') {
-    const providers = await getAvailableTransports();
+    const providers = await getAvailableProviders();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ providers }));
     return;
@@ -81,6 +109,91 @@ const server = createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to read transcript' }));
+    }
+    return;
+  }
+
+  // Render PDF page as image
+  // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
+  const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);
+  if (pdfMatch && req.method === 'GET') {
+    const pdfPath = decodeURIComponent(pdfMatch[1]);
+    const pageNum = parseInt(pdfMatch[2], 10);
+
+    // Validate path to prevent directory traversal
+    const normalizedPath = normalize(join(STORAGE_DIR, pdfPath));
+    const relativePath = relative(STORAGE_DIR, normalizedPath);
+
+    if (relativePath.startsWith('..') || relativePath.includes('..')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access denied' }));
+      return;
+    }
+
+    if (extname(pdfPath).toLowerCase() !== '.pdf') {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not a PDF file' }));
+      return;
+    }
+
+    try {
+      const document = await pdf(normalizedPath, {
+        scale: 1.5,
+        docInitParams: { verbosity: 0 },
+      });
+
+      let currentPage = 0;
+      for await (const page of document) {
+        currentPage++;
+        if (currentPage === pageNum) {
+          // Convert to WebP for efficiency
+          const webpBuffer = await sharp(page).webp({ quality: 85 }).toBuffer();
+          res.writeHead(200, {
+            'Content-Type': 'image/webp',
+            'Cache-Control': 'public, max-age=3600'
+          });
+          res.end(webpBuffer);
+          return;
+        }
+      }
+
+      // Page not found
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: `Page ${pageNum} not found (PDF has ${currentPage} pages)` }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to render PDF page' }));
+    }
+    return;
+  }
+
+  // Serve storage files
+  if (url.pathname.startsWith('/api/storage/') && req.method === 'GET') {
+    const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));
+
+    // Validate path to prevent directory traversal
+    const normalizedPath = normalize(join(STORAGE_DIR, filePath));
+    const relativePath = relative(STORAGE_DIR, normalizedPath);
+
+    if (relativePath.startsWith('..') || relativePath.includes('..')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access denied' }));
+      return;
+    }
+
+    try {
+      const content = await readFile(normalizedPath);
+      const ext = extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600'
+      });
+      res.end(content);
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
     }
     return;
   }

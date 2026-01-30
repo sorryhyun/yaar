@@ -37,7 +37,7 @@ const okWithImages = (text: string, images: Array<{ data: string; mimeType: stri
  */
 export const storageReadTool = tool(
   'storage_read',
-  'Read a file from the persistent storage directory. For PDF files, returns rendered page images.',
+  'Read a file from the persistent storage directory. For PDF files, returns page count - use /api/pdf/<path>/<page> URLs to display pages visually instead of describing them.',
   {
     path: z.string().describe('Path to the file relative to storage/')
   },
@@ -48,9 +48,12 @@ export const storageReadTool = tool(
     }
 
     // If we have images (PDF), return them along with text
+    // Also include hint about using /api/pdf/ endpoint for display
     if (result.images && result.images.length > 0) {
+      const pageCount = result.images.length;
+      const hint = `\n\nTo display these pages visually, use image components with src="/api/pdf/${args.path}/<page>" where <page> is 1 to ${pageCount}.`;
       return okWithImages(
-        result.content!,
+        result.content! + hint,
         result.images.map(img => ({ data: img.data, mimeType: img.mimeType }))
       );
     }

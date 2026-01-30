@@ -2,20 +2,21 @@
  * Session manager - manages multiple agent sessions per WebSocket connection.
  *
  * Agent types:
- * - Default agent: The primary agent for the session
+ * - Default agent pool: Pool of agents for handling concurrent user messages
  * - Window agent: Spawned for specific windows, runs in parallel with default agent
  * - Subagent: Spawned by default/window agents via SDK native feature
  */
 
 import type { WebSocket } from 'ws';
 import { AgentSession } from './agent-session.js';
+import { DefaultAgentPool } from './default-agent-pool.js';
 import type { ClientEvent, ServerEvent } from '@claudeos/shared';
 
 const MAX_WINDOW_AGENTS = 5;
 
 export class SessionManager {
   private ws: WebSocket;
-  private defaultSession: AgentSession | null = null;
+  private defaultPool: DefaultAgentPool | null = null;
   private windowSessions: Map<string, AgentSession> = new Map();
 
   constructor(ws: WebSocket) {
@@ -23,12 +24,11 @@ export class SessionManager {
   }
 
   /**
-   * Initialize the main session.
+   * Initialize the main session pool.
    */
   async initialize(): Promise<boolean> {
-    // Main session: no pre-assigned sessionId, no windowId, no fork
-    this.defaultSession = new AgentSession(this.ws);
-    return this.defaultSession.initialize();
+    this.defaultPool = new DefaultAgentPool(this.ws);
+    return this.defaultPool.initialize();
   }
 
   /**
@@ -37,12 +37,12 @@ export class SessionManager {
   async routeMessage(event: ClientEvent): Promise<void> {
     switch (event.type) {
       case 'USER_MESSAGE':
-        // Route to main session with interaction context
-        await this.defaultSession?.handleMessage(event.content, event.interactions);
+        // Route to pool which handles concurrent messages
+        await this.defaultPool?.handleMessage(event.messageId, event.content, event.interactions);
         break;
 
       case 'WINDOW_MESSAGE':
-        await this.handleWindowMessage(event.windowId, event.content);
+        await this.handleWindowMessage(event.messageId, event.windowId, event.content);
         break;
 
       case 'COMPONENT_ACTION':
@@ -51,8 +51,8 @@ export class SessionManager {
         break;
 
       case 'INTERRUPT':
-        // Interrupt main session
-        await this.defaultSession?.interrupt();
+        // Interrupt all agents in the pool
+        await this.defaultPool?.interruptAll();
         break;
 
       case 'INTERRUPT_AGENT':
@@ -61,12 +61,12 @@ export class SessionManager {
         break;
 
       case 'SET_PROVIDER':
-        await this.defaultSession?.setProvider(event.provider);
+        await this.defaultPool?.getPrimaryAgent()?.setProvider(event.provider);
         break;
 
       case 'RENDERING_FEEDBACK':
-        // Rendering feedback goes to all sessions (action emitter handles it)
-        this.defaultSession?.handleRenderingFeedback(
+        // Rendering feedback goes to primary session (action emitter handles it)
+        this.defaultPool?.getPrimaryAgent()?.handleRenderingFeedback(
           event.requestId,
           event.windowId,
           event.renderer,
@@ -105,17 +105,20 @@ export class SessionManager {
         status: 'idle',
       });
     } else {
-      // Route to default session with context about which window triggered it
+      // Route to pool with context about which window triggered it
+      // Generate a messageId for component actions
+      const messageId = `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const contextualMessage = `[Component action from window "${windowId}"] ${action}`;
-      await this.defaultSession?.handleMessage(contextualMessage);
+      await this.defaultPool?.handleMessage(messageId, contextualMessage);
     }
   }
 
   /**
    * Handle a message targeted at a specific window.
    * Creates or reuses a window-specific agent session.
+   * Window agents use sequential queuing - new messages wait for current to complete.
    */
-  private async handleWindowMessage(windowId: string, content: string): Promise<void> {
+  private async handleWindowMessage(messageId: string, windowId: string, content: string): Promise<void> {
     let session = this.windowSessions.get(windowId);
 
     if (!session) {
@@ -131,8 +134,8 @@ export class SessionManager {
       // Create new window session, forking from main session's context
       // Session ID will be assigned by the SDK and captured from the stream
       // Share the main session's logger so all logs go to one place
-      const defaultSessionId = this.defaultSession?.getRawSessionId() ?? undefined;
-      const sharedLogger = this.defaultSession?.getSessionLogger() ?? undefined;
+      const defaultSessionId = this.defaultPool?.getRawSessionId() ?? undefined;
+      const sharedLogger = this.defaultPool?.getSessionLogger() ?? undefined;
       session = new AgentSession(this.ws, undefined, windowId, defaultSessionId, sharedLogger);
 
       // Initialize the session
@@ -159,6 +162,18 @@ export class SessionManager {
       });
     }
 
+    // Check if window agent is busy - if so, queue the message
+    if (session.isRunning()) {
+      const queuePosition = session.queueMessage(messageId, content);
+      await this.sendEvent({
+        type: 'MESSAGE_QUEUED',
+        messageId,
+        position: queuePosition,
+      });
+      console.log(`[SessionManager] Queued message ${messageId} for window ${windowId}, position: ${queuePosition}`);
+      return;
+    }
+
     // Send status update
     await this.sendEvent({
       type: 'WINDOW_AGENT_STATUS',
@@ -167,8 +182,15 @@ export class SessionManager {
       status: 'active',
     });
 
+    // Notify frontend that message is accepted
+    await this.sendEvent({
+      type: 'MESSAGE_ACCEPTED',
+      messageId,
+      agentId: session.getSessionId(),
+    });
+
     // Process the message
-    await session.handleMessage(content);
+    await session.handleMessage(content, undefined, messageId);
 
     // Send idle status after completion
     await this.sendEvent({
@@ -184,7 +206,7 @@ export class SessionManager {
    */
   private async interruptAgent(agentId: string): Promise<void> {
     if (agentId === 'default') {
-      await this.defaultSession?.interrupt();
+      await this.defaultPool?.interruptAll();
       return;
     }
 
@@ -252,10 +274,10 @@ export class SessionManager {
     }
     this.windowSessions.clear();
 
-    // Cleanup main session
-    if (this.defaultSession) {
-      await this.defaultSession.cleanup();
-      this.defaultSession = null;
+    // Cleanup default pool
+    if (this.defaultPool) {
+      await this.defaultPool.cleanup();
+      this.defaultPool = null;
     }
   }
 }

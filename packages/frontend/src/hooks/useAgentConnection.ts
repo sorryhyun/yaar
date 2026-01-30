@@ -163,6 +163,18 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           }
           break
         }
+
+        case 'MESSAGE_ACCEPTED': {
+          const { messageId, agentId } = message as { messageId: string; agentId: string }
+          console.log('[Message Accepted]', messageId, 'by agent', agentId)
+          break
+        }
+
+        case 'MESSAGE_QUEUED': {
+          const { messageId, position } = message as { messageId: string; position: number }
+          console.log('[Message Queued]', messageId, 'at position', position)
+          break
+        }
       }
     } catch (e) {
       console.error('Failed to parse message:', e)
@@ -247,19 +259,26 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
   }, [addDebugEntry])
 
+  // Generate a unique message ID
+  const generateMessageId = useCallback(() => {
+    return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  }, [])
+
   // Send user message
   const sendMessage = useCallback((content: string) => {
     // Don't show thinking indicator here - let server events drive the UI
     // This prevents duplicate indicators when server sends AGENT_THINKING
     const interactions = consumeInteractions()
-    send({ type: 'USER_MESSAGE', content, interactions: interactions.length > 0 ? interactions : undefined })
-  }, [send, consumeInteractions])
+    const messageId = generateMessageId()
+    send({ type: 'USER_MESSAGE', messageId, content, interactions: interactions.length > 0 ? interactions : undefined })
+  }, [send, consumeInteractions, generateMessageId])
 
   // Send message to a specific window agent
   const sendWindowMessage = useCallback((windowId: string, content: string) => {
     // Don't show thinking indicator here - let server events drive the UI
-    send({ type: 'WINDOW_MESSAGE', windowId, content })
-  }, [send])
+    const messageId = generateMessageId()
+    send({ type: 'WINDOW_MESSAGE', messageId, windowId, content })
+  }, [send, generateMessageId])
 
   // Send component action (button click) to agent
   const sendComponentAction = useCallback((windowId: string, action: string) => {

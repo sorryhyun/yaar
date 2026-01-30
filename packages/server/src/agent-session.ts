@@ -8,14 +8,23 @@ import type { WebSocket } from 'ws';
 import { AsyncLocalStorage } from 'async_hooks';
 import type { AITransport, TransportOptions, ProviderType } from './providers/types.js';
 import {
-  createTransport,
-  getFirstAvailableTransport,
-  getAvailableTransports,
+  createProvider,
+  getFirstAvailableProvider,
+  getAvailableProviders,
 } from './providers/factory.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from './sessions/index.js';
 import { actionEmitter, type ActionEvent } from './tools/index.js';
+
+/**
+ * Queued message structure for sequential processing.
+ */
+interface QueuedMessage {
+  messageId: string;
+  content: string;
+  interactions?: UserInteraction[];
+}
 
 /**
  * Agent context - tracks which agent is currently executing so tools
@@ -37,7 +46,7 @@ export function getAgentId(): string | undefined {
 
 export class AgentSession {
   private ws: WebSocket;
-  private transport: AITransport | null = null;
+  private provider: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
   private sessionLogger: SessionLogger | null = null;
@@ -45,6 +54,9 @@ export class AgentSession {
   private windowId?: string;
   private forkFromSessionId?: string;
   private hasSentFirstMessage = false;
+  private currentMessageId: string | null = null;
+  private messageQueue: QueuedMessage[] = [];
+  private processingQueue = false;
 
   /**
    * Create an agent session.
@@ -75,6 +87,36 @@ export class AgentSession {
    */
   getWindowId(): string | undefined {
     return this.windowId;
+  }
+
+  /**
+   * Check if the agent is currently processing a message.
+   */
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  /**
+   * Get the current message ID being processed.
+   */
+  getCurrentMessageId(): string | null {
+    return this.currentMessageId;
+  }
+
+  /**
+   * Get the number of queued messages.
+   */
+  getQueueLength(): number {
+    return this.messageQueue.length;
+  }
+
+  /**
+   * Queue a message for later processing (used by window agents).
+   * Returns the position in the queue.
+   */
+  queueMessage(messageId: string, content: string, interactions?: UserInteraction[]): number {
+    this.messageQueue.push({ messageId, content, interactions });
+    return this.messageQueue.length;
   }
 
   /**
@@ -150,9 +192,9 @@ export class AgentSession {
    * Initialize with the first available transport.
    */
   async initialize(): Promise<boolean> {
-    this.transport = await getFirstAvailableTransport();
+    this.provider = await getFirstAvailableProvider();
 
-    if (!this.transport) {
+    if (!this.provider) {
       await this.sendEvent({
         type: 'ERROR',
         error: 'No AI provider available. Install Claude CLI.',
@@ -162,14 +204,14 @@ export class AgentSession {
 
     // Create session logger only if not using a shared one
     if (!this.sessionLogger) {
-      const sessionInfo = await createSession(this.transport.name);
+      const sessionInfo = await createSession(this.provider.name);
       this.sessionLogger = new SessionLogger(sessionInfo);
     }
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
       status: 'connected',
-      provider: this.transport.name,
+      provider: this.provider.name,
       sessionId: this.sessionId ?? undefined,
     });
 
@@ -203,12 +245,13 @@ export class AgentSession {
   /**
    * Process a user message through the AI provider.
    */
-  async handleMessage(content: string, interactions?: UserInteraction[]): Promise<void> {
-    if (!this.transport) {
+  async handleMessage(content: string, interactions?: UserInteraction[], messageId?: string): Promise<void> {
+    if (!this.provider) {
       return;
     }
 
     this.running = true;
+    this.currentMessageId = messageId ?? null;
 
     // Immediately notify frontend that agent is thinking
     const stableAgentId = this.getFilterAgentId();
@@ -256,7 +299,7 @@ export class AgentSession {
       // Use getFilterAgentId() for stable UI tracking ('default' or 'window-{id}')
       const currentAgentId = this.getFilterAgentId();
       await agentContext.run({ agentId: currentAgentId }, async () => {
-        for await (const message of this.transport!.query(fullContent, options)) {
+        for await (const message of this.provider!.query(fullContent, options)) {
           if (!this.running) break;
 
           switch (message.type) {
@@ -267,7 +310,7 @@ export class AgentSession {
                 await this.sendEvent({
                   type: 'CONNECTION_STATUS',
                   status: 'connected',
-                  provider: this.transport!.name,
+                  provider: this.provider!.name,
                   sessionId: this.sessionId,
                 });
               }
@@ -281,6 +324,7 @@ export class AgentSession {
                   content: responseText,
                   isComplete: false,
                   agentId: currentAgentId,
+                  messageId: this.currentMessageId ?? undefined,
                 });
               }
               break;
@@ -329,6 +373,7 @@ export class AgentSession {
                 content: responseText,
                 isComplete: true,
                 agentId: currentAgentId,
+                messageId: this.currentMessageId ?? undefined,
               });
               break;
 
@@ -349,6 +394,32 @@ export class AgentSession {
       });
     } finally {
       this.running = false;
+      this.currentMessageId = null;
+
+      // Process queued messages (for window agents)
+      await this.processQueue();
+    }
+  }
+
+  /**
+   * Process queued messages sequentially.
+   * Called automatically after handleMessage completes.
+   */
+  private async processQueue(): Promise<void> {
+    if (this.processingQueue || this.messageQueue.length === 0) {
+      return;
+    }
+
+    this.processingQueue = true;
+    try {
+      while (this.messageQueue.length > 0 && !this.running) {
+        const next = this.messageQueue.shift();
+        if (next) {
+          await this.handleMessage(next.content, next.interactions, next.messageId);
+        }
+      }
+    } finally {
+      this.processingQueue = false;
     }
   }
 
@@ -357,7 +428,7 @@ export class AgentSession {
    */
   async interrupt(): Promise<void> {
     this.running = false;
-    this.transport?.interrupt();
+    this.provider?.interrupt();
   }
 
   /**
@@ -394,7 +465,7 @@ export class AgentSession {
    * Switch to a different provider.
    */
   async setProvider(providerType: ProviderType): Promise<void> {
-    const available = await getAvailableTransports();
+    const available = await getAvailableProviders();
     if (!available.includes(providerType)) {
       await this.sendEvent({
         type: 'ERROR',
@@ -403,20 +474,20 @@ export class AgentSession {
       return;
     }
 
-    // Dispose current transport
-    if (this.transport) {
-      await this.transport.dispose();
+    // Dispose current provider
+    if (this.provider) {
+      await this.provider.dispose();
     }
 
-    // Create new transport (async with dynamic import)
-    const newTransport = await createTransport(providerType);
-    this.transport = newTransport;
+    // Create new provider (async with dynamic import)
+    const newProvider = await createProvider(providerType);
+    this.provider = newProvider;
     this.sessionId = null;
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
       status: 'connected',
-      provider: newTransport.name,
+      provider: newProvider.name,
     });
   }
 
@@ -438,9 +509,9 @@ export class AgentSession {
       this.unsubscribeAction();
       this.unsubscribeAction = null;
     }
-    if (this.transport) {
-      await this.transport.dispose();
-      this.transport = null;
+    if (this.provider) {
+      await this.provider.dispose();
+      this.provider = null;
     }
   }
 }

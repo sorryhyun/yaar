@@ -47,32 +47,32 @@ function getForcedProvider(): ProviderType | null {
  */
 const providerLoaders: Record<ProviderType, () => Promise<AITransport>> = {
   claude: async () => {
-    const { ClaudeTransport } = await import('./claude/index.js');
-    return new ClaudeTransport();
+    const { ClaudeProvider } = await import('./claude/index.js');
+    return new ClaudeProvider();
   },
   codex: async () => {
-    const { CodexTransport } = await import('./codex/index.js');
-    return new CodexTransport();
+    const { CodexProvider } = await import('./codex/index.js');
+    return new CodexProvider();
   },
 };
 
 /**
- * Get list of available transport names.
+ * Get list of available provider names.
  */
-export async function getAvailableTransports(): Promise<ProviderType[]> {
+export async function getAvailableProviders(): Promise<ProviderType[]> {
   const available: ProviderType[] = [];
 
   for (const providerType of PROVIDER_PREFERENCE) {
     const loader = providerLoaders[providerType];
     if (!loader) continue;
 
-    const transport = await loader();
+    const provider = await loader();
     try {
-      if (await transport.isAvailable()) {
+      if (await provider.isAvailable()) {
         available.push(providerType);
       }
     } finally {
-      await transport.dispose();
+      await provider.dispose();
     }
   }
 
@@ -80,23 +80,23 @@ export async function getAvailableTransports(): Promise<ProviderType[]> {
 }
 
 /**
- * Create a transport instance by provider type.
+ * Create a provider instance by provider type.
  * Uses dynamic imports to only load the required SDK.
  */
-export async function createTransport(providerType: ProviderType): Promise<AITransport> {
+export async function createProvider(providerType: ProviderType): Promise<AITransport> {
   const loader = providerLoaders[providerType];
   if (!loader) {
-    throw new Error(`Unknown transport: ${providerType}`);
+    throw new Error(`Unknown provider: ${providerType}`);
   }
   return loader();
 }
 
 /**
- * Get the first available transport.
+ * Get the first available provider.
  * If PROVIDER env var is set, only that provider is used.
  * Returns null if no providers are available.
  */
-export async function getFirstAvailableTransport(): Promise<AITransport | null> {
+export async function getFirstAvailableProvider(): Promise<AITransport | null> {
   const forcedProvider = getForcedProvider();
   const providers = forcedProvider ? [forcedProvider] : PROVIDER_PREFERENCE;
 
@@ -104,11 +104,11 @@ export async function getFirstAvailableTransport(): Promise<AITransport | null> 
     const loader = providerLoaders[providerType];
     if (!loader) continue;
 
-    const transport = await loader();
-    if (await transport.isAvailable()) {
-      return transport;
+    const provider = await loader();
+    if (await provider.isAvailable()) {
+      return provider;
     }
-    await transport.dispose();
+    await provider.dispose();
   }
 
   return null;

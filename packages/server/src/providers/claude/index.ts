@@ -2,5 +2,5 @@
  * Claude provider exports.
  */
 
-export { ClaudeTransport, AgentSDKTransport } from './transport.js';
+export { ClaudeProvider, AgentSDKProvider } from './provider.js';
 export { mapClaudeMessage } from './message-mapper.js';

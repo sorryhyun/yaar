@@ -16,12 +16,14 @@ export interface UserInteraction {
 
 export interface UserMessageEvent {
   type: 'USER_MESSAGE';
+  messageId: string;
   content: string;
   interactions?: UserInteraction[];
 }
 
 export interface WindowMessageEvent {
   type: 'WINDOW_MESSAGE';
+  messageId: string;
   windowId: string;
   content: string;
 }
@@ -85,6 +87,7 @@ export interface AgentResponseEvent {
   content: string;
   isComplete: boolean;
   agentId?: string;
+  messageId?: string;
 }
 
 export interface ConnectionStatusEvent {
@@ -123,6 +126,18 @@ export interface WindowAgentStatusEvent {
   status: 'created' | 'active' | 'idle' | 'destroyed';
 }
 
+export interface MessageAcceptedEvent {
+  type: 'MESSAGE_ACCEPTED';
+  messageId: string;
+  agentId: string;
+}
+
+export interface MessageQueuedEvent {
+  type: 'MESSAGE_QUEUED';
+  messageId: string;
+  position: number;
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -131,4 +146,6 @@ export type ServerEvent =
   | ToolProgressEvent
   | RequestPermissionEvent
   | ErrorEvent
-  | WindowAgentStatusEvent;
+  | WindowAgentStatusEvent
+  | MessageAcceptedEvent
+  | MessageQueuedEvent;

@@ -1,5 +1,5 @@
 /**
- * Claude Agent SDK Transport.
+ * Claude Agent SDK Provider.
  *
  * Uses the @anthropic-ai/claude-agent-sdk to communicate with Claude.
  * Authentication is handled via the Claude CLI's OAuth flow.
@@ -11,7 +11,7 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import { mapClaudeMessage } from './message-mapper.js';
 import { claudeOSTools, getClaudeOSToolNames } from '../../tools/index.js';
 
-export class ClaudeTransport extends BaseTransport {
+export class ClaudeProvider extends BaseTransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
 
@@ -41,6 +41,10 @@ export class ClaudeTransport extends BaseTransport {
           claudeos: claudeOSTools
         },
         includePartialMessages: true, // Enable streaming
+        env: {
+          ...process.env,
+          MAX_MCP_OUTPUT_TOKENS: '7500', // Limit MCP tool output to avoid huge base64 payloads
+        },
       };
 
       const stream = sdkQuery({
@@ -64,4 +68,4 @@ export class ClaudeTransport extends BaseTransport {
 }
 
 // Re-export with legacy name for backwards compatibility
-export { ClaudeTransport as AgentSDKTransport };
+export { ClaudeProvider as AgentSDKProvider };

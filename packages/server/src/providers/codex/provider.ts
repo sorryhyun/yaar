@@ -1,5 +1,5 @@
 /**
- * Codex App-Server Transport.
+ * Codex App-Server Provider.
  *
  * Uses `codex app-server` for long-running JSON-RPC communication.
  * This provides:
@@ -21,7 +21,7 @@ interface ThreadSession {
   systemPrompt: string;
 }
 
-export class CodexTransport extends BaseTransport {
+export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
   readonly providerType: ProviderType = 'codex';
 
