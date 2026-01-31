@@ -98,6 +98,11 @@ export function mapNotification(
       return null;
     }
 
+    case 'item/reasoning/summaryTextDelta':
+    case 'item/reasoning/summaryTextCompleted':
+      // Reasoning summary events - skip silently
+      return null;
+
     // ========================================================================
     // MCP tool call events
     // ========================================================================
@@ -126,6 +131,11 @@ export function mapNotification(
         content: formatMcpResult(mcpParams),
       };
     }
+
+    case 'item/started':
+    case 'item/completed':
+      // Generic item lifecycle events - skip silently
+      return null;
 
     // ========================================================================
     // Command execution events (shell commands)
@@ -166,7 +176,11 @@ export function mapNotification(
     // ========================================================================
 
     default:
-      // Log unknown events for debugging
+      // Skip noisy codex internal events
+      if (method.startsWith('codex/event/')) {
+        return null;
+      }
+      // Log truly unknown events for debugging
       console.debug(`[codex] Unknown notification: ${method}`, params);
       return null;
   }

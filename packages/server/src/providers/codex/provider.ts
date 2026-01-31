@@ -77,7 +77,7 @@ export class CodexProvider extends BaseTransport {
         });
 
         this.currentSession = {
-          threadId: result.threadId,
+          threadId: result.thread.id,
           systemPrompt: options.systemPrompt,
         };
 

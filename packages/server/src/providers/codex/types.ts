@@ -71,10 +71,49 @@ export interface ThreadStartParams {
 }
 
 /**
+ * Thread object returned from the app-server.
+ */
+export interface Thread {
+  id: string;
+  preview?: string;
+  modelProvider?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  path?: string;
+  cwd?: string;
+  cliVersion?: string;
+  source?: string;
+  turns?: unknown[];
+}
+
+/**
  * Response from thread/start request.
  */
 export interface ThreadStartResult {
-  threadId: string;
+  thread: Thread;
+  model?: string;
+  modelProvider?: string;
+  cwd?: string;
+  approvalPolicy?: string;
+  sandbox?: unknown;
+  reasoningEffort?: string;
+}
+
+/**
+ * Parameters for initialize request.
+ */
+export interface InitializeParams {
+  clientInfo: {
+    name: string;
+    version: string;
+  };
+}
+
+/**
+ * Response from initialize request.
+ */
+export interface InitializeResult {
+  userAgent: string;
 }
 
 /**

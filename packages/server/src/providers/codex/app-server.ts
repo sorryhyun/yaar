@@ -18,6 +18,8 @@ import type {
   ThreadStartResult,
   TurnStartParams,
   ThreadResumeParams,
+  InitializeParams,
+  InitializeResult,
 } from './types.js';
 
 // MCP server port (same as main server)
@@ -98,6 +100,29 @@ export class AppServer {
     this.tempDir = await mkdtemp(join(tmpdir(), 'codex-'));
 
     await this.spawnProcess();
+
+    // Initialize the app-server (required before any other operations)
+    await this.initialize();
+  }
+
+  /**
+   * Initialize the app-server with client info.
+   * This must be called before any thread/turn operations.
+   */
+  private async initialize(): Promise<void> {
+    if (!this.client) {
+      throw new Error('AppServer client is not available');
+    }
+
+    await this.client.request<InitializeParams, InitializeResult>(
+      'initialize',
+      {
+        clientInfo: {
+          name: 'claudeos',
+          version: '1.0.0',
+        },
+      }
+    );
   }
 
   /**
@@ -189,6 +214,7 @@ export class AppServer {
 
         try {
           await this.spawnProcess();
+          await this.initialize();
         } catch (err) {
           for (const listener of this.errorListeners) {
             listener(err instanceof Error ? err : new Error(String(err)));
