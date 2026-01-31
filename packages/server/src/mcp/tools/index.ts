@@ -7,11 +7,13 @@ import { registerSystemTools } from './system.js';
 import { registerWindowTools } from './window.js';
 import { registerStorageTools } from './storage.js';
 import { registerAppsTools } from './apps.js';
+import { registerHttpTools } from './http.js';
 
 export { registerSystemTools } from './system.js';
 export { registerWindowTools } from './window.js';
 export { registerStorageTools } from './storage.js';
 export { registerAppsTools } from './apps.js';
+export { registerHttpTools } from './http.js';
 
 /**
  * Register all ClaudeOS tools on the MCP server.
@@ -21,6 +23,7 @@ export function registerAllTools(server: McpServer): void {
   registerWindowTools(server);
   registerStorageTools(server);
   registerAppsTools(server);
+  registerHttpTools(server);
 }
 
 /**
@@ -29,7 +32,6 @@ export function registerAllTools(server: McpServer): void {
 export function getToolNames(): string[] {
   return [
     // Built-in Claude tools
-    'WebFetch',
     'WebSearch',
     // System tools
     'mcp__claudeos__get_system_time',
@@ -57,5 +59,9 @@ export function getToolNames(): string[] {
     'mcp__claudeos__apps_load_skill',
     'mcp__claudeos__apps_read_config',
     'mcp__claudeos__apps_write_config',
+    // HTTP tools (curl-based)
+    'mcp__claudeos__request_allowing_domain',
+    'mcp__claudeos__http_get',
+    'mcp__claudeos__http_post',
   ];
 }

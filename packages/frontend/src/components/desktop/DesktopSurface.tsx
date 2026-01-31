@@ -13,6 +13,7 @@ import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionCon
 import { WindowManager } from './WindowManager'
 import { ToastContainer } from '../ui/ToastContainer'
 import { NotificationCenter } from '../ui/NotificationCenter'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
@@ -163,6 +164,9 @@ export function DesktopSurface() {
 
       {/* Cursor spinner when AI is thinking */}
       <CursorSpinner />
+
+      {/* Confirmation dialogs */}
+      <ConfirmDialog />
     </div>
   )
 }

@@ -40,10 +40,31 @@ trap cleanup INT TERM
 # Enable job control for process groups
 set -m
 
-# Start server and frontend in parallel
+# Function to wait for server health endpoint
+wait_for_server() {
+  local max_attempts=30
+  local attempt=0
+
+  while [ $attempt -lt $max_attempts ]; do
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.5
+  done
+
+  echo "Warning: Server did not become ready in time"
+  return 1
+}
+
+# Start server first
 echo "Starting server..."
 PROVIDER="$PROVIDER_ARG" pnpm --filter @claudeos/server dev 2>&1 &
 SERVER_PID=$!
+
+# Wait for server to be ready
+echo "Waiting for server to be ready..."
+wait_for_server
 
 echo "Starting frontend..."
 pnpm --filter @claudeos/frontend dev 2>&1 &

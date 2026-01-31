@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { OSAction } from '@claudeos/shared';
+import type { OSAction, DialogConfirmAction } from '@claudeos/shared';
 import { getAgentId } from '../agents/session.js';
 
 /**
@@ -34,6 +34,14 @@ export interface RenderingFeedback {
 }
 
 /**
+ * Dialog feedback from frontend.
+ */
+export interface DialogFeedback {
+  dialogId: string;
+  confirmed: boolean;
+}
+
+/**
  * Pending request waiting for feedback.
  */
 interface PendingRequest {
@@ -42,10 +50,19 @@ interface PendingRequest {
 }
 
 /**
+ * Pending dialog waiting for feedback.
+ */
+interface PendingDialog {
+  resolve: (confirmed: boolean) => void;
+  timeoutId: NodeJS.Timeout;
+}
+
+/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
   private pendingRequests = new Map<string, PendingRequest>();
+  private pendingDialogs = new Map<string, PendingDialog>();
   private requestCounter = 0;
 
   /**
@@ -103,6 +120,56 @@ class ActionEmitter extends EventEmitter {
       clearTimeout(pending.timeoutId);
       this.pendingRequests.delete(feedback.requestId);
       pending.resolve(feedback);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Show a confirmation dialog and wait for user response.
+   */
+  async showConfirmDialog(
+    title: string,
+    message: string,
+    confirmText: string = 'Yes',
+    cancelText: string = 'No',
+    timeoutMs: number = 60000 // 1 minute default timeout
+  ): Promise<boolean> {
+    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
+    const agentId = getAgentId();
+
+    const dialogPromise = new Promise<boolean>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingDialogs.delete(dialogId);
+        resolve(false); // Timeout - treat as cancel
+      }, timeoutMs);
+
+      this.pendingDialogs.set(dialogId, { resolve, timeoutId });
+    });
+
+    const action: DialogConfirmAction = {
+      type: 'dialog.confirm',
+      id: dialogId,
+      title,
+      message,
+      confirmText,
+      cancelText,
+    };
+
+    this.emit('action', { action: action as OSAction, sessionId: undefined, agentId } as ActionEvent);
+
+    return dialogPromise;
+  }
+
+  /**
+   * Resolve a pending dialog with feedback.
+   */
+  resolveDialogFeedback(feedback: DialogFeedback): boolean {
+    const pending = this.pendingDialogs.get(feedback.dialogId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      this.pendingDialogs.delete(feedback.dialogId);
+      pending.resolve(feedback.confirmed);
       return true;
     }
     return false;

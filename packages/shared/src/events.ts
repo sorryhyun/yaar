@@ -64,6 +64,12 @@ export interface ComponentActionEvent {
   componentPath?: string[]; // Path through component tree (e.g., ["Card:Settings", "Form:config", "Button:Save"])
 }
 
+export interface DialogFeedbackEvent {
+  type: 'DIALOG_FEEDBACK';
+  dialogId: string;
+  confirmed: boolean;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -71,7 +77,8 @@ export type ClientEvent =
   | InterruptAgentEvent
   | SetProviderEvent
   | RenderingFeedbackEvent
-  | ComponentActionEvent;
+  | ComponentActionEvent
+  | DialogFeedbackEvent;
 
 // ============ Server → Client Events ============
 

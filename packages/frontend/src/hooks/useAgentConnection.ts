@@ -285,6 +285,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: 'WINDOW_MESSAGE', messageId, windowId, content })
   }, [send, generateMessageId])
 
+  // Send dialog feedback
+  const sendDialogFeedback = useCallback((dialogId: string, confirmed: boolean) => {
+    send({ type: 'DIALOG_FEEDBACK', dialogId, confirmed })
+  }, [send])
+
   // Send component action (button click) to agent
   const sendComponentAction = useCallback((
     windowId: string,
@@ -388,6 +393,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     sendMessage,
     sendWindowMessage,
     sendComponentAction,
+    sendDialogFeedback,
     interrupt,
     interruptAgent,
     setProvider,

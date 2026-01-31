@@ -117,6 +117,7 @@ const initialState: DesktopState = {
   focusedWindowId: null,
   notifications: {},
   toasts: {},
+  dialogs: {},
   connectionStatus: 'disconnected',
   connectionError: null,
   activityLog: [],
@@ -418,6 +419,20 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
           }
           break
         }
+
+        // ======== Dialog Actions ========
+
+        case 'dialog.confirm': {
+          state.dialogs[action.id] = {
+            id: action.id,
+            title: action.title,
+            message: action.message,
+            confirmText: action.confirmText ?? 'Yes',
+            cancelText: action.cancelText ?? 'No',
+            timestamp: Date.now(),
+          }
+          break
+        }
       }
     }),
 
@@ -521,6 +536,10 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         timestamp: Date.now(),
         details: notification?.title,
       })
+    }),
+
+    respondToDialog: (id, _confirmed) => set((state) => {
+      delete state.dialogs[id]
     }),
 
     addDebugEntry: (entry) => set((state) => {
@@ -673,6 +692,9 @@ export const selectToasts = (state: DesktopState & DesktopActions) =>
 
 export const selectNotifications = (state: DesktopState & DesktopActions) =>
   Object.values(state.notifications)
+
+export const selectDialogs = (state: DesktopState & DesktopActions) =>
+  Object.values(state.dialogs)
 
 export const selectActiveAgents = (state: DesktopState & DesktopActions) =>
   Object.values(state.activeAgents)

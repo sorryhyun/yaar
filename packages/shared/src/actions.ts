@@ -153,6 +153,17 @@ export interface ToastDismissAction {
   id: string;
 }
 
+// ============ Dialog Actions ============
+
+export interface DialogConfirmAction {
+  type: 'dialog.confirm';
+  id: string;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+}
+
 // ============ Union Types ============
 
 export type WindowAction =
@@ -174,7 +185,9 @@ export type NotificationAction = NotificationShowAction | NotificationDismissAct
 
 export type ToastAction = ToastShowAction | ToastDismissAction;
 
-export type OSAction = WindowAction | NotificationAction | ToastAction;
+export type DialogAction = DialogConfirmAction;
+
+export type OSAction = WindowAction | NotificationAction | ToastAction | DialogAction;
 
 // ============ Window Presets ============
 
@@ -188,7 +201,7 @@ export interface WindowPresetConfig {
 }
 
 export const WINDOW_PRESETS: Record<WindowPreset, WindowPresetConfig> = {
-  default: { width: 400, height: 300, x: 100, y: 100 },
+  default: { width: 500, height: 400, x: 100, y: 100 },
   info: { width: 350, height: 200, x: 150, y: 150 },
   alert: { width: 300, height: 150, x: 200, y: 200 },
   document: { width: 600, height: 500, x: 80, y: 60 },
@@ -208,6 +221,10 @@ export function isNotificationAction(action: OSAction): action is NotificationAc
 
 export function isToastAction(action: OSAction): action is ToastAction {
   return action.type.startsWith('toast.');
+}
+
+export function isDialogAction(action: OSAction): action is DialogAction {
+  return action.type.startsWith('dialog.');
 }
 
 // ============ Runtime Validation Helpers ============

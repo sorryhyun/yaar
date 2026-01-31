@@ -4,6 +4,7 @@ export {
   selectVisibleWindows,
   selectToasts,
   selectNotifications,
+  selectDialogs,
   selectActiveAgents,
   selectWindowAgents,
   selectWindowAgent,

@@ -9,6 +9,7 @@
 import { ContextPool } from './context-pool.js';
 import type { ClientEvent } from '@claudeos/shared';
 import type { ConnectionId } from '../events/broadcast-center.js';
+import { actionEmitter } from '../mcp/action-emitter.js';
 
 export class SessionManager {
   private connectionId: ConnectionId;
@@ -142,6 +143,13 @@ export class SessionManager {
           event.url,
           event.locked
         );
+        break;
+
+      case 'DIALOG_FEEDBACK':
+        actionEmitter.resolveDialogFeedback({
+          dialogId: event.dialogId,
+          confirmed: event.confirmed,
+        });
         break;
     }
   }

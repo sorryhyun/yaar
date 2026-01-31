@@ -31,6 +31,15 @@ export interface ToastModel {
   timestamp: number
 }
 
+export interface DialogModel {
+  id: string
+  title: string
+  message: string
+  confirmText: string
+  cancelText: string
+  timestamp: number
+}
+
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
 export interface ContextMenuState {
@@ -92,6 +101,9 @@ export interface DesktopState {
   notifications: Record<string, NotificationModel>
   toasts: Record<string, ToastModel>
 
+  // Confirmation dialogs
+  dialogs: Record<string, DialogModel>
+
   // Connection to AI backend
   connectionStatus: ConnectionStatus
   connectionError: string | null
@@ -147,6 +159,9 @@ export interface DesktopActions {
   // Dismissals
   dismissToast: (id: string) => void
   dismissNotification: (id: string) => void
+
+  // Dialogs
+  respondToDialog: (id: string, confirmed: boolean) => void
 
   // Debug panel
   addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void
