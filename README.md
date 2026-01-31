@@ -13,7 +13,7 @@ AI interprets your intent
        ↓
 AI emits "OS Actions" (JSON commands)
        ↓
-Frontend renders windows, toasts, content
+Frontend renders windows and content
        ↓
 You interact or ask for more
        ↓
@@ -26,7 +26,7 @@ Repeat
 ┌─────────────────────────────────────────────────────────┐
 │                      Frontend                           │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐ │
-│  │   Input     │  │   Windows   │  │  Toasts/Notifs  │ │
+│  │   Input     │  │   Windows   │  │  Notifications  │ │
 │  │   Field     │  │   Manager   │  │                 │ │
 │  └──────┬──────┘  └──────▲──────┘  └────────▲────────┘ │
 │         │                │                   │          │
@@ -57,8 +57,8 @@ Repeat
 ## Quick Start
 
 **Prerequisites:**
-- Node.js >= 18
-- pnpm >= 8
+- Node.js >= 24
+- pnpm >= 10
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 ```bash
@@ -79,11 +79,10 @@ The AI controls the UI through a simple action vocabulary:
 | Action | What it does |
 |--------|-------------|
 | `window.create` | Opens a new window with content |
-| `window.setContent` | Updates what's in a window |
+| `window.updateContent` | Updates what's in a window |
 | `window.close` | Closes a window |
 | `window.focus` | Brings a window to front |
-| `toast.show` | Shows a brief notification |
-| `notification.show` | Shows a persistent alert |
+| `notification.show` | Shows a persistent notification |
 
 ## Content Renderers
 
@@ -104,7 +103,6 @@ And the AI:
 1. Creates a window with a task list
 2. Each task has a checkbox
 3. Checking a box updates the task
-4. A toast confirms "Task completed"
 
 All without writing a todo app. The AI generates the interface on demand.
 
