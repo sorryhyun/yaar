@@ -32,8 +32,10 @@ src/
 │   ├── types.ts          # AITransport interface
 │   ├── base-transport.ts # Abstract base class
 │   ├── factory.ts        # Provider factory with auto-detection
+│   ├── warm-pool.ts      # Pre-warms providers at startup
 │   ├── claude/           # Claude Agent SDK implementation
-│   │   ├── provider.ts   # ClaudeProvider class
+│   │   ├── provider.ts   # ClaudeProvider class (query-based)
+│   │   ├── session-provider.ts  # ClaudeSessionProvider (with warmup)
 │   │   └── system-prompt.ts  # Claude-specific system prompt
 │   └── codex/            # Codex app-server implementation
 │       ├── provider.ts   # CodexProvider class
@@ -92,6 +94,7 @@ WebSocket → SessionManager.routeMessage()
 |---------|----------|---------|
 | Semaphore | `AgentLimiter` | Global agent limit with queue |
 | Pool | `ContextPool` | Unified agent reuse with dynamic roles |
+| Warm Pool | `providers/warm-pool.ts` | Pre-initialize providers at startup |
 | Context Tape | `ContextTape` | Track messages by source for injection |
 | Factory | `providers/factory.ts` | Auto-detect and create providers |
 | Observer | `actionEmitter` | Decouple tools from sessions |
@@ -105,6 +108,20 @@ WebSocket → SessionManager.routeMessage()
 - `query(prompt, options)` - Returns async iterable of StreamMessages
 - `interrupt()` - Cancel ongoing query
 - `dispose()` - Cleanup resources
+
+**Provider Warm Pool:**
+Providers are pre-initialized at server startup for faster first connection:
+- `initWarmPool()` - Called at startup, creates and warms up provider instances
+- `acquireWarmProvider()` - Gets a pre-warmed provider with session already created
+- Pool auto-replenishes in background when providers are acquired
+- Stats available via `GET /api/agents/stats` (warmPool field)
+
+**Session Warmup (Claude):**
+`ClaudeSessionProvider` sends a "ping" message at startup to pre-create a session:
+1. Establishes MCP server connection
+2. Loads system prompt into context
+3. Gets session ID for resumption
+The system prompt includes a handshake protocol: "ping" → "pong"
 
 **Adding a new provider:**
 1. Create `src/providers/<name>/provider.ts` implementing `AITransport`
@@ -129,5 +146,5 @@ Tools use `actionEmitter.emitAction()` which:
 - `GET /api/providers` - List available providers
 - `GET /api/sessions` - List sessions
 - `GET /api/sessions/:id/transcript` - Session transcript
-- `GET /api/agents/stats` - Agent pool statistics
+- `GET /api/agents/stats` - Agent pool statistics (includes warmPool stats)
 - `GET /api/storage/*` - Serve storage files

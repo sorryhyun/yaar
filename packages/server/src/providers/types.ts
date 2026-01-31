@@ -74,4 +74,20 @@ export interface AITransport {
 
   /** Clean up resources */
   dispose(): Promise<void>;
+
+  /**
+   * Optional: Pre-warm the provider by initializing a session.
+   * Providers that support this can be used for faster first response.
+   */
+  warmup?(): Promise<boolean>;
+
+  /**
+   * Optional: Check if the provider has been warmed up.
+   */
+  isWarmedUp?(): boolean;
+
+  /**
+   * Optional: Get the pre-warmed session ID.
+   */
+  getSessionId?(): string | null;
 }

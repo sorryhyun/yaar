@@ -14,7 +14,8 @@ import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 import { getAgentLimiter } from './limiter.js';
-import { getFirstAvailableProvider } from '../providers/factory.js';
+import { acquireWarmProvider } from '../providers/factory.js';
+import type { AITransport } from '../providers/types.js';
 
 /**
  * Pool configuration constants.
@@ -91,10 +92,11 @@ export class ContextPool {
 
   /**
    * Initialize the pool with the first agent.
+   * Uses warm pool for faster initialization.
    */
   async initialize(): Promise<boolean> {
-    // Check that we have a provider available
-    const provider = await getFirstAvailableProvider();
+    // Acquire a pre-warmed provider
+    const provider = await acquireWarmProvider();
     if (!provider) {
       await this.sendEvent({
         type: 'ERROR',
@@ -107,9 +109,11 @@ export class ContextPool {
     const sessionInfo = await createSession(provider.name);
     this.sharedLogger = new SessionLogger(sessionInfo);
 
-    // Create the first agent
-    const firstAgent = await this.createAgent();
+    // Create the first agent with the pre-warmed provider
+    const firstAgent = await this.createAgent(provider);
     if (!firstAgent) {
+      // Provider not used, dispose it
+      await provider.dispose();
       return false;
     }
 
@@ -119,9 +123,6 @@ export class ContextPool {
       status: 'connected',
       provider: provider.name,
     });
-
-    // Dispose the temporary provider check
-    await provider.dispose();
 
     return true;
   }
@@ -409,8 +410,9 @@ export class ContextPool {
 
   /**
    * Create a new agent in the pool.
+   * @param preWarmedProvider - Optional pre-warmed provider to use for the first agent
    */
-  private async createAgent(): Promise<PooledAgent | null> {
+  private async createAgent(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
     // Acquire global agent slot
     const limiter = getAgentLimiter();
     if (!limiter.tryAcquire()) {
@@ -428,7 +430,8 @@ export class ContextPool {
       instanceId
     );
 
-    const initialized = await session.initialize();
+    // Pass pre-warmed provider if available
+    const initialized = await session.initialize(preWarmedProvider);
     if (!initialized) {
       limiter.release();
       return null;

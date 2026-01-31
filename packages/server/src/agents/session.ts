@@ -9,8 +9,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 import type { AITransport, TransportOptions, ProviderType } from '../providers/types.js';
 import {
   createProvider,
-  getFirstAvailableProvider,
   getAvailableProviders,
+  acquireWarmProvider,
 } from '../providers/factory.js';
 import type { ServerEvent, UserInteraction } from '@claudeos/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
@@ -178,9 +178,12 @@ export class AgentSession {
 
   /**
    * Initialize with the first available transport.
+   * Uses warm pool for faster initialization.
+   * @param preWarmedProvider - Optional pre-warmed provider to use instead of acquiring new one
    */
-  async initialize(): Promise<boolean> {
-    this.provider = await getFirstAvailableProvider();
+  async initialize(preWarmedProvider?: AITransport): Promise<boolean> {
+    // Use provided provider or acquire from warm pool
+    this.provider = preWarmedProvider ?? (await acquireWarmProvider());
 
     if (!this.provider) {
       await this.sendEvent({

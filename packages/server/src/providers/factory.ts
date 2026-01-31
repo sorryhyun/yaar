@@ -127,3 +127,6 @@ export function getProviderInfo(providerType: ProviderType): ProviderInfo | unde
 export function getAllProviderInfo(): ProviderInfo[] {
   return Object.values(providerRegistry);
 }
+
+// Re-export warm pool functions for convenient access
+export { initWarmPool, acquireWarmProvider, getWarmPool } from './warm-pool.js';

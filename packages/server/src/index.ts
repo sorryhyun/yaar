@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { renderPdfPage } from './pdf/index.js';
 import { SessionManager, getAgentLimiter } from './agents/index.js';
-import { getAvailableProviders } from './providers/factory.js';
+import { getAvailableProviders, initWarmPool, getWarmPool } from './providers/factory.js';
 import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest } from './mcp/server.js';
@@ -257,10 +257,12 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/api/agents/stats' && req.method === 'GET') {
     const limiterStats = getAgentLimiter().getStats();
     const broadcastStats = getBroadcastCenter().getStats();
+    const warmPoolStats = getWarmPool().getStats();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       agents: limiterStats,
       connections: broadcastStats,
+      warmPool: warmPoolStats,
     }));
     return;
   }
@@ -415,6 +417,13 @@ async function startup() {
   await ensureStorageDir();
   await initMcpServer();
 
+  // Pre-warm provider pool for faster first connection
+  const warmPoolReady = await initWarmPool();
+  if (warmPoolReady) {
+    const stats = getWarmPool().getStats();
+    console.log(`Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`);
+  }
+
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`ClaudeOS server running at http://127.0.0.1:${PORT}`);
     console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
@@ -425,8 +434,12 @@ async function startup() {
 startup();
 
 // Graceful shutdown
-function shutdown() {
+async function shutdown() {
   console.log('\nShutting down...');
+
+  // Clean up warm pool
+  await getWarmPool().cleanup();
+
   wss.close(() => {
     server.close(() => {
       process.exit(0);
@@ -436,5 +449,13 @@ function shutdown() {
   setTimeout(() => process.exit(0), 2000);
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+// Wrap shutdown for signal handlers
+function handleShutdown() {
+  shutdown().catch((err) => {
+    console.error('Shutdown error:', err);
+    process.exit(1);
+  });
+}
+
+process.on('SIGINT', handleShutdown);
+process.on('SIGTERM', handleShutdown);

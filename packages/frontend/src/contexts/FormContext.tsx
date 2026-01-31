@@ -4,7 +4,7 @@
  * Forms collect data locally without sending to the AI until a button
  * with submitForm is clicked.
  */
-import { createContext, useContext, useCallback, useRef } from 'react'
+import { createContext, useContext, useCallback, useRef, useEffect } from 'react'
 
 export type FormValue = string | number | boolean
 
@@ -93,13 +93,14 @@ export function useFormField(formId: string | undefined, fieldName: string, init
     }
   }, [formId, fieldName, formContext])
 
-  // Always register field with its initial value on mount
-  // This ensures all fields appear in form data even if user hasn't typed
-  const initialized = useRef(false)
-  if (!initialized.current && formId && formContext) {
-    formContext.setFieldValue(formId, fieldName, initialValue)
-    initialized.current = true
-  }
+  // Register field with initial value on mount using useEffect.
+  // This handles React Strict Mode correctly - the effect runs after mount
+  // and re-runs if the component is remounted (after form data was cleared).
+  useEffect(() => {
+    if (formId && formContext) {
+      formContext.setFieldValue(formId, fieldName, initialValue)
+    }
+  }, [formId, fieldName, initialValue, formContext])
 
   return { setValue }
 }
