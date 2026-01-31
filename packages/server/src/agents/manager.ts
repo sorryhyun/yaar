@@ -13,6 +13,8 @@ import type { ConnectionId } from '../events/broadcast-center.js';
 export class SessionManager {
   private connectionId: ConnectionId;
   private pool: ContextPool | null = null;
+  private initPromise: Promise<boolean> | null = null;
+  private initialized = false;
 
   constructor(connectionId: ConnectionId) {
     this.connectionId = connectionId;
@@ -20,16 +22,52 @@ export class SessionManager {
 
   /**
    * Initialize the context pool.
+   * This is now a no-op - actual initialization happens lazily on first message.
    */
   async initialize(): Promise<boolean> {
+    // Just return true - actual init happens on first message
+    return true;
+  }
+
+  /**
+   * Ensure the pool is initialized (lazy initialization).
+   */
+  private async ensureInitialized(): Promise<boolean> {
+    if (this.initialized) {
+      return true;
+    }
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = this.doInitialize();
+    const result = await this.initPromise;
+    this.initPromise = null;
+    return result;
+  }
+
+  private async doInitialize(): Promise<boolean> {
+    console.log(`[SessionManager] Lazy initializing pool for ${this.connectionId}`);
     this.pool = new ContextPool(this.connectionId);
-    return await this.pool.initialize();
+    const success = await this.pool.initialize();
+    this.initialized = success;
+    return success;
   }
 
   /**
    * Route incoming messages to the appropriate handler.
    */
   async routeMessage(event: ClientEvent): Promise<void> {
+    // Lazy initialize on first message that needs the pool
+    if (!this.initialized && (event.type === 'USER_MESSAGE' || event.type === 'WINDOW_MESSAGE' || event.type === 'COMPONENT_ACTION')) {
+      const success = await this.ensureInitialized();
+      if (!success) {
+        console.error('[SessionManager] Failed to initialize pool');
+        return;
+      }
+    }
+
     switch (event.type) {
       case 'USER_MESSAGE':
         await this.pool?.handleTask({

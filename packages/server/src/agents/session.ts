@@ -275,6 +275,7 @@ export class AgentSession {
       if (this.hasSentFirstMessage && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
+      console.log(`[AgentSession] ${role} sessionIdToUse: ${sessionIdToUse}, hasSentFirstMessage: ${this.hasSentFirstMessage}, this.sessionId: ${this.sessionId}`);
 
       const transportOptions: TransportOptions = {
         systemPrompt: this.provider!.systemPrompt,

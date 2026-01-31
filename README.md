@@ -122,6 +122,8 @@ But the AI is the "kernel" — it decides what runs, what shows, and how things 
 
 ```
 claudeos/
+├── apps/              # Convention-based apps (each folder = one app)
+│   └── moltbook/      # Example: Moltbook social network integration
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events)
 │   ├── server/        # TypeScript WebSocket server
@@ -130,10 +132,51 @@ claudeos/
 
 See [CLAUDE.md](./CLAUDE.md) for detailed development instructions.
 
+## Apps System
+
+ClaudeOS supports **convention-based apps**. Each folder in `apps/` automatically becomes a desktop icon.
+
+### How It Works
+
+```
+User clicks app icon (e.g., "Moltbook")
+       ↓
+Frontend sends "user clicked app: moltbook"
+       ↓
+AI loads apps/moltbook/SKILL.md
+       ↓
+AI uses skill instructions to help user
+       ↓
+(Register, post, browse feed, etc.)
+```
+
+### Creating an App
+
+1. Create a folder: `apps/myapp/`
+2. Add `SKILL.md` with instructions for the AI:
+   - What the app does
+   - API endpoints and authentication
+   - Example workflows
+
+```markdown
+# MyApp
+
+Description of what this app does.
+
+## Authentication
+How to authenticate with the API.
+
+## API Endpoints
+Available endpoints and how to use them.
+
+## Example Workflows
+Step-by-step guides for common tasks.
+```
+
+3. Credentials are stored in `credentials.json` (git-ignored for security)
+
 ## Future Directions
 
 - More content renderers (charts, code editor, forms)
-- Tool system (web search, file ops)
-- MCP server integration
-- Session persistence
+- More app integrations
 - Multi-window workspaces

@@ -18,6 +18,7 @@ import { getAvailableProviders, initWarmPool, getWarmPool } from './providers/fa
 import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest } from './mcp/server.js';
+import { listApps } from './mcp/tools/apps.js';
 import type { ClientEvent } from '@claudeos/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
@@ -129,6 +130,19 @@ const server = createServer(async (req, res) => {
     const providers = await getAvailableProviders();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ providers }));
+    return;
+  }
+
+  // List available apps
+  if (url.pathname === '/api/apps' && req.method === 'GET') {
+    try {
+      const apps = await listApps();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ apps }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to list apps' }));
+    }
     return;
   }
 
@@ -389,16 +403,12 @@ wss.on('connection', async (ws: WebSocket) => {
     console.error('WebSocket error:', err);
   });
 
-  // Initialize main session (async)
-  const initSuccess = await manager.initialize();
-  if (!initSuccess) {
-    broadcastCenter.unsubscribe(connectionId);
-    ws.close(1011, 'No provider available');
-    return;
-  }
-
-  // Mark as initialized and process any queued messages
+  // Mark as initialized immediately - pool initialization is lazy (on first message)
+  // This avoids wasting warm providers on connections that disconnect before sending messages
   initialized = true;
+
+  // Initialize manager (no-op, actual pool init is lazy)
+  await manager.initialize();
 
   if (earlyMessageQueue.length > 0) {
     console.log(`Processing ${earlyMessageQueue.length} queued message(s)`);

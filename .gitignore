@@ -36,3 +36,6 @@ storage/
 bundled/*.js
 bundled/*.css
 !bundled/.gitkeep
+
+# App credentials (sensitive data)
+apps/*/credentials.json

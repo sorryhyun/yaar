@@ -6,7 +6,7 @@
  * - Background styling
  * - Contains all windows
  */
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useDesktopStore } from '@/store'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext'
@@ -18,6 +18,20 @@ import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
 import styles from '@/styles/DesktopSurface.module.css'
 
+/** App info from /api/apps endpoint */
+interface AppInfo {
+  id: string
+  name: string
+  hasSkill: boolean
+  hasCredentials: boolean
+}
+
+/** Map app IDs to emoji icons (fallback to default) */
+const APP_ICONS: Record<string, string> = {
+  moltbook: '📱',
+  default: '📦',
+}
+
 export function DesktopSurface() {
   const connectionStatus = useDesktopStore(s => s.connectionStatus)
   const providerType = useDesktopStore(s => s.providerType)
@@ -27,6 +41,24 @@ export function DesktopSurface() {
   const windowAgents = useDesktopStore(s => s.windowAgents)
   const activeAgents = useDesktopStore(s => s.activeAgents)
   const { sendMessage, sendWindowMessage, sendComponentAction } = useAgentConnection({ autoConnect: false })
+
+  const [apps, setApps] = useState<AppInfo[]>([])
+
+  // Fetch available apps on mount
+  useEffect(() => {
+    async function fetchApps() {
+      try {
+        const response = await fetch('/api/apps')
+        if (response.ok) {
+          const data = await response.json()
+          setApps(data.apps || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch apps:', err)
+      }
+    }
+    fetchApps()
+  }, [])
 
   const agentList = Object.values(activeAgents)
 
@@ -49,6 +81,10 @@ export function DesktopSurface() {
 
   const handleStorageClick = useCallback(() => {
     sendMessage('user clicked storage')
+  }, [sendMessage])
+
+  const handleAppClick = useCallback((appId: string) => {
+    sendMessage(`user clicked app: ${appId}`)
   }, [sendMessage])
 
   return (
@@ -82,6 +118,19 @@ export function DesktopSurface() {
           <span className={styles.iconImage}>🗄️</span>
           <span className={styles.iconLabel}>Storage</span>
         </button>
+        {/* Dynamic app icons */}
+        {apps.map((app) => (
+          <button
+            key={app.id}
+            className={styles.desktopIcon}
+            onClick={() => handleAppClick(app.id)}
+          >
+            <span className={styles.iconImage}>
+              {APP_ICONS[app.id] || APP_ICONS.default}
+            </span>
+            <span className={styles.iconLabel}>{app.name}</span>
+          </button>
+        ))}
       </div>
 
       {/* Window container */}

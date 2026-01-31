@@ -148,6 +148,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     // Determine which session to resume
     // Priority: options.sessionId > this.sessionId (warmed up)
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
+    console.log(`[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`);
 
     const sdkOptions = this.getSDKOptions(resumeSession);
 

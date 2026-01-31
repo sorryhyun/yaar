@@ -40,6 +40,10 @@ pnpm --filter @claudeos/frontend vitest run  # Run frontend tests
 
 ```
 claudeos/
+├── apps/                        # Convention-based apps (each folder = one app)
+│   └── moltbook/
+│       ├── SKILL.md             # Instructions for AI on how to use this app
+│       └── credentials.json     # (git-ignored) API credentials
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events)
 │   ├── server/        # TypeScript WebSocket server
@@ -74,3 +78,44 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 
 - All packages: TypeScript strict mode
 - Frontend: path alias `@/` → `src/`
+
+## Apps System
+
+ClaudeOS has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically.
+
+### How It Works
+
+1. **Frontend startup**: Calls `GET /api/apps` to list apps
+2. **Desktop renders**: Shows one icon per app folder
+3. **User clicks icon**: Sends `"user clicked app: {appId}"`
+4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
+5. **AI responds**: Uses skill instructions to help user
+
+### Creating a New App
+
+1. Create folder: `apps/myapp/`
+2. Create `SKILL.md` with:
+   - App description
+   - API endpoints and authentication
+   - Available actions
+   - Example workflows
+3. (Optional) Store credentials in `credentials.json` (git-ignored)
+
+### Apps Tools (MCP)
+
+| Tool | Description |
+|------|-------------|
+| `apps_list` | List all available apps |
+| `apps_load_skill` | Load SKILL.md for an app |
+| `apps_read_config` | Read config file (default: credentials.json) |
+| `apps_write_config` | Write config file |
+
+### Example: Moltbook App
+
+```
+apps/moltbook/
+├── SKILL.md           # API docs, auth flow, example usage
+└── credentials.json   # { "api_key": "moltbook_xxx" }
+```
+
+When user clicks the Moltbook icon, the AI loads `SKILL.md` and can then help with registration, posting, viewing feed, etc.
