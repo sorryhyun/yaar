@@ -37,30 +37,14 @@ cleanup() {
 
 trap cleanup INT TERM
 
-# Start server in new process group
+# Enable job control for process groups
+set -m
+
+# Start server and frontend in parallel
 echo "Starting server..."
-set -m  # Enable job control for process groups
 PROVIDER="$PROVIDER_ARG" pnpm --filter @claudeos/server dev 2>&1 &
 SERVER_PID=$!
 
-# Wait for server to be ready (poll health endpoint)
-echo "Waiting for server to be ready..."
-MAX_WAIT=30
-WAITED=0
-while [ $WAITED -lt $MAX_WAIT ]; do
-  if curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; then
-    echo "Server is ready!"
-    break
-  fi
-  sleep 1
-  WAITED=$((WAITED + 1))
-done
-
-if [ $WAITED -ge $MAX_WAIT ]; then
-  echo "Warning: Server did not respond within ${MAX_WAIT}s, starting frontend anyway..."
-fi
-
-# Start frontend in new process group
 echo "Starting frontend..."
 pnpm --filter @claudeos/frontend dev 2>&1 &
 FRONTEND_PID=$!

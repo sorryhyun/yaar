@@ -193,6 +193,17 @@ export class AgentSession {
       return false;
     }
 
+    // Copy session ID from pre-warmed provider if available
+    // This ensures we resume the warmed session instead of creating a new one
+    if (!this.sessionId && this.provider.getSessionId) {
+      const warmSessionId = this.provider.getSessionId();
+      if (warmSessionId) {
+        this.sessionId = warmSessionId;
+        this.hasSentFirstMessage = true; // Mark as having sent first message (the warmup ping)
+        console.log(`[AgentSession] Using pre-warmed session: ${warmSessionId}`);
+      }
+    }
+
     // Create session logger only if not using a shared one
     if (!this.sessionLogger) {
       const sessionInfo = await createSession(this.provider.name);

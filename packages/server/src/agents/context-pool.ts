@@ -117,11 +117,14 @@ export class ContextPool {
       return false;
     }
 
-    // Send connection status
+    // Send connection status with session info
+    // Note: The initial CONNECTION_STATUS was already sent on WebSocket connect
+    // This update provides the sessionId after pool initialization
     await this.sendEvent({
       type: 'CONNECTION_STATUS',
       status: 'connected',
       provider: provider.name,
+      sessionId: provider.getSessionId?.() ?? undefined,
     });
 
     return true;

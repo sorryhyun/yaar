@@ -19,7 +19,7 @@ import { listSessions, readSessionTranscript, readSessionMessages, parseSessionM
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest } from './mcp/server.js';
 import { listApps } from './mcp/tools/apps.js';
-import type { ClientEvent } from '@claudeos/shared';
+import type { ClientEvent, ServerEvent } from '@claudeos/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
 // Detect if running as bundled executable
@@ -409,6 +409,15 @@ wss.on('connection', async (ws: WebSocket) => {
 
   // Initialize manager (no-op, actual pool init is lazy)
   await manager.initialize();
+
+  // Send ready status immediately so frontend knows the connection is established
+  // The actual provider info will be sent when the pool initializes on first message
+  const readyEvent: ServerEvent = {
+    type: 'CONNECTION_STATUS',
+    status: 'connected',
+    provider: getWarmPool().getPreferredProvider() ?? 'claude',
+  };
+  ws.send(JSON.stringify(readyEvent));
 
   if (earlyMessageQueue.length > 0) {
     console.log(`Processing ${earlyMessageQueue.length} queued message(s)`);
