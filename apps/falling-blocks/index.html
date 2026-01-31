@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Falling Blocks</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body>
+  <script type="module">
+// ../../../sandbox/1769867068128/src/main.ts
+var COLS = 10;
+var ROWS = 20;
+var N = 4;
+var COLORS = [
+  "#000000",
+  "#00D7FF",
+  // I
+  "#2F6BFF",
+  // J
+  "#FF9E2C",
+  // L
+  "#FFE04A",
+  // O
+  "#58E05E",
+  // S
+  "#B35CFF",
+  // T
+  "#FF4C68"
+  // Z
+];
+var SHAPES = {
+  I: [
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  J: [
+    [2, 0, 0, 0],
+    [2, 2, 2, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  L: [
+    [0, 0, 3, 0],
+    [3, 3, 3, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  O: [
+    [0, 4, 4, 0],
+    [0, 4, 4, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  S: [
+    [0, 5, 5, 0],
+    [5, 5, 0, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  T: [
+    [0, 6, 0, 0],
+    [6, 6, 6, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  Z: [
+    [7, 7, 0, 0],
+    [0, 7, 7, 0],
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ]
+};
+function cloneMatrix(m) {
+  return m.map((row) => row.slice());
+}
+function rotateCW(m) {
+  const res = Array.from({ length: N }, () => Array(N).fill(0));
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      res[x][N - 1 - y] = m[y][x];
+    }
+  }
+  return res;
+}
+function makeBoard() {
+  return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+}
+var TYPES = ["I", "J", "L", "O", "S", "T", "Z"];
+var bag = [];
+function nextType() {
+  if (bag.length === 0) {
+    bag = TYPES.slice();
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+function spawn(type) {
+  return {
+    type,
+    m: cloneMatrix(SHAPES[type]),
+    x: Math.floor(COLS / 2) - 2,
+    y: -1
+  };
+}
+function collides(board2, piece, dx = 0, dy = 0, testM) {
+  const m = testM ?? piece.m;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const v = m[y][x];
+      if (!v) continue;
+      const bx = piece.x + x + dx;
+      const by = piece.y + y + dy;
+      if (bx < 0 || bx >= COLS) return true;
+      if (by >= ROWS) return true;
+      if (by >= 0 && board2[by][bx]) return true;
+    }
+  }
+  return false;
+}
+function merge(board2, piece) {
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const v = piece.m[y][x];
+      if (!v) continue;
+      const bx = piece.x + x;
+      const by = piece.y + y;
+      if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS) {
+        board2[by][bx] = v;
+      }
+    }
+  }
+}
+function clearLines(board2) {
+  let cleared = 0;
+  for (let y = ROWS - 1; y >= 0; y--) {
+    if (board2[y].every((v) => v !== 0)) {
+      board2.splice(y, 1);
+      board2.unshift(Array(COLS).fill(0));
+      cleared++;
+      y++;
+    }
+  }
+  return cleared;
+}
+function computeDropInterval(level2) {
+  return Math.max(90, 800 - level2 * 60);
+}
+function pointsForLines(lines2, level2) {
+  const base = [0, 100, 300, 500, 800][lines2] ?? lines2 * 200;
+  return base * (level2 + 1);
+}
+var style = document.createElement("style");
+style.textContent = `
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: radial-gradient(1200px 900px at 20% 0%, #1b2440 0%, #0b0f1a 55%, #070910 100%);
+    color: #e9eefc;
+    display: grid;
+    place-items: center;
+  }
+  #app {
+    display: flex;
+    gap: 16px;
+    padding: 18px;
+    border-radius: 18px;
+    background: rgba(10, 13, 25, 0.7);
+    box-shadow: 0 10px 35px rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+  }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 210px;
+  }
+  .title {
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    font-size: 18px;
+  }
+  .card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 12px;
+  }
+  .stat {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    font-size: 14px;
+    opacity: 0.95;
+  }
+  .stat b { font-variant-numeric: tabular-nums; }
+  .help {
+    font-size: 12px;
+    line-height: 1.35;
+    opacity: 0.85;
+  }
+  canvas {
+    image-rendering: pixelated;
+    background: rgba(0,0,0,0.35);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .miniWrap { display: flex; gap: 10px; }
+  .miniCol { display:flex; flex-direction: column; gap: 8px; }
+  .miniLabel { font-size: 12px; opacity: 0.85; }
+  .btnRow { display:flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.06);
+    color: #e9eefc;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  button:hover { background: rgba(255,255,255,0.10); }
+  button:active { transform: translateY(1px); }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+  .overlayBox {
+    pointer-events: none;
+    text-align: center;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.10);
+    max-width: 320px;
+  }
+  .overlayBox h2 { margin: 0 0 6px 0; font-size: 18px; }
+  .overlayBox p { margin: 0; font-size: 13px; opacity: 0.9; }
+`;
+document.head.appendChild(style);
+document.body.innerHTML = "";
+var app = document.createElement("div");
+app.id = "app";
+var boardWrap = document.createElement("div");
+boardWrap.style.position = "relative";
+var canvas = document.createElement("canvas");
+var ctx = canvas.getContext("2d");
+var overlay = document.createElement("div");
+overlay.className = "overlay";
+var overlayBox = document.createElement("div");
+overlayBox.className = "overlayBox";
+overlay.appendChild(overlayBox);
+boardWrap.appendChild(canvas);
+boardWrap.appendChild(overlay);
+var panel = document.createElement("div");
+panel.className = "panel";
+var title = document.createElement("div");
+title.className = "title";
+title.textContent = "Falling Blocks";
+var statsCard = document.createElement("div");
+statsCard.className = "card";
+var statScore = document.createElement("div");
+statScore.className = "stat";
+var statLines = document.createElement("div");
+statLines.className = "stat";
+var statLevel = document.createElement("div");
+statLevel.className = "stat";
+var statHi = document.createElement("div");
+statHi.className = "stat";
+statsCard.append(statScore, statHi, statLines, statLevel);
+var miniCard = document.createElement("div");
+miniCard.className = "card";
+var miniWrap = document.createElement("div");
+miniWrap.className = "miniWrap";
+function makeMini(label) {
+  const col = document.createElement("div");
+  col.className = "miniCol";
+  const lab = document.createElement("div");
+  lab.className = "miniLabel";
+  lab.textContent = label;
+  const c = document.createElement("canvas");
+  const g = c.getContext("2d");
+  col.append(lab, c);
+  return { wrap: col, c, g };
+}
+var nextMini = makeMini("Next");
+var holdMini = makeMini("Hold");
+miniWrap.append(nextMini.wrap, holdMini.wrap);
+miniCard.appendChild(miniWrap);
+var btnCard = document.createElement("div");
+btnCard.className = "card";
+var btnRow = document.createElement("div");
+btnRow.className = "btnRow";
+var btnRestart = document.createElement("button");
+btnRestart.textContent = "Restart (R)";
+var btnPause = document.createElement("button");
+btnPause.textContent = "Pause (P)";
+btnRow.append(btnRestart, btnPause);
+btnCard.appendChild(btnRow);
+var help = document.createElement("div");
+help.className = "help";
+help.textContent = "\u2190/\u2192 move \u2022 \u2191 rotate \u2022 \u2193 soft drop \u2022 Space hard drop \u2022 C hold \u2022 P pause \u2022 R restart";
+panel.append(title, statsCard, miniCard, btnCard, help);
+app.append(boardWrap, panel);
+document.body.appendChild(app);
+var board = makeBoard();
+var current = spawn(nextType());
+var next = spawn(nextType());
+var hold = null;
+var canHold = true;
+var score = 0;
+var lines = 0;
+var level = 0;
+var dropInterval = computeDropInterval(level);
+var dropAccum = 0;
+var lastTime = 0;
+var paused = false;
+var gameOver = false;
+var HI_KEY = "falling-blocks:hi";
+var hi = Number(localStorage.getItem(HI_KEY) ?? "0") || 0;
+function reset() {
+  board = makeBoard();
+  bag = [];
+  current = spawn(nextType());
+  next = spawn(nextType());
+  hold = null;
+  canHold = true;
+  score = 0;
+  lines = 0;
+  level = 0;
+  dropInterval = computeDropInterval(level);
+  dropAccum = 0;
+  paused = false;
+  gameOver = false;
+  updateOverlay();
+}
+function updateHi() {
+  if (score > hi) {
+    hi = score;
+    localStorage.setItem(HI_KEY, String(hi));
+  }
+}
+function updateStats() {
+  statScore.innerHTML = `<span>Score</span><b>${score}</b>`;
+  statHi.innerHTML = `<span>High</span><b>${hi}</b>`;
+  statLines.innerHTML = `<span>Lines</span><b>${lines}</b>`;
+  statLevel.innerHTML = `<span>Level</span><b>${level}</b>`;
+}
+function tryMove(dx, dy) {
+  if (!collides(board, current, dx, dy)) {
+    current.x += dx;
+    current.y += dy;
+    return true;
+  }
+  return false;
+}
+function lockAndAdvance() {
+  merge(board, current);
+  const cleared = clearLines(board);
+  if (cleared) {
+    lines += cleared;
+    score += pointsForLines(cleared, level);
+    const newLevel = Math.floor(lines / 10);
+    if (newLevel !== level) {
+      level = newLevel;
+      dropInterval = computeDropInterval(level);
+    }
+  }
+  updateHi();
+  current = next;
+  current.x = Math.floor(COLS / 2) - 2;
+  current.y = -1;
+  next = spawn(nextType());
+  canHold = true;
+  if (collides(board, current, 0, 0)) {
+    gameOver = true;
+  }
+}
+function softDrop() {
+  if (!tryMove(0, 1)) {
+    lockAndAdvance();
+  } else {
+    score += 1;
+    updateHi();
+  }
+}
+function hardDrop() {
+  if (gameOver || paused) return;
+  let dropped = 0;
+  while (!collides(board, current, 0, 1)) {
+    current.y++;
+    dropped++;
+  }
+  score += dropped * 2;
+  updateHi();
+  lockAndAdvance();
+}
+function holdPiece() {
+  if (!canHold || gameOver || paused) return;
+  canHold = false;
+  const curType = current.type;
+  if (hold == null) {
+    hold = curType;
+    current = next;
+    current.x = Math.floor(COLS / 2) - 2;
+    current.y = -1;
+    next = spawn(nextType());
+  } else {
+    current = spawn(hold);
+    hold = curType;
+  }
+  if (collides(board, current, 0, 0)) {
+    gameOver = true;
+  }
+}
+function rotateCurrent() {
+  if (gameOver || paused) return;
+  const rotated = rotateCW(current.m);
+  const kicks = [0, -1, 1, -2, 2];
+  for (const k of kicks) {
+    if (!collides(board, current, k, 0, rotated)) {
+      current.m = rotated;
+      current.x += k;
+      return;
+    }
+  }
+}
+function updateOverlay() {
+  if (gameOver) {
+    overlayBox.innerHTML = `<h2>Game Over</h2><p>Press R to restart.</p>`;
+    overlay.style.display = "grid";
+  } else if (paused) {
+    overlayBox.innerHTML = `<h2>Paused</h2><p>Press P to resume.</p>`;
+    overlay.style.display = "grid";
+  } else {
+    overlay.style.display = "none";
+  }
+}
+var BLOCK = 26;
+function fit() {
+  const maxH = Math.min(760, window.innerHeight - 120);
+  BLOCK = Math.max(18, Math.floor(maxH / ROWS));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = `${COLS * BLOCK}px`;
+  canvas.style.height = `${ROWS * BLOCK}px`;
+  canvas.width = Math.floor(COLS * BLOCK * dpr);
+  canvas.height = Math.floor(ROWS * BLOCK * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const miniSize = Math.floor(BLOCK * 0.9);
+  for (const { c } of [nextMini, holdMini]) {
+    c.style.width = `${miniSize * 4}px`;
+    c.style.height = `${miniSize * 4}px`;
+    c.width = Math.floor(miniSize * 4 * dpr);
+    c.height = Math.floor(miniSize * 4 * dpr);
+  }
+  nextMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  holdMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function drawCell(g, x, y, v, alpha = 1) {
+  if (!v) return;
+  g.save();
+  g.globalAlpha = alpha;
+  g.fillStyle = COLORS[v];
+  g.fillRect(x * BLOCK, y * BLOCK, BLOCK, BLOCK);
+  g.strokeStyle = "rgba(0,0,0,0.35)";
+  g.lineWidth = 1;
+  g.strokeRect(x * BLOCK + 0.5, y * BLOCK + 0.5, BLOCK - 1, BLOCK - 1);
+  g.restore();
+}
+function drawMatrix(g, m, ox, oy, alpha = 1) {
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const v = m[y][x];
+      if (!v) continue;
+      drawCell(g, ox + x, oy + y, v, alpha);
+    }
+  }
+}
+function ghostY() {
+  let y = current.y;
+  while (!collides(board, current, 0, y - current.y + 1)) {
+    y++;
+  }
+  return y;
+}
+function clearCanvas(g, w, h) {
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = "rgba(0,0,0,0.28)";
+  g.fillRect(0, 0, w, h);
+}
+function render() {
+  clearCanvas(ctx, COLS * BLOCK, ROWS * BLOCK);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  for (let x = 1; x < COLS; x++) {
+    ctx.beginPath();
+    ctx.moveTo(x * BLOCK + 0.5, 0);
+    ctx.lineTo(x * BLOCK + 0.5, ROWS * BLOCK);
+    ctx.stroke();
+  }
+  for (let y = 1; y < ROWS; y++) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * BLOCK + 0.5);
+    ctx.lineTo(COLS * BLOCK, y * BLOCK + 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const v = board[y][x];
+      if (v) drawCell(ctx, x, y, v, 1);
+    }
+  }
+  if (!gameOver) {
+    const gy = ghostY();
+    drawMatrix(ctx, current.m, current.x, gy, 0.22);
+  }
+  drawMatrix(ctx, current.m, current.x, current.y, 1);
+  const miniSize = Math.floor(BLOCK * 0.9);
+  const dpr = window.devicePixelRatio || 1;
+  nextMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  nextMini.g.clearRect(0, 0, miniSize * 4, miniSize * 4);
+  nextMini.g.fillStyle = "rgba(0,0,0,0.28)";
+  nextMini.g.fillRect(0, 0, miniSize * 4, miniSize * 4);
+  nextMini.g.save();
+  nextMini.g.scale(miniSize / BLOCK, miniSize / BLOCK);
+  drawMatrix(nextMini.g, next.m, 0, 0, 1);
+  nextMini.g.restore();
+  holdMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  holdMini.g.clearRect(0, 0, miniSize * 4, miniSize * 4);
+  holdMini.g.fillStyle = "rgba(0,0,0,0.28)";
+  holdMini.g.fillRect(0, 0, miniSize * 4, miniSize * 4);
+  if (hold) {
+    const hp = spawn(hold);
+    holdMini.g.save();
+    holdMini.g.scale(miniSize / BLOCK, miniSize / BLOCK);
+    drawMatrix(holdMini.g, hp.m, 0, 0, canHold ? 1 : 0.6);
+    holdMini.g.restore();
+  }
+  updateStats();
+  updateOverlay();
+}
+function step(time) {
+  const dt = time - lastTime;
+  lastTime = time;
+  if (!paused && !gameOver) {
+    dropAccum += dt;
+    if (dropAccum >= dropInterval) {
+      dropAccum = 0;
+      if (!tryMove(0, 1)) {
+        lockAndAdvance();
+      }
+    }
+  }
+  render();
+  requestAnimationFrame(step);
+}
+function togglePause() {
+  if (gameOver) return;
+  paused = !paused;
+  updateOverlay();
+}
+btnRestart.onclick = () => reset();
+btnPause.onclick = () => togglePause();
+window.addEventListener("keydown", (e) => {
+  const key = e.key;
+  if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", " "].includes(key)) e.preventDefault();
+  if (key === "r" || key === "R") {
+    reset();
+    return;
+  }
+  if (key === "p" || key === "P") {
+    togglePause();
+    return;
+  }
+  if (paused || gameOver) return;
+  if (key === "ArrowLeft") {
+    tryMove(-1, 0);
+  } else if (key === "ArrowRight") {
+    tryMove(1, 0);
+  } else if (key === "ArrowDown") {
+    softDrop();
+  } else if (key === "ArrowUp") {
+    rotateCurrent();
+  } else if (key === " ") {
+    hardDrop();
+  } else if (key === "c" || key === "C") {
+    holdPiece();
+  }
+});
+window.addEventListener("resize", () => {
+  fit();
+});
+fit();
+updateStats();
+updateOverlay();
+requestAnimationFrame(step);
+
+  </script>
+</body>
+</html>

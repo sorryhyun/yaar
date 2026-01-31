@@ -281,6 +281,76 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Serve sandbox files (for previewing compiled apps)
+  // URL format: /api/sandbox/{sandboxId}/{path}
+  const sandboxMatch = url.pathname.match(/^\/api\/sandbox\/(\d+)\/(.+)$/);
+  if (sandboxMatch && req.method === 'GET') {
+    const sandboxId = sandboxMatch[1];
+    const filePath = decodeURIComponent(sandboxMatch[2]);
+
+    const sandboxDir = join(PROJECT_ROOT, 'sandbox', sandboxId);
+    const normalizedPath = normalize(join(sandboxDir, filePath));
+    const relativePath = relative(sandboxDir, normalizedPath);
+
+    // Validate path to prevent directory traversal
+    if (relativePath.startsWith('..') || relativePath.includes('..')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access denied' }));
+      return;
+    }
+
+    try {
+      const content = await readFile(normalizedPath);
+      const ext = extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'no-cache'  // No caching for dev sandbox
+      });
+      res.end(content);
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+    }
+    return;
+  }
+
+  // Serve app static files (for deployed apps)
+  // URL format: /api/apps/{appId}/static/{path}
+  const appStaticMatch = url.pathname.match(/^\/api\/apps\/([a-z][a-z0-9-]*)\/static\/(.+)$/);
+  if (appStaticMatch && req.method === 'GET') {
+    const appId = appStaticMatch[1];
+    const filePath = decodeURIComponent(appStaticMatch[2]);
+
+    const appsDir = join(PROJECT_ROOT, 'apps', appId);
+    const normalizedPath = normalize(join(appsDir, filePath));
+    const relativePath = relative(appsDir, normalizedPath);
+
+    // Validate path to prevent directory traversal
+    if (relativePath.startsWith('..') || relativePath.includes('..')) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Access denied' }));
+      return;
+    }
+
+    try {
+      const content = await readFile(normalizedPath);
+      const ext = extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600'
+      });
+      res.end(content);
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+    }
+    return;
+  }
+
   // Serve storage files
   if (url.pathname.startsWith('/api/storage/') && req.method === 'GET') {
     const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));

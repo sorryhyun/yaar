@@ -22,8 +22,10 @@ const APPS_DIR = join(PROJECT_ROOT, 'apps');
 export interface AppInfo {
   id: string;
   name: string;
+  icon?: string;
   hasSkill: boolean;
   hasCredentials: boolean;
+  isCompiled?: boolean;  // Has index.html (TypeScript compiled app)
 }
 
 /**
@@ -58,8 +60,29 @@ export async function listApps(): Promise<AppInfo[]> {
         // File doesn't exist
       }
 
-      // Convert kebab-case or snake_case to Title Case
-      const name = appId
+      // Check for compiled app (index.html)
+      let isCompiled = false;
+      try {
+        await stat(join(appPath, 'index.html'));
+        isCompiled = true;
+      } catch {
+        // File doesn't exist
+      }
+
+      // Check for app.json metadata
+      let icon: string | undefined;
+      let displayName: string | undefined;
+      try {
+        const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
+        const meta = JSON.parse(metaContent);
+        icon = meta.icon;
+        displayName = meta.name;
+      } catch {
+        // No metadata or invalid JSON
+      }
+
+      // Convert kebab-case or snake_case to Title Case (fallback)
+      const name = displayName ?? appId
         .split(/[-_]/)
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
@@ -67,8 +90,10 @@ export async function listApps(): Promise<AppInfo[]> {
       apps.push({
         id: appId,
         name,
+        icon,
         hasSkill,
         hasCredentials,
+        isCompiled,
       });
     }
 

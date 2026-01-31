@@ -39,3 +39,6 @@ bundled/*.css
 
 # App credentials (sensitive data)
 apps/*/credentials.json
+
+# Sandbox (temporary app development)
+sandbox/

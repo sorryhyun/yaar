@@ -8,12 +8,14 @@ import { registerWindowTools } from './window.js';
 import { registerStorageTools } from './storage.js';
 import { registerAppsTools } from './apps.js';
 import { registerHttpTools } from './http.js';
+import { registerAppDevTools } from './app-dev.js';
 
 export { registerSystemTools } from './system.js';
 export { registerWindowTools } from './window.js';
 export { registerStorageTools } from './storage.js';
 export { registerAppsTools } from './apps.js';
 export { registerHttpTools } from './http.js';
+export { registerAppDevTools } from './app-dev.js';
 
 /**
  * Register all ClaudeOS tools on the MCP server.
@@ -24,6 +26,7 @@ export function registerAllTools(server: McpServer): void {
   registerStorageTools(server);
   registerAppsTools(server);
   registerHttpTools(server);
+  registerAppDevTools(server);
 }
 
 /**
@@ -59,6 +62,10 @@ export function getToolNames(): string[] {
     'mcp__claudeos__apps_load_skill',
     'mcp__claudeos__apps_read_config',
     'mcp__claudeos__apps_write_config',
+    // App development tools
+    'mcp__claudeos__app_write_ts',
+    'mcp__claudeos__app_compile',
+    'mcp__claudeos__app_deploy',
     // HTTP tools (curl-based)
     'mcp__claudeos__request_allowing_domain',
     'mcp__claudeos__http_get',

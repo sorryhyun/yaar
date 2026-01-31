@@ -9,6 +9,58 @@ import { ContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
 import styles from '@/styles/WindowFrame.module.css'
 
+function exportContent(content: WindowModel['content'], title: string) {
+  const { renderer, data } = content
+  let blob: Blob
+  let filename: string
+
+  switch (renderer) {
+    case 'markdown':
+    case 'text':
+      blob = new Blob([String(data)], { type: 'text/plain' })
+      filename = `${title}.${renderer === 'markdown' ? 'md' : 'txt'}`
+      break
+    case 'html':
+      blob = new Blob([String(data)], { type: 'text/html' })
+      filename = `${title}.html`
+      break
+    case 'table': {
+      const tableData = data as { headers?: string[]; rows?: unknown[][] }
+      if (tableData.headers && tableData.rows) {
+        const csv = [
+          tableData.headers.join(','),
+          ...tableData.rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        ].join('\n')
+        blob = new Blob([csv], { type: 'text/csv' })
+        filename = `${title}.csv`
+      } else {
+        blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+        filename = `${title}.json`
+      }
+      break
+    }
+    case 'iframe': {
+      const iframeData = data as { url?: string } | string
+      const url = typeof iframeData === 'string' ? iframeData : iframeData?.url
+      blob = new Blob([url || ''], { type: 'text/plain' })
+      filename = `${title}-url.txt`
+      break
+    }
+    default:
+      blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      filename = `${title}.json`
+  }
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename.replace(/[/\\?%*:|"<>]/g, '-')
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 interface WindowFrameProps {
   window: WindowModel
   zIndex: number
@@ -136,6 +188,14 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           )}
         </div>
         <div className={styles.controls}>
+          <button
+            className={styles.controlBtn}
+            data-action="export"
+            title="Export content"
+            onClick={() => exportContent(window.content, window.title)}
+          >
+            ↓
+          </button>
           <button
             className={styles.controlBtn}
             data-action="minimize"

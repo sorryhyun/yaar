@@ -15,9 +15,24 @@ interface IframeRendererProps {
 
 type LoadState = 'loading' | 'loaded' | 'error'
 
+// Check if URL is same-origin (relative path or same host)
+function isSameOrigin(url: string): boolean {
+  // Relative paths are always same-origin
+  if (url.startsWith('/')) return true
+  try {
+    const parsed = new URL(url, window.location.origin)
+    return parsed.origin === window.location.origin
+  } catch {
+    return false
+  }
+}
+
 export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
   const url = typeof data === 'string' ? data : data.url
-  const sandbox = typeof data === 'object' ? data.sandbox : 'allow-scripts allow-same-origin allow-forms'
+  const customSandbox = typeof data === 'object' ? data.sandbox : undefined
+  // For same-origin content (local apps), don't sandbox - it's trusted
+  // For cross-origin, apply sandbox to prevent escape attacks
+  const sandbox = customSandbox ?? (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms')
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [loadState, setLoadState] = useState<LoadState>('loading')
@@ -32,17 +47,25 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
     onRenderError?.(message, url)
   }, [onRenderError, url])
 
+  // Reset state when URL changes
   useEffect(() => {
-    // Reset state when URL changes
     setLoadState('loading')
     setErrorMessage('')
     reportedRef.current = false
+  }, [url])
 
-    // Listen for CSP violations at document level
+  // Listen for CSP violations and handle timeout fallback
+  useEffect(() => {
     const handleSecurityViolation = (e: SecurityPolicyViolationEvent) => {
       // Check if this violation is related to our iframe
-      if (e.blockedURI && url.includes(new URL(e.blockedURI).hostname)) {
-        reportError(`Site blocked iframe embedding (CSP: ${e.violatedDirective})`)
+      if (e.blockedURI) {
+        try {
+          if (url.includes(new URL(e.blockedURI).hostname)) {
+            reportError(`Site blocked iframe embedding (CSP: ${e.violatedDirective})`)
+          }
+        } catch {
+          // Invalid URL in blockedURI, ignore
+        }
       }
     }
 
@@ -50,20 +73,18 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
 
     // Fallback: If iframe hasn't loaded after timeout, assume it's blocked
     const timeoutId = setTimeout(() => {
-      if (loadState === 'loading') {
-        // Try to detect if iframe is blank by checking if we can access anything
-        const iframe = iframeRef.current
-        if (iframe) {
-          try {
-            // This will throw for cross-origin, but if iframe didn't load at all,
-            // contentWindow might be null or document might be about:blank
-            const doc = iframe.contentDocument
-            if (doc && doc.location.href === 'about:blank') {
-              reportError('Site may have blocked iframe embedding (X-Frame-Options or CSP)')
-            }
-          } catch {
-            // Cross-origin - can't check, assume it loaded if no CSP error was caught
+      // Use ref to check current state without causing re-renders
+      const iframe = iframeRef.current
+      if (iframe && !reportedRef.current) {
+        try {
+          // This will throw for cross-origin, but if iframe didn't load at all,
+          // contentWindow might be null or document might be about:blank
+          const doc = iframe.contentDocument
+          if (doc && doc.location.href === 'about:blank') {
+            reportError('Site may have blocked iframe embedding (X-Frame-Options or CSP)')
           }
+        } catch {
+          // Cross-origin - can't check, assume it loaded if no CSP error was caught
         }
       }
     }, 3000)
@@ -72,7 +93,7 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
       document.removeEventListener('securitypolicyviolation', handleSecurityViolation)
       clearTimeout(timeoutId)
     }
-  }, [url, loadState, reportError])
+  }, [url, reportError])
 
   const handleLoad = () => {
     // iframe loaded event fired - but this doesn't mean content loaded successfully
@@ -115,14 +136,20 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
       {loadState === 'loading' && (
         <div className={styles.iframeLoading}>
           <div className={styles.iframeLoadingSpinner} />
-          <span>Loading {new URL(url).hostname}...</span>
+          <span>Loading {(() => {
+            try {
+              return new URL(url, window.location.origin).hostname
+            } catch {
+              return url
+            }
+          })()}...</span>
         </div>
       )}
       <iframe
         ref={iframeRef}
         src={url}
         className={styles.iframe}
-        sandbox={sandbox}
+        {...(sandbox ? { sandbox } : {})}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         loading="lazy"
         title="Embedded content"
