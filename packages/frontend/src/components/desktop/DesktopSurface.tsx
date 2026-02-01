@@ -18,6 +18,7 @@ import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
 import { RestorePromptBanner } from '../ui/RestorePromptBanner'
+import { DrawingOverlay } from '../drawing/DrawingOverlay'
 import styles from '@/styles/DesktopSurface.module.css'
 
 /** App info from /api/apps endpoint */
@@ -224,6 +225,9 @@ export function DesktopSurface() {
           onClose={hideContextMenu}
         />
       )}
+
+      {/* Drawing overlay */}
+      <DrawingOverlay />
 
       {/* Cursor spinner when AI is thinking */}
       <CursorSpinner />

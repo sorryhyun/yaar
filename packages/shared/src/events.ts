@@ -7,11 +7,12 @@ import type { OSAction } from './actions.js';
 // ============ Client → Server Events ============
 
 export interface UserInteraction {
-  type: 'window.close' | 'window.focus' | 'window.move' | 'window.resize' | 'window.minimize' | 'window.maximize' | 'toast.dismiss' | 'notification.dismiss' | 'icon.click';
+  type: 'window.close' | 'window.focus' | 'window.move' | 'window.resize' | 'window.minimize' | 'window.maximize' | 'toast.dismiss' | 'notification.dismiss' | 'icon.click' | 'draw';
   timestamp: number;
   windowId?: string;
   windowTitle?: string;
   details?: string;
+  imageData?: string;  // Base64 PNG for drawings
 }
 
 export interface UserMessageEvent {

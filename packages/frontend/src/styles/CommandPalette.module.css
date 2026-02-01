@@ -127,3 +127,38 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Drawing indicator */
+.drawingIndicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(255, 100, 50, 0.15);
+  border: 1px solid rgba(255, 100, 50, 0.4);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: rgb(255, 130, 80);
+}
+
+.drawingIcon {
+  font-size: var(--text-lg);
+}
+
+.clearDrawingButton {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: rgb(255, 130, 80);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.clearDrawingButton:hover {
+  opacity: 1;
+}

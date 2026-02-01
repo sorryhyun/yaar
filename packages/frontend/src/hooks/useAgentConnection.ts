@@ -65,6 +65,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAllAgents,
     consumePendingFeedback,
     consumeInteractions,
+    consumeDrawing,
     registerWindowAgent,
     updateWindowAgentStatus,
     setRestorePrompt,
@@ -297,9 +298,20 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     // Don't show thinking indicator here - let server events drive the UI
     // This prevents duplicate indicators when server sends AGENT_THINKING
     const interactions = consumeInteractions()
+    const drawing = consumeDrawing()
+
+    // Add drawing interaction if present
+    if (drawing) {
+      interactions.push({
+        type: 'draw',
+        timestamp: Date.now(),
+        imageData: drawing,
+      })
+    }
+
     const messageId = generateMessageId()
     send({ type: 'USER_MESSAGE', messageId, content, interactions: interactions.length > 0 ? interactions : undefined })
-  }, [send, consumeInteractions, generateMessageId])
+  }, [send, consumeInteractions, consumeDrawing, generateMessageId])
 
   // Send message to a specific window agent
   const sendWindowMessage = useCallback((windowId: string, content: string) => {

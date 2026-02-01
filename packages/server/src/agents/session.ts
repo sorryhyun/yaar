@@ -229,18 +229,37 @@ export class AgentSession {
 
   /**
    * Format user interactions into context string.
+   * Drawings are formatted separately with their base64 image data.
    */
   private formatInteractions(interactions: UserInteraction[]): string {
     if (interactions.length === 0) return '';
 
-    const lines = interactions.map(i => {
-      let content = '';
-      if (i.windowTitle) content += `"${i.windowTitle}"`;
-      if (i.details) content += content ? ` (${i.details})` : i.details;
-      return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
-    });
+    // Separate drawings from other interactions
+    const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
+    const otherInteractions = interactions.filter(i => i.type !== 'draw');
 
-    return `<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>\n\n`;
+    const parts: string[] = [];
+
+    // Format non-drawing interactions
+    if (otherInteractions.length > 0) {
+      const lines = otherInteractions.map(i => {
+        let content = '';
+        if (i.windowTitle) content += `"${i.windowTitle}"`;
+        if (i.details) content += content ? ` (${i.details})` : i.details;
+        return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
+      });
+      parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
+    }
+
+    // Format drawings with base64 image data
+    if (drawings.length > 0) {
+      const drawingLines = drawings.map(d =>
+        `<user_interaction:draw>\n[User drawing attached as base64 PNG]\n${d.imageData}\n</user_interaction:draw>`
+      );
+      parts.push(drawingLines.join('\n'));
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
   }
 
   /**

@@ -25,6 +25,7 @@ import {
   createFeedbackSlice,
   createInteractionsSlice,
   createQueuedActionsSlice,
+  createDrawingSlice,
 } from './slices'
 
 export const useDesktopStore = create<DesktopStore>()(
@@ -41,6 +42,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createFeedbackSlice(...a),
     ...createInteractionsSlice(...a),
     ...createQueuedActionsSlice(...a),
+    ...createDrawingSlice(...a),
 
     // Action router - routes OS actions to appropriate slice handlers
     applyAction: (action: OSAction) => {

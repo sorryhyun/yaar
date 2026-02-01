@@ -1,0 +1,15 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* Enable pointer events only when actively drawing */
+.overlay[data-drawing="true"] {
+  pointer-events: auto;
+  cursor: crosshair;
+}

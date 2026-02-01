@@ -21,6 +21,8 @@ export function CommandPalette() {
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
   const activeAgents = useDesktopStore((state) => state.activeAgents)
   const applyAction = useDesktopStore((state) => state.applyAction)
+  const hasDrawing = useDesktopStore((state) => state.hasDrawing)
+  const clearDrawing = useDesktopStore((state) => state.clearDrawing)
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
@@ -55,6 +57,19 @@ export function CommandPalette() {
       {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
+        {hasDrawing && (
+          <div className={styles.drawingIndicator}>
+            <span className={styles.drawingIcon}>&#9998;</span>
+            <span>Drawing attached</span>
+            <button
+              className={styles.clearDrawingButton}
+              onClick={clearDrawing}
+              title="Clear drawing"
+            >
+              &times;
+            </button>
+          </div>
+        )}
         <div className={styles.inputWrapper}>
           <textarea
             className={styles.input}

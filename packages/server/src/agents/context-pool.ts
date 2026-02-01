@@ -209,12 +209,7 @@ export class ContextPool {
     // Record user message to context tape IMMEDIATELY so parallel tasks can see it
     // Format the full content with interactions prefix (same as session.ts does)
     const interactionPrefix = task.interactions && task.interactions.length > 0
-      ? `<previous_interactions>\n${task.interactions.map(i => {
-          let content = '';
-          if (i.windowTitle) content += `"${i.windowTitle}"`;
-          if (i.details) content += content ? ` (${i.details})` : i.details;
-          return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
-        }).join('\n')}\n</previous_interactions>\n\n`
+      ? this.formatInteractionsForContext(task.interactions)
       : '';
     const fullUserContent = interactionPrefix + task.content;
     this.contextTape.append('user', fullUserContent, 'main');
@@ -619,6 +614,41 @@ export class ContextPool {
       agentId,
       status,
     });
+  }
+
+  /**
+   * Format user interactions into context string.
+   * Drawings are formatted separately with their base64 image data.
+   */
+  private formatInteractionsForContext(interactions: UserInteraction[]): string {
+    if (interactions.length === 0) return '';
+
+    // Separate drawings from other interactions
+    const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
+    const otherInteractions = interactions.filter(i => i.type !== 'draw');
+
+    const parts: string[] = [];
+
+    // Format non-drawing interactions
+    if (otherInteractions.length > 0) {
+      const lines = otherInteractions.map(i => {
+        let content = '';
+        if (i.windowTitle) content += `"${i.windowTitle}"`;
+        if (i.details) content += content ? ` (${i.details})` : i.details;
+        return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
+      });
+      parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
+    }
+
+    // Format drawings with base64 image data
+    if (drawings.length > 0) {
+      const drawingLines = drawings.map(d =>
+        `<user_interaction:draw>\n[User drawing attached as base64 PNG]\n${d.imageData}\n</user_interaction:draw>`
+      );
+      parts.push(drawingLines.join('\n'));
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
   }
 
   /**

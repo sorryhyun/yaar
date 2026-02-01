@@ -189,6 +189,19 @@ export interface QueuedActionsSliceActions {
 
 export type QueuedActionsSlice = QueuedActionsSliceState & QueuedActionsSliceActions
 
+export interface DrawingSliceState {
+  hasDrawing: boolean
+  canvasDataUrl: string | null
+}
+
+export interface DrawingSliceActions {
+  saveDrawing: (dataUrl: string) => void
+  clearDrawing: () => void
+  consumeDrawing: () => string | null
+}
+
+export type DrawingSlice = DrawingSliceState & DrawingSliceActions
+
 // ============ Combined Store Type ============
 
 export type DesktopStore = WindowsSlice &
@@ -201,7 +214,8 @@ export type DesktopStore = WindowsSlice &
   UiSlice &
   FeedbackSlice &
   InteractionsSlice &
-  QueuedActionsSlice & {
+  QueuedActionsSlice &
+  DrawingSlice & {
     applyAction: (action: OSAction) => void
     applyActions: (actions: OSAction[]) => void
   }
