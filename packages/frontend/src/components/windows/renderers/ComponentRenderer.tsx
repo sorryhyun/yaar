@@ -102,7 +102,23 @@ function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
   }
 
   // Handle null/undefined
-  if (!node || !isComponent(node)) {
+  if (!node) {
+    return null
+  }
+
+  // Handle arrays - render as horizontal stack (common for action buttons)
+  if (Array.isArray(node)) {
+    return (
+      <div className={`${styles.stack} ${styles.stackDirHorizontal} ${styles.stackGapSm}`}>
+        {node.map((child, i) => (
+          <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
+        ))}
+      </div>
+    )
+  }
+
+  // Handle non-component objects
+  if (!isComponent(node)) {
     return null
   }
 
