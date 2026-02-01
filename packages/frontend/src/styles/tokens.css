@@ -1,0 +1,123 @@
+/**
+ * Design Tokens
+ *
+ * CSS custom properties for consistent theming across the application.
+ * Based on Catppuccin Mocha palette.
+ */
+
+:root {
+  /* === Catppuccin Mocha Colors === */
+  --color-base: #1e1e2e;
+  --color-mantle: #181825;
+  --color-surface: #313244;
+  --color-surface-hover: #45475a;
+  --color-overlay: #585b70;
+
+  /* Text colors */
+  --color-text: #cdd6f4;
+  --color-subtext: #bac2de;
+  --color-subtext-muted: #a6adc8;
+  --color-muted: #6c7086;
+
+  /* Accent colors */
+  --color-blue: #89b4fa;
+  --color-blue-hover: #b4befe;
+  --color-lavender: #b4befe;
+  --color-green: #a6e3a1;
+  --color-green-dim: rgba(166, 227, 161, 0.3);
+  --color-red: #f38ba8;
+  --color-red-hover: #f5a3b5;
+  --color-yellow: #f9e2af;
+  --color-peach: #fab387;
+  --color-pink: #f5c2e7;
+  --color-mauve: #cba6f7;
+
+  /* Semantic aliases */
+  --color-primary: var(--color-blue);
+  --color-primary-hover: var(--color-blue-hover);
+  --color-success: var(--color-green);
+  --color-danger: var(--color-red);
+  --color-danger-hover: var(--color-red-hover);
+  --color-warning: var(--color-yellow);
+  --color-info: var(--color-blue);
+
+  /* Button colors (Tailwind-like, used in renderers) */
+  --color-btn-primary: #3b82f6;
+  --color-btn-primary-hover: #2563eb;
+  --color-btn-danger: #ef4444;
+  --color-btn-danger-hover: #dc2626;
+  --color-btn-success: #22c55e;
+  --color-btn-warning: #eab308;
+
+  /* === Spacing Scale === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* === Border Radius === */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* === Shadows === */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+  /* === Borders === */
+  --border-subtle: 1px solid rgba(255, 255, 255, 0.1);
+  --border-muted: 1px solid rgba(255, 255, 255, 0.08);
+  --border-hover: 1px solid rgba(255, 255, 255, 0.15);
+  --border-strong: 1px solid rgba(255, 255, 255, 0.2);
+
+  /* === Transitions === */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* === Typography === */
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  --font-sans: system-ui, -apple-system, sans-serif;
+
+  /* Font sizes */
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 15px;
+  --text-2xl: 16px;
+  --text-3xl: 18px;
+
+  /* === Z-Index Scale === */
+  --z-window: 9000;
+  --z-panel: 9998;
+  --z-modal: 9999;
+  --z-toast: 10000;
+  --z-cursor: 99999;
+
+  /* === Opacity === */
+  --opacity-disabled: 0.5;
+  --opacity-hover: 0.95;
+
+  /* === Background Overlays === */
+  --bg-overlay-light: rgba(255, 255, 255, 0.05);
+  --bg-overlay-medium: rgba(255, 255, 255, 0.08);
+  --bg-overlay-strong: rgba(255, 255, 255, 0.1);
+  --bg-overlay-hover: rgba(255, 255, 255, 0.15);
+  --bg-dark-overlay: rgba(0, 0, 0, 0.2);
+  --bg-dark-overlay-medium: rgba(0, 0, 0, 0.3);
+  --bg-dark-overlay-strong: rgba(0, 0, 0, 0.4);
+  --bg-modal-backdrop: rgba(0, 0, 0, 0.6);
+}

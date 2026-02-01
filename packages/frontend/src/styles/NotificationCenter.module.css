@@ -1,19 +1,19 @@
 .container {
   position: fixed;
-  top: 48px;
-  right: 16px;
+  top: var(--space-12);
+  right: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  z-index: 10000;
+  gap: var(--space-2);
+  z-index: var(--z-toast);
   max-width: 320px;
 }
 
 .notification {
-  background: #313244;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  animation: slideIn 0.2s ease;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  animation: slideInRight var(--transition-normal);
   overflow: hidden;
 }
 
@@ -21,43 +21,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
-  background: #181825;
+  padding: 10px var(--space-3);
+  background: var(--color-mantle);
 }
 
 .title {
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 600;
-  color: #cdd6f4;
+  color: var(--color-text);
 }
 
 .dismiss {
   border: none;
   background: transparent;
-  color: #6c7086;
-  font-size: 18px;
+  color: var(--color-muted);
+  font-size: var(--text-3xl);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
 }
 
 .dismiss:hover {
-  color: #cdd6f4;
+  color: var(--color-text);
 }
 
 .body {
-  padding: 12px;
-  font-size: 13px;
-  color: #a6adc8;
+  padding: var(--space-3);
+  font-size: var(--text-md);
+  color: var(--color-subtext-muted);
   line-height: 1.4;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
 }

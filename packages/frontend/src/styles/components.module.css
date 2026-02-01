@@ -1,0 +1,191 @@
+/**
+ * Component Styles
+ *
+ * Styles for UI components: cards, badges, alerts, progress bars, images.
+ */
+
+/* ============ Card ============ */
+.card {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.cardDefault {
+  background: var(--bg-overlay-light);
+}
+
+.cardOutlined {
+  background: transparent;
+  border: var(--border-subtle);
+}
+
+.cardElevated {
+  background: var(--bg-overlay-medium);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.cardHeader {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cardTitle {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.cardSubtitle {
+  font-size: var(--text-md);
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.cardContent {
+  padding: var(--space-4);
+}
+
+.cardActions {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* ============ Badge ============ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-xl);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.badgeDefault {
+  background: var(--bg-overlay-strong);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.badgeSuccess {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--color-btn-success);
+}
+
+.badgeWarning {
+  background: rgba(234, 179, 8, 0.2);
+  color: var(--color-btn-warning);
+}
+
+.badgeError {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-btn-danger);
+}
+
+.badgeInfo {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--color-btn-primary);
+}
+
+/* ============ Progress ============ */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.progressLabel {
+  font-size: var(--text-base);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.progressTrack {
+  height: var(--space-2);
+  background: var(--bg-overlay-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-slow);
+}
+
+.progressDefault .progressBar {
+  background: var(--color-btn-primary);
+}
+
+.progressSuccess .progressBar {
+  background: var(--color-btn-success);
+}
+
+.progressWarning .progressBar {
+  background: var(--color-btn-warning);
+}
+
+.progressError .progressBar {
+  background: var(--color-btn-danger);
+}
+
+.progressValue {
+  font-size: var(--text-base);
+  color: rgba(255, 255, 255, 0.7);
+  text-align: right;
+}
+
+/* ============ Alert ============ */
+.alert {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border-left: 4px solid;
+}
+
+.alertInfo {
+  background: rgba(59, 130, 246, 0.1);
+  border-left-color: var(--color-btn-primary);
+}
+
+.alertSuccess {
+  background: rgba(34, 197, 94, 0.1);
+  border-left-color: var(--color-btn-success);
+}
+
+.alertWarning {
+  background: rgba(234, 179, 8, 0.1);
+  border-left-color: var(--color-btn-warning);
+}
+
+.alertError {
+  background: rgba(239, 68, 68, 0.1);
+  border-left-color: var(--color-btn-danger);
+}
+
+.alertTitle {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.alertMessage {
+  font-size: var(--text-md);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ============ Image ============ */
+.image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+/* ============ List ============ */
+.list {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+
+.listItem {
+  margin-bottom: var(--space-1);
+}

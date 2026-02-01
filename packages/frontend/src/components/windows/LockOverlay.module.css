@@ -11,34 +11,25 @@
 }
 
 .gear {
-  width: 48px;
-  height: 48px;
-  color: #89b4fa;
+  width: var(--space-12);
+  height: var(--space-12);
+  color: var(--color-blue);
   animation: spin 2s linear infinite;
 }
 
 .label {
-  margin-top: 12px;
-  font-size: 14px;
+  margin-top: var(--space-3);
+  font-size: var(--text-lg);
   font-weight: 500;
-  color: #cdd6f4;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  color: var(--color-text);
 }
 
 .queueBadge {
-  margin-top: 8px;
-  padding: 4px 10px;
-  font-size: 12px;
+  margin-top: var(--space-2);
+  padding: var(--space-1) 10px;
+  font-size: var(--text-base);
   font-weight: 500;
-  color: #1e1e2e;
-  background: #f9e2af;
-  border-radius: 12px;
+  color: var(--color-base);
+  background: var(--color-yellow);
+  border-radius: var(--radius-xl);
 }

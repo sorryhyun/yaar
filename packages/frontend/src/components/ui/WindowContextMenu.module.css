@@ -1,20 +1,20 @@
 .menu {
   position: fixed;
-  background: #1e1e2e;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px;
+  background: var(--color-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  border: var(--border-subtle);
+  padding: var(--space-3);
   min-width: 280px;
   max-width: 400px;
-  z-index: 10000;
+  z-index: var(--z-toast);
 }
 
 .header {
-  font-size: 12px;
+  font-size: var(--text-base);
   font-weight: 500;
-  color: #a6adc8;
-  margin-bottom: 8px;
+  color: var(--color-subtext-muted);
+  margin-bottom: var(--space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -22,23 +22,23 @@
 
 .inputRow {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .input {
   flex: 1;
-  background: #181825;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: #cdd6f4;
+  background: var(--color-mantle);
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-md);
+  color: var(--color-text);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .input::placeholder {
-  color: #6c7086;
+  color: var(--color-muted);
 }
 
 .input:focus {
@@ -46,22 +46,22 @@
 }
 
 .sendButton {
-  padding: 8px 16px;
-  background: #89b4fa;
-  color: #1e1e2e;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-blue);
+  color: var(--color-base);
   border: none;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .sendButton:hover:not(:disabled) {
-  background: #b4befe;
+  background: var(--color-lavender);
 }
 
 .sendButton:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }

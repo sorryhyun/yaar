@@ -1,106 +1,106 @@
 .container {
   position: fixed;
-  bottom: 24px;
+  bottom: var(--space-6);
   left: 50%;
   transform: translateX(-50%);
   width: 600px;
   max-width: calc(100vw - 48px);
-  z-index: 9998;
+  z-index: var(--z-panel);
 }
 
 .inputWrapper {
   display: flex;
-  gap: 8px;
-  background: #1e1e2e;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: var(--space-2);
+  background: var(--color-base);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-lg);
+  border: var(--border-subtle);
 }
 
 .input {
   flex: 1;
   background: transparent;
   border: none;
-  color: #cdd6f4;
-  font-size: 14px;
+  color: var(--color-text);
+  font-size: var(--text-lg);
   font-family: inherit;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   resize: none;
   outline: none;
 }
 
 .input::placeholder {
-  color: #6c7086;
+  color: var(--color-muted);
 }
 
 .input:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
 }
 
 .sendButton {
-  padding: 8px 20px;
-  background: #89b4fa;
-  color: #1e1e2e;
+  padding: var(--space-2) var(--space-5);
+  background: var(--color-blue);
+  color: var(--color-base);
   border: none;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-lg);
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .sendButton:hover:not(:disabled) {
-  background: #b4befe;
+  background: var(--color-lavender);
 }
 
 .sendButton:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
 
 .toolbar {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .toolbarButton {
   padding: 6px 14px;
   background: transparent;
-  color: #6c7086;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  font-size: 12px;
+  color: var(--color-muted);
+  border: var(--border-muted);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .toolbarButton:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #cdd6f4;
+  background: var(--bg-overlay-light);
+  color: var(--color-text);
   border-color: rgba(255, 255, 255, 0.15);
 }
 
 .toolbarButton[data-active="true"] {
   background: rgba(137, 180, 250, 0.15);
-  color: #89b4fa;
-  border-color: #89b4fa;
+  color: var(--color-blue);
+  border-color: var(--color-blue);
 }
 
 /* Spinner box for active agents */
 .spinnerBox {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: var(--space-2);
+  padding: var(--space-1) 10px;
   background: rgba(166, 227, 161, 0.1);
-  border: 1px solid rgba(166, 227, 161, 0.3);
-  border-radius: 6px;
-  margin-left: 4px;
+  border: 1px solid var(--color-green-dim);
+  border-radius: var(--radius-md);
+  margin-left: var(--space-1);
 }
 
 .spinnerItem {
@@ -110,23 +110,17 @@
 }
 
 .spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(166, 227, 161, 0.3);
-  border-top-color: #a6e3a1;
+  width: var(--space-3);
+  height: var(--space-3);
+  border: 2px solid var(--color-green-dim);
+  border-top-color: var(--color-green);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .spinnerLabel {
-  font-size: 11px;
-  color: #a6e3a1;
+  font-size: var(--text-sm);
+  color: var(--color-green);
   font-weight: 500;
   max-width: 140px;
   overflow: hidden;

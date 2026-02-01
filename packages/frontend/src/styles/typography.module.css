@@ -1,0 +1,127 @@
+/**
+ * Typography Styles
+ *
+ * Styles for text, headings, and markdown prose content.
+ */
+
+/* ============ Plain Text ============ */
+.text {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============ Text Variants ============ */
+.textBody {
+  font-size: var(--text-lg);
+}
+
+.textHeading {
+  font-size: var(--text-3xl);
+  font-weight: 600;
+}
+
+.textSubheading {
+  font-size: var(--text-xl);
+  font-weight: 500;
+}
+
+.textCaption {
+  font-size: var(--text-base);
+}
+
+.textCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  background: var(--bg-dark-overlay);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* ============ Text Colors ============ */
+.textColorDefault {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.textColorMuted {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.textColorAccent {
+  color: var(--color-btn-primary);
+}
+
+.textColorSuccess {
+  color: var(--color-btn-success);
+}
+
+.textColorWarning {
+  color: var(--color-btn-warning);
+}
+
+.textColorError {
+  color: var(--color-btn-danger);
+}
+
+/* ============ Text Alignment ============ */
+.textAlignLeft {
+  text-align: left;
+}
+
+.textAlignCenter {
+  text-align: center;
+}
+
+.textAlignRight {
+  text-align: right;
+}
+
+/* ============ Markdown Prose ============ */
+.markdown {
+  font-size: var(--text-lg);
+  line-height: 1.6;
+}
+
+.markdown h1 {
+  font-size: 1.5em;
+  margin: 0 0 0.5em;
+  border-bottom: var(--border-subtle);
+  padding-bottom: 0.3em;
+}
+
+.markdown h2 {
+  font-size: 1.3em;
+  margin: 1em 0 0.5em;
+}
+
+.markdown h3 {
+  font-size: 1.1em;
+  margin: 1em 0 0.5em;
+}
+
+.markdown code {
+  background: var(--bg-dark-overlay);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.markdown pre {
+  background: var(--bg-dark-overlay);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown strong {
+  font-weight: 600;
+}

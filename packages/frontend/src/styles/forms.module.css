@@ -1,0 +1,178 @@
+/**
+ * Form Styles
+ *
+ * Styles for form elements: inputs, textareas, selects, buttons.
+ */
+
+/* ============ Button ============ */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.buttonSizeSm {
+  padding: var(--space-1) 10px;
+  font-size: var(--text-base);
+}
+
+.buttonSizeMd {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-md);
+}
+
+.buttonSizeLg {
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-lg);
+}
+
+.buttonPrimary {
+  background: var(--color-btn-primary);
+  color: white;
+}
+
+.buttonPrimary:hover {
+  background: var(--color-btn-primary-hover);
+}
+
+.buttonSecondary {
+  background: var(--bg-overlay-strong);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.buttonSecondary:hover {
+  background: var(--bg-overlay-hover);
+}
+
+.buttonGhost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.buttonGhost:hover {
+  background: var(--bg-overlay-medium);
+}
+
+.buttonDanger {
+  background: var(--color-btn-danger);
+  color: white;
+}
+
+.buttonDanger:hover {
+  background: var(--color-btn-danger-hover);
+}
+
+.buttonDisabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.buttonIcon {
+  font-size: 1.1em;
+}
+
+/* ============ Form Layout ============ */
+.form {
+  display: flex;
+  width: 100%;
+}
+
+.formLayoutVertical {
+  flex-direction: column;
+}
+
+.formLayoutHorizontal {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.formGapNone {
+  gap: 0;
+}
+
+.formGapSm {
+  gap: var(--space-2);
+}
+
+.formGapMd {
+  gap: var(--space-3);
+}
+
+.formGapLg {
+  gap: var(--space-5);
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.formLabel {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ============ Input Controls ============ */
+.formInput,
+.formTextarea,
+.formSelect {
+  background: var(--bg-dark-overlay);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-lg);
+  color: rgba(255, 255, 255, 0.95);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.formInput::placeholder,
+.formTextarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.formInput:focus,
+.formTextarea:focus,
+.formSelect:focus {
+  outline: none;
+  border-color: var(--color-btn-primary);
+  background: var(--bg-dark-overlay-strong);
+}
+
+.formInput:disabled,
+.formTextarea:disabled,
+.formSelect:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.formTextarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.formSelect {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.6)' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  padding-right: var(--space-8);
+}
+
+.formSelect option {
+  background: #1a1a2e;
+  color: rgba(255, 255, 255, 0.95);
+}
