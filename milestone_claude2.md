@@ -685,6 +685,24 @@ export interface ReloadCacheConfig {
 
 ---
 
+## Additional Improvements & Tweaks
+
+These adjustments align the reload system with existing server capabilities and reduce complexity:
+
+1. **Use the server window registry for fingerprints and invalidation.** The current server already maintains authoritative window state. Hashing the window registry snapshot (IDs, titles, bounds, and content metadata) provides a reliable `windowStateHash` and simplifies stale-window detection before replay.
+
+2. **Capture action sequences in the existing action pipeline.** Actions already flow through `actionEmitter` and are observed in `AgentSession`. Recording per-message action sequences there avoids new tool instrumentation and keeps capture logic centralized.
+
+3. **Persist reload cache alongside session logs (optional).** Consider storing `reload-cache.json` under `session_logs/{sessionId}/` for easier cleanup and troubleshooting. This also aligns with existing session lifecycle handling.
+
+4. **Use render feedback to update success/failure stats.** The `emitActionWithFeedback` path already reports render success for iframe actions; integrate this feedback to drive `successCount`/`failureCount` rather than relying on heuristics.
+
+5. **Apply reload injection consistently for main and window tasks.** `ContextPool` treats main and window tasks differently. Ensure reload options are injected for both (or explicitly document a scope) to avoid inconsistent behavior.
+
+6. **Keep provider prompts in sync.** If you add reload instructions to the Claude system prompt, replicate equivalent guidance for other providers (Codex) to prevent drift.
+
+---
+
 ## Open Questions
 
 1. **Scope granularity:** Should we cache at the message level or action-sequence level?
