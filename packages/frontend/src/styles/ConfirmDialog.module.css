@@ -36,6 +36,28 @@
   white-space: pre-wrap;
 }
 
+.rememberChoice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #a6adc8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.rememberChoice input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #89b4fa;
+  cursor: pointer;
+}
+
+.rememberChoice:hover {
+  color: #cdd6f4;
+}
+
 .buttons {
   display: flex;
   gap: 12px;

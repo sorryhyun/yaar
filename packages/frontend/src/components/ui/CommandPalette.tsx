@@ -5,6 +5,7 @@ import { useState, useCallback, KeyboardEvent } from 'react'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import { useDesktopStore } from '@/store'
 import { DebugPanel } from './DebugPanel'
+import { RecentActionsPanel } from './RecentActionsPanel'
 import { SessionsModal } from './SessionsModal'
 import styles from '@/styles/CommandPalette.module.css'
 
@@ -14,6 +15,8 @@ export function CommandPalette() {
   const { isConnected, sendMessage, interrupt } = useAgentConnection()
   const debugPanelOpen = useDesktopStore((state) => state.debugPanelOpen)
   const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel)
+  const recentActionsPanelOpen = useDesktopStore((state) => state.recentActionsPanelOpen)
+  const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel)
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen)
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
 
@@ -38,6 +41,7 @@ export function CommandPalette() {
   return (
     <>
       {debugPanelOpen && <DebugPanel />}
+      {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
         <div className={styles.inputWrapper}>
@@ -73,6 +77,14 @@ export function CommandPalette() {
             data-active={sessionsModalOpen}
           >
             Sessions
+          </button>
+          <button
+            className={styles.toolbarButton}
+            onClick={toggleRecentActionsPanel}
+            title="View recent AI actions"
+            data-active={recentActionsPanelOpen}
+          >
+            Actions
           </button>
           <button
             className={styles.toolbarButton}

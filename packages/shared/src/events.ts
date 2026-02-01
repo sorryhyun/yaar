@@ -68,6 +68,7 @@ export interface DialogFeedbackEvent {
   type: 'DIALOG_FEEDBACK';
   dialogId: string;
   confirmed: boolean;
+  rememberChoice?: 'once' | 'always' | 'deny_always';
 }
 
 export type ClientEvent =
@@ -118,13 +119,6 @@ export interface ToolProgressEvent {
   agentId?: string;
 }
 
-export interface RequestPermissionEvent {
-  type: 'REQUEST_PERMISSION';
-  id: string;
-  action: string;
-  description: string;
-}
-
 export interface ErrorEvent {
   type: 'ERROR';
   error: string;
@@ -156,7 +150,6 @@ export type ServerEvent =
   | AgentResponseEvent
   | ConnectionStatusEvent
   | ToolProgressEvent
-  | RequestPermissionEvent
   | ErrorEvent
   | WindowAgentStatusEvent
   | MessageAcceptedEvent

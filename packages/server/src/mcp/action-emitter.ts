@@ -7,8 +7,9 @@
  */
 
 import { EventEmitter } from 'events';
-import type { OSAction, DialogConfirmAction } from '@claudeos/shared';
+import type { OSAction, DialogConfirmAction, PermissionOptions } from '@claudeos/shared';
 import { getAgentId } from '../agents/session.js';
+import { checkPermission, savePermission, type PermissionDecision } from '../storage/permissions.js';
 
 /**
  * Action event data.
@@ -39,6 +40,7 @@ export interface RenderingFeedback {
 export interface DialogFeedback {
   dialogId: string;
   confirmed: boolean;
+  rememberChoice?: 'once' | 'always' | 'deny_always';
 }
 
 /**
@@ -55,6 +57,7 @@ interface PendingRequest {
 interface PendingDialog {
   resolve: (confirmed: boolean) => void;
   timeoutId: NodeJS.Timeout;
+  permissionOptions?: PermissionOptions;
 }
 
 /**
@@ -162,13 +165,89 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Show a permission dialog with "Remember my choice" option.
+   *
+   * First checks if there's a saved permission decision. If so, returns
+   * immediately with that decision. Otherwise, shows the dialog and
+   * saves the decision if the user chooses to remember it.
+   */
+  async showPermissionDialog(
+    title: string,
+    message: string,
+    toolName: string,
+    context?: string,
+    confirmText: string = 'Allow',
+    cancelText: string = 'Deny',
+    timeoutMs: number = 60000
+  ): Promise<boolean> {
+    // Check for saved permission first
+    const savedDecision = await checkPermission(toolName, context);
+    if (savedDecision === 'allow') {
+      return true;
+    }
+    if (savedDecision === 'deny') {
+      return false;
+    }
+
+    // Show dialog with permission options
+    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
+    const agentId = getAgentId();
+
+    const permissionOptions: PermissionOptions = {
+      showRememberChoice: true,
+      toolName,
+      context,
+    };
+
+    const dialogPromise = new Promise<boolean>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingDialogs.delete(dialogId);
+        resolve(false); // Timeout - treat as deny
+      }, timeoutMs);
+
+      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions });
+    });
+
+    const action: DialogConfirmAction = {
+      type: 'dialog.confirm',
+      id: dialogId,
+      title,
+      message,
+      confirmText,
+      cancelText,
+      permissionOptions,
+    };
+
+    this.emit('action', { action: action as OSAction, sessionId: undefined, agentId } as ActionEvent);
+
+    return dialogPromise;
+  }
+
+  /**
    * Resolve a pending dialog with feedback.
    */
-  resolveDialogFeedback(feedback: DialogFeedback): boolean {
+  async resolveDialogFeedback(feedback: DialogFeedback): Promise<boolean> {
     const pending = this.pendingDialogs.get(feedback.dialogId);
     if (pending) {
       clearTimeout(pending.timeoutId);
       this.pendingDialogs.delete(feedback.dialogId);
+
+      // Save permission if user chose to remember
+      if (pending.permissionOptions && feedback.rememberChoice) {
+        const { toolName, context } = pending.permissionOptions;
+        let decision: PermissionDecision = 'ask';
+
+        if (feedback.rememberChoice === 'always') {
+          decision = 'allow';
+        } else if (feedback.rememberChoice === 'deny_always') {
+          decision = 'deny';
+        }
+
+        if (decision !== 'ask') {
+          await savePermission(toolName, decision, context);
+        }
+      }
+
       pending.resolve(feedback.confirmed);
       return true;
     }

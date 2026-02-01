@@ -79,7 +79,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         message.type === 'ACTIONS' ||
         message.type === 'CONNECTION_STATUS' ||
         message.type === 'ERROR' ||
-        message.type === 'REQUEST_PERMISSION' ||
         (message.type === 'AGENT_RESPONSE' && (message as { isComplete?: boolean }).isComplete) ||
         (message.type === 'TOOL_PROGRESS' && (message as { status?: string }).status !== 'running')
 
@@ -141,12 +140,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           }
           break
         }
-
-        case 'REQUEST_PERMISSION':
-          // Show permission dialog
-          console.log('[Permission Request]', (message as { action?: string }).action)
-          // TODO: Show modal and send permission response
-          break
 
         case 'ERROR':
           console.error('[Agent Error]', message.error)
@@ -286,8 +279,12 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   }, [send, generateMessageId])
 
   // Send dialog feedback
-  const sendDialogFeedback = useCallback((dialogId: string, confirmed: boolean) => {
-    send({ type: 'DIALOG_FEEDBACK', dialogId, confirmed })
+  const sendDialogFeedback = useCallback((
+    dialogId: string,
+    confirmed: boolean,
+    rememberChoice?: 'once' | 'always' | 'deny_always'
+  ) => {
+    send({ type: 'DIALOG_FEEDBACK', dialogId, confirmed, rememberChoice })
   }, [send])
 
   // Send component action (button click) to agent

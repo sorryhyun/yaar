@@ -155,6 +155,12 @@ export interface ToastDismissAction {
 
 // ============ Dialog Actions ============
 
+export interface PermissionOptions {
+  showRememberChoice: boolean;
+  toolName: string;
+  context?: string;
+}
+
 export interface DialogConfirmAction {
   type: 'dialog.confirm';
   id: string;
@@ -162,6 +168,7 @@ export interface DialogConfirmAction {
   message: string;
   confirmText?: string;
   cancelText?: string;
+  permissionOptions?: PermissionOptions;
 }
 
 // ============ Union Types ============

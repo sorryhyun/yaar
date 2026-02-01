@@ -42,8 +42,11 @@ pnpm --filter @claudeos/frontend vitest run  # Run frontend tests
 claudeos/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   └── moltbook/
-│       ├── SKILL.md             # Instructions for AI on how to use this app
-│       └── credentials.json     # (git-ignored) API credentials
+│       └── SKILL.md             # Instructions for AI on how to use this app
+├── storage/                     # Persistent data storage
+│   ├── credentials/             # Centralized app credentials
+│   │   └── moltbook.json        # (git-ignored) API credentials for moltbook
+│   └── permissions.json         # (git-ignored) Saved permission decisions
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events)
 │   ├── server/        # TypeScript WebSocket server
@@ -99,7 +102,7 @@ ClaudeOS has a convention-based apps system. Each folder in `apps/` becomes a de
    - API endpoints and authentication
    - Available actions
    - Example workflows
-3. (Optional) Store credentials in `credentials.json` (git-ignored)
+3. (Optional) Use `apps_write_config` to store credentials (saved to `storage/credentials/myapp.json`, git-ignored)
 
 ### Apps Tools (MCP)
 
@@ -107,15 +110,19 @@ ClaudeOS has a convention-based apps system. Each folder in `apps/` becomes a de
 |------|-------------|
 | `apps_list` | List all available apps |
 | `apps_load_skill` | Load SKILL.md for an app |
-| `apps_read_config` | Read config file (default: credentials.json) |
-| `apps_write_config` | Write config file |
+| `apps_read_config` | Read config file (credentials.json reads from `storage/credentials/{appId}.json`) |
+| `apps_write_config` | Write config file (credentials.json writes to `storage/credentials/{appId}.json`) |
 
 ### Example: Moltbook App
 
 ```
 apps/moltbook/
-├── SKILL.md           # API docs, auth flow, example usage
-└── credentials.json   # { "api_key": "moltbook_xxx" }
+└── SKILL.md           # API docs, auth flow, example usage
+
+storage/credentials/
+└── moltbook.json      # { "api_key": "moltbook_xxx" } (git-ignored)
 ```
 
 When user clicks the Moltbook icon, the AI loads `SKILL.md` and can then help with registration, posting, viewing feed, etc.
+
+**Note:** Old credentials at `apps/{appId}/credentials.json` are automatically migrated to `storage/credentials/{appId}.json` on first read.

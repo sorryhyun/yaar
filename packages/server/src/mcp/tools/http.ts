@@ -196,11 +196,13 @@ export function registerHttpTools(server: McpServer): void {
         return ok(`Domain "${args.domain}" is already in the allowed list.`);
       }
 
-      // Show confirmation dialog
+      // Show permission dialog with "Remember my choice" option
       const reasonText = args.reason ? `\n\nReason: ${args.reason}` : '';
-      const confirmed = await actionEmitter.showConfirmDialog(
+      const confirmed = await actionEmitter.showPermissionDialog(
         'Allow Domain Access',
         `The AI wants to make HTTP requests to "${args.domain}".${reasonText}\n\nDo you want to allow this domain?`,
+        'http_domain', // toolName for permission storage
+        args.domain,   // context - the specific domain
         'Allow',
         'Deny'
       );

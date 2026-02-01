@@ -31,6 +31,8 @@ export interface ToastModel {
   timestamp: number
 }
 
+import type { PermissionOptions } from '@claudeos/shared'
+
 export interface DialogModel {
   id: string
   title: string
@@ -38,6 +40,7 @@ export interface DialogModel {
   confirmText: string
   cancelText: string
   timestamp: number
+  permissionOptions?: PermissionOptions
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -119,6 +122,9 @@ export interface DesktopState {
   debugLog: DebugEntry[]
   debugPanelOpen: boolean
 
+  // Recent actions panel
+  recentActionsPanelOpen: boolean
+
   // Context menu state
   contextMenu: ContextMenuState | null
 
@@ -167,6 +173,10 @@ export interface DesktopActions {
   addDebugEntry: (entry: Omit<DebugEntry, 'id' | 'timestamp'>) => void
   toggleDebugPanel: () => void
   clearDebugLog: () => void
+
+  // Recent actions panel
+  toggleRecentActionsPanel: () => void
+  clearActivityLog: () => void
 
   // Context menu
   showContextMenu: (x: number, y: number, windowId?: string) => void

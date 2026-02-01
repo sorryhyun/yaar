@@ -125,6 +125,7 @@ const initialState: DesktopState = {
   sessionId: null,
   debugLog: [],
   debugPanelOpen: false,
+  recentActionsPanelOpen: false,
   contextMenu: null,
   sessionsModalOpen: false,
   activeAgents: {},
@@ -139,8 +140,11 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
     ...initialState,
 
     applyAction: (action) => set((state) => {
-      // Log all AI actions
+      // Log all AI actions (bounded to 200 entries)
       state.activityLog.push(action)
+      if (state.activityLog.length > 200) {
+        state.activityLog = state.activityLog.slice(-200)
+      }
 
       switch (action.type) {
         // ======== Window Actions ========
@@ -423,6 +427,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
         // ======== Dialog Actions ========
 
         case 'dialog.confirm': {
+          const permissionOptions = (action as { permissionOptions?: { showRememberChoice: boolean; toolName: string; context?: string } }).permissionOptions
           state.dialogs[action.id] = {
             id: action.id,
             title: action.title,
@@ -430,6 +435,7 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
             confirmText: action.confirmText ?? 'Yes',
             cancelText: action.cancelText ?? 'No',
             timestamp: Date.now(),
+            permissionOptions,
           }
           break
         }
@@ -561,6 +567,14 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
     clearDebugLog: () => set((state) => {
       state.debugLog = []
+    }),
+
+    toggleRecentActionsPanel: () => set((state) => {
+      state.recentActionsPanelOpen = !state.recentActionsPanelOpen
+    }),
+
+    clearActivityLog: () => set((state) => {
+      state.activityLog = []
     }),
 
     showContextMenu: (x, y, windowId?) => set((state) => {

@@ -149,6 +149,7 @@ export class SessionManager {
         actionEmitter.resolveDialogFeedback({
           dialogId: event.dialogId,
           confirmed: event.confirmed,
+          rememberChoice: event.rememberChoice,
         });
         break;
     }

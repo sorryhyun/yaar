@@ -25,12 +25,12 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "animejs": "^3.2.2",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
-    "eslint": "^8.56.0",
+    "eslint": "^9.39.0",
     "konva": "^9.3.15",
     "lodash-es": "^4.17.21",
     "tsx": "^4.19.0",
@@ -41,6 +41,6 @@
     "node-poppler-win32": "^24.11.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24"
   }
 }
