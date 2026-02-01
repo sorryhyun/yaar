@@ -101,7 +101,7 @@ export function WindowContextMenu({
   const headerText = windowId
     ? hasWindowAgent
       ? `Continue with "${windowTitle}" agent`
-      : `Fork agent for "${windowTitle}"`
+      : `In "${windowTitle}..."`
     : 'Quick message'
 
   return (

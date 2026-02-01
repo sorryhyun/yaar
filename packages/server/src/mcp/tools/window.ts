@@ -21,20 +21,20 @@ export function registerWindowTools(server: McpServer): void {
     'create_window',
     {
       description:
-        'Create a new window on the ClaudeOS desktop. IMPORTANT: For interactive UI with buttons/cards, you MUST set renderer="component" and pass a JSON object to the "components" parameter (NOT "content"). The "content" parameter is only for markdown/text/html/iframe renderers.',
+        'Create a new window. For interactive UI, set renderer="component" and use "components" parameter.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
         content: z
           .string()
           .optional()
-          .describe(
-            'String content for markdown/text/html/iframe renderers ONLY. Do NOT put JSON here for component renderer.'
-          ),
+          .describe('String content for markdown/text/html/iframe renderers.'),
         components: z
           .any()
           .optional()
-          .describe('JSON object for component renderer. MUST be a JSON object, not a string. Example: {"type":"card","title":"Hello","content":{"type":"text","content":"World"}}. Required when renderer="component".'),
+          .describe(
+            'Component tree for renderer="component". Valid types: stack (layout with children), grid (columns), card (title/content), button (action), text, markdown, image, alert, badge, progress, list, divider, spacer, form, input, textarea, select.'
+          ),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()
@@ -54,21 +54,10 @@ export function registerWindowTools(server: McpServer): void {
       const preset = WINDOW_PRESETS[presetName];
       const renderer = args.renderer || 'markdown';
 
-      let contentData: unknown;
-      if (renderer === 'component' && args.components) {
-        // Handle case where components is passed as JSON string (Codex does this)
-        if (typeof args.components === 'string') {
-          try {
-            contentData = JSON.parse(args.components);
-          } catch {
-            contentData = args.components;
-          }
-        } else {
-          contentData = args.components as ComponentNode;
-        }
-      } else {
-        contentData = args.content ?? '';
-      }
+      const contentData =
+        renderer === 'component' && args.components
+          ? (args.components as ComponentNode)
+          : (args.content ?? '');
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -107,8 +96,7 @@ export function registerWindowTools(server: McpServer): void {
   server.registerTool(
     'update_window',
     {
-      description:
-        'Update the content of an existing window. IMPORTANT: For component renderer, use "components" parameter with a JSON object, NOT "content".',
+      description: 'Update window content.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to update'),
         operation: z
@@ -117,12 +105,12 @@ export function registerWindowTools(server: McpServer): void {
         content: z
           .string()
           .optional()
-          .describe('String content for markdown/text/html/iframe renderers ONLY. Do NOT put JSON here for component renderer.'),
+          .describe('String content for markdown/text/html/iframe renderers.'),
         components: z
           .any()
           .optional()
           .describe(
-            'JSON object for component renderer (use with operation: "replace" and renderer: "component"). MUST be a JSON object, not a string. Example: {"type":"card","title":"Updated","content":{"type":"text","content":"New content"}}'
+            'Component tree for renderer="component". Valid types: stack, grid, card, button, text, markdown, image, alert, badge, progress, list, divider, spacer, form, input, textarea, select.'
           ),
         position: z.number().optional().describe('Character position for insertAt operation'),
         renderer: z
@@ -132,23 +120,12 @@ export function registerWindowTools(server: McpServer): void {
       },
     },
     async (args) => {
-      let operation: ContentUpdateOperation;
-      let contentData: unknown;
-      if (args.renderer === 'component' && args.components) {
-        // Handle case where components is passed as JSON string (Codex does this)
-        if (typeof args.components === 'string') {
-          try {
-            contentData = JSON.parse(args.components);
-          } catch {
-            contentData = args.components;
-          }
-        } else {
-          contentData = args.components;
-        }
-      } else {
-        contentData = args.content ?? '';
-      }
+      const contentData =
+        args.renderer === 'component' && args.components
+          ? args.components
+          : (args.content ?? '');
 
+      let operation: ContentUpdateOperation;
       switch (args.operation) {
         case 'append':
           operation = { op: 'append', data: contentData };

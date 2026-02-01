@@ -29,6 +29,30 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext'
 import styles from '@/styles/renderers.module.css'
 
+// Normalize enum values - handles numbers, invalid strings, etc.
+function normalizeEnum<T extends string>(value: unknown, validValues: readonly T[], defaultValue: T): T {
+  if (typeof value === 'string' && validValues.includes(value as T)) {
+    return value as T
+  }
+  return defaultValue
+}
+
+const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const
+const DIRECTION_VALUES = ['horizontal', 'vertical'] as const
+const ALIGN_VALUES = ['start', 'center', 'end', 'stretch'] as const
+const JUSTIFY_VALUES = ['start', 'center', 'end', 'between', 'around'] as const
+const BUTTON_VARIANT_VALUES = ['primary', 'secondary', 'ghost', 'danger'] as const
+const BUTTON_SIZE_VALUES = ['sm', 'md', 'lg'] as const
+const TEXT_VARIANT_VALUES = ['body', 'heading', 'subheading', 'caption', 'code'] as const
+const TEXT_COLOR_VALUES = ['default', 'muted', 'accent', 'success', 'warning', 'error'] as const
+const TEXT_ALIGN_VALUES = ['left', 'center', 'right'] as const
+const BADGE_VARIANT_VALUES = ['default', 'success', 'warning', 'error', 'info'] as const
+const PROGRESS_VARIANT_VALUES = ['default', 'success', 'warning', 'error'] as const
+const ALERT_VARIANT_VALUES = ['info', 'success', 'warning', 'error'] as const
+const DIVIDER_VARIANT_VALUES = ['solid', 'dashed'] as const
+const SIZE_VALUES = ['sm', 'md', 'lg'] as const
+const LAYOUT_VALUES = ['vertical', 'horizontal'] as const
+
 // Context to pass current form ID to nested components
 const FormIdContext = createContext<string | undefined>(undefined)
 
@@ -175,10 +199,10 @@ function StackRenderer({
   windowId: string
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
-  const direction = node.direction || 'vertical'
-  const gap = node.gap || 'md'
-  const align = node.align || 'stretch'
-  const justify = node.justify || 'start'
+  const direction = normalizeEnum(node.direction, DIRECTION_VALUES, 'vertical')
+  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
+  const align = normalizeEnum(node.align, ALIGN_VALUES, 'stretch')
+  const justify = normalizeEnum(node.justify, JUSTIFY_VALUES, 'start')
 
   const className = [
     styles.stack,
@@ -208,7 +232,7 @@ function GridRenderer({
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const columns = node.columns || 'auto'
-  const gap = node.gap || 'md'
+  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
 
   const style = columns !== 'auto'
     ? { gridTemplateColumns: `repeat(${columns}, 1fr)` }
@@ -262,8 +286,8 @@ function ButtonRenderer({
     }
   }, [node.action, node.disabled, node.parallel, node.submitForm, onAction, formContext, currentFormId, fullPath])
 
-  const variant = node.variant || 'secondary'
-  const size = node.size || 'md'
+  const variant = normalizeEnum(node.variant, BUTTON_VARIANT_VALUES, 'secondary')
+  const size = normalizeEnum(node.size, BUTTON_SIZE_VALUES, 'md')
 
   const className = [
     styles.button,
@@ -286,9 +310,9 @@ function ButtonRenderer({
 }
 
 function TextRenderer({ node }: { node: TextComponent }) {
-  const variant = node.variant || 'body'
-  const color = node.color || 'default'
-  const align = node.align || 'left'
+  const variant = normalizeEnum(node.variant, TEXT_VARIANT_VALUES, 'body')
+  const color = normalizeEnum(node.color, TEXT_COLOR_VALUES, 'default')
+  const align = normalizeEnum(node.align, TEXT_ALIGN_VALUES, 'left')
 
   const className = [
     styles.text,
@@ -323,7 +347,7 @@ function ListRenderer({
 }
 
 function BadgeRenderer({ node }: { node: BadgeComponent }) {
-  const variant = node.variant || 'default'
+  const variant = normalizeEnum(node.variant, BADGE_VARIANT_VALUES, 'default')
 
   const className = [
     styles.badge,
@@ -334,8 +358,8 @@ function BadgeRenderer({ node }: { node: BadgeComponent }) {
 }
 
 function ProgressRenderer({ node }: { node: ProgressComponent }) {
-  const variant = node.variant || 'default'
-  const value = Math.max(0, Math.min(100, node.value))
+  const variant = normalizeEnum(node.variant, PROGRESS_VARIANT_VALUES, 'default')
+  const value = Math.max(0, Math.min(100, typeof node.value === 'number' ? node.value : 0))
 
   const className = [
     styles.progress,
@@ -359,7 +383,8 @@ function ProgressRenderer({ node }: { node: ProgressComponent }) {
 }
 
 function AlertRenderer({ node }: { node: AlertComponent }) {
-  const variant = node.variant || 'info'
+  const variant = normalizeEnum(node.variant, ALERT_VARIANT_VALUES, 'info')
+  const message = node.message ?? node.content ?? ''
 
   const className = [
     styles.alert,
@@ -369,7 +394,7 @@ function AlertRenderer({ node }: { node: AlertComponent }) {
   return (
     <div className={className}>
       {node.title && <div className={styles.alertTitle}>{node.title}</div>}
-      <div className={styles.alertMessage}>{node.message}</div>
+      <div className={styles.alertMessage}>{message}</div>
     </div>
   )
 }
@@ -398,7 +423,7 @@ function MarkdownNodeRenderer({ node }: { node: MarkdownComponent }) {
 }
 
 function DividerRenderer({ node }: { node: DividerComponent }) {
-  const variant = node.variant || 'solid'
+  const variant = normalizeEnum(node.variant, DIVIDER_VARIANT_VALUES, 'solid')
 
   const className = [
     styles.divider,
@@ -409,7 +434,7 @@ function DividerRenderer({ node }: { node: DividerComponent }) {
 }
 
 function SpacerRenderer({ node }: { node: SpacerComponent }) {
-  const size = node.size || 'md'
+  const size = normalizeEnum(node.size, SIZE_VALUES, 'md')
 
   const className = [
     styles.spacer,
@@ -433,8 +458,8 @@ function FormRenderer({
   const formContext = useFormContext()
   const parentPath = useComponentPath()
   const formPath = [...parentPath, `Form:${node.id}`]
-  const layout = node.layout || 'vertical'
-  const gap = node.gap || 'md'
+  const layout = normalizeEnum(node.layout, LAYOUT_VALUES, 'vertical')
+  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
 
   // Register form on mount
   useEffect(() => {

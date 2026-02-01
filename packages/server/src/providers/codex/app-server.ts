@@ -138,6 +138,7 @@ export class AppServer {
       // Configure ClaudeOS MCP server
       '-c', `mcp_servers.claudeos.url=http://127.0.0.1:${MCP_PORT}/mcp`,
       '-c', 'mcp_servers.claudeos.bearer_token_env_var=CLAUDEOS_MCP_TOKEN',
+      '-c', 'model_reasoning_effort = "medium"',
     ];
 
     // Add model if specified

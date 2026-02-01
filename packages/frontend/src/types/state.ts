@@ -52,6 +52,11 @@ export interface ContextMenuState {
   windowTitle?: string
 }
 
+export interface RestorePrompt {
+  sessionId: string
+  sessionDate: string
+}
+
 export interface DebugEntry {
   id: string
   timestamp: number
@@ -131,8 +136,14 @@ export interface DesktopState {
   // Sessions modal
   sessionsModalOpen: boolean
 
+  // Restore prompt
+  restorePrompt: RestorePrompt | null
+
   // Active agents (for spinner display)
   activeAgents: Record<string, ActiveAgent>
+
+  // Agent panel expanded state
+  agentPanelOpen: boolean
 
   // Window agents (for fork session feature)
   windowAgents: Record<string, WindowAgent>
@@ -185,10 +196,15 @@ export interface DesktopActions {
   // Sessions modal
   toggleSessionsModal: () => void
 
+  // Restore prompt
+  setRestorePrompt: (prompt: RestorePrompt | null) => void
+  dismissRestorePrompt: () => void
+
   // Active agents
   setAgentActive: (agentId: string, status: string) => void
   clearAgent: (agentId: string) => void
   clearAllAgents: () => void
+  toggleAgentPanel: () => void
 
   // Window agents
   registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void

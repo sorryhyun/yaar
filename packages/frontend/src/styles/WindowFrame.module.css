@@ -13,6 +13,14 @@
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
+.frame[data-agent-active="true"] {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(166, 227, 161, 0.5);
+}
+
+.frame[data-focused="true"][data-agent-active="true"] {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(166, 227, 161, 0.7), 0 0 16px rgba(166, 227, 161, 0.3);
+}
+
 .frame[data-dragging="true"],
 .frame[data-resizing="true"] {
   user-select: none;
@@ -57,6 +65,27 @@
 .lockIcon {
   font-size: 12px;
   opacity: 0.8;
+}
+
+.agentBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agentIcon {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.agentBadge[data-status="active"] .agentIcon {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 .controls {

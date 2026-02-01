@@ -19,6 +19,8 @@ export function CommandPalette() {
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel)
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen)
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
+  const activeAgents = useDesktopStore((state) => state.activeAgents)
+  const applyAction = useDesktopStore((state) => state.applyAction)
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
@@ -34,9 +36,18 @@ export function CommandPalette() {
       handleSubmit()
     } else if (e.key === 'Escape') {
       setIsExpanded(false)
-      interrupt()
+      const agentCount = Object.keys(activeAgents).length
+      if (agentCount > 0) {
+        interrupt()
+        applyAction({
+          type: 'toast.show',
+          id: `interrupt-${Date.now()}`,
+          message: agentCount === 1 ? 'Agent stopped' : `${agentCount} agents stopped`,
+          variant: 'info'
+        })
+      }
     }
-  }, [handleSubmit, interrupt])
+  }, [handleSubmit, interrupt, activeAgents, applyAction])
 
   return (
     <>

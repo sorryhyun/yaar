@@ -206,13 +206,32 @@ export class ContextPool {
 
     console.log(`[ContextPool] Processing main task ${task.messageId} with agent ${agent.id}`);
 
+    // Record user message to context tape IMMEDIATELY so parallel tasks can see it
+    // Format the full content with interactions prefix (same as session.ts does)
+    const interactionPrefix = task.interactions && task.interactions.length > 0
+      ? `<previous_interactions>\n${task.interactions.map(i => {
+          let content = '';
+          if (i.windowTitle) content += `"${i.windowTitle}"`;
+          if (i.details) content += content ? ` (${i.details})` : i.details;
+          return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
+        }).join('\n')}\n</previous_interactions>\n\n`
+      : '';
+    const fullUserContent = interactionPrefix + task.content;
+    this.contextTape.append('user', fullUserContent, 'main');
+
     // Process the message with role and context recording
+    // Only record assistant response in callback (user already recorded above)
     await agent.session.handleMessage(task.content, {
       role: 'default',
       source: 'main',
       interactions: task.interactions,
       messageId: task.messageId,
-      onContextMessage: (role, content) => this.contextTape.append(role, content, 'main'),
+      onContextMessage: (role, content) => {
+        // Only record assistant messages - user message already recorded above
+        if (role === 'assistant') {
+          this.contextTape.append(role, content, 'main');
+        }
+      },
     });
 
     // Clear role and start idle timer
@@ -338,13 +357,23 @@ export class ContextPool {
       // Create context source for this window
       const source: ContextSource = { window: windowId };
 
+      // Record user message to context tape IMMEDIATELY so parallel tasks can see it
+      // For window tasks, the content already includes the task.content (which may have interaction formatting from manager.ts)
+      this.contextTape.append('user', task.content, source);
+
       // Process the message
+      // Only record assistant response in callback (user already recorded above)
       await agent.session.handleMessage(fullContent, {
         role: `window-${windowId}`,
         source,
         interactions: task.interactions,
         messageId: task.messageId,
-        onContextMessage: (role, content) => this.contextTape.append(role, content, source),
+        onContextMessage: (role, content) => {
+          // Only record assistant messages - user message already recorded above
+          if (role === 'assistant') {
+            this.contextTape.append(role, content, source);
+          }
+        },
       });
 
       // Mark agent as available

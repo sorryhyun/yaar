@@ -90,7 +90,7 @@ ClaudeOS has a convention-based apps system. Each folder in `apps/` becomes a de
 
 1. **Frontend startup**: Calls `GET /api/apps` to list apps
 2. **Desktop renders**: Shows one icon per app folder
-3. **User clicks icon**: Sends `"user clicked app: {appId}"`
+3. **User clicks icon**: Sends `<user_interaction:click>app: {appId}</user_interaction:click>`
 4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
 5. **AI responds**: Uses skill instructions to help user
 

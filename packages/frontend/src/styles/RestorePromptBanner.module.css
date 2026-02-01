@@ -1,0 +1,78 @@
+.banner {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  background: rgba(137, 180, 250, 0.15);
+  border: 1px solid rgba(137, 180, 250, 0.3);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  z-index: 9998;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.message {
+  font-size: 13px;
+  color: #cdd6f4;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.restoreButton,
+.dismissButton {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.restoreButton {
+  background: #89b4fa;
+  color: #1e1e2e;
+  border: none;
+}
+
+.restoreButton:hover:not(:disabled) {
+  background: #a6c8ff;
+}
+
+.restoreButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dismissButton {
+  background: transparent;
+  color: #a6adc8;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dismissButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dismissButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

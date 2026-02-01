@@ -76,6 +76,135 @@
   font-weight: 500;
 }
 
+.agentIndicatorButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.expandArrow {
+  font-size: 8px;
+  color: #a6adc8;
+  transition: transform 0.2s ease;
+}
+
+/* Agent Panel */
+.agentPanel {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 300px;
+  max-width: 400px;
+  background: rgba(30, 30, 46, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  z-index: 9998;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.agentPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-weight: 500;
+  color: #cdd6f4;
+}
+
+.stopAllButton {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #1e1e2e;
+  background: #f38ba8;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.stopAllButton:hover {
+  background: #f5a3b5;
+}
+
+.agentPanelList {
+  padding: 8px;
+}
+
+.agentPanelItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.agentPanelItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.agentPanelInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agentPanelId {
+  font-size: 12px;
+  font-weight: 500;
+  color: #cdd6f4;
+  font-family: monospace;
+}
+
+.agentPanelStatus {
+  font-size: 11px;
+  color: #a6e3a1;
+}
+
+.agentPanelWindow {
+  font-size: 10px;
+  color: #6c7086;
+}
+
+.stopAgentButton {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #cdd6f4;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stopAgentButton:hover {
+  background: #f38ba8;
+  color: #1e1e2e;
+  border-color: #f38ba8;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

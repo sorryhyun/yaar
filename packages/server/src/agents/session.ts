@@ -234,11 +234,10 @@ export class AgentSession {
     if (interactions.length === 0) return '';
 
     const lines = interactions.map(i => {
-      const time = new Date(i.timestamp).toLocaleTimeString();
-      let desc = i.type;
-      if (i.windowTitle) desc += ` "${i.windowTitle}"`;
-      if (i.details) desc += ` (${i.details})`;
-      return `- [${time}] ${desc}`;
+      let content = '';
+      if (i.windowTitle) content += `"${i.windowTitle}"`;
+      if (i.details) content += content ? ` (${i.details})` : i.details;
+      return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
     });
 
     return `<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>\n\n`;

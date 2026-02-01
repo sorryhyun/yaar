@@ -128,7 +128,9 @@ const initialState: DesktopState = {
   recentActionsPanelOpen: false,
   contextMenu: null,
   sessionsModalOpen: false,
+  restorePrompt: null,
   activeAgents: {},
+  agentPanelOpen: false,
   windowAgents: {},
   pendingFeedback: [],
   interactionLog: [],
@@ -597,6 +599,14 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
       state.sessionsModalOpen = !state.sessionsModalOpen
     }),
 
+    setRestorePrompt: (prompt) => set((state) => {
+      state.restorePrompt = prompt
+    }),
+
+    dismissRestorePrompt: () => set((state) => {
+      state.restorePrompt = null
+    }),
+
     setAgentActive: (agentId, status) => set((state) => {
       state.activeAgents[agentId] = {
         id: agentId,
@@ -611,6 +621,10 @@ export const useDesktopStore = create<DesktopState & DesktopActions>()(
 
     clearAllAgents: () => set((state) => {
       state.activeAgents = {}
+    }),
+
+    toggleAgentPanel: () => set((state) => {
+      state.agentPanelOpen = !state.agentPanelOpen
     }),
 
     registerWindowAgent: (windowId, agentId, status) => set((state) => {

@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
+import { RestorePromptBanner } from '../ui/RestorePromptBanner'
 import styles from '@/styles/DesktopSurface.module.css'
 
 /** App info from /api/apps endpoint */
@@ -41,7 +42,10 @@ export function DesktopSurface() {
   const showContextMenu = useDesktopStore(s => s.showContextMenu)
   const windowAgents = useDesktopStore(s => s.windowAgents)
   const activeAgents = useDesktopStore(s => s.activeAgents)
-  const { sendMessage, sendWindowMessage, sendComponentAction } = useAgentConnection({ autoConnect: false })
+  const agentPanelOpen = useDesktopStore(s => s.agentPanelOpen)
+  const toggleAgentPanel = useDesktopStore(s => s.toggleAgentPanel)
+  const windows = useDesktopStore(s => s.windows)
+  const { sendMessage, sendWindowMessage, sendComponentAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
 
   const [apps, setApps] = useState<AppInfo[]>([])
 
@@ -81,15 +85,18 @@ export function DesktopSurface() {
   }, [showContextMenu])
 
   const handleStorageClick = useCallback(() => {
-    sendMessage('user clicked storage')
+    sendMessage('<user_interaction:click>storage</user_interaction:click>')
   }, [sendMessage])
 
   const handleAppClick = useCallback((appId: string) => {
-    sendMessage(`user clicked app: ${appId}`)
+    sendMessage(`<user_interaction:click>app: ${appId}</user_interaction:click>`)
   }, [sendMessage])
 
   return (
     <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu}>
+      {/* Restore prompt banner */}
+      <RestorePromptBanner />
+
       {/* Connection status indicator */}
       <div className={styles.statusBar}>
         <span className={styles.statusDot} data-status={connectionStatus} />
@@ -103,15 +110,71 @@ export function DesktopSurface() {
         {agentList.length > 0 && (
           <>
             <span className={styles.statusDivider} />
-            {agentList.map((agent) => (
-              <div key={agent.id} className={styles.agentIndicator}>
-                <span className={styles.agentSpinner} />
-                <span className={styles.agentStatus}>{agent.status}</span>
-              </div>
-            ))}
+            <button
+              className={styles.agentIndicatorButton}
+              onClick={toggleAgentPanel}
+              title="Click to expand agent panel"
+            >
+              {agentList.map((agent) => (
+                <div key={agent.id} className={styles.agentIndicator}>
+                  <span className={styles.agentSpinner} />
+                  <span className={styles.agentStatus}>{agent.status}</span>
+                </div>
+              ))}
+              <span className={styles.expandArrow} data-open={agentPanelOpen}>
+                {agentPanelOpen ? '▲' : '▼'}
+              </span>
+            </button>
           </>
         )}
       </div>
+
+      {/* Expanded agent panel */}
+      {agentPanelOpen && agentList.length > 0 && (
+        <div className={styles.agentPanel}>
+          <div className={styles.agentPanelHeader}>
+            <span>Active Agents</span>
+            <button
+              className={styles.stopAllButton}
+              onClick={interrupt}
+              title="Stop all agents"
+            >
+              Stop All
+            </button>
+          </div>
+          <div className={styles.agentPanelList}>
+            {agentList.map((agent) => {
+              // Find window associated with this agent
+              const windowEntry = Object.entries(windowAgents).find(
+                ([, wa]) => wa.agentId === agent.id
+              )
+              const windowId = windowEntry?.[0]
+              const windowTitle = windowId ? windows[windowId]?.title : null
+
+              return (
+                <div key={agent.id} className={styles.agentPanelItem}>
+                  <div className={styles.agentPanelInfo}>
+                    <span className={styles.agentPanelId}>{agent.id}</span>
+                    <span className={styles.agentPanelStatus}>{agent.status}</span>
+                    {windowTitle && (
+                      <span className={styles.agentPanelWindow}>
+                        Window: {windowTitle}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    className={styles.stopAgentButton}
+                    onClick={() => interruptAgent(agent.id)}
+                    title={`Stop agent ${agent.id}`}
+                  >
+                    Stop
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Desktop icons */}
       <div className={styles.desktopIcons}>

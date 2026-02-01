@@ -2,7 +2,7 @@
  * WindowFrame - Draggable, resizable window container.
  */
 import { useCallback, useRef, useState } from 'react'
-import { useDesktopStore, selectQueuedActionsCount } from '@/store'
+import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store'
 import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
@@ -71,6 +71,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback, logInteraction } =
     useDesktopStore()
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
+  const windowAgent = useDesktopStore(selectWindowAgent(window.id))
   const sendComponentAction = useComponentAction()
 
   const frameRef = useRef<HTMLDivElement>(null)
@@ -164,6 +165,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       data-focused={isFocused}
       data-dragging={isDragging}
       data-resizing={isResizing}
+      data-agent-active={windowAgent?.status === 'active'}
       onMouseDown={handleMouseDown}
     >
       {/* Title bar */}
@@ -184,6 +186,17 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
               title={`Locked by: ${window.lockedBy || 'unknown'}`}
             >
               <span className={styles.lockIcon}>🔒</span>
+            </div>
+          )}
+          {windowAgent && (
+            <div
+              className={styles.agentBadge}
+              data-status={windowAgent.status}
+              title={`Agent: ${windowAgent.agentId} (${windowAgent.status})`}
+            >
+              <span className={styles.agentIcon}>
+                {windowAgent.status === 'active' ? '⚡' : '💤'}
+              </span>
             </div>
           )}
         </div>

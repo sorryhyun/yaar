@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useDesktopStore } from '@/store'
+import type { OSAction } from '@claudeos/shared'
 import styles from '@/styles/SessionsModal.module.css'
 
 interface SessionInfo {
@@ -21,7 +22,10 @@ export function SessionsModal() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<string | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
+  const [restoring, setRestoring] = useState<string | null>(null)
+  const [exporting, setExporting] = useState<string | null>(null)
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
+  const applyActions = useDesktopStore((state) => state.applyActions)
 
   useEffect(() => {
     fetchSessions()
@@ -67,6 +71,62 @@ export function SessionsModal() {
     }
   }, [selectedSession])
 
+  const handleRestoreSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setRestoring(sessionId)
+      const response = await fetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' })
+      if (!response.ok) {
+        throw new Error('Failed to restore session')
+      }
+      const data = await response.json()
+      if (data.actions && Array.isArray(data.actions)) {
+        applyActions(data.actions as OSAction[])
+      }
+      toggleSessionsModal()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore session')
+    } finally {
+      setRestoring(null)
+    }
+  }, [applyActions, toggleSessionsModal])
+
+  const handleExportSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      setExporting(sessionId)
+      // Fetch both transcript and messages
+      const [transcriptRes, messagesRes] = await Promise.all([
+        fetch(`/api/sessions/${sessionId}/transcript`),
+        fetch(`/api/sessions/${sessionId}/messages`)
+      ])
+
+      const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null
+      const messagesData = messagesRes.ok ? await messagesRes.json() : null
+
+      const exportData = {
+        sessionId,
+        exportedAt: new Date().toISOString(),
+        transcript: transcriptData?.transcript || null,
+        messages: messagesData?.messages || null
+      }
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `session-${sessionId}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export session')
+    } finally {
+      setExporting(null)
+    }
+  }, [])
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleString()
@@ -111,6 +171,22 @@ export function SessionsModal() {
                       <span className={styles.date}>
                         {formatDate(session.metadata.createdAt)}
                       </span>
+                      <button
+                        className={styles.actionButton}
+                        onClick={(e) => handleRestoreSession(session.sessionId, e)}
+                        disabled={restoring === session.sessionId}
+                        title="Restore this session"
+                      >
+                        {restoring === session.sessionId ? '...' : 'Restore'}
+                      </button>
+                      <button
+                        className={styles.actionButton}
+                        onClick={(e) => handleExportSession(session.sessionId, e)}
+                        disabled={exporting === session.sessionId}
+                        title="Export this session"
+                      >
+                        {exporting === session.sessionId ? '...' : 'Export'}
+                      </button>
                     </div>
                   </div>
                   {selectedSession === session.sessionId && (

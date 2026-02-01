@@ -181,7 +181,7 @@ export function registerHttpTools(server: McpServer): void {
     'request_allowing_domain',
     {
       description:
-        'Request permission from the user to allow HTTP requests to a specific domain. Shows a confirmation dialog and if approved, adds the domain to the allowlist.',
+        'Request permission from the user to allow HTTP requests to a specific domain. Shows a confirmation dialog and if approved, adds the domain to the allowlist. Use this tool when http_get or http_post returns a domain-not-allowed error.',
       inputSchema: {
         domain: z.string().describe('The domain to request access for (e.g., "api.example.com")'),
         reason: z
@@ -284,31 +284,14 @@ export function registerHttpTools(server: McpServer): void {
           body = body.slice(0, maxLength) + '\n\n[Response truncated]';
         }
 
-        return ok(
-          JSON.stringify(
-            {
-              status: result.status,
-              headers: result.headers,
-              body,
-            },
-            null,
-            2
-          )
-        );
+        // For success (2xx), just return body. For errors, include status.
+        if (result.status >= 200 && result.status < 300) {
+          return ok(body);
+        }
+        return ok(`Error ${result.status}:\n${body}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        // Include more context for debugging
-        return ok(
-          JSON.stringify(
-            {
-              error: true,
-              message: `GET request failed: ${message}`,
-              url: args.url,
-            },
-            null,
-            2
-          )
-        );
+        return ok(`Error: ${message}`);
       }
     }
   );
@@ -420,31 +403,14 @@ export function registerHttpTools(server: McpServer): void {
           body = body.slice(0, maxLength) + '\n\n[Response truncated]';
         }
 
-        return ok(
-          JSON.stringify(
-            {
-              status: result.status,
-              headers: result.headers,
-              body,
-            },
-            null,
-            2
-          )
-        );
+        // For success (2xx), just return body. For errors, include status.
+        if (result.status >= 200 && result.status < 300) {
+          return ok(body);
+        }
+        return ok(`Error ${result.status}:\n${body}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        // Include more context for debugging
-        return ok(
-          JSON.stringify(
-            {
-              error: true,
-              message: `POST request failed: ${message}`,
-              url: args.url,
-            },
-            null,
-            2
-          )
-        );
+        return ok(`Error: ${message}`);
       }
     }
   );

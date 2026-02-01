@@ -67,7 +67,35 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     consumeInteractions,
     registerWindowAgent,
     updateWindowAgentStatus,
+    setRestorePrompt,
   } = useDesktopStore()
+
+  // Check for previous session to restore
+  const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
+    try {
+      const response = await fetch('/api/sessions')
+      if (!response.ok) return
+
+      const data = await response.json()
+      const sessions = data.sessions || []
+
+      // Find sessions that are not the current one
+      const previousSessions = sessions.filter(
+        (s: { sessionId: string }) => s.sessionId !== currentSessionId
+      )
+
+      // If there's a recent session, offer to restore it
+      if (previousSessions.length > 0) {
+        const lastSession = previousSessions[0]
+        setRestorePrompt({
+          sessionId: lastSession.sessionId,
+          sessionDate: lastSession.metadata?.createdAt || new Date().toISOString()
+        })
+      }
+    } catch (err) {
+      console.error('Failed to check for previous sessions:', err)
+    }
+  }, [setRestorePrompt])
 
   // Handle incoming messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -105,6 +133,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           )
           if (message.provider && message.sessionId) {
             setSession(message.provider, message.sessionId)
+            // Check for previous sessions to restore
+            checkForPreviousSession(message.sessionId)
           }
           break
 
@@ -177,7 +207,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     } catch (e) {
       console.error('Failed to parse message:', e)
     }
-  }, [applyActions, setConnectionStatus, setSession, addDebugEntry, setAgentActive, clearAgent, registerWindowAgent, updateWindowAgentStatus])
+  }, [applyActions, setConnectionStatus, setSession, addDebugEntry, setAgentActive, clearAgent, registerWindowAgent, updateWindowAgentStatus, checkForPreviousSession])
 
   // Connect to WebSocket
   const connect = useCallback(() => {

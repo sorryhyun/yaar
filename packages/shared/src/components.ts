@@ -114,7 +114,8 @@ export interface ProgressComponent {
 export interface AlertComponent {
   type: 'alert';
   title?: string;
-  message: string;
+  message?: string;
+  content?: string; // Alias for message
   variant?: 'info' | 'success' | 'warning' | 'error';
 }
 

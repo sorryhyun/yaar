@@ -25,10 +25,10 @@ Make ClaudeOS feel like a trustworthy “AI desktop”:
 **Goal:** make it hard for the AI to surprise the user.
 
 ### Deliverables
-- [ ] **Unify “permission” UX** around `dialog.confirm` (remove/replace legacy `REQUEST_PERMISSION` event path if unused).
-- [ ] **Tool risk levels** (low/medium/high) surfaced in the dialog copy (e.g. HTTP domain allowlist, app deployment, cross-origin iframe).
-- [ ] **Remember decisions** (allow once / allow always / deny) persisted via `storage/` (e.g. `storage/permissions.json`).
-- [ ] **User-visible audit trail**: a “Recent Actions” panel fed from existing debug/event streams (OS Actions + tool progress + confirmations).
+- [x] **Unify “permission” UX** around `dialog.confirm` (remove/replace legacy `REQUEST_PERMISSION` event path if unused).
+- [x] **Tool risk levels** (low/medium/high) surfaced in the dialog copy (e.g. HTTP domain allowlist, app deployment, cross-origin iframe).
+- [x] **Remember decisions** (allow once / allow always / deny) persisted via `storage/` (e.g. `storage/permissions.json`).
+- [x] **User-visible audit trail**: a “Recent Actions” panel fed from existing debug/event streams (OS Actions + tool progress + confirmations).
 
 ### Definition of Done
 - “AI asks to do risky thing” always routes through a confirmation UI.

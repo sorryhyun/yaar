@@ -166,10 +166,10 @@ export class ContextTape {
     }
 
     const formatted = filtered.map((m) => {
-      const sourceLabel = typeof m.source === 'object'
-        ? `[${m.role}@${m.source.window}]`
-        : `[${m.role}]`;
-      return `${sourceLabel}: ${m.content}`;
+      const tag = typeof m.source === 'object'
+        ? `${m.role}:${m.source.window}`
+        : m.role;
+      return `<${tag}>${m.content}</${tag}>`;
     }).join('\n\n');
 
     return `<previous_conversation>\n${formatted}\n</previous_conversation>\n\n`;

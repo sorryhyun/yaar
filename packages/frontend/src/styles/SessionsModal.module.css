@@ -127,6 +127,29 @@
 .sessionMeta {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.actionButton {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #cdd6f4;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.actionButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .date {

@@ -97,7 +97,7 @@ export class SessionManager {
           ? `in window "${event.windowTitle}"`
           : `in window ${event.windowId}`;
 
-        let content = `User clicked button "${event.action}" ${windowContext}`;
+        let content = `<user_interaction:click>button "${event.action}" ${windowContext}</user_interaction:click>`;
 
         // Add component path for context about where in the UI hierarchy the click occurred
         if (event.componentPath && event.componentPath.length > 0) {
