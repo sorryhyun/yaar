@@ -15,11 +15,30 @@ interface Point {
 
 export function DrawingOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [lastPoint, setLastPoint] = useState<Point | null>(null)
+  const [ctrlHeld, setCtrlHeld] = useState(false)
   const [hasStrokes, setHasStrokes] = useState(false)
   const saveDrawing = useDesktopStore(state => state.saveDrawing)
   const hasDrawing = useDesktopStore(state => state.hasDrawing)
+
+  // Use refs to avoid stale closure issues in mouse handlers
+  const isDrawingRef = useRef(false)
+  const lastPointRef = useRef<Point | null>(null)
+
+  // Track Ctrl key state globally
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setCtrlHeld(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') setCtrlHeld(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
 
   // Clear canvas when drawing is consumed
   useEffect(() => {
@@ -88,61 +107,71 @@ export function DrawingOverlay() {
     if (!e.ctrlKey || e.button !== 0) return
 
     e.preventDefault()
-    setIsDrawing(true)
-    setLastPoint({ x: e.clientX, y: e.clientY })
+    isDrawingRef.current = true
+    const point = { x: e.clientX, y: e.clientY }
+    lastPointRef.current = point
+
+    // Draw initial dot so first click is visible
+    const canvas = canvasRef.current
+    if (canvas) {
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.beginPath()
+        ctx.arc(point.x, point.y, 1.5, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(255, 100, 50, 0.8)'
+        ctx.fill()
+        setHasStrokes(true)
+      }
+    }
   }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !lastPoint) return
+    if (!isDrawingRef.current || !lastPointRef.current) return
 
     const currentPoint = { x: e.clientX, y: e.clientY }
-    drawLine(lastPoint, currentPoint)
-    setLastPoint(currentPoint)
+    drawLine(lastPointRef.current, currentPoint)
+    lastPointRef.current = currentPoint
     setHasStrokes(true)
-  }, [isDrawing, lastPoint, drawLine])
+  }, [drawLine])
 
   const handleMouseUp = useCallback(() => {
-    if (!isDrawing) return
+    if (!isDrawingRef.current) return
 
-    setIsDrawing(false)
-    setLastPoint(null)
+    isDrawingRef.current = false
+    lastPointRef.current = null
 
     // Save the drawing if we have strokes
-    if (hasStrokes) {
-      const canvas = canvasRef.current
-      if (canvas) {
-        const dataUrl = canvas.toDataURL('image/png')
-        saveDrawing(dataUrl)
-      }
+    const canvas = canvasRef.current
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png')
+      saveDrawing(dataUrl)
     }
-  }, [isDrawing, hasStrokes, saveDrawing])
+  }, [saveDrawing])
 
   // Handle mouse leaving the window while drawing
   useEffect(() => {
     const handleGlobalMouseUp = () => {
-      if (isDrawing) {
-        setIsDrawing(false)
-        setLastPoint(null)
+      if (isDrawingRef.current) {
+        isDrawingRef.current = false
+        lastPointRef.current = null
 
-        if (hasStrokes) {
-          const canvas = canvasRef.current
-          if (canvas) {
-            const dataUrl = canvas.toDataURL('image/png')
-            saveDrawing(dataUrl)
-          }
+        const canvas = canvasRef.current
+        if (canvas) {
+          const dataUrl = canvas.toDataURL('image/png')
+          saveDrawing(dataUrl)
         }
       }
     }
 
     window.addEventListener('mouseup', handleGlobalMouseUp)
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp)
-  }, [isDrawing, hasStrokes, saveDrawing])
+  }, [saveDrawing])
 
   return (
     <canvas
       ref={canvasRef}
       className={styles.overlay}
-      data-drawing={isDrawing}
+      data-ctrl-held={ctrlHeld}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

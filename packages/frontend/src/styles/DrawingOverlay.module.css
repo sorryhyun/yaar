@@ -4,12 +4,12 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 100;
+  z-index: var(--z-drawing);
   pointer-events: none;
 }
 
-/* Enable pointer events only when actively drawing */
-.overlay[data-drawing="true"] {
+/* Enable pointer events when Ctrl is held */
+.overlay[data-ctrl-held="true"] {
   pointer-events: auto;
   cursor: crosshair;
 }

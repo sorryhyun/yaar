@@ -116,10 +116,22 @@ export class CodexProvider extends BaseTransport {
       this.appServer!.on('notification', notificationHandler);
 
       try {
+        // Build input array with text and optional images
+        const input: Array<{ type: 'text'; text: string } | { type: 'image'; url: string }> = [
+          { type: 'text', text: prompt },
+        ];
+
+        // Add images as separate ImageInput objects
+        if (options.images && options.images.length > 0) {
+          for (const imageDataUrl of options.images) {
+            input.push({ type: 'image', url: imageDataUrl });
+          }
+        }
+
         // Start the turn
         await this.appServer!.turnStart({
           threadId: this.currentSession!.threadId,
-          input: [{ type: 'text', text: prompt }],
+          input,
         });
 
         // Yield messages as they arrive

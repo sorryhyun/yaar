@@ -300,17 +300,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     const interactions = consumeInteractions()
     const drawing = consumeDrawing()
 
-    // Add drawing interaction if present
-    if (drawing) {
-      interactions.push({
-        type: 'draw',
-        timestamp: Date.now(),
-        imageData: drawing,
-      })
-    }
+    // Add drawing interaction if present (create new array to avoid mutating frozen state)
+    const allInteractions = drawing
+      ? [...interactions, { type: 'draw' as const, timestamp: Date.now(), imageData: drawing }]
+      : interactions
 
     const messageId = generateMessageId()
-    send({ type: 'USER_MESSAGE', messageId, content, interactions: interactions.length > 0 ? interactions : undefined })
+    send({ type: 'USER_MESSAGE', messageId, content, interactions: allInteractions.length > 0 ? allInteractions : undefined })
   }, [send, consumeInteractions, consumeDrawing, generateMessageId])
 
   // Send message to a specific window agent

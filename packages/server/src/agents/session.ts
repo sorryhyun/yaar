@@ -228,11 +228,11 @@ export class AgentSession {
   }
 
   /**
-   * Format user interactions into context string.
-   * Drawings are formatted separately with their base64 image data.
+   * Format user interactions into context string and extract images.
+   * Returns both the text context and array of image data URLs.
    */
-  private formatInteractions(interactions: UserInteraction[]): string {
-    if (interactions.length === 0) return '';
+  private formatInteractions(interactions: UserInteraction[]): { text: string; images: string[] } {
+    if (interactions.length === 0) return { text: '', images: [] };
 
     // Separate drawings from other interactions
     const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
@@ -240,7 +240,7 @@ export class AgentSession {
 
     const parts: string[] = [];
 
-    // Format non-drawing interactions
+    // Format non-drawing interactions as text
     if (otherInteractions.length > 0) {
       const lines = otherInteractions.map(i => {
         let content = '';
@@ -251,15 +251,17 @@ export class AgentSession {
       parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
     }
 
-    // Format drawings with base64 image data
+    // Add a note about drawings if present (images sent separately)
     if (drawings.length > 0) {
-      const drawingLines = drawings.map(d =>
-        `<user_interaction:draw>\n[User drawing attached as base64 PNG]\n${d.imageData}\n</user_interaction:draw>`
-      );
-      parts.push(drawingLines.join('\n'));
+      parts.push(`<user_interaction:draw>[User drawing attached as image]</user_interaction:draw>`);
     }
 
-    return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
+    const text = parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
+    const images = drawings
+      .map(d => d.imageData)
+      .filter((img): img is string => img !== undefined);
+
+    return { text, images };
   }
 
   /**
@@ -288,8 +290,10 @@ export class AgentSession {
       agentId: role,
     });
 
-    // Prepend interaction context if available
-    const interactionContext = interactions ? this.formatInteractions(interactions) : '';
+    // Prepend interaction context if available, extract images separately
+    const { text: interactionContext, images } = interactions
+      ? this.formatInteractions(interactions)
+      : { text: '', images: [] };
     const fullContent = interactionContext + content;
 
     // Log user message with role identifier
@@ -309,6 +313,7 @@ export class AgentSession {
       const transportOptions: TransportOptions = {
         systemPrompt: this.provider!.systemPrompt,
         sessionId: sessionIdToUse,
+        images: images.length > 0 ? images : undefined,
       };
       this.hasSentFirstMessage = true;
 

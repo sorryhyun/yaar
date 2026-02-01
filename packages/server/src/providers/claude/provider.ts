@@ -32,6 +32,16 @@ export class ClaudeProvider extends BaseTransport {
   ): AsyncIterable<StreamMessage> {
     const abortController = this.createAbortController();
 
+    // Embed images as base64 text in prompt (Claude Agent SDK doesn't support native image input)
+    let fullPrompt = prompt;
+    if (options.images && options.images.length > 0) {
+      const imageText = options.images
+        .map(img => `<user_interaction:draw>\n[User drawing attached as base64 PNG]\n${img}\n</user_interaction:draw>`)
+        .join('\n');
+      // Prepend images to prompt
+      fullPrompt = imageText + '\n\n' + prompt;
+    }
+
     try {
       const sdkOptions: SDKOptions = {
         abortController,
@@ -63,7 +73,7 @@ export class ClaudeProvider extends BaseTransport {
       };
 
       const stream = sdkQuery({
-        prompt,
+        prompt: fullPrompt,
         options: sdkOptions,
       });
 

@@ -618,7 +618,7 @@ export class ContextPool {
 
   /**
    * Format user interactions into context string.
-   * Drawings are formatted separately with their base64 image data.
+   * Drawings are noted but not embedded (sent as native images to provider).
    */
   private formatInteractionsForContext(interactions: UserInteraction[]): string {
     if (interactions.length === 0) return '';
@@ -640,12 +640,9 @@ export class ContextPool {
       parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
     }
 
-    // Format drawings with base64 image data
+    // Note that drawings were attached (actual images sent separately to provider)
     if (drawings.length > 0) {
-      const drawingLines = drawings.map(d =>
-        `<user_interaction:draw>\n[User drawing attached as base64 PNG]\n${d.imageData}\n</user_interaction:draw>`
-      );
-      parts.push(drawingLines.join('\n'));
+      parts.push(`<user_interaction:draw>[User drawing attached as image]</user_interaction:draw>`);
     }
 
     return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';

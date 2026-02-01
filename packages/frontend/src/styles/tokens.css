@@ -105,6 +105,7 @@
   --z-panel: 9998;
   --z-modal: 9999;
   --z-toast: 10000;
+  --z-drawing: 50000;
   --z-cursor: 99999;
 
   /* === Opacity === */
