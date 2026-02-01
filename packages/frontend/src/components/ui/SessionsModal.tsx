@@ -64,7 +64,7 @@ export function SessionsModal() {
       }
       const data = await response.json()
       setTranscript(data.transcript)
-    } catch (err) {
+    } catch {
       setTranscript('Failed to load transcript')
     } finally {
       setLoadingTranscript(false)

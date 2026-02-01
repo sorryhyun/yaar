@@ -139,7 +139,7 @@ const server = createServer(async (req, res) => {
       const apps = await listApps();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ apps }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to list apps' }));
     }
@@ -152,7 +152,7 @@ const server = createServer(async (req, res) => {
       const sessions = await listSessions();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ sessions }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to list sessions' }));
     }
@@ -172,7 +172,7 @@ const server = createServer(async (req, res) => {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ transcript }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to read transcript' }));
     }
@@ -193,7 +193,7 @@ const server = createServer(async (req, res) => {
       const messages = parseSessionMessages(messagesJsonl);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ messages }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to read messages' }));
     }
@@ -215,7 +215,7 @@ const server = createServer(async (req, res) => {
       const restoreActions = getWindowRestoreActions(messages);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ actions: restoreActions }));
-    } catch (err) {
+    } catch {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Failed to restore session' }));
     }
@@ -375,7 +375,7 @@ const server = createServer(async (req, res) => {
         'Cache-Control': 'public, max-age=3600'
       });
       res.end(content);
-    } catch (err) {
+    } catch {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'File not found' }));
     }

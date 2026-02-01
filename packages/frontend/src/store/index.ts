@@ -1,5 +1,8 @@
+// Public API for the store
+export { useDesktopStore } from './desktop'
+
+// Selectors
 export {
-  useDesktopStore,
   selectWindowsInOrder,
   selectVisibleWindows,
   selectToasts,
@@ -9,4 +12,7 @@ export {
   selectWindowAgents,
   selectWindowAgent,
   selectQueuedActionsCount,
-} from './desktop'
+} from './selectors'
+
+// Types (for consumers that need them)
+export type { DesktopStore } from './types'

@@ -43,7 +43,7 @@ setTimeout(() => {
         stdio: 'ignore',
       }).unref();
     }
-  } catch (err) {
+  } catch {
     console.log(`Could not auto-open browser. Please visit: ${URL}`);
   }
 }, 1500);
