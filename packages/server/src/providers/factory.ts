@@ -47,8 +47,8 @@ function getForcedProvider(): ProviderType | null {
  */
 const providerLoaders: Record<ProviderType, () => Promise<AITransport>> = {
   claude: async () => {
-    const { ClaudeProvider } = await import('./claude/index.js');
-    return new ClaudeProvider();
+    const { ClaudeSessionProvider } = await import('./claude/index.js');
+    return new ClaudeSessionProvider();
   },
   codex: async () => {
     const { CodexProvider } = await import('./codex/index.js');

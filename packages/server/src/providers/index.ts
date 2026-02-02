@@ -15,5 +15,5 @@ export * from './factory.js';
 export { BaseTransport } from './base-transport.js';
 
 // Provider implementations
-export { ClaudeProvider, AgentSDKProvider, mapClaudeMessage } from './claude/index.js';
+export { ClaudeProvider, ClaudeSessionProvider, mapClaudeMessage } from './claude/index.js';
 export { CodexProvider, mapNotification as mapCodexEvent } from './codex/index.js';

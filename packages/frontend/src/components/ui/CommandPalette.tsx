@@ -26,11 +26,12 @@ export function CommandPalette() {
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim()
-    if (!trimmed || !isConnected) return
+    // Allow sending if there's text OR a drawing attached
+    if ((!trimmed && !hasDrawing) || !isConnected) return
 
     sendMessage(trimmed)
     setInput('')
-  }, [input, isConnected, sendMessage])
+  }, [input, isConnected, sendMessage, hasDrawing])
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -90,7 +91,7 @@ export function CommandPalette() {
           <button
             className={styles.sendButton}
             onClick={handleSubmit}
-            disabled={!isConnected || !input.trim()}
+            disabled={!isConnected || (!input.trim() && !hasDrawing)}
           >
             Send
           </button>

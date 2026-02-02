@@ -3,8 +3,10 @@
  *
  * Users can Ctrl+LeftDrag to draw on the screen.
  * The drawing is saved and sent with the next message.
+ * The saved image includes a screenshot of the current screen with annotations on top.
  */
 import { useRef, useState, useEffect, useCallback } from 'react'
+import html2canvas from 'html2canvas'
 import { useDesktopStore } from '@/store'
 import styles from '@/styles/DrawingOverlay.module.css'
 
@@ -134,19 +136,52 @@ export function DrawingOverlay() {
     setHasStrokes(true)
   }, [drawLine])
 
+  // Capture screen with drawing overlay
+  const captureScreenWithDrawing = useCallback(async () => {
+    const drawingCanvas = canvasRef.current
+    if (!drawingCanvas) return
+
+    try {
+      // Capture the screen content (excluding the drawing overlay)
+      const screenshot = await html2canvas(document.body, {
+        ignoreElements: (element) => element === drawingCanvas,
+        useCORS: true,
+        logging: false,
+        scale: 1,
+      })
+
+      // Create a composite canvas
+      const compositeCanvas = document.createElement('canvas')
+      compositeCanvas.width = screenshot.width
+      compositeCanvas.height = screenshot.height
+      const ctx = compositeCanvas.getContext('2d')
+
+      if (ctx) {
+        // Draw screenshot first
+        ctx.drawImage(screenshot, 0, 0)
+        // Draw annotations on top
+        ctx.drawImage(drawingCanvas, 0, 0)
+        // Save the composite
+        const dataUrl = compositeCanvas.toDataURL('image/png')
+        saveDrawing(dataUrl)
+      }
+    } catch (error) {
+      console.error('Failed to capture screen:', error)
+      // Fallback to just the drawing
+      const dataUrl = drawingCanvas.toDataURL('image/png')
+      saveDrawing(dataUrl)
+    }
+  }, [saveDrawing])
+
   const handleMouseUp = useCallback(() => {
     if (!isDrawingRef.current) return
 
     isDrawingRef.current = false
     lastPointRef.current = null
 
-    // Save the drawing if we have strokes
-    const canvas = canvasRef.current
-    if (canvas) {
-      const dataUrl = canvas.toDataURL('image/png')
-      saveDrawing(dataUrl)
-    }
-  }, [saveDrawing])
+    // Capture screen with drawing annotations
+    captureScreenWithDrawing()
+  }, [captureScreenWithDrawing])
 
   // Handle mouse leaving the window while drawing
   useEffect(() => {
@@ -154,18 +189,13 @@ export function DrawingOverlay() {
       if (isDrawingRef.current) {
         isDrawingRef.current = false
         lastPointRef.current = null
-
-        const canvas = canvasRef.current
-        if (canvas) {
-          const dataUrl = canvas.toDataURL('image/png')
-          saveDrawing(dataUrl)
-        }
+        captureScreenWithDrawing()
       }
     }
 
     window.addEventListener('mouseup', handleGlobalMouseUp)
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp)
-  }, [saveDrawing])
+  }, [captureScreenWithDrawing])
 
   return (
     <canvas

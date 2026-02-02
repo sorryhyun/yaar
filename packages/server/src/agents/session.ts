@@ -261,6 +261,11 @@ export class AgentSession {
       .map(d => d.imageData)
       .filter((img): img is string => img !== undefined);
 
+    console.log(`[AgentSession] formatInteractions: ${drawings.length} drawings, ${images.length} images extracted`);
+    if (images.length > 0) {
+      console.log(`[AgentSession] First image prefix: ${images[0].slice(0, 50)}...`);
+    }
+
     return { text, images };
   }
 
@@ -315,6 +320,7 @@ export class AgentSession {
         sessionId: sessionIdToUse,
         images: images.length > 0 ? images : undefined,
       };
+      console.log(`[AgentSession] ${role} transportOptions: sessionId=${sessionIdToUse}, images=${images.length}`);
       this.hasSentFirstMessage = true;
 
       let responseText = '';
