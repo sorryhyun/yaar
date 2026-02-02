@@ -9,9 +9,8 @@ import { z } from 'zod';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 
-const containerBase = {
-  gap: gapEnum,
-};
+/** Gap with default - LLM doesn't need to specify */
+const gapWithDefault = gapEnum.default('md');
 
 // ============ Leaf Component Schemas (non-recursive) ============
 
@@ -82,8 +81,7 @@ const progressSchema = z.object({
 const alertSchema = z.object({
   type: z.literal('alert'),
   title: z.string().optional(),
-  message: z.string().optional(),
-  content: z.string().optional().describe('Alias for message'),
+  message: z.string().optional().describe('Alert message text'),
   variant: z.enum(['info', 'success', 'warning', 'error']).optional(),
 });
 
@@ -115,7 +113,9 @@ const spacerSchema = z.object({
 
 type StackComponentType = {
   type: 'stack';
+  /** @default 'vertical' */
   direction?: 'horizontal' | 'vertical';
+  /** @default 'md' */
   gap?: 'none' | 'sm' | 'md' | 'lg';
   align?: 'start' | 'center' | 'end' | 'stretch';
   justify?: 'start' | 'center' | 'end' | 'between' | 'around';
@@ -126,6 +126,7 @@ type StackComponentType = {
 type GridComponentType = {
   type: 'grid';
   columns?: number | 'auto';
+  /** @default 'md' */
   gap?: 'none' | 'sm' | 'md' | 'lg';
   children: ComponentNodeType[];
 };
@@ -135,13 +136,14 @@ type FormComponentType = {
   id: string;
   children: ComponentNodeType[];
   layout?: 'vertical' | 'horizontal';
+  /** @default 'md' */
   gap?: 'none' | 'sm' | 'md' | 'lg';
 };
 
 type ListComponentType = {
   type: 'list';
   variant?: 'unordered' | 'ordered';
-  items: ComponentNodeType[];
+  children: ComponentNodeType[];
 };
 
 /** Union of all component types */
@@ -163,19 +165,19 @@ type ComponentType =
   | z.infer<typeof dividerSchema>
   | z.infer<typeof spacerSchema>;
 
-type ComponentNodeType = string | ComponentType;
+/** Component node - always an object (no string shorthand for LLM clarity) */
+type ComponentNodeType = ComponentType;
 
 // ============ Recursive Schemas (using z.lazy) ============
 
-const componentNodeSchema: z.ZodType<ComponentNodeType> = z.lazy(() =>
-  z.union([z.string(), componentSchema])
-);
+/** Component node schema - objects only (no string shorthand for LLM clarity) */
+const componentNodeSchema: z.ZodType<ComponentNodeType> = z.lazy(() => componentSchema);
 
 // Layout schemas (with children)
 const stackSchema = z.object({
   type: z.literal('stack'),
-  direction: z.enum(['horizontal', 'vertical']),
-  ...containerBase,
+  direction: z.enum(['horizontal', 'vertical']).default('vertical'),
+  gap: gapWithDefault,
   align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
   justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
   wrap: z.boolean().optional(),
@@ -185,14 +187,14 @@ const stackSchema = z.object({
 const gridSchema = z.object({
   type: z.literal('grid'),
   columns: z.union([z.number(), z.literal('auto')]).optional(),
-  ...containerBase,
+  gap: gapWithDefault,
   children: z.array(componentNodeSchema),
 });
 
 const formSchema = z.object({
   type: z.literal('form'),
   id: z.string().describe('Required - referenced by button submitForm'),
-  ...containerBase,
+  gap: gapWithDefault,
   layout: z.enum(['vertical', 'horizontal']).optional(),
   children: z.array(componentNodeSchema),
 });
@@ -200,7 +202,7 @@ const formSchema = z.object({
 const listSchema = z.object({
   type: z.literal('list'),
   variant: z.enum(['unordered', 'ordered']).optional(),
-  items: z.array(componentNodeSchema),
+  children: z.array(componentNodeSchema).describe('List items'),
 });
 
 // ============ Organized by Category ============

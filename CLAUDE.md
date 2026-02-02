@@ -22,19 +22,31 @@ pnpm install                     # Install all dependencies
 make claude                      # Start with Claude provider
 make codex                       # Start with Codex provider
 make dev                         # Start with auto-detected provider
+make claude-dev                  # Claude provider without MCP auth (local dev)
+make codex-dev                   # Codex provider without MCP auth (local dev)
 make server                      # Start server only
 make frontend                    # Start frontend only
 make build                       # Build all packages
 pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
-pnpm --filter @claudeos/frontend vitest run  # Run frontend tests
+
+# Testing
+pnpm --filter @claudeos/frontend vitest run           # Run all frontend tests
+pnpm --filter @claudeos/frontend vitest run store     # Run tests matching "store"
+
+# Standalone executable (requires Bun)
+pnpm build:exe                   # Build Windows executable
+pnpm build:exe:bundle:linux      # Build Linux executable
+pnpm build:exe:bundle:macos      # Build macOS executable
 ```
 
 ## Environment Variables
 
 - `PROVIDER` - Force a specific AI provider (`claude` or `codex`). Auto-detected if not set.
 - `PORT` - Server port (default: 8000)
+- `MAX_AGENTS` - Global agent limit (default: 10)
+- `MCP_SKIP_AUTH` - Skip MCP authentication for local development
 
 ## Monorepo Structure
 

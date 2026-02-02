@@ -310,9 +310,9 @@ function ListRenderer({
 
   return (
     <Tag className={styles.list}>
-      {node.items.map((item, i) => (
+      {node.children.map((child, i) => (
         <li key={i} className={styles.listItem}>
-          <NodeRenderer node={item} windowId={windowId} onAction={onAction} />
+          <NodeRenderer node={child} windowId={windowId} onAction={onAction} />
         </li>
       ))}
     </Tag>
@@ -357,7 +357,6 @@ function ProgressRenderer({ node }: { node: ProgressComponent }) {
 
 function AlertRenderer({ node }: { node: AlertComponent }) {
   const variant = normalizeEnum(node.variant, ALERT_VARIANT_VALUES, 'info')
-  const message = node.message ?? node.content ?? ''
 
   const className = [
     styles.alert,
@@ -367,7 +366,7 @@ function AlertRenderer({ node }: { node: AlertComponent }) {
   return (
     <div className={className}>
       {node.title && <div className={styles.alertTitle}>{node.title}</div>}
-      <div className={styles.alertMessage}>{message}</div>
+      {node.message && <div className={styles.alertMessage}>{node.message}</div>}
     </div>
   )
 }
