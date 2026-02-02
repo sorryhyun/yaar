@@ -1,4 +1,4 @@
-.PHONY: dev claude codex server frontend install lint build clean
+.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean
 
 # Run both server and frontend (auto-select provider)
 dev:
@@ -11,6 +11,14 @@ claude:
 # Run with Codex provider
 codex:
 	@./scripts/dev.sh codex
+
+# Run with Claude provider (dev mode - no MCP auth)
+claude-dev:
+	@MCP_SKIP_AUTH=1 ./scripts/dev.sh claude
+
+# Run with Codex provider (dev mode - no MCP auth)
+codex-dev:
+	@MCP_SKIP_AUTH=1 ./scripts/dev.sh codex
 
 # Run server only
 server:

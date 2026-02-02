@@ -5,8 +5,8 @@
  * The frontend applies them to create windows, toasts, and notifications.
  */
 
-import type { ComponentNode } from './components'
-import { isComponent } from './components'
+import type { ComponentNode } from './components.js';
+import { isComponent } from './components.js';
 
 // ============ Window Actions ============
 

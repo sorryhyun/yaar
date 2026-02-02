@@ -1,182 +1,280 @@
 /**
- * Component DSL - Typed components for rich UI rendering.
- *
- * The AI generates JSON conforming to these types, and the frontend
- * renders them as interactive React components.
+ * Component DSL - Single source of truth for schemas, types, and validation.
+ * Organized by category with shared base patterns.
  */
 
-// ============ Component Types ============
+import { z } from 'zod';
 
-export interface CardComponent {
-  type: 'card';
-  title?: string;
-  subtitle?: string;
-  content: ComponentNode;
-  actions?: ComponentNode;
-  variant?: 'default' | 'outlined' | 'elevated';
-}
+// ============ Shared Base Patterns ============
 
-export interface StackComponent {
+const gapEnum = z.enum(['none', 'sm', 'md', 'lg']).optional();
+
+const containerBase = {
+  gap: gapEnum,
+};
+
+// ============ Leaf Component Schemas (non-recursive) ============
+
+const buttonSchema = z.object({
+  type: z.literal('button'),
+  label: z.string(),
+  action: z.string().describe('Sent as message to agent on click'),
+  variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
+  size: z.enum(['sm', 'md', 'lg']).optional(),
+  disabled: z.boolean().optional(),
+  icon: z.string().optional(),
+  parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
+  submitForm: z.string().optional().describe('Form ID to collect data from on click'),
+});
+
+const inputSchema = z.object({
+  type: z.literal('input'),
+  name: z.string().describe('Required - key in form data'),
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  defaultValue: z.string().optional(),
+  variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
+  disabled: z.boolean().optional(),
+});
+
+const textareaSchema = z.object({
+  type: z.literal('textarea'),
+  name: z.string(),
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  defaultValue: z.string().optional(),
+  rows: z.number().optional(),
+  disabled: z.boolean().optional(),
+});
+
+const selectSchema = z.object({
+  type: z.literal('select'),
+  name: z.string(),
+  label: z.string().optional(),
+  options: z.array(z.object({ value: z.string(), label: z.string() })),
+  defaultValue: z.string().optional(),
+  placeholder: z.string().optional(),
+  disabled: z.boolean().optional(),
+});
+
+const textComponentSchema = z.object({
+  type: z.literal('text'),
+  content: z.string(),
+  variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
+  color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
+});
+
+const badgeSchema = z.object({
+  type: z.literal('badge'),
+  label: z.string(),
+  variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
+});
+
+const progressSchema = z.object({
+  type: z.literal('progress'),
+  value: z.number().min(0).max(100),
+  label: z.string().optional(),
+  variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
+  showValue: z.boolean().optional(),
+});
+
+const alertSchema = z.object({
+  type: z.literal('alert'),
+  title: z.string().optional(),
+  message: z.string().optional(),
+  content: z.string().optional().describe('Alias for message'),
+  variant: z.enum(['info', 'success', 'warning', 'error']).optional(),
+});
+
+const imageSchema = z.object({
+  type: z.literal('image'),
+  src: z.string(),
+  alt: z.string().optional(),
+  width: z.union([z.number(), z.string()]).optional(),
+  height: z.union([z.number(), z.string()]).optional(),
+  fit: z.enum(['contain', 'cover', 'fill']).optional(),
+});
+
+const markdownSchema = z.object({
+  type: z.literal('markdown'),
+  content: z.string(),
+});
+
+const dividerSchema = z.object({
+  type: z.literal('divider'),
+  variant: z.enum(['solid', 'dashed']).optional(),
+});
+
+const spacerSchema = z.object({
+  type: z.literal('spacer'),
+  size: z.enum(['sm', 'md', 'lg']).optional(),
+});
+
+// ============ Recursive Types (defined first for schema typing) ============
+
+type StackComponentType = {
   type: 'stack';
   direction?: 'horizontal' | 'vertical';
   gap?: 'none' | 'sm' | 'md' | 'lg';
   align?: 'start' | 'center' | 'end' | 'stretch';
   justify?: 'start' | 'center' | 'end' | 'between' | 'around';
   wrap?: boolean;
-  children: ComponentNode[];
-}
+  children: ComponentNodeType[];
+};
 
-export interface GridComponent {
+type GridComponentType = {
   type: 'grid';
   columns?: number | 'auto';
   gap?: 'none' | 'sm' | 'md' | 'lg';
-  children: ComponentNode[];
-}
+  children: ComponentNodeType[];
+};
 
-export interface ButtonComponent {
-  type: 'button';
-  label: string;
-  action: string; // Sent as message to agent on click
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
-  disabled?: boolean;
-  icon?: string;
-  parallel?: boolean; // Actions run in parallel by default; set to false for sequential
-  submitForm?: string; // Form ID to collect data from on click
-}
-
-export interface FormComponent {
+type FormComponentType = {
   type: 'form';
-  id: string; // Required - referenced by button's submitForm
-  children: ComponentNode[];
+  id: string;
+  children: ComponentNodeType[];
   layout?: 'vertical' | 'horizontal';
   gap?: 'none' | 'sm' | 'md' | 'lg';
-}
+};
 
-export interface InputComponent {
-  type: 'input';
-  name: string; // Required - key in form data
-  label?: string;
-  placeholder?: string;
-  defaultValue?: string;
-  variant?: 'text' | 'email' | 'password' | 'number' | 'url';
-  disabled?: boolean;
-}
-
-export interface TextareaComponent {
-  type: 'textarea';
-  name: string;
-  label?: string;
-  placeholder?: string;
-  defaultValue?: string;
-  rows?: number;
-  disabled?: boolean;
-}
-
-export interface SelectComponent {
-  type: 'select';
-  name: string;
-  label?: string;
-  options: Array<{ value: string; label: string }>;
-  defaultValue?: string;
-  placeholder?: string;
-  disabled?: boolean;
-}
-
-export interface TextComponent {
-  type: 'text';
-  content: string;
-  variant?: 'body' | 'heading' | 'subheading' | 'caption' | 'code';
-  color?: 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error';
-  align?: 'left' | 'center' | 'right';
-}
-
-export interface ListComponent {
+type ListComponentType = {
   type: 'list';
   variant?: 'unordered' | 'ordered';
-  items: ComponentNode[];
-}
+  items: ComponentNodeType[];
+};
 
-export interface BadgeComponent {
-  type: 'badge';
-  label: string;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
-}
+/** Union of all component types */
+type ComponentType =
+  | StackComponentType
+  | GridComponentType
+  | FormComponentType
+  | ListComponentType
+  | z.infer<typeof buttonSchema>
+  | z.infer<typeof inputSchema>
+  | z.infer<typeof textareaSchema>
+  | z.infer<typeof selectSchema>
+  | z.infer<typeof textComponentSchema>
+  | z.infer<typeof badgeSchema>
+  | z.infer<typeof progressSchema>
+  | z.infer<typeof alertSchema>
+  | z.infer<typeof imageSchema>
+  | z.infer<typeof markdownSchema>
+  | z.infer<typeof dividerSchema>
+  | z.infer<typeof spacerSchema>;
 
-export interface ProgressComponent {
-  type: 'progress';
-  value: number; // 0-100
-  label?: string;
-  variant?: 'default' | 'success' | 'warning' | 'error';
-  showValue?: boolean;
-}
+type ComponentNodeType = string | ComponentType;
 
-export interface AlertComponent {
-  type: 'alert';
-  title?: string;
-  message?: string;
-  content?: string; // Alias for message
-  variant?: 'info' | 'success' | 'warning' | 'error';
-}
+// ============ Recursive Schemas (using z.lazy) ============
 
-export interface ImageComponent {
-  type: 'image';
-  src: string;
-  alt?: string;
-  width?: number | string;
-  height?: number | string;
-  fit?: 'contain' | 'cover' | 'fill';
-}
+const componentNodeSchema: z.ZodType<ComponentNodeType> = z.lazy(() =>
+  z.union([z.string(), componentSchema])
+);
 
-export interface MarkdownComponent {
-  type: 'markdown';
-  content: string;
-}
+// Layout schemas (with children)
+const stackSchema = z.object({
+  type: z.literal('stack'),
+  direction: z.enum(['horizontal', 'vertical']).optional(),
+  ...containerBase,
+  align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+  justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
+  wrap: z.boolean().optional(),
+  children: z.array(componentNodeSchema),
+});
 
-export interface DividerComponent {
-  type: 'divider';
-  variant?: 'solid' | 'dashed';
-}
+const gridSchema = z.object({
+  type: z.literal('grid'),
+  columns: z.union([z.number(), z.literal('auto')]).optional(),
+  ...containerBase,
+  children: z.array(componentNodeSchema),
+});
 
-export interface SpacerComponent {
-  type: 'spacer';
-  size?: 'sm' | 'md' | 'lg';
-}
+const formSchema = z.object({
+  type: z.literal('form'),
+  id: z.string().describe('Required - referenced by button submitForm'),
+  ...containerBase,
+  layout: z.enum(['vertical', 'horizontal']).optional(),
+  children: z.array(componentNodeSchema),
+});
 
-// ============ Union Type ============
+const listSchema = z.object({
+  type: z.literal('list'),
+  variant: z.enum(['unordered', 'ordered']).optional(),
+  items: z.array(componentNodeSchema),
+});
 
-export type Component =
-  | CardComponent
-  | StackComponent
-  | GridComponent
-  | ButtonComponent
-  | TextComponent
-  | ListComponent
-  | BadgeComponent
-  | ProgressComponent
-  | AlertComponent
-  | ImageComponent
-  | MarkdownComponent
-  | DividerComponent
-  | SpacerComponent
-  | FormComponent
-  | InputComponent
-  | TextareaComponent
-  | SelectComponent;
+// ============ Organized by Category ============
+
+const layoutSchemas = [stackSchema, gridSchema] as const;
+const containerSchemas = [formSchema, listSchema] as const;
+const displaySchemas = [
+  textComponentSchema,
+  badgeSchema,
+  progressSchema,
+  alertSchema,
+  imageSchema,
+  markdownSchema,
+  dividerSchema,
+  spacerSchema,
+] as const;
+const inputSchemas = [buttonSchema, inputSchema, textareaSchema, selectSchema] as const;
+
+// ============ Union Schema ============
+
+const componentSchema: z.ZodType<ComponentType> = z.discriminatedUnion('type', [
+  ...layoutSchemas,
+  ...containerSchemas,
+  ...displaySchemas,
+  ...inputSchemas,
+]);
 
 /**
- * ComponentNode can be a component object or a plain string (text shorthand).
+ * Raw content with explicit renderer (for html/iframe/text).
  */
-export type ComponentNode = Component | string;
+const rawContentSchema = z.object({
+  renderer: z.enum(['markdown', 'html', 'text', 'iframe']),
+  content: z.string(),
+});
+
+/**
+ * Content schema for window content:
+ * - string: rendered as markdown (default)
+ * - component object: rendered as interactive UI
+ * - { renderer, content }: explicit renderer for string content
+ */
+const contentSchema = z.union([z.string(), componentSchema, rawContentSchema]);
+
+// ============ Exported Types ============
+
+// Leaf types (inferred from schemas)
+export type ButtonComponent = z.infer<typeof buttonSchema>;
+export type InputComponent = z.infer<typeof inputSchema>;
+export type TextareaComponent = z.infer<typeof textareaSchema>;
+export type SelectComponent = z.infer<typeof selectSchema>;
+export type TextComponent = z.infer<typeof textComponentSchema>;
+export type BadgeComponent = z.infer<typeof badgeSchema>;
+export type ProgressComponent = z.infer<typeof progressSchema>;
+export type AlertComponent = z.infer<typeof alertSchema>;
+export type ImageComponent = z.infer<typeof imageSchema>;
+export type MarkdownComponent = z.infer<typeof markdownSchema>;
+export type DividerComponent = z.infer<typeof dividerSchema>;
+export type SpacerComponent = z.infer<typeof spacerSchema>;
+
+// Recursive types (manually defined due to z.lazy)
+export type StackComponent = StackComponentType;
+export type GridComponent = GridComponentType;
+export type FormComponent = FormComponentType;
+export type ListComponent = ListComponentType;
+
+export type Component = ComponentType;
+export type ComponentNode = ComponentNodeType;
+export type RawContent = z.infer<typeof rawContentSchema>;
+export type Content = string | ComponentType | RawContent;
 
 // ============ Type Guards ============
 
 export function isComponent(node: ComponentNode): node is Component {
   return typeof node === 'object' && node !== null && 'type' in node;
-}
-
-export function isCardComponent(node: ComponentNode): node is CardComponent {
-  return isComponent(node) && node.type === 'card';
 }
 
 export function isStackComponent(node: ComponentNode): node is StackComponent {
@@ -242,3 +340,50 @@ export function isTextareaComponent(node: ComponentNode): node is TextareaCompon
 export function isSelectComponent(node: ComponentNode): node is SelectComponent {
   return isComponent(node) && node.type === 'select';
 }
+
+export function isRawContent(content: Content): content is RawContent {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'renderer' in content &&
+    'content' in content
+  );
+}
+
+// ============ Schema Exports ============
+
+export { componentNodeSchema, componentSchema, contentSchema };
+
+export {
+  stackSchema,
+  gridSchema,
+  buttonSchema,
+  formSchema,
+  inputSchema,
+  textareaSchema,
+  selectSchema,
+  textComponentSchema,
+  listSchema,
+  badgeSchema,
+  progressSchema,
+  alertSchema,
+  imageSchema,
+  markdownSchema,
+  dividerSchema,
+  spacerSchema,
+};
+
+/**
+ * Schema description for component tree parameters (for MCP tool descriptions).
+ */
+export const COMPONENT_SCHEMA_DESCRIPTION = `Component tree object. Types: stack {children[], direction?, gap?}, grid {children[], columns?}, form {id, children[]}, button {label, action}, text/markdown {content}, image {src}, list {items[]}, badge {label}, progress {value}, alert {message}, divider, spacer, input/textarea/select {name}`;
+
+/**
+ * Schema description for content parameter.
+ */
+export const CONTENT_SCHEMA_DESCRIPTION = `Window content - three formats:
+1. String: rendered as markdown (default)
+2. Component object: interactive UI with {type, ...props}
+3. {renderer: "html"|"iframe"|"text", content: string}: explicit renderer
+
+Component types: stack {children[]}, grid {children[]}, form {id, children[]}, button {label, action}, text {content}, markdown {content}, image {src}, list {items[]}, badge, progress, alert, divider, spacer, input/textarea/select {name}`;

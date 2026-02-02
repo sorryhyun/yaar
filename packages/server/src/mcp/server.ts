@@ -17,6 +17,9 @@ let transport: StreamableHTTPServerTransport | null = null;
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
 
+// Skip auth in dev mode (set MCP_SKIP_AUTH=1)
+const skipAuth = process.env.MCP_SKIP_AUTH === '1';
+
 /**
  * Get the MCP authentication token.
  * Must be called after initMcpServer().
@@ -49,7 +52,7 @@ export async function initMcpServer(): Promise<void> {
   });
 
   await mcpServer.connect(transport);
-  console.log('[MCP] HTTP server initialized');
+  console.log(`[MCP] HTTP server initialized${skipAuth ? ' (auth disabled)' : ''}`);
 }
 
 /**
@@ -65,13 +68,15 @@ export async function handleMcpRequest(
     return;
   }
 
-  // Validate bearer token
-  const authHeader = req.headers.authorization;
-  if (authHeader !== `Bearer ${mcpToken}`) {
-    console.log(`[MCP] Unauthorized request (invalid or missing token)`);
-    res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Unauthorized' }));
-    return;
+  // Validate bearer token (skip in dev mode)
+  if (!skipAuth) {
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${mcpToken}`) {
+      console.log(`[MCP] Unauthorized request (invalid or missing token)`);
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
   }
 
   console.log(`[MCP] ${req.method} ${req.url}`);

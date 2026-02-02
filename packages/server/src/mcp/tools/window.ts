@@ -9,7 +9,10 @@ import {
   type WindowPreset,
   type OSAction,
   type ContentUpdateOperation,
-  type ComponentNode,
+  type Content,
+  contentSchema,
+  CONTENT_SCHEMA_DESCRIPTION,
+  isRawContent,
 } from '@claudeos/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
@@ -21,28 +24,15 @@ export function registerWindowTools(server: McpServer): void {
     'create_window',
     {
       description:
-        'Create a new window. For interactive UI, set renderer="component" and use "components" parameter.',
+        'Create a new window. Pass a string for markdown content, or a component object for interactive UI.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        content: z
-          .string()
-          .optional()
-          .describe('String content for markdown/text/html/iframe renderers.'),
-        components: z
-          .any()
-          .optional()
-          .describe(
-            'Component tree for renderer="component". Valid types: stack (layout with children), grid (columns), card (title/content), button (action), text, markdown, image, alert, badge, progress, list, divider, spacer, form, input, textarea, select.'
-          ),
+        content: contentSchema.optional().describe(CONTENT_SCHEMA_DESCRIPTION),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()
           .describe('Window preset for consistent styling. Defaults to "default"'),
-        renderer: z
-          .enum(['markdown', 'text', 'html', 'iframe', 'component'])
-          .optional()
-          .describe('Content renderer. Use "component" for interactive UI with buttons. Defaults to "markdown"'),
         x: z.number().optional().describe('X position (overrides preset)'),
         y: z.number().optional().describe('Y position (overrides preset)'),
         width: z.number().optional().describe('Width (overrides preset)'),
@@ -52,12 +42,22 @@ export function registerWindowTools(server: McpServer): void {
     async (args) => {
       const presetName = (args.preset || 'default') as WindowPreset;
       const preset = WINDOW_PRESETS[presetName];
-      const renderer = args.renderer || 'markdown';
 
-      const contentData =
-        renderer === 'component' && args.components
-          ? (args.components as ComponentNode)
-          : (args.content ?? '');
+      // Determine renderer and data based on content type
+      const content = (args.content ?? '') as Content;
+      let renderer: 'markdown' | 'html' | 'text' | 'iframe' | 'component';
+      let data: string | object;
+
+      if (typeof content === 'string') {
+        renderer = 'markdown';
+        data = content;
+      } else if (isRawContent(content)) {
+        renderer = content.renderer;
+        data = content.content;
+      } else {
+        renderer = 'component';
+        data = content;
+      }
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -71,16 +71,16 @@ export function registerWindowTools(server: McpServer): void {
         },
         content: {
           renderer,
-          data: contentData,
+          data,
         },
       };
 
-      if (renderer === 'iframe' && args.content) {
+      if (renderer === 'iframe') {
         const feedback = await actionEmitter.emitActionWithFeedback(osAction, 2000);
 
         if (feedback && !feedback.success) {
           return ok(
-            `Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding via CSP or X-Frame-Options. Consider showing content differently (e.g., markdown summary with a link).`
+            `Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding.`
           );
         }
 
@@ -96,51 +96,49 @@ export function registerWindowTools(server: McpServer): void {
   server.registerTool(
     'update_window',
     {
-      description: 'Update window content.',
+      description: 'Update window content. Pass a string for markdown or a component object for interactive UI.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to update'),
         operation: z
           .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
           .describe('The operation to perform on the content'),
-        content: z
-          .string()
-          .optional()
-          .describe('String content for markdown/text/html/iframe renderers.'),
-        components: z
-          .any()
-          .optional()
-          .describe(
-            'Component tree for renderer="component". Valid types: stack, grid, card, button, text, markdown, image, alert, badge, progress, list, divider, spacer, form, input, textarea, select.'
-          ),
+        content: contentSchema.optional().describe(CONTENT_SCHEMA_DESCRIPTION),
         position: z.number().optional().describe('Character position for insertAt operation'),
-        renderer: z
-          .enum(['markdown', 'text', 'html', 'iframe', 'component'])
-          .optional()
-          .describe('Change the renderer type. Use "component" for interactive UI with buttons'),
       },
     },
     async (args) => {
-      const contentData =
-        args.renderer === 'component' && args.components
-          ? args.components
-          : (args.content ?? '');
+      // Determine renderer and data based on content type
+      const content = (args.content ?? '') as Content;
+      let renderer: 'markdown' | 'html' | 'text' | 'iframe' | 'component' | undefined;
+      let data: string | object;
+
+      if (typeof content === 'string') {
+        renderer = undefined; // Keep existing renderer
+        data = content;
+      } else if (isRawContent(content)) {
+        renderer = content.renderer;
+        data = content.content;
+      } else {
+        renderer = 'component';
+        data = content;
+      }
 
       let operation: ContentUpdateOperation;
       switch (args.operation) {
         case 'append':
-          operation = { op: 'append', data: contentData };
+          operation = { op: 'append', data };
           break;
         case 'prepend':
-          operation = { op: 'prepend', data: contentData };
+          operation = { op: 'prepend', data };
           break;
         case 'replace':
-          operation = { op: 'replace', data: contentData };
+          operation = { op: 'replace', data };
           break;
         case 'insertAt':
           if (args.position === undefined) {
             return ok('Error: position is required for insertAt operation');
           }
-          operation = { op: 'insertAt', position: args.position, data: contentData };
+          operation = { op: 'insertAt', position: args.position, data };
           break;
         case 'clear':
           operation = { op: 'clear' };
@@ -151,7 +149,7 @@ export function registerWindowTools(server: McpServer): void {
         type: 'window.updateContent' as const,
         windowId: args.windowId,
         operation,
-        renderer: args.renderer,
+        renderer,
       };
 
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
@@ -164,9 +162,7 @@ export function registerWindowTools(server: McpServer): void {
         return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock_window when done.`);
       }
 
-      return ok(
-        `Updated window "${args.windowId}" (${args.operation}${args.renderer ? `, renderer: ${args.renderer}` : ''})`
-      );
+      return ok(`Updated window "${args.windowId}" (${args.operation})`);
     }
   );
 

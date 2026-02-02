@@ -185,55 +185,6 @@
   line-height: 1.5;
 }
 
-/* ============ Card ============ */
-.card {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.cardDefault {
-  background: var(--bg-overlay-light);
-}
-
-.cardOutlined {
-  background: transparent;
-  border: var(--border-subtle);
-}
-
-.cardElevated {
-  background: var(--bg-overlay-medium);
-  box-shadow: var(--shadow-md);
-}
-
-.cardHeader {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.cardTitle {
-  font-size: var(--text-2xl);
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.cardSubtitle {
-  font-size: var(--text-md);
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 2px;
-}
-
-.cardContent {
-  padding: var(--space-4);
-}
-
-.cardActions {
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-}
-
 /* ============ Stack ============ */
 .stack {
   display: flex;

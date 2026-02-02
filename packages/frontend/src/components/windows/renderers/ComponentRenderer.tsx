@@ -6,7 +6,6 @@ import { memo, useCallback, useEffect, useState, createContext, useContext } fro
 import type {
   ComponentNode,
   Component,
-  CardComponent,
   StackComponent,
   GridComponent,
   ButtonComponent,
@@ -125,8 +124,6 @@ function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
   const component = node as Component
 
   switch (component.type) {
-    case 'card':
-      return <CardRenderer node={component} windowId={windowId} onAction={onAction} />
     case 'stack':
       return <StackRenderer node={component} windowId={windowId} onAction={onAction} />
     case 'grid':
@@ -165,46 +162,6 @@ function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
 }
 
 // ============ Component Renderers ============
-
-function CardRenderer({
-  node,
-  windowId,
-  onAction,
-}: {
-  node: CardComponent
-  windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
-}) {
-  const parentPath = useComponentPath()
-  const cardPath = [...parentPath, `Card${node.title ? `:${node.title}` : ''}`]
-
-  const variantClass = node.variant === 'outlined'
-    ? styles.cardOutlined
-    : node.variant === 'elevated'
-    ? styles.cardElevated
-    : styles.cardDefault
-
-  return (
-    <ComponentPathContext.Provider value={cardPath}>
-      <div className={`${styles.card} ${variantClass}`}>
-        {(node.title || node.subtitle) && (
-          <div className={styles.cardHeader}>
-            {node.title && <div className={styles.cardTitle}>{node.title}</div>}
-            {node.subtitle && <div className={styles.cardSubtitle}>{node.subtitle}</div>}
-          </div>
-        )}
-        <div className={styles.cardContent}>
-          <NodeRenderer node={node.content} windowId={windowId} onAction={onAction} />
-        </div>
-        {node.actions && (
-          <div className={styles.cardActions}>
-            <NodeRenderer node={node.actions} windowId={windowId} onAction={onAction} />
-          </div>
-        )}
-      </div>
-    </ComponentPathContext.Provider>
-  )
-}
 
 function StackRenderer({
   node,

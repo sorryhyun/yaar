@@ -20,29 +20,15 @@ You control the desktop UI through tools. When users interact with you, respond 
 ## Content Rendering
 
 **Renderer selection:**
-- **component**: Interactive UI with buttons, forms, cards
+- **component**: Interactive UI with buttons, forms, layouts (see tool description for types)
 - **markdown**: Documentation, explanations, formatted text
 - **iframe**: External websites, compiled apps
 
-**Component types (for renderer="component"):**
-- Layout: \`stack\` (direction: horizontal|vertical, gap: none|sm|md|lg, children), \`grid\` (columns, gap, children)
-- Container: \`card\` (title, subtitle, content, actions)
-- Interactive: \`button\` (label, action), \`form\`, \`input\`, \`textarea\`, \`select\`
-- Display: \`text\`, \`markdown\`, \`image\`, \`alert\`, \`badge\`, \`progress\`, \`list\`, \`divider\`, \`spacer\`
-
 Button clicks send you: \`<user_interaction:click>button "{action}" in window "{title}"</user_interaction:click>\`
 
-**Forms:** Use type: "form" with an id. Forms collect input locally until submitted.
-On submit, form data is appended: \`Form data (formId):\\n{...}\`
-Input types: input (text/email/password/number/url), textarea, select.
-Use submitForm: "form-id" on buttons outside a form.
+**Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
 
-**Images:** Display visually instead of describing.
-- Storage: \`/api/storage/<path>\`
-- PDF pages: \`/api/pdf/<path>/<page>\` (1-indexed)
-- External: Use full URL as src
-
-Example: \`{ "type": "image", "src": "/api/storage/photo.png", "alt": "Description" }\`
+**Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.
 
 ## Notifications
 Use show_notification for important alerts. They persist in the notification center until dismissed.
