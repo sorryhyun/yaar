@@ -336,6 +336,534 @@ export function isSelectComponent(node: ComponentNode): node is SelectComponent 
 }
 
 
+// ============ LLM Emission Schema ============
+// Canonical {type, props, children} structure for LLM output
+// All props nested, extensive defaults, optional IDs for future diffing
+
+const llmBaseNode = z.object({
+  id: z.string().optional().describe('Stable ID for updates/references'),
+});
+
+// LLM Layout components
+const llmStackSchema = llmBaseNode.extend({
+  type: z.literal('stack'),
+  props: z
+    .object({
+      direction: z.enum(['horizontal', 'vertical']).optional(),
+      gap: gapEnum.optional(),
+      align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+      justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
+      wrap: z.boolean().optional(),
+    })
+    .optional(),
+  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+});
+
+const llmGridSchema = llmBaseNode.extend({
+  type: z.literal('grid'),
+  props: z
+    .object({
+      columns: z.union([z.number(), z.literal('auto')]).optional(),
+      gap: gapEnum.optional(),
+    })
+    .optional(),
+  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+});
+
+// LLM Container components
+const llmFormSchema = llmBaseNode.extend({
+  type: z.literal('form'),
+  props: z.object({
+    id: z.string().describe('Required - referenced by button submitForm'),
+    layout: z.enum(['vertical', 'horizontal']).optional(),
+    gap: gapEnum.optional(),
+  }),
+  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+});
+
+const llmListSchema = llmBaseNode.extend({
+  type: z.literal('list'),
+  props: z
+    .object({
+      variant: z.enum(['unordered', 'ordered']).optional(),
+    })
+    .optional(),
+  children: z.array(z.lazy(() => llmComponentSchema)).optional().describe('List items'),
+});
+
+// LLM Input components (leaf)
+const llmButtonSchema = llmBaseNode.extend({
+  type: z.literal('button'),
+  props: z.object({
+    label: z.string(),
+    action: z.string().describe('Message sent to agent on click'),
+    variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
+    size: z.enum(['sm', 'md', 'lg']).optional(),
+    disabled: z.boolean().optional(),
+    icon: z.string().optional(),
+    parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
+    submitForm: z.string().optional().describe('Form ID to collect data from on click'),
+  }),
+});
+
+const llmInputSchema = llmBaseNode.extend({
+  type: z.literal('input'),
+  props: z.object({
+    name: z.string().describe('Required - key in form data'),
+    label: z.string().optional(),
+    placeholder: z.string().optional(),
+    defaultValue: z.string().optional(),
+    variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
+    disabled: z.boolean().optional(),
+  }),
+});
+
+const llmTextareaSchema = llmBaseNode.extend({
+  type: z.literal('textarea'),
+  props: z.object({
+    name: z.string(),
+    label: z.string().optional(),
+    placeholder: z.string().optional(),
+    defaultValue: z.string().optional(),
+    rows: z.number().optional(),
+    disabled: z.boolean().optional(),
+  }),
+});
+
+const llmSelectSchema = llmBaseNode.extend({
+  type: z.literal('select'),
+  props: z.object({
+    name: z.string(),
+    label: z.string().optional(),
+    options: z.array(z.object({ value: z.string(), label: z.string() })),
+    defaultValue: z.string().optional(),
+    placeholder: z.string().optional(),
+    disabled: z.boolean().optional(),
+  }),
+});
+
+// LLM Display components (leaf)
+const llmTextComponentSchema = llmBaseNode.extend({
+  type: z.literal('text'),
+  props: z.object({
+    content: z.string(),
+    variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
+    color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
+    align: z.enum(['left', 'center', 'right']).optional(),
+  }),
+});
+
+const llmBadgeSchema = llmBaseNode.extend({
+  type: z.literal('badge'),
+  props: z.object({
+    label: z.string(),
+    variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
+  }),
+});
+
+const llmProgressSchema = llmBaseNode.extend({
+  type: z.literal('progress'),
+  props: z.object({
+    value: z.number().min(0).max(100),
+    label: z.string().optional(),
+    variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
+    showValue: z.boolean().optional(),
+  }),
+});
+
+const llmAlertSchema = llmBaseNode.extend({
+  type: z.literal('alert'),
+  props: z
+    .object({
+      title: z.string().optional(),
+      message: z.string().optional().describe('Alert message text'),
+      variant: z.enum(['info', 'success', 'warning', 'error']).optional(),
+    })
+    .optional(),
+});
+
+const llmImageSchema = llmBaseNode.extend({
+  type: z.literal('image'),
+  props: z.object({
+    src: z.string(),
+    alt: z.string().optional(),
+    width: z.union([z.number(), z.string()]).optional(),
+    height: z.union([z.number(), z.string()]).optional(),
+    fit: z.enum(['contain', 'cover', 'fill']).optional(),
+  }),
+});
+
+const llmMarkdownSchema = llmBaseNode.extend({
+  type: z.literal('markdown'),
+  props: z.object({
+    content: z.string(),
+  }),
+});
+
+const llmDividerSchema = llmBaseNode.extend({
+  type: z.literal('divider'),
+  props: z
+    .object({
+      variant: z.enum(['solid', 'dashed']).optional(),
+    })
+    .optional(),
+});
+
+const llmSpacerSchema = llmBaseNode.extend({
+  type: z.literal('spacer'),
+  props: z
+    .object({
+      size: z.enum(['sm', 'md', 'lg']).optional(),
+    })
+    .optional(),
+});
+
+// LLM Component Schema - discriminated union
+export const llmComponentSchema: z.ZodType<LlmComponent> = z.discriminatedUnion('type', [
+  llmStackSchema,
+  llmGridSchema,
+  llmFormSchema,
+  llmListSchema,
+  llmButtonSchema,
+  llmInputSchema,
+  llmTextareaSchema,
+  llmSelectSchema,
+  llmTextComponentSchema,
+  llmBadgeSchema,
+  llmProgressSchema,
+  llmAlertSchema,
+  llmImageSchema,
+  llmMarkdownSchema,
+  llmDividerSchema,
+  llmSpacerSchema,
+]);
+
+// LLM Component Types (manual definition due to recursive nature)
+type LlmBaseNode = { id?: string };
+
+type LlmStackComponent = LlmBaseNode & {
+  type: 'stack';
+  props?: {
+    direction?: 'horizontal' | 'vertical';
+    gap?: 'none' | 'sm' | 'md' | 'lg';
+    align?: 'start' | 'center' | 'end' | 'stretch';
+    justify?: 'start' | 'center' | 'end' | 'between' | 'around';
+    wrap?: boolean;
+  };
+  children?: LlmComponent[];
+};
+
+type LlmGridComponent = LlmBaseNode & {
+  type: 'grid';
+  props?: {
+    columns?: number | 'auto';
+    gap?: 'none' | 'sm' | 'md' | 'lg';
+  };
+  children?: LlmComponent[];
+};
+
+type LlmFormComponent = LlmBaseNode & {
+  type: 'form';
+  props: {
+    id: string;
+    layout?: 'vertical' | 'horizontal';
+    gap?: 'none' | 'sm' | 'md' | 'lg';
+  };
+  children?: LlmComponent[];
+};
+
+type LlmListComponent = LlmBaseNode & {
+  type: 'list';
+  props?: {
+    variant?: 'unordered' | 'ordered';
+  };
+  children?: LlmComponent[];
+};
+
+type LlmButtonComponent = LlmBaseNode & {
+  type: 'button';
+  props: {
+    label: string;
+    action: string;
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+    size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
+    icon?: string;
+    parallel?: boolean;
+    submitForm?: string;
+  };
+};
+
+type LlmInputComponent = LlmBaseNode & {
+  type: 'input';
+  props: {
+    name: string;
+    label?: string;
+    placeholder?: string;
+    defaultValue?: string;
+    variant?: 'text' | 'email' | 'password' | 'number' | 'url';
+    disabled?: boolean;
+  };
+};
+
+type LlmTextareaComponent = LlmBaseNode & {
+  type: 'textarea';
+  props: {
+    name: string;
+    label?: string;
+    placeholder?: string;
+    defaultValue?: string;
+    rows?: number;
+    disabled?: boolean;
+  };
+};
+
+type LlmSelectComponent = LlmBaseNode & {
+  type: 'select';
+  props: {
+    name: string;
+    label?: string;
+    options: { value: string; label: string }[];
+    defaultValue?: string;
+    placeholder?: string;
+    disabled?: boolean;
+  };
+};
+
+type LlmTextComponent = LlmBaseNode & {
+  type: 'text';
+  props: {
+    content: string;
+    variant?: 'body' | 'heading' | 'subheading' | 'caption' | 'code';
+    color?: 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error';
+    align?: 'left' | 'center' | 'right';
+  };
+};
+
+type LlmBadgeComponent = LlmBaseNode & {
+  type: 'badge';
+  props: {
+    label: string;
+    variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
+  };
+};
+
+type LlmProgressComponent = LlmBaseNode & {
+  type: 'progress';
+  props: {
+    value: number;
+    label?: string;
+    variant?: 'default' | 'success' | 'warning' | 'error';
+    showValue?: boolean;
+  };
+};
+
+type LlmAlertComponent = LlmBaseNode & {
+  type: 'alert';
+  props?: {
+    title?: string;
+    message?: string;
+    variant?: 'info' | 'success' | 'warning' | 'error';
+  };
+};
+
+type LlmImageComponent = LlmBaseNode & {
+  type: 'image';
+  props: {
+    src: string;
+    alt?: string;
+    width?: number | string;
+    height?: number | string;
+    fit?: 'contain' | 'cover' | 'fill';
+  };
+};
+
+type LlmMarkdownComponent = LlmBaseNode & {
+  type: 'markdown';
+  props: {
+    content: string;
+  };
+};
+
+type LlmDividerComponent = LlmBaseNode & {
+  type: 'divider';
+  props?: {
+    variant?: 'solid' | 'dashed';
+  };
+};
+
+type LlmSpacerComponent = LlmBaseNode & {
+  type: 'spacer';
+  props?: {
+    size?: 'sm' | 'md' | 'lg';
+  };
+};
+
+export type LlmComponent =
+  | LlmStackComponent
+  | LlmGridComponent
+  | LlmFormComponent
+  | LlmListComponent
+  | LlmButtonComponent
+  | LlmInputComponent
+  | LlmTextareaComponent
+  | LlmSelectComponent
+  | LlmTextComponent
+  | LlmBadgeComponent
+  | LlmProgressComponent
+  | LlmAlertComponent
+  | LlmImageComponent
+  | LlmMarkdownComponent
+  | LlmDividerComponent
+  | LlmSpacerComponent;
+
+// ============ Normalization Function ============
+// Transforms LLM format {type, props, children} → internal format {type, ...props, children}
+
+export function normalizeComponent(llm: LlmComponent): Component {
+  switch (llm.type) {
+    case 'stack': {
+      const props = llm.props ?? {};
+      return {
+        type: 'stack',
+        direction: props.direction ?? 'vertical',
+        gap: props.gap ?? 'md',
+        align: props.align,
+        justify: props.justify,
+        wrap: props.wrap,
+        children: (llm.children ?? []).map(normalizeComponent),
+      };
+    }
+    case 'grid': {
+      const props = llm.props ?? {};
+      return {
+        type: 'grid',
+        columns: props.columns,
+        gap: props.gap ?? 'md',
+        children: (llm.children ?? []).map(normalizeComponent),
+      };
+    }
+    case 'form': {
+      return {
+        type: 'form',
+        id: llm.props.id,
+        layout: llm.props.layout,
+        gap: llm.props.gap ?? 'md',
+        children: (llm.children ?? []).map(normalizeComponent),
+      };
+    }
+    case 'list': {
+      const props = llm.props ?? {};
+      return {
+        type: 'list',
+        variant: props.variant,
+        children: (llm.children ?? []).map(normalizeComponent),
+      };
+    }
+    case 'button':
+      return {
+        type: 'button',
+        label: llm.props.label,
+        action: llm.props.action,
+        variant: llm.props.variant,
+        size: llm.props.size,
+        disabled: llm.props.disabled,
+        icon: llm.props.icon,
+        parallel: llm.props.parallel,
+        submitForm: llm.props.submitForm,
+      };
+    case 'input':
+      return {
+        type: 'input',
+        name: llm.props.name,
+        label: llm.props.label,
+        placeholder: llm.props.placeholder,
+        defaultValue: llm.props.defaultValue,
+        variant: llm.props.variant,
+        disabled: llm.props.disabled,
+      };
+    case 'textarea':
+      return {
+        type: 'textarea',
+        name: llm.props.name,
+        label: llm.props.label,
+        placeholder: llm.props.placeholder,
+        defaultValue: llm.props.defaultValue,
+        rows: llm.props.rows,
+        disabled: llm.props.disabled,
+      };
+    case 'select':
+      return {
+        type: 'select',
+        name: llm.props.name,
+        label: llm.props.label,
+        options: llm.props.options,
+        defaultValue: llm.props.defaultValue,
+        placeholder: llm.props.placeholder,
+        disabled: llm.props.disabled,
+      };
+    case 'text':
+      return {
+        type: 'text',
+        content: llm.props.content,
+        variant: llm.props.variant,
+        color: llm.props.color,
+        align: llm.props.align,
+      };
+    case 'badge':
+      return {
+        type: 'badge',
+        label: llm.props.label,
+        variant: llm.props.variant,
+      };
+    case 'progress':
+      return {
+        type: 'progress',
+        value: llm.props.value,
+        label: llm.props.label,
+        variant: llm.props.variant,
+        showValue: llm.props.showValue,
+      };
+    case 'alert': {
+      const props = llm.props ?? {};
+      return {
+        type: 'alert',
+        title: props.title,
+        message: props.message,
+        variant: props.variant,
+      };
+    }
+    case 'image':
+      return {
+        type: 'image',
+        src: llm.props.src,
+        alt: llm.props.alt,
+        width: llm.props.width,
+        height: llm.props.height,
+        fit: llm.props.fit,
+      };
+    case 'markdown':
+      return {
+        type: 'markdown',
+        content: llm.props.content,
+      };
+    case 'divider': {
+      const props = llm.props ?? {};
+      return {
+        type: 'divider',
+        variant: props.variant,
+      };
+    }
+    case 'spacer': {
+      const props = llm.props ?? {};
+      return {
+        type: 'spacer',
+        size: props.size,
+      };
+    }
+  }
+}
+
 // ============ Schema Exports ============
 
 export { componentNodeSchema, componentSchema, displayContentSchema };
