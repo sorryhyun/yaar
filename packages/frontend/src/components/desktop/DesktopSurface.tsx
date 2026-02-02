@@ -17,7 +17,6 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
-import { RestorePromptBanner } from '../ui/RestorePromptBanner'
 import { DrawingOverlay } from '../drawing/DrawingOverlay'
 import styles from '@/styles/DesktopSurface.module.css'
 
@@ -95,9 +94,6 @@ export function DesktopSurface() {
 
   return (
     <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu}>
-      {/* Restore prompt banner */}
-      <RestorePromptBanner />
-
       {/* Connection status indicator */}
       <div className={styles.statusBar}>
         <span className={styles.statusDot} data-status={connectionStatus} />

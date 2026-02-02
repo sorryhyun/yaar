@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 // ============ Shared Base Patterns ============
 
-const gapEnum = z.enum(['none', 'sm', 'md', 'lg']).optional();
+const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 
 const containerBase = {
   gap: gapEnum,
@@ -174,7 +174,7 @@ const componentNodeSchema: z.ZodType<ComponentNodeType> = z.lazy(() =>
 // Layout schemas (with children)
 const stackSchema = z.object({
   type: z.literal('stack'),
-  direction: z.enum(['horizontal', 'vertical']).optional(),
+  direction: z.enum(['horizontal', 'vertical']),
   ...containerBase,
   align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
   justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
@@ -229,20 +229,13 @@ const componentSchema: z.ZodType<ComponentType> = z.discriminatedUnion('type', [
 ]);
 
 /**
- * Raw content with explicit renderer (for html/iframe/text).
+ * Display content schema - for markdown, html, text, iframe (no components).
+ * Used by create_window and update_window tools.
  */
-const rawContentSchema = z.object({
-  renderer: z.enum(['markdown', 'html', 'text', 'iframe']),
-  content: z.string(),
+const displayContentSchema = z.object({
+  renderer: z.enum(['markdown', 'html', 'text', 'iframe']).describe('Content renderer type'),
+  content: z.string().describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
 });
-
-/**
- * Content schema for window content:
- * - string: rendered as markdown (default)
- * - component object: rendered as interactive UI
- * - { renderer, content }: explicit renderer for string content
- */
-const contentSchema = z.union([z.string(), componentSchema, rawContentSchema]);
 
 // ============ Exported Types ============
 
@@ -268,8 +261,7 @@ export type ListComponent = ListComponentType;
 
 export type Component = ComponentType;
 export type ComponentNode = ComponentNodeType;
-export type RawContent = z.infer<typeof rawContentSchema>;
-export type Content = string | ComponentType | RawContent;
+export type DisplayContent = z.infer<typeof displayContentSchema>;
 
 // ============ Type Guards ============
 
@@ -341,18 +333,10 @@ export function isSelectComponent(node: ComponentNode): node is SelectComponent 
   return isComponent(node) && node.type === 'select';
 }
 
-export function isRawContent(content: Content): content is RawContent {
-  return (
-    typeof content === 'object' &&
-    content !== null &&
-    'renderer' in content &&
-    'content' in content
-  );
-}
 
 // ============ Schema Exports ============
 
-export { componentNodeSchema, componentSchema, contentSchema };
+export { componentNodeSchema, componentSchema, displayContentSchema };
 
 export {
   stackSchema,
@@ -372,18 +356,3 @@ export {
   dividerSchema,
   spacerSchema,
 };
-
-/**
- * Schema description for component tree parameters (for MCP tool descriptions).
- */
-export const COMPONENT_SCHEMA_DESCRIPTION = `Component tree object. Types: stack {children[], direction?, gap?}, grid {children[], columns?}, form {id, children[]}, button {label, action}, text/markdown {content}, image {src}, list {items[]}, badge {label}, progress {value}, alert {message}, divider, spacer, input/textarea/select {name}`;
-
-/**
- * Schema description for content parameter.
- */
-export const CONTENT_SCHEMA_DESCRIPTION = `Window content - three formats:
-1. String: rendered as markdown (default)
-2. Component object: interactive UI with {type, ...props}
-3. {renderer: "html"|"iframe"|"text", content: string}: explicit renderer
-
-Component types: stack {children[]}, grid {children[]}, form {id, children[]}, button {label, action}, text {content}, markdown {content}, image {src}, list {items[]}, badge, progress, alert, divider, spacer, input/textarea/select {name}`;

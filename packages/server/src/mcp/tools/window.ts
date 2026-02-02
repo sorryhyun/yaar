@@ -9,26 +9,26 @@ import {
   type WindowPreset,
   type OSAction,
   type ContentUpdateOperation,
-  type Content,
-  contentSchema,
-  CONTENT_SCHEMA_DESCRIPTION,
-  isRawContent,
+  type DisplayContent,
+  type Component,
+  displayContentSchema,
+  componentSchema,
 } from '@claudeos/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
 import { ok } from '../utils.js';
 
 export function registerWindowTools(server: McpServer): void {
-  // create_window
+  // create_window - for display content (markdown, html, text, iframe)
   server.registerTool(
     'create_window',
     {
       description:
-        'Create a new window. Pass a string for markdown content, or a component object for interactive UI.',
+        'Create a window for displaying content (markdown, HTML, text, or iframe). For interactive UI with buttons/forms, use create_component_window instead.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        content: contentSchema.optional().describe(CONTENT_SCHEMA_DESCRIPTION),
+        content: displayContentSchema.describe('Display content (markdown, html, text, or iframe)'),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()
@@ -43,21 +43,9 @@ export function registerWindowTools(server: McpServer): void {
       const presetName = (args.preset || 'default') as WindowPreset;
       const preset = WINDOW_PRESETS[presetName];
 
-      // Determine renderer and data based on content type
-      const content = (args.content ?? '') as Content;
-      let renderer: 'markdown' | 'html' | 'text' | 'iframe' | 'component';
-      let data: string | object;
-
-      if (typeof content === 'string') {
-        renderer = 'markdown';
-        data = content;
-      } else if (isRawContent(content)) {
-        renderer = content.renderer;
-        data = content.content;
-      } else {
-        renderer = 'component';
-        data = content;
-      }
+      const content = args.content as DisplayContent;
+      const renderer = content.renderer;
+      const data = content.content;
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -92,36 +80,74 @@ export function registerWindowTools(server: McpServer): void {
     }
   );
 
-  // update_window
+  // create_component_window - for interactive UI components
+  server.registerTool(
+    'create_component_window',
+    {
+      description:
+        'Create a window with interactive UI components (buttons, forms, inputs, ... etc).',
+      inputSchema: {
+        windowId: z.string().describe('Unique identifier for the window'),
+        title: z.string().describe('Window title'),
+        component: componentSchema.describe('Root component of the UI tree'),
+        preset: z
+          .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
+          .optional()
+          .describe('Window preset for consistent styling. Defaults to "default"'),
+        x: z.number().optional().describe('X position (overrides preset)'),
+        y: z.number().optional().describe('Y position (overrides preset)'),
+        width: z.number().optional().describe('Width (overrides preset)'),
+        height: z.number().optional().describe('Height (overrides preset)'),
+      },
+    },
+    async (args) => {
+      const presetName = (args.preset || 'default') as WindowPreset;
+      const preset = WINDOW_PRESETS[presetName];
+
+      const component = args.component as Component;
+
+      const osAction: OSAction = {
+        type: 'window.create',
+        windowId: args.windowId,
+        title: args.title,
+        bounds: {
+          x: args.x ?? preset.x ?? 100,
+          y: args.y ?? preset.y ?? 100,
+          w: args.width ?? preset.width,
+          h: args.height ?? preset.height,
+        },
+        content: {
+          renderer: 'component',
+          data: component,
+        },
+      };
+
+      actionEmitter.emitAction(osAction);
+      return ok(`Created component window "${args.windowId}"`);
+    }
+  );
+
+  // update_window - for display content (markdown, html, text, iframe)
   server.registerTool(
     'update_window',
     {
-      description: 'Update window content. Pass a string for markdown or a component object for interactive UI.',
+      description:
+        'Update display window content with text operations. For component windows, use update_component_window instead.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to update'),
         operation: z
           .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
           .describe('The operation to perform on the content'),
-        content: contentSchema.optional().describe(CONTENT_SCHEMA_DESCRIPTION),
+        content: displayContentSchema
+          .optional()
+          .describe('Display content (markdown, html, text, or iframe)'),
         position: z.number().optional().describe('Character position for insertAt operation'),
       },
     },
     async (args) => {
-      // Determine renderer and data based on content type
-      const content = (args.content ?? '') as Content;
-      let renderer: 'markdown' | 'html' | 'text' | 'iframe' | 'component' | undefined;
-      let data: string | object;
-
-      if (typeof content === 'string') {
-        renderer = undefined; // Keep existing renderer
-        data = content;
-      } else if (isRawContent(content)) {
-        renderer = content.renderer;
-        data = content.content;
-      } else {
-        renderer = 'component';
-        data = content;
-      }
+      const content = args.content as DisplayContent | undefined;
+      const renderer = content?.renderer;
+      const data = content?.content ?? '';
 
       let operation: ContentUpdateOperation;
       switch (args.operation) {
@@ -163,6 +189,42 @@ export function registerWindowTools(server: McpServer): void {
       }
 
       return ok(`Updated window "${args.windowId}" (${args.operation})`);
+    }
+  );
+
+  // update_component_window - replace component tree
+  server.registerTool(
+    'update_component_window',
+    {
+      description: 'Replace the component tree in a component window.',
+      inputSchema: {
+        windowId: z.string().describe('ID of the component window to update'),
+        component: componentSchema.describe('New root component to replace the existing UI'),
+      },
+    },
+    async (args) => {
+      const component = args.component as Component;
+
+      const osAction = {
+        type: 'window.updateContent' as const,
+        windowId: args.windowId,
+        operation: { op: 'replace' as const, data: component },
+        renderer: 'component' as const,
+      };
+
+      const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
+
+      if (feedback && !feedback.success) {
+        return ok(`Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`);
+      }
+
+      if (feedback?.locked) {
+        return ok(
+          `Updated component window "${args.windowId}". Window is currently locked - use unlock_window when done.`
+        );
+      }
+
+      return ok(`Updated component window "${args.windowId}"`);
     }
   );
 
