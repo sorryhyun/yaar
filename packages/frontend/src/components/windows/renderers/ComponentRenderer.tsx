@@ -1,28 +1,19 @@
 /**
- * ComponentRenderer - Renders the component DSL as React components.
+ * ComponentRenderer - Renders flat component arrays as CSS grid layouts.
  * Button clicks emit COMPONENT_ACTION events back to the agent.
  */
-import { memo, useCallback, useEffect, useState, createContext, useContext } from 'react'
+import { memo, useCallback, useState } from 'react'
 import type {
-  ComponentNode,
   Component,
-  StackComponent,
-  GridComponent,
+  ComponentLayout,
   ButtonComponent,
   TextComponent,
-  ListComponent,
   BadgeComponent,
   ProgressComponent,
   ImageComponent,
-  MarkdownComponent,
-  DividerComponent,
-  SpacerComponent,
-  FormComponent,
   InputComponent,
   SelectComponent,
 } from '@claudeos/shared'
-import { isComponent } from '@claudeos/shared'
-import { MarkdownRenderer } from './MarkdownRenderer'
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext'
 import styles from '@/styles/renderers.module.css'
 
@@ -35,8 +26,6 @@ function normalizeEnum<T extends string>(value: unknown, validValues: readonly T
 }
 
 const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const
-const DIRECTION_VALUES = ['horizontal', 'vertical'] as const
-const ALIGN_VALUES = ['start', 'center', 'end', 'stretch'] as const
 const BUTTON_VARIANT_VALUES = ['primary', 'secondary', 'ghost', 'danger'] as const
 const BUTTON_SIZE_VALUES = ['sm', 'md', 'lg'] as const
 const TEXT_VARIANT_VALUES = ['body', 'heading', 'subheading', 'caption', 'code'] as const
@@ -44,27 +33,31 @@ const TEXT_COLOR_VALUES = ['default', 'muted', 'accent', 'success', 'warning', '
 const TEXT_ALIGN_VALUES = ['left', 'center', 'right'] as const
 const BADGE_VARIANT_VALUES = ['default', 'success', 'warning', 'error', 'info'] as const
 const PROGRESS_VARIANT_VALUES = ['default', 'success', 'warning', 'error'] as const
-const DIVIDER_VARIANT_VALUES = ['solid', 'dashed'] as const
-const SIZE_VALUES = ['sm', 'md', 'lg'] as const
-const LAYOUT_VALUES = ['vertical', 'horizontal'] as const
 
-// Context to pass current form ID to nested components
-const FormIdContext = createContext<string | undefined>(undefined)
+// ============ Layout Helpers ============
 
-function useCurrentFormId(): string | undefined {
-  return useContext(FormIdContext)
+function colsToCss(cols?: number | number[]): string {
+  if (!cols) return '1fr'
+  if (typeof cols === 'number') return `repeat(${cols}, 1fr)`
+  return cols.map(c => `${c}fr`).join(' ')
 }
 
-// Context to track component path through the tree
-const ComponentPathContext = createContext<string[]>([])
-
-function useComponentPath(): string[] {
-  return useContext(ComponentPathContext)
+const GAP_CSS: Record<string, string> = {
+  none: '0',
+  sm: 'var(--space-1)',
+  md: 'var(--space-2)',
+  lg: 'var(--space-4)',
 }
+
+function gapToCss(gap: string): string {
+  return GAP_CSS[gap] ?? GAP_CSS.md
+}
+
+// ============ Entry Point ============
 
 interface ComponentRendererProps {
-  data: ComponentNode
-  windowId: string
+  data: unknown
+  windowId?: string
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }
 
@@ -72,148 +65,63 @@ import { FormProvider } from '@/contexts/FormContext'
 
 export const ComponentRenderer = memo(function ComponentRenderer({
   data,
-  windowId,
   onAction,
 }: ComponentRendererProps) {
+  const layout = data as ComponentLayout
+  const components = layout?.components
+  if (!Array.isArray(components)) return null
+
+  const gap = normalizeEnum(layout.gap, GAP_VALUES, 'md')
+
   return (
     <FormProvider>
-      <div className={styles.componentRoot}>
-        <NodeRenderer node={data} windowId={windowId} onAction={onAction} />
+      <div
+        className={styles.componentRoot}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: colsToCss(layout.cols),
+          gap: gapToCss(gap),
+        }}
+      >
+        {components.map((comp, i) => (
+          <LeafRenderer key={i} node={comp as Component} onAction={onAction} />
+        ))}
       </div>
     </FormProvider>
   )
 })
 
-interface NodeRendererProps {
-  node: ComponentNode
-  windowId: string
+// ============ Leaf Dispatcher ============
+
+interface LeafRendererProps {
+  node: Component
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }
 
-function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
-  // Handle string shorthand
-  if (typeof node === 'string') {
-    return <span>{node}</span>
-  }
+function LeafRenderer({ node, onAction }: LeafRendererProps) {
+  if (!node || typeof node !== 'object' || !('type' in node)) return null
 
-  // Handle null/undefined
-  if (!node) {
-    return null
-  }
-
-  // Handle arrays - render as horizontal stack (common for action buttons)
-  if (Array.isArray(node)) {
-    return (
-      <div className={`${styles.stack} ${styles.stackDirHorizontal} ${styles.stackGapSm}`}>
-        {node.map((child, i) => (
-          <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
-        ))}
-      </div>
-    )
-  }
-
-  // Handle non-component objects
-  if (!isComponent(node)) {
-    return null
-  }
-
-  const component = node as Component
-
-  switch (component.type) {
-    case 'stack':
-      return <StackRenderer node={component} windowId={windowId} onAction={onAction} />
-    case 'grid':
-      return <GridRenderer node={component} windowId={windowId} onAction={onAction} />
+  switch (node.type) {
     case 'button':
-      return <ButtonRenderer node={component} onAction={onAction} />
+      return <ButtonRenderer node={node} onAction={onAction} />
     case 'text':
-      return <TextRenderer node={component} />
-    case 'list':
-      return <ListRenderer node={component} windowId={windowId} onAction={onAction} />
+      return <TextRenderer node={node} />
     case 'badge':
-      return <BadgeRenderer node={component} />
+      return <BadgeRenderer node={node} />
     case 'progress':
-      return <ProgressRenderer node={component} />
+      return <ProgressRenderer node={node} />
     case 'image':
-      return <ImageRenderer node={component} />
-    case 'markdown':
-      return <MarkdownNodeRenderer node={component} />
-    case 'divider':
-      return <DividerRenderer node={component} />
-    case 'spacer':
-      return <SpacerRenderer node={component} />
-    case 'form':
-      return <FormRenderer node={component} windowId={windowId} onAction={onAction} />
+      return <ImageRenderer node={node} />
     case 'input':
-      return <InputRenderer node={component} />
+      return <InputRenderer node={node} />
     case 'select':
-      return <SelectRenderer node={component} />
+      return <SelectRenderer node={node} />
     default:
       return <span>[Unknown component type]</span>
   }
 }
 
 // ============ Component Renderers ============
-
-function StackRenderer({
-  node,
-  windowId,
-  onAction,
-}: {
-  node: StackComponent
-  windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
-}) {
-  const direction = normalizeEnum(node.direction, DIRECTION_VALUES, 'vertical')
-  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
-  const align = normalizeEnum(node.align, ALIGN_VALUES, 'stretch')
-
-  const className = [
-    styles.stack,
-    styles[`stackDir${direction.charAt(0).toUpperCase() + direction.slice(1)}`],
-    styles[`stackGap${gap.charAt(0).toUpperCase() + gap.slice(1)}`],
-    styles[`stackAlign${align.charAt(0).toUpperCase() + align.slice(1)}`],
-  ].filter(Boolean).join(' ')
-
-  return (
-    <div className={className}>
-      {node.children.map((child, i) => (
-        <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
-      ))}
-    </div>
-  )
-}
-
-function GridRenderer({
-  node,
-  windowId,
-  onAction,
-}: {
-  node: GridComponent
-  windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
-}) {
-  const columns = node.columns || 'auto'
-  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
-
-  const style = columns !== 'auto'
-    ? { gridTemplateColumns: `repeat(${columns}, 1fr)` }
-    : undefined
-
-  const className = [
-    styles.grid,
-    styles[`gridGap${gap.charAt(0).toUpperCase() + gap.slice(1)}`],
-    columns === 'auto' ? styles.gridAuto : '',
-  ].filter(Boolean).join(' ')
-
-  return (
-    <div className={className} style={style}>
-      {node.children.map((child, i) => (
-        <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
-      ))}
-    </div>
-  )
-}
 
 function ButtonRenderer({
   node,
@@ -223,30 +131,19 @@ function ButtonRenderer({
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const formContext = useFormContext()
-  const currentFormId = useCurrentFormId()
-  const parentPath = useComponentPath()
-
-  // Build full component path including this button
-  const fullPath = [...parentPath, `Button:${node.label}`]
 
   const handleClick = useCallback(() => {
     if (!node.disabled && onAction) {
-      // Default to parallel execution (parallel: true unless explicitly set to false)
       const isParallel = node.parallel !== false
 
-      // If submitForm is specified, collect form data
       if (node.submitForm && formContext) {
         const formData = formContext.getFormData(node.submitForm)
-        onAction(node.action, isParallel, formData, node.submitForm, fullPath)
-      } else if (currentFormId && formContext) {
-        // If inside a form, submit that form's data
-        const formData = formContext.getFormData(currentFormId)
-        onAction(node.action, isParallel, formData, currentFormId, fullPath)
+        onAction(node.action, isParallel, formData, node.submitForm, [`Button:${node.label}`])
       } else {
-        onAction(node.action, isParallel, undefined, undefined, fullPath)
+        onAction(node.action, isParallel, undefined, undefined, [`Button:${node.label}`])
       }
     }
-  }, [node.action, node.disabled, node.parallel, node.submitForm, onAction, formContext, currentFormId, fullPath])
+  }, [node.action, node.disabled, node.parallel, node.submitForm, node.label, onAction, formContext])
 
   const variant = normalizeEnum(node.variant, BUTTON_VARIANT_VALUES, 'secondary')
   const size = normalizeEnum(node.size, BUTTON_SIZE_VALUES, 'md')
@@ -284,28 +181,6 @@ function TextRenderer({ node }: { node: TextComponent }) {
   ].filter(Boolean).join(' ')
 
   return <div className={className}>{node.content}</div>
-}
-
-function ListRenderer({
-  node,
-  windowId,
-  onAction,
-}: {
-  node: ListComponent
-  windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
-}) {
-  const Tag = node.variant === 'ordered' ? 'ol' : 'ul'
-
-  return (
-    <Tag className={styles.list}>
-      {node.children.map((child, i) => (
-        <li key={i} className={styles.listItem}>
-          <NodeRenderer node={child} windowId={windowId} onAction={onAction} />
-        </li>
-      ))}
-    </Tag>
-  )
 }
 
 function BadgeRenderer({ node }: { node: BadgeComponent }) {
@@ -363,78 +238,10 @@ function ImageRenderer({ node }: { node: ImageComponent }) {
   )
 }
 
-function MarkdownNodeRenderer({ node }: { node: MarkdownComponent }) {
-  return <MarkdownRenderer data={node.content} />
-}
-
-function DividerRenderer({ node }: { node: DividerComponent }) {
-  const variant = normalizeEnum(node.variant, DIVIDER_VARIANT_VALUES, 'solid')
-
-  const className = [
-    styles.divider,
-    styles[`divider${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
-  ].filter(Boolean).join(' ')
-
-  return <hr className={className} />
-}
-
-function SpacerRenderer({ node }: { node: SpacerComponent }) {
-  const size = normalizeEnum(node.size, SIZE_VALUES, 'md')
-
-  const className = [
-    styles.spacer,
-    styles[`spacer${size.charAt(0).toUpperCase() + size.slice(1)}`],
-  ].filter(Boolean).join(' ')
-
-  return <div className={className} />
-}
-
-// ============ Form Component Renderers ============
-
-function FormRenderer({
-  node,
-  windowId,
-  onAction,
-}: {
-  node: FormComponent
-  windowId: string
-  onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
-}) {
-  const formContext = useFormContext()
-  const parentPath = useComponentPath()
-  const formPath = [...parentPath, `Form:${node.id}`]
-  const layout = normalizeEnum(node.layout, LAYOUT_VALUES, 'vertical')
-  const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
-
-  // Register form on mount
-  useEffect(() => {
-    if (formContext) {
-      formContext.registerForm(node.id)
-      return () => formContext.unregisterForm(node.id)
-    }
-  }, [node.id, formContext])
-
-  const className = [
-    styles.form,
-    styles[`formLayout${layout.charAt(0).toUpperCase() + layout.slice(1)}`],
-    styles[`formGap${gap.charAt(0).toUpperCase() + gap.slice(1)}`],
-  ].filter(Boolean).join(' ')
-
-  return (
-    <FormIdContext.Provider value={node.id}>
-      <ComponentPathContext.Provider value={formPath}>
-        <div className={className}>
-          {node.children.map((child, i) => (
-            <NodeRenderer key={i} node={child} windowId={windowId} onAction={onAction} />
-          ))}
-        </div>
-      </ComponentPathContext.Provider>
-    </FormIdContext.Provider>
-  )
-}
+// ============ Form Field Renderers ============
 
 function InputRenderer({ node }: { node: InputComponent }) {
-  const formId = useCurrentFormId()
+  const formId = node.formId
   const initialValue = node.defaultValue ?? ''
   const { setValue } = useFormField(formId, node.name, initialValue)
   const [localValue, setLocalValue] = useState(String(initialValue))
@@ -481,7 +288,7 @@ function InputRenderer({ node }: { node: InputComponent }) {
 }
 
 function SelectRenderer({ node }: { node: SelectComponent }) {
-  const formId = useCurrentFormId()
+  const formId = node.formId
   const initialValue = node.defaultValue ?? ''
   const { setValue } = useFormField(formId, node.name, initialValue)
   const [localValue, setLocalValue] = useState(String(initialValue))

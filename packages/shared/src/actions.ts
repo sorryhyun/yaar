@@ -5,8 +5,7 @@
  * The frontend applies them to create windows, toasts, and notifications.
  */
 
-import type { ComponentNode } from './components.js';
-import { isComponent } from './components.js';
+import type { ComponentLayout } from './components.js';
 
 // ============ Window Actions ============
 
@@ -261,8 +260,8 @@ export function isIframeContentData(value: unknown): value is string | IframeCon
   return typeof data.url === 'string' && (data.sandbox === undefined || typeof data.sandbox === 'string')
 }
 
-export function isComponentNode(value: unknown): value is ComponentNode {
-  return typeof value === 'string' || (typeof value === 'object' && value !== null && isComponent(value as ComponentNode))
+export function isComponentLayout(value: unknown): value is ComponentLayout {
+  return typeof value === 'object' && value !== null && Array.isArray((value as Record<string, unknown>).components)
 }
 
 export function isWindowContentData(renderer: string, value: unknown): boolean {
@@ -274,7 +273,7 @@ export function isWindowContentData(renderer: string, value: unknown): boolean {
     case 'table':
       return isTableContentData(value)
     case 'component':
-      return isComponentNode(value)
+      return isComponentLayout(value)
     case 'iframe':
       return isIframeContentData(value)
     default:

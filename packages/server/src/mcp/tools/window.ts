@@ -10,13 +10,19 @@ import {
   type OSAction,
   type ContentUpdateOperation,
   type DisplayContent,
-  type Component,
+  type ComponentLayout,
   displayContentSchema,
   componentSchema,
 } from '@claudeos/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
 import { ok } from '../utils.js';
+
+const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
+const colsSchema = z.union([
+  z.coerce.number().int().min(1),
+  z.array(z.number().min(0)),
+]);
 
 export function registerWindowTools(server: McpServer): void {
   // create_window - for display content (markdown, html, text, iframe)
@@ -85,11 +91,14 @@ export function registerWindowTools(server: McpServer): void {
     'create_component_window',
     {
       description:
-        'Create a window with interactive UI components (buttons, forms, inputs, ... etc).',
+        'Create a window with interactive UI components (buttons, forms, inputs, ... etc). Components are a flat array laid out with CSS grid.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        component: componentSchema.describe('Root component of the UI tree in JSON object'),
+        components: z.array(componentSchema).describe('Flat array of UI components'),
+        cols: colsSchema.optional()
+          .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
+        gap: gapEnum.optional().describe('Spacing between components (default: md)'),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()
@@ -104,7 +113,11 @@ export function registerWindowTools(server: McpServer): void {
       const presetName = (args.preset || 'default') as WindowPreset;
       const preset = WINDOW_PRESETS[presetName];
 
-      const component = args.component as Component;
+      const layoutData: ComponentLayout = {
+        components: args.components as ComponentLayout['components'],
+        cols: args.cols as ComponentLayout['cols'],
+        gap: args.gap as ComponentLayout['gap'],
+      };
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -118,7 +131,7 @@ export function registerWindowTools(server: McpServer): void {
         },
         content: {
           renderer: 'component',
-          data: component,
+          data: layoutData,
         },
       };
 
@@ -192,23 +205,30 @@ export function registerWindowTools(server: McpServer): void {
     }
   );
 
-  // update_component_window - replace component tree
+  // update_component_window - replace component layout
   server.registerTool(
     'update_component_window',
     {
-      description: 'Replace the component tree in a component window.',
+      description: 'Replace the components in a component window.',
       inputSchema: {
         windowId: z.string().describe('ID of the component window to update'),
-        component: componentSchema.describe('New root component to replace the existing UI'),
+        components: z.array(componentSchema).describe('New flat array of UI components'),
+        cols: colsSchema.optional()
+          .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
+        gap: gapEnum.optional().describe('Spacing between components (default: md)'),
       },
     },
     async (args) => {
-      const component = args.component as Component;
+      const layoutData: ComponentLayout = {
+        components: args.components as ComponentLayout['components'],
+        cols: args.cols as ComponentLayout['cols'],
+        gap: args.gap as ComponentLayout['gap'],
+      };
 
       const osAction = {
         type: 'window.updateContent' as const,
         windowId: args.windowId,
-        operation: { op: 'replace' as const, data: component },
+        operation: { op: 'replace' as const, data: layoutData },
         renderer: 'component' as const,
       };
 

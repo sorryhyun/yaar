@@ -1,6 +1,6 @@
 /**
- * Component DSL - Flattened schema for LLM simplicity.
- * All properties at top level with .describe() documenting which types use them.
+ * Component DSL - Flat schema for LLM simplicity.
+ * No recursion, no containers. Components are a flat array with grid layout.
  */
 
 import { z } from 'zod';
@@ -10,10 +10,9 @@ import { z } from 'zod';
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const sizeEnum = z.enum(['sm', 'md', 'lg']);
 
-// ============ Component Types ============
+// ============ Component Types (leaf only) ============
 
-const containerTypes = ['stack', 'grid', 'form', 'list'] as const;
-const leafTypes = [
+const componentTypes = [
   'button',
   'input',
   'select',
@@ -21,39 +20,18 @@ const leafTypes = [
   'badge',
   'progress',
   'image',
-  'markdown',
-  'divider',
-  'spacer',
 ] as const;
 
-// ============ Shared Base Fields ============
+// ============ Base Fields ============
 
 /**
- * All properties shared across containers and leaves (flat for LLM simplicity).
+ * All properties shared across leaf components (flat for LLM simplicity).
  * Use .describe() to document which component types each property applies to.
  */
 const baseFields = {
-  // === Layout props (stack, grid) ===
-  direction: z
-    .enum(['horizontal', 'vertical'])
-    .optional()
-    .describe('stack: Layout direction (default: vertical)'),
-  gap: gapEnum.optional().describe('stack, grid, form: Spacing between children (default: md)'),
-  align: z
-    .enum(['start', 'center', 'end', 'stretch'])
-    .optional()
-    .describe('stack: Cross-axis alignment'),
-  columns: z
-    .union([z.number(), z.literal('auto')])
-    .optional()
-    .describe('grid: Number of columns or "auto"'),
-
-  // === Container props (form, list) ===
-  id: z.string().optional().describe('form: Required form ID (referenced by button submitForm)'),
-  layout: z.enum(['vertical', 'horizontal']).optional().describe('form: Field layout direction'),
-
   // === Form field props (input, select) ===
   name: z.string().optional().describe('input, select: Required field name in form data'),
+  formId: z.string().optional().describe('input, select: Form ID to associate with (referenced by button submitForm)'),
   placeholder: z.string().optional().describe('input, select: Placeholder text'),
   defaultValue: z.string().optional().describe('input, select: Initial value'),
   disabled: z.boolean().optional().describe('button, input, select: Disabled state'),
@@ -69,7 +47,7 @@ const baseFields = {
   parallel: z.boolean().optional().describe('button: Run action in parallel (default: true)'),
 
   // === Display content props ===
-  content: z.string().optional().describe('text, markdown: Required text content'),
+  content: z.string().optional().describe('text: Required text content'),
 
   // === Variant (polymorphic - different enums per type) ===
   variant: z
@@ -80,13 +58,11 @@ const baseFields = {
         'input: text|email|password|number|url, ' +
         'text: body|heading|subheading|caption|code, ' +
         'badge: default|success|warning|error|info, ' +
-        'progress: default|success|warning|error, ' +
-        'divider: solid|dashed, ' +
-        'list: unordered|ordered'
+        'progress: default|success|warning|error'
     ),
 
   // === Size ===
-  size: sizeEnum.optional().describe('button, spacer: Size'),
+  size: sizeEnum.optional().describe('button: Size'),
 
   // === Text-specific props ===
   color: z
@@ -115,36 +91,29 @@ const baseFields = {
     .describe('select: Required options array'),
 } as const;
 
-// ============ Container & Leaf Schemas ============
+// ============ Component Schema (flat, no recursion) ============
 
-/** Container components (stack, grid, form, list) - have recursive children */
-const containerComponentSchema = z.object({
-  type: z.enum(containerTypes),
-  ...baseFields,
-  get children() {
-    return z
-      .array(componentSchema)
-      .optional()
-      .describe(
-        'stack, grid, form, list: Array of component objects (NOT a string). ' +
-          'For list items use: [{type:"text",content:"Item 1"},{type:"text",content:"Item 2"}]'
-      );
-  },
-});
-
-/** Leaf components (button, input, select, text, etc.) - no children */
-const leafComponentSchema = z.object({
-  type: z.enum(leafTypes),
+/** Single flat component schema — no children, no containers */
+export const componentSchema = z.object({
+  type: z.enum(componentTypes),
   ...baseFields,
 });
 
-// ============ Recursive Union Schema ============
+// ============ Layout Schema ============
 
-/** Component schema: union of container (with children) and leaf (without) */
-export const componentSchema: z.ZodType<Component> = z.union([
-  containerComponentSchema,
-  leafComponentSchema,
+const colsSchema = z.union([
+  z.coerce.number().int().min(1),
+  z.array(z.number().min(0)),
 ]);
+
+/** Component layout — flat array of components with grid layout */
+export const componentLayoutSchema = z.object({
+  components: z.array(componentSchema),
+  cols: colsSchema.optional()
+    .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
+  gap: gapEnum.optional()
+    .describe('Spacing between components (default: md)'),
+});
 
 // ============ Display Content Schema ============
 
@@ -159,40 +128,9 @@ export const displayContentSchema = z.object({
     .describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
 });
 
-// ============ Discriminated Types for TypeScript ============
-// These provide stricter TypeScript types while the schema remains flat
+// ============ TypeScript Types ============
 
-type Gap = 'none' | 'sm' | 'md' | 'lg';
 type Size = 'sm' | 'md' | 'lg';
-
-export type StackComponent = {
-  type: 'stack';
-  direction?: 'horizontal' | 'vertical';
-  gap?: Gap;
-  align?: 'start' | 'center' | 'end' | 'stretch';
-  children: Component[];
-};
-
-export type GridComponent = {
-  type: 'grid';
-  columns?: number | 'auto';
-  gap?: Gap;
-  children: Component[];
-};
-
-export type FormComponent = {
-  type: 'form';
-  id: string;
-  layout?: 'vertical' | 'horizontal';
-  gap?: Gap;
-  children: Component[];
-};
-
-export type ListComponent = {
-  type: 'list';
-  variant?: 'unordered' | 'ordered';
-  children: Component[];
-};
 
 export type ButtonComponent = {
   type: 'button';
@@ -209,17 +147,19 @@ export type ButtonComponent = {
 export type InputComponent = {
   type: 'input';
   name: string;
+  formId?: string;
   label?: string;
   placeholder?: string;
   defaultValue?: string;
   variant?: 'text' | 'email' | 'password' | 'number' | 'url';
-  rows?: number; // If set, renders as textarea
+  rows?: number;
   disabled?: boolean;
 };
 
 export type SelectComponent = {
   type: 'select';
   name: string;
+  formId?: string;
   label?: string;
   options: { value: string; label: string }[];
   defaultValue?: string;
@@ -257,102 +197,51 @@ export type ImageComponent = {
   fit?: 'contain' | 'cover' | 'fill';
 };
 
-export type MarkdownComponent = {
-  type: 'markdown';
-  content: string;
-};
-
-export type DividerComponent = {
-  type: 'divider';
-  variant?: 'solid' | 'dashed';
-};
-
-export type SpacerComponent = {
-  type: 'spacer';
-  size?: Size;
-};
-
 /** Union of all component types */
 export type Component =
-  | StackComponent
-  | GridComponent
-  | FormComponent
-  | ListComponent
   | ButtonComponent
   | InputComponent
   | SelectComponent
   | TextComponent
   | BadgeComponent
   | ProgressComponent
-  | ImageComponent
-  | MarkdownComponent
-  | DividerComponent
-  | SpacerComponent;
+  | ImageComponent;
 
-/** Component node (alias for backward compatibility) */
-export type ComponentNode = Component;
+/** Component layout: flat array + grid config */
+export type ComponentLayout = z.infer<typeof componentLayoutSchema>;
 
 export type DisplayContent = z.infer<typeof displayContentSchema>;
 
 // ============ Type Guards ============
 
-export function isComponent(node: ComponentNode): node is Component {
+export function isComponent(node: unknown): node is Component {
   return typeof node === 'object' && node !== null && 'type' in node;
 }
 
-export function isStackComponent(node: ComponentNode): node is StackComponent {
-  return isComponent(node) && node.type === 'stack';
+export function isButtonComponent(node: Component): node is ButtonComponent {
+  return node.type === 'button';
 }
 
-export function isGridComponent(node: ComponentNode): node is GridComponent {
-  return isComponent(node) && node.type === 'grid';
+export function isTextComponent(node: Component): node is TextComponent {
+  return node.type === 'text';
 }
 
-export function isButtonComponent(node: ComponentNode): node is ButtonComponent {
-  return isComponent(node) && node.type === 'button';
+export function isBadgeComponent(node: Component): node is BadgeComponent {
+  return node.type === 'badge';
 }
 
-export function isTextComponent(node: ComponentNode): node is TextComponent {
-  return isComponent(node) && node.type === 'text';
+export function isProgressComponent(node: Component): node is ProgressComponent {
+  return node.type === 'progress';
 }
 
-export function isListComponent(node: ComponentNode): node is ListComponent {
-  return isComponent(node) && node.type === 'list';
+export function isImageComponent(node: Component): node is ImageComponent {
+  return node.type === 'image';
 }
 
-export function isBadgeComponent(node: ComponentNode): node is BadgeComponent {
-  return isComponent(node) && node.type === 'badge';
+export function isInputComponent(node: Component): node is InputComponent {
+  return node.type === 'input';
 }
 
-export function isProgressComponent(node: ComponentNode): node is ProgressComponent {
-  return isComponent(node) && node.type === 'progress';
+export function isSelectComponent(node: Component): node is SelectComponent {
+  return node.type === 'select';
 }
-
-export function isImageComponent(node: ComponentNode): node is ImageComponent {
-  return isComponent(node) && node.type === 'image';
-}
-
-export function isMarkdownComponent(node: ComponentNode): node is MarkdownComponent {
-  return isComponent(node) && node.type === 'markdown';
-}
-
-export function isDividerComponent(node: ComponentNode): node is DividerComponent {
-  return isComponent(node) && node.type === 'divider';
-}
-
-export function isSpacerComponent(node: ComponentNode): node is SpacerComponent {
-  return isComponent(node) && node.type === 'spacer';
-}
-
-export function isFormComponent(node: ComponentNode): node is FormComponent {
-  return isComponent(node) && node.type === 'form';
-}
-
-export function isInputComponent(node: ComponentNode): node is InputComponent {
-  return isComponent(node) && node.type === 'input';
-}
-
-export function isSelectComponent(node: ComponentNode): node is SelectComponent {
-  return isComponent(node) && node.type === 'select';
-}
-
