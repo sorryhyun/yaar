@@ -13,14 +13,12 @@ import type {
   ListComponent,
   BadgeComponent,
   ProgressComponent,
-  AlertComponent,
   ImageComponent,
   MarkdownComponent,
   DividerComponent,
   SpacerComponent,
   FormComponent,
   InputComponent,
-  TextareaComponent,
   SelectComponent,
 } from '@claudeos/shared'
 import { isComponent } from '@claudeos/shared'
@@ -39,7 +37,6 @@ function normalizeEnum<T extends string>(value: unknown, validValues: readonly T
 const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const
 const DIRECTION_VALUES = ['horizontal', 'vertical'] as const
 const ALIGN_VALUES = ['start', 'center', 'end', 'stretch'] as const
-const JUSTIFY_VALUES = ['start', 'center', 'end', 'between', 'around'] as const
 const BUTTON_VARIANT_VALUES = ['primary', 'secondary', 'ghost', 'danger'] as const
 const BUTTON_SIZE_VALUES = ['sm', 'md', 'lg'] as const
 const TEXT_VARIANT_VALUES = ['body', 'heading', 'subheading', 'caption', 'code'] as const
@@ -47,7 +44,6 @@ const TEXT_COLOR_VALUES = ['default', 'muted', 'accent', 'success', 'warning', '
 const TEXT_ALIGN_VALUES = ['left', 'center', 'right'] as const
 const BADGE_VARIANT_VALUES = ['default', 'success', 'warning', 'error', 'info'] as const
 const PROGRESS_VARIANT_VALUES = ['default', 'success', 'warning', 'error'] as const
-const ALERT_VARIANT_VALUES = ['info', 'success', 'warning', 'error'] as const
 const DIVIDER_VARIANT_VALUES = ['solid', 'dashed'] as const
 const SIZE_VALUES = ['sm', 'md', 'lg'] as const
 const LAYOUT_VALUES = ['vertical', 'horizontal'] as const
@@ -138,8 +134,6 @@ function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
       return <BadgeRenderer node={component} />
     case 'progress':
       return <ProgressRenderer node={component} />
-    case 'alert':
-      return <AlertRenderer node={component} />
     case 'image':
       return <ImageRenderer node={component} />
     case 'markdown':
@@ -152,8 +146,6 @@ function NodeRenderer({ node, windowId, onAction }: NodeRendererProps) {
       return <FormRenderer node={component} windowId={windowId} onAction={onAction} />
     case 'input':
       return <InputRenderer node={component} />
-    case 'textarea':
-      return <TextareaRenderer node={component} />
     case 'select':
       return <SelectRenderer node={component} />
     default:
@@ -175,15 +167,12 @@ function StackRenderer({
   const direction = normalizeEnum(node.direction, DIRECTION_VALUES, 'vertical')
   const gap = normalizeEnum(node.gap, GAP_VALUES, 'md')
   const align = normalizeEnum(node.align, ALIGN_VALUES, 'stretch')
-  const justify = normalizeEnum(node.justify, JUSTIFY_VALUES, 'start')
 
   const className = [
     styles.stack,
     styles[`stackDir${direction.charAt(0).toUpperCase() + direction.slice(1)}`],
     styles[`stackGap${gap.charAt(0).toUpperCase() + gap.slice(1)}`],
     styles[`stackAlign${align.charAt(0).toUpperCase() + align.slice(1)}`],
-    styles[`stackJustify${justify.charAt(0).toUpperCase() + justify.slice(1)}`],
-    node.wrap ? styles.stackWrap : '',
   ].filter(Boolean).join(' ')
 
   return (
@@ -285,7 +274,7 @@ function ButtonRenderer({
 function TextRenderer({ node }: { node: TextComponent }) {
   const variant = normalizeEnum(node.variant, TEXT_VARIANT_VALUES, 'body')
   const color = normalizeEnum(node.color, TEXT_COLOR_VALUES, 'default')
-  const align = normalizeEnum(node.align, TEXT_ALIGN_VALUES, 'left')
+  const align = normalizeEnum(node.textAlign, TEXT_ALIGN_VALUES, 'left')
 
   const className = [
     styles.text,
@@ -355,22 +344,6 @@ function ProgressRenderer({ node }: { node: ProgressComponent }) {
   )
 }
 
-function AlertRenderer({ node }: { node: AlertComponent }) {
-  const variant = normalizeEnum(node.variant, ALERT_VARIANT_VALUES, 'info')
-
-  const className = [
-    styles.alert,
-    styles[`alert${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
-  ].filter(Boolean).join(' ')
-
-  return (
-    <div className={className}>
-      {node.title && <div className={styles.alertTitle}>{node.title}</div>}
-      {node.message && <div className={styles.alertMessage}>{node.message}</div>}
-    </div>
-  )
-}
-
 function ImageRenderer({ node }: { node: ImageComponent }) {
   const fit = node.fit || 'contain'
 
@@ -384,7 +357,7 @@ function ImageRenderer({ node }: { node: ImageComponent }) {
     <img
       className={styles.image}
       src={node.src}
-      alt={node.alt || ''}
+      alt=""
       style={style}
     />
   )
@@ -465,53 +438,44 @@ function InputRenderer({ node }: { node: InputComponent }) {
   const initialValue = node.defaultValue ?? ''
   const { setValue } = useFormField(formId, node.name, initialValue)
   const [localValue, setLocalValue] = useState(String(initialValue))
+  const isMultiline = node.rows !== undefined
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = node.variant === 'number' ? e.target.valueAsNumber || e.target.value : e.target.value
     setLocalValue(e.target.value)
     setValue(newValue)
   }, [node.variant, setValue])
+
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setLocalValue(e.target.value)
+    setValue(e.target.value)
+  }, [setValue])
 
   const inputType = node.variant || 'text'
 
   return (
     <div className={styles.formField}>
       {node.label && <label className={styles.formLabel}>{node.label}</label>}
-      <input
-        type={inputType}
-        className={styles.formInput}
-        placeholder={node.placeholder}
-        defaultValue={node.defaultValue}
-        value={localValue}
-        onChange={handleChange}
-        disabled={node.disabled}
-      />
-    </div>
-  )
-}
-
-function TextareaRenderer({ node }: { node: TextareaComponent }) {
-  const formId = useCurrentFormId()
-  const initialValue = node.defaultValue ?? ''
-  const { setValue } = useFormField(formId, node.name, initialValue)
-  const [localValue, setLocalValue] = useState(String(initialValue))
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalValue(e.target.value)
-    setValue(e.target.value)
-  }, [setValue])
-
-  return (
-    <div className={styles.formField}>
-      {node.label && <label className={styles.formLabel}>{node.label}</label>}
-      <textarea
-        className={styles.formTextarea}
-        placeholder={node.placeholder}
-        rows={node.rows || 3}
-        value={localValue}
-        onChange={handleChange}
-        disabled={node.disabled}
-      />
+      {isMultiline ? (
+        <textarea
+          className={styles.formTextarea}
+          placeholder={node.placeholder}
+          rows={node.rows}
+          value={localValue}
+          onChange={handleTextareaChange}
+          disabled={node.disabled}
+        />
+      ) : (
+        <input
+          type={inputType}
+          className={styles.formInput}
+          placeholder={node.placeholder}
+          defaultValue={node.defaultValue}
+          value={localValue}
+          onChange={handleInputChange}
+          disabled={node.disabled}
+        />
+      )}
     </div>
   )
 }

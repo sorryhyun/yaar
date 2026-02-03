@@ -10,10 +10,9 @@ import {
   type OSAction,
   type ContentUpdateOperation,
   type DisplayContent,
-  type LlmComponent,
+  type Component,
   displayContentSchema,
-  llmComponentSchema,
-  normalizeComponent,
+  componentSchema,
 } from '@claudeos/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
@@ -90,7 +89,7 @@ export function registerWindowTools(server: McpServer): void {
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        component: llmComponentSchema.describe('Root component of the UI tree'),
+        component: componentSchema.describe('Root component of the UI tree'),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()
@@ -105,8 +104,7 @@ export function registerWindowTools(server: McpServer): void {
       const presetName = (args.preset || 'default') as WindowPreset;
       const preset = WINDOW_PRESETS[presetName];
 
-      const llmComponent = args.component as LlmComponent;
-      const component = normalizeComponent(llmComponent);
+      const component = args.component as Component;
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -201,12 +199,11 @@ export function registerWindowTools(server: McpServer): void {
       description: 'Replace the component tree in a component window.',
       inputSchema: {
         windowId: z.string().describe('ID of the component window to update'),
-        component: llmComponentSchema.describe('New root component to replace the existing UI'),
+        component: componentSchema.describe('New root component to replace the existing UI'),
       },
     },
     async (args) => {
-      const llmComponent = args.component as LlmComponent;
-      const component = normalizeComponent(llmComponent);
+      const component = args.component as Component;
 
       const osAction = {
         type: 'window.updateContent' as const,

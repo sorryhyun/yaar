@@ -1,268 +1,291 @@
 /**
- * Component DSL - Single source of truth for schemas, types, and validation.
- * Organized by category with shared base patterns.
+ * Component DSL - Flattened schema for LLM simplicity.
+ * All properties at top level with .describe() documenting which types use them.
  */
 
 import { z } from 'zod';
 
-// ============ Shared Base Patterns ============
+// ============ Shared Enums ============
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
+const sizeEnum = z.enum(['sm', 'md', 'lg']);
 
-/** Gap with default - LLM doesn't need to specify */
-const gapWithDefault = gapEnum.default('md');
+// ============ Component Types ============
 
-// ============ Leaf Component Schemas (non-recursive) ============
-
-const buttonSchema = z.object({
-  type: z.literal('button'),
-  label: z.string(),
-  action: z.string().describe('Sent as message to agent on click'),
-  variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
-  size: z.enum(['sm', 'md', 'lg']).optional(),
-  disabled: z.boolean().optional(),
-  icon: z.string().optional(),
-  parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
-  submitForm: z.string().optional().describe('Form ID to collect data from on click'),
-});
-
-const inputSchema = z.object({
-  type: z.literal('input'),
-  name: z.string().describe('Required - key in form data'),
-  label: z.string().optional(),
-  placeholder: z.string().optional(),
-  defaultValue: z.string().optional(),
-  variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
-  disabled: z.boolean().optional(),
-});
-
-const textareaSchema = z.object({
-  type: z.literal('textarea'),
-  name: z.string(),
-  label: z.string().optional(),
-  placeholder: z.string().optional(),
-  defaultValue: z.string().optional(),
-  rows: z.number().optional(),
-  disabled: z.boolean().optional(),
-});
-
-const selectSchema = z.object({
-  type: z.literal('select'),
-  name: z.string(),
-  label: z.string().optional(),
-  options: z.array(z.object({ value: z.string(), label: z.string() })),
-  defaultValue: z.string().optional(),
-  placeholder: z.string().optional(),
-  disabled: z.boolean().optional(),
-});
-
-const textComponentSchema = z.object({
-  type: z.literal('text'),
-  content: z.string(),
-  variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
-  color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
-  align: z.enum(['left', 'center', 'right']).optional(),
-});
-
-const badgeSchema = z.object({
-  type: z.literal('badge'),
-  label: z.string(),
-  variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
-});
-
-const progressSchema = z.object({
-  type: z.literal('progress'),
-  value: z.number().min(0).max(100),
-  label: z.string().optional(),
-  variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
-  showValue: z.boolean().optional(),
-});
-
-const alertSchema = z.object({
-  type: z.literal('alert'),
-  title: z.string().optional(),
-  message: z.string().optional().describe('Alert message text'),
-  variant: z.enum(['info', 'success', 'warning', 'error']).optional(),
-});
-
-const imageSchema = z.object({
-  type: z.literal('image'),
-  src: z.string(),
-  alt: z.string().optional(),
-  width: z.union([z.number(), z.string()]).optional(),
-  height: z.union([z.number(), z.string()]).optional(),
-  fit: z.enum(['contain', 'cover', 'fill']).optional(),
-});
-
-const markdownSchema = z.object({
-  type: z.literal('markdown'),
-  content: z.string(),
-});
-
-const dividerSchema = z.object({
-  type: z.literal('divider'),
-  variant: z.enum(['solid', 'dashed']).optional(),
-});
-
-const spacerSchema = z.object({
-  type: z.literal('spacer'),
-  size: z.enum(['sm', 'md', 'lg']).optional(),
-});
-
-// ============ Recursive Types (defined first for schema typing) ============
-
-type StackComponentType = {
-  type: 'stack';
-  /** @default 'vertical' */
-  direction?: 'horizontal' | 'vertical';
-  /** @default 'md' */
-  gap?: 'none' | 'sm' | 'md' | 'lg';
-  align?: 'start' | 'center' | 'end' | 'stretch';
-  justify?: 'start' | 'center' | 'end' | 'between' | 'around';
-  wrap?: boolean;
-  children: ComponentNodeType[];
-};
-
-type GridComponentType = {
-  type: 'grid';
-  columns?: number | 'auto';
-  /** @default 'md' */
-  gap?: 'none' | 'sm' | 'md' | 'lg';
-  children: ComponentNodeType[];
-};
-
-type FormComponentType = {
-  type: 'form';
-  id: string;
-  children: ComponentNodeType[];
-  layout?: 'vertical' | 'horizontal';
-  /** @default 'md' */
-  gap?: 'none' | 'sm' | 'md' | 'lg';
-};
-
-type ListComponentType = {
-  type: 'list';
-  variant?: 'unordered' | 'ordered';
-  children: ComponentNodeType[];
-};
-
-/** Union of all component types */
-type ComponentType =
-  | StackComponentType
-  | GridComponentType
-  | FormComponentType
-  | ListComponentType
-  | z.infer<typeof buttonSchema>
-  | z.infer<typeof inputSchema>
-  | z.infer<typeof textareaSchema>
-  | z.infer<typeof selectSchema>
-  | z.infer<typeof textComponentSchema>
-  | z.infer<typeof badgeSchema>
-  | z.infer<typeof progressSchema>
-  | z.infer<typeof alertSchema>
-  | z.infer<typeof imageSchema>
-  | z.infer<typeof markdownSchema>
-  | z.infer<typeof dividerSchema>
-  | z.infer<typeof spacerSchema>;
-
-/** Component node - always an object (no string shorthand for LLM clarity) */
-type ComponentNodeType = ComponentType;
-
-// ============ Recursive Schemas (using z.lazy) ============
-
-/** Component node schema - objects only (no string shorthand for LLM clarity) */
-const componentNodeSchema: z.ZodType<ComponentNodeType> = z.lazy(() => componentSchema);
-
-// Layout schemas (with children)
-const stackSchema = z.object({
-  type: z.literal('stack'),
-  direction: z.enum(['horizontal', 'vertical']).default('vertical'),
-  gap: gapWithDefault,
-  align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
-  justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
-  wrap: z.boolean().optional(),
-  children: z.array(componentNodeSchema),
-});
-
-const gridSchema = z.object({
-  type: z.literal('grid'),
-  columns: z.union([z.number(), z.literal('auto')]).optional(),
-  gap: gapWithDefault,
-  children: z.array(componentNodeSchema),
-});
-
-const formSchema = z.object({
-  type: z.literal('form'),
-  id: z.string().describe('Required - referenced by button submitForm'),
-  gap: gapWithDefault,
-  layout: z.enum(['vertical', 'horizontal']).optional(),
-  children: z.array(componentNodeSchema),
-});
-
-const listSchema = z.object({
-  type: z.literal('list'),
-  variant: z.enum(['unordered', 'ordered']).optional(),
-  children: z.array(componentNodeSchema).describe('List items'),
-});
-
-// ============ Organized by Category ============
-
-const layoutSchemas = [stackSchema, gridSchema] as const;
-const containerSchemas = [formSchema, listSchema] as const;
-const displaySchemas = [
-  textComponentSchema,
-  badgeSchema,
-  progressSchema,
-  alertSchema,
-  imageSchema,
-  markdownSchema,
-  dividerSchema,
-  spacerSchema,
+const componentTypes = [
+  'stack',
+  'grid',
+  'form',
+  'list',
+  'button',
+  'input',
+  'select',
+  'text',
+  'badge',
+  'progress',
+  'image',
+  'markdown',
+  'divider',
+  'spacer',
 ] as const;
-const inputSchemas = [buttonSchema, inputSchema, textareaSchema, selectSchema] as const;
 
-// ============ Union Schema ============
+// ============ Flattened Component Schema ============
 
-const componentSchema: z.ZodType<ComponentType> = z.discriminatedUnion('type', [
-  ...layoutSchemas,
-  ...containerSchemas,
-  ...displaySchemas,
-  ...inputSchemas,
-]);
+/**
+ * Unified component schema - all properties flat for LLM simplicity.
+ * Use .describe() to document which component types each property applies to.
+ */
+const baseComponentSchema = z.object({
+  type: z.enum(componentTypes),
+
+  // === Layout props (stack, grid) ===
+  direction: z
+    .enum(['horizontal', 'vertical'])
+    .optional()
+    .describe('stack: Layout direction (default: vertical)'),
+  gap: gapEnum.optional().describe('stack, grid, form: Spacing between children (default: md)'),
+  align: z
+    .enum(['start', 'center', 'end', 'stretch'])
+    .optional()
+    .describe('stack: Cross-axis alignment'),
+  columns: z
+    .union([z.number(), z.literal('auto')])
+    .optional()
+    .describe('grid: Number of columns or "auto"'),
+
+  // === Container props (form, list) ===
+  id: z.string().optional().describe('form: Required form ID (referenced by button submitForm)'),
+  layout: z.enum(['vertical', 'horizontal']).optional().describe('form: Field layout direction'),
+
+  // === Children (recursive) ===
+  children: z
+    .lazy(() => z.array(componentSchema))
+    .optional()
+    .describe('stack, grid, form, list: Child components'),
+
+  // === Form field props (input, select) ===
+  name: z.string().optional().describe('input, select: Required field name in form data'),
+  placeholder: z.string().optional().describe('input, select: Placeholder text'),
+  defaultValue: z.string().optional().describe('input, select: Initial value'),
+  disabled: z.boolean().optional().describe('button, input, select: Disabled state'),
+
+  // === Button props ===
+  label: z
+    .string()
+    .optional()
+    .describe('button, badge: Required label. input, select, progress: Optional label'),
+  action: z.string().optional().describe('button: Required - message sent to agent on click'),
+  submitForm: z.string().optional().describe('button: Form ID to collect data from on click'),
+  icon: z.string().optional().describe('button: Icon name'),
+  parallel: z.boolean().optional().describe('button: Run action in parallel (default: true)'),
+
+  // === Display content props ===
+  content: z.string().optional().describe('text, markdown: Required text content'),
+
+  // === Variant (polymorphic - different enums per type) ===
+  variant: z
+    .string()
+    .optional()
+    .describe(
+      'button: primary|secondary|ghost|danger, ' +
+        'input: text|email|password|number|url, ' +
+        'text: body|heading|subheading|caption|code, ' +
+        'badge: default|success|warning|error|info, ' +
+        'progress: default|success|warning|error, ' +
+        'divider: solid|dashed, ' +
+        'list: unordered|ordered'
+    ),
+
+  // === Size ===
+  size: sizeEnum.optional().describe('button, spacer: Size'),
+
+  // === Text-specific props ===
+  color: z
+    .enum(['default', 'muted', 'accent', 'success', 'warning', 'error'])
+    .optional()
+    .describe('text: Text color'),
+  textAlign: z.enum(['left', 'center', 'right']).optional().describe('text: Text alignment'),
+
+  // === Progress props ===
+  value: z.number().min(0).max(100).optional().describe('progress: Required value 0-100'),
+  showValue: z.boolean().optional().describe('progress: Show percentage text'),
+
+  // === Input multiline props ===
+  rows: z.number().optional().describe('input: Number of rows (renders as textarea if set)'),
+
+  // === Image props ===
+  src: z.string().optional().describe('image: Required source URL'),
+  width: z.union([z.number(), z.string()]).optional().describe('image: Width (px or CSS value)'),
+  height: z.union([z.number(), z.string()]).optional().describe('image: Height (px or CSS value)'),
+  fit: z.enum(['contain', 'cover', 'fill']).optional().describe('image: Object fit mode'),
+
+  // === Select props ===
+  options: z
+    .array(z.object({ value: z.string(), label: z.string() }))
+    .optional()
+    .describe('select: Required options array'),
+});
+
+// ============ Recursive Schema Definition ============
+
+/**
+ * Component schema with recursive children support.
+ * Note: We use `as any` cast because the flattened schema intentionally
+ * has a simpler structure than the discriminated union types.
+ * The LLM sends flat objects; TypeScript types provide stricter discrimination.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const componentSchema: z.ZodType<Component> = baseComponentSchema as any;
+
+/** Component node schema (alias for backward compatibility) */
+export const componentNodeSchema = componentSchema;
+
+// ============ Display Content Schema ============
 
 /**
  * Display content schema - for markdown, html, text, iframe (no components).
  * Used by create_window and update_window tools.
  */
-const displayContentSchema = z.object({
+export const displayContentSchema = z.object({
   renderer: z.enum(['markdown', 'html', 'text', 'iframe']).describe('Content renderer type'),
-  content: z.string().describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
+  content: z
+    .string()
+    .describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
 });
 
-// ============ Exported Types ============
+// ============ Discriminated Types for TypeScript ============
+// These provide stricter TypeScript types while the schema remains flat
 
-// Leaf types (inferred from schemas)
-export type ButtonComponent = z.infer<typeof buttonSchema>;
-export type InputComponent = z.infer<typeof inputSchema>;
-export type TextareaComponent = z.infer<typeof textareaSchema>;
-export type SelectComponent = z.infer<typeof selectSchema>;
-export type TextComponent = z.infer<typeof textComponentSchema>;
-export type BadgeComponent = z.infer<typeof badgeSchema>;
-export type ProgressComponent = z.infer<typeof progressSchema>;
-export type AlertComponent = z.infer<typeof alertSchema>;
-export type ImageComponent = z.infer<typeof imageSchema>;
-export type MarkdownComponent = z.infer<typeof markdownSchema>;
-export type DividerComponent = z.infer<typeof dividerSchema>;
-export type SpacerComponent = z.infer<typeof spacerSchema>;
+type Gap = 'none' | 'sm' | 'md' | 'lg';
+type Size = 'sm' | 'md' | 'lg';
 
-// Recursive types (manually defined due to z.lazy)
-export type StackComponent = StackComponentType;
-export type GridComponent = GridComponentType;
-export type FormComponent = FormComponentType;
-export type ListComponent = ListComponentType;
+export type StackComponent = {
+  type: 'stack';
+  direction?: 'horizontal' | 'vertical';
+  gap?: Gap;
+  align?: 'start' | 'center' | 'end' | 'stretch';
+  children: Component[];
+};
 
-export type Component = ComponentType;
-export type ComponentNode = ComponentNodeType;
+export type GridComponent = {
+  type: 'grid';
+  columns?: number | 'auto';
+  gap?: Gap;
+  children: Component[];
+};
+
+export type FormComponent = {
+  type: 'form';
+  id: string;
+  layout?: 'vertical' | 'horizontal';
+  gap?: Gap;
+  children: Component[];
+};
+
+export type ListComponent = {
+  type: 'list';
+  variant?: 'unordered' | 'ordered';
+  children: Component[];
+};
+
+export type ButtonComponent = {
+  type: 'button';
+  label: string;
+  action: string;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: Size;
+  disabled?: boolean;
+  icon?: string;
+  parallel?: boolean;
+  submitForm?: string;
+};
+
+export type InputComponent = {
+  type: 'input';
+  name: string;
+  label?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  variant?: 'text' | 'email' | 'password' | 'number' | 'url';
+  rows?: number; // If set, renders as textarea
+  disabled?: boolean;
+};
+
+export type SelectComponent = {
+  type: 'select';
+  name: string;
+  label?: string;
+  options: { value: string; label: string }[];
+  defaultValue?: string;
+  placeholder?: string;
+  disabled?: boolean;
+};
+
+export type TextComponent = {
+  type: 'text';
+  content: string;
+  variant?: 'body' | 'heading' | 'subheading' | 'caption' | 'code';
+  color?: 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error';
+  textAlign?: 'left' | 'center' | 'right';
+};
+
+export type BadgeComponent = {
+  type: 'badge';
+  label: string;
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
+};
+
+export type ProgressComponent = {
+  type: 'progress';
+  value: number;
+  label?: string;
+  variant?: 'default' | 'success' | 'warning' | 'error';
+  showValue?: boolean;
+};
+
+export type ImageComponent = {
+  type: 'image';
+  src: string;
+  width?: number | string;
+  height?: number | string;
+  fit?: 'contain' | 'cover' | 'fill';
+};
+
+export type MarkdownComponent = {
+  type: 'markdown';
+  content: string;
+};
+
+export type DividerComponent = {
+  type: 'divider';
+  variant?: 'solid' | 'dashed';
+};
+
+export type SpacerComponent = {
+  type: 'spacer';
+  size?: Size;
+};
+
+/** Union of all component types */
+export type Component =
+  | StackComponent
+  | GridComponent
+  | FormComponent
+  | ListComponent
+  | ButtonComponent
+  | InputComponent
+  | SelectComponent
+  | TextComponent
+  | BadgeComponent
+  | ProgressComponent
+  | ImageComponent
+  | MarkdownComponent
+  | DividerComponent
+  | SpacerComponent;
+
+/** Component node (alias for backward compatibility) */
+export type ComponentNode = Component;
+
 export type DisplayContent = z.infer<typeof displayContentSchema>;
 
 // ============ Type Guards ============
@@ -299,10 +322,6 @@ export function isProgressComponent(node: ComponentNode): node is ProgressCompon
   return isComponent(node) && node.type === 'progress';
 }
 
-export function isAlertComponent(node: ComponentNode): node is AlertComponent {
-  return isComponent(node) && node.type === 'alert';
-}
-
 export function isImageComponent(node: ComponentNode): node is ImageComponent {
   return isComponent(node) && node.type === 'image';
 }
@@ -327,562 +346,115 @@ export function isInputComponent(node: ComponentNode): node is InputComponent {
   return isComponent(node) && node.type === 'input';
 }
 
-export function isTextareaComponent(node: ComponentNode): node is TextareaComponent {
-  return isComponent(node) && node.type === 'textarea';
-}
-
 export function isSelectComponent(node: ComponentNode): node is SelectComponent {
   return isComponent(node) && node.type === 'select';
 }
 
+// ============ Individual Schema Exports (for backward compatibility) ============
 
-// ============ LLM Emission Schema ============
-// Canonical {type, props, children} structure for LLM output
-// All props nested, extensive defaults, optional IDs for future diffing
-
-const llmBaseNode = z.object({
-  id: z.string().optional().describe('Stable ID for updates/references'),
-});
-
-// LLM Layout components
-const llmStackSchema = llmBaseNode.extend({
+export const stackSchema = z.object({
   type: z.literal('stack'),
-  props: z
-    .object({
-      direction: z.enum(['horizontal', 'vertical']).optional(),
-      gap: gapEnum.optional(),
-      align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
-      justify: z.enum(['start', 'center', 'end', 'between', 'around']).optional(),
-      wrap: z.boolean().optional(),
-    })
-    .optional(),
-  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+  direction: z.enum(['horizontal', 'vertical']).optional(),
+  gap: gapEnum.optional(),
+  align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
+  children: z.lazy(() => z.array(componentSchema)).optional(),
 });
 
-const llmGridSchema = llmBaseNode.extend({
+export const gridSchema = z.object({
   type: z.literal('grid'),
-  props: z
-    .object({
-      columns: z.union([z.number(), z.literal('auto')]).optional(),
-      gap: gapEnum.optional(),
-    })
-    .optional(),
-  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+  columns: z.union([z.number(), z.literal('auto')]).optional(),
+  gap: gapEnum.optional(),
+  children: z.lazy(() => z.array(componentSchema)).optional(),
 });
 
-// LLM Container components
-const llmFormSchema = llmBaseNode.extend({
+export const formSchema = z.object({
   type: z.literal('form'),
-  props: z.object({
-    id: z.string().describe('Required - referenced by button submitForm'),
-    layout: z.enum(['vertical', 'horizontal']).optional(),
-    gap: gapEnum.optional(),
-  }),
-  children: z.array(z.lazy(() => llmComponentSchema)).optional(),
+  id: z.string().describe('Required - referenced by button submitForm'),
+  gap: gapEnum.optional(),
+  layout: z.enum(['vertical', 'horizontal']).optional(),
+  children: z.lazy(() => z.array(componentSchema)).optional(),
 });
 
-const llmListSchema = llmBaseNode.extend({
+export const listSchema = z.object({
   type: z.literal('list'),
-  props: z
-    .object({
-      variant: z.enum(['unordered', 'ordered']).optional(),
-    })
-    .optional(),
-  children: z.array(z.lazy(() => llmComponentSchema)).optional().describe('List items'),
+  variant: z.enum(['unordered', 'ordered']).optional(),
+  children: z.lazy(() => z.array(componentSchema)).optional(),
 });
 
-// LLM Input components (leaf)
-const llmButtonSchema = llmBaseNode.extend({
+export const buttonSchema = z.object({
   type: z.literal('button'),
-  props: z.object({
-    label: z.string(),
-    action: z.string().describe('Message sent to agent on click'),
-    variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
-    size: z.enum(['sm', 'md', 'lg']).optional(),
-    disabled: z.boolean().optional(),
-    icon: z.string().optional(),
-    parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
-    submitForm: z.string().optional().describe('Form ID to collect data from on click'),
-  }),
+  label: z.string(),
+  action: z.string().describe('Sent as message to agent on click'),
+  variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
+  size: sizeEnum.optional(),
+  disabled: z.boolean().optional(),
+  icon: z.string().optional(),
+  parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
+  submitForm: z.string().optional().describe('Form ID to collect data from on click'),
 });
 
-const llmInputSchema = llmBaseNode.extend({
+export const inputSchema = z.object({
   type: z.literal('input'),
-  props: z.object({
-    name: z.string().describe('Required - key in form data'),
-    label: z.string().optional(),
-    placeholder: z.string().optional(),
-    defaultValue: z.string().optional(),
-    variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
-    disabled: z.boolean().optional(),
-  }),
+  name: z.string().describe('Required - key in form data'),
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  defaultValue: z.string().optional(),
+  variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
+  rows: z.number().optional().describe('If set, renders as textarea'),
+  disabled: z.boolean().optional(),
 });
 
-const llmTextareaSchema = llmBaseNode.extend({
-  type: z.literal('textarea'),
-  props: z.object({
-    name: z.string(),
-    label: z.string().optional(),
-    placeholder: z.string().optional(),
-    defaultValue: z.string().optional(),
-    rows: z.number().optional(),
-    disabled: z.boolean().optional(),
-  }),
-});
-
-const llmSelectSchema = llmBaseNode.extend({
+export const selectSchema = z.object({
   type: z.literal('select'),
-  props: z.object({
-    name: z.string(),
-    label: z.string().optional(),
-    options: z.array(z.object({ value: z.string(), label: z.string() })),
-    defaultValue: z.string().optional(),
-    placeholder: z.string().optional(),
-    disabled: z.boolean().optional(),
-  }),
+  name: z.string(),
+  label: z.string().optional(),
+  options: z.array(z.object({ value: z.string(), label: z.string() })),
+  defaultValue: z.string().optional(),
+  placeholder: z.string().optional(),
+  disabled: z.boolean().optional(),
 });
 
-// LLM Display components (leaf)
-const llmTextComponentSchema = llmBaseNode.extend({
+export const textComponentSchema = z.object({
   type: z.literal('text'),
-  props: z.object({
-    content: z.string(),
-    variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
-    color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
-    align: z.enum(['left', 'center', 'right']).optional(),
-  }),
+  content: z.string(),
+  variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
+  color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
+  textAlign: z.enum(['left', 'center', 'right']).optional(),
 });
 
-const llmBadgeSchema = llmBaseNode.extend({
+export const badgeSchema = z.object({
   type: z.literal('badge'),
-  props: z.object({
-    label: z.string(),
-    variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
-  }),
+  label: z.string(),
+  variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
 });
 
-const llmProgressSchema = llmBaseNode.extend({
+export const progressSchema = z.object({
   type: z.literal('progress'),
-  props: z.object({
-    value: z.number().min(0).max(100),
-    label: z.string().optional(),
-    variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
-    showValue: z.boolean().optional(),
-  }),
+  value: z.number().min(0).max(100),
+  label: z.string().optional(),
+  variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
+  showValue: z.boolean().optional(),
 });
 
-const llmAlertSchema = llmBaseNode.extend({
-  type: z.literal('alert'),
-  props: z
-    .object({
-      title: z.string().optional(),
-      message: z.string().optional().describe('Alert message text'),
-      variant: z.enum(['info', 'success', 'warning', 'error']).optional(),
-    })
-    .optional(),
-});
-
-const llmImageSchema = llmBaseNode.extend({
+export const imageSchema = z.object({
   type: z.literal('image'),
-  props: z.object({
-    src: z.string(),
-    alt: z.string().optional(),
-    width: z.union([z.number(), z.string()]).optional(),
-    height: z.union([z.number(), z.string()]).optional(),
-    fit: z.enum(['contain', 'cover', 'fill']).optional(),
-  }),
+  src: z.string(),
+  width: z.union([z.number(), z.string()]).optional(),
+  height: z.union([z.number(), z.string()]).optional(),
+  fit: z.enum(['contain', 'cover', 'fill']).optional(),
 });
 
-const llmMarkdownSchema = llmBaseNode.extend({
+export const markdownSchema = z.object({
   type: z.literal('markdown'),
-  props: z.object({
-    content: z.string(),
-  }),
+  content: z.string(),
 });
 
-const llmDividerSchema = llmBaseNode.extend({
+export const dividerSchema = z.object({
   type: z.literal('divider'),
-  props: z
-    .object({
-      variant: z.enum(['solid', 'dashed']).optional(),
-    })
-    .optional(),
+  variant: z.enum(['solid', 'dashed']).optional(),
 });
 
-const llmSpacerSchema = llmBaseNode.extend({
+export const spacerSchema = z.object({
   type: z.literal('spacer'),
-  props: z
-    .object({
-      size: z.enum(['sm', 'md', 'lg']).optional(),
-    })
-    .optional(),
+  size: sizeEnum.optional(),
 });
-
-// LLM Component Schema - discriminated union
-export const llmComponentSchema: z.ZodType<LlmComponent> = z.discriminatedUnion('type', [
-  llmStackSchema,
-  llmGridSchema,
-  llmFormSchema,
-  llmListSchema,
-  llmButtonSchema,
-  llmInputSchema,
-  llmTextareaSchema,
-  llmSelectSchema,
-  llmTextComponentSchema,
-  llmBadgeSchema,
-  llmProgressSchema,
-  llmAlertSchema,
-  llmImageSchema,
-  llmMarkdownSchema,
-  llmDividerSchema,
-  llmSpacerSchema,
-]);
-
-// LLM Component Types (manual definition due to recursive nature)
-type LlmBaseNode = { id?: string };
-
-type LlmStackComponent = LlmBaseNode & {
-  type: 'stack';
-  props?: {
-    direction?: 'horizontal' | 'vertical';
-    gap?: 'none' | 'sm' | 'md' | 'lg';
-    align?: 'start' | 'center' | 'end' | 'stretch';
-    justify?: 'start' | 'center' | 'end' | 'between' | 'around';
-    wrap?: boolean;
-  };
-  children?: LlmComponent[];
-};
-
-type LlmGridComponent = LlmBaseNode & {
-  type: 'grid';
-  props?: {
-    columns?: number | 'auto';
-    gap?: 'none' | 'sm' | 'md' | 'lg';
-  };
-  children?: LlmComponent[];
-};
-
-type LlmFormComponent = LlmBaseNode & {
-  type: 'form';
-  props: {
-    id: string;
-    layout?: 'vertical' | 'horizontal';
-    gap?: 'none' | 'sm' | 'md' | 'lg';
-  };
-  children?: LlmComponent[];
-};
-
-type LlmListComponent = LlmBaseNode & {
-  type: 'list';
-  props?: {
-    variant?: 'unordered' | 'ordered';
-  };
-  children?: LlmComponent[];
-};
-
-type LlmButtonComponent = LlmBaseNode & {
-  type: 'button';
-  props: {
-    label: string;
-    action: string;
-    variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-    size?: 'sm' | 'md' | 'lg';
-    disabled?: boolean;
-    icon?: string;
-    parallel?: boolean;
-    submitForm?: string;
-  };
-};
-
-type LlmInputComponent = LlmBaseNode & {
-  type: 'input';
-  props: {
-    name: string;
-    label?: string;
-    placeholder?: string;
-    defaultValue?: string;
-    variant?: 'text' | 'email' | 'password' | 'number' | 'url';
-    disabled?: boolean;
-  };
-};
-
-type LlmTextareaComponent = LlmBaseNode & {
-  type: 'textarea';
-  props: {
-    name: string;
-    label?: string;
-    placeholder?: string;
-    defaultValue?: string;
-    rows?: number;
-    disabled?: boolean;
-  };
-};
-
-type LlmSelectComponent = LlmBaseNode & {
-  type: 'select';
-  props: {
-    name: string;
-    label?: string;
-    options: { value: string; label: string }[];
-    defaultValue?: string;
-    placeholder?: string;
-    disabled?: boolean;
-  };
-};
-
-type LlmTextComponent = LlmBaseNode & {
-  type: 'text';
-  props: {
-    content: string;
-    variant?: 'body' | 'heading' | 'subheading' | 'caption' | 'code';
-    color?: 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error';
-    align?: 'left' | 'center' | 'right';
-  };
-};
-
-type LlmBadgeComponent = LlmBaseNode & {
-  type: 'badge';
-  props: {
-    label: string;
-    variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
-  };
-};
-
-type LlmProgressComponent = LlmBaseNode & {
-  type: 'progress';
-  props: {
-    value: number;
-    label?: string;
-    variant?: 'default' | 'success' | 'warning' | 'error';
-    showValue?: boolean;
-  };
-};
-
-type LlmAlertComponent = LlmBaseNode & {
-  type: 'alert';
-  props?: {
-    title?: string;
-    message?: string;
-    variant?: 'info' | 'success' | 'warning' | 'error';
-  };
-};
-
-type LlmImageComponent = LlmBaseNode & {
-  type: 'image';
-  props: {
-    src: string;
-    alt?: string;
-    width?: number | string;
-    height?: number | string;
-    fit?: 'contain' | 'cover' | 'fill';
-  };
-};
-
-type LlmMarkdownComponent = LlmBaseNode & {
-  type: 'markdown';
-  props: {
-    content: string;
-  };
-};
-
-type LlmDividerComponent = LlmBaseNode & {
-  type: 'divider';
-  props?: {
-    variant?: 'solid' | 'dashed';
-  };
-};
-
-type LlmSpacerComponent = LlmBaseNode & {
-  type: 'spacer';
-  props?: {
-    size?: 'sm' | 'md' | 'lg';
-  };
-};
-
-export type LlmComponent =
-  | LlmStackComponent
-  | LlmGridComponent
-  | LlmFormComponent
-  | LlmListComponent
-  | LlmButtonComponent
-  | LlmInputComponent
-  | LlmTextareaComponent
-  | LlmSelectComponent
-  | LlmTextComponent
-  | LlmBadgeComponent
-  | LlmProgressComponent
-  | LlmAlertComponent
-  | LlmImageComponent
-  | LlmMarkdownComponent
-  | LlmDividerComponent
-  | LlmSpacerComponent;
-
-// ============ Normalization Function ============
-// Transforms LLM format {type, props, children} → internal format {type, ...props, children}
-
-export function normalizeComponent(llm: LlmComponent): Component {
-  switch (llm.type) {
-    case 'stack': {
-      const props = llm.props ?? {};
-      return {
-        type: 'stack',
-        direction: props.direction ?? 'vertical',
-        gap: props.gap ?? 'md',
-        align: props.align,
-        justify: props.justify,
-        wrap: props.wrap,
-        children: (llm.children ?? []).map(normalizeComponent),
-      };
-    }
-    case 'grid': {
-      const props = llm.props ?? {};
-      return {
-        type: 'grid',
-        columns: props.columns,
-        gap: props.gap ?? 'md',
-        children: (llm.children ?? []).map(normalizeComponent),
-      };
-    }
-    case 'form': {
-      return {
-        type: 'form',
-        id: llm.props.id,
-        layout: llm.props.layout,
-        gap: llm.props.gap ?? 'md',
-        children: (llm.children ?? []).map(normalizeComponent),
-      };
-    }
-    case 'list': {
-      const props = llm.props ?? {};
-      return {
-        type: 'list',
-        variant: props.variant,
-        children: (llm.children ?? []).map(normalizeComponent),
-      };
-    }
-    case 'button':
-      return {
-        type: 'button',
-        label: llm.props.label,
-        action: llm.props.action,
-        variant: llm.props.variant,
-        size: llm.props.size,
-        disabled: llm.props.disabled,
-        icon: llm.props.icon,
-        parallel: llm.props.parallel,
-        submitForm: llm.props.submitForm,
-      };
-    case 'input':
-      return {
-        type: 'input',
-        name: llm.props.name,
-        label: llm.props.label,
-        placeholder: llm.props.placeholder,
-        defaultValue: llm.props.defaultValue,
-        variant: llm.props.variant,
-        disabled: llm.props.disabled,
-      };
-    case 'textarea':
-      return {
-        type: 'textarea',
-        name: llm.props.name,
-        label: llm.props.label,
-        placeholder: llm.props.placeholder,
-        defaultValue: llm.props.defaultValue,
-        rows: llm.props.rows,
-        disabled: llm.props.disabled,
-      };
-    case 'select':
-      return {
-        type: 'select',
-        name: llm.props.name,
-        label: llm.props.label,
-        options: llm.props.options,
-        defaultValue: llm.props.defaultValue,
-        placeholder: llm.props.placeholder,
-        disabled: llm.props.disabled,
-      };
-    case 'text':
-      return {
-        type: 'text',
-        content: llm.props.content,
-        variant: llm.props.variant,
-        color: llm.props.color,
-        align: llm.props.align,
-      };
-    case 'badge':
-      return {
-        type: 'badge',
-        label: llm.props.label,
-        variant: llm.props.variant,
-      };
-    case 'progress':
-      return {
-        type: 'progress',
-        value: llm.props.value,
-        label: llm.props.label,
-        variant: llm.props.variant,
-        showValue: llm.props.showValue,
-      };
-    case 'alert': {
-      const props = llm.props ?? {};
-      return {
-        type: 'alert',
-        title: props.title,
-        message: props.message,
-        variant: props.variant,
-      };
-    }
-    case 'image':
-      return {
-        type: 'image',
-        src: llm.props.src,
-        alt: llm.props.alt,
-        width: llm.props.width,
-        height: llm.props.height,
-        fit: llm.props.fit,
-      };
-    case 'markdown':
-      return {
-        type: 'markdown',
-        content: llm.props.content,
-      };
-    case 'divider': {
-      const props = llm.props ?? {};
-      return {
-        type: 'divider',
-        variant: props.variant,
-      };
-    }
-    case 'spacer': {
-      const props = llm.props ?? {};
-      return {
-        type: 'spacer',
-        size: props.size,
-      };
-    }
-  }
-}
-
-// ============ Schema Exports ============
-
-export { componentNodeSchema, componentSchema, displayContentSchema };
-
-export {
-  stackSchema,
-  gridSchema,
-  buttonSchema,
-  formSchema,
-  inputSchema,
-  textareaSchema,
-  selectSchema,
-  textComponentSchema,
-  listSchema,
-  badgeSchema,
-  progressSchema,
-  alertSchema,
-  imageSchema,
-  markdownSchema,
-  dividerSchema,
-  spacerSchema,
-};
