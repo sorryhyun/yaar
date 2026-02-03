@@ -280,7 +280,7 @@ export async function writeAppConfig(
 export function registerAppsTools(server: McpServer): void {
   // apps_list - List available apps
   server.registerTool(
-    'apps_list',
+    'list',
     {
       description: 'List all available apps in the apps/ directory. Returns app ID, name, and whether it has SKILL.md and credentials.',
     },
@@ -305,7 +305,7 @@ export function registerAppsTools(server: McpServer): void {
 
   // apps_load_skill - Load SKILL.md for an app
   server.registerTool(
-    'apps_load_skill',
+    'load_skill',
     {
       description:
         'Load the SKILL.md file for a specific app. This contains instructions on how to use the app, including API endpoints, authentication, and available actions.',
@@ -317,7 +317,7 @@ export function registerAppsTools(server: McpServer): void {
       const skill = await loadAppSkill(args.appId);
 
       if (skill === null) {
-        return ok(`Error: No SKILL.md found for app "${args.appId}". Use apps_list to see available apps.`);
+        return ok(`Error: No SKILL.md found for app "${args.appId}". Use list to see available apps.`);
       }
 
       return ok(skill);
@@ -326,7 +326,7 @@ export function registerAppsTools(server: McpServer): void {
 
   // apps_read_config - Read app config file
   server.registerTool(
-    'apps_read_config',
+    'read_config',
     {
       description: 'Read a configuration file from an app. For credentials.json, reads from storage/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
       inputSchema: {
@@ -351,7 +351,7 @@ export function registerAppsTools(server: McpServer): void {
 
   // apps_write_config - Write app config file
   server.registerTool(
-    'apps_write_config',
+    'write_config',
     {
       description: 'Write a configuration file for an app. For credentials.json, writes to storage/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
       inputSchema: {

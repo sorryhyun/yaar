@@ -1,8 +1,8 @@
 /**
  * MCP HTTP Server for YAAR.
  *
- * Provides an HTTP endpoint for MCP tool calls, allowing multiple agents
- * to connect independently without state corruption issues.
+ * Provides HTTP endpoints for MCP tool calls across 4 namespaced servers,
+ * allowing multiple agents to connect independently without state corruption issues.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -11,8 +11,16 @@ import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { registerAllTools } from './tools/index.js';
 
-let mcpServer: McpServer | null = null;
-let transport: StreamableHTTPServerTransport | null = null;
+/** The 4 MCP server categories. */
+export const MCP_SERVERS = ['system', 'window', 'storage', 'apps'] as const;
+export type McpServerName = (typeof MCP_SERVERS)[number];
+
+interface McpServerEntry {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+}
+
+const mcpServers = new Map<McpServerName, McpServerEntry>();
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
@@ -32,39 +40,62 @@ export function getMcpToken(): string {
 }
 
 /**
- * Initialize the MCP server with all YAAR tools.
+ * Initialize all 4 MCP servers with their respective tools.
  */
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
   mcpToken = randomUUID();
 
-  mcpServer = new McpServer(
-    { name: 'yaar', version: '1.0.0' },
-    { capabilities: { tools: {} } }
-  );
+  // Create all 4 servers
+  const servers: Record<McpServerName, McpServer> = {} as Record<McpServerName, McpServer>;
 
-  // Register all tools
-  registerAllTools(mcpServer);
+  for (const name of MCP_SERVERS) {
+    const server = new McpServer(
+      { name, version: '1.0.0' },
+      { capabilities: { tools: {} } }
+    );
+    servers[name] = server;
+  }
 
-  // Create HTTP transport in stateless mode
-  transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // Stateless mode
-  });
+  // Register tools on their respective servers
+  registerAllTools(servers);
 
-  await mcpServer.connect(transport);
-  console.log(`[MCP] HTTP server initialized${skipAuth ? ' (auth disabled)' : ''}`);
+  // Create transports and connect
+  for (const name of MCP_SERVERS) {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined, // Stateless mode
+    });
+
+    await servers[name].connect(transport);
+
+    mcpServers.set(name, {
+      server: servers[name],
+      transport,
+    });
+  }
+
+  console.log(`[MCP] HTTP servers initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`);
 }
 
 /**
  * Handle incoming MCP HTTP requests.
+ * Routes to the correct server based on the sub-path.
  */
 export async function handleMcpRequest(
   req: IncomingMessage,
-  res: ServerResponse
+  res: ServerResponse,
+  serverName: McpServerName
 ): Promise<void> {
-  if (!transport || !mcpToken) {
+  if (!mcpToken) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'MCP server not initialized' }));
+    return;
+  }
+
+  const entry = mcpServers.get(serverName);
+  if (!entry) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: `Unknown MCP server: ${serverName}` }));
     return;
   }
 
@@ -80,5 +111,5 @@ export async function handleMcpRequest(
   }
 
   console.log(`[MCP] ${req.method} ${req.url}`);
-  await transport.handleRequest(req, res);
+  await entry.transport.handleRequest(req, res);
 }

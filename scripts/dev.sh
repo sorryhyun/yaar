@@ -14,7 +14,7 @@ fi
 
 # Build shared package first (needed by other packages)
 echo "Building shared package..."
-pnpm --filter @claudeos/shared build
+pnpm --filter @yaar/shared build
 
 # Cleanup function
 cleanup() {
@@ -59,7 +59,7 @@ wait_for_server() {
 
 # Start server first
 echo "Starting server..."
-PROVIDER="$PROVIDER_ARG" pnpm --filter @claudeos/server dev 2>&1 &
+PROVIDER="$PROVIDER_ARG" pnpm --filter @yaar/server dev 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -67,7 +67,7 @@ echo "Waiting for server to be ready..."
 wait_for_server
 
 echo "Starting frontend..."
-pnpm --filter @claudeos/frontend dev 2>&1 &
+pnpm --filter @yaar/frontend dev 2>&1 &
 FRONTEND_PID=$!
 
 echo ""

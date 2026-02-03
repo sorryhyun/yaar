@@ -22,7 +22,7 @@ import type { ContextSource } from './context.js';
  * Options for handling a message with dynamic role assignment.
  */
 export interface HandleMessageOptions {
-  /** Role to use for this message ('default' or 'window-{id}') */
+  /** Role to use for this message ('main-{messageId}' or 'window-{id}') */
   role: string;
   /** Source for context recording */
   source: ContextSource;

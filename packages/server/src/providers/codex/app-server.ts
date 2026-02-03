@@ -135,9 +135,15 @@ export class AppServer {
       '-c', 'features.shell_tool=false',
       // Disable web search
       '-c', 'web_search=disabled',
-      // Configure YAAR MCP server
-      '-c', `mcp_servers.yaar.url=http://127.0.0.1:${MCP_PORT}/mcp`,
-      '-c', 'mcp_servers.yaar.bearer_token_env_var=YAAR_MCP_TOKEN',
+      // Configure YAAR MCP servers
+      '-c', `mcp_servers.system.url=http://127.0.0.1:${MCP_PORT}/mcp/system`,
+      '-c', 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN',
+      '-c', `mcp_servers.window.url=http://127.0.0.1:${MCP_PORT}/mcp/window`,
+      '-c', 'mcp_servers.window.bearer_token_env_var=YAAR_MCP_TOKEN',
+      '-c', `mcp_servers.storage.url=http://127.0.0.1:${MCP_PORT}/mcp/storage`,
+      '-c', 'mcp_servers.storage.bearer_token_env_var=YAAR_MCP_TOKEN',
+      '-c', `mcp_servers.apps.url=http://127.0.0.1:${MCP_PORT}/mcp/apps`,
+      '-c', 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN',
       '-c', 'model_reasoning_effort = "medium"',
     ];
 

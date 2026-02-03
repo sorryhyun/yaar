@@ -17,7 +17,7 @@ import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders, initWarmPool, getWarmPool } from './providers/factory.js';
 import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
-import { initMcpServer, handleMcpRequest } from './mcp/server.js';
+import { initMcpServer, handleMcpRequest, MCP_SERVERS, type McpServerName } from './mcp/server.js';
 import { listApps } from './mcp/tools/apps.js';
 import type { ClientEvent, ServerEvent } from '@yaar/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
@@ -112,10 +112,14 @@ const server = createServer(async (req, res) => {
 
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 
-  // MCP endpoint for tool calls
-  if (url.pathname === '/mcp' && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
-    await handleMcpRequest(req, res);
-    return;
+  // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/storage, /mcp/apps)
+  const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);
+  if (mcpMatch && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
+    const serverName = mcpMatch[1] as McpServerName;
+    if ((MCP_SERVERS as readonly string[]).includes(serverName)) {
+      await handleMcpRequest(req, res, serverName);
+      return;
+    }
   }
 
   // Health check
@@ -516,7 +520,7 @@ async function startup() {
   server.listen(PORT, '127.0.0.1', () => {
     console.log(`YAAR server running at http://127.0.0.1:${PORT}`);
     console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
-    console.log('MCP endpoint: http://127.0.0.1:' + PORT + '/mcp');
+    console.log('MCP endpoints: http://127.0.0.1:' + PORT + '/mcp/{system,window,storage,apps}');
   });
 }
 

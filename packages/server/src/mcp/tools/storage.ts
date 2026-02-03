@@ -10,7 +10,7 @@ import { ok, okWithImages } from '../utils.js';
 export function registerStorageTools(server: McpServer): void {
   // storage_read
   server.registerTool(
-    'storage_read',
+    'read',
     {
       description:
         'Read a file from the persistent storage directory. For PDF files, returns page count - use /api/pdf/<path>/<page> URLs to display pages visually instead of describing them.',
@@ -39,7 +39,7 @@ export function registerStorageTools(server: McpServer): void {
 
   // storage_write
   server.registerTool(
-    'storage_write',
+    'write',
     {
       description: 'Write a file to the persistent storage directory',
       inputSchema: {
@@ -55,7 +55,7 @@ export function registerStorageTools(server: McpServer): void {
 
   // storage_list
   server.registerTool(
-    'storage_list',
+    'list',
     {
       description: 'List files and directories in the persistent storage directory',
       inputSchema: {
@@ -75,7 +75,7 @@ export function registerStorageTools(server: McpServer): void {
 
   // storage_delete
   server.registerTool(
-    'storage_delete',
+    'delete',
     {
       description: 'Delete a file from the persistent storage directory',
       inputSchema: {

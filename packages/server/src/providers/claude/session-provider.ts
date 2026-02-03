@@ -10,7 +10,7 @@ import sharp from 'sharp';
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { getToolNames, getMcpToken } from '../../mcp/index.js';
+import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { getStorageDir } from '../../storage/index.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 
@@ -113,15 +113,18 @@ export class ClaudeSessionProvider extends BaseTransport {
       tools: ['WebSearch'],
       allowedTools: getToolNames(),
       maxThinkingTokens: 4096,
-      mcpServers: {
-        yaar: {
-          type: 'http',
-          url: `http://127.0.0.1:${MCP_PORT}/mcp`,
-          headers: {
-            Authorization: `Bearer ${getMcpToken()}`,
+      mcpServers: Object.fromEntries(
+        MCP_SERVERS.map((name: string) => [
+          name,
+          {
+            type: 'http' as const,
+            url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
+            headers: {
+              Authorization: `Bearer ${getMcpToken()}`,
+            },
           },
-        },
-      },
+        ])
+      ),
       includePartialMessages: true,
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,

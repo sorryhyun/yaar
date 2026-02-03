@@ -5,7 +5,7 @@
  * - Agents are dynamically assigned roles based on task type
  * - Context (ContextTape) is the central organizing principle
  * - Main tasks are processed sequentially, window tasks in parallel
- * - Agent identities ('default', 'window-{id}') are preserved
+ * - Agent identities ('main-{messageId}', 'window-{id}') are preserved
  */
 
 import { AgentSession } from './session.js';
@@ -46,7 +46,7 @@ interface PooledAgent {
   id: number;
   instanceId: string; // Unique ID for this agent instance
   lastUsed: number;
-  currentRole: string | null; // 'default' or 'window-{id}' when active
+  currentRole: string | null; // 'main-{messageId}' or 'window-{id}' when active
   idleTimer: NodeJS.Timeout | null;
 }
 
@@ -193,15 +193,15 @@ export class ContextPool {
       agent.idleTimer = null;
     }
 
-    // Assign role
-    agent.currentRole = 'default';
+    // Assign role - unique per message so parallel main agents are distinguishable
+    agent.currentRole = `main-${task.messageId}`;
     agent.lastUsed = Date.now();
 
     // Notify frontend
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
       messageId: task.messageId,
-      agentId: 'default',
+      agentId: `main-${task.messageId}`,
     });
 
     console.log(`[ContextPool] Processing main task ${task.messageId} with agent ${agent.id}`);
@@ -567,12 +567,6 @@ export class ContextPool {
    * Interrupt a specific agent by ID.
    */
   async interruptAgent(agentId: string): Promise<boolean> {
-    // Check if it's the default agent
-    if (agentId === 'default') {
-      await this.interruptAll();
-      return true;
-    }
-
     // Try to find agent by role
     for (const agent of this.agents) {
       if (agent.currentRole === agentId) {

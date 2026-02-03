@@ -27,10 +27,10 @@ const colsSchema = z.union([
 export function registerWindowTools(server: McpServer): void {
   // create_window - for display content (markdown, html, text, iframe)
   server.registerTool(
-    'create_window',
+    'create',
     {
       description:
-        'Create a window for displaying content (markdown, HTML, text, or iframe). For interactive UI with buttons/forms, use create_component_window instead.',
+        'Create a window for displaying content (markdown, HTML, text, or iframe). For interactive UI with buttons/forms, use create_component instead.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
@@ -88,7 +88,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // create_component_window - for interactive UI components
   server.registerTool(
-    'create_component_window',
+    'create_component',
     {
       description:
         'Create a window with interactive UI components (buttons, forms, inputs, ... etc). Components are a flat array laid out with CSS grid.',
@@ -142,10 +142,10 @@ export function registerWindowTools(server: McpServer): void {
 
   // update_window - for display content (markdown, html, text, iframe)
   server.registerTool(
-    'update_window',
+    'update',
     {
       description:
-        'Update display window content with text operations. For component windows, use update_component_window instead.',
+        'Update display window content with text operations. For component windows, use update_component instead.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to update'),
         operation: z
@@ -198,7 +198,7 @@ export function registerWindowTools(server: McpServer): void {
       }
 
       if (feedback?.locked) {
-        return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock_window when done.`);
+        return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock when done.`);
       }
 
       return ok(`Updated window "${args.windowId}" (${args.operation})`);
@@ -207,7 +207,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // update_component_window - replace component layout
   server.registerTool(
-    'update_component_window',
+    'update_component',
     {
       description: 'Replace the components in a component window.',
       inputSchema: {
@@ -240,7 +240,7 @@ export function registerWindowTools(server: McpServer): void {
 
       if (feedback?.locked) {
         return ok(
-          `Updated component window "${args.windowId}". Window is currently locked - use unlock_window when done.`
+          `Updated component window "${args.windowId}". Window is currently locked - use unlock when done.`
         );
       }
 
@@ -250,7 +250,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // close_window
   server.registerTool(
-    'close_window',
+    'close',
     {
       description: 'Close a window on the YAAR desktop',
       inputSchema: {
@@ -276,7 +276,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // lock_window
   server.registerTool(
-    'lock_window',
+    'lock',
     {
       description:
         'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
@@ -299,7 +299,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // unlock_window
   server.registerTool(
-    'unlock_window',
+    'unlock',
     {
       description: 'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
       inputSchema: {
@@ -323,7 +323,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // list_windows
   server.registerTool(
-    'list_windows',
+    'list',
     {
       description:
         'List all windows currently open on the YAAR desktop. Returns window IDs, titles, positions, sizes, and lock status.',
@@ -351,7 +351,7 @@ export function registerWindowTools(server: McpServer): void {
 
   // view_window
   server.registerTool(
-    'view_window',
+    'view',
     {
       description:
         'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content.',
@@ -363,7 +363,7 @@ export function registerWindowTools(server: McpServer): void {
       const win = windowState.getWindow(args.windowId);
 
       if (!win) {
-        return ok(`Window "${args.windowId}" not found. Use list_windows to see available windows.`);
+        return ok(`Window "${args.windowId}" not found. Use list to see available windows.`);
       }
 
       const windowInfo = {

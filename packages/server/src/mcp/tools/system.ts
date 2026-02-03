@@ -9,7 +9,7 @@ import { ok } from '../utils.js';
 export function registerSystemTools(server: McpServer): void {
   // get_system_time
   server.registerTool(
-    'get_system_time',
+    'get_time',
     {
       description: 'Get the current system time and date in various formats',
       inputSchema: {
@@ -108,7 +108,7 @@ export function registerSystemTools(server: McpServer): void {
 
   // get_system_info
   server.registerTool(
-    'get_system_info',
+    'get_info',
     {
       description: 'Get information about the YAAR system environment',
     },

@@ -2,9 +2,9 @@
  * App development tools - write, compile, and deploy TypeScript apps.
  *
  * Workflow:
- * 1. app_write_ts - Write TypeScript code to a sandbox directory
- * 2. app_compile - Compile TypeScript to a bundled HTML file
- * 3. app_deploy - Deploy sandbox to apps/ directory as a desktop app
+ * 1. write_ts - Write TypeScript code to a sandbox directory
+ * 2. compile - Compile TypeScript to a bundled HTML file
+ * 3. deploy - Deploy sandbox to apps/ directory as a desktop app
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -47,7 +47,7 @@ A compiled TypeScript application.
 ## Launch
 Open this app in an iframe window:
 \`\`\`
-create_window({
+create({
   windowId: "${appId}",
   title: "${appName}",
   renderer: "iframe",
@@ -56,7 +56,7 @@ create_window({
 \`\`\`
 
 ## Source
-Source code is available in \`src/\` directory. Use \`apps_read_config\` with path \`src/main.ts\` to view.
+Source code is available in \`src/\` directory. Use \`read_config\` with path \`src/main.ts\` to view.
 `;
 }
 
@@ -74,7 +74,7 @@ function toDisplayName(appId: string): string {
 export function registerAppDevTools(server: McpServer): void {
   // app_write_ts - Write TypeScript to sandbox
   server.registerTool(
-    'app_write_ts',
+    'write_ts',
     {
       description: `Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use this to develop apps before compiling.
 
@@ -134,9 +134,9 @@ Example:
     }
   );
 
-  // app_compile - Compile sandbox TypeScript to HTML
+  // compile - Compile sandbox TypeScript to HTML
   server.registerTool(
-    'app_compile',
+    'compile',
     {
       description:
         'Compile TypeScript from a sandbox to a bundled HTML file. Entry point is src/main.ts. Returns a preview URL for viewing the app.',
@@ -175,14 +175,14 @@ Example:
       return ok(JSON.stringify({
         success: true,
         previewUrl,
-        message: 'Compilation successful. Use create_window with renderer: "iframe" to preview.',
+        message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
       }, null, 2));
     }
   );
 
   // app_deploy - Deploy sandbox to apps/ directory
   server.registerTool(
-    'app_deploy',
+    'deploy',
     {
       description:
         'Deploy a compiled sandbox as a desktop app. Creates the app folder in apps/, copies files, and generates SKILL.md so the app appears on the desktop.',
@@ -228,7 +228,7 @@ Example:
       try {
         await stat(distIndexPath);
       } catch {
-        return ok('Error: No compiled output found. Run app_compile first.');
+        return ok('Error: No compiled output found. Run compile first.');
       }
 
       const displayName = name ?? toDisplayName(appId);

@@ -3,6 +3,7 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServerName } from '../server.js';
 import { registerSystemTools } from './system.js';
 import { registerWindowTools } from './window.js';
 import { registerStorageTools } from './storage.js';
@@ -18,15 +19,15 @@ export { registerHttpTools } from './http.js';
 export { registerAppDevTools } from './app-dev.js';
 
 /**
- * Register all YAAR tools on the MCP server.
+ * Register all YAAR tools on their respective MCP servers.
  */
-export function registerAllTools(server: McpServer): void {
-  registerSystemTools(server);
-  registerWindowTools(server);
-  registerStorageTools(server);
-  registerAppsTools(server);
-  registerHttpTools(server);
-  registerAppDevTools(server);
+export function registerAllTools(servers: Record<McpServerName, McpServer>): void {
+  registerSystemTools(servers.system);
+  registerHttpTools(servers.system);
+  registerWindowTools(servers.window);
+  registerStorageTools(servers.storage);
+  registerAppsTools(servers.apps);
+  registerAppDevTools(servers.apps);
 }
 
 /**
@@ -37,38 +38,39 @@ export function getToolNames(): string[] {
     // Built-in Claude tools
     'WebSearch',
     // System tools
-    'mcp__yaar__get_system_time',
-    'mcp__yaar__calculate',
-    'mcp__yaar__get_system_info',
-    'mcp__yaar__get_env_var',
-    'mcp__yaar__generate_random',
+    'mcp__system__get_time',
+    'mcp__system__calculate',
+    'mcp__system__get_info',
+    'mcp__system__get_env_var',
+    'mcp__system__generate_random',
+    'mcp__system__request_allowing_domain',
+    'mcp__system__http_get',
+    'mcp__system__http_post',
     // Window tools
-    'mcp__yaar__create_window',
-    'mcp__yaar__update_window',
-    'mcp__yaar__close_window',
-    'mcp__yaar__lock_window',
-    'mcp__yaar__unlock_window',
-    'mcp__yaar__list_windows',
-    'mcp__yaar__view_window',
-    'mcp__yaar__show_notification',
-    'mcp__yaar__dismiss_notification',
+    'mcp__window__create',
+    'mcp__window__create_component',
+    'mcp__window__update',
+    'mcp__window__update_component',
+    'mcp__window__close',
+    'mcp__window__lock',
+    'mcp__window__unlock',
+    'mcp__window__list',
+    'mcp__window__view',
+    'mcp__window__show_notification',
+    'mcp__window__dismiss_notification',
     // Storage tools
-    'mcp__yaar__storage_read',
-    'mcp__yaar__storage_write',
-    'mcp__yaar__storage_list',
-    'mcp__yaar__storage_delete',
+    'mcp__storage__read',
+    'mcp__storage__write',
+    'mcp__storage__list',
+    'mcp__storage__delete',
     // Apps tools
-    'mcp__yaar__apps_list',
-    'mcp__yaar__apps_load_skill',
-    'mcp__yaar__apps_read_config',
-    'mcp__yaar__apps_write_config',
+    'mcp__apps__list',
+    'mcp__apps__load_skill',
+    'mcp__apps__read_config',
+    'mcp__apps__write_config',
     // App development tools
-    'mcp__yaar__app_write_ts',
-    'mcp__yaar__app_compile',
-    'mcp__yaar__app_deploy',
-    // HTTP tools (curl-based)
-    'mcp__yaar__request_allowing_domain',
-    'mcp__yaar__http_get',
-    'mcp__yaar__http_post',
+    'mcp__apps__write_ts',
+    'mcp__apps__compile',
+    'mcp__apps__deploy',
   ];
 }

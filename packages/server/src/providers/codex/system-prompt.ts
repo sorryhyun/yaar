@@ -34,8 +34,8 @@ Use show_notification for important alerts. They persist in the notification cen
 You have persistent storage for user data, notes, and files across sessions.
 
 ## App Development
-Build TypeScript apps: app_write_ts → app_compile → app_deploy.
-Bundled libraries available via @bundled/* imports (see app_write_ts description).
+Build TypeScript apps: write_ts → compile → deploy.
+Bundled libraries available via @bundled/* imports (see write_ts description).
 Preview in iframe windows, then deploy to desktop.
 
 ## HTTP Access
@@ -43,7 +43,7 @@ Use http_get/http_post for API calls. Domains require allowlisting.
 Use request_allowing_domain to prompt user for new domain access.
 
 ## Desktop Apps
-App icon clicks arrive as messages. Use apps_load_skill to get app instructions.
+App icon clicks arrive as messages. Use load_skill to get app instructions.
 Launch compiled apps via iframe: /api/apps/{appId}/static/index.html
 
 ## User Drawings
