@@ -9,6 +9,8 @@
  * - layout.module.css: stacks, grids, dividers, spacers
  */
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ============ Plain Text (kept for backward compat) ============ */
 .text {
   margin: 0;

@@ -12,11 +12,8 @@ const sizeEnum = z.enum(['sm', 'md', 'lg']);
 
 // ============ Component Types ============
 
-const componentTypes = [
-  'stack',
-  'grid',
-  'form',
-  'list',
+const containerTypes = ['stack', 'grid', 'form', 'list'] as const;
+const leafTypes = [
   'button',
   'input',
   'select',
@@ -29,15 +26,13 @@ const componentTypes = [
   'spacer',
 ] as const;
 
-// ============ Flattened Component Schema ============
+// ============ Shared Base Fields ============
 
 /**
- * Unified component schema - all properties flat for LLM simplicity.
+ * All properties shared across containers and leaves (flat for LLM simplicity).
  * Use .describe() to document which component types each property applies to.
  */
-const baseComponentSchema = z.object({
-  type: z.enum(componentTypes),
-
+const baseFields = {
   // === Layout props (stack, grid) ===
   direction: z
     .enum(['horizontal', 'vertical'])
@@ -56,12 +51,6 @@ const baseComponentSchema = z.object({
   // === Container props (form, list) ===
   id: z.string().optional().describe('form: Required form ID (referenced by button submitForm)'),
   layout: z.enum(['vertical', 'horizontal']).optional().describe('form: Field layout direction'),
-
-  // === Children (recursive) ===
-  children: z
-    .lazy(() => z.array(componentSchema))
-    .optional()
-    .describe('stack, grid, form, list: Child components'),
 
   // === Form field props (input, select) ===
   name: z.string().optional().describe('input, select: Required field name in form data'),
@@ -124,21 +113,38 @@ const baseComponentSchema = z.object({
     .array(z.object({ value: z.string(), label: z.string() }))
     .optional()
     .describe('select: Required options array'),
+} as const;
+
+// ============ Container & Leaf Schemas ============
+
+/** Container components (stack, grid, form, list) - have recursive children */
+const containerComponentSchema = z.object({
+  type: z.enum(containerTypes),
+  ...baseFields,
+  get children() {
+    return z
+      .array(componentSchema)
+      .optional()
+      .describe(
+        'stack, grid, form, list: Array of component objects (NOT a string). ' +
+          'For list items use: [{type:"text",content:"Item 1"},{type:"text",content:"Item 2"}]'
+      );
+  },
 });
 
-// ============ Recursive Schema Definition ============
+/** Leaf components (button, input, select, text, etc.) - no children */
+const leafComponentSchema = z.object({
+  type: z.enum(leafTypes),
+  ...baseFields,
+});
 
-/**
- * Component schema with recursive children support.
- * Note: We use `as any` cast because the flattened schema intentionally
- * has a simpler structure than the discriminated union types.
- * The LLM sends flat objects; TypeScript types provide stricter discrimination.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const componentSchema: z.ZodType<Component> = baseComponentSchema as any;
+// ============ Recursive Union Schema ============
 
-/** Component node schema (alias for backward compatibility) */
-export const componentNodeSchema = componentSchema;
+/** Component schema: union of container (with children) and leaf (without) */
+export const componentSchema: z.ZodType<Component> = z.union([
+  containerComponentSchema,
+  leafComponentSchema,
+]);
 
 // ============ Display Content Schema ============
 
@@ -350,111 +356,3 @@ export function isSelectComponent(node: ComponentNode): node is SelectComponent 
   return isComponent(node) && node.type === 'select';
 }
 
-// ============ Individual Schema Exports (for backward compatibility) ============
-
-export const stackSchema = z.object({
-  type: z.literal('stack'),
-  direction: z.enum(['horizontal', 'vertical']).optional(),
-  gap: gapEnum.optional(),
-  align: z.enum(['start', 'center', 'end', 'stretch']).optional(),
-  children: z.lazy(() => z.array(componentSchema)).optional(),
-});
-
-export const gridSchema = z.object({
-  type: z.literal('grid'),
-  columns: z.union([z.number(), z.literal('auto')]).optional(),
-  gap: gapEnum.optional(),
-  children: z.lazy(() => z.array(componentSchema)).optional(),
-});
-
-export const formSchema = z.object({
-  type: z.literal('form'),
-  id: z.string().describe('Required - referenced by button submitForm'),
-  gap: gapEnum.optional(),
-  layout: z.enum(['vertical', 'horizontal']).optional(),
-  children: z.lazy(() => z.array(componentSchema)).optional(),
-});
-
-export const listSchema = z.object({
-  type: z.literal('list'),
-  variant: z.enum(['unordered', 'ordered']).optional(),
-  children: z.lazy(() => z.array(componentSchema)).optional(),
-});
-
-export const buttonSchema = z.object({
-  type: z.literal('button'),
-  label: z.string(),
-  action: z.string().describe('Sent as message to agent on click'),
-  variant: z.enum(['primary', 'secondary', 'ghost', 'danger']).optional(),
-  size: sizeEnum.optional(),
-  disabled: z.boolean().optional(),
-  icon: z.string().optional(),
-  parallel: z.boolean().optional().describe('Run action in parallel (default true)'),
-  submitForm: z.string().optional().describe('Form ID to collect data from on click'),
-});
-
-export const inputSchema = z.object({
-  type: z.literal('input'),
-  name: z.string().describe('Required - key in form data'),
-  label: z.string().optional(),
-  placeholder: z.string().optional(),
-  defaultValue: z.string().optional(),
-  variant: z.enum(['text', 'email', 'password', 'number', 'url']).optional(),
-  rows: z.number().optional().describe('If set, renders as textarea'),
-  disabled: z.boolean().optional(),
-});
-
-export const selectSchema = z.object({
-  type: z.literal('select'),
-  name: z.string(),
-  label: z.string().optional(),
-  options: z.array(z.object({ value: z.string(), label: z.string() })),
-  defaultValue: z.string().optional(),
-  placeholder: z.string().optional(),
-  disabled: z.boolean().optional(),
-});
-
-export const textComponentSchema = z.object({
-  type: z.literal('text'),
-  content: z.string(),
-  variant: z.enum(['body', 'heading', 'subheading', 'caption', 'code']).optional(),
-  color: z.enum(['default', 'muted', 'accent', 'success', 'warning', 'error']).optional(),
-  textAlign: z.enum(['left', 'center', 'right']).optional(),
-});
-
-export const badgeSchema = z.object({
-  type: z.literal('badge'),
-  label: z.string(),
-  variant: z.enum(['default', 'success', 'warning', 'error', 'info']).optional(),
-});
-
-export const progressSchema = z.object({
-  type: z.literal('progress'),
-  value: z.number().min(0).max(100),
-  label: z.string().optional(),
-  variant: z.enum(['default', 'success', 'warning', 'error']).optional(),
-  showValue: z.boolean().optional(),
-});
-
-export const imageSchema = z.object({
-  type: z.literal('image'),
-  src: z.string(),
-  width: z.union([z.number(), z.string()]).optional(),
-  height: z.union([z.number(), z.string()]).optional(),
-  fit: z.enum(['contain', 'cover', 'fill']).optional(),
-});
-
-export const markdownSchema = z.object({
-  type: z.literal('markdown'),
-  content: z.string(),
-});
-
-export const dividerSchema = z.object({
-  type: z.literal('divider'),
-  variant: z.enum(['solid', 'dashed']).optional(),
-});
-
-export const spacerSchema = z.object({
-  type: z.literal('spacer'),
-  size: sizeEnum.optional(),
-});

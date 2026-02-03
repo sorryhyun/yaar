@@ -4,7 +4,8 @@
  * Components import styles from this directory using the path alias:
  * import styles from '@/styles/ComponentName.module.css'
  *
- * Global styles (tokens.css, animations.css) are imported in index.html
+ * Global styles (tokens.css) are imported in index.html
+ * Animations (@keyframes) are defined locally in each module for proper CSS Module scoping
  */
 
 // Re-export individual style modules for type-safe imports

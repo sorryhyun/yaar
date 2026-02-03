@@ -1,3 +1,5 @@
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .spinner {
   position: fixed;
   width: var(--space-3);

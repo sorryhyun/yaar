@@ -89,7 +89,7 @@ export function registerWindowTools(server: McpServer): void {
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        component: componentSchema.describe('Root component of the UI tree'),
+        component: componentSchema.describe('Root component of the UI tree in JSON object'),
         preset: z
           .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
           .optional()

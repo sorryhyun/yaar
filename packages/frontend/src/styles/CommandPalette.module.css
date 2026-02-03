@@ -91,6 +91,8 @@
   border-color: var(--color-blue);
 }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Spinner box for active agents */
 .spinnerBox {
   display: flex;
