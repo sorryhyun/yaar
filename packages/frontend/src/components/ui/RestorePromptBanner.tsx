@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react'
 import { useDesktopStore } from '@/store'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 import styles from '@/styles/RestorePromptBanner.module.css'
 
 export function RestorePromptBanner() {

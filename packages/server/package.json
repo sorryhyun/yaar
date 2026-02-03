@@ -1,9 +1,9 @@
 {
-  "name": "@claudeos/server",
+  "name": "@yaar/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "ClaudeOS TypeScript backend with Claude Agent SDK",
+  "description": "YAAR TypeScript backend with Claude Agent SDK",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.22",
-    "@claudeos/shared": "workspace:*",
+    "@yaar/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "esbuild": "^0.24.0",
     "node-poppler": "^7.2.0",

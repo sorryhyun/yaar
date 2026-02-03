@@ -1,6 +1,6 @@
 # Agent Architecture: Pools, Forks, and Message Flow
 
-This document describes how ClaudeOS manages multiple concurrent AI agents through pooling and forking mechanisms.
+This document describes how YAAR manages multiple concurrent AI agents through pooling and forking mechanisms.
 
 ## Overview
 

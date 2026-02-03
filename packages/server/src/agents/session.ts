@@ -12,7 +12,7 @@ import {
   getAvailableProviders,
   acquireWarmProvider,
 } from '../providers/factory.js';
-import type { ServerEvent, UserInteraction } from '@claudeos/shared';
+import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { actionEmitter, type ActionEvent } from '../mcp/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';

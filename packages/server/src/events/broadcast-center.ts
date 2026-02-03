@@ -8,7 +8,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import type { ServerEvent } from '@claudeos/shared';
+import type { ServerEvent } from '@yaar/shared';
 
 export type ConnectionId = string;
 

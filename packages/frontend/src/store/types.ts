@@ -19,7 +19,7 @@ import type {
   RenderingFeedback,
   QueuedComponentAction,
 } from '@/types/state'
-import type { OSAction, UserInteraction } from '@claudeos/shared'
+import type { OSAction, UserInteraction } from '@yaar/shared'
 
 // Re-export for convenience
 export type {

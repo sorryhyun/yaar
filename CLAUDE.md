@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClaudeOS is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notification, etc.).
+YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notification, etc.).
 
 **Prerequisites:**
 - Node.js >= 24
@@ -32,8 +32,8 @@ make lint                        # Lint all packages
 make clean                       # Clean generated files
 
 # Testing
-pnpm --filter @claudeos/frontend vitest run           # Run all frontend tests
-pnpm --filter @claudeos/frontend vitest run store     # Run tests matching "store"
+pnpm --filter @yaar/frontend vitest run           # Run all frontend tests
+pnpm --filter @yaar/frontend vitest run store     # Run tests matching "store"
 
 # Standalone executable (requires Bun)
 pnpm build:exe                   # Build Windows executable
@@ -51,7 +51,7 @@ pnpm build:exe:bundle:macos      # Build macOS executable
 ## Monorepo Structure
 
 ```
-claudeos/
+yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   └── moltbook/
 │       └── SKILL.md             # Instructions for AI on how to use this app
@@ -70,9 +70,9 @@ claudeos/
 ### Package Dependencies
 
 ```
-@claudeos/frontend ──┐
-                     ├──> @claudeos/shared
-@claudeos/server ────┘
+@yaar/frontend ──┐
+                     ├──> @yaar/shared
+@yaar/server ────┘
 ```
 
 ## Architecture
@@ -83,11 +83,11 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 
 ### Key Packages
 
-1. **Frontend** (`@claudeos/frontend`): React + Zustand + Vite. Renders windows based on OS Actions. See `packages/frontend/CLAUDE.md`.
+1. **Frontend** (`@yaar/frontend`): React + Zustand + Vite. Renders windows based on OS Actions. See `packages/frontend/CLAUDE.md`.
 
-2. **Server** (`@claudeos/server`): TypeScript + ws. WebSocket server with pluggable AI providers. See `packages/server/CLAUDE.md`.
+2. **Server** (`@yaar/server`): TypeScript + ws. WebSocket server with pluggable AI providers. See `packages/server/CLAUDE.md`.
 
-3. **Shared** (`@claudeos/shared`): Shared types for OS Actions and WebSocket events. See `packages/shared/CLAUDE.md`.
+3. **Shared** (`@yaar/shared`): Shared types for OS Actions and WebSocket events. See `packages/shared/CLAUDE.md`.
 
 ## Code Style
 
@@ -96,7 +96,7 @@ User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actio
 
 ## Apps System
 
-ClaudeOS has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically.
+YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically.
 
 ### How It Works
 

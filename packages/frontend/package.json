@@ -1,5 +1,5 @@
 {
-  "name": "@claudeos/frontend",
+  "name": "@yaar/frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@claudeos/shared": "workspace:*",
+    "@yaar/shared": "workspace:*",
     "html2canvas": "^1.4.1",
     "immer": "^10.0.3",
     "react": "^18.2.0",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * ClaudeOS Standalone Executable Entry Point
+ * YAAR Standalone Executable Entry Point
  *
  * This file is the entry point for the bundled .exe.
  * It imports and starts the server, then auto-opens the browser.

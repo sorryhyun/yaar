@@ -1,7 +1,7 @@
 /**
  * Helper functions for the desktop store.
  */
-import type { UserInteraction } from '@claudeos/shared'
+import type { UserInteraction } from '@yaar/shared'
 import type { DebugSliceState } from './types'
 
 /**

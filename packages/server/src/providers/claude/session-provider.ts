@@ -114,7 +114,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       allowedTools: getToolNames(),
       maxThinkingTokens: 4096,
       mcpServers: {
-        claudeos: {
+        yaar: {
           type: 'http',
           url: `http://127.0.0.1:${MCP_PORT}/mcp`,
           headers: {

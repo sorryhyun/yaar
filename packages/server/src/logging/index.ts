@@ -1,5 +1,5 @@
 /**
- * Session logging for ClaudeOS.
+ * Session logging for YAAR.
  *
  * Logs session activity to disk for debugging and replay purposes.
  * Sessions are stored in session_logs/{timestamp}/
@@ -8,7 +8,7 @@
 import { mkdir, writeFile, readFile, readdir, appendFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { OSAction } from '@claudeos/shared';
+import type { OSAction } from '@yaar/shared';
 
 // Project root directory (3 levels up from this file: sessions -> src -> server -> packages -> root)
 const __dirname = dirname(fileURLToPath(import.meta.url));

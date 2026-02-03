@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useDesktopStore } from '@/store'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 import styles from '@/styles/SessionsModal.module.css'
 
 interface SessionInfo {

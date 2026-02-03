@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { OSAction, DialogConfirmAction, PermissionOptions } from '@claudeos/shared';
+import type { OSAction, DialogConfirmAction, PermissionOptions } from '@yaar/shared';
 import { getAgentId } from '../agents/session.js';
 import { checkPermission, savePermission, type PermissionDecision } from '../storage/permissions.js';
 

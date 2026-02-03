@@ -55,8 +55,8 @@ Interactive components for `component` renderer:
 ## Adding a New OS Action
 
 1. Define action type in `src/actions.ts`
-2. Handle in `applyAction()` in `@claudeos/frontend`
-3. Add MCP tool in `@claudeos/server` if needed
+2. Handle in `applyAction()` in `@yaar/frontend`
+3. Add MCP tool in `@yaar/server` if needed
 
 ## Zod Schema Guidelines (v4)
 

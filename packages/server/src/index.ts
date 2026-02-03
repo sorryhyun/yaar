@@ -1,5 +1,5 @@
 /**
- * ClaudeOS TypeScript Backend Entry Point.
+ * YAAR TypeScript Backend Entry Point.
  *
  * WebSocket server that connects the frontend to AI providers
  * via the transport layer.
@@ -19,14 +19,14 @@ import { listSessions, readSessionTranscript, readSessionMessages, parseSessionM
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest } from './mcp/server.js';
 import { listApps } from './mcp/tools/apps.js';
-import type { ClientEvent, ServerEvent } from '@claudeos/shared';
+import type { ClientEvent, ServerEvent } from '@yaar/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
 // Detect if running as bundled executable
 const IS_BUNDLED_EXE =
   typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
   process.argv[0]?.endsWith('.exe') ||
-  process.argv[0]?.includes('claudeos');
+  process.argv[0]?.includes('yaar');
 
 // Storage directory path
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,8 +39,8 @@ const PROJECT_ROOT = join(__dirname, '..', '..', '..');
  * - Development: project root /storage/
  */
 function getStorageDir(): string {
-  if (process.env.CLAUDEOS_STORAGE) {
-    return process.env.CLAUDEOS_STORAGE;
+  if (process.env.YAAR_STORAGE) {
+    return process.env.YAAR_STORAGE;
   }
   if (IS_BUNDLED_EXE) {
     return join(dirname(process.execPath), 'storage');
@@ -514,7 +514,7 @@ async function startup() {
   }
 
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`ClaudeOS server running at http://127.0.0.1:${PORT}`);
+    console.log(`YAAR server running at http://127.0.0.1:${PORT}`);
     console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
     console.log('MCP endpoint: http://127.0.0.1:' + PORT + '/mcp');
   });

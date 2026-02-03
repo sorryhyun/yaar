@@ -2,7 +2,7 @@
 
 ## Vision
 
-Enable ClaudeOS to cache AI-generated action sequences and replay them instantly when similar contexts reappear. This transforms repetitive interactions (clicking the same app, performing common operations) from expensive AI generations into instant replays.
+Enable YAAR to cache AI-generated action sequences and replay them instantly when similar contexts reappear. This transforms repetitive interactions (clicking the same app, performing common operations) from expensive AI generations into instant replays.
 
 **Example Flow:**
 ```
@@ -117,7 +117,7 @@ class ReloadCache {
 
 #### Approach D: SQLite Database
 ```typescript
-// storage/claudeos.db
+// storage/yaar.db
 // Table: reload_cache (id, fingerprint_json, actions_json, metadata_json, created_at)
 ```
 
@@ -672,7 +672,7 @@ export interface ReloadCacheConfig {
 
 3. **Manual Testing:**
    ```
-   1. Start ClaudeOS: make dev
+   1. Start YAAR: make dev
    2. Click Storage app → window created (observe generation time)
    3. Close window
    4. Click Storage app again

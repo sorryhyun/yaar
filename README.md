@@ -1,6 +1,6 @@
-# ClaudeOS
+# YAAR
 
-A **reactive AI interface** where the AI decides what to show and do next.
+**Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
 
 No pre-built screens. Just an **always-ready input field**. The AI creates windows, tables, forms, and visualizations dynamically based on your intent.
 
@@ -81,7 +81,7 @@ No frontend code needed. The AI generates interfaces on demand.
 
 ```bash
 pnpm install    # Install dependencies
-make dev        # Start ClaudeOS
+make dev        # Start YAAR
 ```
 
 Open http://localhost:5173
@@ -89,7 +89,7 @@ Open http://localhost:5173
 ## Project Structure
 
 ```
-claudeos/
+yaar/
 ├── apps/              # Drop folders here to create apps
 ├── packages/
 │   ├── shared/        # OS Actions types

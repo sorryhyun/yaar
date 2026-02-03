@@ -3,8 +3,8 @@
  * This is the most complex slice with cross-slice dependencies.
  */
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types'
-import type { OSAction } from '@claudeos/shared'
-import { isContentUpdateOperationValid, isWindowContentData } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
+import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared'
 import { emptyContentByRenderer, addDebugLogEntry } from '../helpers'
 
 export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({

@@ -110,7 +110,7 @@ export function registerSystemTools(server: McpServer): void {
   server.registerTool(
     'get_system_info',
     {
-      description: 'Get information about the ClaudeOS system environment',
+      description: 'Get information about the YAAR system environment',
     },
     async () => {
       const info = {

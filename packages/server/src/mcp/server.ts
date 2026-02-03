@@ -1,5 +1,5 @@
 /**
- * MCP HTTP Server for ClaudeOS.
+ * MCP HTTP Server for YAAR.
  *
  * Provides an HTTP endpoint for MCP tool calls, allowing multiple agents
  * to connect independently without state corruption issues.
@@ -32,14 +32,14 @@ export function getMcpToken(): string {
 }
 
 /**
- * Initialize the MCP server with all ClaudeOS tools.
+ * Initialize the MCP server with all YAAR tools.
  */
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
   mcpToken = randomUUID();
 
   mcpServer = new McpServer(
-    { name: 'claudeos', version: '1.0.0' },
+    { name: 'yaar', version: '1.0.0' },
     { capabilities: { tools: {} } }
   );
 

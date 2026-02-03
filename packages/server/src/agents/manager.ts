@@ -7,7 +7,7 @@
  */
 
 import { ContextPool } from './context-pool.js';
-import type { ClientEvent } from '@claudeos/shared';
+import type { ClientEvent } from '@yaar/shared';
 import type { ConnectionId } from '../events/broadcast-center.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 

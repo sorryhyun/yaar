@@ -13,7 +13,7 @@ import type {
   ImageComponent,
   InputComponent,
   SelectComponent,
-} from '@claudeos/shared'
+} from '@yaar/shared'
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext'
 import styles from '@/styles/renderers.module.css'
 

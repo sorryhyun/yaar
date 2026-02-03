@@ -10,7 +10,7 @@
 
 import { AgentSession } from './session.js';
 import { ContextTape, type ContextSource } from './context.js';
-import type { ServerEvent, UserInteraction } from '@claudeos/shared';
+import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 import { getAgentLimiter } from './limiter.js';

@@ -118,7 +118,7 @@ export class AppServer {
       'initialize',
       {
         clientInfo: {
-          name: 'claudeos',
+          name: 'yaar',
           version: '1.0.0',
         },
       }
@@ -135,9 +135,9 @@ export class AppServer {
       '-c', 'features.shell_tool=false',
       // Disable web search
       '-c', 'web_search=disabled',
-      // Configure ClaudeOS MCP server
-      '-c', `mcp_servers.claudeos.url=http://127.0.0.1:${MCP_PORT}/mcp`,
-      '-c', 'mcp_servers.claudeos.bearer_token_env_var=CLAUDEOS_MCP_TOKEN',
+      // Configure YAAR MCP server
+      '-c', `mcp_servers.yaar.url=http://127.0.0.1:${MCP_PORT}/mcp`,
+      '-c', 'mcp_servers.yaar.bearer_token_env_var=YAAR_MCP_TOKEN',
       '-c', 'model_reasoning_effort = "medium"',
     ];
 
@@ -154,7 +154,7 @@ export class AppServer {
         // Ensure no interactive prompts
         CI: '1',
         // MCP authentication token
-        CLAUDEOS_MCP_TOKEN: getMcpToken(),
+        YAAR_MCP_TOKEN: getMcpToken(),
       },
     });
 

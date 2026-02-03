@@ -5,11 +5,11 @@
  * for list_windows and view_window tools.
  */
 
-import type { OSAction, ContentUpdateOperation, WindowState } from '@claudeos/shared';
+import type { OSAction, ContentUpdateOperation, WindowState } from '@yaar/shared';
 import { actionEmitter, type ActionEvent } from './action-emitter.js';
 
 // Re-export WindowState for convenience
-export type { WindowState } from '@claudeos/shared';
+export type { WindowState } from '@yaar/shared';
 
 /**
  * Global window state registry.

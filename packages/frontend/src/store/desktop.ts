@@ -10,7 +10,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopStore } from './types'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 
 // Import all slice creators
 import {

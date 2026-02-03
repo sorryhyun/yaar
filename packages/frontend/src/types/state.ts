@@ -1,7 +1,7 @@
 /**
  * Desktop state - everything that can appear on screen.
  */
-import type { WindowBounds, WindowContent, OSAction } from '@claudeos/shared'
+import type { WindowBounds, WindowContent, OSAction } from '@yaar/shared'
 
 export interface WindowModel {
   id: string
@@ -31,7 +31,7 @@ export interface ToastModel {
   timestamp: number
 }
 
-import type { PermissionOptions } from '@claudeos/shared'
+import type { PermissionOptions } from '@yaar/shared'
 
 export interface DialogModel {
   id: string
@@ -86,7 +86,7 @@ export interface RenderingFeedback {
   locked?: boolean
 }
 
-import type { UserInteraction } from '@claudeos/shared'
+import type { UserInteraction } from '@yaar/shared'
 
 export interface QueuedComponentAction {
   windowId: string

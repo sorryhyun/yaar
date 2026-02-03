@@ -1,6 +1,6 @@
 # Frontend Package
 
-React + Zustand + Vite frontend that renders the ClaudeOS desktop.
+React + Zustand + Vite frontend that renders the YAAR desktop.
 
 ## Commands
 
@@ -69,7 +69,7 @@ src/
 1. Create `src/components/windows/renderers/<Name>Renderer.tsx`
 2. Add case in `src/components/windows/ContentRenderer.tsx`
 3. Add styles in `src/styles/renderers.module.css`
-4. Update renderer enum in `@claudeos/server` tools
+4. Update renderer enum in `@yaar/server` tools
 
 ## Testing
 

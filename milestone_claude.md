@@ -1,8 +1,8 @@
-# ClaudeOS Milestones
+# YAAR Milestones
 
 ## Vision
 
-Transform ClaudeOS into a true AI-native operating system where multiple AI agents work autonomously across virtual screens while users maintain full control and visibility.
+Transform YAAR into a true AI-native operating system where multiple AI agents work autonomously across virtual screens while users maintain full control and visibility.
 
 ---
 
@@ -14,7 +14,7 @@ Transform ClaudeOS into a true AI-native operating system where multiple AI agen
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ClaudeOS - Single Screen, Multiple Agents                   │
+│ YAAR - Single Screen, Multiple Agents                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │   ┌──────────────────┐  ┌──────────────────┐               │
@@ -370,7 +370,7 @@ pipeline([
 
 ```
 ┌─────────────────────────────────────────────┐
-│ ClaudeOS - Shared Workspace                 │
+│ YAAR - Shared Workspace                 │
 │ 👤 Alice  👤 Bob  🤖 Claude                 │
 ├─────────────────────────────────────────────┤
 │                                             │
@@ -407,7 +407,7 @@ pipeline([
 
 ### Killer Feature: Custom Window Components
 
-**Concept**: Users can create custom React components that render in windows. Like VS Code extensions but for ClaudeOS.
+**Concept**: Users can create custom React components that render in windows. Like VS Code extensions but for YAAR.
 
 ```typescript
 // user-components/chart.tsx

@@ -13,7 +13,7 @@ import {
   type ComponentLayout,
   displayContentSchema,
   componentSchema,
-} from '@claudeos/shared';
+} from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
 import { ok } from '../utils.js';
@@ -252,7 +252,7 @@ export function registerWindowTools(server: McpServer): void {
   server.registerTool(
     'close_window',
     {
-      description: 'Close a window on the ClaudeOS desktop',
+      description: 'Close a window on the YAAR desktop',
       inputSchema: {
         windowId: z.string().describe('ID of the window to close'),
       },
@@ -326,7 +326,7 @@ export function registerWindowTools(server: McpServer): void {
     'list_windows',
     {
       description:
-        'List all windows currently open on the ClaudeOS desktop. Returns window IDs, titles, positions, sizes, and lock status.',
+        'List all windows currently open on the YAAR desktop. Returns window IDs, titles, positions, sizes, and lock status.',
     },
     async () => {
       const windows = windowState.listWindows();

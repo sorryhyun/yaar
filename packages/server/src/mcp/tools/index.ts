@@ -18,7 +18,7 @@ export { registerHttpTools } from './http.js';
 export { registerAppDevTools } from './app-dev.js';
 
 /**
- * Register all ClaudeOS tools on the MCP server.
+ * Register all YAAR tools on the MCP server.
  */
 export function registerAllTools(server: McpServer): void {
   registerSystemTools(server);
@@ -30,45 +30,45 @@ export function registerAllTools(server: McpServer): void {
 }
 
 /**
- * Get the list of MCP tool names for ClaudeOS.
+ * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
   return [
     // Built-in Claude tools
     'WebSearch',
     // System tools
-    'mcp__claudeos__get_system_time',
-    'mcp__claudeos__calculate',
-    'mcp__claudeos__get_system_info',
-    'mcp__claudeos__get_env_var',
-    'mcp__claudeos__generate_random',
+    'mcp__yaar__get_system_time',
+    'mcp__yaar__calculate',
+    'mcp__yaar__get_system_info',
+    'mcp__yaar__get_env_var',
+    'mcp__yaar__generate_random',
     // Window tools
-    'mcp__claudeos__create_window',
-    'mcp__claudeos__update_window',
-    'mcp__claudeos__close_window',
-    'mcp__claudeos__lock_window',
-    'mcp__claudeos__unlock_window',
-    'mcp__claudeos__list_windows',
-    'mcp__claudeos__view_window',
-    'mcp__claudeos__show_notification',
-    'mcp__claudeos__dismiss_notification',
+    'mcp__yaar__create_window',
+    'mcp__yaar__update_window',
+    'mcp__yaar__close_window',
+    'mcp__yaar__lock_window',
+    'mcp__yaar__unlock_window',
+    'mcp__yaar__list_windows',
+    'mcp__yaar__view_window',
+    'mcp__yaar__show_notification',
+    'mcp__yaar__dismiss_notification',
     // Storage tools
-    'mcp__claudeos__storage_read',
-    'mcp__claudeos__storage_write',
-    'mcp__claudeos__storage_list',
-    'mcp__claudeos__storage_delete',
+    'mcp__yaar__storage_read',
+    'mcp__yaar__storage_write',
+    'mcp__yaar__storage_list',
+    'mcp__yaar__storage_delete',
     // Apps tools
-    'mcp__claudeos__apps_list',
-    'mcp__claudeos__apps_load_skill',
-    'mcp__claudeos__apps_read_config',
-    'mcp__claudeos__apps_write_config',
+    'mcp__yaar__apps_list',
+    'mcp__yaar__apps_load_skill',
+    'mcp__yaar__apps_read_config',
+    'mcp__yaar__apps_write_config',
     // App development tools
-    'mcp__claudeos__app_write_ts',
-    'mcp__claudeos__app_compile',
-    'mcp__claudeos__app_deploy',
+    'mcp__yaar__app_write_ts',
+    'mcp__yaar__app_compile',
+    'mcp__yaar__app_deploy',
     // HTTP tools (curl-based)
-    'mcp__claudeos__request_allowing_domain',
-    'mcp__claudeos__http_get',
-    'mcp__claudeos__http_post',
+    'mcp__yaar__request_allowing_domain',
+    'mcp__yaar__http_get',
+    'mcp__yaar__http_post',
   ];
 }

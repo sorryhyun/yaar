@@ -2,7 +2,7 @@
  * Toasts slice - manages toast notifications.
  */
 import type { SliceCreator, ToastsSlice, DesktopStore } from '../types'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 
 export const createToastsSlice: SliceCreator<ToastsSlice> = (set, _get) => ({
   toasts: {},

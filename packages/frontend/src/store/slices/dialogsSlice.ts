@@ -2,7 +2,7 @@
  * Dialogs slice - manages confirmation dialogs.
  */
 import type { SliceCreator, DialogsSlice } from '../types'
-import type { OSAction, PermissionOptions } from '@claudeos/shared'
+import type { OSAction, PermissionOptions } from '@yaar/shared'
 
 export const createDialogsSlice: SliceCreator<DialogsSlice> = (set, _get) => ({
   dialogs: {},

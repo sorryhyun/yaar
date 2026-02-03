@@ -1,10 +1,10 @@
-# ClaudeOS Milestones (Codex)
+# YAAR Milestones (Codex)
 
 This is an **implementation-first** roadmap: fewer “big ideas”, more shippable increments with clear “done” criteria.
 
 ## North Star
 
-Make ClaudeOS feel like a trustworthy “AI desktop”:
+Make YAAR feel like a trustworthy “AI desktop”:
 - **Observable**: you can always tell *what* the AI is doing and *why*.
 - **Interruptible**: you can stop/redirect safely at any moment.
 - **Recoverable**: sessions restore cleanly after reload/restart.
@@ -113,8 +113,8 @@ Make ClaudeOS feel like a trustworthy “AI desktop”:
   - token estimates per agent/context branch
   - automatic pruning strategy + user controls (“summarize older context”, “pin this window”)
 - [ ] **Contract tests**:
-  - OS Actions reducer tests (`@claudeos/frontend`)
-  - WebSocket event schema tests (`@claudeos/shared`)
+  - OS Actions reducer tests (`@yaar/frontend`)
+  - WebSocket event schema tests (`@yaar/shared`)
   - session restore snapshot test (restore actions reconstruct window state)
 
 ### Definition of Done
@@ -125,12 +125,12 @@ Make ClaudeOS feel like a trustworthy “AI desktop”:
 
 ## Milestone 5 — Distribution & Operations (P2)
 
-**Goal:** make it easy to run ClaudeOS as a product (not just a dev repo).
+**Goal:** make it easy to run YAAR as a product (not just a dev repo).
 
 ### Deliverables
 - [ ] **Single-command local install** guide per OS (including poppler for PDF rendering).
 - [ ] **Bundled builds** polished:
-  - `dist/claudeos` artifacts (Windows/Linux/macOS) plus `public/` + `storage/` layout
+  - `dist/yaar` artifacts (Windows/Linux/macOS) plus `public/` + `storage/` layout
   - first-run experience (storage dir creation, provider selection, auth hints)
 - [ ] **Operational diagnostics**:
   - “System Info” window (providers available, warm pool stats, storage path, poppler availability)

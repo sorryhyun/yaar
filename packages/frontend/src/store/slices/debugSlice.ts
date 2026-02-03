@@ -2,7 +2,7 @@
  * Debug slice - manages debug panel, activity log, and debug log.
  */
 import type { SliceCreator, DebugSlice } from '../types'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 
 export const createDebugSlice: SliceCreator<DebugSlice> = (set, _get) => ({
   activityLog: [],

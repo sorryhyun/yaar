@@ -18,7 +18,7 @@ function isBundledExe(): boolean {
   // Bun sets this when running a compiled executable
   return typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
     process.argv[0]?.endsWith('.exe') ||
-    process.argv[0]?.includes('claudeos');
+    process.argv[0]?.includes('yaar');
 }
 
 /**
@@ -62,7 +62,7 @@ export async function pdfToImages(pdfPath: string, scale: number = 1.5): Promise
   const images: PdfPageImage[] = [];
 
   // Create a unique temp directory for this conversion
-  const tempDir = join(tmpdir(), `claudeos-pdf-${randomUUID()}`);
+  const tempDir = join(tmpdir(), `yaar-pdf-${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
   try {
@@ -115,7 +115,7 @@ export async function renderPdfPage(
   const poppler = getPoppler();
 
   // Create a unique temp directory for this conversion
-  const tempDir = join(tmpdir(), `claudeos-pdf-${randomUUID()}`);
+  const tempDir = join(tmpdir(), `yaar-pdf-${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
   try {

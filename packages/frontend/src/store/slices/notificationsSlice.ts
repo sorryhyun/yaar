@@ -2,7 +2,7 @@
  * Notifications slice - manages notification center.
  */
 import type { SliceCreator, NotificationsSlice, DesktopStore } from '../types'
-import type { OSAction } from '@claudeos/shared'
+import type { OSAction } from '@yaar/shared'
 
 export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, _get) => ({
   notifications: {},

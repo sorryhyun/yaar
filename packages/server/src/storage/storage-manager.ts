@@ -21,11 +21,11 @@ import type {
 const IS_BUNDLED_EXE =
   typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
   process.argv[0]?.endsWith('.exe') ||
-  process.argv[0]?.includes('claudeos');
+  process.argv[0]?.includes('yaar');
 
 export function getStorageDir(): string {
-  if (process.env.CLAUDEOS_STORAGE) {
-    return process.env.CLAUDEOS_STORAGE;
+  if (process.env.YAAR_STORAGE) {
+    return process.env.YAAR_STORAGE;
   }
   if (IS_BUNDLED_EXE) {
     return join(dirname(process.execPath), 'storage');
