@@ -217,7 +217,7 @@ export class ContextPool {
     // Process the message with role and context recording
     // Only record assistant response in callback (user already recorded above)
     await agent.session.handleMessage(task.content, {
-      role: 'default',
+      role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
       messageId: task.messageId,
