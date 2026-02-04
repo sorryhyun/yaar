@@ -4,7 +4,7 @@
  * Forms collect data locally without sending to the AI until a button
  * with submitForm is clicked.
  */
-import { createContext, useContext, useCallback, useRef, useEffect } from 'react'
+import { createContext, useContext, useCallback, useRef, useEffect, useMemo } from 'react'
 
 export type FormValue = string | number | boolean
 
@@ -60,12 +60,12 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
     return formsRef.current.get(formId)
   }, [])
 
-  const value: FormContextType = {
+  const value = useMemo<FormContextType>(() => ({
     registerForm,
     unregisterForm,
     setFieldValue,
     getFormData,
-  }
+  }), [registerForm, unregisterForm, setFieldValue, getFormData])
 
   return (
     <FormContext.Provider value={value}>
@@ -87,6 +87,10 @@ export function useFormContext(): FormContextType | null {
 export function useFormField(formId: string | undefined, fieldName: string, initialValue: FormValue = '') {
   const formContext = useFormContext()
 
+  // Use ref to avoid re-running the initial-value effect when formContext reference changes
+  const formContextRef = useRef(formContext)
+  formContextRef.current = formContext
+
   const setValue = useCallback((value: FormValue) => {
     if (formId && formContext) {
       formContext.setFieldValue(formId, fieldName, value)
@@ -97,10 +101,10 @@ export function useFormField(formId: string | undefined, fieldName: string, init
   // This handles React Strict Mode correctly - the effect runs after mount
   // and re-runs if the component is remounted (after form data was cleared).
   useEffect(() => {
-    if (formId && formContext) {
-      formContext.setFieldValue(formId, fieldName, initialValue)
+    if (formId && formContextRef.current) {
+      formContextRef.current.setFieldValue(formId, fieldName, initialValue)
     }
-  }, [formId, fieldName, initialValue, formContext])
+  }, [formId, fieldName, initialValue])
 
   return { setValue }
 }

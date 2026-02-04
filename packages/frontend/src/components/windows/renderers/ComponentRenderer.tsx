@@ -277,7 +277,6 @@ function InputRenderer({ node }: { node: InputComponent }) {
           type={inputType}
           className={styles.formInput}
           placeholder={node.placeholder}
-          defaultValue={node.defaultValue}
           value={localValue}
           onChange={handleInputChange}
           disabled={node.disabled}

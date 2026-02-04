@@ -74,6 +74,16 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const windowAgent = useDesktopStore(selectWindowAgent(window.id))
   const sendComponentAction = useComponentAction()
 
+  const handleComponentAction = useCallback((
+    action: string,
+    parallel?: boolean,
+    formData?: Record<string, string | number | boolean>,
+    formId?: string,
+    componentPath?: string[]
+  ) => {
+    sendComponentAction?.(window.id, window.title, action, parallel, formData, formId, componentPath)
+  }, [sendComponentAction, window.id, window.title])
+
   const frameRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
@@ -284,9 +294,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           onRenderError={(requestId, windowId, renderer, error, url) => {
             addRenderingFeedback({ requestId, windowId, renderer, success: false, error, url })
           }}
-          onComponentAction={(action, parallel, formData, formId, componentPath) => {
-            sendComponentAction?.(window.id, window.title, action, parallel, formData, formId, componentPath)
-          }}
+          onComponentAction={handleComponentAction}
         />
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
       </div>
