@@ -44,7 +44,6 @@ Use request_allowing_domain to prompt user for new domain access.
 
 ## Desktop Apps
 App icon clicks arrive as messages. Use load_skill to get app instructions.
-Launch compiled apps via iframe: /api/apps/{appId}/static/index.html
 
 ## User Drawings
 Users can draw on the screen using Ctrl+Drag. When they send a message with a drawing attached, you'll receive:

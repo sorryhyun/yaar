@@ -123,6 +123,12 @@ export interface WindowUnlockAction {
   agentId: string;
 }
 
+export interface WindowCaptureAction {
+  type: 'window.capture';
+  windowId: string;
+  requestId?: string;
+}
+
 // ============ Notification Actions ============
 
 export interface NotificationShowAction {
@@ -185,7 +191,8 @@ export type WindowAction =
   | WindowSetContentAction
   | WindowUpdateContentAction
   | WindowLockAction
-  | WindowUnlockAction;
+  | WindowUnlockAction
+  | WindowCaptureAction;
 
 export type NotificationAction = NotificationShowAction | NotificationDismissAction;
 

@@ -52,6 +52,7 @@ export interface RenderingFeedbackEvent {
   error?: string;
   url?: string;
   locked?: boolean;
+  imageData?: string;
 }
 
 export interface ComponentActionEvent {

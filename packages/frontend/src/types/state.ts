@@ -84,6 +84,7 @@ export interface RenderingFeedback {
   error?: string
   url?: string
   locked?: boolean
+  imageData?: string
 }
 
 import type { UserInteraction } from '@yaar/shared'

@@ -10,7 +10,8 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopStore } from './types'
-import type { OSAction } from '@yaar/shared'
+import type { OSAction, WindowCaptureAction } from '@yaar/shared'
+import html2canvas from 'html2canvas'
 
 // Import all slice creators
 import {
@@ -27,6 +28,51 @@ import {
   createQueuedActionsSlice,
   createDrawingSlice,
 } from './slices'
+
+/**
+ * Capture a window element as a PNG image and push feedback.
+ */
+async function captureWindow(windowId: string, requestId: string) {
+  try {
+    const el = document.querySelector(`[data-window-id="${windowId}"]`) as HTMLElement | null
+    if (!el) {
+      useDesktopStore.getState().addRenderingFeedback({
+        requestId,
+        windowId,
+        renderer: 'capture',
+        success: false,
+        error: `Window element not found in DOM`,
+      })
+      return
+    }
+
+    const canvas = await html2canvas(el, {
+      useCORS: true,
+      logging: false,
+      scale: 1,
+    })
+
+    const dataUrl = canvas.toDataURL('image/png')
+    // Strip the data:image/png;base64, prefix
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+
+    useDesktopStore.getState().addRenderingFeedback({
+      requestId,
+      windowId,
+      renderer: 'capture',
+      success: true,
+      imageData: base64,
+    })
+  } catch (error) {
+    useDesktopStore.getState().addRenderingFeedback({
+      requestId,
+      windowId,
+      renderer: 'capture',
+      success: false,
+      error: error instanceof Error ? error.message : 'Capture failed',
+    })
+  }
+}
 
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
@@ -53,6 +99,15 @@ export const useDesktopStore = create<DesktopStore>()(
 
       // Route to appropriate slice handler based on action type prefix
       const actionType = action.type
+
+      if (actionType === 'window.capture') {
+        // Handle capture async (outside Immer)
+        const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string }
+        if (requestId) {
+          captureWindow(windowId, requestId)
+        }
+        return
+      }
 
       if (actionType.startsWith('window.')) {
         store.handleWindowAction(action)

@@ -141,7 +141,8 @@ export class SessionManager {
           event.success,
           event.error,
           event.url,
-          event.locked
+          event.locked,
+          event.imageData
         );
         break;
 

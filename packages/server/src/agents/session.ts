@@ -453,7 +453,8 @@ export class AgentSession {
     success: boolean,
     error?: string,
     url?: string,
-    locked?: boolean
+    locked?: boolean,
+    imageData?: string
   ): void {
     const resolved = actionEmitter.resolveFeedback({
       requestId,
@@ -463,6 +464,7 @@ export class AgentSession {
       error,
       url,
       locked,
+      imageData,
     });
 
     if (resolved) {

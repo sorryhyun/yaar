@@ -162,6 +162,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       ref={frameRef}
       className={styles.frame}
       style={style}
+      data-window-id={window.id}
       data-focused={isFocused}
       data-dragging={isDragging}
       data-resizing={isResizing}

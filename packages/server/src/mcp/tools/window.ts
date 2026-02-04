@@ -16,7 +16,7 @@ import {
 } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import { windowState } from '../window-state.js';
-import { ok } from '../utils.js';
+import { ok, okWithImages } from '../utils.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const colsSchema = z.union([
@@ -91,7 +91,7 @@ export function registerWindowTools(server: McpServer): void {
     'create_component',
     {
       description:
-        'Create a window with interactive UI components (buttons, forms, inputs, ... etc). Components are a flat array laid out with CSS grid.',
+        'Create a window with interactive UI components (buttons, forms, inputs, ... etc). Components are a flat array laid out with CSS grid. Prefer multi-column layouts (cols: 2 or ratio like [7,3]) for richer UIs; use 1 column only for simple single-component windows.\n\nExample: 2-col layout with 7:3 ratio:\n  cols: [7, 3],\n  components: [\n    { type: "text", content: "Name", variant: "caption" },\n    { type: "badge", label: "Active", variant: "success" },\n    { type: "input", name: "query", formId: "f1", placeholder: "Search..." },\n    { type: "button", label: "Go", action: "search", submitForm: "f1" }\n  ]',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
@@ -354,9 +354,10 @@ export function registerWindowTools(server: McpServer): void {
     'view',
     {
       description:
-        'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content.',
+        'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content. Optionally capture a screenshot of the rendered window.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to view'),
+        includeImage: z.boolean().optional().describe('Capture a screenshot of the rendered window and return it as an image'),
       },
     },
     async (args) => {
@@ -376,6 +377,25 @@ export function registerWindowTools(server: McpServer): void {
         locked: win.locked,
         lockedBy: win.lockedBy,
       };
+
+      if (args.includeImage) {
+        const osAction: OSAction = {
+          type: 'window.capture',
+          windowId: args.windowId,
+        };
+
+        const feedback = await actionEmitter.emitActionWithFeedback(osAction, 5000);
+
+        if (feedback?.success && feedback.imageData) {
+          return okWithImages(
+            JSON.stringify(windowInfo, null, 2),
+            [{ data: feedback.imageData, mimeType: 'image/png' }]
+          );
+        }
+
+        const errorMsg = feedback?.error ?? 'Capture timed out or no image returned';
+        return ok(JSON.stringify({ ...windowInfo, captureError: errorMsg }, null, 2));
+      }
 
       return ok(JSON.stringify(windowInfo, null, 2));
     }

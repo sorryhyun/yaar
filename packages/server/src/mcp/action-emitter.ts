@@ -32,6 +32,7 @@ export interface RenderingFeedback {
   error?: string;
   url?: string;
   locked?: boolean;
+  imageData?: string;
 }
 
 /**

@@ -381,6 +381,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
             error: item.error,
             url: item.url,
             locked: item.locked,
+            imageData: item.imageData,
           })
         }
       }
