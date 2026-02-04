@@ -73,6 +73,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   // Check for previous session to restore
   const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
+    // If windows already exist (auto-restored from server), skip the restore prompt
+    const currentWindows = useDesktopStore.getState().windows
+    if (Object.keys(currentWindows).length > 0) return
+
     try {
       const response = await fetch('/api/sessions')
       if (!response.ok) return

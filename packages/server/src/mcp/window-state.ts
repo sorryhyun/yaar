@@ -168,6 +168,16 @@ class WindowStateRegistry {
   getWindowCount(): number {
     return this.windows.size;
   }
+
+  /**
+   * Restore window state from a list of actions (e.g., from a previous session).
+   * Calls handleAction directly, bypassing actionEmitter to avoid side effects.
+   */
+  restoreFromActions(actions: OSAction[]): void {
+    for (const action of actions) {
+      this.handleAction(action);
+    }
+  }
 }
 
 /**

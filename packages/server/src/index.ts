@@ -18,8 +18,9 @@ import { getAvailableProviders, initWarmPool, getWarmPool } from './providers/fa
 import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest, MCP_SERVERS, type McpServerName } from './mcp/server.js';
+import { windowState } from './mcp/window-state.js';
 import { listApps } from './mcp/tools/apps.js';
-import type { ClientEvent, ServerEvent } from '@yaar/shared';
+import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
 
 // Detect if running as bundled executable
@@ -89,6 +90,9 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const PORT = parseInt(process.env.PORT ?? '8000', 10);
+
+// Restore actions from the most recent previous session (populated at startup)
+let startupRestoreActions: OSAction[] = [];
 
 // Create HTTP server for health checks and REST endpoints
 const server = createServer(async (req, res) => {
@@ -493,6 +497,15 @@ wss.on('connection', async (ws: WebSocket) => {
   };
   ws.send(JSON.stringify(readyEvent));
 
+  // Send restored window state from previous session
+  if (startupRestoreActions.length > 0) {
+    const restoreEvent: ServerEvent = {
+      type: 'ACTIONS',
+      actions: startupRestoreActions,
+    };
+    ws.send(JSON.stringify(restoreEvent));
+  }
+
   if (earlyMessageQueue.length > 0) {
     console.log(`Processing ${earlyMessageQueue.length} queued message(s)`);
     for (const event of earlyMessageQueue) {
@@ -515,6 +528,26 @@ async function startup() {
   if (warmPoolReady) {
     const stats = getWarmPool().getStats();
     console.log(`Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`);
+  }
+
+  // Restore window state from the most recent previous session
+  try {
+    const sessions = await listSessions();
+    if (sessions.length > 0) {
+      const lastSession = sessions[0];
+      const messagesJsonl = await readSessionMessages(lastSession.sessionId);
+      if (messagesJsonl) {
+        const messages = parseSessionMessages(messagesJsonl);
+        const restoreActions = getWindowRestoreActions(messages);
+        if (restoreActions.length > 0) {
+          windowState.restoreFromActions(restoreActions);
+          startupRestoreActions = restoreActions;
+          console.log(`Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to restore previous session:', err);
   }
 
   server.listen(PORT, '127.0.0.1', () => {
