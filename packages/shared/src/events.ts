@@ -38,6 +38,10 @@ export interface InterruptAgentEvent {
   agentId: string;
 }
 
+export interface ResetEvent {
+  type: 'RESET';
+}
+
 export interface SetProviderEvent {
   type: 'SET_PROVIDER';
   provider: 'claude' | 'codex';
@@ -78,6 +82,7 @@ export type ClientEvent =
   | WindowMessageEvent
   | InterruptEvent
   | InterruptAgentEvent
+  | ResetEvent
   | SetProviderEvent
   | RenderingFeedbackEvent
   | ComponentActionEvent

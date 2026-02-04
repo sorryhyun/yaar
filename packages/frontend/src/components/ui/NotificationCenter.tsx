@@ -2,10 +2,11 @@
  * NotificationCenter - Displays persistent notifications.
  */
 import { useDesktopStore, selectNotifications } from '@/store'
+import { useShallow } from 'zustand/react/shallow'
 import styles from '@/styles/NotificationCenter.module.css'
 
 export function NotificationCenter() {
-  const notifications = useDesktopStore(selectNotifications)
+  const notifications = useDesktopStore(useShallow(selectNotifications))
   const dismissNotification = useDesktopStore(s => s.dismissNotification)
 
   if (notifications.length === 0) return null

@@ -3,10 +3,11 @@
  */
 import { useEffect } from 'react'
 import { useDesktopStore, selectToasts } from '@/store'
+import { useShallow } from 'zustand/react/shallow'
 import styles from '@/styles/ToastContainer.module.css'
 
 export function ToastContainer() {
-  const toasts = useDesktopStore(selectToasts)
+  const toasts = useDesktopStore(useShallow(selectToasts))
   const dismissToast = useDesktopStore(s => s.dismissToast)
 
   // Auto-dismiss toasts after 5 seconds

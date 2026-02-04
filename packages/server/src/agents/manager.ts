@@ -124,6 +124,11 @@ export class SessionManager {
         await this.pool?.interruptAll();
         break;
 
+      case 'RESET':
+        // Reset: interrupt all agents, clear context
+        await this.pool?.reset();
+        break;
+
       case 'INTERRUPT_AGENT':
         // Interrupt specific agent by ID
         await this.pool?.interruptAgent(event.agentId);

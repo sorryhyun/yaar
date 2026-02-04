@@ -564,6 +564,20 @@ export class ContextPool {
   }
 
   /**
+   * Reset the pool: interrupt all agents, clear context and queues.
+   * Unlike cleanup(), this keeps the pool alive for reuse.
+   */
+  async reset(): Promise<void> {
+    await this.interruptAll();
+    this.contextTape.clear();
+    this.mainQueue = [];
+    this.windowQueues.clear();
+    this.windowProcessing.clear();
+    this.windowAgentMap.clear();
+    console.log(`[ContextPool] Reset: cleared context tape and queues`);
+  }
+
+  /**
    * Interrupt a specific agent by ID.
    */
   async interruptAgent(agentId: string): Promise<boolean> {

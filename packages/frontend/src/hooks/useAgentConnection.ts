@@ -349,6 +349,12 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: 'INTERRUPT' })
   }, [send])
 
+  // Reset: close all windows and clear server context
+  const reset = useCallback(() => {
+    send({ type: 'RESET' })
+    useDesktopStore.getState().resetDesktop()
+  }, [send])
+
   // Set provider
   const setProvider = useCallback((provider: 'claude' | 'codex') => {
     send({ type: 'SET_PROVIDER', provider })
@@ -437,5 +443,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     interrupt,
     interruptAgent,
     setProvider,
+    reset,
   }
 }

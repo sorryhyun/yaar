@@ -2,12 +2,12 @@
  * Permission storage for remembering user decisions.
  *
  * Stores permission decisions (allow/deny) for tools with optional context.
- * Decisions are persisted to storage/permissions.json.
+ * Decisions are persisted to config/permissions.json.
  */
 
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
-import { getStorageDir } from './storage-manager.js';
+import { getConfigDir } from './storage-manager.js';
 
 /**
  * Permission decision types.
@@ -35,7 +35,7 @@ interface PermissionsFile {
  * Get the path to the permissions file.
  */
 function getPermissionsPath(): string {
-  return join(getStorageDir(), 'permissions.json');
+  return join(getConfigDir(), 'permissions.json');
 }
 
 /**

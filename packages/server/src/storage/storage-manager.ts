@@ -23,17 +23,23 @@ const IS_BUNDLED_EXE =
   process.argv[0]?.endsWith('.exe') ||
   process.argv[0]?.includes('yaar');
 
+function getProjectRoot(): string {
+  if (IS_BUNDLED_EXE) {
+    return dirname(process.execPath);
+  }
+  const __dirname = dirname(new URL(import.meta.url).pathname);
+  return join(__dirname, '..', '..', '..', '..');
+}
+
 export function getStorageDir(): string {
   if (process.env.YAAR_STORAGE) {
     return process.env.YAAR_STORAGE;
   }
-  if (IS_BUNDLED_EXE) {
-    return join(dirname(process.execPath), 'storage');
-  }
-  // Development: calculate from file location
-  const __dirname = dirname(new URL(import.meta.url).pathname);
-  const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
-  return join(PROJECT_ROOT, 'storage');
+  return join(getProjectRoot(), 'storage');
+}
+
+export function getConfigDir(): string {
+  return join(getProjectRoot(), 'config');
 }
 
 const STORAGE_DIR = getStorageDir();
@@ -197,6 +203,52 @@ export async function storageDelete(filePath: string): Promise<StorageDeleteResu
 
   try {
     await unlink(validatedPath);
+    return { success: true, path: filePath };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, path: filePath, error };
+  }
+}
+
+// --- Config directory helpers ---
+
+const CONFIG_DIR = getConfigDir();
+
+/**
+ * Read a file from the config directory.
+ */
+export async function configRead(filePath: string): Promise<StorageReadResult> {
+  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
+  const rel = relative(CONFIG_DIR, normalizedPath);
+  if (rel.startsWith('..') || rel.includes('..')) {
+    return { success: false, error: 'Invalid path: path traversal detected' };
+  }
+
+  try {
+    const content = await readFile(normalizedPath, 'utf-8');
+    return { success: true, content };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, error };
+  }
+}
+
+/**
+ * Write a file to the config directory.
+ */
+export async function configWrite(
+  filePath: string,
+  content: string
+): Promise<StorageWriteResult> {
+  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
+  const rel = relative(CONFIG_DIR, normalizedPath);
+  if (rel.startsWith('..') || rel.includes('..')) {
+    return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
+  }
+
+  try {
+    await mkdir(dirname(normalizedPath), { recursive: true });
+    await writeFile(normalizedPath, content, 'utf-8');
     return { success: true, path: filePath };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';

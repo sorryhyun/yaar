@@ -12,7 +12,7 @@ import styles from '@/styles/CommandPalette.module.css'
 export function CommandPalette() {
   const [input, setInput] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
-  const { isConnected, sendMessage, interrupt } = useAgentConnection()
+  const { isConnected, sendMessage, interrupt, reset } = useAgentConnection()
   const debugPanelOpen = useDesktopStore((state) => state.debugPanelOpen)
   const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel)
   const recentActionsPanelOpen = useDesktopStore((state) => state.recentActionsPanelOpen)
@@ -112,6 +112,21 @@ export function CommandPalette() {
             data-active={recentActionsPanelOpen}
           >
             Actions
+          </button>
+          <button
+            className={styles.toolbarButton}
+            onClick={() => {
+              reset()
+              applyAction({
+                type: 'toast.show',
+                id: `reset-${Date.now()}`,
+                message: 'Desktop and context reset',
+                variant: 'info'
+              })
+            }}
+            title="Reset windows and context"
+          >
+            Reset
           </button>
           <button
             className={styles.toolbarButton}

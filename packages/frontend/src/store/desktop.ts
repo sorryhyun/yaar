@@ -126,6 +126,25 @@ export const useDesktopStore = create<DesktopStore>()(
         store.applyAction(action)
       }
     },
+
+    resetDesktop: () => {
+      const [set] = a
+      set((state) => {
+        state.windows = {}
+        state.zOrder = []
+        state.focusedWindowId = null
+        state.notifications = {}
+        state.toasts = {}
+        state.dialogs = {}
+        state.activeAgents = {}
+        state.windowAgents = {}
+        state.queuedActions = {}
+        state.interactionLog = []
+        state.activityLog = []
+        state.debugLog = []
+        state.pendingFeedback = []
+      })
+    },
   }))
 )
 

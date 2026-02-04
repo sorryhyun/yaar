@@ -218,6 +218,7 @@ export type DesktopStore = WindowsSlice &
   DrawingSlice & {
     applyAction: (action: OSAction) => void
     applyActions: (actions: OSAction[]) => void
+    resetDesktop: () => void
   }
 
 // ============ Slice Creator Type ============

@@ -3,6 +3,7 @@
  */
 import { useState } from 'react'
 import { useDesktopStore, selectDialogs } from '@/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import type { DialogModel } from '@/types/state'
 import styles from '@/styles/ConfirmDialog.module.css'
@@ -59,7 +60,7 @@ function DialogBox({ dialog, onRespond }: {
 }
 
 export function ConfirmDialog() {
-  const dialogs = useDesktopStore(selectDialogs) as DialogModel[]
+  const dialogs = useDesktopStore(useShallow(selectDialogs)) as DialogModel[]
   const respondToDialog = useDesktopStore(s => s.respondToDialog)
   const { sendDialogFeedback } = useAgentConnection()
 

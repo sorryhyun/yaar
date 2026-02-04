@@ -2,10 +2,11 @@
  * WindowManager - Renders all windows in z-order.
  */
 import { useDesktopStore, selectVisibleWindows } from '@/store'
+import { useShallow } from 'zustand/react/shallow'
 import { WindowFrame } from '../windows/WindowFrame'
 
 export function WindowManager() {
-  const windows = useDesktopStore(selectVisibleWindows)
+  const windows = useDesktopStore(useShallow(selectVisibleWindows))
   const zOrder = useDesktopStore(s => s.zOrder)
   const focusedWindowId = useDesktopStore(s => s.focusedWindowId)
 

@@ -55,10 +55,12 @@ yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   └── moltbook/
 │       └── SKILL.md             # Instructions for AI on how to use this app
+├── config/                      # User config (git-ignored)
+│   ├── permissions.json         # Saved permission decisions
+│   └── curl_allowed_domains.yaml # Allowed HTTP domains
 ├── storage/                     # Persistent data storage
-│   ├── credentials/             # Centralized app credentials
-│   │   └── moltbook.json        # (git-ignored) API credentials for moltbook
-│   └── permissions.json         # (git-ignored) Saved permission decisions
+│   └── credentials/             # Centralized app credentials
+│       └── moltbook.json        # (git-ignored) API credentials for moltbook
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events)
 │   ├── server/        # TypeScript WebSocket server

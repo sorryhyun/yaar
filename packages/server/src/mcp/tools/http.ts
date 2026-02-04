@@ -13,7 +13,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ok } from '../utils.js';
-import { storageRead, storageWrite } from '../../storage/index.js';
+import { configRead, configWrite } from '../../storage/index.js';
 import { actionEmitter } from '../action-emitter.js';
 
 const execFileAsync = promisify(execFile);
@@ -50,11 +50,11 @@ function extractDomain(url: string): string {
  * Read allowed domains from storage.
  */
 async function readAllowedDomains(): Promise<string[]> {
-  const result = await storageRead(ALLOWED_DOMAINS_FILE);
+  const result = await configRead(ALLOWED_DOMAINS_FILE);
   if (!result.success || !result.content) {
     // Create default config with empty list
     const defaultConfig: AllowedDomainsConfig = { allowed_domains: [] };
-    await storageWrite(ALLOWED_DOMAINS_FILE, stringifyYaml(defaultConfig));
+    await configWrite(ALLOWED_DOMAINS_FILE, stringifyYaml(defaultConfig));
     return [];
   }
 
@@ -77,7 +77,7 @@ async function addAllowedDomain(domain: string): Promise<boolean> {
 
   domains.push(domain);
   const config: AllowedDomainsConfig = { allowed_domains: domains };
-  const result = await storageWrite(ALLOWED_DOMAINS_FILE, stringifyYaml(config));
+  const result = await configWrite(ALLOWED_DOMAINS_FILE, stringifyYaml(config));
   return result.success;
 }
 

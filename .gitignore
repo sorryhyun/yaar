@@ -30,6 +30,7 @@ Thumbs.db
 # Session logs (AI conversation logs with timestamp subdirectories)
 session_logs/
 /storage/
+/config/
 !session_logs/.gitkeep
 
 # Bundled assets
