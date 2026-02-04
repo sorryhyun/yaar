@@ -300,11 +300,13 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
     }
   }),
 
-  userResizeWindow: (windowId, w, h) => set((state) => {
+  userResizeWindow: (windowId, w, h, x?, y?) => set((state) => {
     const win = state.windows[windowId]
     if (win) {
       win.bounds.w = w
       win.bounds.h = h
+      if (x !== undefined) win.bounds.x = x
+      if (y !== undefined) win.bounds.y = y
       win.maximized = false
       ;(state as DesktopStore).interactionLog.push({
         type: 'window.resize',

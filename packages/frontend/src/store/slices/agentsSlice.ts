@@ -34,7 +34,7 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
 
   updateWindowAgentStatus: (windowId, status) => set((state) => {
     if (state.windowAgents[windowId]) {
-      if (status === 'destroyed') {
+      if (status === 'released') {
         delete state.windowAgents[windowId]
       } else {
         state.windowAgents[windowId].status = status

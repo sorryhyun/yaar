@@ -73,7 +73,7 @@ export interface ActiveAgent {
 
 export interface WindowAgent {
   agentId: string
-  status: 'created' | 'active' | 'idle' | 'destroyed'
+  status: 'assigned' | 'active' | 'released'
 }
 
 export interface RenderingFeedback {

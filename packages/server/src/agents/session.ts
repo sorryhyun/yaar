@@ -368,6 +368,7 @@ export class AgentSession {
                   content: thinkingText,
                   agentId: role,
                 });
+                await this.sessionLogger?.logThinking(message.content, role);
               }
               break;
 
@@ -378,6 +379,12 @@ export class AgentSession {
                 status: 'running',
                 agentId: role,
               });
+              await this.sessionLogger?.logToolUse(
+                message.toolName ?? 'unknown',
+                message.toolInput,
+                message.toolUseId,
+                role
+              );
               break;
 
             case 'tool_result':
@@ -387,6 +394,12 @@ export class AgentSession {
                 status: 'complete',
                 agentId: role,
               });
+              await this.sessionLogger?.logToolResult(
+                message.toolName ?? 'tool',
+                message.content,
+                message.toolUseId,
+                role
+              );
               break;
 
             case 'complete':

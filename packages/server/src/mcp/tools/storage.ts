@@ -25,8 +25,8 @@ export function registerStorageTools(server: McpServer): void {
       }
 
       if (result.images && result.images.length > 0) {
-        const pageCount = result.images.length;
-        const hint = `\n\nTo display these pages visually, use image components with src="/api/pdf/${args.path}/<page>" where <page> is 1 to ${pageCount}.`;
+        const totalPages = result.totalPages ?? result.images.length;
+        const hint = `\n\nTo display these pages visually, use image components with src="/api/pdf/${args.path}/<page>" where <page> is 1 to ${totalPages}.`;
         return okWithImages(
           result.content! + hint,
           result.images.map((img) => ({ data: img.data, mimeType: img.mimeType }))

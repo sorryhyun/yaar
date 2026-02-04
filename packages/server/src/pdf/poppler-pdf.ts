@@ -57,7 +57,7 @@ export interface PdfPageImage {
 /**
  * Convert all pages of a PDF to PNG images.
  */
-export async function pdfToImages(pdfPath: string, scale: number = 1.5): Promise<PdfPageImage[]> {
+export async function pdfToImages(pdfPath: string, scale: number = 1.5, maxPages?: number): Promise<PdfPageImage[]> {
   const poppler = getPoppler();
   const images: PdfPageImage[] = [];
 
@@ -71,10 +71,16 @@ export async function pdfToImages(pdfPath: string, scale: number = 1.5): Promise
     const resolution = Math.round(72 * scale);
     const outputPrefix = join(tempDir, 'page');
 
-    await poppler.pdfToCairo(pdfPath, outputPrefix, {
+    const options: Record<string, unknown> = {
       pngFile: true,
       resolutionXYAxis: resolution,
-    });
+    };
+    if (maxPages !== undefined) {
+      options.firstPageToConvert = 1;
+      options.lastPageToConvert = maxPages;
+    }
+
+    await poppler.pdfToCairo(pdfPath, outputPrefix, options);
 
     // Read all generated PNG files
     const files = await readdir(tempDir);

@@ -122,16 +122,22 @@
   color: var(--color-text);
 }
 
-.resizeHandle {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: var(--space-4);
-  height: var(--space-4);
-  cursor: nwse-resize;
-}
+/* Resize edges */
+.resizeN, .resizeS { position: absolute; left: 6px; right: 6px; height: 6px; }
+.resizeW, .resizeE { position: absolute; top: 6px; bottom: 6px; width: 6px; }
+.resizeN { top: -3px; cursor: ns-resize; }
+.resizeS { bottom: -3px; cursor: ns-resize; }
+.resizeW { left: -3px; cursor: ew-resize; }
+.resizeE { right: -3px; cursor: ew-resize; }
 
-.resizeHandle::after {
+/* Resize corners */
+.resizeNW, .resizeNE, .resizeSW, .resizeSE { position: absolute; width: 12px; height: 12px; }
+.resizeNW { top: -3px; left: -3px; cursor: nwse-resize; }
+.resizeNE { top: -3px; right: -3px; cursor: nesw-resize; }
+.resizeSW { bottom: -3px; left: -3px; cursor: nesw-resize; }
+.resizeSE { bottom: -3px; right: -3px; cursor: nwse-resize; }
+
+.resizeSE::after {
   content: '';
   position: absolute;
   bottom: var(--space-1);

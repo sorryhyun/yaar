@@ -19,40 +19,15 @@ pnpm build                  # Build for production
 
 ```
 src/
-├── index.ts              # WebSocket server + REST API endpoints
-├── agents/
-│   ├── manager.ts        # SessionManager - routes messages to ContextPool
-│   ├── session.ts        # AgentSession - individual agent with dynamic role
-│   ├── limiter.ts        # AgentLimiter - global semaphore
-│   ├── context.ts        # ContextTape - hierarchical conversation context
-│   └── context-pool.ts   # Unified pool with dynamic role assignment
-├── events/
-│   └── broadcast-center.ts  # Centralized WebSocket event hub
-├── providers/
-│   ├── types.ts          # AITransport interface
-│   ├── base-transport.ts # Abstract base class
-│   ├── factory.ts        # Provider factory with auto-detection
-│   ├── warm-pool.ts      # Pre-warms providers at startup
-│   ├── claude/           # Claude Agent SDK implementation
-│   │   ├── provider.ts   # ClaudeProvider class (query-based)
-│   │   ├── session-provider.ts  # ClaudeSessionProvider (with warmup)
-│   │   └── system-prompt.ts  # Claude-specific system prompt
-│   └── codex/            # Codex app-server implementation
-│       ├── provider.ts   # CodexProvider class
-│       └── system-prompt.ts  # Codex-specific system prompt
-├── mcp/
-│   ├── index.ts          # MCP module exports
-│   ├── server.ts         # MCP HTTP server init & request handling
-│   ├── action-emitter.ts # Emits OS Actions with feedback mechanism
-│   ├── window-state.ts   # Server-side window state tracker
-│   ├── utils.ts          # Shared helpers (ok, okWithImages)
-│   └── tools/
-│       ├── index.ts      # Tool registration aggregator
-│       ├── system.ts     # get_system_time, calculate, etc.
-│       ├── window.ts     # create_window, update_window, lock_window, etc.
-│       └── storage.ts    # storage_read, storage_write, etc.
-├── logging/              # SessionLogger for transcript persistence
-└── storage/              # StorageManager for persistent data
+├── index.ts           # WebSocket server + REST API endpoints
+├── agents/            # Agent lifecycle, pooling, context management
+├── events/            # BroadcastCenter - centralized WebSocket event hub
+├── providers/         # Pluggable AI backends (Claude, Codex)
+├── mcp/               # MCP server, tools, action emitter
+├── logging/           # Session logging (write), reading, and window restore
+├── storage/           # StorageManager + permissions for persistent data
+├── compiler/          # Bun bundler for standalone executables
+└── pdf/               # PDF rendering via poppler
 ```
 
 ## Architecture

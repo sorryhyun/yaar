@@ -136,7 +136,7 @@ export interface WindowAgentStatusEvent {
   type: 'WINDOW_AGENT_STATUS';
   windowId: string;
   agentId: string;
-  status: 'created' | 'active' | 'idle' | 'destroyed';
+  status: 'assigned' | 'active' | 'released';
 }
 
 export interface MessageAcceptedEvent {

@@ -185,12 +185,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           const { windowId, agentId, status } = message as {
             windowId: string
             agentId: string
-            status: 'created' | 'active' | 'idle' | 'destroyed'
+            status: 'assigned' | 'active' | 'released'
           }
-          if (status === 'created') {
+          if (status === 'assigned') {
             registerWindowAgent(windowId, agentId, status)
-          } else if (status === 'destroyed') {
-            updateWindowAgentStatus(windowId, status)
           } else {
             updateWindowAgentStatus(windowId, status)
           }

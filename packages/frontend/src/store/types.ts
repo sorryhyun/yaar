@@ -49,7 +49,7 @@ export interface WindowsSliceActions {
   userFocusWindow: (windowId: string) => void
   userCloseWindow: (windowId: string) => void
   userMoveWindow: (windowId: string, x: number, y: number) => void
-  userResizeWindow: (windowId: string, w: number, h: number) => void
+  userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void
   handleWindowAction: (action: OSAction) => void
 }
 

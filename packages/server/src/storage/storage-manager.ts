@@ -6,7 +6,7 @@
 
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
-import { pdfToImages } from '../pdf/index.js';
+import { pdfToImages, getPdfPageCount } from '../pdf/index.js';
 import type {
   StorageEntry,
   StorageReadResult,
@@ -74,18 +74,24 @@ function isPdfFile(filePath: string): boolean {
   return extname(filePath).toLowerCase() === '.pdf';
 }
 
+const MAX_PDF_PREVIEW_PAGES = 3;
+
 /**
  * Convert a PDF file to images (PNG format via poppler).
+ * Returns at most MAX_PDF_PREVIEW_PAGES images.
  */
-async function convertPdfToImages(filePath: string): Promise<StorageImageContent[]> {
-  const pdfPages = await pdfToImages(filePath, 1.5);
+async function convertPdfToImages(filePath: string): Promise<{ images: StorageImageContent[]; totalPages: number }> {
+  const totalPages = await getPdfPageCount(filePath);
+  const pdfPages = await pdfToImages(filePath, 1.5, MAX_PDF_PREVIEW_PAGES);
 
-  return pdfPages.map(page => ({
+  const images = pdfPages.map(page => ({
     type: 'image' as const,
     data: page.data.toString('base64'),
     mimeType: page.mimeType,
     pageNumber: page.pageNumber,
   }));
+
+  return { images, totalPages };
 }
 
 /**
@@ -100,11 +106,16 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
   try {
     // Handle PDF files by converting to images
     if (isPdfFile(validatedPath)) {
-      const images = await convertPdfToImages(validatedPath);
+      const { images, totalPages } = await convertPdfToImages(validatedPath);
+      const exceeded = totalPages > MAX_PDF_PREVIEW_PAGES;
+      const content = exceeded
+        ? `PDF preview (first ${MAX_PDF_PREVIEW_PAGES} of ${totalPages} pages). It exceeds ${MAX_PDF_PREVIEW_PAGES} pages! Total: ${totalPages} pages.`
+        : `PDF with ${totalPages} page(s)`;
       return {
         success: true,
-        content: `PDF with ${images.length} page(s)`,
-        images
+        content,
+        images,
+        totalPages,
       };
     }
 

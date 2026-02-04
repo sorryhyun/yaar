@@ -113,21 +113,41 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
     document.addEventListener('mouseup', handleMouseUp)
   }, [window.id, window.bounds.x, window.bounds.y, userMoveWindow])
 
-  // Handle resize
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  // Handle resize from any edge/corner
+  const handleResizeStart = useCallback((direction: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsResizing(true)
 
-    const startW = window.bounds.w
-    const startH = window.bounds.h
-    const startX = e.clientX
-    const startY = e.clientY
+    const startBounds = { ...window.bounds }
+    const startMouseX = e.clientX
+    const startMouseY = e.clientY
+
+    const resizeTop = direction.includes('n')
+    const resizeBottom = direction.includes('s')
+    const resizeLeft = direction.includes('w')
+    const resizeRight = direction.includes('e')
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newW = Math.max(200, startW + (e.clientX - startX))
-      const newH = Math.max(150, startH + (e.clientY - startY))
-      userResizeWindow(window.id, newW, newH)
+      const dx = e.clientX - startMouseX
+      const dy = e.clientY - startMouseY
+
+      let newX = startBounds.x
+      let newY = startBounds.y
+      let newW = startBounds.w
+      let newH = startBounds.h
+
+      if (resizeRight) newW = startBounds.w + dx
+      if (resizeLeft) { newW = startBounds.w - dx; newX = startBounds.x + dx }
+      if (resizeBottom) newH = startBounds.h + dy
+      if (resizeTop) { newH = startBounds.h - dy; newY = startBounds.y + dy }
+
+      // Enforce minimums and clamp position
+      if (newW < 200) { if (resizeLeft) newX = startBounds.x + startBounds.w - 200; newW = 200 }
+      if (newH < 150) { if (resizeTop) newY = startBounds.y + startBounds.h - 150; newH = 150 }
+
+      const posChanged = resizeLeft || resizeTop
+      userResizeWindow(window.id, newW, newH, posChanged ? newX : undefined, posChanged ? newY : undefined)
     }
 
     const handleMouseUp = () => {
@@ -138,7 +158,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [window.id, window.bounds.w, window.bounds.h, userResizeWindow])
+  }, [window.id, window.bounds, userResizeWindow])
 
   // Determine position/size (handle maximized state)
   const style: React.CSSProperties = window.maximized
@@ -193,7 +213,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
             <div
               className={styles.agentBadge}
               data-status={windowAgent.status}
-              title={`Agent: ${windowAgent.agentId} (${windowAgent.status})`}
+              title={`Pool agent: ${windowAgent.agentId} (${windowAgent.status})`}
             >
               <span className={styles.agentIcon}>
                 {windowAgent.status === 'active' ? '⚡' : '💤'}
@@ -271,10 +291,17 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
       </div>
 
-      {/* Resize handle */}
-      {!window.maximized && (
-        <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
-      )}
+      {/* Resize edges and corners */}
+      {!window.maximized && <>
+        <div className={styles.resizeN} onMouseDown={(e) => handleResizeStart('n', e)} />
+        <div className={styles.resizeS} onMouseDown={(e) => handleResizeStart('s', e)} />
+        <div className={styles.resizeW} onMouseDown={(e) => handleResizeStart('w', e)} />
+        <div className={styles.resizeE} onMouseDown={(e) => handleResizeStart('e', e)} />
+        <div className={styles.resizeNW} onMouseDown={(e) => handleResizeStart('nw', e)} />
+        <div className={styles.resizeNE} onMouseDown={(e) => handleResizeStart('ne', e)} />
+        <div className={styles.resizeSW} onMouseDown={(e) => handleResizeStart('sw', e)} />
+        <div className={styles.resizeSE} onMouseDown={(e) => handleResizeStart('se', e)} />
+      </>}
     </div>
   )
 }

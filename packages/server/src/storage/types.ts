@@ -20,6 +20,7 @@ export interface StorageReadResult {
   success: boolean;
   content?: string;
   images?: StorageImageContent[];
+  totalPages?: number;
   error?: string;
 }
 
