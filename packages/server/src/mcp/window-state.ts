@@ -7,15 +7,15 @@
 
 import type { OSAction, ContentUpdateOperation, WindowState } from '@yaar/shared';
 import { actionEmitter, type ActionEvent } from './action-emitter.js';
+import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
 
 /**
- * Global window state registry.
- * Tracks all windows created through the action emitter.
+ * Window state registry for one connection/session.
  */
-class WindowStateRegistry {
+export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private onWindowCloseCallback?: (windowId: string) => void;
 
@@ -27,17 +27,7 @@ class WindowStateRegistry {
     this.onWindowCloseCallback = cb;
   }
 
-  /**
-   * Subscribe to action events. Must be called after all modules are loaded
-   * to avoid circular-dependency TDZ errors with actionEmitter.
-   */
-  init(): void {
-    actionEmitter.onAction((event: ActionEvent) => {
-      this.handleAction(event.action);
-    });
-  }
-
-  private handleAction(action: OSAction): void {
+  handleAction(action: OSAction): void {
     const now = Date.now();
 
     switch (action.type) {
@@ -154,45 +144,26 @@ class WindowStateRegistry {
     }
   }
 
-  /**
-   * Get all windows.
-   */
   listWindows(): WindowState[] {
     return Array.from(this.windows.values());
   }
 
-  /**
-   * Get a specific window by ID.
-   */
   getWindow(windowId: string): WindowState | undefined {
     return this.windows.get(windowId);
   }
 
-  /**
-   * Check if a window exists.
-   */
   hasWindow(windowId: string): boolean {
     return this.windows.has(windowId);
   }
 
-  /**
-   * Clear all window state.
-   */
   clear(): void {
     this.windows.clear();
   }
 
-  /**
-   * Get window count.
-   */
   getWindowCount(): number {
     return this.windows.size;
   }
 
-  /**
-   * Restore window state from a list of actions (e.g., from a previous session).
-   * Calls handleAction directly, bypassing actionEmitter to avoid side effects.
-   */
   restoreFromActions(actions: OSAction[]): void {
     for (const action of actions) {
       this.handleAction(action);
@@ -201,6 +172,43 @@ class WindowStateRegistry {
 }
 
 /**
- * Singleton instance of the window state registry.
+ * Registry manager keyed by websocket connection.
  */
-export const windowState = new WindowStateRegistry();
+class WindowStateRegistryManager {
+  private registries = new Map<ConnectionId, WindowStateRegistry>();
+  private unsubscribeAction: (() => void) | null = null;
+
+  init(): void {
+    if (this.unsubscribeAction) return;
+
+    this.unsubscribeAction = actionEmitter.onAction((event: ActionEvent) => {
+      if (!event.agentId) return;
+      const connectionId = getBroadcastCenter().getConnectionForAgent(event.agentId);
+      if (!connectionId) return;
+      this.get(connectionId).handleAction(event.action);
+    });
+  }
+
+  get(connectionId: ConnectionId): WindowStateRegistry {
+    let registry = this.registries.get(connectionId);
+    if (!registry) {
+      registry = new WindowStateRegistry();
+      this.registries.set(connectionId, registry);
+    }
+    return registry;
+  }
+
+  clear(connectionId: ConnectionId): void {
+    this.registries.get(connectionId)?.clear();
+    this.registries.delete(connectionId);
+  }
+
+  clearAll(): void {
+    for (const registry of this.registries.values()) {
+      registry.clear();
+    }
+    this.registries.clear();
+  }
+}
+
+export const windowStateRegistryManager = new WindowStateRegistryManager();

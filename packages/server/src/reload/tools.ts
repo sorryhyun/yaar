@@ -8,12 +8,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../mcp/utils.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
-import { windowState } from '../mcp/window-state.js';
+import type { WindowStateRegistry } from '../mcp/window-state.js';
 import { getAgentId } from '../agents/session.js';
 import type { ReloadCache } from './cache.js';
 import type { CacheEntry } from './types.js';
 
-export function registerReloadTools(server: McpServer, cache: ReloadCache): void {
+export function registerReloadTools(server: McpServer, getCache: () => ReloadCache, getWindowState: () => WindowStateRegistry): void {
   // reload_cached - replay a cached action sequence
   server.registerTool(
     'reload_cached',
@@ -27,6 +27,7 @@ export function registerReloadTools(server: McpServer, cache: ReloadCache): void
       },
     },
     async (args) => {
+      const cache = getCache();
       const entry = cache.getEntry(args.cacheId);
       if (!entry) {
         return ok('Cache entry not found. Proceed manually.');
@@ -35,7 +36,7 @@ export function registerReloadTools(server: McpServer, cache: ReloadCache): void
       // Validate required windows still exist
       if (entry.requiredWindowIds) {
         for (const windowId of entry.requiredWindowIds) {
-          if (!windowState.hasWindow(windowId)) {
+          if (!getWindowState().hasWindow(windowId)) {
             cache.markFailed(entry.id);
             return ok(`Cache invalid: window "${windowId}" no longer exists. Proceed manually.`);
           }
@@ -91,7 +92,7 @@ export function registerReloadTools(server: McpServer, cache: ReloadCache): void
         'Usually not needed as options are injected into the message automatically.',
     },
     async () => {
-      const entries = cache.listEntries();
+      const entries = getCache().listEntries();
       if (entries.length === 0) {
         return ok('No cached action sequences available.');
       }
