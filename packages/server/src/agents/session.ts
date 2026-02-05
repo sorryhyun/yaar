@@ -332,7 +332,7 @@ export class AgentSession {
     const fullContent = interactionContext + content;
 
     // Log user message with role identifier
-    await this.sessionLogger?.logUserMessage(fullContent, role);
+    await this.sessionLogger?.logUserMessage(fullContent, role, options.source);
 
     // Record to context tape
     onContextMessage?.('user', fullContent);
@@ -439,7 +439,7 @@ export class AgentSession {
               }
               // Log assistant response
               if (responseText) {
-                await this.sessionLogger?.logAssistantMessage(responseText, role);
+                await this.sessionLogger?.logAssistantMessage(responseText, role, options.source);
                 await this.sessionLogger?.updateLastActivity();
                 // Record to context tape
                 onContextMessage?.('assistant', responseText);

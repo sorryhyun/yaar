@@ -4,11 +4,12 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
-import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from '../../logging/index.js';
+import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/tools/apps.js';
 import { getBroadcastCenter } from '../../events/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
+import type { ContextRestorePolicy } from '../../logging/index.js';
 
 export async function handleApiRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   // Health check
@@ -81,11 +82,27 @@ export async function handleApiRoutes(req: IncomingMessage, res: ServerResponse,
     return true;
   }
 
-  // Restore session (returns window create actions to recreate window state)
+  // Restore session (returns window create actions + context according to restore policy)
   const restoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/restore$/);
   if (restoreMatch && req.method === 'POST') {
     const sessionId = restoreMatch[1];
     try {
+      let policy: ContextRestorePolicy | undefined;
+      const bodyChunks: Buffer[] = [];
+      for await (const chunk of req) {
+        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
+      if (body) {
+        try {
+          const parsed = JSON.parse(body) as { policy?: ContextRestorePolicy };
+          policy = parsed.policy;
+        } catch {
+          sendError(res, 'Invalid JSON body', 400);
+          return true;
+        }
+      }
+
       const messagesJsonl = await readSessionMessages(sessionId);
       if (messagesJsonl === null) {
         sendError(res, 'Session not found', 404);
@@ -93,7 +110,8 @@ export async function handleApiRoutes(req: IncomingMessage, res: ServerResponse,
       }
       const messages = parseSessionMessages(messagesJsonl);
       const restoreActions = getWindowRestoreActions(messages);
-      sendJson(res, { actions: restoreActions });
+      const contextMessages = getContextRestoreMessages(messages, policy);
+      sendJson(res, { actions: restoreActions, contextMessages });
     } catch {
       sendError(res, 'Failed to restore session');
     }
