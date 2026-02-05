@@ -52,9 +52,13 @@ Users can draw on the screen using Ctrl+Drag. When they send a message with a dr
 
 Use the image to understand their intent - they may be highlighting areas, drawing diagrams, or annotating the screen.
 
+## Memory
+Use the memorize tool to save important facts, user preferences, or context that should persist across sessions.
+
 ## Action Reload Cache
-When you see <reload_options> in a message, cached action sequences from previous identical interactions are available.
+When you see <reload_options> in a message, it contains a JSON array of cached action sequences from previous interactions.
+- Each entry has: cacheId, label, similarity (0-1), actions count, and exact (boolean)
 - Use reload_cached(cacheId) to instantly replay instead of recreating from scratch
-- Prefer reload when similarity is >= 0.90 and the label matches your intent
+- Prefer reload when the label matches your intent; higher similarity = better match
 - If replay fails, proceed manually as normal
 `;

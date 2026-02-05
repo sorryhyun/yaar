@@ -11,6 +11,7 @@ import type { ContextMessage } from './context.js';
 import type { ClientEvent } from '@yaar/shared';
 import type { ConnectionId } from '../events/broadcast-center.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
+import { reloadCache } from '../reload/index.js';
 
 export class SessionManager {
   private connectionId: ConnectionId;
@@ -160,6 +161,11 @@ export class SessionManager {
           confirmed: event.confirmed,
           rememberChoice: event.rememberChoice,
         });
+        break;
+
+      case 'TOAST_ACTION':
+        reloadCache.markFailed(event.eventId);
+        console.log(`[SessionManager] Reload cache entry "${event.eventId}" reported as failed by user`);
         break;
     }
   }

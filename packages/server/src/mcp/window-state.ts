@@ -27,8 +27,11 @@ class WindowStateRegistry {
     this.onWindowCloseCallback = cb;
   }
 
-  constructor() {
-    // Subscribe to action events to track window state
+  /**
+   * Subscribe to action events. Must be called after all modules are loaded
+   * to avoid circular-dependency TDZ errors with actionEmitter.
+   */
+  init(): void {
     actionEmitter.onAction((event: ActionEvent) => {
       this.handleAction(event.action);
     });

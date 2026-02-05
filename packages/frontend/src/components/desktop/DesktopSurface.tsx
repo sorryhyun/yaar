@@ -45,7 +45,7 @@ export function DesktopSurface() {
   const agentPanelOpen = useDesktopStore(s => s.agentPanelOpen)
   const toggleAgentPanel = useDesktopStore(s => s.toggleAgentPanel)
   const windows = useDesktopStore(s => s.windows)
-  const { sendMessage, sendWindowMessage, sendComponentAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
+  const { sendMessage, sendWindowMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
 
   const [apps, setApps] = useState<AppInfo[]>([])
 
@@ -203,7 +203,7 @@ export function DesktopSurface() {
       <CommandPalette />
 
       {/* Toast notifications (bottom-right) */}
-      <ToastContainer />
+      <ToastContainer onToastAction={sendToastAction} />
 
       {/* Notification center (top-right) */}
       <NotificationCenter />

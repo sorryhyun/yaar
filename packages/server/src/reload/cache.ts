@@ -12,7 +12,7 @@ import type { CacheEntry, CacheMatch, Fingerprint } from './types.js';
 import { computeSimilarity } from './fingerprint.js';
 
 const MAX_ENTRIES = 100;
-const MIN_SIMILARITY = 0.7;
+const MIN_SIMILARITY = 0.85;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SAVE_DEBOUNCE_MS = 500;
 

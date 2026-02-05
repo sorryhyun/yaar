@@ -1,0 +1,117 @@
+/**
+ * REST API routes — health, providers, apps, sessions, agents/stats.
+ */
+
+import type { IncomingMessage, ServerResponse } from 'http';
+import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
+import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from '../../logging/index.js';
+import { getAgentLimiter } from '../../agents/index.js';
+import { listApps } from '../../mcp/tools/apps.js';
+import { getBroadcastCenter } from '../../events/broadcast-center.js';
+import { sendJson, sendError } from '../utils.js';
+
+export async function handleApiRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+  // Health check
+  if (url.pathname === '/health' && req.method === 'GET') {
+    sendJson(res, { status: 'ok' });
+    return true;
+  }
+
+  // List available providers
+  if (url.pathname === '/api/providers' && req.method === 'GET') {
+    const providers = await getAvailableProviders();
+    sendJson(res, { providers });
+    return true;
+  }
+
+  // List available apps
+  if (url.pathname === '/api/apps' && req.method === 'GET') {
+    try {
+      const apps = await listApps();
+      sendJson(res, { apps });
+    } catch {
+      sendError(res, 'Failed to list apps');
+    }
+    return true;
+  }
+
+  // List all sessions
+  if (url.pathname === '/api/sessions' && req.method === 'GET') {
+    try {
+      const sessions = await listSessions();
+      sendJson(res, { sessions });
+    } catch {
+      sendError(res, 'Failed to list sessions');
+    }
+    return true;
+  }
+
+  // Get session transcript
+  const transcriptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/transcript$/);
+  if (transcriptMatch && req.method === 'GET') {
+    const sessionId = transcriptMatch[1];
+    try {
+      const transcript = await readSessionTranscript(sessionId);
+      if (transcript === null) {
+        sendError(res, 'Session not found', 404);
+        return true;
+      }
+      sendJson(res, { transcript });
+    } catch {
+      sendError(res, 'Failed to read transcript');
+    }
+    return true;
+  }
+
+  // Get session messages (for replay)
+  const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+  if (messagesMatch && req.method === 'GET') {
+    const sessionId = messagesMatch[1];
+    try {
+      const messagesJsonl = await readSessionMessages(sessionId);
+      if (messagesJsonl === null) {
+        sendError(res, 'Session not found', 404);
+        return true;
+      }
+      const messages = parseSessionMessages(messagesJsonl);
+      sendJson(res, { messages });
+    } catch {
+      sendError(res, 'Failed to read messages');
+    }
+    return true;
+  }
+
+  // Restore session (returns window create actions to recreate window state)
+  const restoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/restore$/);
+  if (restoreMatch && req.method === 'POST') {
+    const sessionId = restoreMatch[1];
+    try {
+      const messagesJsonl = await readSessionMessages(sessionId);
+      if (messagesJsonl === null) {
+        sendError(res, 'Session not found', 404);
+        return true;
+      }
+      const messages = parseSessionMessages(messagesJsonl);
+      const restoreActions = getWindowRestoreActions(messages);
+      sendJson(res, { actions: restoreActions });
+    } catch {
+      sendError(res, 'Failed to restore session');
+    }
+    return true;
+  }
+
+  // Agent stats endpoint
+  if (url.pathname === '/api/agents/stats' && req.method === 'GET') {
+    const limiterStats = getAgentLimiter().getStats();
+    const broadcastStats = getBroadcastCenter().getStats();
+    const warmPoolStats = getWarmPool().getStats();
+    sendJson(res, {
+      agents: limiterStats,
+      connections: broadcastStats,
+      warmPool: warmPoolStats,
+    });
+    return true;
+  }
+
+  return false;
+}

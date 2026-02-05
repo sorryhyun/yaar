@@ -77,6 +77,12 @@ export interface DialogFeedbackEvent {
   rememberChoice?: 'once' | 'always' | 'deny_always';
 }
 
+export interface ToastActionEvent {
+  type: 'TOAST_ACTION';
+  toastId: string;
+  eventId: string;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -86,7 +92,8 @@ export type ClientEvent =
   | SetProviderEvent
   | RenderingFeedbackEvent
   | ComponentActionEvent
-  | DialogFeedbackEvent;
+  | DialogFeedbackEvent
+  | ToastActionEvent;
 
 // ============ Server → Client Events ============
 

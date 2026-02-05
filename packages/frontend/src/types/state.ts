@@ -29,6 +29,8 @@ export interface ToastModel {
   message: string
   variant: 'info' | 'success' | 'warning' | 'error'
   timestamp: number
+  action?: { label: string; eventId: string }
+  duration?: number
 }
 
 import type { PermissionOptions } from '@yaar/shared'

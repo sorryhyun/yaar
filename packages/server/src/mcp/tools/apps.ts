@@ -5,7 +5,7 @@
  * - SKILL.md: Instructions for the AI on how to use the app
  * - Other config files as needed
  *
- * Credentials are stored centrally in storage/credentials/{appId}.json
+ * Credentials are stored centrally in config/credentials/{appId}.json
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -14,25 +14,29 @@ import { readdir, readFile, writeFile, stat, mkdir, unlink } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ok } from '../utils.js';
-import { getStorageDir } from '../../storage/storage-manager.js';
+import { getConfigDir } from '../../storage/storage-manager.js';
 
 // Compute apps directory from project root
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
-// New centralized credentials location
+// Centralized credentials location under config/
 function getCredentialsDir(): string {
-  return join(getStorageDir(), 'credentials');
+  return join(getConfigDir(), 'credentials');
 }
 
 function getCredentialsPath(appId: string): string {
   return join(getCredentialsDir(), `${appId}.json`);
 }
 
-// Old credentials location (for migration)
+// Old credentials locations (for migration)
 function getOldCredentialsPath(appId: string): string {
   return join(APPS_DIR, appId, 'credentials.json');
+}
+
+function getLegacyStorageCredentialsPath(appId: string): string {
+  return join(PROJECT_ROOT, 'storage', 'credentials', `${appId}.json`);
 }
 
 export interface AppInfo {
@@ -48,15 +52,23 @@ export interface AppInfo {
  * Check if credentials exist for an app (in either location).
  */
 async function hasCredentials(appId: string): Promise<boolean> {
-  // Check new location first
+  // Check current location first
   try {
     await stat(getCredentialsPath(appId));
     return true;
   } catch {
-    // Not in new location
+    // Not in current location
   }
 
-  // Check old location
+  // Check legacy storage/credentials/ location
+  try {
+    await stat(getLegacyStorageCredentialsPath(appId));
+    return true;
+  } catch {
+    // Not in legacy storage location
+  }
+
+  // Check old apps/{appId}/credentials.json location
   try {
     await stat(getOldCredentialsPath(appId));
     return true;
@@ -70,42 +82,44 @@ async function hasCredentials(appId: string): Promise<boolean> {
  * Returns true if migration happened, false if already migrated or no credentials.
  */
 async function migrateCredentials(appId: string): Promise<boolean> {
-  const oldPath = getOldCredentialsPath(appId);
   const newPath = getCredentialsPath(appId);
 
-  // Check if already in new location
+  // Check if already in current location
   try {
     await stat(newPath);
     return false; // Already migrated
   } catch {
-    // Not in new location, continue
+    // Not in current location, continue
   }
 
-  // Check if exists in old location
-  try {
-    await stat(oldPath);
-  } catch {
-    return false; // No credentials to migrate
+  // Try legacy locations in order: storage/credentials/ first, then apps/{appId}/
+  const legacyPaths = [
+    getLegacyStorageCredentialsPath(appId),
+    getOldCredentialsPath(appId),
+  ];
+
+  for (const oldPath of legacyPaths) {
+    try {
+      await stat(oldPath);
+    } catch {
+      continue; // Not in this location
+    }
+
+    // Found credentials, migrate them
+    try {
+      await mkdir(getCredentialsDir(), { recursive: true });
+      const content = await readFile(oldPath, 'utf-8');
+      await writeFile(newPath, content, 'utf-8');
+      await unlink(oldPath);
+      console.log(`[Apps] Migrated credentials for ${appId} to config/credentials/`);
+      return true;
+    } catch (err) {
+      console.error(`[Apps] Failed to migrate credentials for ${appId}:`, err);
+      return false;
+    }
   }
 
-  // Migrate: read from old, write to new, delete old
-  try {
-    // Ensure credentials directory exists
-    await mkdir(getCredentialsDir(), { recursive: true });
-
-    // Copy content (don't use rename as it may fail across filesystems)
-    const content = await readFile(oldPath, 'utf-8');
-    await writeFile(newPath, content, 'utf-8');
-
-    // Remove old file
-    await unlink(oldPath);
-
-    console.log(`[Apps] Migrated credentials for ${appId} to storage/credentials/`);
-    return true;
-  } catch (err) {
-    console.error(`[Apps] Failed to migrate credentials for ${appId}:`, err);
-    return false;
-  }
+  return false; // No credentials to migrate
 }
 
 /**
@@ -193,7 +207,7 @@ export async function loadAppSkill(appId: string): Promise<string | null> {
 
 /**
  * Read a config file from an app.
- * For credentials.json, uses the centralized storage/credentials/ location.
+ * For credentials.json, uses the centralized config/credentials/ location.
  * For other files, uses the app folder.
  */
 export async function readAppConfig(
@@ -238,7 +252,7 @@ export async function readAppConfig(
 
 /**
  * Write a config file to an app.
- * For credentials.json, uses the centralized storage/credentials/ location.
+ * For credentials.json, uses the centralized config/credentials/ location.
  * For other files, uses the app folder.
  */
 export async function writeAppConfig(
@@ -328,7 +342,7 @@ export function registerAppsTools(server: McpServer): void {
   server.registerTool(
     'read_config',
     {
-      description: 'Read a configuration file from an app. For credentials.json, reads from storage/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
+      description: 'Read a configuration file from an app. For credentials.json, reads from config/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
       inputSchema: {
         appId: z.string().describe('The app ID (folder name in apps/)'),
         filename: z.string().optional().describe('Config filename (default: credentials.json)'),
@@ -353,7 +367,7 @@ export function registerAppsTools(server: McpServer): void {
   server.registerTool(
     'write_config',
     {
-      description: 'Write a configuration file for an app. For credentials.json, writes to storage/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
+      description: 'Write a configuration file for an app. For credentials.json, writes to config/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
       inputSchema: {
         appId: z.string().describe('The app ID (folder name in apps/)'),
         filename: z.string().describe('Config filename (e.g., credentials.json)'),

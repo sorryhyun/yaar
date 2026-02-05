@@ -484,12 +484,15 @@ function formatOpenWindows(): string {
 function formatReloadOptions(matches: CacheMatch[]): string {
   if (matches.length === 0) return '';
 
-  const lines = matches.map(m => {
-    const exact = m.isExact ? ' [exact match]' : '';
-    return `- cacheId="${m.entry.id}" label="${m.entry.label}" similarity=${m.similarity.toFixed(2)} actions=${m.entry.actions.length}${exact}`;
-  });
+  const options = matches.map(m => ({
+    cacheId: m.entry.id,
+    label: m.entry.label,
+    similarity: parseFloat(m.similarity.toFixed(2)),
+    actions: m.entry.actions.length,
+    exact: m.isExact,
+  }));
 
-  return `<reload_options>\nCached action sequences available. Use reload_cached(cacheId) to replay instantly:\n${lines.join('\n')}\n</reload_options>\n\n`;
+  return `<reload_options>\n${JSON.stringify(options)}\n</reload_options>\n\n`;
 }
 
 /**

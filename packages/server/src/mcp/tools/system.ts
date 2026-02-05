@@ -5,6 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
+import { configRead, configWrite } from '../../storage/storage-manager.js';
 
 export function registerSystemTools(server: McpServer): void {
   // get_system_time
@@ -208,6 +209,30 @@ export function registerSystemTools(server: McpServer): void {
       }
 
       return ok(result);
+    }
+  );
+
+  // memorize
+  server.registerTool(
+    'memorize',
+    {
+      description:
+        'Save a sentence or note to persistent memory. These notes are automatically included in your system prompt across sessions.',
+      inputSchema: {
+        content: z
+          .string()
+          .describe('A sentence or note to remember across sessions'),
+      },
+    },
+    async (args) => {
+      const existing = await configRead('memory.md');
+      const current = existing.success ? (existing.content ?? '') : '';
+      const updated = current ? current.trimEnd() + '\n' + args.content : args.content;
+      const result = await configWrite('memory.md', updated + '\n');
+      if (!result.success) {
+        return ok(`Error saving memory: ${result.error}`);
+      }
+      return ok(`Memorized: "${args.content}"`);
     }
   );
 }

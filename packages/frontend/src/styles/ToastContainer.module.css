@@ -11,6 +11,9 @@
 }
 
 .toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
   border-radius: var(--radius-lg);
@@ -19,7 +22,30 @@
   box-shadow: var(--shadow-md);
   cursor: pointer;
   animation: slideInRight var(--transition-normal);
-  max-width: 300px;
+  max-width: 360px;
+}
+
+.message {
+  flex: 1;
+}
+
+.actionButton {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.actionButton:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .toast[data-variant="success"] {

@@ -6,16 +6,20 @@ import { useDesktopStore, selectToasts } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
 import styles from '@/styles/ToastContainer.module.css'
 
-export function ToastContainer() {
+interface ToastContainerProps {
+  onToastAction?: (toastId: string, eventId: string) => void
+}
+
+export function ToastContainer({ onToastAction }: ToastContainerProps) {
   const toasts = useDesktopStore(useShallow(selectToasts))
   const dismissToast = useDesktopStore(s => s.dismissToast)
 
-  // Auto-dismiss toasts after 5 seconds
+  // Auto-dismiss toasts (per-toast duration or default 5s)
   useEffect(() => {
     const timers = toasts.map(toast => {
       return setTimeout(() => {
         dismissToast(toast.id)
-      }, 5000)
+      }, toast.duration ?? 5000)
     })
 
     return () => {
@@ -32,7 +36,19 @@ export function ToastContainer() {
           data-variant={toast.variant}
           onClick={() => dismissToast(toast.id)}
         >
-          {toast.message}
+          <span className={styles.message}>{toast.message}</span>
+          {toast.action && (
+            <button
+              className={styles.actionButton}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToastAction?.(toast.id, toast.action!.eventId)
+                dismissToast(toast.id)
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

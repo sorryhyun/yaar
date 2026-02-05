@@ -59,6 +59,21 @@ export function registerReloadTools(server: McpServer, cache: ReloadCache): void
         }
 
         cache.markUsed(entry.id);
+
+        // Emit feedback toast so user can report if the replay didn't work
+        actionEmitter.emitAction(
+          {
+            type: 'toast.show',
+            id: `reload-feedback-${entry.id}`,
+            message: 'Loaded from cache',
+            variant: 'info',
+            duration: 8000,
+            action: { label: "Didn't work?", eventId: entry.id },
+          },
+          undefined,
+          agentId,
+        );
+
         return ok(`Replayed ${entry.actions.length} actions from cache "${entry.label}".`);
       } catch (err) {
         cache.markFailed(entry.id);

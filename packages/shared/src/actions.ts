@@ -151,6 +151,8 @@ export interface ToastShowAction {
   id: string;
   message: string;
   variant?: 'info' | 'success' | 'warning' | 'error';
+  action?: { label: string; eventId: string };
+  duration?: number;
 }
 
 export interface ToastDismissAction {

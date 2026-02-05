@@ -56,11 +56,11 @@ yaar/
 │   └── moltbook/
 │       └── SKILL.md             # Instructions for AI on how to use this app
 ├── config/                      # User config (git-ignored)
+│   ├── credentials/             # Centralized app credentials
+│   │   └── moltbook.json       # API credentials for moltbook
 │   ├── permissions.json         # Saved permission decisions
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
 ├── storage/                     # Persistent data storage
-│   └── credentials/             # Centralized app credentials
-│       └── moltbook.json        # (git-ignored) API credentials for moltbook
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events)
 │   ├── server/        # TypeScript WebSocket server
@@ -116,7 +116,7 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
    - API endpoints and authentication
    - Available actions
    - Example workflows
-3. (Optional) Use `apps_write_config` to store credentials (saved to `storage/credentials/myapp.json`, git-ignored)
+3. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
 
 ### Apps Tools (MCP)
 
@@ -124,8 +124,8 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
 |------|-------------|
 | `apps_list` | List all available apps |
 | `apps_load_skill` | Load SKILL.md for an app |
-| `apps_read_config` | Read config file (credentials.json reads from `storage/credentials/{appId}.json`) |
-| `apps_write_config` | Write config file (credentials.json writes to `storage/credentials/{appId}.json`) |
+| `apps_read_config` | Read config file (credentials.json reads from `config/credentials/{appId}.json`) |
+| `apps_write_config` | Write config file (credentials.json writes to `config/credentials/{appId}.json`) |
 
 ### Example: Moltbook App
 
@@ -133,10 +133,10 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
 apps/moltbook/
 └── SKILL.md           # API docs, auth flow, example usage
 
-storage/credentials/
+config/credentials/
 └── moltbook.json      # { "api_key": "moltbook_xxx" } (git-ignored)
 ```
 
 When user clicks the Moltbook icon, the AI loads `SKILL.md` and can then help with registration, posting, viewing feed, etc.
 
-**Note:** Old credentials at `apps/{appId}/credentials.json` are automatically migrated to `storage/credentials/{appId}.json` on first read.
+**Note:** Old credentials at `apps/{appId}/credentials.json` or `storage/credentials/{appId}.json` are automatically migrated to `config/credentials/{appId}.json` on first read.

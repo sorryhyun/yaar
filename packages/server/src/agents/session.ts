@@ -17,6 +17,7 @@ import { createSession, SessionLogger } from '../logging/index.js';
 import { actionEmitter, type ActionEvent } from '../mcp/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 import type { ContextSource } from './context.js';
+import { configRead } from '../storage/storage-manager.js';
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -50,6 +51,17 @@ const agentContext = new AsyncLocalStorage<AgentContext>();
  */
 export function getAgentId(): string | undefined {
   return agentContext.getStore()?.agentId;
+}
+
+/**
+ * Load memory notes from config/memory.md for injection into the system prompt.
+ */
+async function loadMemory(): Promise<string> {
+  const result = await configRead('memory.md');
+  if (!result.success || !result.content?.trim()) {
+    return '';
+  }
+  return `\n\n## Memory\nThe following notes were saved by you from previous sessions:\n${result.content.trim()}`;
 }
 
 export class AgentSession {
@@ -328,8 +340,9 @@ export class AgentSession {
       }
       console.log(`[AgentSession] ${role} sessionIdToUse: ${sessionIdToUse}, hasSentFirstMessage: ${this.hasSentFirstMessage}, this.sessionId: ${this.sessionId}`);
 
+      const memory = await loadMemory();
       const transportOptions: TransportOptions = {
-        systemPrompt: this.provider!.systemPrompt,
+        systemPrompt: this.provider!.systemPrompt + memory,
         sessionId: sessionIdToUse,
         images: images.length > 0 ? images : undefined,
       };

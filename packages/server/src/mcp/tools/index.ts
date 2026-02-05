@@ -49,6 +49,7 @@ export function getToolNames(): string[] {
     'mcp__system__get_info',
     'mcp__system__get_env_var',
     'mcp__system__generate_random',
+    'mcp__system__memorize',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
     'mcp__system__http_post',

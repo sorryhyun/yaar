@@ -327,6 +327,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: 'DIALOG_FEEDBACK', dialogId, confirmed, rememberChoice })
   }, [send])
 
+  // Send toast action feedback
+  const sendToastAction = useCallback((toastId: string, eventId: string) => {
+    send({ type: 'TOAST_ACTION', toastId, eventId })
+  }, [send])
+
   // Send component action (button click) to agent
   const sendComponentAction = useCallback((
     windowId: string,
@@ -438,6 +443,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     sendWindowMessage,
     sendComponentAction,
     sendDialogFeedback,
+    sendToastAction,
     interrupt,
     interruptAgent,
     setProvider,

@@ -15,6 +15,8 @@ export const createToastsSlice: SliceCreator<ToastsSlice> = (set, _get) => ({
           message: action.message,
           variant: action.variant ?? 'info',
           timestamp: Date.now(),
+          action: action.action,
+          duration: action.duration,
         }
         break
       }
