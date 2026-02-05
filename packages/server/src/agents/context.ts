@@ -184,10 +184,10 @@ export class ContextTape {
 
   /**
    * Restore messages from a previous session.
-   * Prepends them before any new messages.
+   * Preserves original ordering, timestamps, and branch identity.
    */
   restore(messages: ContextMessage[]): void {
-    this.messages.unshift(...messages);
+    this.messages = [...messages, ...this.messages];
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { OSAction } from '@yaar/shared';
+import type { ContextSource } from '../agents/context.js';
 
 export interface AgentInfo {
   agentId: string;
@@ -25,6 +26,7 @@ export interface ParsedMessage {
   timestamp: string;
   agentId: string;
   parentAgentId: string | null;
+  source?: ContextSource;
   content?: string;
   action?: OSAction;
   toolName?: string;

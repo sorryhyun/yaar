@@ -3,6 +3,7 @@ import { join } from 'path';
 import type { OSAction } from '@yaar/shared';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
+import type { ContextSource } from '../agents/context.js';
 
 /**
  * Generate a unique session ID based on timestamp.
@@ -143,12 +144,12 @@ export class SessionLogger {
     return path.join(' → ');
   }
 
-  async logUserMessage(content: string, agentId?: string): Promise<void> {
-    await this.appendEntry('user', agentId, { content });
+  async logUserMessage(content: string, agentId: string | undefined, source?: ContextSource): Promise<void> {
+    await this.appendEntry('user', agentId, { content, ...(source ? { source } : {}) });
   }
 
-  async logAssistantMessage(content: string, agentId?: string): Promise<void> {
-    await this.appendEntry('assistant', agentId, { content });
+  async logAssistantMessage(content: string, agentId: string | undefined, source?: ContextSource): Promise<void> {
+    await this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
   }
 
   async logThinking(content: string, agentId?: string): Promise<void> {
