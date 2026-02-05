@@ -5,7 +5,7 @@
  */
 
 import { join } from 'path';
-import { getStorageDir } from '../storage/storage-manager.js';
+import { getConfigDir } from '../storage/storage-manager.js';
 import { ReloadCache } from './cache.js';
 
 export type { Fingerprint, CacheEntry, CacheMatch } from './types.js';
@@ -22,4 +22,4 @@ export {
 /**
  * Singleton reload cache instance.
  */
-export const reloadCache = new ReloadCache(join(getStorageDir(), 'reload-cache.json'));
+export const reloadCache = new ReloadCache(join(getConfigDir(), 'reload-cache.json'));

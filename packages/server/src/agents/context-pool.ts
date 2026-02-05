@@ -362,7 +362,8 @@ export class ContextPool {
     this.windowQueues.clear();
     this.windowProcessing.clear();
     this.windowAgentMap.clear();
-    console.log(`[ContextPool] Reset: cleared context tape and queues`);
+    windowState.clear();
+    console.log(`[ContextPool] Reset: cleared context tape, queues, and window state`);
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {

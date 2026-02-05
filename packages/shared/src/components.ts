@@ -101,9 +101,19 @@ export const componentSchema = z.object({
 
 // ============ Layout Schema ============
 
-const colsSchema = z.union([
+const colsInner = z.union([
+  z.array(z.number().min(0)).min(1),
   z.coerce.number().int().min(1),
-  z.array(z.number().min(0)),
+]);
+// Handle stringified JSON from AI (e.g., "[7,3]" instead of [7,3])
+const colsSchema = z.union([
+  colsInner,
+  z.string().transform((s, ctx) => {
+    try { return JSON.parse(s); } catch {
+      ctx.addIssue({ code: 'custom', message: 'Invalid JSON' });
+      return z.NEVER;
+    }
+  }).pipe(colsInner),
 ]);
 
 /** Component layout — flat array of components with grid layout */

@@ -173,6 +173,13 @@ class WindowStateRegistry {
   }
 
   /**
+   * Clear all window state.
+   */
+  clear(): void {
+    this.windows.clear();
+  }
+
+  /**
    * Get window count.
    */
   getWindowCount(): number {
