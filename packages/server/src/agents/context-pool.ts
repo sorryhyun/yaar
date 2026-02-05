@@ -15,6 +15,7 @@ import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
+import { windowState } from '../mcp/window-state.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -152,7 +153,8 @@ export class ContextPool {
       : '';
     this.contextTape.append('user', interactionPrefix + task.content, 'main');
 
-    await agent.session.handleMessage(task.content, {
+    const openWindowsContext = formatOpenWindows();
+    await agent.session.handleMessage(openWindowsContext + task.content, {
       role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
@@ -261,12 +263,13 @@ export class ContextPool {
       await this.sendWindowStatus(windowId, `window-${windowId}`, 'active');
 
       const contextPrefix = this.contextTape.formatForPrompt({ includeWindows: false });
+      const openWindowsContext = formatOpenWindows();
       const source: ContextSource = { window: windowId };
 
       // Record user message immediately
       this.contextTape.append('user', task.content, source);
 
-      await agent.session.handleMessage(contextPrefix + task.content, {
+      await agent.session.handleMessage(openWindowsContext + contextPrefix + task.content, {
         role: `window-${windowId}`,
         source,
         interactions: task.interactions,
@@ -428,4 +431,16 @@ function formatInteractionsForContext(interactions: UserInteraction[]): string {
   }
 
   return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
+}
+
+/**
+ * Format open windows as minimal context for AI.
+ * Returns empty string if no windows are open.
+ */
+function formatOpenWindows(): string {
+  const windows = windowState.listWindows();
+  if (windows.length === 0) return '';
+
+  const ids = windows.map(w => w.id).join(', ');
+  return `<open_windows>${ids}</open_windows>\n\n`;
 }

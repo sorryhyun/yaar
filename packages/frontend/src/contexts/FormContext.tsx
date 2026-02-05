@@ -47,13 +47,9 @@ export function FormProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setFieldValue = useCallback((formId: string, fieldName: string, value: FormValue) => {
-    const formData = formsRef.current.get(formId)
-    if (formData) {
-      formData[fieldName] = value
-    } else {
-      // Auto-register form if not registered
-      formsRef.current.set(formId, { [fieldName]: value })
-    }
+    const formData = formsRef.current.get(formId) ?? {}
+    // Always create a new object to avoid mutating frozen objects (Immer can freeze objects)
+    formsRef.current.set(formId, { ...formData, [fieldName]: value })
   }, [])
 
   const getFormData = useCallback((formId: string) => {
