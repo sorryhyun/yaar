@@ -6,8 +6,7 @@ import type { Server } from 'http';
 import type { WebSocketServer } from 'ws';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
-import { windowState } from './mcp/window-state.js';
-import { reloadCache } from './reload/index.js';
+import { windowStateRegistryManager } from './mcp/window-state.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import { listSessions, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from './logging/index.js';
 import { PORT } from './config.js';
@@ -19,9 +18,7 @@ import type { WebSocketServerOptions } from './websocket/index.js';
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   await ensureStorageDir();
-  await reloadCache.load();
-  windowState.init();
-  windowState.setOnWindowClose((wid) => reloadCache.invalidateForWindow(wid));
+  windowStateRegistryManager.init();
   await initMcpServer();
 
   // Pre-warm provider pool for faster first connection
@@ -46,7 +43,6 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
         const messages = parseSessionMessages(messagesJsonl);
         const restoreActions = getWindowRestoreActions(messages);
         if (restoreActions.length > 0) {
-          windowState.restoreFromActions(restoreActions);
           options.restoreActions = restoreActions;
           console.log(`Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`);
         }

@@ -11,7 +11,8 @@ import type { ContextMessage } from './context.js';
 import type { ClientEvent } from '@yaar/shared';
 import type { ConnectionId } from '../events/broadcast-center.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
-import { reloadCache } from '../reload/index.js';
+import { reloadCacheManager } from '../reload/index.js';
+import { windowStateRegistryManager } from '../mcp/window-state.js';
 
 export class SessionManager {
   private connectionId: ConnectionId;
@@ -54,7 +55,11 @@ export class SessionManager {
 
   private async doInitialize(): Promise<boolean> {
     console.log(`[SessionManager] Lazy initializing pool for ${this.connectionId}`);
-    this.pool = new ContextPool(this.connectionId, this.restoredContext);
+    const windowState = windowStateRegistryManager.get(this.connectionId);
+    const reloadCache = await reloadCacheManager.ensureLoaded(this.connectionId);
+    windowState.setOnWindowClose((wid) => reloadCache.invalidateForWindow(wid));
+
+    this.pool = new ContextPool(this.connectionId, windowState, reloadCache, this.restoredContext);
     const success = await this.pool.initialize();
     this.initialized = success;
     return success;
@@ -164,7 +169,7 @@ export class SessionManager {
         break;
 
       case 'TOAST_ACTION':
-        reloadCache.markFailed(event.eventId);
+        reloadCacheManager.get(this.connectionId).markFailed(event.eventId);
         console.log(`[SessionManager] Reload cache entry "${event.eventId}" reported as failed by user`);
         break;
     }
@@ -199,5 +204,7 @@ export class SessionManager {
       await this.pool.cleanup();
       this.pool = null;
     }
+    windowStateRegistryManager.clear(this.connectionId);
+    reloadCacheManager.clear(this.connectionId);
   }
 }

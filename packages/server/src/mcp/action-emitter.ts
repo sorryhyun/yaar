@@ -80,7 +80,8 @@ class ActionEmitter extends EventEmitter {
    * Emit an OS Action to all listeners.
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
-    this.emit('action', { action, sessionId, agentId } as ActionEvent);
+    const currentAgentId = agentId ?? getAgentId();
+    this.emit('action', { action, sessionId, agentId: currentAgentId } as ActionEvent);
   }
 
   /**

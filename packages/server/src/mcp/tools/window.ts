@@ -15,7 +15,7 @@ import {
   componentSchema,
 } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
-import { windowState } from '../window-state.js';
+import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages } from '../utils.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
@@ -34,7 +34,7 @@ const colsSchema = z.union([
   }).pipe(colsInner),
 ]);
 
-export function registerWindowTools(server: McpServer): void {
+export function registerWindowTools(server: McpServer, getWindowState: () => WindowStateRegistry): void {
   // create_window - for display content (markdown, html, text, iframe)
   server.registerTool(
     'create',
@@ -339,7 +339,7 @@ export function registerWindowTools(server: McpServer): void {
         'List all windows currently open on the YAAR desktop. Returns window IDs, titles, positions, sizes, and lock status.',
     },
     async () => {
-      const windows = windowState.listWindows();
+      const windows = getWindowState().listWindows();
 
       if (windows.length === 0) {
         return ok('No windows are currently open.');
@@ -371,7 +371,7 @@ export function registerWindowTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const win = windowState.getWindow(args.windowId);
+      const win = getWindowState().getWindow(args.windowId);
 
       if (!win) {
         return ok(`Window "${args.windowId}" not found. Use list to see available windows.`);

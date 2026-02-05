@@ -5,6 +5,7 @@
 import type { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { SessionManager } from '../agents/index.js';
+import { windowStateRegistryManager } from '../mcp/window-state.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../events/broadcast-center.js';
 import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
@@ -31,6 +32,12 @@ export function createWebSocketServer(
     broadcastCenter.subscribe(connectionId, ws);
 
     const manager = new SessionManager(connectionId, options.contextMessages);
+
+    const windowState = windowStateRegistryManager.get(connectionId);
+    if (options.restoreActions.length > 0) {
+      windowState.restoreFromActions(options.restoreActions);
+    }
+
 
     // Track initialization state and queue early messages
     let initialized = false;

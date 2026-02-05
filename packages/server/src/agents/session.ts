@@ -14,7 +14,7 @@ import {
 } from '../providers/factory.js';
 import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
-import { actionEmitter, type ActionEvent } from '../mcp/index.js';
+import { actionEmitter, type ActionEvent } from '../mcp/action-emitter.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
@@ -41,6 +41,7 @@ export interface HandleMessageOptions {
  */
 interface AgentContext {
   agentId: string;
+  connectionId: ConnectionId;
 }
 
 const agentContext = new AsyncLocalStorage<AgentContext>();
@@ -51,6 +52,10 @@ const agentContext = new AsyncLocalStorage<AgentContext>();
  */
 export function getAgentId(): string | undefined {
   return agentContext.getStore()?.agentId;
+}
+
+export function getCurrentConnectionId(): ConnectionId | undefined {
+  return agentContext.getStore()?.connectionId;
 }
 
 /**
@@ -355,7 +360,7 @@ export class AgentSession {
       // Run within agent context so tools can access the agentId
       // Use instanceId for action filtering (prevents cross-talk)
       console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);
-      await agentContext.run({ agentId: stableAgentId }, async () => {
+      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId }, async () => {
         console.log(`[AgentSession] ${role} entered agentContext.run`);
         for await (const message of this.provider!.query(fullContent, transportOptions)) {
           if (!this.running) break;

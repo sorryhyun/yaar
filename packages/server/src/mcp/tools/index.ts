@@ -12,7 +12,9 @@ import { registerHttpTools } from './http.js';
 import { registerAppDevTools } from './app-dev.js';
 import { registerSandboxTools } from './sandbox.js';
 import { registerReloadTools } from '../../reload/tools.js';
-import { reloadCache } from '../../reload/index.js';
+import { reloadCacheManager } from '../../reload/index.js';
+import { windowStateRegistryManager } from '../window-state.js';
+import { getCurrentConnectionId } from '../../agents/session.js';
 
 export { registerSystemTools } from './system.js';
 export { registerWindowTools } from './window.js';
@@ -26,14 +28,18 @@ export { registerSandboxTools } from './sandbox.js';
  * Register all YAAR tools on their respective MCP servers.
  */
 export function registerAllTools(servers: Record<McpServerName, McpServer>): void {
+  const resolveConnectionId = () => getCurrentConnectionId() ?? 'global';
+  const getWindowState = () => windowStateRegistryManager.get(resolveConnectionId());
+  const getReloadCache = () => reloadCacheManager.get(resolveConnectionId());
+
   registerSystemTools(servers.system);
   registerHttpTools(servers.system);
   registerSandboxTools(servers.system);
-  registerWindowTools(servers.window);
+  registerWindowTools(servers.window, getWindowState);
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
   registerAppDevTools(servers.apps);
-  registerReloadTools(servers.system, reloadCache);
+  registerReloadTools(servers.system, getReloadCache, getWindowState);
 }
 
 /**
