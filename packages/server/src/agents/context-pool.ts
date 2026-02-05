@@ -16,9 +16,11 @@ import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-cente
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
-import { computeFingerprint } from '../reload/index.js';
 import type { ReloadCache } from '../reload/cache.js';
-import type { CacheMatch } from '../reload/types.js';
+import { MainQueuePolicy } from './context-pool-policies/main-queue-policy.js';
+import { WindowQueuePolicy } from './context-pool-policies/window-queue-policy.js';
+import { ContextAssemblyPolicy } from './context-pool-policies/context-assembly-policy.js';
+import { ReloadCachePolicy } from './context-pool-policies/reload-cache-policy.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -43,16 +45,13 @@ export class ContextPool {
   private contextTape: ContextTape;
   private sharedLogger: SessionLogger | null = null;
   private windowState: WindowStateRegistry;
-  private reloadCache: ReloadCache;
-
-  // Main task queue (sequential processing)
-  private mainQueue: Array<{ task: Task; timestamp: number }> = [];
-  private processingMain = false;
 
   // Window task tracking
   private windowAgentMap: Map<string, string> = new Map();
-  private windowProcessing: Map<string, boolean> = new Map();
-  private windowQueues: Map<string, Array<{ task: Task; timestamp: number }>> = new Map();
+  private mainQueuePolicy = new MainQueuePolicy(MAX_QUEUE_SIZE);
+  private windowQueuePolicy = new WindowQueuePolicy();
+  private contextAssembly = new ContextAssemblyPolicy();
+  private reloadPolicy: ReloadCachePolicy;
 
   constructor(
     connectionId: ConnectionId,
@@ -62,7 +61,7 @@ export class ContextPool {
   ) {
     this.connectionId = connectionId;
     this.windowState = windowState;
-    this.reloadCache = reloadCache;
+    this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.contextTape = new ContextTape();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
@@ -132,7 +131,7 @@ export class ContextPool {
       return;
     }
 
-    if (this.mainQueue.length >= MAX_QUEUE_SIZE) {
+    if (!this.mainQueuePolicy.canEnqueue()) {
       await this.sendEvent({
         type: 'ERROR',
         error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
@@ -140,13 +139,13 @@ export class ContextPool {
       return;
     }
 
-    this.mainQueue.push({ task, timestamp: Date.now() });
-    console.log(`[ContextPool] Queued main task ${task.messageId}, queue size: ${this.mainQueue.length}`);
+    const position = this.mainQueuePolicy.enqueue(task);
+    console.log(`[ContextPool] Queued main task ${task.messageId}, queue size: ${position}`);
 
     await this.sendEvent({
       type: 'MESSAGE_QUEUED',
       messageId: task.messageId,
-      position: this.mainQueue.length,
+      position,
     });
   }
 
@@ -164,54 +163,49 @@ export class ContextPool {
     console.log(`[ContextPool] Processing main task ${task.messageId} with agent ${agent.id}`);
 
     // Record user message immediately so parallel tasks can see it
-    const interactionPrefix = task.interactions?.length
-      ? formatInteractionsForContext(task.interactions)
-      : '';
-    this.contextTape.append('user', interactionPrefix + task.content, 'main');
-
-    // Compute fingerprint and check for reload matches
     const windowSnapshot = this.windowState.listWindows();
-    const fp = computeFingerprint(task, windowSnapshot);
-    const matches = this.reloadCache.findMatches(fp, 3);
-    const reloadPrefix = formatReloadOptions(matches);
+    const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
+    const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
+    const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
+    const mainContext = this.contextAssembly.buildMainPrompt(task.content, {
+      interactions: task.interactions,
+      openWindows: openWindowsContext,
+      reloadPrefix,
+    });
+    this.contextAssembly.appendUserMessage(this.contextTape, mainContext.contextContent, 'main');
 
-    const openWindowsContext = this.formatOpenWindows();
-    await agent.session.handleMessage(openWindowsContext + reloadPrefix + task.content, {
+    await agent.session.handleMessage(mainContext.prompt, {
       role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
       messageId: task.messageId,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
-          this.contextTape.append(role, content, 'main');
+          this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
         }
       },
     });
 
     // Record actions for future cache hits
     const recordedActions = agent.session.getRecordedActions();
-    if (recordedActions.length > 0) {
-      this.reloadCache.record(fp, recordedActions, generateCacheLabel(task));
-    }
+    this.reloadPolicy.maybeRecord(task, fp, recordedActions);
 
     this.agentPool.release(agent);
     await this.processMainQueue();
   }
 
   private async processMainQueue(): Promise<void> {
-    if (this.processingMain || this.mainQueue.length === 0) return;
-
-    this.processingMain = true;
+    if (!this.mainQueuePolicy.beginProcessing()) return;
     try {
-      while (this.mainQueue.length > 0) {
+      while (this.mainQueuePolicy.size() > 0) {
         const agent = this.agentPool.findIdle();
         if (!agent) break;
 
-        const next = this.mainQueue.shift();
+        const next = this.mainQueuePolicy.dequeue();
         if (next) await this.processMainTask(agent, next.task);
       }
     } finally {
-      this.processingMain = false;
+      this.mainQueuePolicy.endProcessing();
     }
   }
 
@@ -229,31 +223,26 @@ export class ContextPool {
     console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (key: ${processingKey}, parallel: ${isParallel})`);
 
     // Queue if this key is already busy (skip for parallel actions)
-    if (!isParallel && this.windowProcessing.get(processingKey)) {
-      let queue = this.windowQueues.get(processingKey);
-      if (!queue) {
-        queue = [];
-        this.windowQueues.set(processingKey, queue);
-      }
-      queue.push({ task, timestamp: Date.now() });
-      console.log(`[ContextPool] Queued task ${task.messageId} for ${processingKey}, queue size: ${queue.length}`);
+    if (!isParallel && this.windowQueuePolicy.isProcessing(processingKey)) {
+      const queueSize = this.windowQueuePolicy.enqueue(processingKey, task);
+      console.log(`[ContextPool] Queued task ${task.messageId} for ${processingKey}, queue size: ${queueSize}`);
 
       await this.sendEvent({
         type: 'MESSAGE_QUEUED',
         messageId: task.messageId,
-        position: queue.length,
+        position: queueSize,
       });
       return;
     }
 
-    this.windowProcessing.set(processingKey, true);
+    this.windowQueuePolicy.setProcessing(processingKey, true);
 
     // Acquire global agent slot
     const limiter = getAgentLimiter();
     try {
       await limiter.acquire(30000);
     } catch (err) {
-      this.windowProcessing.set(processingKey, false);
+      this.windowQueuePolicy.setProcessing(processingKey, false);
       console.error(`[ContextPool] Failed to acquire limiter for ${task.messageId}:`, err);
       await this.sendEvent({
         type: 'ERROR',
@@ -267,7 +256,7 @@ export class ContextPool {
       const agent = await this.agentPool.acquire(`window-${windowId}`);
       if (!agent) {
         limiter.release();
-        this.windowProcessing.set(processingKey, false);
+        this.windowQueuePolicy.setProcessing(processingKey, false);
         console.error(`[ContextPool] Failed to acquire agent for window ${windowId}`);
         await this.sendEvent({
           type: 'ERROR',
@@ -292,50 +281,47 @@ export class ContextPool {
 
       // Compute fingerprint and check for reload matches
       const windowSnapshot = this.windowState.listWindows();
-      const fp = computeFingerprint(task, windowSnapshot);
-      const matches = this.reloadCache.findMatches(fp, 3);
-      const reloadPrefix = formatReloadOptions(matches);
+      const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
+      const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
 
       const contextPrefix = this.contextTape.formatForPrompt({ includeWindows: false });
-      const openWindowsContext = this.formatOpenWindows();
+      const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
       const source: ContextSource = { window: windowId };
 
       // Record user message immediately
-      this.contextTape.append('user', task.content, source);
+      this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
 
-      await agent.session.handleMessage(openWindowsContext + reloadPrefix + contextPrefix + task.content, {
+      await agent.session.handleMessage(this.contextAssembly.buildWindowPrompt(task.content, {
+        openWindows: openWindowsContext,
+        reloadPrefix,
+        contextPrefix,
+      }), {
         role: `window-${windowId}`,
         source,
         interactions: task.interactions,
         messageId: task.messageId,
         onContextMessage: (role, content) => {
           if (role === 'assistant') {
-            this.contextTape.append(role, content, source);
+            this.contextAssembly.appendAssistantMessage(this.contextTape, content, source);
           }
         },
       });
 
       // Record actions for future cache hits
       const recordedActions = agent.session.getRecordedActions();
-      if (recordedActions.length > 0) {
-        const requiredWindowIds = windowId ? [windowId] : undefined;
-        this.reloadCache.record(fp, recordedActions, generateCacheLabel(task), { requiredWindowIds });
-      }
+      this.reloadPolicy.maybeRecord(task, fp, recordedActions, windowId);
 
       this.agentPool.release(agent);
       await this.sendWindowStatus(windowId, `window-${windowId}`, 'released');
     } finally {
       limiter.release();
-      this.windowProcessing.set(processingKey, false);
+      this.windowQueuePolicy.setProcessing(processingKey, false);
       if (!isParallel) await this.processWindowQueue(processingKey);
     }
   }
 
   private async processWindowQueue(windowId: string): Promise<void> {
-    const queue = this.windowQueues.get(windowId);
-    if (!queue || queue.length === 0) return;
-
-    const next = queue.shift();
+    const next = this.windowQueuePolicy.dequeue(windowId);
     if (next) {
       console.log(`[ContextPool] Processing queued task ${next.task.messageId} for window ${windowId}`);
       await this.handleWindowTask(next.task);
@@ -368,9 +354,8 @@ export class ContextPool {
   async reset(): Promise<void> {
     await this.agentPool.interruptAll();
     this.contextTape.clear();
-    this.mainQueue = [];
-    this.windowQueues.clear();
-    this.windowProcessing.clear();
+    this.mainQueuePolicy.clear();
+    this.windowQueuePolicy.clear();
     this.windowAgentMap.clear();
     this.windowState.clear();
     console.log(`[ContextPool] Reset: cleared context tape, queues, and window state`);
@@ -397,30 +382,13 @@ export class ContextPool {
     contextTapeSize: number;
   } {
     const poolStats = this.agentPool.getStats();
-    const windowQueueSizes: Record<string, number> = {};
-    for (const [windowId, queue] of this.windowQueues) {
-      if (queue.length > 0) {
-        windowQueueSizes[windowId] = queue.length;
-      }
-    }
+    const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
     return {
       ...poolStats,
-      mainQueueSize: this.mainQueue.length,
+      mainQueueSize: this.mainQueuePolicy.size(),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
     };
-  }
-
-  /**
-   * Format open windows as minimal context for AI.
-   * Returns empty string if no windows are open.
-   */
-  private formatOpenWindows(): string {
-    const windows = this.windowState.listWindows();
-    if (windows.length === 0) return '';
-
-    const ids = windows.map((w) => w.id).join(', ');
-    return `<open_windows>${ids}</open_windows>\n\n`;
   }
 
   // ── Events ────────────────────────────────────────────────────────────
@@ -447,84 +415,10 @@ export class ContextPool {
 
   async cleanup(): Promise<void> {
     await this.agentPool.cleanup();
-    this.mainQueue = [];
+    this.mainQueuePolicy.clear();
     this.windowAgentMap.clear();
-    this.windowProcessing.clear();
-    this.windowQueues.clear();
+    this.windowQueuePolicy.clear();
     this.contextTape.clear();
     this.sharedLogger = null;
   }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-/**
- * Format user interactions into a context string.
- * Drawings are noted but not embedded (sent as native images to provider).
- */
-function formatInteractionsForContext(interactions: UserInteraction[]): string {
-  if (interactions.length === 0) return '';
-
-  const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
-  const otherInteractions = interactions.filter(i => i.type !== 'draw');
-
-  const parts: string[] = [];
-
-  if (otherInteractions.length > 0) {
-    const lines = otherInteractions.map(i => {
-      let content = '';
-      if (i.windowTitle) content += `"${i.windowTitle}"`;
-      if (i.details) content += content ? ` (${i.details})` : i.details;
-      return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
-    });
-    parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
-  }
-
-  if (drawings.length > 0) {
-    parts.push(`<user_interaction:draw>[User drawing attached as image]</user_interaction:draw>`);
-  }
-
-  return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
-}
-
-/**
- * Format reload cache matches as context for AI.
- * Returns empty string if no matches.
- */
-function formatReloadOptions(matches: CacheMatch[]): string {
-  if (matches.length === 0) return '';
-
-  const options = matches.map(m => ({
-    cacheId: m.entry.id,
-    label: m.entry.label,
-    similarity: parseFloat(m.similarity.toFixed(2)),
-    actions: m.entry.actions.length,
-    exact: m.isExact,
-  }));
-
-  return `<reload_options>\n${JSON.stringify(options)}\n</reload_options>\n\n`;
-}
-
-/**
- * Generate a human-readable label for a cache entry from task content.
- */
-function generateCacheLabel(task: Task): string {
-  const content = task.content.trim();
-
-  // Try to extract app name from click interaction pattern
-  const appMatch = content.match(/app:\s*(\w+)/i);
-  if (appMatch) {
-    return `Open ${appMatch[1]} app`;
-  }
-
-  // Try to extract button click pattern
-  const buttonMatch = content.match(/button\s+"([^"]+)"/i);
-  if (buttonMatch) {
-    return `Click "${buttonMatch[1]}"`;
-  }
-
-  // Truncate content as label
-  const maxLen = 50;
-  if (content.length <= maxLen) return content;
-  return content.slice(0, maxLen).trimEnd() + '...';
 }
