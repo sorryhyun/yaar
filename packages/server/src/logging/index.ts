@@ -23,3 +23,4 @@ export type { AgentInfo, SessionMetadata, SessionInfo, ParsedMessage } from './t
 export { createSession, SessionLogger } from './session-logger.js';
 export { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages } from './session-reader.js';
 export { getWindowRestoreActions } from './window-restore.js';
+export { getContextRestoreMessages } from './context-restore.js';

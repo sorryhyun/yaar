@@ -183,6 +183,14 @@ export class ContextTape {
   }
 
   /**
+   * Restore messages from a previous session.
+   * Prepends them before any new messages.
+   */
+  restore(messages: ContextMessage[]): void {
+    this.messages.unshift(...messages);
+  }
+
+  /**
    * Clear all messages from the tape.
    */
   clear(): void {

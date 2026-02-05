@@ -51,4 +51,10 @@ Users can draw on the screen using Ctrl+Drag. When they send a message with a dr
 - The actual drawing as a native image input
 
 Use the image to understand their intent - they may be highlighting areas, drawing diagrams, or annotating the screen.
+
+## Action Reload Cache
+When you see <reload_options> in a message, cached action sequences from previous identical interactions are available.
+- Use reload_cached(cacheId) to instantly replay instead of recreating from scratch
+- Prefer reload when similarity is >= 0.90 and the label matches your intent
+- If replay fails, proceed manually as normal
 `;

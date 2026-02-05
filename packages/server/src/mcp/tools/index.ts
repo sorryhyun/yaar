@@ -11,6 +11,8 @@ import { registerAppsTools } from './apps.js';
 import { registerHttpTools } from './http.js';
 import { registerAppDevTools } from './app-dev.js';
 import { registerSandboxTools } from './sandbox.js';
+import { registerReloadTools } from '../../reload/tools.js';
+import { reloadCache } from '../../reload/index.js';
 
 export { registerSystemTools } from './system.js';
 export { registerWindowTools } from './window.js';
@@ -31,6 +33,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
   registerAppDevTools(servers.apps);
+  registerReloadTools(servers.system, reloadCache);
 }
 
 /**
@@ -78,5 +81,8 @@ export function getToolNames(): string[] {
     'mcp__apps__write_ts',
     'mcp__apps__compile',
     'mcp__apps__deploy',
+    // Reload cache tools
+    'mcp__system__reload_cached',
+    'mcp__system__list_reload_options',
   ];
 }

@@ -8,7 +8,7 @@
  */
 
 import { AgentSession } from './session.js';
-import { ContextTape, type ContextSource } from './context.js';
+import { ContextTape, type ContextMessage, type ContextSource } from './context.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
@@ -16,6 +16,8 @@ import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-cente
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { windowState } from '../mcp/window-state.js';
+import { reloadCache, computeFingerprint } from '../reload/index.js';
+import type { CacheMatch } from '../reload/types.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -49,9 +51,13 @@ export class ContextPool {
   private windowProcessing: Map<string, boolean> = new Map();
   private windowQueues: Map<string, Array<{ task: Task; timestamp: number }>> = new Map();
 
-  constructor(connectionId: ConnectionId) {
+  constructor(connectionId: ConnectionId, restoredContext: ContextMessage[] = []) {
     this.connectionId = connectionId;
     this.contextTape = new ContextTape();
+    if (restoredContext.length > 0) {
+      this.contextTape.restore(restoredContext);
+      console.log(`[ContextPool] Restored ${restoredContext.length} context messages from previous session`);
+    }
     this.agentPool = new AgentPool(connectionId);
   }
 
@@ -153,8 +159,14 @@ export class ContextPool {
       : '';
     this.contextTape.append('user', interactionPrefix + task.content, 'main');
 
+    // Compute fingerprint and check for reload matches
+    const windowSnapshot = windowState.listWindows();
+    const fp = computeFingerprint(task, windowSnapshot);
+    const matches = reloadCache.findMatches(fp, 3);
+    const reloadPrefix = formatReloadOptions(matches);
+
     const openWindowsContext = formatOpenWindows();
-    await agent.session.handleMessage(openWindowsContext + task.content, {
+    await agent.session.handleMessage(openWindowsContext + reloadPrefix + task.content, {
       role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
@@ -165,6 +177,12 @@ export class ContextPool {
         }
       },
     });
+
+    // Record actions for future cache hits
+    const recordedActions = agent.session.getRecordedActions();
+    if (recordedActions.length > 0) {
+      reloadCache.record(fp, recordedActions, generateCacheLabel(task));
+    }
 
     this.agentPool.release(agent);
     await this.processMainQueue();
@@ -262,6 +280,12 @@ export class ContextPool {
 
       await this.sendWindowStatus(windowId, `window-${windowId}`, 'active');
 
+      // Compute fingerprint and check for reload matches
+      const windowSnapshot = windowState.listWindows();
+      const fp = computeFingerprint(task, windowSnapshot);
+      const matches = reloadCache.findMatches(fp, 3);
+      const reloadPrefix = formatReloadOptions(matches);
+
       const contextPrefix = this.contextTape.formatForPrompt({ includeWindows: false });
       const openWindowsContext = formatOpenWindows();
       const source: ContextSource = { window: windowId };
@@ -269,7 +293,7 @@ export class ContextPool {
       // Record user message immediately
       this.contextTape.append('user', task.content, source);
 
-      await agent.session.handleMessage(openWindowsContext + contextPrefix + task.content, {
+      await agent.session.handleMessage(openWindowsContext + reloadPrefix + contextPrefix + task.content, {
         role: `window-${windowId}`,
         source,
         interactions: task.interactions,
@@ -280,6 +304,13 @@ export class ContextPool {
           }
         },
       });
+
+      // Record actions for future cache hits
+      const recordedActions = agent.session.getRecordedActions();
+      if (recordedActions.length > 0) {
+        const requiredWindowIds = windowId ? [windowId] : undefined;
+        reloadCache.record(fp, recordedActions, generateCacheLabel(task), { requiredWindowIds });
+      }
 
       this.agentPool.release(agent);
       await this.sendWindowStatus(windowId, `window-${windowId}`, 'released');
@@ -443,4 +474,43 @@ function formatOpenWindows(): string {
 
   const ids = windows.map(w => w.id).join(', ');
   return `<open_windows>${ids}</open_windows>\n\n`;
+}
+
+/**
+ * Format reload cache matches as context for AI.
+ * Returns empty string if no matches.
+ */
+function formatReloadOptions(matches: CacheMatch[]): string {
+  if (matches.length === 0) return '';
+
+  const lines = matches.map(m => {
+    const exact = m.isExact ? ' [exact match]' : '';
+    return `- cacheId="${m.entry.id}" label="${m.entry.label}" similarity=${m.similarity.toFixed(2)} actions=${m.entry.actions.length}${exact}`;
+  });
+
+  return `<reload_options>\nCached action sequences available. Use reload_cached(cacheId) to replay instantly:\n${lines.join('\n')}\n</reload_options>\n\n`;
+}
+
+/**
+ * Generate a human-readable label for a cache entry from task content.
+ */
+function generateCacheLabel(task: Task): string {
+  const content = task.content.trim();
+
+  // Try to extract app name from click interaction pattern
+  const appMatch = content.match(/app:\s*(\w+)/i);
+  if (appMatch) {
+    return `Open ${appMatch[1]} app`;
+  }
+
+  // Try to extract button click pattern
+  const buttonMatch = content.match(/button\s+"([^"]+)"/i);
+  if (buttonMatch) {
+    return `Click "${buttonMatch[1]}"`;
+  }
+
+  // Truncate content as label
+  const maxLen = 50;
+  if (content.length <= maxLen) return content;
+  return content.slice(0, maxLen).trimEnd() + '...';
 }

@@ -7,6 +7,7 @@
  */
 
 import { ContextPool } from './context-pool.js';
+import type { ContextMessage } from './context.js';
 import type { ClientEvent } from '@yaar/shared';
 import type { ConnectionId } from '../events/broadcast-center.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
@@ -16,9 +17,11 @@ export class SessionManager {
   private pool: ContextPool | null = null;
   private initPromise: Promise<boolean> | null = null;
   private initialized = false;
+  private restoredContext: ContextMessage[];
 
-  constructor(connectionId: ConnectionId) {
+  constructor(connectionId: ConnectionId, restoredContext: ContextMessage[] = []) {
     this.connectionId = connectionId;
+    this.restoredContext = restoredContext;
   }
 
   /**
@@ -50,7 +53,7 @@ export class SessionManager {
 
   private async doInitialize(): Promise<boolean> {
     console.log(`[SessionManager] Lazy initializing pool for ${this.connectionId}`);
-    this.pool = new ContextPool(this.connectionId);
+    this.pool = new ContextPool(this.connectionId, this.restoredContext);
     const success = await this.pool.initialize();
     this.initialized = success;
     return success;

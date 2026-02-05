@@ -12,7 +12,7 @@ import {
   getAvailableProviders,
   acquireWarmProvider,
 } from '../providers/factory.js';
-import type { ServerEvent, UserInteraction } from '@yaar/shared';
+import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { actionEmitter, type ActionEvent } from '../mcp/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
@@ -63,6 +63,7 @@ export class AgentSession {
   private hasSentFirstMessage = false;
   private currentMessageId: string | null = null;
   private currentRole: string | null = null; // Current role being used
+  private recordedActions: OSAction[] = []; // Buffer for action recording (reload cache)
 
   /**
    * Create an agent session.
@@ -121,6 +122,14 @@ export class AgentSession {
   }
 
   /**
+   * Get the actions recorded during the current/last message processing.
+   * Returns a shallow copy to prevent external mutation.
+   */
+  getRecordedActions(): OSAction[] {
+    return [...this.recordedActions];
+  }
+
+  /**
    * Get the agent identifier.
    * Returns the current role if active, otherwise 'default'.
    */
@@ -157,6 +166,9 @@ export class AgentSession {
     if (event.agentId && event.agentId !== myAgentId) {
       return;
     }
+
+    // Record clean action for reload cache (before adding UI metadata)
+    this.recordedActions.push(event.action);
 
     // Include requestId and agentId in the action for frontend tracking
     // Use currentRole for the UI-facing agentId (not instanceId)
@@ -287,6 +299,7 @@ export class AgentSession {
 
     this.running = true;
     this.currentMessageId = messageId ?? null;
+    this.recordedActions = []; // Clear buffer for fresh recording
 
     // Immediately notify frontend that agent is thinking
     await this.sendEvent({

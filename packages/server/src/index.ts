@@ -15,10 +15,11 @@ import { dirname } from 'path';
 import { renderPdfPage } from './pdf/index.js';
 import { SessionManager, getAgentLimiter } from './agents/index.js';
 import { getAvailableProviders, initWarmPool, getWarmPool } from './providers/factory.js';
-import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions } from './logging/index.js';
+import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from './logging/index.js';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer, handleMcpRequest, MCP_SERVERS, type McpServerName } from './mcp/server.js';
 import { windowState } from './mcp/window-state.js';
+import { reloadCache } from './reload/index.js';
 import { listApps } from './mcp/tools/apps.js';
 import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
 import { getBroadcastCenter, generateConnectionId } from './events/broadcast-center.js';
@@ -93,6 +94,10 @@ const PORT = parseInt(process.env.PORT ?? '8000', 10);
 
 // Restore actions from the most recent previous session (populated at startup)
 let startupRestoreActions: OSAction[] = [];
+
+// Restored context tape messages from previous session
+import type { ContextMessage } from './agents/context.js';
+let startupContextMessages: ContextMessage[] = [];
 
 // Create HTTP server for health checks and REST endpoints
 const server = createServer(async (req, res) => {
@@ -443,7 +448,7 @@ wss.on('connection', async (ws: WebSocket) => {
   // Register connection with broadcast center
   broadcastCenter.subscribe(connectionId, ws);
 
-  const manager = new SessionManager(connectionId);
+  const manager = new SessionManager(connectionId, startupContextMessages);
 
   // Track initialization state and queue early messages
   let initialized = false;
@@ -521,6 +526,8 @@ wss.on('connection', async (ws: WebSocket) => {
 // Initialize storage and MCP server, then start HTTP server
 async function startup() {
   await ensureStorageDir();
+  await reloadCache.load();
+  windowState.setOnWindowClose((wid) => reloadCache.invalidateForWindow(wid));
   await initMcpServer();
 
   // Pre-warm provider pool for faster first connection
@@ -543,6 +550,11 @@ async function startup() {
           windowState.restoreFromActions(restoreActions);
           startupRestoreActions = restoreActions;
           console.log(`Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`);
+        }
+        const contextMessages = getContextRestoreMessages(messages);
+        if (contextMessages.length > 0) {
+          startupContextMessages = contextMessages;
+          console.log(`Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`);
         }
       }
     }

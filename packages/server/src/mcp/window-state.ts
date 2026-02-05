@@ -17,6 +17,15 @@ export type { WindowState } from '@yaar/shared';
  */
 class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
+  private onWindowCloseCallback?: (windowId: string) => void;
+
+  /**
+   * Set a callback to be invoked when a window is closed.
+   * Used to invalidate reload cache entries that depend on the closed window.
+   */
+  setOnWindowClose(cb: (windowId: string) => void): void {
+    this.onWindowCloseCallback = cb;
+  }
 
   constructor() {
     // Subscribe to action events to track window state
@@ -44,6 +53,7 @@ class WindowStateRegistry {
 
       case 'window.close': {
         this.windows.delete(action.windowId);
+        this.onWindowCloseCallback?.(action.windowId);
         break;
       }
 
