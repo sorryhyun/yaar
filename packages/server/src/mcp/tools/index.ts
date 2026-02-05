@@ -10,6 +10,7 @@ import { registerStorageTools } from './storage.js';
 import { registerAppsTools } from './apps.js';
 import { registerHttpTools } from './http.js';
 import { registerAppDevTools } from './app-dev.js';
+import { registerSandboxTools } from './sandbox.js';
 
 export { registerSystemTools } from './system.js';
 export { registerWindowTools } from './window.js';
@@ -17,6 +18,7 @@ export { registerStorageTools } from './storage.js';
 export { registerAppsTools } from './apps.js';
 export { registerHttpTools } from './http.js';
 export { registerAppDevTools } from './app-dev.js';
+export { registerSandboxTools } from './sandbox.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
@@ -24,6 +26,7 @@ export { registerAppDevTools } from './app-dev.js';
 export function registerAllTools(servers: Record<McpServerName, McpServer>): void {
   registerSystemTools(servers.system);
   registerHttpTools(servers.system);
+  registerSandboxTools(servers.system);
   registerWindowTools(servers.window);
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
@@ -46,6 +49,9 @@ export function getToolNames(): string[] {
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
     'mcp__system__http_post',
+    // Sandbox tools
+    'mcp__system__run_js',
+    'mcp__system__run_ts',
     // Window tools
     'mcp__window__create',
     'mcp__window__create_component',

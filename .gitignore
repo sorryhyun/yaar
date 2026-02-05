@@ -42,4 +42,4 @@ bundled/*.css
 apps/*/credentials.json
 
 # Sandbox (temporary app development)
-sandbox/
+/sandbox/
