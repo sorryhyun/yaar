@@ -43,3 +43,9 @@ apps/*/credentials.json
 
 # Sandbox (temporary app development)
 /sandbox/
+
+# Claude Code
+.claude/*
+!.claude/agents/
+!.claude/settings.json
+!.claude/agent-memory/
