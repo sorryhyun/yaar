@@ -269,13 +269,9 @@ export class AgentSession {
         options.source,
         onContextMessage,
         async (sessionId: string) => {
+          // Update internal provider session ID for session resumption/forking.
+          // The log session ID (sent to frontend) is managed by ContextPool.
           this.sessionId = sessionId;
-          await this.sendEvent({
-            type: 'CONNECTION_STATUS',
-            status: 'connected',
-            provider: this.provider!.name,
-            sessionId: this.sessionId ?? undefined,
-          });
         },
       );
 

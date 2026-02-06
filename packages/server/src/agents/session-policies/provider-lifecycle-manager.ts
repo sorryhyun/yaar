@@ -45,7 +45,6 @@ export class ProviderLifecycleManager {
       type: 'CONNECTION_STATUS',
       status: 'connected',
       provider: this.state.provider.name,
-      sessionId: this.state.sessionId ?? undefined,
     });
 
     return true;

@@ -52,6 +52,7 @@ export class ContextPool {
   private windowQueuePolicy = new WindowQueuePolicy();
   private contextAssembly = new ContextAssemblyPolicy();
   private reloadPolicy: ReloadCachePolicy;
+  private logSessionId: string | null = null;
 
   constructor(
     connectionId: ConnectionId,
@@ -85,6 +86,7 @@ export class ContextPool {
 
     const sessionInfo = await createSession(provider.name);
     this.sharedLogger = new SessionLogger(sessionInfo);
+    this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);
 
     const firstAgent = await this.agentPool.createAgent(provider);
@@ -97,7 +99,7 @@ export class ContextPool {
       type: 'CONNECTION_STATUS',
       status: 'connected',
       provider: provider.name,
-      sessionId: provider.getSessionId?.() ?? undefined,
+      sessionId: this.logSessionId,
     });
 
     return true;
@@ -362,13 +364,31 @@ export class ContextPool {
   }
 
   async reset(): Promise<void> {
-    await this.agentPool.interruptAll();
+    // Dispose all agents (and their providers) — not just interrupt
+    await this.agentPool.cleanup();
     this.contextTape.clear();
     this.mainQueuePolicy.clear();
     this.windowQueuePolicy.clear();
     this.windowAgentMap.clear();
     this.windowState.clear();
-    console.log(`[ContextPool] Reset: cleared context tape, queues, and window state`);
+
+    // Re-create a fresh primary agent so the pool is ready for the next message
+    const provider = await acquireWarmProvider();
+    if (provider) {
+      const agent = await this.agentPool.createAgent(provider);
+      if (agent) {
+        await this.sendEvent({
+          type: 'CONNECTION_STATUS',
+          status: 'connected',
+          provider: provider.name,
+          sessionId: this.logSessionId ?? undefined,
+        });
+      } else {
+        await provider.dispose();
+      }
+    }
+
+    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, queues, and window state`);
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {
