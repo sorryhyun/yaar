@@ -8,7 +8,6 @@ import {
   isComponentLayout,
   isWindowContentData,
   isContentUpdateOperationValid,
-  WINDOW_PRESETS,
   type OSAction,
 } from '../actions.js'
 
@@ -138,20 +137,5 @@ describe('Runtime Validation', () => {
       expect(isContentUpdateOperationValid('markdown', { op: 'clear' })).toBe(true)
       expect(isContentUpdateOperationValid('table', { op: 'clear' })).toBe(true)
     })
-  })
-})
-
-describe('WINDOW_PRESETS', () => {
-  it('has all expected presets', () => {
-    expect(Object.keys(WINDOW_PRESETS)).toEqual(
-      expect.arrayContaining(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
-    )
-  })
-
-  it('each preset has width and height', () => {
-    for (const preset of Object.values(WINDOW_PRESETS)) {
-      expect(preset.width).toBeGreaterThan(0)
-      expect(preset.height).toBeGreaterThan(0)
-    }
   })
 })

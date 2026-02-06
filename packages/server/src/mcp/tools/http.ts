@@ -141,21 +141,29 @@ async function executeCurl(args: string[]): Promise<CurlResult> {
   }
 
   // Parse the response (we use -i to include headers, then -w for status code)
+  // With -L (follow redirects), curl outputs all intermediate responses.
+  // We need to find the LAST HTTP status line and parse from there.
   const lines = stdout.split('\n');
   const headers: Record<string, string> = {};
   let bodyStartIndex = 0;
   let status = 0;
 
-  // Find the last HTTP status line (in case of redirects)
+  // First pass: find the index of the last HTTP status line
+  let lastStatusIndex = 0;
   for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('HTTP/')) {
+      lastStatusIndex = i;
+    }
+  }
+
+  // Second pass: parse status, headers, and body from the last response
+  for (let i = lastStatusIndex; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('HTTP/')) {
       const match = line.match(/HTTP\/[\d.]+ (\d+)/);
       if (match) {
         status = parseInt(match[1], 10);
       }
-      // Reset headers for new response (redirect case)
-      Object.keys(headers).forEach((key) => delete headers[key]);
       continue;
     }
     if (line === '') {
@@ -173,6 +181,39 @@ async function executeCurl(args: string[]): Promise<CurlResult> {
   const body = lines.slice(bodyStartIndex).join('\n');
 
   return { status, headers, body };
+}
+
+/**
+ * Format the HTTP response for returning to the agent.
+ * - Success (2xx): return body as-is (truncated if too large)
+ * - Error: strip HTML to avoid dumping massive pages, include status code
+ */
+function formatResponse(result: CurlResult): string {
+  const maxLength = 50000;
+  let body = result.body;
+
+  if (result.status >= 200 && result.status < 300) {
+    if (body.length > maxLength) {
+      body = body.slice(0, maxLength) + '\n\n[Response truncated]';
+    }
+    return body;
+  }
+
+  // For error responses, strip HTML to avoid wasting tokens on full pages
+  const isHtml = result.headers['content-type']?.includes('text/html') || body.trimStart().startsWith('<!DOCTYPE') || body.trimStart().startsWith('<html');
+  if (isHtml) {
+    // Extract text content from HTML, collapse whitespace
+    const text = body.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    body = text.slice(0, 500) || `(HTML error page)`;
+  } else if (body.length > maxLength) {
+    body = body.slice(0, maxLength) + '\n\n[Response truncated]';
+  }
+
+  return `Error ${result.status}:\n${body}`;
 }
 
 export function registerHttpTools(server: McpServer): void {
@@ -276,19 +317,7 @@ export function registerHttpTools(server: McpServer): void {
         curlArgs.push(args.url);
 
         const result = await executeCurl(curlArgs);
-
-        // Truncate very large responses
-        const maxLength = 50000;
-        let body = result.body;
-        if (body.length > maxLength) {
-          body = body.slice(0, maxLength) + '\n\n[Response truncated]';
-        }
-
-        // For success (2xx), just return body. For errors, include status.
-        if (result.status >= 200 && result.status < 300) {
-          return ok(body);
-        }
-        return ok(`Error ${result.status}:\n${body}`);
+        return ok(formatResponse(result));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return ok(`Error: ${message}`);
@@ -395,19 +424,7 @@ export function registerHttpTools(server: McpServer): void {
         curlArgs.push(args.url);
 
         const result = await executeCurl(curlArgs);
-
-        // Truncate very large responses
-        const maxLength = 50000;
-        let body = result.body;
-        if (body.length > maxLength) {
-          body = body.slice(0, maxLength) + '\n\n[Response truncated]';
-        }
-
-        // For success (2xx), just return body. For errors, include status.
-        if (result.status >= 200 && result.status < 300) {
-          return ok(body);
-        }
-        return ok(`Error ${result.status}:\n${body}`);
+        return ok(formatResponse(result));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return ok(`Error: ${message}`);

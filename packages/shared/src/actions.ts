@@ -204,26 +204,6 @@ export type DialogAction = DialogConfirmAction;
 
 export type OSAction = WindowAction | NotificationAction | ToastAction | DialogAction;
 
-// ============ Window Presets ============
-
-export type WindowPreset = 'default' | 'info' | 'alert' | 'document' | 'sidebar' | 'dialog';
-
-export interface WindowPresetConfig {
-  width: number;
-  height: number;
-  x?: number;
-  y?: number;
-}
-
-export const WINDOW_PRESETS: Record<WindowPreset, WindowPresetConfig> = {
-  default: { width: 500, height: 400, x: 100, y: 100 },
-  info: { width: 350, height: 200, x: 150, y: 150 },
-  alert: { width: 300, height: 150, x: 200, y: 200 },
-  document: { width: 600, height: 500, x: 80, y: 60 },
-  sidebar: { width: 300, height: 600, x: 20, y: 40 },
-  dialog: { width: 400, height: 250, x: 180, y: 180 },
-};
-
 // ============ Type Guards ============
 
 export function isWindowAction(action: OSAction): action is WindowAction {

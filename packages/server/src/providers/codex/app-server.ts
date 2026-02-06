@@ -140,8 +140,6 @@ export class AppServer {
       'app-server',
       // Disable shell tool
       '-c', 'features.shell_tool=false',
-      // Disable web search
-      '-c', 'web_search=disabled',
       // Configure YAAR MCP servers
       '-c', `mcp_servers.system.url=http://127.0.0.1:${MCP_PORT}/mcp/system`,
       '-c', 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN',
@@ -152,6 +150,9 @@ export class AppServer {
       '-c', `mcp_servers.apps.url=http://127.0.0.1:${MCP_PORT}/mcp/apps`,
       '-c', 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN',
       '-c', 'model_reasoning_effort = "medium"',
+      '-c', 'model_personality = "none"',
+      '-c', 'sandbox_mode = "danger-full-access"',
+      '-c', 'approval_policy = "never"',
     ];
 
     // Add model if specified

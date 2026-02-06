@@ -4,6 +4,7 @@
  * Provides safe globals and context creation for vm-based code execution.
  */
 
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 
 /** Console log entry with level and arguments */
@@ -187,6 +188,11 @@ export function createSafeGlobals(capturedConsole: CapturedConsole): Record<stri
       getOwnPropertyDescriptor: Reflect.getOwnPropertyDescriptor,
       getPrototypeOf: Reflect.getPrototypeOf,
       isExtensible: Reflect.isExtensible,
+    }),
+
+    // Crypto (pure computation only — no system access, no network, no I/O)
+    crypto: Object.freeze({
+      createHash,
     }),
   };
 }

@@ -5,8 +5,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  WINDOW_PRESETS,
-  type WindowPreset,
   type OSAction,
   type ContentUpdateOperation,
   type DisplayContent,
@@ -45,20 +43,13 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
         content: displayContentSchema.describe('Display content (markdown, html, text, or iframe)'),
-        preset: z
-          .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
-          .optional()
-          .describe('Window preset for consistent styling. Defaults to "default"'),
-        x: z.number().optional().describe('X position (overrides preset)'),
-        y: z.number().optional().describe('Y position (overrides preset)'),
-        width: z.number().optional().describe('Width (overrides preset)'),
-        height: z.number().optional().describe('Height (overrides preset)'),
+        x: z.number().optional().describe('X position (default: 100)'),
+        y: z.number().optional().describe('Y position (default: 100)'),
+        width: z.number().optional().describe('Width (default: 500)'),
+        height: z.number().optional().describe('Height (default: 400)'),
       },
     },
     async (args) => {
-      const presetName = (args.preset || 'default') as WindowPreset;
-      const preset = WINDOW_PRESETS[presetName];
-
       const content = args.content as DisplayContent;
       const renderer = content.renderer;
       const data = content.content;
@@ -68,10 +59,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
         windowId: args.windowId,
         title: args.title,
         bounds: {
-          x: args.x ?? preset.x ?? 100,
-          y: args.y ?? preset.y ?? 100,
-          w: args.width ?? preset.width,
-          h: args.height ?? preset.height,
+          x: args.x ?? 100,
+          y: args.y ?? 100,
+          w: args.width ?? 500,
+          h: args.height ?? 400,
         },
         content: {
           renderer,
@@ -109,20 +100,13 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
         cols: colsSchema.optional()
           .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
         gap: gapEnum.optional().describe('Spacing between components (default: md)'),
-        preset: z
-          .enum(['default', 'info', 'alert', 'document', 'sidebar', 'dialog'])
-          .optional()
-          .describe('Window preset for consistent styling. Defaults to "default"'),
-        x: z.number().optional().describe('X position (overrides preset)'),
-        y: z.number().optional().describe('Y position (overrides preset)'),
-        width: z.number().optional().describe('Width (overrides preset)'),
-        height: z.number().optional().describe('Height (overrides preset)'),
+        x: z.number().optional().describe('X position (default: 100)'),
+        y: z.number().optional().describe('Y position (default: 100)'),
+        width: z.number().optional().describe('Width (default: 500)'),
+        height: z.number().optional().describe('Height (default: 400)'),
       },
     },
     async (args) => {
-      const presetName = (args.preset || 'default') as WindowPreset;
-      const preset = WINDOW_PRESETS[presetName];
-
       const layoutData: ComponentLayout = {
         components: args.components as ComponentLayout['components'],
         cols: args.cols as ComponentLayout['cols'],
@@ -134,10 +118,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
         windowId: args.windowId,
         title: args.title,
         bounds: {
-          x: args.x ?? preset.x ?? 100,
-          y: args.y ?? preset.y ?? 100,
-          w: args.width ?? preset.width,
-          h: args.height ?? preset.height,
+          x: args.x ?? 100,
+          y: args.y ?? 100,
+          w: args.width ?? 500,
+          h: args.height ?? 400,
         },
         content: {
           renderer: 'component',
