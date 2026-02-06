@@ -27,7 +27,7 @@ export const selectWindowAgents = (state: DesktopStore) =>
   state.windowAgents
 
 export const selectWindowAgent = (windowId: string) => (state: DesktopStore) =>
-  state.windowAgents[windowId]
+  Object.values(state.windowAgents).find(wa => wa.windowId === windowId)
 
 export const selectQueuedActionsCount = (windowId: string) => (state: DesktopStore) =>
   state.queuedActions[windowId]?.length ?? 0

@@ -1,5 +1,8 @@
 /**
  * Agents slice - manages active agents and window agents.
+ *
+ * windowAgents is keyed by agentId (not windowId) so multiple parallel agents
+ * working on the same window each get their own entry.
  */
 import type { SliceCreator, AgentsSlice } from '../types'
 
@@ -29,20 +32,24 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
   }),
 
   registerWindowAgent: (windowId, agentId, status) => set((state) => {
-    state.windowAgents[windowId] = { agentId, status }
+    state.windowAgents[agentId] = { agentId, windowId, status }
   }),
 
-  updateWindowAgentStatus: (windowId, status) => set((state) => {
-    if (state.windowAgents[windowId]) {
+  updateWindowAgentStatus: (agentId, status) => set((state) => {
+    if (state.windowAgents[agentId]) {
       if (status === 'released') {
-        delete state.windowAgents[windowId]
+        delete state.windowAgents[agentId]
       } else {
-        state.windowAgents[windowId].status = status
+        state.windowAgents[agentId].status = status
       }
     }
   }),
 
   removeWindowAgent: (windowId) => set((state) => {
-    delete state.windowAgents[windowId]
+    for (const [key, wa] of Object.entries(state.windowAgents)) {
+      if (wa.windowId === windowId) {
+        delete state.windowAgents[key]
+      }
+    }
   }),
 })

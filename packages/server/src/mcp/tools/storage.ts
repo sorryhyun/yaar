@@ -13,7 +13,7 @@ export function registerStorageTools(server: McpServer): void {
     'read',
     {
       description:
-        'Read a file from the persistent storage directory. For PDF files, returns page count - use /api/pdf/<path>/<page> URLs to display pages visually instead of describing them.',
+        'Read a file from the persistent storage directory. For PDF files, returns page count — display them by creating an iframe window with src="/api/storage/<path>" to use the browser\'s built-in PDF viewer. NEVER render PDF content as markdown.',
       inputSchema: {
         path: z.string().describe('Path to the file relative to storage/'),
       },
@@ -26,7 +26,7 @@ export function registerStorageTools(server: McpServer): void {
 
       if (result.images && result.images.length > 0) {
         const totalPages = result.totalPages ?? result.images.length;
-        const hint = `\n\nTo display these pages visually, use image components with src="/api/pdf/${args.path}/<page>" where <page> is 1 to ${totalPages}.`;
+        const hint = `\n\nTo display this PDF, create an iframe window with src="/api/storage/${args.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`;
         return okWithImages(
           result.content! + hint,
           result.images.map((img) => ({ data: img.data, mimeType: img.mimeType }))

@@ -204,6 +204,14 @@ export class AgentPool {
   }
 
   /**
+   * Check if any agent has a role starting with the given prefix.
+   * Useful for checking if any agent is working on a window (role may include actionId suffix).
+   */
+  hasRolePrefix(prefix: string): boolean {
+    return this.agents.some((a) => a.currentRole?.startsWith(prefix) ?? false);
+  }
+
+  /**
    * Get pool statistics.
    */
   getStats(): { totalAgents: number; idleAgents: number; busyAgents: number } {

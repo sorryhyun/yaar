@@ -2,10 +2,13 @@
  * Codex App-Server Provider.
  *
  * Uses `codex app-server` for long-running JSON-RPC communication.
- * This provides:
- * - System prompts via baseInstructions in thread/start
- * - Session persistence via thread IDs
- * - Streaming via JSON-RPC notifications
+ * Supports shared AppServer instances with thread forking for parallel agents.
+ *
+ * Architecture:
+ * - One AppServer process per connection (shared across agents)
+ * - Each agent gets its own thread (via thread/start or thread/fork)
+ * - Turns are serialized through the AppServer's turn semaphore
+ *   (notifications lack thread IDs, so only one turn runs at a time)
  */
 
 import { BaseTransport } from '../base-transport.js';
@@ -28,9 +31,53 @@ export class CodexProvider extends BaseTransport {
   readonly systemPrompt = SYSTEM_PROMPT;
 
   private appServer: AppServer | null = null;
+  private ownsAppServer = false; // true if this provider created the AppServer
   private currentSession: ThreadSession | null = null;
-  private pendingMessages: StreamMessage[] = [];
+
+  // Interrupt signal: shared instance field so interrupt() can reach the active query.
+  // Safe because the turn semaphore ensures only one query runs at a time.
   private resolveMessage: ((done: boolean) => void) | null = null;
+
+  /**
+   * Create a CodexProvider.
+   * @param sharedAppServer - Optional shared AppServer to use instead of creating a new one.
+   */
+  constructor(sharedAppServer?: AppServer) {
+    super();
+    if (sharedAppServer) {
+      this.appServer = sharedAppServer;
+      this.appServer.retain();
+      this.ownsAppServer = false;
+    }
+  }
+
+  /**
+   * Get the underlying AppServer (for sharing with other providers).
+   */
+  getAppServer(): AppServer | null {
+    return this.appServer;
+  }
+
+  /**
+   * Get the current thread/session ID.
+   */
+  getSessionId(): string | null {
+    return this.currentSession?.threadId ?? null;
+  }
+
+  /**
+   * Eagerly start the AppServer so it's ready for the first query
+   * and can be shared with other providers.
+   */
+  async warmup(): Promise<boolean> {
+    try {
+      await this.ensureAppServer();
+      return true;
+    } catch (err) {
+      console.error('[codex] Warmup failed:', err);
+      return false;
+    }
+  }
 
   async isAvailable(): Promise<boolean> {
     // Check if Codex CLI is installed
@@ -65,35 +112,24 @@ export class CodexProvider extends BaseTransport {
       // Ensure app-server is running
       await this.ensureAppServer(options.model);
 
-      // Check if we need a new thread (system prompt changed or no session)
-      const needsNewThread =
-        !this.currentSession ||
-        this.currentSession.systemPrompt !== options.systemPrompt;
-
-      if (needsNewThread) {
-        // Start a new thread with the system prompt
-        const result = await this.appServer!.threadStart({
-          baseInstructions: options.systemPrompt,
-        });
-
-        this.currentSession = {
-          threadId: result.thread.id,
-          systemPrompt: options.systemPrompt,
-        };
-
-        // Emit the session ID
-        yield { type: 'text', sessionId: this.currentSession.threadId };
+      // Handle thread creation: new, fork, or reuse
+      const threadCreated = await this.ensureThread(options);
+      if (threadCreated) {
+        yield { type: 'text', sessionId: this.currentSession!.threadId };
       }
 
-      // Set up notification handling
-      this.pendingMessages = [];
+      // Acquire turn lock (only one turn at a time per app-server)
+      await this.appServer!.acquireTurn();
+
+      // pendingMessages is local per-query to avoid cross-talk.
+      // resolveMessage uses the instance field so interrupt() can signal it.
+      const pendingMessages: StreamMessage[] = [];
       this.resolveMessage = null;
 
       const notificationHandler = (method: string, params: unknown) => {
         const message = mapNotification(method, params);
         if (message) {
-          this.pendingMessages.push(message);
-          // Signal that a message is available
+          pendingMessages.push(message);
           if (this.resolveMessage) {
             this.resolveMessage(false);
             this.resolveMessage = null;
@@ -139,8 +175,8 @@ export class CodexProvider extends BaseTransport {
           if (this.isAborted()) break;
 
           // Check for pending messages
-          while (this.pendingMessages.length > 0) {
-            const message = this.pendingMessages.shift()!;
+          while (pendingMessages.length > 0) {
+            const message = pendingMessages.shift()!;
             yield message;
 
             // Stop yielding after complete or error
@@ -154,12 +190,13 @@ export class CodexProvider extends BaseTransport {
             this.resolveMessage = resolve;
           });
 
-          if (done && this.pendingMessages.length === 0) {
+          if (done && pendingMessages.length === 0) {
             break;
           }
         }
       } finally {
         this.appServer!.off('notification', notificationHandler);
+        this.appServer!.releaseTurn();
       }
     } catch (err) {
       if (this.isAbortError(err)) {
@@ -195,13 +232,63 @@ export class CodexProvider extends BaseTransport {
     await super.dispose();
 
     if (this.appServer) {
-      await this.appServer.stop();
+      if (this.ownsAppServer) {
+        // Only stop the process if we created it and no one else is using it
+        if (this.appServer.release()) {
+          await this.appServer.stop();
+        }
+      } else {
+        this.appServer.release();
+      }
       this.appServer = null;
     }
 
     this.currentSession = null;
-    this.pendingMessages = [];
     this.resolveMessage = null;
+  }
+
+  /**
+   * Ensure the thread is set up based on transport options.
+   * Handles three cases: fork from parent, start new, or reuse existing.
+   * Returns true if a new thread was created (caller should yield sessionId).
+   */
+  private async ensureThread(options: TransportOptions): Promise<boolean> {
+    // Case 1: Fork from parent session
+    if (options.forkSession && options.sessionId) {
+      console.log(`[codex] Forking thread from parent ${options.sessionId}`);
+      try {
+        const result = await this.appServer!.threadFork({
+          threadId: options.sessionId,
+        });
+        this.currentSession = {
+          threadId: result.thread.id,
+          systemPrompt: options.systemPrompt,
+        };
+        return true;
+      } catch (err) {
+        console.warn(`[codex] Fork failed, falling back to new thread:`, err);
+        // Fall through to create new thread
+      }
+    }
+
+    // Case 2: Need new thread (no session or system prompt changed)
+    const needsNewThread =
+      !this.currentSession ||
+      this.currentSession.systemPrompt !== options.systemPrompt;
+
+    if (needsNewThread) {
+      const result = await this.appServer!.threadStart({
+        baseInstructions: options.systemPrompt,
+      });
+      this.currentSession = {
+        threadId: result.thread.id,
+        systemPrompt: options.systemPrompt,
+      };
+      return true;
+    }
+
+    // Case 3: Reuse existing thread (same system prompt, continuing conversation)
+    return false;
   }
 
   /**
@@ -212,12 +299,13 @@ export class CodexProvider extends BaseTransport {
       return;
     }
 
-    const config: AppServerConfig = {};
-    if (model) {
-      config.model = model;
-    }
+    const config: AppServerConfig = {
+      model: model ?? 'gpt-5.3-codex',
+    };
 
     this.appServer = new AppServer(config);
+    this.appServer.retain();
+    this.ownsAppServer = true;
 
     // Handle errors
     this.appServer.on('error', (err) => {

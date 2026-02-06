@@ -31,6 +31,10 @@ export interface HandleMessageOptions {
   messageId?: string;
   /** Callback to record messages to context tape */
   onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  /** When true, fork from the parent session instead of continuing it */
+  forkSession?: boolean;
+  /** Parent session/thread ID to fork from (used with forkSession) */
+  parentSessionId?: string;
 }
 
 interface AgentContext {
@@ -232,8 +236,12 @@ export class AgentSession {
     onContextMessage?.('user', fullContent);
 
     try {
+      // For forked sessions, use the parent's session ID so the provider can fork from it.
+      // Otherwise, resume our own session if we've already sent a message.
       let sessionIdToUse: string | undefined;
-      if (this.hasSentFirstMessage && this.sessionId) {
+      if (options.forkSession && options.parentSessionId) {
+        sessionIdToUse = options.parentSessionId;
+      } else if (this.hasSentFirstMessage && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
 
@@ -241,6 +249,7 @@ export class AgentSession {
       const transportOptions: TransportOptions = {
         systemPrompt: this.provider.systemPrompt + memory,
         sessionId: sessionIdToUse,
+        forkSession: options.forkSession,
         images: images.length > 0 ? images : undefined,
       };
       this.hasSentFirstMessage = true;

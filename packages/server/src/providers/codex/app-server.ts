@@ -18,6 +18,8 @@ import type {
   ThreadStartResult,
   TurnStartParams,
   ThreadResumeParams,
+  ThreadForkParams,
+  ThreadForkResult,
   InitializeParams,
   InitializeResult,
 } from './types.js';
@@ -32,7 +34,7 @@ const RESTART_DELAY_MS = 1000;
  * Configuration for the app-server.
  */
 export interface AppServerConfig {
-  /** Model to use (default: gpt-5.2) */
+  /** Model to use (default: gpt-5.3-codex) */
   model?: string;
   /** Request timeout in milliseconds */
   requestTimeout?: number;
@@ -77,6 +79,11 @@ export class AppServer {
   private restartCount = 0;
   private isShuttingDown = false;
   private readonly config: AppServerConfig;
+  private refCount = 0;
+
+  // Turn serialization: only one turn runs at a time on a single app-server
+  private turnQueue: Array<{ resolve: () => void }> = [];
+  private turnActive = false;
 
   // Event listeners
   private notificationListeners: Array<(method: string, params: unknown) => void> = [];
@@ -333,6 +340,65 @@ export class AppServer {
       throw new Error('AppServer is not running');
     }
     await this.client.request<TurnStartParams, void>('turn/start', params);
+  }
+
+  /**
+   * Fork an existing thread into a new independent thread.
+   * The forked thread inherits the parent's conversation history.
+   */
+  async threadFork(params: ThreadForkParams): Promise<ThreadForkResult> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<ThreadForkParams, ThreadForkResult>(
+      'thread/fork',
+      params
+    );
+  }
+
+  // ============================================================================
+  // Turn Serialization
+  // ============================================================================
+
+  /**
+   * Acquire exclusive turn access. Only one turn runs at a time per app-server
+   * because notifications are not tagged with thread/turn IDs.
+   */
+  async acquireTurn(): Promise<void> {
+    if (!this.turnActive) {
+      this.turnActive = true;
+      return;
+    }
+    return new Promise<void>((resolve) => {
+      this.turnQueue.push({ resolve });
+    });
+  }
+
+  /**
+   * Release turn access, allowing the next queued turn to proceed.
+   */
+  releaseTurn(): void {
+    const next = this.turnQueue.shift();
+    if (next) {
+      next.resolve();
+    } else {
+      this.turnActive = false;
+    }
+  }
+
+  // ============================================================================
+  // Reference Counting
+  // ============================================================================
+
+  /** Increment reference count (called when a provider starts using this server). */
+  retain(): void {
+    this.refCount++;
+  }
+
+  /** Decrement reference count. Returns true if no more references remain. */
+  release(): boolean {
+    this.refCount = Math.max(0, this.refCount - 1);
+    return this.refCount === 0;
   }
 
   // ============================================================================

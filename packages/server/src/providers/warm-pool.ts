@@ -9,6 +9,7 @@
  */
 
 import type { AITransport, ProviderType } from './types.js';
+import type { AppServer } from './codex/app-server.js';
 
 /**
  * Configuration for the warm pool.
@@ -46,6 +47,7 @@ class ProviderWarmPool {
   private initializing = false;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private sharedCodexAppServer: AppServer | null = null;
 
   constructor(config: Partial<WarmPoolConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -106,6 +108,8 @@ class ProviderWarmPool {
 
   /**
    * Create and warm up a provider instance.
+   * For Codex, reuses the shared AppServer so new providers start instantly
+   * (no subprocess spawn) and can fork threads for context inheritance.
    */
   private async createWarmProvider(providerType: ProviderType): Promise<AITransport | null> {
     try {
@@ -116,9 +120,9 @@ class ProviderWarmPool {
         const { ClaudeSessionProvider } = await import('./claude/index.js');
         provider = new ClaudeSessionProvider();
       } else {
-        // Use regular provider for Codex
+        // Use regular provider for Codex, sharing the AppServer if available
         const { CodexProvider } = await import('./codex/index.js');
-        provider = new CodexProvider();
+        provider = new CodexProvider(this.sharedCodexAppServer ?? undefined);
       }
 
       // Check availability
@@ -134,6 +138,14 @@ class ProviderWarmPool {
         if (!success) {
           console.warn(`[WarmPool] Warmup failed for ${providerType}`);
           // Still return the provider - it will work, just not pre-warmed
+        }
+      }
+
+      // Capture the AppServer from the first Codex provider for sharing
+      if (providerType === 'codex' && !this.sharedCodexAppServer) {
+        const getAppServer = (provider as { getAppServer?: () => AppServer | null }).getAppServer;
+        if (getAppServer) {
+          this.sharedCodexAppServer = getAppServer.call(provider);
         }
       }
 
@@ -243,6 +255,7 @@ class ProviderWarmPool {
     this.pool = [];
     this.initialized = false;
     this.preferredProvider = null;
+    this.sharedCodexAppServer = null;
   }
 }
 

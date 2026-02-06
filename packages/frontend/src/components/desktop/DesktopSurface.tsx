@@ -141,11 +141,9 @@ export function DesktopSurface() {
           </div>
           <div className={styles.agentPanelList}>
             {agentList.map((agent) => {
-              // Find window associated with this agent
-              const windowEntry = Object.entries(windowAgents).find(
-                ([, wa]) => wa.agentId === agent.id
-              )
-              const windowId = windowEntry?.[0]
+              // Find window associated with this agent (keyed by agentId)
+              const windowAgent = windowAgents[agent.id]
+              const windowId = windowAgent?.windowId
               const windowTitle = windowId ? windows[windowId]?.title : null
 
               return (
@@ -215,7 +213,7 @@ export function DesktopSurface() {
           y={contextMenu.y}
           windowId={contextMenu.windowId}
           windowTitle={contextMenu.windowTitle}
-          hasWindowAgent={contextMenu.windowId ? !!windowAgents[contextMenu.windowId] : false}
+          hasWindowAgent={contextMenu.windowId ? Object.values(windowAgents).some(wa => wa.windowId === contextMenu.windowId) : false}
           onSend={sendMessage}
           onSendToWindow={sendWindowMessage}
           onClose={hideContextMenu}

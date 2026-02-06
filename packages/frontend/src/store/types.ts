@@ -132,7 +132,7 @@ export interface AgentsSliceActions {
   clearAllAgents: () => void
   toggleAgentPanel: () => void
   registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void
-  updateWindowAgentStatus: (windowId: string, status: WindowAgent['status']) => void
+  updateWindowAgentStatus: (agentId: string, status: WindowAgent['status']) => void
   removeWindowAgent: (windowId: string) => void
 }
 

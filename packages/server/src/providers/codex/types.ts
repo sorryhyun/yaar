@@ -124,6 +124,21 @@ export interface ThreadResumeParams {
 }
 
 /**
+ * Parameters for thread/fork request.
+ * Branches an existing thread into a new independent thread.
+ */
+export interface ThreadForkParams {
+  threadId: string;
+}
+
+/**
+ * Response from thread/fork request.
+ */
+export interface ThreadForkResult {
+  thread: Thread;
+}
+
+/**
  * Parameters for turn/start request.
  */
 export interface TurnStartParams {

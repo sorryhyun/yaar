@@ -75,6 +75,7 @@ export interface ActiveAgent {
 
 export interface WindowAgent {
   agentId: string
+  windowId: string
   status: 'assigned' | 'active' | 'released'
 }
 

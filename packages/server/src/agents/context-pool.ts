@@ -252,8 +252,13 @@ export class ContextPool {
       return;
     }
 
+    // Use unique agent IDs for parallel tasks so the dashboard shows each one
+    const agentRole = isParallel
+      ? `window-${windowId}/${task.actionId}`
+      : `window-${windowId}`;
+
     try {
-      const agent = await this.agentPool.acquire(`window-${windowId}`);
+      const agent = await this.agentPool.acquire(agentRole);
       if (!agent) {
         limiter.release();
         this.windowQueuePolicy.setProcessing(processingKey, false);
@@ -266,18 +271,18 @@ export class ContextPool {
         return;
       }
 
-      console.log(`[ContextPool] Agent ${agent.instanceId} acquired for window ${windowId}`);
+      console.log(`[ContextPool] Agent ${agent.instanceId} acquired for window ${windowId} (role: ${agentRole})`);
 
-      await this.sharedLogger?.registerAgent(`window-${windowId}`, 'default', windowId);
-      await this.sendWindowStatus(windowId, `window-${windowId}`, 'assigned');
+      await this.sharedLogger?.registerAgent(agentRole, 'default', windowId);
+      await this.sendWindowStatus(windowId, agentRole, 'assigned');
 
       await this.sendEvent({
         type: 'MESSAGE_ACCEPTED',
         messageId: task.messageId,
-        agentId: `window-${windowId}`,
+        agentId: agentRole,
       });
 
-      await this.sendWindowStatus(windowId, `window-${windowId}`, 'active');
+      await this.sendWindowStatus(windowId, agentRole, 'active');
 
       // Compute fingerprint and check for reload matches
       const windowSnapshot = this.windowState.listWindows();
@@ -291,15 +296,20 @@ export class ContextPool {
       // Record user message immediately
       this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
 
+      // Get parent session ID for thread forking (inherits main conversation context)
+      const parentSessionId = this.agentPool.getPrimaryAgent()?.getRawSessionId() ?? undefined;
+
       await agent.session.handleMessage(this.contextAssembly.buildWindowPrompt(task.content, {
         openWindows: openWindowsContext,
         reloadPrefix,
         contextPrefix,
       }), {
-        role: `window-${windowId}`,
+        role: agentRole,
         source,
         interactions: task.interactions,
         messageId: task.messageId,
+        forkSession: true,
+        parentSessionId,
         onContextMessage: (role, content) => {
           if (role === 'assistant') {
             this.contextAssembly.appendAssistantMessage(this.contextTape, content, source);
@@ -312,7 +322,7 @@ export class ContextPool {
       this.reloadPolicy.maybeRecord(task, fp, recordedActions, windowId);
 
       this.agentPool.release(agent);
-      await this.sendWindowStatus(windowId, `window-${windowId}`, 'released');
+      await this.sendWindowStatus(windowId, agentRole, 'released');
     } finally {
       limiter.release();
       this.windowQueuePolicy.setProcessing(processingKey, false);
@@ -366,7 +376,7 @@ export class ContextPool {
   }
 
   hasActiveAgent(windowId: string): boolean {
-    return this.agentPool.hasRole(`window-${windowId}`);
+    return this.agentPool.hasRolePrefix(`window-${windowId}`);
   }
 
   getWindowAgentId(windowId: string): string | undefined {

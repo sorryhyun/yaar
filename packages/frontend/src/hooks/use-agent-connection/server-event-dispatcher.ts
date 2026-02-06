@@ -10,7 +10,7 @@ export interface ServerEventDispatchHandlers {
   setAgentActive: (agentId: string, status: string) => void
   clearAgent: (agentId: string) => void
   registerWindowAgent: (windowId: string, agentId: string, status: 'assigned' | 'active' | 'released') => void
-  updateWindowAgentStatus: (windowId: string, status: 'assigned' | 'active' | 'released') => void
+  updateWindowAgentStatus: (agentId: string, status: 'assigned' | 'active' | 'released') => void
 }
 
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
@@ -79,7 +79,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       if (status === 'assigned') {
         handlers.registerWindowAgent(windowId, agentId, status)
       } else {
-        handlers.updateWindowAgentStatus(windowId, status)
+        handlers.updateWindowAgentStatus(agentId, status)
       }
       break
     }
