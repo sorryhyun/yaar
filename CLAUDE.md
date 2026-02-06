@@ -99,21 +99,42 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 
 1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
 2. **ContextPool**: Unified task orchestration — main messages processed sequentially, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
-3. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio.
+3. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio. Dynamic imports keep SDK dependencies lazy.
 4. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
 5. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
 6. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections.
 7. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 8. **Session forking**: Window agents fork from the default agent's session, inheriting context but running independently.
-9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing.
+9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
+10. **Policy pattern**: Server decomposes complex behavior into focused policy classes:
+    - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
+    - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
 See `docs/common_flow.md` for detailed agent pool, fork, and message flow diagrams.
+
+### Server Subsystems
+
+Beyond agents and providers, the server has additional subsystems:
+- **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
+- **`sandbox/`** — In-browser code compilation (Bun bundler) for user-generated content
+- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore
+
+### Connection Lifecycle
+
+```
+WebSocket connects → SessionManager created (lazy init)
+  → First message → ContextPool initialized → AgentPool created → Warm provider acquired
+  → Messages routed: USER_MESSAGE → main queue (sequential), WINDOW_MESSAGE → window handler (parallel)
+  → Window interaction → fork from default agent's session → independent window agent
+  → WebSocket disconnects → all agents disposed
+```
 
 ## Code Style
 
 - All packages: TypeScript strict mode, ESM (`"type": "module"`)
-- Frontend: path alias `@/` → `src/`
+- Frontend: path alias `@/` → `src/`, CSS Modules for component styles
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
+- Server imports use `.js` extensions (ESM requirement for Node.js)
 
 ## Apps System
 
