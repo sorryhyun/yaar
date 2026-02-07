@@ -39,10 +39,19 @@ export type {
 
 // ============ Slice State Types ============
 
+export interface BoundsUpdate {
+  windowId: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface WindowsSliceState {
   windows: Record<string, WindowModel>
   zOrder: string[]
   focusedWindowId: string | null
+  pendingBoundsUpdates: BoundsUpdate[]
 }
 
 export interface WindowsSliceActions {
@@ -51,6 +60,8 @@ export interface WindowsSliceActions {
   userMoveWindow: (windowId: string, x: number, y: number) => void
   userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void
   handleWindowAction: (action: OSAction) => void
+  queueBoundsUpdate: (windowId: string) => void
+  consumeBoundsUpdates: () => BoundsUpdate[]
 }
 
 export type WindowsSlice = WindowsSliceState & WindowsSliceActions

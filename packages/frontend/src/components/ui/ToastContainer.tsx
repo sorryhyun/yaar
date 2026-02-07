@@ -1,7 +1,7 @@
 /**
  * ToastContainer - Displays toast notifications.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useDesktopStore, selectToasts } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
 import styles from '@/styles/ToastContainer.module.css'
@@ -13,19 +13,40 @@ interface ToastContainerProps {
 export function ToastContainer({ onToastAction }: ToastContainerProps) {
   const toasts = useDesktopStore(useShallow(selectToasts))
   const dismissToast = useDesktopStore(s => s.dismissToast)
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  // Auto-dismiss toasts (per-toast duration or default 5s)
+  // Auto-dismiss toasts - only create timers for newly appeared toasts
   useEffect(() => {
-    const timers = toasts.map(toast => {
-      return setTimeout(() => {
-        dismissToast(toast.id)
-      }, toast.duration ?? 5000)
-    })
+    for (const toast of toasts) {
+      if (!timersRef.current.has(toast.id)) {
+        const timer = setTimeout(() => {
+          dismissToast(toast.id)
+          timersRef.current.delete(toast.id)
+        }, toast.duration ?? 5000)
+        timersRef.current.set(toast.id, timer)
+      }
+    }
 
-    return () => {
-      timers.forEach(clearTimeout)
+    // Clean up timers for removed toasts
+    const currentIds = new Set(toasts.map(t => t.id))
+    for (const [id, timer] of timersRef.current) {
+      if (!currentIds.has(id)) {
+        clearTimeout(timer)
+        timersRef.current.delete(id)
+      }
     }
   }, [toasts, dismissToast])
+
+  // Cleanup all timers on unmount
+  useEffect(() => {
+    const timers = timersRef.current
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer)
+      }
+      timers.clear()
+    }
+  }, [])
 
   return (
     <div className={styles.container}>

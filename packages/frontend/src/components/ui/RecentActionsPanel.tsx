@@ -3,7 +3,7 @@
  *
  * Shows human-readable summaries of OS Actions with expandable details.
  */
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useDesktopStore } from '@/store'
 import type { OSAction } from '@yaar/shared'
 import styles from '@/styles/RecentActionsPanel.module.css'
@@ -73,9 +73,21 @@ export function RecentActionsPanel() {
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel)
   const clearActivityLog = useDesktopStore((state) => state.clearActivityLog)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const [position, setPosition] = useState({ x: 150, y: 150 })
+  const [position, setPosition] = useState({ x: 720, y: 100 })
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
+  const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null)
+
+  // Cleanup document listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (listenersRef.current) {
+        document.removeEventListener('mousemove', listenersRef.current.move)
+        document.removeEventListener('mouseup', listenersRef.current.up)
+        listenersRef.current = null
+      }
+    }
+  }, [])
 
   // Convert activity log to entries with IDs
   const entries: ActionEntry[] = activityLog.map((action, index) => ({
@@ -103,8 +115,10 @@ export function RecentActionsPanel() {
       setIsDragging(false)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      listenersRef.current = null
     }
 
+    listenersRef.current = { move: handleMouseMove, up: handleMouseUp }
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [position])

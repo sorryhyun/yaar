@@ -1,7 +1,7 @@
 /**
  * WindowFrame - Draggable, resizable window container.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store'
 import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
@@ -28,7 +28,7 @@ function exportContent(content: WindowModel['content'], title: string) {
       const tableData = data as { headers?: string[]; rows?: unknown[][] }
       if (tableData.headers && tableData.rows) {
         const csv = [
-          tableData.headers.join(','),
+          tableData.headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','),
           ...tableData.rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
         ].join('\n')
         blob = new Blob([csv], { type: 'text/csv' })
@@ -68,7 +68,7 @@ interface WindowFrameProps {
 }
 
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, showContextMenu, addRenderingFeedback, logInteraction } =
+  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, queueBoundsUpdate, showContextMenu, addRenderingFeedback, logInteraction } =
     useDesktopStore()
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
   const windowAgent = useDesktopStore(selectWindowAgent(window.id))
@@ -88,6 +88,18 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
+  const listenersRef = useRef<Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>>([])
+
+  // Cleanup document listeners on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      for (const { move, up } of listenersRef.current) {
+        document.removeEventListener('mousemove', move)
+        document.removeEventListener('mouseup', up)
+      }
+      listenersRef.current = []
+    }
+  }, [])
 
   // Handle window focus
   const handleMouseDown = useCallback(() => {
@@ -113,15 +125,19 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       )
     }
 
-    const handleMouseUp = () => {
+    const entry = { move: handleMouseMove, up: handleMouseUp }
+    function handleMouseUp() {
       setIsDragging(false)
+      queueBoundsUpdate(window.id)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      listenersRef.current = listenersRef.current.filter(e => e !== entry)
     }
 
+    listenersRef.current.push(entry)
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [window.id, window.bounds.x, window.bounds.y, userMoveWindow])
+  }, [window.id, window.bounds.x, window.bounds.y, userMoveWindow, queueBoundsUpdate])
 
   // Handle resize from any edge/corner
   const handleResizeStart = useCallback((direction: string, e: React.MouseEvent) => {
@@ -160,15 +176,19 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       userResizeWindow(window.id, newW, newH, posChanged ? newX : undefined, posChanged ? newY : undefined)
     }
 
-    const handleMouseUp = () => {
+    const entry = { move: handleMouseMove, up: handleMouseUp }
+    function handleMouseUp() {
       setIsResizing(false)
+      queueBoundsUpdate(window.id)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      listenersRef.current = listenersRef.current.filter(e => e !== entry)
     }
 
+    listenersRef.current.push(entry)
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }, [window.id, window.bounds, userResizeWindow])
+  }, [window.id, window.bounds, userResizeWindow, queueBoundsUpdate])
 
   // Determine position/size (handle maximized state)
   const style: React.CSSProperties = window.maximized

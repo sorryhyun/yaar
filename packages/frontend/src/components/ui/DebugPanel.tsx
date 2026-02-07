@@ -1,7 +1,7 @@
 /**
  * DebugPanel - Shows raw WebSocket interaction with the AI.
  */
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useDesktopStore } from '@/store'
 import type { DebugEntry } from '@/types/state'
 import styles from '@/styles/DebugPanel.module.css'
@@ -47,6 +47,18 @@ export function DebugPanel() {
   const [position, setPosition] = useState({ x: 100, y: 100 })
   const [isDragging, setIsDragging] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
+  const listenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null)
+
+  // Cleanup document listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (listenersRef.current) {
+        document.removeEventListener('mousemove', listenersRef.current.move)
+        document.removeEventListener('mouseup', listenersRef.current.up)
+        listenersRef.current = null
+      }
+    }
+  }, [])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return
@@ -67,8 +79,10 @@ export function DebugPanel() {
       setIsDragging(false)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      listenersRef.current = null
     }
 
+    listenersRef.current = { move: handleMouseMove, up: handleMouseUp }
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [position])

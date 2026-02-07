@@ -11,6 +11,9 @@ export const selectVisibleWindows = (state: DesktopStore) =>
     .map(id => state.windows[id])
     .filter((w): w is WindowModel => w != null && !w.minimized)
 
+export const selectMinimizedWindows = (state: DesktopStore) =>
+  Object.values(state.windows).filter((w): w is WindowModel => w != null && w.minimized)
+
 export const selectToasts = (state: DesktopStore) =>
   Object.values(state.toasts)
 

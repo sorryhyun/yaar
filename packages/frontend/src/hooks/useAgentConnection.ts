@@ -41,6 +41,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAgent,
     clearAllAgents,
     consumePendingFeedback,
+    consumeBoundsUpdates,
     consumeInteractions,
     consumeDrawing,
     registerWindowAgent,
@@ -259,6 +260,25 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     })
     return unsubscribe
   }, [consumePendingFeedback, send])
+
+  useEffect(() => {
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.pendingBoundsUpdates.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+        const updates = consumeBoundsUpdates()
+        for (const item of updates) {
+          send({
+            type: 'WINDOW_BOUNDS_UPDATE',
+            windowId: item.windowId,
+            x: item.x,
+            y: item.y,
+            w: item.w,
+            h: item.h,
+          })
+        }
+      }
+    })
+    return unsubscribe
+  }, [consumeBoundsUpdates, send])
 
   useEffect(() => {
     let previousWindows = useDesktopStore.getState().windows

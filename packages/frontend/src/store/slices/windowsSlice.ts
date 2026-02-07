@@ -7,10 +7,11 @@ import type { OSAction } from '@yaar/shared'
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared'
 import { emptyContentByRenderer, addDebugLogEntry } from '../helpers'
 
-export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
+export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, get) => ({
   windows: {},
   zOrder: [],
   focusedWindowId: null,
+  pendingBoundsUpdates: [],
 
   handleWindowAction: (action: OSAction) => set((state) => {
     const store = state as DesktopStore
@@ -317,4 +318,33 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       })
     }
   }),
+
+  queueBoundsUpdate: (windowId) => set((state) => {
+    const win = state.windows[windowId]
+    if (!win) return
+    // Replace any existing pending update for the same window
+    const idx = state.pendingBoundsUpdates.findIndex(u => u.windowId === windowId)
+    const update = {
+      windowId,
+      x: win.bounds.x,
+      y: win.bounds.y,
+      w: win.bounds.w,
+      h: win.bounds.h,
+    }
+    if (idx >= 0) {
+      state.pendingBoundsUpdates[idx] = update
+    } else {
+      state.pendingBoundsUpdates.push(update)
+    }
+  }),
+
+  consumeBoundsUpdates: () => {
+    const updates = get().pendingBoundsUpdates
+    if (updates.length > 0) {
+      set((state) => {
+        state.pendingBoundsUpdates = []
+      })
+    }
+    return updates
+  },
 })

@@ -1,0 +1,39 @@
+.taskbar {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-dark-overlay-strong);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(10px);
+  z-index: var(--z-panel);
+  max-width: calc(100vw - 48px);
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-overlay-strong);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 160px;
+  transition: background var(--transition-fast);
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tabTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

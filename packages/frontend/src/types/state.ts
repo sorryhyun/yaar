@@ -21,6 +21,7 @@ export interface NotificationModel {
   title: string
   body: string
   icon?: string
+  duration?: number
   timestamp: number
 }
 

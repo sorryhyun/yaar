@@ -83,6 +83,15 @@ export interface ToastActionEvent {
   eventId: string;
 }
 
+export interface WindowBoundsUpdateEvent {
+  type: 'WINDOW_BOUNDS_UPDATE';
+  windowId: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -93,7 +102,8 @@ export type ClientEvent =
   | RenderingFeedbackEvent
   | ComponentActionEvent
   | DialogFeedbackEvent
-  | ToastActionEvent;
+  | ToastActionEvent
+  | WindowBoundsUpdateEvent;
 
 // ============ Server → Client Events ============
 

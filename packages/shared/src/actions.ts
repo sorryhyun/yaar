@@ -137,6 +137,7 @@ export interface NotificationShowAction {
   title: string;
   body: string;
   icon?: string;
+  duration?: number;
 }
 
 export interface NotificationDismissAction {

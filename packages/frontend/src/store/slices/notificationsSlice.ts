@@ -15,6 +15,7 @@ export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, 
           title: action.title,
           body: action.body,
           icon: action.icon,
+          duration: action.duration,
           timestamp: Date.now(),
         }
         break

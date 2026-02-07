@@ -174,6 +174,22 @@ export class SessionManager {
         reloadCacheManager.get(this.connectionId).markFailed(event.eventId);
         console.log(`[SessionManager] Reload cache entry "${event.eventId}" reported as failed by user`);
         break;
+
+      case 'WINDOW_BOUNDS_UPDATE': {
+        // User moved/resized a window on the frontend — persist the new bounds
+        const windowState = windowStateRegistryManager.get(this.connectionId);
+        const moveAction = { type: 'window.move' as const, windowId: event.windowId, x: event.x, y: event.y };
+        const resizeAction = { type: 'window.resize' as const, windowId: event.windowId, w: event.w, h: event.h };
+        windowState.handleAction(moveAction);
+        windowState.handleAction(resizeAction);
+
+        const logger = this.pool?.getSessionLogger();
+        if (logger) {
+          await logger.logAction(moveAction);
+          await logger.logAction(resizeAction);
+        }
+        break;
+      }
     }
   }
 

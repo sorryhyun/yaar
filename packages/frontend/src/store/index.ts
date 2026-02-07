@@ -5,6 +5,7 @@ export { useDesktopStore } from './desktop'
 export {
   selectWindowsInOrder,
   selectVisibleWindows,
+  selectMinimizedWindows,
   selectToasts,
   selectNotifications,
   selectDialogs,
