@@ -3,11 +3,14 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { join, extname } from 'path';
-import { renderPdfPage } from '../../pdf/index.js';
+import { renderPdfPage } from '../../lib/pdf/index.js';
 import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES } from '../../config.js';
 import { sendError, safePath } from '../utils.js';
+
+/** Supported image extensions for app icons */
+const ICON_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']);
 
 export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   // Render PDF page as image
@@ -71,6 +74,54 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       res.end(content);
     } catch {
       sendError(res, 'File not found', 404);
+    }
+    return true;
+  }
+
+  // Serve app icon image
+  // URL format: /api/apps/{appId}/icon
+  const appIconMatch = url.pathname.match(/^\/api\/apps\/([a-z][a-z0-9-]*)\/icon$/);
+  if (appIconMatch && req.method === 'GET') {
+    const appId = appIconMatch[1];
+    const appDir = join(PROJECT_ROOT, 'apps', appId);
+
+    const validated = safePath(PROJECT_ROOT, join('apps', appId));
+    if (!validated) {
+      sendError(res, 'Access denied', 403);
+      return true;
+    }
+
+    try {
+      const files = await readdir(appDir);
+      let iconFile: string | undefined;
+      for (const file of files) {
+        const lower = file.toLowerCase();
+        const dotIdx = lower.lastIndexOf('.');
+        if (dotIdx === -1) continue;
+        const baseName = lower.slice(0, dotIdx);
+        const ext = lower.slice(dotIdx);
+        if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.has(ext)) {
+          iconFile = file;
+          break;
+        }
+      }
+
+      if (!iconFile) {
+        sendError(res, 'Icon not found', 404);
+        return true;
+      }
+
+      const iconPath = join(appDir, iconFile);
+      const content = await readFile(iconPath);
+      const ext = extname(iconFile).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600',
+      });
+      res.end(content);
+    } catch {
+      sendError(res, 'Icon not found', 404);
     }
     return true;
   }

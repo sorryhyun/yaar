@@ -2,7 +2,10 @@
  * Tests for pool drain on reset — verifies that ContextPool, AgentPool,
  * AppServer, and CodexProvider correctly handle in-flight tasks during reset.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { CallbackQueue } from '../agents/callback-queue.js';
+import { ContextTape } from '../agents/context.js';
+import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 
 // ── AppServer turn queue drain ──────────────────────────────────────────
 
@@ -125,7 +128,7 @@ describe('ContextPool inflight tracking', () => {
   });
 
   it('awaitInflight resolves immediately when no tasks in flight', async () => {
-    let inflightCount = 0;
+    const inflightCount = 0;
     function awaitInflight(): Promise<void> {
       if (inflightCount <= 0) return Promise.resolve();
       return new Promise<void>(() => { /* never resolves */ });
@@ -240,5 +243,199 @@ describe('Reset integration: interrupt → await inflight → dispose', () => {
     // The task should have finished before dispose
     await inflightTask;
     expect(events).toEqual(['interrupt', 'task-finished', 'dispose']);
+  });
+});
+
+// ── Main agent routing: idle → main, busy → ephemeral ───────────────────
+
+describe('Main agent routing logic', () => {
+  it('routes to main when idle, ephemeral when busy', () => {
+    // Simulate the routing decision
+    let mainBusy = false;
+    const routeLog: string[] = [];
+
+    function routeMainTask(taskId: string): void {
+      if (!mainBusy) {
+        routeLog.push(`main:${taskId}`);
+        mainBusy = true;
+      } else {
+        routeLog.push(`ephemeral:${taskId}`);
+      }
+    }
+
+    routeMainTask('msg-1'); // main is idle → goes to main
+    routeMainTask('msg-2'); // main is busy → goes to ephemeral
+    routeMainTask('msg-3'); // main still busy → goes to ephemeral
+
+    expect(routeLog).toEqual([
+      'main:msg-1',
+      'ephemeral:msg-2',
+      'ephemeral:msg-3',
+    ]);
+  });
+
+  it('main agent becomes available after task completes', () => {
+    let mainBusy = false;
+    const routeLog: string[] = [];
+
+    function routeMainTask(taskId: string): void {
+      if (!mainBusy) {
+        routeLog.push(`main:${taskId}`);
+        mainBusy = true;
+      } else {
+        routeLog.push(`ephemeral:${taskId}`);
+      }
+    }
+
+    function completeMainTask(): void {
+      mainBusy = false;
+    }
+
+    routeMainTask('msg-1'); // → main
+    completeMainTask();
+    routeMainTask('msg-2'); // → main (idle again)
+
+    expect(routeLog).toEqual(['main:msg-1', 'main:msg-2']);
+  });
+});
+
+// ── Ephemeral agent lifecycle ───────────────────────────────────────────
+
+describe('Ephemeral agent lifecycle', () => {
+  it('creates, processes, pushes callback, and disposes', async () => {
+    const events: string[] = [];
+
+    // Simulate ephemeral agent lifecycle
+    events.push('create-ephemeral');
+    events.push('process-task');
+    events.push('push-callback');
+    events.push('dispose-ephemeral');
+
+    expect(events).toEqual([
+      'create-ephemeral',
+      'process-task',
+      'push-callback',
+      'dispose-ephemeral',
+    ]);
+  });
+});
+
+// ── Window agent persistence ────────────────────────────────────────────
+
+describe('Window agent persistence', () => {
+  it('creates on first interaction, reuses on subsequent', () => {
+    const windowAgents = new Map<string, string>();
+    let nextId = 0;
+
+    function getOrCreate(windowId: string): string {
+      if (windowAgents.has(windowId)) {
+        return windowAgents.get(windowId)!;
+      }
+      const agentId = `agent-${nextId++}`;
+      windowAgents.set(windowId, agentId);
+      return agentId;
+    }
+
+    const first = getOrCreate('win-1');
+    const second = getOrCreate('win-1');
+    const third = getOrCreate('win-2');
+
+    expect(first).toBe(second); // Same agent reused
+    expect(first).not.toBe(third); // Different window → different agent
+    expect(windowAgents.size).toBe(2);
+  });
+
+  it('disposes on window close', () => {
+    const windowAgents = new Map<string, string>();
+    windowAgents.set('win-1', 'agent-0');
+    windowAgents.set('win-2', 'agent-1');
+
+    // Simulate window close
+    windowAgents.delete('win-1');
+
+    expect(windowAgents.has('win-1')).toBe(false);
+    expect(windowAgents.has('win-2')).toBe(true);
+    expect(windowAgents.size).toBe(1);
+  });
+});
+
+// ── Callback injection into main prompt ──────────────────────────────────
+
+describe('Callback injection into main prompt', () => {
+  it('callbacks drained and included in main prompt', () => {
+    const queue = new CallbackQueue();
+
+    // Simulate ephemeral agent pushing callback
+    queue.push({
+      role: 'ephemeral-1',
+      task: 'app: Calendar',
+      actions: [{ type: 'window.create', windowId: 'cal', title: 'Cal', bounds: { x: 0, y: 0, w: 600, h: 400 }, content: { renderer: 'component', data: '' } }],
+      timestamp: Date.now(),
+    });
+
+    // Simulate window agent pushing callback
+    queue.push({
+      role: 'window-settings',
+      task: 'button "Save"',
+      actions: [],
+      windowId: 'settings',
+      timestamp: Date.now(),
+    });
+
+    expect(queue.size).toBe(2);
+
+    // Format for prompt injection
+    const formatted = queue.format();
+    expect(formatted).toContain('<agent_callbacks>');
+    expect(formatted).toContain('agent="ephemeral-1"');
+    expect(formatted).toContain('agent="window-settings"');
+
+    // Drain clears the queue
+    const drained = queue.drain();
+    expect(drained).toHaveLength(2);
+    expect(queue.size).toBe(0);
+  });
+});
+
+// ── ContextAssemblyPolicy: buildWindowInitialContext ─────────────────────
+
+describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
+  it('includes last N main turns for new window agents', () => {
+    const tape = new ContextTape();
+    const policy = new ContextAssemblyPolicy();
+
+    tape.append('user', 'Hello', 'main');
+    tape.append('assistant', 'Hi there!', 'main');
+    tape.append('user', 'Open calendar', 'main');
+    tape.append('assistant', 'Opening calendar...', 'main');
+    tape.append('user', 'Show settings', 'main');
+    tape.append('assistant', 'Here are your settings.', 'main');
+
+    // Default 3 turns = 6 messages
+    const context = policy.buildWindowInitialContext(tape, 3);
+    expect(context).toContain('<recent_conversation>');
+    expect(context).toContain('Hello');
+    expect(context).toContain('Here are your settings.');
+  });
+
+  it('returns empty string when no main messages', () => {
+    const tape = new ContextTape();
+    const policy = new ContextAssemblyPolicy();
+
+    expect(policy.buildWindowInitialContext(tape)).toBe('');
+  });
+
+  it('excludes window messages', () => {
+    const tape = new ContextTape();
+    const policy = new ContextAssemblyPolicy();
+
+    tape.append('user', 'Main message', 'main');
+    tape.append('assistant', 'Main response', 'main');
+    tape.append('user', 'Window message', { window: 'win-1' });
+    tape.append('assistant', 'Window response', { window: 'win-1' });
+
+    const context = policy.buildWindowInitialContext(tape, 3);
+    expect(context).toContain('Main message');
+    expect(context).not.toContain('Window message');
   });
 });

@@ -6,7 +6,7 @@
 
 import { join } from 'path';
 import { getConfigDir } from '../storage/storage-manager.js';
-import type { ConnectionId } from '../events/broadcast-center.js';
+import type { ConnectionId } from '../websocket/broadcast-center.js';
 import { ReloadCache } from './cache.js';
 
 export type { Fingerprint, CacheEntry, CacheMatch } from './types.js';

@@ -13,7 +13,7 @@ import { writeFile, mkdir, cp, stat } from 'fs/promises';
 import { join, dirname, normalize, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { ok } from '../utils.js';
-import { compileTypeScript, getSandboxPath } from '../../compiler/index.js';
+import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 
 // Compute apps directory from project root
 const __dirname = dirname(fileURLToPath(import.meta.url));

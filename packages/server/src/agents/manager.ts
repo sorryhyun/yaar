@@ -9,7 +9,7 @@
 import { ContextPool } from './context-pool.js';
 import type { ContextMessage } from './context.js';
 import type { ClientEvent } from '@yaar/shared';
-import type { ConnectionId } from '../events/broadcast-center.js';
+import type { ConnectionId } from '../websocket/broadcast-center.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { reloadCacheManager } from '../reload/index.js';
 import { windowStateRegistryManager } from '../mcp/window-state.js';
@@ -59,9 +59,14 @@ export class SessionManager {
     console.log(`[SessionManager] Lazy initializing pool for ${this.connectionId}`);
     const windowState = windowStateRegistryManager.get(this.connectionId);
     const reloadCache = await reloadCacheManager.ensureLoaded(this.connectionId);
-    windowState.setOnWindowClose((wid) => reloadCache.invalidateForWindow(wid));
-
     this.pool = new ContextPool(this.connectionId, windowState, reloadCache, this.restoredContext, this.savedThreadIds);
+
+    // Chain both window close handlers: reload cache + pool agent cleanup
+    const pool = this.pool;
+    windowState.setOnWindowClose((wid) => {
+      reloadCache.invalidateForWindow(wid);
+      pool.handleWindowClose(wid);
+    });
     const success = await this.pool.initialize();
     this.initialized = success;
     return success;

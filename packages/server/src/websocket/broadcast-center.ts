@@ -1,5 +1,5 @@
 /**
- * BroadcastCenter - Centralized event hub for routing agent events to WebSocket connections.
+ * BroadcastCenter - Centralized event hub for routing events to WebSocket connections.
  *
  * Decouples agents from WebSocket connections, allowing:
  * - Agents to send events without holding WebSocket references
@@ -14,7 +14,6 @@ export type ConnectionId = string;
 
 export class BroadcastCenter {
   private connections: Map<ConnectionId, WebSocket> = new Map();
-  private agentToConnection: Map<string, ConnectionId> = new Map();
 
   /**
    * Register a WebSocket connection.
@@ -25,47 +24,11 @@ export class BroadcastCenter {
   }
 
   /**
-   * Unregister a WebSocket connection and clean up associated agents.
+   * Unregister a WebSocket connection.
    */
   unsubscribe(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
-
-    // Clean up agent mappings for this connection
-    const agentsToRemove: string[] = [];
-    for (const [agentId, connId] of this.agentToConnection.entries()) {
-      if (connId === connectionId) {
-        agentsToRemove.push(agentId);
-      }
-    }
-    for (const agentId of agentsToRemove) {
-      this.agentToConnection.delete(agentId);
-    }
-
-    console.log(
-      `[BroadcastCenter] Connection unsubscribed: ${connectionId}, ` +
-        `cleaned up ${agentsToRemove.length} agent(s)`
-    );
-  }
-
-  /**
-   * Register an agent with a connection.
-   */
-  registerAgent(agentId: string, connectionId: ConnectionId): void {
-    this.agentToConnection.set(agentId, connectionId);
-  }
-
-  /**
-   * Unregister an agent.
-   */
-  unregisterAgent(agentId: string): void {
-    this.agentToConnection.delete(agentId);
-  }
-
-  /**
-   * Get the connection ID for an agent.
-   */
-  getConnectionForAgent(agentId: string): ConnectionId | undefined {
-    return this.agentToConnection.get(agentId);
+    console.log(`[BroadcastCenter] Connection unsubscribed: ${connectionId}`);
   }
 
   /**
@@ -74,19 +37,6 @@ export class BroadcastCenter {
   isConnectionActive(connectionId: ConnectionId): boolean {
     const ws = this.connections.get(connectionId);
     return ws !== undefined && ws.readyState === ws.OPEN;
-  }
-
-  /**
-   * Publish an event to the connection associated with an agent.
-   * Returns true if the event was sent successfully.
-   */
-  publishToAgent(event: ServerEvent, agentId: string): boolean {
-    const connectionId = this.agentToConnection.get(agentId);
-    if (!connectionId) {
-      console.warn(`[BroadcastCenter] No connection for agent: ${agentId}`);
-      return false;
-    }
-    return this.publishToConnection(event, connectionId);
   }
 
   /**
@@ -126,35 +76,17 @@ export class BroadcastCenter {
   /**
    * Get stats for monitoring.
    */
-  getStats(): {
-    connectionCount: number;
-    agentCount: number;
-  } {
+  getStats(): { connectionCount: number } {
     return {
       connectionCount: this.connections.size,
-      agentCount: this.agentToConnection.size,
     };
   }
 
   /**
-   * Get all registered agents for a connection.
-   */
-  getAgentsForConnection(connectionId: ConnectionId): string[] {
-    const agents: string[] = [];
-    for (const [agentId, connId] of this.agentToConnection.entries()) {
-      if (connId === connectionId) {
-        agents.push(agentId);
-      }
-    }
-    return agents;
-  }
-
-  /**
-   * Clear all connections and agents (for testing/shutdown).
+   * Clear all connections (for testing/shutdown).
    */
   clear(): void {
     this.connections.clear();
-    this.agentToConnection.clear();
   }
 }
 

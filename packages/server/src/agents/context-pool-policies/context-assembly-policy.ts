@@ -1,5 +1,6 @@
 import type { UserInteraction } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
+import type { CallbackQueue } from '../callback-queue.js';
 
 export interface MainPromptContext {
   prompt: string;
@@ -37,18 +38,61 @@ export class ContextAssemblyPolicy {
     return `<open_windows>${windowIds.join(', ')}</open_windows>\n\n`;
   }
 
-  buildMainPrompt(content: string, options: { interactions?: UserInteraction[]; openWindows: string; reloadPrefix: string }): MainPromptContext {
+  /**
+   * Build main agent prompt, draining and injecting callbacks from parallel agents.
+   */
+  buildMainPrompt(content: string, options: {
+    interactions?: UserInteraction[];
+    openWindows: string;
+    reloadPrefix: string;
+    callbackQueue?: CallbackQueue;
+  }): MainPromptContext {
     const interactionPrefix = options.interactions?.length
       ? this.formatInteractionsForContext(options.interactions)
       : '';
+
+    // Drain callbacks from parallel agents and inject as prefix
+    const callbackPrefix = options.callbackQueue?.format() ?? '';
+    // Drain the queue after formatting so main agent consumes them
+    if (options.callbackQueue && options.callbackQueue.size > 0) {
+      options.callbackQueue.drain();
+    }
+
     return {
-      prompt: options.openWindows + options.reloadPrefix + content,
+      prompt: callbackPrefix + options.openWindows + options.reloadPrefix + content,
       contextContent: interactionPrefix + content,
     };
   }
 
-  buildWindowPrompt(content: string, options: { openWindows: string; reloadPrefix: string; contextPrefix: string }): string {
-    return options.openWindows + options.reloadPrefix + options.contextPrefix + content;
+  /**
+   * Build prompt for window agent interactions (subsequent turns, session continuity).
+   * No contextPrefix — window agents maintain their own provider session.
+   */
+  buildWindowPrompt(content: string, options: {
+    openWindows: string;
+    reloadPrefix: string;
+  }): string {
+    return options.openWindows + options.reloadPrefix + content;
+  }
+
+  /**
+   * Build initial context for a new window agent.
+   * Includes the last N main conversation turns so the window agent has context
+   * about what the user and main agent have been discussing.
+   */
+  buildWindowInitialContext(tape: ContextTape, maxTurns: number = 3): string {
+    const mainMessages = tape.getMessages({ includeWindows: false });
+    if (mainMessages.length === 0) return '';
+
+    // Take the last N turns (each turn = user + assistant pair)
+    const recent = mainMessages.slice(-maxTurns * 2);
+    if (recent.length === 0) return '';
+
+    const formatted = recent.map((m) => {
+      return `<${m.role}>${m.content}</${m.role}>`;
+    }).join('\n\n');
+
+    return `<recent_conversation>\n${formatted}\n</recent_conversation>\n\n`;
   }
 
   appendUserMessage(tape: ContextTape, content: string, source: ContextSource): void {

@@ -10,7 +10,7 @@ import type { AITransport, TransportOptions, ProviderType } from '../providers/t
 import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
 import type { SessionLogger } from '../logging/index.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
-import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
@@ -91,6 +91,7 @@ export class AgentSession {
     this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.sessionLogger = sharedLogger ?? null;
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const connection = this;
 
     this.providerLifecycle = new ProviderLifecycleManager(

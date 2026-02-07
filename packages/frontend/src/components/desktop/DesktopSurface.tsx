@@ -24,14 +24,10 @@ import styles from '@/styles/DesktopSurface.module.css'
 interface AppInfo {
   id: string
   name: string
+  icon?: string
+  iconType?: 'emoji' | 'image'
   hasSkill: boolean
   hasCredentials: boolean
-}
-
-/** Map app IDs to emoji icons (fallback to default) */
-const APP_ICONS: Record<string, string> = {
-  moltbook: '📱',
-  default: '📦',
 }
 
 export function DesktopSurface() {
@@ -184,9 +180,13 @@ export function DesktopSurface() {
             className={styles.desktopIcon}
             onClick={() => handleAppClick(app.id)}
           >
-            <span className={styles.iconImage}>
-              {APP_ICONS[app.id] || APP_ICONS.default}
-            </span>
+            {app.iconType === 'image' ? (
+              <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
+            ) : (
+              <span className={styles.iconImage}>
+                {app.icon || '📦'}
+              </span>
+            )}
             <span className={styles.iconLabel}>{app.name}</span>
           </button>
         ))}

@@ -6,7 +6,7 @@
 
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
-import { pdfToImages, getPdfPageCount } from '../pdf/index.js';
+import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
 import type {
   StorageEntry,
   StorageReadResult,

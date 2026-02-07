@@ -115,7 +115,10 @@ See `docs/common_flow.md` for detailed agent pool, fork, and message flow diagra
 
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
-- **`sandbox/`** — In-browser code compilation (Bun bundler) for user-generated content
+- **`lib/`** — Standalone utilities with no server internal dependencies:
+  - `compiler/` — esbuild bundler for sandbox apps
+  - `pdf/` — PDF rendering via poppler
+  - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore
 
 ### Connection Lifecycle

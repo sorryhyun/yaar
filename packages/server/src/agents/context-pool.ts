@@ -1,18 +1,19 @@
 /**
- * ContextPool - Unified task orchestration with context-centric architecture.
+ * ContextPool - Unified task orchestration with main agent + callbacks architecture.
  *
  * Routes tasks to agents via AgentPool:
- * - Main tasks are processed sequentially
- * - Window tasks run in parallel across windows, sequentially within each
- * - ContextTape records all conversation history by source
+ * - Main tasks: main agent (idle) or ephemeral agent (busy) — sequential queue
+ * - Window tasks: persistent per-window agents — parallel across windows, sequential within
+ * - CallbackQueue: ephemeral/window agents push callbacks, drained on main agent's next turn
+ * - ContextTape: kept for logging/debugging and providing initial context to new window agents
  */
 
-import { AgentSession } from './session.js';
 import { ContextTape, type ContextMessage, type ContextSource } from './context.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
+import { CallbackQueue } from './callback-queue.js';
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
-import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
@@ -37,12 +38,14 @@ export interface Task {
 }
 
 /**
- * ContextPool manages task orchestration with a shared context tape.
+ * ContextPool manages task orchestration with a persistent main agent,
+ * ephemeral overflow agents, and persistent per-window agents.
  */
 export class ContextPool {
   private connectionId: ConnectionId;
   private agentPool: AgentPool;
   private contextTape: ContextTape;
+  private callbackQueue: CallbackQueue;
   private sharedLogger: SessionLogger | null = null;
   private windowState: WindowStateRegistry;
 
@@ -72,6 +75,7 @@ export class ContextPool {
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
     this.contextTape = new ContextTape();
+    this.callbackQueue = new CallbackQueue();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
       console.log(`[ContextPool] Restored ${restoredContext.length} context messages from previous session`);
@@ -80,7 +84,7 @@ export class ContextPool {
   }
 
   /**
-   * Initialize the pool with the first agent.
+   * Initialize the pool with the main agent.
    */
   async initialize(): Promise<boolean> {
     const provider = await acquireWarmProvider();
@@ -97,8 +101,8 @@ export class ContextPool {
     this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);
 
-    const firstAgent = await this.agentPool.createAgent(provider);
-    if (!firstAgent) {
+    const mainAgent = await this.agentPool.createMainAgent(provider);
+    if (!mainAgent) {
       await provider.dispose();
       return false;
     }
@@ -159,19 +163,24 @@ export class ContextPool {
 
   // ── Main task processing ──────────────────────────────────────────────
 
+  /**
+   * Route a main task: to the main agent if idle, or to an ephemeral agent.
+   */
   private async queueMainTask(task: Task): Promise<void> {
-    const agent = this.agentPool.findIdle();
-    if (agent) {
-      await this.processMainTask(agent, task);
+    if (!this.agentPool.isMainAgentBusy()) {
+      // Main agent idle → process directly
+      await this.processMainTask(this.agentPool.getMainAgent()!, task);
       return;
     }
 
-    const newAgent = await this.agentPool.createAgent();
-    if (newAgent) {
-      await this.processMainTask(newAgent, task);
+    // Main agent busy → try ephemeral
+    const ephemeral = await this.agentPool.createEphemeral();
+    if (ephemeral) {
+      await this.processEphemeralTask(ephemeral, task);
       return;
     }
 
+    // No agents available → queue
     if (!this.mainQueuePolicy.canEnqueue()) {
       await this.sendEvent({
         type: 'ERROR',
@@ -190,8 +199,11 @@ export class ContextPool {
     });
   }
 
+  /**
+   * Process a main task on the main agent (provider session continuity).
+   * Drains callback queue before processing.
+   */
   private async processMainTask(agent: PooledAgent, task: Task): Promise<void> {
-    this.agentPool.clearIdleTimer(agent);
     agent.currentRole = `main-${task.messageId}`;
     agent.lastUsed = Date.now();
 
@@ -201,9 +213,9 @@ export class ContextPool {
       agentId: `main-${task.messageId}`,
     });
 
-    console.log(`[ContextPool] Processing main task ${task.messageId} with agent ${agent.id}`);
+    console.log(`[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id}`);
 
-    // Record user message immediately so parallel tasks can see it
+    // Build prompt with callback injection
     const windowSnapshot = this.windowState.listWindows();
     const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
     const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
@@ -212,6 +224,7 @@ export class ContextPool {
       interactions: task.interactions,
       openWindows: openWindowsContext,
       reloadPrefix,
+      callbackQueue: this.callbackQueue,
     });
     this.contextAssembly.appendUserMessage(this.contextTape, mainContext.contextContent, 'main');
 
@@ -236,19 +249,77 @@ export class ContextPool {
     const recordedActions = agent.session.getRecordedActions();
     this.reloadPolicy.maybeRecord(task, fp, recordedActions);
 
-    this.agentPool.release(agent);
+    agent.currentRole = null;
     await this.processMainQueue();
   }
 
+  /**
+   * Process a main task on an ephemeral agent (fresh provider, no context).
+   * Pushes a callback when done, then disposes the agent.
+   */
+  private async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
+    const ephemeralRole = `ephemeral-${task.messageId}`;
+    agent.currentRole = ephemeralRole;
+    agent.lastUsed = Date.now();
+
+    await this.sendEvent({
+      type: 'MESSAGE_ACCEPTED',
+      messageId: task.messageId,
+      agentId: ephemeralRole,
+    });
+
+    console.log(`[ContextPool] Processing main task ${task.messageId} with ephemeral agent ${agent.id}`);
+
+    // Ephemeral agents get open windows + reload options + content, but NO callback prefix and NO conversation history
+    const windowSnapshot = this.windowState.listWindows();
+    const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
+    const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
+    const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
+    const prompt = openWindowsContext + reloadPrefix + task.content;
+
+    // Record user message to tape
+    this.contextAssembly.appendUserMessage(this.contextTape, task.content, 'main');
+
+    try {
+      await agent.session.handleMessage(prompt, {
+        role: ephemeralRole,
+        source: 'main',
+        interactions: task.interactions,
+        messageId: task.messageId,
+        onContextMessage: (role, content) => {
+          if (role === 'assistant') {
+            this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
+          }
+        },
+      });
+
+      // Record actions for cache + push callback
+      const recordedActions = agent.session.getRecordedActions();
+      this.reloadPolicy.maybeRecord(task, fp, recordedActions);
+
+      this.callbackQueue.push({
+        role: ephemeralRole,
+        task: task.content.slice(0, 100),
+        actions: recordedActions,
+        timestamp: Date.now(),
+      });
+    } finally {
+      agent.currentRole = null;
+      await this.agentPool.disposeEphemeral(agent);
+    }
+  }
+
+  /**
+   * Process queued main tasks when the main agent becomes available.
+   */
   private async processMainQueue(): Promise<void> {
     if (!this.mainQueuePolicy.beginProcessing()) return;
     try {
       while (this.mainQueuePolicy.size() > 0) {
-        const agent = this.agentPool.findIdle();
-        if (!agent) break;
+        if (this.agentPool.isMainAgentBusy()) break;
 
         const next = this.mainQueuePolicy.dequeue();
-        if (next) await this.processMainTask(agent, next.task);
+        if (next) await this.processMainTask(this.agentPool.getMainAgent()!, next.task);
       }
     } finally {
       this.mainQueuePolicy.endProcessing();
@@ -283,41 +354,28 @@ export class ContextPool {
 
     this.windowQueuePolicy.setProcessing(processingKey, true);
 
-    // Acquire global agent slot
-    const limiter = getAgentLimiter();
-    try {
-      await limiter.acquire(30000);
-    } catch (err) {
-      this.windowQueuePolicy.setProcessing(processingKey, false);
-      console.error(`[ContextPool] Failed to acquire limiter for ${task.messageId}:`, err);
-      await this.sendEvent({
-        type: 'ERROR',
-        error: `Failed to acquire agent slot: ${err instanceof Error ? err.message : String(err)}`,
-      });
-      if (!isParallel) await this.processWindowQueue(processingKey);
-      return;
-    }
-
-    // Use unique agent IDs for parallel tasks so the dashboard shows each one
     const agentRole = isParallel
       ? `window-${windowId}/${task.actionId}`
       : `window-${windowId}`;
 
     try {
-      const agent = await this.agentPool.acquire(agentRole);
+      // Get or create persistent window agent
+      const agent = await this.agentPool.getOrCreateWindowAgent(windowId);
       if (!agent) {
-        limiter.release();
         this.windowQueuePolicy.setProcessing(processingKey, false);
-        console.error(`[ContextPool] Failed to acquire agent for window ${windowId}`);
+        console.error(`[ContextPool] Failed to create window agent for ${windowId}`);
         await this.sendEvent({
           type: 'ERROR',
-          error: `Failed to acquire agent for window ${windowId}`,
+          error: `Failed to create agent for window ${windowId}`,
         });
         if (!isParallel) await this.processWindowQueue(processingKey);
         return;
       }
 
-      console.log(`[ContextPool] Agent ${agent.instanceId} acquired for window ${windowId} (role: ${agentRole})`);
+      agent.currentRole = agentRole;
+      agent.lastUsed = Date.now();
+
+      console.log(`[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (role: ${agentRole})`);
 
       await this.sharedLogger?.registerAgent(agentRole, 'default', windowId);
       await this.sendWindowStatus(windowId, agentRole, 'assigned');
@@ -334,32 +392,38 @@ export class ContextPool {
       const windowSnapshot = this.windowState.listWindows();
       const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
       const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
-
-      const contextPrefix = this.contextTape.formatForPrompt({ includeWindows: false });
       const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
       const source: ContextSource = { window: windowId };
 
       // Record user message immediately
       this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
 
-      // Get parent session ID for thread forking (inherits main conversation context)
-      const parentSessionId = this.agentPool.getPrimaryAgent()?.getRawSessionId() ?? undefined;
-
+      // Build prompt: first interaction gets recent main context, subsequent get session continuity
       const canonicalWindow = `window-${windowId}`;
       const resumeSessionId = this.savedThreadIds?.[canonicalWindow];
       delete this.savedThreadIds?.[canonicalWindow];
 
-      await agent.session.handleMessage(this.contextAssembly.buildWindowPrompt(task.content, {
-        openWindows: openWindowsContext,
-        reloadPrefix,
-        contextPrefix,
-      }), {
+      let prompt: string;
+      if (!resumeSessionId && agent.session.getRawSessionId() === null) {
+        // First interaction: include recent main conversation context
+        const recentContext = this.contextAssembly.buildWindowInitialContext(this.contextTape);
+        prompt = recentContext + this.contextAssembly.buildWindowPrompt(task.content, {
+          openWindows: openWindowsContext,
+          reloadPrefix,
+        });
+      } else {
+        // Subsequent interaction: session continuity, no extra context
+        prompt = this.contextAssembly.buildWindowPrompt(task.content, {
+          openWindows: openWindowsContext,
+          reloadPrefix,
+        });
+      }
+
+      await agent.session.handleMessage(prompt, {
         role: agentRole,
         source,
         interactions: task.interactions,
         messageId: task.messageId,
-        forkSession: !resumeSessionId, // Skip fork if resuming a saved thread
-        parentSessionId: resumeSessionId ? undefined : parentSessionId,
         canonicalAgent: canonicalWindow,
         resumeSessionId,
         onContextMessage: (role, content) => {
@@ -373,10 +437,18 @@ export class ContextPool {
       const recordedActions = agent.session.getRecordedActions();
       this.reloadPolicy.maybeRecord(task, fp, recordedActions, windowId);
 
-      this.agentPool.release(agent);
+      // Push callback so main agent knows what happened
+      this.callbackQueue.push({
+        role: agentRole,
+        task: task.content.slice(0, 100),
+        actions: recordedActions,
+        windowId,
+        timestamp: Date.now(),
+      });
+
+      agent.currentRole = null;
       await this.sendWindowStatus(windowId, agentRole, 'released');
     } finally {
-      limiter.release();
       this.windowQueuePolicy.setProcessing(processingKey, false);
       if (!isParallel) await this.processWindowQueue(processingKey);
     }
@@ -390,10 +462,45 @@ export class ContextPool {
     }
   }
 
+  // ── Window lifecycle ───────────────────────────────────────────────────
+
+  /**
+   * Handle window close: dispose window agent, push callback, prune context.
+   * Called by SessionManager when a window close action is processed.
+   */
+  handleWindowClose(windowId: string): void {
+    // Push a callback about the window closing
+    this.callbackQueue.push({
+      role: `window-${windowId}`,
+      task: `Window "${windowId}" closed`,
+      actions: [{ type: 'window.close', windowId }],
+      windowId,
+      timestamp: Date.now(),
+    });
+
+    // Dispose the window agent (async, fire-and-forget)
+    this.agentPool.disposeWindowAgent(windowId).catch((err) => {
+      console.error(`[ContextPool] Error disposing window agent for ${windowId}:`, err);
+    });
+
+    // Prune window context from tape
+    const pruned = this.contextTape.pruneWindow(windowId);
+    if (pruned.length > 0) {
+      console.log(`[ContextPool] Pruned ${pruned.length} messages from closed window ${windowId}`);
+    }
+
+    // Clean up agent map entry
+    this.windowAgentMap.delete(windowId);
+  }
+
   // ── Query methods ─────────────────────────────────────────────────────
 
   getContextTape(): ContextTape {
     return this.contextTape;
+  }
+
+  getCallbackQueue(): CallbackQueue {
+    return this.callbackQueue;
   }
 
   pruneWindowContext(windowId: string): void {
@@ -405,8 +512,8 @@ export class ContextPool {
     return this.sharedLogger;
   }
 
-  getPrimaryAgent(): AgentSession | null {
-    return this.agentPool.getPrimaryAgent();
+  getPrimaryAgent(): import('./session.js').AgentSession | null {
+    return this.agentPool.getMainAgentSession();
   }
 
   async interruptAll(): Promise<void> {
@@ -444,13 +551,14 @@ export class ContextPool {
 
     // 7. Clear remaining state
     this.contextTape.clear();
+    this.callbackQueue.clear();
     this.windowAgentMap.clear();
     this.windowState.clear();
 
-    // 8. Re-create a fresh primary agent
+    // 8. Re-create a fresh main agent
     const provider = await acquireWarmProvider();
     if (provider) {
-      const agent = await this.agentPool.createAgent(provider);
+      const agent = await this.agentPool.createMainAgent(provider);
       if (agent) {
         await this.sendEvent({
           type: 'CONNECTION_STATUS',
@@ -464,7 +572,7 @@ export class ContextPool {
     }
 
     this.resetting = false;
-    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, queues, and window state`);
+    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, callbacks, queues, and window state`);
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {
@@ -486,6 +594,10 @@ export class ContextPool {
     mainQueueSize: number;
     windowQueueSizes: Record<string, number>;
     contextTapeSize: number;
+    callbackQueueSize: number;
+    mainAgent: boolean;
+    windowAgents: number;
+    ephemeralAgents: number;
   } {
     const poolStats = this.agentPool.getStats();
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
@@ -494,6 +606,7 @@ export class ContextPool {
       mainQueueSize: this.mainQueuePolicy.size(),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
+      callbackQueueSize: this.callbackQueue.size,
     };
   }
 
@@ -541,6 +654,7 @@ export class ContextPool {
     this.windowAgentMap.clear();
     this.windowState.clear();
     this.contextTape.clear();
+    this.callbackQueue.clear();
     this.sharedLogger = null;
     this.resetting = false;
   }

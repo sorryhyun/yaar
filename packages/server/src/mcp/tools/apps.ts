@@ -39,10 +39,14 @@ function getLegacyStorageCredentialsPath(appId: string): string {
   return join(PROJECT_ROOT, 'storage', 'credentials', `${appId}.json`);
 }
 
+/** Supported image extensions for app icons */
+const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
+
 export interface AppInfo {
   id: string;
   name: string;
   icon?: string;
+  iconType?: 'emoji' | 'image';
   hasSkill: boolean;
   hasCredentials: boolean;
   isCompiled?: boolean;  // Has index.html (TypeScript compiled app)
@@ -159,14 +163,35 @@ export async function listApps(): Promise<AppInfo[]> {
 
       // Check for app.json metadata
       let icon: string | undefined;
+      let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
       try {
         const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
         const meta = JSON.parse(metaContent);
         icon = meta.icon;
+        if (icon) iconType = 'emoji';
         displayName = meta.name;
       } catch {
         // No metadata or invalid JSON
+      }
+
+      // Check for icon image file (takes priority over emoji)
+      try {
+        const files = await readdir(appPath);
+        for (const file of files) {
+          const lower = file.toLowerCase();
+          const dotIdx = lower.lastIndexOf('.');
+          if (dotIdx === -1) continue;
+          const baseName = lower.slice(0, dotIdx);
+          const ext = lower.slice(dotIdx);
+          if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.includes(ext)) {
+            icon = `/api/apps/${appId}/icon`;
+            iconType = 'image';
+            break;
+          }
+        }
+      } catch {
+        // Could not read directory
       }
 
       // Convert kebab-case or snake_case to Title Case (fallback)
@@ -179,6 +204,7 @@ export async function listApps(): Promise<AppInfo[]> {
         id: appId,
         name,
         icon,
+        iconType,
         hasSkill,
         hasCredentials: appHasCredentials,
         isCompiled,

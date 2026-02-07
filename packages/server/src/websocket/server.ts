@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { SessionManager } from '../agents/index.js';
 import { windowStateRegistryManager } from '../mcp/window-state.js';
 import { getWarmPool } from '../providers/factory.js';
-import { getBroadcastCenter, generateConnectionId } from '../events/broadcast-center.js';
+import { getBroadcastCenter, generateConnectionId } from './broadcast-center.js';
 import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 

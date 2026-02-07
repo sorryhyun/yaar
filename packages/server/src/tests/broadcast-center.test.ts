@@ -1,4 +1,4 @@
-import { BroadcastCenter } from '../events/broadcast-center.js'
+import { BroadcastCenter } from '../websocket/broadcast-center.js'
 import type { ServerEvent } from '@yaar/shared'
 
 /** Minimal mock of WebSocket */
@@ -29,36 +29,10 @@ describe('BroadcastCenter', () => {
       expect(bc.getStats().connectionCount).toBe(1)
     })
 
-    it('unsubscribe removes connection and cleans up agents', () => {
+    it('unsubscribe removes connection', () => {
       bc.subscribe('c1', createMockWs())
-      bc.registerAgent('a1', 'c1')
-      bc.registerAgent('a2', 'c1')
-
       bc.unsubscribe('c1')
-
       expect(bc.getStats().connectionCount).toBe(0)
-      expect(bc.getStats().agentCount).toBe(0)
-    })
-  })
-
-  describe('agent management', () => {
-    it('registers and looks up agents', () => {
-      bc.registerAgent('a1', 'c1')
-      expect(bc.getConnectionForAgent('a1')).toBe('c1')
-    })
-
-    it('lists agents for a connection', () => {
-      bc.registerAgent('a1', 'c1')
-      bc.registerAgent('a2', 'c1')
-      bc.registerAgent('a3', 'c2')
-
-      expect(bc.getAgentsForConnection('c1')).toEqual(['a1', 'a2'])
-    })
-
-    it('unregisters agents', () => {
-      bc.registerAgent('a1', 'c1')
-      bc.unregisterAgent('a1')
-      expect(bc.getConnectionForAgent('a1')).toBeUndefined()
     })
   })
 
@@ -81,15 +55,6 @@ describe('BroadcastCenter', () => {
       expect(bc.publishToConnection(testEvent, 'c1')).toBe(false)
     })
 
-    it('publishToAgent routes through agent→connection mapping', () => {
-      const ws = createMockWs()
-      bc.subscribe('c1', ws)
-      bc.registerAgent('a1', 'c1')
-
-      expect(bc.publishToAgent(testEvent, 'a1')).toBe(true)
-      expect(ws.send).toHaveBeenCalled()
-    })
-
     it('broadcast sends to all connections', () => {
       const ws1 = createMockWs()
       const ws2 = createMockWs()
@@ -105,8 +70,7 @@ describe('BroadcastCenter', () => {
 
   it('clear removes everything', () => {
     bc.subscribe('c1', createMockWs())
-    bc.registerAgent('a1', 'c1')
     bc.clear()
-    expect(bc.getStats()).toEqual({ connectionCount: 0, agentCount: 0 })
+    expect(bc.getStats()).toEqual({ connectionCount: 0 })
   })
 })

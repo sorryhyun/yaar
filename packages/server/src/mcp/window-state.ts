@@ -7,7 +7,8 @@
 
 import type { OSAction, ContentUpdateOperation, WindowState } from '@yaar/shared';
 import { actionEmitter, type ActionEvent } from './action-emitter.js';
-import { getBroadcastCenter, type ConnectionId } from '../events/broadcast-center.js';
+import { getCurrentConnectionId } from '../agents/session.js';
+import type { ConnectionId } from '../websocket/broadcast-center.js';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
@@ -182,8 +183,7 @@ class WindowStateRegistryManager {
     if (this.unsubscribeAction) return;
 
     this.unsubscribeAction = actionEmitter.onAction((event: ActionEvent) => {
-      if (!event.agentId) return;
-      const connectionId = getBroadcastCenter().getConnectionForAgent(event.agentId);
+      const connectionId = getCurrentConnectionId();
       if (!connectionId) return;
       this.get(connectionId).handleAction(event.action);
     });
