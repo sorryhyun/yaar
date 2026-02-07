@@ -252,6 +252,14 @@ export class AppServer {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
+    // Drain the turn queue so any providers blocked on acquireTurn() unblock.
+    // They will fail at the next RPC call (client is null) which is caught by query().
+    for (const waiter of this.turnQueue) {
+      waiter.resolve();
+    }
+    this.turnQueue = [];
+    this.turnActive = false;
+
     if (this.client) {
       this.client.close();
       this.client = null;

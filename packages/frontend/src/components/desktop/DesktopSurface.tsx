@@ -17,7 +17,6 @@ import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
-import { Taskbar } from '../ui/Taskbar'
 import { DrawingOverlay } from '../drawing/DrawingOverlay'
 import styles from '@/styles/DesktopSurface.module.css'
 
@@ -198,10 +197,7 @@ export function DesktopSurface() {
         <WindowManager />
       </QueueAwareComponentActionProvider>
 
-      {/* Taskbar for minimized windows */}
-      <Taskbar />
-
-      {/* Command input */}
+      {/* Command input (includes taskbar for minimized windows) */}
       <CommandPalette />
 
       {/* Toast notifications (bottom-right) */}

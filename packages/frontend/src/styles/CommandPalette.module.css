@@ -1,6 +1,6 @@
 .container {
   position: fixed;
-  bottom: var(--space-6);
+  bottom: var(--space-3);
   left: 50%;
   transform: translateX(-50%);
   width: 600px;
@@ -8,7 +8,19 @@
   z-index: var(--z-panel);
 }
 
+/* Reserve space below input for minimized tabs so input position is stable */
+.taskbarSlot {
+  height: 36px;
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
 .inputWrapper {
+  flex: 1;
   display: flex;
   gap: var(--space-2);
   background: var(--color-base);
@@ -59,36 +71,113 @@
   cursor: not-allowed;
 }
 
-.toolbar {
+/* Action buttons (gear + reset) */
+.actionButtons {
   display: flex;
-  justify-content: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  gap: 4px;
+  align-items: center;
 }
 
-.toolbarButton {
-  padding: 6px 14px;
-  background: transparent;
+/* Gear settings button */
+.gearWrapper {
+  position: relative;
+}
+
+.gearButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
   color: var(--color-muted);
-  border: var(--border-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-lg);
+}
+
+.gearButton:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gearButton[data-active="true"] {
+  color: var(--color-blue);
+  border-color: var(--color-blue);
+  background: rgba(137, 180, 250, 0.1);
+}
+
+/* Settings popover - appears above the gear button */
+@keyframes popoverIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.settingsPopover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 140px;
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1);
+  animation: popoverIn var(--transition-fast);
+  z-index: 1;
+}
+
+.settingsItem {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-md);
+  color: var(--color-text);
   font-size: var(--text-base);
   font-family: inherit;
   font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.settingsItem:hover {
+  background: var(--bg-overlay-light);
+}
+
+.settingsItem[data-active="true"] {
+  color: var(--color-blue);
+}
+
+.settingsDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: var(--space-1) 0;
+}
+
+/* Reset button */
+.resetButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
+  box-shadow: var(--shadow-lg);
 }
 
-.toolbarButton:hover {
-  background: var(--bg-overlay-light);
+.resetButton:hover {
   color: var(--color-text);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.toolbarButton[data-active="true"] {
-  background: rgba(137, 180, 250, 0.15);
-  color: var(--color-blue);
-  border-color: var(--color-blue);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }

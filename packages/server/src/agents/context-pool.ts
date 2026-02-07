@@ -55,6 +55,11 @@ export class ContextPool {
   private logSessionId: string | null = null;
   private savedThreadIds?: Record<string, string>;
 
+  // Inflight task tracking for clean reset/cleanup
+  private resetting = false;
+  private inflightCount = 0;
+  private inflightResolve: (() => void) | null = null;
+
   constructor(
     connectionId: ConnectionId,
     windowState: WindowStateRegistry,
@@ -108,16 +113,47 @@ export class ContextPool {
     return true;
   }
 
+  // ── Inflight tracking ────────────────────────────────────────────────
+
+  private inflightEnter(): void {
+    this.inflightCount++;
+  }
+
+  private inflightExit(): void {
+    this.inflightCount--;
+    if (this.inflightCount <= 0 && this.inflightResolve) {
+      this.inflightResolve();
+      this.inflightResolve = null;
+    }
+  }
+
+  private awaitInflight(): Promise<void> {
+    if (this.inflightCount <= 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      this.inflightResolve = resolve;
+    });
+  }
+
   // ── Task routing ──────────────────────────────────────────────────────
 
   /**
    * Single entry point for all tasks.
    */
   async handleTask(task: Task): Promise<void> {
-    if (task.type === 'main') {
-      await this.queueMainTask(task);
-    } else {
-      await this.handleWindowTask(task);
+    if (this.resetting) {
+      console.log(`[ContextPool] Rejecting task ${task.messageId} — pool is resetting`);
+      return;
+    }
+
+    this.inflightEnter();
+    try {
+      if (task.type === 'main') {
+        await this.queueMainTask(task);
+      } else {
+        await this.handleWindowTask(task);
+      }
+    } finally {
+      this.inflightExit();
     }
   }
 
@@ -378,15 +414,40 @@ export class ContextPool {
   }
 
   async reset(): Promise<void> {
-    // Dispose all agents (and their providers) — not just interrupt
-    await this.agentPool.cleanup();
-    this.contextTape.clear();
+    this.resetting = true;
+
+    // 1. Clear queues so no new tasks start from dequeue
     this.mainQueuePolicy.clear();
     this.windowQueuePolicy.clear();
+
+    // 2. Reject blocked limiter waiters so they unblock and exit
+    getAgentLimiter().clearWaiting(new Error('Pool resetting'));
+
+    // 3. Interrupt running queries so handleMessage loops exit
+    await this.agentPool.interruptAll();
+
+    // 4. Wait for all in-flight task functions to return
+    await this.awaitInflight();
+
+    // 5. Now safe to dispose agents (no in-flight references)
+    await this.agentPool.cleanup();
+
+    // 6. Close all tracked windows on the frontend
+    const openWindows = this.windowState.listWindows();
+    if (openWindows.length > 0) {
+      const closeActions = openWindows.map((win) => ({
+        type: 'window.close' as const,
+        windowId: win.id,
+      }));
+      await this.sendEvent({ type: 'ACTIONS', actions: closeActions });
+    }
+
+    // 7. Clear remaining state
+    this.contextTape.clear();
     this.windowAgentMap.clear();
     this.windowState.clear();
 
-    // Re-create a fresh primary agent so the pool is ready for the next message
+    // 8. Re-create a fresh primary agent
     const provider = await acquireWarmProvider();
     if (provider) {
       const agent = await this.agentPool.createAgent(provider);
@@ -402,6 +463,7 @@ export class ContextPool {
       }
     }
 
+    this.resetting = false;
     console.log(`[ContextPool] Reset: disposed agents, cleared context tape, queues, and window state`);
   }
 
@@ -458,11 +520,28 @@ export class ContextPool {
   // ── Cleanup ───────────────────────────────────────────────────────────
 
   async cleanup(): Promise<void> {
-    await this.agentPool.cleanup();
+    this.resetting = true;
     this.mainQueuePolicy.clear();
-    this.windowAgentMap.clear();
     this.windowQueuePolicy.clear();
+    getAgentLimiter().clearWaiting(new Error('Pool cleaning up'));
+    await this.agentPool.interruptAll();
+    await this.awaitInflight();
+    await this.agentPool.cleanup();
+
+    // Close all tracked windows on the frontend
+    const openWindows = this.windowState.listWindows();
+    if (openWindows.length > 0) {
+      const closeActions = openWindows.map((win) => ({
+        type: 'window.close' as const,
+        windowId: win.id,
+      }));
+      await this.sendEvent({ type: 'ACTIONS', actions: closeActions });
+    }
+
+    this.windowAgentMap.clear();
+    this.windowState.clear();
     this.contextTape.clear();
     this.sharedLogger = null;
+    this.resetting = false;
   }
 }

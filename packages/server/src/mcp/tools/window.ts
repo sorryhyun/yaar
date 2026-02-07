@@ -152,6 +152,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
       },
     },
     async (args) => {
+      if (!getWindowState().hasWindow(args.windowId)) {
+        return ok(`Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`);
+      }
+
       const content = args.content as DisplayContent | undefined;
       const renderer = content?.renderer;
       const data = content?.content ?? '';
@@ -213,6 +217,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
       },
     },
     async (args) => {
+      if (!getWindowState().hasWindow(args.windowId)) {
+        return ok(`Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`);
+      }
+
       const layoutData: ComponentLayout = {
         components: args.components as ComponentLayout['components'],
         cols: args.cols as ComponentLayout['cols'],
@@ -252,6 +260,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
       },
     },
     async (args) => {
+      if (!getWindowState().hasWindow(args.windowId)) {
+        return ok(`Window "${args.windowId}" does not exist or was already closed.`);
+      }
+
       const osAction: OSAction = {
         type: 'window.close',
         windowId: args.windowId,
@@ -280,6 +292,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
       },
     },
     async (args) => {
+      if (!getWindowState().hasWindow(args.windowId)) {
+        return ok(`Error: Window "${args.windowId}" does not exist. Cannot lock a non-existent window.`);
+      }
+
       const osAction: OSAction = {
         type: 'window.lock',
         windowId: args.windowId,
@@ -304,6 +320,10 @@ export function registerWindowTools(server: McpServer, getWindowState: () => Win
       },
     },
     async (args) => {
+      if (!getWindowState().hasWindow(args.windowId)) {
+        return ok(`Error: Window "${args.windowId}" does not exist. Cannot unlock a non-existent window.`);
+      }
+
       const osAction: OSAction = {
         type: 'window.unlock',
         windowId: args.windowId,

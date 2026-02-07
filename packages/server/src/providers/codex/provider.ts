@@ -112,6 +112,10 @@ export class CodexProvider extends BaseTransport {
       // Ensure app-server is running
       await this.ensureAppServer(options.model);
 
+      // Capture a local reference so dispose() nulling this.appServer
+      // doesn't crash the finally block.
+      const appServer = this.appServer!;
+
       // Handle thread creation: new, fork, or reuse
       const threadCreated = await this.ensureThread(options);
       if (threadCreated) {
@@ -119,7 +123,7 @@ export class CodexProvider extends BaseTransport {
       }
 
       // Acquire turn lock (only one turn at a time per app-server)
-      await this.appServer!.acquireTurn();
+      await appServer.acquireTurn();
 
       // pendingMessages is local per-query to avoid cross-talk.
       // resolveMessage uses the instance field so interrupt() can signal it.
@@ -149,7 +153,7 @@ export class CodexProvider extends BaseTransport {
         }
       };
 
-      this.appServer!.on('notification', notificationHandler);
+      appServer.on('notification', notificationHandler);
 
       try {
         // Build input array with text and optional images
@@ -165,7 +169,7 @@ export class CodexProvider extends BaseTransport {
         }
 
         // Start the turn
-        await this.appServer!.turnStart({
+        await appServer.turnStart({
           threadId: this.currentSession!.threadId,
           input,
         });
@@ -195,8 +199,8 @@ export class CodexProvider extends BaseTransport {
           }
         }
       } finally {
-        this.appServer!.off('notification', notificationHandler);
-        this.appServer!.releaseTurn();
+        appServer.off('notification', notificationHandler);
+        appServer.releaseTurn();
       }
     } catch (err) {
       if (this.isAbortError(err)) {

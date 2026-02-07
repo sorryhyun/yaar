@@ -201,7 +201,7 @@
 /* Desktop Icons */
 .desktopIcons {
   position: absolute;
-  top: 60px;
+  top: 72px;
   left: var(--space-5);
   display: flex;
   flex-direction: column;

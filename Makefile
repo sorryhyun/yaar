@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean
+.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean test test-frontend test-server test-shared
 
 # Run both server and frontend (auto-select provider)
 dev:
@@ -22,11 +22,11 @@ codex-dev:
 
 # Run server only
 server:
-	pnpm --filter @claudeos/server dev
+	pnpm --filter @yaar/server dev
 
 # Run frontend only
 frontend:
-	pnpm --filter @claudeos/frontend dev
+	pnpm --filter @yaar/frontend dev
 
 # Install all dependencies
 install:
@@ -39,6 +39,22 @@ lint:
 # Build all packages
 build:
 	pnpm -r build
+
+# Run all tests
+test:
+	pnpm -r test
+
+# Run frontend tests
+test-frontend:
+	pnpm --filter @yaar/frontend test
+
+# Run server tests
+test-server:
+	pnpm --filter @yaar/server test
+
+# Run shared tests
+test-shared:
+	pnpm --filter @yaar/shared test
 
 # Clean generated files
 clean:

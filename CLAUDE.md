@@ -29,10 +29,9 @@ pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
 
-# Run individual packages (NOTE: `make server`/`make frontend` are broken — they
-# reference old @claudeos/* package names. Use these instead:)
-pnpm --filter @yaar/server dev               # Start server only
-pnpm --filter @yaar/frontend dev             # Start frontend only
+# Run individual packages
+make server                                  # Start server only
+make frontend                                # Start frontend only
 
 # Testing
 pnpm --filter @yaar/frontend vitest run           # Run all frontend tests
@@ -129,12 +128,19 @@ WebSocket connects → SessionManager created (lazy init)
   → WebSocket disconnects → all agents disposed
 ```
 
+## Development Workflow
+
+- `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server → polls `/health` until ready → starts frontend
+- Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
+- Git branch: uses `master` (not `main`)
+
 ## Code Style
 
 - All packages: TypeScript strict mode, ESM (`"type": "module"`)
 - Frontend: path alias `@/` → `src/`, CSS Modules for component styles
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
 - Server imports use `.js` extensions (ESM requirement for Node.js)
+- ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
 
 ## Apps System
 

@@ -229,11 +229,18 @@ export class AgentPool {
 
   /**
    * Clean up all agents and release resources.
+   * Interrupts all running queries first so handleMessage loops exit
+   * before providers are disposed.
    */
   async cleanup(): Promise<void> {
-    const limiter = getAgentLimiter();
+    // Phase 1: interrupt all running agents so their query loops exit
     for (const agent of this.agents) {
       this.clearIdleTimer(agent);
+      await agent.session.interrupt();
+    }
+    // Phase 2: dispose providers and release limiter slots
+    const limiter = getAgentLimiter();
+    for (const agent of this.agents) {
       await agent.session.cleanup();
       limiter.release();
     }
