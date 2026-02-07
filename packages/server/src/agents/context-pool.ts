@@ -22,6 +22,7 @@ import { MainQueuePolicy } from './context-pool-policies/main-queue-policy.js';
 import { WindowQueuePolicy } from './context-pool-policies/window-queue-policy.js';
 import { ContextAssemblyPolicy } from './context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from './context-pool-policies/reload-cache-policy.js';
+import { WindowConnectionPolicy } from './context-pool-policies/window-connection-policy.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -55,6 +56,7 @@ export class ContextPool {
   private windowQueuePolicy = new WindowQueuePolicy();
   private contextAssembly = new ContextAssemblyPolicy();
   private reloadPolicy: ReloadCachePolicy;
+  private windowConnectionPolicy = new WindowConnectionPolicy();
   private logSessionId: string | null = null;
   private savedThreadIds?: Record<string, string>;
 
@@ -335,9 +337,13 @@ export class ContextPool {
     }
 
     const windowId = task.windowId;
-    const processingKey = task.actionId ?? windowId;
+
+    // Resolve agent key: if this window belongs to a group, route to the group's agent
+    const groupId = this.windowConnectionPolicy.getGroupId(windowId);
+    const agentKey = groupId ?? windowId;
+    const processingKey = task.actionId ?? agentKey;
     const isParallel = !!task.actionId;
-    console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (key: ${processingKey}, parallel: ${isParallel})`);
+    console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (agentKey: ${agentKey}, key: ${processingKey}, parallel: ${isParallel})`);
 
     // Queue if this key is already busy (skip for parallel actions)
     if (!isParallel && this.windowQueuePolicy.isProcessing(processingKey)) {
@@ -359,11 +365,11 @@ export class ContextPool {
       : `window-${windowId}`;
 
     try {
-      // Get or create persistent window agent
-      const agent = await this.agentPool.getOrCreateWindowAgent(windowId);
+      // Get or create persistent window agent — keyed by agentKey (groupId or windowId)
+      const agent = await this.agentPool.getOrCreateWindowAgent(agentKey);
       if (!agent) {
         this.windowQueuePolicy.setProcessing(processingKey, false);
-        console.error(`[ContextPool] Failed to create window agent for ${windowId}`);
+        console.error(`[ContextPool] Failed to create window agent for ${agentKey}`);
         await this.sendEvent({
           type: 'ERROR',
           error: `Failed to create agent for window ${windowId}`,
@@ -375,7 +381,7 @@ export class ContextPool {
       agent.currentRole = agentRole;
       agent.lastUsed = Date.now();
 
-      console.log(`[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (role: ${agentRole})`);
+      console.log(`[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`);
 
       await this.sharedLogger?.registerAgent(agentRole, 'default', windowId);
       await this.sendWindowStatus(windowId, agentRole, 'assigned');
@@ -399,7 +405,8 @@ export class ContextPool {
       this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
 
       // Build prompt: first interaction gets recent main context, subsequent get session continuity
-      const canonicalWindow = `window-${windowId}`;
+      // canonicalAgent uses agentKey so the group shares one thread
+      const canonicalWindow = `window-${agentKey}`;
       const resumeSessionId = this.savedThreadIds?.[canonicalWindow];
       delete this.savedThreadIds?.[canonicalWindow];
 
@@ -437,6 +444,14 @@ export class ContextPool {
       const recordedActions = agent.session.getRecordedActions();
       this.reloadPolicy.maybeRecord(task, fp, recordedActions, windowId);
 
+      // Connect any child windows created by this window agent
+      for (const action of recordedActions) {
+        if (action.type === 'window.create') {
+          this.windowConnectionPolicy.connectWindow(windowId, action.windowId);
+          console.log(`[ContextPool] Connected child window ${action.windowId} to parent ${windowId} (group: ${this.windowConnectionPolicy.getGroupId(windowId)})`);
+        }
+      }
+
       // Push callback so main agent knows what happened
       this.callbackQueue.push({
         role: agentRole,
@@ -469,6 +484,10 @@ export class ContextPool {
    * Called by SessionManager when a window close action is processed.
    */
   handleWindowClose(windowId: string): void {
+    // Resolve group BEFORE handleClose modifies it
+    const groupId = this.windowConnectionPolicy.getGroupId(windowId);
+    const agentKey = groupId ?? windowId;
+
     // Push a callback about the window closing
     this.callbackQueue.push({
       role: `window-${windowId}`,
@@ -478,18 +497,24 @@ export class ContextPool {
       timestamp: Date.now(),
     });
 
-    // Dispose the window agent (async, fire-and-forget)
-    this.agentPool.disposeWindowAgent(windowId).catch((err) => {
-      console.error(`[ContextPool] Error disposing window agent for ${windowId}:`, err);
-    });
+    // Update group state and decide if agent should be disposed
+    const closeResult = this.windowConnectionPolicy.handleClose(windowId);
 
-    // Prune window context from tape
+    if (closeResult.shouldDisposeAgent) {
+      // Last window in group (or standalone) — dispose the agent
+      this.agentPool.disposeWindowAgent(agentKey).catch((err) => {
+        console.error(`[ContextPool] Error disposing window agent for ${agentKey}:`, err);
+      });
+    }
+    // Agent survives if other windows remain in the group
+
+    // Prune this window's context from tape (regardless of group status)
     const pruned = this.contextTape.pruneWindow(windowId);
     if (pruned.length > 0) {
       console.log(`[ContextPool] Pruned ${pruned.length} messages from closed window ${windowId}`);
     }
 
-    // Clean up agent map entry
+    // Clean up agent map entry for this window
     this.windowAgentMap.delete(windowId);
   }
 
@@ -553,6 +578,7 @@ export class ContextPool {
     this.contextTape.clear();
     this.callbackQueue.clear();
     this.windowAgentMap.clear();
+    this.windowConnectionPolicy.clear();
     this.windowState.clear();
 
     // 8. Re-create a fresh main agent
@@ -652,6 +678,7 @@ export class ContextPool {
     }
 
     this.windowAgentMap.clear();
+    this.windowConnectionPolicy.clear();
     this.windowState.clear();
     this.contextTape.clear();
     this.callbackQueue.clear();
