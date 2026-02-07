@@ -15,6 +15,8 @@ export interface ExecuteOptions {
   timeout?: number;
   /** Whether to compile as TypeScript (default: false) */
   typescript?: boolean;
+  /** Allowed domains for fetch (empty = fetch disabled) */
+  allowedDomains?: string[];
 }
 
 export interface ExecuteResult {
@@ -41,10 +43,13 @@ export async function executeCode(code: string, options: ExecuteOptions = {}): P
   const startTime = performance.now();
   const timeout = Math.min(options.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
 
-  // Compile TypeScript if needed
-  let jsCode = code;
+  // Wrap code in async IIFE first (so return/await are valid inside function body)
+  const wrappedCode = wrapCodeForExecution(code);
+
+  // Compile TypeScript if needed (after wrapping, so esbuild sees valid function scope)
+  let execCode = wrappedCode;
   if (options.typescript) {
-    const compileResult = await compileTypeScript(code);
+    const compileResult = await compileTypeScript(wrappedCode);
     if (!compileResult.success) {
       return {
         success: false,
@@ -54,26 +59,32 @@ export async function executeCode(code: string, options: ExecuteOptions = {}): P
         executionTimeMs: performance.now() - startTime,
       };
     }
-    jsCode = compileResult.code!;
+    execCode = compileResult.code!;
   }
-
-  // Wrap code to capture return value
-  const wrappedCode = wrapCodeForExecution(jsCode);
 
   // Create sandboxed context
   const capturedConsole = createCapturedConsole();
-  const context = createSandboxContext(capturedConsole);
+  const context = createSandboxContext(capturedConsole, options.allowedDomains ?? []);
 
   try {
     // Create and run the script
-    const script = new vm.Script(wrappedCode, {
+    const script = new vm.Script(execCode, {
       filename: options.typescript ? 'sandbox.ts' : 'sandbox.js',
     });
 
-    const result = script.runInContext(context, {
+    // The vm timeout catches synchronous infinite loops during the sync phase.
+    // The async IIFE returns a Promise which we race against an async timeout.
+    const promiseResult = script.runInContext(context, {
       timeout,
       displayErrors: true,
     });
+
+    // Await the async IIFE result with a timeout for async hangs
+    const asyncTimeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error('Async execution timed out')), timeout);
+    });
+
+    const result = await Promise.race([promiseResult, asyncTimeout]);
 
     // Serialize the result
     let resultStr: string | undefined;
@@ -103,7 +114,7 @@ export async function executeCode(code: string, options: ExecuteOptions = {}): P
     let errorMessage: string;
 
     if (err instanceof Error) {
-      if (err.message.includes('Script execution timed out')) {
+      if (err.message.includes('Script execution timed out') || err.message.includes('Async execution timed out')) {
         errorMessage = `Execution timed out after ${timeout}ms`;
       } else {
         // Include stack trace for better debugging

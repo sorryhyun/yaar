@@ -75,10 +75,36 @@ export function formatLogs(logs: LogEntry[]): string {
 }
 
 /**
+ * Create a fetch function restricted to the given domain allowlist.
+ * Returns undefined if no domains are allowed (fetch disabled).
+ */
+function createRestrictedFetch(allowedDomains: string[]): typeof fetch | undefined {
+  if (allowedDomains.length === 0) return undefined;
+
+  const domainSet = new Set(allowedDomains);
+
+  return (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      return Promise.reject(new Error(`Invalid URL: ${url}`));
+    }
+    if (!domainSet.has(hostname)) {
+      return Promise.reject(
+        new Error(`Domain "${hostname}" is not in the allowed domains list. Allowed: ${allowedDomains.join(', ')}`)
+      );
+    }
+    return fetch(input, init);
+  };
+}
+
+/**
  * Safe globals whitelist for the sandbox.
  * These are frozen copies of built-in objects that don't provide system access.
  */
-export function createSafeGlobals(capturedConsole: CapturedConsole): Record<string, unknown> {
+export function createSafeGlobals(capturedConsole: CapturedConsole, allowedDomains: string[] = []): Record<string, unknown> {
   return {
     // Console (captured)
     console: Object.freeze({
@@ -172,6 +198,12 @@ export function createSafeGlobals(capturedConsole: CapturedConsole): Record<stri
     BigInt64Array,
     BigUint64Array,
 
+    // HTTP (fetch + supporting types — fetch is restricted to allowed domains)
+    fetch: createRestrictedFetch(allowedDomains),
+    Headers,
+    Request,
+    Response,
+
     // Structured clone (useful for deep copying)
     structuredClone,
 
@@ -200,8 +232,8 @@ export function createSafeGlobals(capturedConsole: CapturedConsole): Record<stri
 /**
  * Create a sandboxed vm context with safe globals.
  */
-export function createSandboxContext(capturedConsole: CapturedConsole): vm.Context {
-  const globals = createSafeGlobals(capturedConsole);
+export function createSandboxContext(capturedConsole: CapturedConsole, allowedDomains: string[] = []): vm.Context {
+  const globals = createSafeGlobals(capturedConsole, allowedDomains);
   const context = vm.createContext(globals, {
     name: 'sandbox',
     codeGeneration: {

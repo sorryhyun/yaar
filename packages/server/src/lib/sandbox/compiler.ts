@@ -63,14 +63,12 @@ export async function compileTypeScript(code: string): Promise<CompileResult> {
 }
 
 /**
- * Wrap code in an IIFE that captures the return value.
+ * Wrap code in an async IIFE that captures the return value.
  *
- * This allows users to write `return value` at the top level.
+ * This allows users to write `return value` and use `await` at the top level.
  */
 export function wrapCodeForExecution(code: string): string {
-  // Check if code already has a return statement at top level
-  // If not, we'll try to return the last expression
-  return `(function() {
+  return `(async function() {
 ${code}
 })()`;
 }
