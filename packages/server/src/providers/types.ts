@@ -48,6 +48,7 @@ export interface TransportOptions {
   model?: string;
   sessionId?: string; // For session resumption, or parent session when forking
   forkSession?: boolean; // When true with sessionId, creates a fork instead of continuing
+  resumeThread?: boolean; // When true with sessionId, resume via thread/resume
   images?: string[]; // Base64 data URLs for images (e.g., user drawings)
 }
 

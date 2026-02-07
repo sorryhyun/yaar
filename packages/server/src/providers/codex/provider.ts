@@ -271,7 +271,23 @@ export class CodexProvider extends BaseTransport {
       }
     }
 
-    // Case 2: Need new thread (no session or system prompt changed)
+    // Case 2: Resume a saved thread
+    if (options.resumeThread && options.sessionId) {
+      console.log(`[codex] Resuming thread ${options.sessionId}`);
+      try {
+        await this.appServer!.threadResume({ threadId: options.sessionId });
+        this.currentSession = {
+          threadId: options.sessionId,
+          systemPrompt: options.systemPrompt,
+        };
+        return true;
+      } catch (err) {
+        console.warn(`[codex] Resume failed, falling back to new thread:`, err);
+        // Fall through to create new thread
+      }
+    }
+
+    // Case 3: Need new thread (no session or system prompt changed)
     const needsNewThread =
       !this.currentSession ||
       this.currentSession.systemPrompt !== options.systemPrompt;
@@ -287,7 +303,7 @@ export class CodexProvider extends BaseTransport {
       return true;
     }
 
-    // Case 3: Reuse existing thread (same system prompt, continuing conversation)
+    // Case 4: Reuse existing thread (same system prompt, continuing conversation)
     return false;
   }
 

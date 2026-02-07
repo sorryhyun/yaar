@@ -169,6 +169,17 @@ export class SessionLogger {
   }
 
   /**
+   * Persist a thread ID for a canonical agent name.
+   */
+  async logThreadId(canonicalAgent: string, threadId: string): Promise<void> {
+    if (!this.sessionInfo.metadata.threadIds) {
+      this.sessionInfo.metadata.threadIds = {};
+    }
+    this.sessionInfo.metadata.threadIds[canonicalAgent] = threadId;
+    await this.saveMetadata();
+  }
+
+  /**
    * Update the last activity timestamp.
    */
   async updateLastActivity(): Promise<void> {

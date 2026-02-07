@@ -53,16 +53,19 @@ export class ContextPool {
   private contextAssembly = new ContextAssemblyPolicy();
   private reloadPolicy: ReloadCachePolicy;
   private logSessionId: string | null = null;
+  private savedThreadIds?: Record<string, string>;
 
   constructor(
     connectionId: ConnectionId,
     windowState: WindowStateRegistry,
     reloadCache: ReloadCache,
-    restoredContext: ContextMessage[] = []
+    restoredContext: ContextMessage[] = [],
+    savedThreadIds?: Record<string, string>,
   ) {
     this.connectionId = connectionId;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
+    this.savedThreadIds = savedThreadIds;
     this.contextTape = new ContextTape();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
@@ -176,11 +179,16 @@ export class ContextPool {
     });
     this.contextAssembly.appendUserMessage(this.contextTape, mainContext.contextContent, 'main');
 
+    const resumeSessionId = this.savedThreadIds?.['default'];
+    delete this.savedThreadIds?.['default'];
+
     await agent.session.handleMessage(mainContext.prompt, {
       role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
       messageId: task.messageId,
+      canonicalAgent: 'default',
+      resumeSessionId,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
           this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
@@ -301,6 +309,10 @@ export class ContextPool {
       // Get parent session ID for thread forking (inherits main conversation context)
       const parentSessionId = this.agentPool.getPrimaryAgent()?.getRawSessionId() ?? undefined;
 
+      const canonicalWindow = `window-${windowId}`;
+      const resumeSessionId = this.savedThreadIds?.[canonicalWindow];
+      delete this.savedThreadIds?.[canonicalWindow];
+
       await agent.session.handleMessage(this.contextAssembly.buildWindowPrompt(task.content, {
         openWindows: openWindowsContext,
         reloadPrefix,
@@ -310,8 +322,10 @@ export class ContextPool {
         source,
         interactions: task.interactions,
         messageId: task.messageId,
-        forkSession: true,
-        parentSessionId,
+        forkSession: !resumeSessionId, // Skip fork if resuming a saved thread
+        parentSessionId: resumeSessionId ? undefined : parentSessionId,
+        canonicalAgent: canonicalWindow,
+        resumeSessionId,
         onContextMessage: (role, content) => {
           if (role === 'assistant') {
             this.contextAssembly.appendAssistantMessage(this.contextTape, content, source);

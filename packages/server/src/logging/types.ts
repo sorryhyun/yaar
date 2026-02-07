@@ -13,6 +13,7 @@ export interface SessionMetadata {
   provider: string;
   lastActivity: string;
   agents: Record<string, AgentInfo>; // agentId -> AgentInfo
+  threadIds?: Record<string, string>; // canonicalAgent -> provider threadId
 }
 
 export interface SessionInfo {

@@ -14,6 +14,7 @@ import type { ContextMessage } from '../agents/context.js';
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
   contextMessages: ContextMessage[];
+  savedThreadIds?: Record<string, string>;
 }
 
 export function createWebSocketServer(
@@ -31,7 +32,7 @@ export function createWebSocketServer(
     // Register connection with broadcast center
     broadcastCenter.subscribe(connectionId, ws);
 
-    const manager = new SessionManager(connectionId, options.contextMessages);
+    const manager = new SessionManager(connectionId, options.contextMessages, options.savedThreadIds);
 
     const windowState = windowStateRegistryManager.get(connectionId);
     if (options.restoreActions.length > 0) {

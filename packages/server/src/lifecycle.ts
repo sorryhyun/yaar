@@ -52,6 +52,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
           console.log(`Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`);
         }
       }
+      if (lastSession.metadata?.threadIds) {
+        options.savedThreadIds = lastSession.metadata.threadIds;
+        console.log(`Restored ${Object.keys(lastSession.metadata.threadIds).length} thread ID(s) from session ${lastSession.sessionId}`);
+      }
     }
   } catch (err) {
     console.error('Failed to restore previous session:', err);

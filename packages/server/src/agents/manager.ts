@@ -20,10 +20,12 @@ export class SessionManager {
   private initPromise: Promise<boolean> | null = null;
   private initialized = false;
   private restoredContext: ContextMessage[];
+  private savedThreadIds?: Record<string, string>;
 
-  constructor(connectionId: ConnectionId, restoredContext: ContextMessage[] = []) {
+  constructor(connectionId: ConnectionId, restoredContext: ContextMessage[] = [], savedThreadIds?: Record<string, string>) {
     this.connectionId = connectionId;
     this.restoredContext = restoredContext;
+    this.savedThreadIds = savedThreadIds;
   }
 
   /**
@@ -59,7 +61,7 @@ export class SessionManager {
     const reloadCache = await reloadCacheManager.ensureLoaded(this.connectionId);
     windowState.setOnWindowClose((wid) => reloadCache.invalidateForWindow(wid));
 
-    this.pool = new ContextPool(this.connectionId, windowState, reloadCache, this.restoredContext);
+    this.pool = new ContextPool(this.connectionId, windowState, reloadCache, this.restoredContext, this.savedThreadIds);
     const success = await this.pool.initialize();
     this.initialized = success;
     return success;

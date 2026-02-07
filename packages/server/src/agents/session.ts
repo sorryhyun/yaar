@@ -35,6 +35,10 @@ export interface HandleMessageOptions {
   forkSession?: boolean;
   /** Parent session/thread ID to fork from (used with forkSession) */
   parentSessionId?: string;
+  /** Canonical agent name for thread persistence (e.g. "default", "window-win1") */
+  canonicalAgent?: string;
+  /** Saved thread ID to resume (explicit restore only) */
+  resumeSessionId?: string;
 }
 
 interface AgentContext {
@@ -237,10 +241,15 @@ export class AgentSession {
 
     try {
       // For forked sessions, use the parent's session ID so the provider can fork from it.
+      // For resume, use the saved thread ID (only on first message).
       // Otherwise, resume our own session if we've already sent a message.
       let sessionIdToUse: string | undefined;
+      let resumeThread = false;
       if (options.forkSession && options.parentSessionId) {
         sessionIdToUse = options.parentSessionId;
+      } else if (options.resumeSessionId && !this.hasSentFirstMessage) {
+        sessionIdToUse = options.resumeSessionId;
+        resumeThread = true;
       } else if (this.hasSentFirstMessage && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
@@ -250,6 +259,7 @@ export class AgentSession {
         systemPrompt: this.provider.systemPrompt + memory,
         sessionId: sessionIdToUse,
         forkSession: options.forkSession,
+        resumeThread,
         images: images.length > 0 ? images : undefined,
       };
       this.hasSentFirstMessage = true;
@@ -272,6 +282,14 @@ export class AgentSession {
           // Update internal provider session ID for session resumption/forking.
           // The log session ID (sent to frontend) is managed by ContextPool.
           this.sessionId = sessionId;
+          const canonical = options.canonicalAgent;
+          if (canonical) {
+            try {
+              await this.sessionLogger?.logThreadId(canonical, sessionId);
+            } catch (err) {
+              console.warn(`[AgentSession] Failed to persist thread ID for ${canonical}:`, err);
+            }
+          }
         },
       );
 
