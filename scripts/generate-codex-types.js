@@ -40,8 +40,8 @@ function processDir(dir) {
       processDir(fullPath);
     } else if (entry.name.endsWith('.ts')) {
       let content = readFileSync(fullPath, 'utf8');
-      // Add .js to relative imports: from "./foo" → from "./foo.js"
-      const updated = content.replace(/from "(\.\/[^"]+)"/g, (match, p1) => {
+      // Add .js to relative imports: from "./foo" or from "../foo" → with .js
+      const updated = content.replace(/from "(\.[^"]+)"/g, (match, p1) => {
         if (p1.endsWith('.js')) return match;
         return `from "${p1}.js"`;
       });
