@@ -103,10 +103,10 @@ export class ClaudeSessionProvider extends BaseTransport {
   /**
    * Get SDK options for queries.
    */
-  private getSDKOptions(resumeSession?: string): SDKOptions {
+  private getSDKOptions(resumeSession?: string, systemPrompt?: string): SDKOptions {
     return {
       abortController: this.createAbortController(),
-      systemPrompt: this.systemPrompt,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
       model: 'claude-sonnet-4-5-20250929',
       resume: resumeSession,
       cwd: getStorageDir(),
@@ -266,7 +266,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       })();
     }
 
-    const sdkOptions = this.getSDKOptions(resumeSession);
+    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt);
 
     // Override model if specified
     if (options.model) {

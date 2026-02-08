@@ -4,6 +4,7 @@
  * Detects CSP/X-Frame-Options blocking and reports back to the AI.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { IFRAME_CAPTURE_HELPER_SCRIPT } from '@yaar/shared'
 import styles from '@/styles/renderers.module.css'
 
 interface IframeRendererProps {
@@ -104,6 +105,23 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
     // Check reportedRef to avoid reporting success after an error was already reported
     if (loadState === 'loading' && !reportedRef.current) {
       setLoadState('loaded')
+
+      // Inject capture helper into same-origin iframes (non-compiler-generated ones)
+      const iframe = iframeRef.current
+      if (iframe) {
+        try {
+          const doc = iframe.contentDocument
+          if (doc && !doc.querySelector('script[data-yaar-capture]')) {
+            const script = doc.createElement('script')
+            script.setAttribute('data-yaar-capture', '1')
+            script.textContent = IFRAME_CAPTURE_HELPER_SCRIPT
+            doc.head.appendChild(script)
+          }
+        } catch {
+          // Cross-origin — can't inject, capture helper must be baked in
+        }
+      }
+
       // Only report success if we have a requestId (meaning server is waiting for feedback)
       if (requestId) {
         reportedRef.current = true

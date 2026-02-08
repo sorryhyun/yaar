@@ -30,6 +30,36 @@ import {
 } from './slices'
 
 /**
+ * Try capturing iframe content via the postMessage self-capture protocol.
+ * Returns a base64 PNG data URL or null if the iframe doesn't respond.
+ */
+function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000): Promise<string | null> {
+  return new Promise((resolve) => {
+    const requestId = `capture-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', handler)
+      resolve(null)
+    }, timeoutMs)
+
+    function handler(e: MessageEvent) {
+      if (
+        e.data?.type === 'yaar:capture-response' &&
+        e.data.requestId === requestId &&
+        e.source === iframe.contentWindow
+      ) {
+        clearTimeout(timer)
+        window.removeEventListener('message', handler)
+        resolve(e.data.imageData ?? null)
+      }
+    }
+
+    window.addEventListener('message', handler)
+    iframe.contentWindow?.postMessage({ type: 'yaar:capture-request', requestId }, '*')
+  })
+}
+
+/**
  * Capture a window element as a PNG image and push feedback.
  */
 async function captureWindow(windowId: string, requestId: string) {
@@ -46,6 +76,24 @@ async function captureWindow(windowId: string, requestId: string) {
       return
     }
 
+    // If the window contains an iframe, try self-capture first
+    const iframe = el.querySelector('iframe') as HTMLIFrameElement | null
+    if (iframe?.contentWindow) {
+      const iframeData = await tryIframeSelfCapture(iframe)
+      if (iframeData) {
+        const base64 = iframeData.replace(/^data:image\/png;base64,/, '')
+        useDesktopStore.getState().addRenderingFeedback({
+          requestId,
+          windowId,
+          renderer: 'capture',
+          success: true,
+          imageData: base64,
+        })
+        return
+      }
+    }
+
+    // Fall back to html2canvas
     const canvas = await html2canvas(el, {
       useCORS: true,
       logging: false,

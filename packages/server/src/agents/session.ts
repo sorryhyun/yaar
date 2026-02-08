@@ -13,6 +13,7 @@ import { actionEmitter } from '../mcp/action-emitter.js';
 import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
+import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
@@ -227,9 +228,12 @@ export class AgentSession {
         sessionIdToUse = this.sessionId;
       }
 
-      const memory = await loadMemory();
+      const [memory, environment] = await Promise.all([
+        loadMemory(),
+        buildEnvironmentSection(this.provider.providerType),
+      ]);
       const transportOptions: TransportOptions = {
-        systemPrompt: this.provider.systemPrompt + memory,
+        systemPrompt: this.provider.systemPrompt + environment + memory,
         sessionId: sessionIdToUse,
         forkSession: options.forkSession,
         resumeThread,
