@@ -25,20 +25,28 @@ export const PROJECT_ROOT = IS_BUNDLED_EXE
 /**
  * Get the storage directory path.
  * - Environment variable override
- * - Bundled exe: ./storage/ alongside executable
- * - Development: project root /storage/
+ * - Otherwise: PROJECT_ROOT/storage/ (works for both bundled and dev)
  */
 export function getStorageDir(): string {
   if (process.env.YAAR_STORAGE) {
     return process.env.YAAR_STORAGE;
   }
-  if (IS_BUNDLED_EXE) {
-    return join(dirname(process.execPath), 'storage');
-  }
   return join(PROJECT_ROOT, 'storage');
 }
 
 export const STORAGE_DIR = getStorageDir();
+
+/**
+ * Get the config directory path.
+ * - Environment variable override
+ * - Always relative to PROJECT_ROOT
+ */
+export function getConfigDir(): string {
+  if (process.env.YAAR_CONFIG) {
+    return process.env.YAAR_CONFIG;
+  }
+  return join(PROJECT_ROOT, 'config');
+}
 
 /**
  * Get the frontend dist directory path.

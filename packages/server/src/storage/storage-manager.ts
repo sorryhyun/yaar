@@ -7,6 +7,11 @@
 import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
+import {
+  STORAGE_DIR,
+  getConfigDir,
+} from '../config.js';
+export { getConfigDir };
 import type {
   StorageEntry,
   StorageReadResult,
@@ -15,34 +20,6 @@ import type {
   StorageDeleteResult,
   StorageImageContent,
 } from './types.js';
-
-// Import storage directory from main index (will be set by index.ts)
-// For now, calculate it here as fallback
-const IS_BUNDLED_EXE =
-  typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
-  process.argv[0]?.endsWith('.exe') ||
-  process.argv[0]?.includes('yaar');
-
-function getProjectRoot(): string {
-  if (IS_BUNDLED_EXE) {
-    return dirname(process.execPath);
-  }
-  const __dirname = dirname(new URL(import.meta.url).pathname);
-  return join(__dirname, '..', '..', '..', '..');
-}
-
-export function getStorageDir(): string {
-  if (process.env.YAAR_STORAGE) {
-    return process.env.YAAR_STORAGE;
-  }
-  return join(getProjectRoot(), 'storage');
-}
-
-export function getConfigDir(): string {
-  return join(getProjectRoot(), 'config');
-}
-
-const STORAGE_DIR = getStorageDir();
 
 /**
  * Validate and normalize a path within the storage directory.

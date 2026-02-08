@@ -7,7 +7,7 @@
  * - Poppler binaries to dist/poppler/ (Windows only)
  */
 
-import { cpSync, existsSync, mkdirSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -34,31 +34,64 @@ if (existsSync(frontendDist)) {
 }
 
 // Copy poppler binaries (Windows)
-const popplerSources = [
-  join(rootDir, 'node_modules', 'node-poppler-win32', 'lib'),
-  join(rootDir, 'node_modules', '@nicecatchltd', 'node-poppler-win32', 'lib'),
-];
+// Find the bin/ directory containing pdftocairo.exe etc.
+function findPopplerBin(baseDir) {
+  // Walk into node-poppler-win32 looking for a bin/ dir with pdftocairo.exe
+  const candidates = [
+    // Hoisted
+    join(baseDir, 'node_modules', 'node-poppler-win32'),
+    join(baseDir, 'node_modules', '@nicecatchltd', 'node-poppler-win32'),
+  ];
 
-const popplerDir = join(distDir, 'poppler');
-
-let popplerCopied = false;
-for (const popplerSrc of popplerSources) {
-  if (existsSync(popplerSrc)) {
-    console.log('Copying poppler binaries to dist/poppler/...');
-    cpSync(popplerSrc, popplerDir, { recursive: true });
-    console.log('  Done.');
-    popplerCopied = true;
-    break;
+  // Also search pnpm store
+  const pnpmBase = join(baseDir, 'node_modules', '.pnpm');
+  if (existsSync(pnpmBase)) {
+    try {
+      const entries = readdirSync(pnpmBase);
+      for (const entry of entries) {
+        if (entry.startsWith('node-poppler-win32@')) {
+          candidates.push(join(pnpmBase, entry, 'node_modules', 'node-poppler-win32'));
+        }
+      }
+    } catch { /* ignore */ }
   }
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    // Recursively find the bin/ directory containing pdftocairo.exe
+    const binDir = findBinDir(candidate);
+    if (binDir) return binDir;
+  }
+  return null;
 }
 
-if (!popplerCopied) {
+function findBinDir(dir) {
+  if (existsSync(join(dir, 'pdftocairo.exe'))) return dir;
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const result = findBinDir(join(dir, entry.name));
+        if (result) return result;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+const popplerBinDir = findPopplerBin(rootDir);
+const popplerDir = join(distDir, 'poppler');
+let popplerCopied = false;
+
+if (popplerBinDir) {
+  console.log(`Copying poppler binaries from ${popplerBinDir} to dist/poppler/...`);
+  cpSync(popplerBinDir, popplerDir, { recursive: true });
+  console.log('  Done.');
+  popplerCopied = true;
+} else {
   console.warn('Warning: Poppler binaries not found.');
-  console.warn('  On Windows, install node-poppler-win32:');
+  console.warn('  Install node-poppler-win32:');
   console.warn('    pnpm add -D node-poppler-win32');
-  console.warn('  On Linux/macOS, poppler-utils must be installed system-wide:');
-  console.warn('    brew install poppler  # macOS');
-  console.warn('    apt install poppler-utils  # Ubuntu/Debian');
 }
 
 console.log('\nAsset copy complete!');

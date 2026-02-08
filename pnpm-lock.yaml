@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      node-poppler-win32:
+        specifier: 1.0.2
+        version: 1.0.2
 
   packages/frontend:
     dependencies:
@@ -2024,6 +2028,12 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  node-poppler-win32@1.0.2:
+    resolution: {integrity: sha512-U2YVdM7EEXNE21TD4ajJxfd1pKx7yEF2tcuHc4eCa7uxmw+mfSNPB+yHRtNrdxJqV6dKoz4Rvhuyy5rn6mg3ZA==}
+    engines: {node: '>=20'}
+    cpu: [x64]
+    os: [win32]
 
   node-poppler@7.2.4:
     resolution: {integrity: sha512-+YvPbEQ2uxsUVBXDIZiUEu0C3wMOo37D+cIqzWu5gZra3p6MHhBFJtZ/2slzj+5QPmWcHd9SAEjXk2ogBSHg9Q==}
@@ -4476,6 +4486,8 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
     optional: true
+
+  node-poppler-win32@1.0.2: {}
 
   node-poppler@7.2.4:
     dependencies:

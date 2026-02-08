@@ -11,7 +11,7 @@ import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
-import { getStorageDir } from '../../storage/index.js';
+import { getStorageDir } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 
 // Port for the MCP HTTP server (same as main server)

@@ -10,16 +10,7 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { readdir, readFile, rm, mkdir } from 'fs/promises';
 import { randomUUID } from 'crypto';
-
-/**
- * Check if running as a bundled Bun executable.
- */
-function isBundledExe(): boolean {
-  // Bun sets this when running a compiled executable
-  return typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
-    process.argv[0]?.endsWith('.exe') ||
-    process.argv[0]?.includes('yaar');
-}
+import { IS_BUNDLED_EXE } from '../../config.js';
 
 /**
  * Get the path to poppler binaries.
@@ -27,11 +18,9 @@ function isBundledExe(): boolean {
  * - Development: undefined (uses node-poppler's auto-detection)
  */
 function getPopplerPath(): string | undefined {
-  if (isBundledExe()) {
-    // Bundled exe: binaries in ./poppler/ alongside exe
+  if (IS_BUNDLED_EXE) {
     return join(dirname(process.execPath), 'poppler');
   }
-  // Development: let node-poppler find the binaries
   return undefined;
 }
 
