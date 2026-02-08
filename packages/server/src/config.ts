@@ -7,10 +7,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 // Detect if running as bundled executable
-export const IS_BUNDLED_EXE =
-  typeof process.env.BUN_SELF_EXEC !== 'undefined' ||
-  process.argv[0]?.endsWith('.exe') ||
-  process.argv[0]?.includes('yaar');
+// __YAAR_BUNDLED is injected at compile time via bun build --define
+declare const __YAAR_BUNDLED: boolean | undefined;
+export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BUNDLED;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

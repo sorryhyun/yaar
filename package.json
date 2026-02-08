@@ -18,9 +18,9 @@
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
     "build:exe": "pnpm build:exe:prepare && pnpm build:exe:bundle && pnpm build:exe:assets",
     "build:exe:prepare": "pnpm -r build",
-    "build:exe:bundle": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-windows-x64 --outfile=dist/yaar-claude.exe --minify && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-windows-x64 --outfile=dist/yaar-codex.exe --minify",
-    "build:exe:bundle:linux": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-linux-x64 --outfile=dist/yaar-claude --minify && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-linux-x64 --outfile=dist/yaar-codex --minify",
-    "build:exe:bundle:macos": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-darwin-x64 --outfile=dist/yaar-claude --minify && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-darwin-x64 --outfile=dist/yaar-codex --minify",
+    "build:exe:bundle": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-windows-x64 --outfile=dist/yaar-claude.exe --minify --define __YAAR_BUNDLED=true && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-windows-x64 --outfile=dist/yaar-codex.exe --minify --define __YAAR_BUNDLED=true",
+    "build:exe:bundle:linux": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-linux-x64 --outfile=dist/yaar-claude --minify --define __YAAR_BUNDLED=true && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-linux-x64 --outfile=dist/yaar-codex --minify --define __YAAR_BUNDLED=true",
+    "build:exe:bundle:macos": "bun build packages/server/src/exe-entry-claude.ts --compile --target=bun-darwin-x64 --outfile=dist/yaar-claude --minify --define __YAAR_BUNDLED=true && bun build packages/server/src/exe-entry-codex.ts --compile --target=bun-darwin-x64 --outfile=dist/yaar-codex --minify --define __YAAR_BUNDLED=true",
     "build:exe:assets": "node scripts/copy-exe-assets.js"
   },
   "engines": {
