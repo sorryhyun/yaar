@@ -1,5 +1,8 @@
 .PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared codex-types
 
+# Codex CLI binary (override for Windows: make build-exe CODEX_BIN=./codex-x86_64.exe)
+CODEX_BIN ?= bundled/codex-x86_64-pc-windows-msvc.exe
+
 # Run both server and frontend (auto-select provider)
 dev:
 	@./scripts/dev.sh
@@ -60,13 +63,13 @@ test-shared:
 # Post-processes imports to add .js extensions required by Node ESM (nodenext)
 codex-types:
 	rm -rf packages/server/src/providers/codex/generated
-	codex app-server generate-ts --out packages/server/src/providers/codex/generated --experimental
+	$(CODEX_BIN) app-server generate-ts --out packages/server/src/providers/codex/generated --experimental
 	@echo "Adding .js extensions to generated imports..."
 	@find packages/server/src/providers/codex/generated -name '*.ts' -exec sed -i -E 's/from "(\.[^"]+)"/from "\1.js"/g' {} +
 	@sed -i 's|from "./v2.js"|from "./v2/index.js"|g' packages/server/src/providers/codex/generated/index.ts
 
 # Build standalone Windows executables (yaar-claude.exe + yaar-codex.exe)
-build-exe:
+build-exe: codex-types
 	pnpm build:exe
 
 # Clean generated files
