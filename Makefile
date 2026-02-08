@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean test test-frontend test-server test-shared codex-types
+.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared codex-types
 
 # Run both server and frontend (auto-select provider)
 dev:
@@ -64,6 +64,10 @@ codex-types:
 	@echo "Adding .js extensions to generated imports..."
 	@find packages/server/src/providers/codex/generated -name '*.ts' -exec sed -i -E 's/from "(\.[^"]+)"/from "\1.js"/g' {} +
 	@sed -i 's|from "./v2.js"|from "./v2/index.js"|g' packages/server/src/providers/codex/generated/index.ts
+
+# Build standalone Windows executables (yaar-claude.exe + yaar-codex.exe)
+build-exe:
+	pnpm build:exe
 
 # Clean generated files
 clean:

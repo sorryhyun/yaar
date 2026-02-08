@@ -64,7 +64,8 @@ if (!popplerCopied) {
 console.log('\nAsset copy complete!');
 console.log('Distribution structure:');
 console.log('  dist/');
-console.log('  ├── claudeos.exe      # Main executable (after bun build)');
+console.log('  ├── yaar-claude.exe   # Claude provider executable');
+console.log('  ├── yaar-codex.exe    # Codex provider executable');
 console.log('  ├── public/           # Frontend assets');
 if (popplerCopied) {
   console.log('  ├── poppler/          # Poppler PDF binaries');
