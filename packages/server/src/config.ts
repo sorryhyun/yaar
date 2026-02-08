@@ -2,6 +2,7 @@
  * Server configuration — constants, paths, MIME types.
  */
 
+import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,7 +13,15 @@ export const IS_BUNDLED_EXE =
   process.argv[0]?.includes('yaar');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const PROJECT_ROOT = join(__dirname, '..', '..', '..');
+
+/**
+ * Project root directory.
+ * - Bundled exe: directory containing the executable
+ * - Development: 3 levels up from src/ (packages/server/src → project root)
+ */
+export const PROJECT_ROOT = IS_BUNDLED_EXE
+  ? dirname(process.execPath)
+  : join(__dirname, '..', '..', '..');
 
 /**
  * Get the storage directory path.
@@ -67,3 +76,24 @@ export const MIME_TYPES: Record<string, string> = {
 };
 
 export const PORT = parseInt(process.env.PORT ?? '8000', 10);
+
+/** Known codex binary filename for Windows */
+const CODEX_EXE_NAME = 'codex-x86_64-pc-windows-msvc.exe';
+
+/**
+ * Get the codex CLI binary path.
+ * - Bundled exe: look next to the exe, then ../bundled/
+ * - Development: 'codex' (from PATH)
+ */
+export function getCodexBin(): string {
+  if (IS_BUNDLED_EXE) {
+    const exeDir = dirname(process.execPath);
+    // 1. Next to the exe
+    const beside = join(exeDir, CODEX_EXE_NAME);
+    if (existsSync(beside)) return beside;
+    // 2. ../bundled/ (exe is in dist/, bundled/ is a sibling)
+    const bundled = join(exeDir, '..', 'bundled', CODEX_EXE_NAME);
+    if (existsSync(bundled)) return bundled;
+  }
+  return 'codex';
+}

@@ -7,12 +7,10 @@
 
 import * as esbuild from 'esbuild';
 import { writeFile, mkdir, stat } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { bundledLibraryPlugin } from './plugins.js';
+import { PROJECT_ROOT } from '../../config.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
 
 export { SANDBOX_DIR };

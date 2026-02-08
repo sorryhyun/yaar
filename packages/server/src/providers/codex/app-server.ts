@@ -13,6 +13,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcClient, type JsonRpcClientOptions } from './jsonrpc-client.js';
 import { getMcpToken } from '../../mcp/index.js';
+import { getCodexBin } from '../../config.js';
 import type {
   ThreadStartParams,
   ThreadStartResult,
@@ -168,7 +169,8 @@ export class AppServer {
       args.push('-c', `model=${this.config.model}`);
     }
 
-    this.process = spawn('codex', args, {
+    const codexBin = getCodexBin();
+    this.process = spawn(codexBin, args, {
       cwd: this.tempDir ?? undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {

@@ -6,12 +6,9 @@
  */
 
 import { mkdir } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
+import { PROJECT_ROOT } from '../config.js';
 
-// Project root directory (3 levels up from this file: logging -> src -> server -> packages -> root)
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
 export const SESSIONS_DIR = join(PROJECT_ROOT, 'session_logs');
 
 export async function ensureSessionsDir(): Promise<void> {

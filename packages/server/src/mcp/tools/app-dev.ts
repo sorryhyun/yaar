@@ -11,13 +11,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { writeFile, mkdir, cp, stat } from 'fs/promises';
 import { join, dirname, normalize, relative } from 'path';
-import { fileURLToPath } from 'url';
 import { ok } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
+import { PROJECT_ROOT } from '../../config.js';
 
-// Compute apps directory from project root
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
 /**

@@ -11,14 +11,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { readdir, readFile, writeFile, stat, mkdir, unlink } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { ok } from '../utils.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
+import { PROJECT_ROOT } from '../../config.js';
 
-// Compute apps directory from project root
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
 // Centralized credentials location under config/
