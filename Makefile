@@ -62,11 +62,7 @@ test-shared:
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by Node ESM (nodenext)
 codex-types:
-	rm -rf packages/server/src/providers/codex/generated
-	$(CODEX_BIN) app-server generate-ts --out packages/server/src/providers/codex/generated --experimental
-	@echo "Adding .js extensions to generated imports..."
-	@find packages/server/src/providers/codex/generated -name '*.ts' -exec sed -i -E 's/from "(\.[^"]+)"/from "\1.js"/g' {} +
-	@sed -i 's|from "./v2.js"|from "./v2/index.js"|g' packages/server/src/providers/codex/generated/index.ts
+	node scripts/generate-codex-types.js $(CODEX_BIN)
 
 # Build standalone Windows executables (yaar-claude.exe + yaar-codex.exe)
 build-exe: codex-types
