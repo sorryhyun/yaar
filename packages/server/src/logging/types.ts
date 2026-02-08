@@ -23,7 +23,7 @@ export interface SessionInfo {
 }
 
 export interface ParsedMessage {
-  type: 'user' | 'assistant' | 'action' | 'thinking' | 'tool_use' | 'tool_result';
+  type: 'user' | 'assistant' | 'action' | 'thinking' | 'tool_use' | 'tool_result' | 'interaction';
   timestamp: string;
   agentId: string;
   parentAgentId: string | null;
@@ -33,4 +33,6 @@ export interface ParsedMessage {
   toolName?: string;
   toolInput?: unknown;
   toolUseId?: string;
+  interactionSource?: string;
+  interaction?: string;
 }

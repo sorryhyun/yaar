@@ -41,8 +41,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAgent,
     clearAllAgents,
     consumePendingFeedback,
-    consumeBoundsUpdates,
-    consumeInteractions,
+    consumePendingInteractions,
     consumeDrawing,
     registerWindowAgent,
     updateWindowAgentStatus,
@@ -170,20 +169,17 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   }, [addDebugEntry])
 
   const sendMessage = useCallback((content: string) => {
-    const interactions = consumeInteractions()
     const drawing = consumeDrawing()
-    const allInteractions = drawing
-      ? [...interactions, { type: 'draw' as const, timestamp: Date.now(), imageData: drawing }]
-      : interactions
-
     const messageId = generateMessageId()
     send({
       type: 'USER_MESSAGE',
       messageId,
       content,
-      interactions: allInteractions.length > 0 ? allInteractions : undefined,
+      interactions: drawing
+        ? [{ type: 'draw' as const, timestamp: Date.now(), imageData: drawing }]
+        : undefined,
     })
-  }, [send, consumeInteractions, consumeDrawing])
+  }, [send, consumeDrawing])
 
   const sendWindowMessage = useCallback((windowId: string, content: string) => {
     const messageId = generateMessageId()
@@ -263,22 +259,15 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   useEffect(() => {
     const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingBoundsUpdates.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const updates = consumeBoundsUpdates()
-        for (const item of updates) {
-          send({
-            type: 'WINDOW_BOUNDS_UPDATE',
-            windowId: item.windowId,
-            x: item.x,
-            y: item.y,
-            w: item.w,
-            h: item.h,
-          })
+      if (state.pendingInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+        const interactions = consumePendingInteractions()
+        if (interactions.length > 0) {
+          send({ type: 'USER_INTERACTION', interactions })
         }
       }
     })
     return unsubscribe
-  }, [consumeBoundsUpdates, send])
+  }, [consumePendingInteractions, send])
 
   useEffect(() => {
     let previousWindows = useDesktopStore.getState().windows

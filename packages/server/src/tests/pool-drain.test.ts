@@ -3,7 +3,7 @@
  * AppServer, and CodexProvider correctly handle in-flight tasks during reset.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { CallbackQueue } from '../agents/callback-queue.js';
+import { InteractionTimeline } from '../agents/interaction-timeline.js';
 import { ContextTape } from '../agents/context.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 
@@ -361,39 +361,30 @@ describe('Window agent persistence', () => {
 
 // ── Callback injection into main prompt ──────────────────────────────────
 
-describe('Callback injection into main prompt', () => {
-  it('callbacks drained and included in main prompt', () => {
-    const queue = new CallbackQueue();
+describe('Timeline injection into main prompt', () => {
+  it('timeline entries drained and included in main prompt', () => {
+    const timeline = new InteractionTimeline();
 
-    // Simulate ephemeral agent pushing callback
-    queue.push({
-      role: 'ephemeral-1',
-      task: 'app: Calendar',
-      actions: [{ type: 'window.create', windowId: 'cal', title: 'Cal', bounds: { x: 0, y: 0, w: 600, h: 400 }, content: { renderer: 'component', data: '' } }],
-      timestamp: Date.now(),
-    });
+    // Simulate ephemeral agent pushing to timeline
+    timeline.pushAI('ephemeral-1', 'app: Calendar', [
+      { type: 'window.create', windowId: 'cal', title: 'Cal', bounds: { x: 0, y: 0, w: 600, h: 400 }, content: { renderer: 'component', data: '' } },
+    ]);
 
-    // Simulate window agent pushing callback
-    queue.push({
-      role: 'window-settings',
-      task: 'button "Save"',
-      actions: [],
-      windowId: 'settings',
-      timestamp: Date.now(),
-    });
+    // Simulate window agent pushing to timeline
+    timeline.pushAI('window-settings', 'button "Save"', []);
 
-    expect(queue.size).toBe(2);
+    expect(timeline.size).toBe(2);
 
     // Format for prompt injection
-    const formatted = queue.format();
-    expect(formatted).toContain('<agent_callbacks>');
+    const formatted = timeline.format();
+    expect(formatted).toContain('<timeline>');
     expect(formatted).toContain('agent="ephemeral-1"');
     expect(formatted).toContain('agent="window-settings"');
 
-    // Drain clears the queue
-    const drained = queue.drain();
+    // Drain clears the timeline
+    const drained = timeline.drain();
     expect(drained).toHaveLength(2);
-    expect(queue.size).toBe(0);
+    expect(timeline.size).toBe(0);
   });
 });
 

@@ -140,10 +140,10 @@ export const useDesktopStore = create<DesktopStore>()(
         state.windowAgents = {}
         state.queuedActions = {}
         state.interactionLog = []
+        state.pendingInteractions = []
         state.activityLog = []
         state.debugLog = []
         state.pendingFeedback = []
-        state.pendingBoundsUpdates = []
       })
     },
   }))

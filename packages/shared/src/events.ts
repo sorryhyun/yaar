@@ -13,6 +13,22 @@ export interface UserInteraction {
   windowTitle?: string;
   details?: string;
   imageData?: string;  // Base64 PNG for drawings
+  bounds?: { x: number; y: number; w: number; h: number };
+}
+
+/**
+ * Format a UserInteraction into a compact ID-only string for the AI timeline.
+ * e.g. "close:win-settings", "focus:win-main", "move:win-main {x:10,y:20,w:600,h:400}"
+ */
+export function formatCompactInteraction(interaction: UserInteraction): string {
+  const verb = interaction.type.split('.')[1]; // 'close', 'focus', 'move', etc.
+  const target = interaction.windowId ?? interaction.details ?? '';
+  let result = target ? `${verb}:${target}` : verb;
+  if (interaction.bounds) {
+    const b = interaction.bounds;
+    result += ` {x:${b.x},y:${b.y},w:${b.w},h:${b.h}}`;
+  }
+  return result;
 }
 
 export interface UserMessageEvent {
@@ -83,13 +99,9 @@ export interface ToastActionEvent {
   eventId: string;
 }
 
-export interface WindowBoundsUpdateEvent {
-  type: 'WINDOW_BOUNDS_UPDATE';
-  windowId: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+export interface UserInteractionEvent {
+  type: 'USER_INTERACTION';
+  interactions: UserInteraction[];
 }
 
 export type ClientEvent =
@@ -103,7 +115,7 @@ export type ClientEvent =
   | ComponentActionEvent
   | DialogFeedbackEvent
   | ToastActionEvent
-  | WindowBoundsUpdateEvent;
+  | UserInteractionEvent;
 
 // ============ Server → Client Events ============
 

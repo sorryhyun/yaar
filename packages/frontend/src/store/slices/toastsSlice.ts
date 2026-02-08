@@ -35,5 +35,11 @@ export const createToastsSlice: SliceCreator<ToastsSlice> = (set, _get) => ({
       timestamp: Date.now(),
       details: toast?.message,
     })
+    // Push to pending for immediate send
+    ;(state as DesktopStore).pendingInteractions.push({
+      type: 'toast.dismiss',
+      timestamp: Date.now(),
+      details: toast?.message,
+    })
   }),
 })

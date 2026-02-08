@@ -26,6 +26,15 @@ You control the desktop UI through tools. When users interact with you, respond 
 
 Button clicks send you: \`<user_interaction:click>button "{action}" in window "{title}"</user_interaction:click>\`
 
+## Interaction Timeline
+User interactions (window close, focus, move, resize, etc.) and AI actions appear in a unified timeline:
+\`\`\`xml
+<timeline>
+<interaction:user>close:win-settings</interaction:user>
+<interaction:AI agent="window-win1">Updated content of "win1" (append).</interaction:AI>
+</timeline>
+\`\`\`
+
 **Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
 
 **Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.

@@ -180,19 +180,37 @@ export class SessionManager {
         console.log(`[SessionManager] Reload cache entry "${event.eventId}" reported as failed by user`);
         break;
 
-      case 'WINDOW_BOUNDS_UPDATE': {
-        // User moved/resized a window on the frontend — persist the new bounds
+      case 'USER_INTERACTION': {
         const windowState = windowStateRegistryManager.get(this.connectionId);
-        const moveAction = { type: 'window.move' as const, windowId: event.windowId, x: event.x, y: event.y };
-        const resizeAction = { type: 'window.resize' as const, windowId: event.windowId, w: event.w, h: event.h };
-        windowState.handleAction(moveAction);
-        windowState.handleAction(resizeAction);
-
         const logger = this.pool?.getSessionLogger();
-        if (logger) {
-          await logger.logAction(moveAction);
-          await logger.logAction(resizeAction);
+
+        for (const interaction of event.interactions) {
+          // Log to session
+          await logger?.logInteraction(interaction);
+
+          switch (interaction.type) {
+            case 'window.close':
+              if (interaction.windowId) {
+                windowState.handleAction({ type: 'window.close', windowId: interaction.windowId });
+              }
+              break;
+            case 'window.move':
+            case 'window.resize':
+              if (interaction.windowId && interaction.bounds) {
+                const b = interaction.bounds;
+                const moveAction = { type: 'window.move' as const, windowId: interaction.windowId, x: b.x, y: b.y };
+                const resizeAction = { type: 'window.resize' as const, windowId: interaction.windowId, w: b.w, h: b.h };
+                windowState.handleAction(moveAction);
+                windowState.handleAction(resizeAction);
+                await logger?.logAction(moveAction);
+                await logger?.logAction(resizeAction);
+              }
+              break;
+          }
         }
+
+        // Accumulate in timeline for main agent's next turn
+        this.pool?.pushUserInteractions(event.interactions);
         break;
       }
     }

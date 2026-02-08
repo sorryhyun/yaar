@@ -1,6 +1,6 @@
 import type { UserInteraction } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
-import type { CallbackQueue } from '../callback-queue.js';
+import type { InteractionTimeline } from '../interaction-timeline.js';
 
 export interface MainPromptContext {
   prompt: string;
@@ -8,59 +8,38 @@ export interface MainPromptContext {
 }
 
 export class ContextAssemblyPolicy {
-  formatInteractionsForContext(interactions: UserInteraction[]): string {
-    if (interactions.length === 0) return '';
-
-    const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
-    const otherInteractions = interactions.filter(i => i.type !== 'draw');
-
-    const parts: string[] = [];
-
-    if (otherInteractions.length > 0) {
-      const lines = otherInteractions.map(i => {
-        let content = '';
-        if (i.windowTitle) content += `"${i.windowTitle}"`;
-        if (i.details) content += content ? ` (${i.details})` : i.details;
-        return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
-      });
-      parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
-    }
-
-    if (drawings.length > 0) {
-      parts.push(`<user_interaction:draw>[User drawing attached as image]</user_interaction:draw>`);
-    }
-
-    return parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
-  }
-
   formatOpenWindows(windowIds: string[]): string {
     if (windowIds.length === 0) return '';
     return `<open_windows>${windowIds.join(', ')}</open_windows>\n\n`;
   }
 
   /**
-   * Build main agent prompt, draining and injecting callbacks from parallel agents.
+   * Build main agent prompt, draining and injecting timeline from parallel agents and user interactions.
    */
   buildMainPrompt(content: string, options: {
     interactions?: UserInteraction[];
     openWindows: string;
     reloadPrefix: string;
-    callbackQueue?: CallbackQueue;
+    timeline?: InteractionTimeline;
   }): MainPromptContext {
-    const interactionPrefix = options.interactions?.length
-      ? this.formatInteractionsForContext(options.interactions)
-      : '';
+    // Add drawing as timeline entry if present
+    const hasDrawing = options.interactions?.some(i => i.type === 'draw' && i.imageData);
 
-    // Drain callbacks from parallel agents and inject as prefix
-    const callbackPrefix = options.callbackQueue?.format() ?? '';
-    // Drain the queue after formatting so main agent consumes them
-    if (options.callbackQueue && options.callbackQueue.size > 0) {
-      options.callbackQueue.drain();
+    // Format timeline (includes both user interactions and AI callbacks)
+    let timelinePrefix = options.timeline?.format() ?? '';
+    // Drain the timeline after formatting
+    if (options.timeline && options.timeline.size > 0) {
+      options.timeline.drain();
+    }
+
+    // Add drawing annotation after timeline
+    if (hasDrawing) {
+      timelinePrefix += '<interaction:user>draw [image attached]</interaction:user>\n\n';
     }
 
     return {
-      prompt: callbackPrefix + options.openWindows + options.reloadPrefix + content,
-      contextContent: interactionPrefix + content,
+      prompt: timelinePrefix + options.openWindows + options.reloadPrefix + content,
+      contextContent: content,
     };
   }
 

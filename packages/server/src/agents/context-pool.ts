@@ -4,13 +4,13 @@
  * Routes tasks to agents via AgentPool:
  * - Main tasks: main agent (idle) or ephemeral agent (busy) — sequential queue
  * - Window tasks: persistent per-window agents — parallel across windows, sequential within
- * - CallbackQueue: ephemeral/window agents push callbacks, drained on main agent's next turn
+ * - InteractionTimeline: user interactions and agent actions accumulated, drained on main agent's next turn
  * - ContextTape: kept for logging/debugging and providing initial context to new window agents
  */
 
 import { ContextTape, type ContextMessage, type ContextSource } from './context.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
-import { CallbackQueue } from './callback-queue.js';
+import { InteractionTimeline } from './interaction-timeline.js';
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
@@ -46,7 +46,7 @@ export class ContextPool {
   private connectionId: ConnectionId;
   private agentPool: AgentPool;
   private contextTape: ContextTape;
-  private callbackQueue: CallbackQueue;
+  private timeline: InteractionTimeline;
   private sharedLogger: SessionLogger | null = null;
   private windowState: WindowStateRegistry;
 
@@ -77,7 +77,7 @@ export class ContextPool {
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
     this.contextTape = new ContextTape();
-    this.callbackQueue = new CallbackQueue();
+    this.timeline = new InteractionTimeline();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
       console.log(`[ContextPool] Restored ${restoredContext.length} context messages from previous session`);
@@ -226,7 +226,7 @@ export class ContextPool {
       interactions: task.interactions,
       openWindows: openWindowsContext,
       reloadPrefix,
-      callbackQueue: this.callbackQueue,
+      timeline: this.timeline,
     });
     this.contextAssembly.appendUserMessage(this.contextTape, mainContext.contextContent, 'main');
 
@@ -299,12 +299,7 @@ export class ContextPool {
       const recordedActions = agent.session.getRecordedActions();
       this.reloadPolicy.maybeRecord(task, fp, recordedActions);
 
-      this.callbackQueue.push({
-        role: ephemeralRole,
-        task: task.content.slice(0, 100),
-        actions: recordedActions,
-        timestamp: Date.now(),
-      });
+      this.timeline.pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
     } finally {
       agent.currentRole = null;
       await this.agentPool.disposeEphemeral(agent);
@@ -452,14 +447,8 @@ export class ContextPool {
         }
       }
 
-      // Push callback so main agent knows what happened
-      this.callbackQueue.push({
-        role: agentRole,
-        task: task.content.slice(0, 100),
-        actions: recordedActions,
-        windowId,
-        timestamp: Date.now(),
-      });
+      // Push to timeline so main agent knows what happened
+      this.timeline.pushAI(agentRole, task.content.slice(0, 100), recordedActions, windowId);
 
       agent.currentRole = null;
       await this.sendWindowStatus(windowId, agentRole, 'released');
@@ -488,14 +477,8 @@ export class ContextPool {
     const groupId = this.windowConnectionPolicy.getGroupId(windowId);
     const agentKey = groupId ?? windowId;
 
-    // Push a callback about the window closing
-    this.callbackQueue.push({
-      role: `window-${windowId}`,
-      task: `Window "${windowId}" closed`,
-      actions: [{ type: 'window.close', windowId }],
-      windowId,
-      timestamp: Date.now(),
-    });
+    // Push to timeline about the window closing
+    this.timeline.pushAI(`window-${windowId}`, `Window "${windowId}" closed`, [{ type: 'window.close', windowId }], windowId);
 
     // Update group state and decide if agent should be disposed
     const closeResult = this.windowConnectionPolicy.handleClose(windowId);
@@ -524,8 +507,19 @@ export class ContextPool {
     return this.contextTape;
   }
 
-  getCallbackQueue(): CallbackQueue {
-    return this.callbackQueue;
+  getTimeline(): InteractionTimeline {
+    return this.timeline;
+  }
+
+  /**
+   * Accumulate user interactions into the timeline for the main agent's next turn.
+   * Skips 'draw' type interactions (handled separately as images).
+   */
+  pushUserInteractions(interactions: UserInteraction[]): void {
+    for (const interaction of interactions) {
+      if (interaction.type === 'draw') continue;
+      this.timeline.pushUser(interaction);
+    }
   }
 
   pruneWindowContext(windowId: string): void {
@@ -576,7 +570,7 @@ export class ContextPool {
 
     // 7. Clear remaining state
     this.contextTape.clear();
-    this.callbackQueue.clear();
+    this.timeline.clear();
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
     this.windowState.clear();
@@ -598,7 +592,7 @@ export class ContextPool {
     }
 
     this.resetting = false;
-    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, callbacks, queues, and window state`);
+    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, timeline, queues, and window state`);
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {
@@ -620,7 +614,7 @@ export class ContextPool {
     mainQueueSize: number;
     windowQueueSizes: Record<string, number>;
     contextTapeSize: number;
-    callbackQueueSize: number;
+    timelineSize: number;
     mainAgent: boolean;
     windowAgents: number;
     ephemeralAgents: number;
@@ -632,7 +626,7 @@ export class ContextPool {
       mainQueueSize: this.mainQueuePolicy.size(),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
-      callbackQueueSize: this.callbackQueue.size,
+      timelineSize: this.timeline.size,
     };
   }
 
@@ -681,7 +675,7 @@ export class ContextPool {
     this.windowConnectionPolicy.clear();
     this.windowState.clear();
     this.contextTape.clear();
-    this.callbackQueue.clear();
+    this.timeline.clear();
     this.sharedLogger = null;
     this.resetting = false;
   }

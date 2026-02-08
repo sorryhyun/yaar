@@ -38,17 +38,8 @@ describe('WindowQueuePolicy', () => {
 });
 
 describe('ContextAssemblyPolicy', () => {
-  it('formats interaction context and window context', () => {
+  it('formats open windows context', () => {
     const policy = new ContextAssemblyPolicy();
-    const interactions = [
-      { type: 'click' as const, timestamp: Date.now(), windowTitle: 'X', details: 'Button A' },
-      { type: 'draw' as const, timestamp: Date.now(), imageData: 'data:image/png;base64,abc' },
-    ];
-
-    const formatted = policy.formatInteractionsForContext(interactions);
-    expect(formatted).toContain('<previous_interactions>');
-    expect(formatted).toContain('<user_interaction:draw>');
-
     const windows = policy.formatOpenWindows(['w-1', 'w-2']);
     expect(windows).toContain('<open_windows>w-1, w-2</open_windows>');
   });

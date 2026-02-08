@@ -7,11 +7,10 @@ import type { OSAction } from '@yaar/shared'
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared'
 import { emptyContentByRenderer, addDebugLogEntry } from '../helpers'
 
-export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, get) => ({
+export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   windows: {},
   zOrder: [],
   focusedWindowId: null,
-  pendingBoundsUpdates: [],
 
   handleWindowAction: (action: OSAction) => set((state) => {
     const store = state as DesktopStore
@@ -259,11 +258,18 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, get) => ({
       state.zOrder.push(windowId)
       state.focusedWindowId = windowId
       win.minimized = false
+      // Log to interaction log (for AI context on next message)
       ;(state as DesktopStore).interactionLog.push({
         type: 'window.focus',
         timestamp: Date.now(),
         windowId,
         windowTitle: win.title,
+      })
+      // Push to pending for immediate send
+      ;(state as DesktopStore).pendingInteractions.push({
+        type: 'window.focus',
+        timestamp: Date.now(),
+        windowId,
       })
     }
   }),
@@ -277,11 +283,18 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, get) => ({
     if (state.focusedWindowId === windowId) {
       state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
     }
+    // Log to interaction log (for AI context on next message)
     ;(state as DesktopStore).interactionLog.push({
       type: 'window.close',
       timestamp: Date.now(),
       windowId,
       windowTitle: title,
+    })
+    // Push to pending for immediate send
+    ;(state as DesktopStore).pendingInteractions.push({
+      type: 'window.close',
+      timestamp: Date.now(),
+      windowId,
     })
   }),
 
@@ -319,32 +332,30 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, get) => ({
     }
   }),
 
+  // On drag-end / resize-end: push a consolidated interaction with bounds for immediate send
   queueBoundsUpdate: (windowId) => set((state) => {
     const win = state.windows[windowId]
     if (!win) return
-    // Replace any existing pending update for the same window
-    const idx = state.pendingBoundsUpdates.findIndex(u => u.windowId === windowId)
-    const update = {
+    // Replace any existing pending bounds interaction for the same window
+    const store = state as DesktopStore
+    const idx = store.pendingInteractions.findIndex(
+      i => (i.type === 'window.move' || i.type === 'window.resize') && i.windowId === windowId && i.bounds
+    )
+    const interaction = {
+      type: 'window.move' as const,
+      timestamp: Date.now(),
       windowId,
-      x: win.bounds.x,
-      y: win.bounds.y,
-      w: win.bounds.w,
-      h: win.bounds.h,
+      bounds: {
+        x: win.bounds.x,
+        y: win.bounds.y,
+        w: win.bounds.w,
+        h: win.bounds.h,
+      },
     }
     if (idx >= 0) {
-      state.pendingBoundsUpdates[idx] = update
+      store.pendingInteractions[idx] = interaction
     } else {
-      state.pendingBoundsUpdates.push(update)
+      store.pendingInteractions.push(interaction)
     }
   }),
-
-  consumeBoundsUpdates: () => {
-    const updates = get().pendingBoundsUpdates
-    if (updates.length > 0) {
-      set((state) => {
-        state.pendingBoundsUpdates = []
-      })
-    }
-    return updates
-  },
 })

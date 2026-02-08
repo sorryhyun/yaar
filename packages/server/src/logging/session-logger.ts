@@ -1,6 +1,7 @@
 import { mkdir, writeFile, appendFile } from 'fs/promises';
 import { join } from 'path';
-import type { OSAction } from '@yaar/shared';
+import type { OSAction, UserInteraction } from '@yaar/shared';
+import { formatCompactInteraction } from '@yaar/shared';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';
@@ -166,6 +167,15 @@ export class SessionLogger {
 
   async logAction(action: OSAction, agentId?: string): Promise<void> {
     await this.appendEntry('action', agentId, { action });
+  }
+
+  async logInteraction(interaction: UserInteraction): Promise<void> {
+    const compact = formatCompactInteraction(interaction);
+    await this.appendEntry('interaction', undefined, {
+      interaction: compact,
+      source: 'user',
+      windowId: interaction.windowId,
+    });
   }
 
   /**

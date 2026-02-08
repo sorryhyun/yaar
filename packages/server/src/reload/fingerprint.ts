@@ -19,6 +19,8 @@ export function normalizeContent(text: string): string {
     .replace(/<open_windows>[\s\S]*?<\/open_windows>/g, '')
     .replace(/<user_interaction:\w+>[\s\S]*?<\/user_interaction:\w+>/g, '')
     .replace(/<previous_interactions>[\s\S]*?<\/previous_interactions>/g, '')
+    .replace(/<timeline>[\s\S]*?<\/timeline>/g, '')
+    .replace(/<interaction:\w+[^>]*>[\s\S]*?<\/interaction:\w+>/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();

@@ -10,6 +10,13 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
   const windows = new Map<string, OSAction>();
 
   for (const msg of messages) {
+    // Handle interaction entries (e.g., user closing a window)
+    if (msg.type === 'interaction' && msg.interaction?.startsWith('close:')) {
+      const windowId = msg.interaction.slice('close:'.length);
+      windows.delete(windowId);
+      continue;
+    }
+
     if (msg.type !== 'action' || !msg.action) continue;
     const action = msg.action;
 

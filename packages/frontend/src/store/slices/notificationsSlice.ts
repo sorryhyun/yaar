@@ -35,5 +35,11 @@ export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, 
       timestamp: Date.now(),
       details: notification?.title,
     })
+    // Push to pending for immediate send
+    ;(state as DesktopStore).pendingInteractions.push({
+      type: 'notification.dismiss',
+      timestamp: Date.now(),
+      details: notification?.title,
+    })
   }),
 })

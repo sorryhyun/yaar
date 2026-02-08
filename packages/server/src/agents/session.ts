@@ -181,36 +181,6 @@ export class AgentSession {
     return this.sessionLogger;
   }
 
-  private formatInteractions(interactions: UserInteraction[]): { text: string; images: string[] } {
-    if (interactions.length === 0) return { text: '', images: [] };
-
-    const drawings = interactions.filter(i => i.type === 'draw' && i.imageData);
-    const otherInteractions = interactions.filter(i => i.type !== 'draw');
-
-    const parts: string[] = [];
-
-    if (otherInteractions.length > 0) {
-      const lines = otherInteractions.map(i => {
-        let content = '';
-        if (i.windowTitle) content += `"${i.windowTitle}"`;
-        if (i.details) content += content ? ` (${i.details})` : i.details;
-        return `<user_interaction:${i.type}>${content}</user_interaction:${i.type}>`;
-      });
-      parts.push(`<previous_interactions>\n${lines.join('\n')}\n</previous_interactions>`);
-    }
-
-    if (drawings.length > 0) {
-      parts.push(`<user_interaction:draw>[User drawing attached as image]</user_interaction:draw>`);
-    }
-
-    const text = parts.length > 0 ? parts.join('\n\n') + '\n\n' : '';
-    const images = drawings
-      .map(d => d.imageData)
-      .filter((img): img is string => img !== undefined);
-
-    return { text, images };
-  }
-
   async handleMessage(content: string, options: HandleMessageOptions): Promise<void> {
     const { role, interactions, messageId, onContextMessage } = options;
 
@@ -231,10 +201,12 @@ export class AgentSession {
       agentId: role,
     });
 
-    const { text: interactionContext, images } = interactions
-      ? this.formatInteractions(interactions)
-      : { text: '', images: [] };
-    const fullContent = interactionContext + content;
+    // Extract images from draw interactions for vision API
+    const images = interactions
+      ?.filter(i => i.type === 'draw' && i.imageData)
+      .map(i => i.imageData!)
+      ?? [];
+    const fullContent = content;
 
     // Log user message with role identifier and source
     await this.sessionLogger?.logUserMessage(fullContent, role, options.source);

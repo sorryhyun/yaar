@@ -6,6 +6,7 @@ import { consolidateInteractions } from '../helpers'
 
 export const createInteractionsSlice: SliceCreator<InteractionsSlice> = (set, get) => ({
   interactionLog: [],
+  pendingInteractions: [],
 
   logInteraction: (interaction) => set((state) => {
     state.interactionLog.push({
@@ -25,5 +26,15 @@ export const createInteractionsSlice: SliceCreator<InteractionsSlice> = (set, ge
       })
     }
     return consolidateInteractions(interactions)
+  },
+
+  consumePendingInteractions: () => {
+    const interactions = get().pendingInteractions
+    if (interactions.length > 0) {
+      set((state) => {
+        state.pendingInteractions = []
+      })
+    }
+    return interactions
   },
 })
