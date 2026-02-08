@@ -1,100 +1,96 @@
 # YAAR
 
-**Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
+**Y**ou **A**re **A**bsolutely **R**ight — AI가 다음에 무엇을 보여주고 할지 스스로 결정하는 리액티브 AI 인터페이스.
 
-No pre-built screens. Just an **always-ready input field**. The AI creates windows, tables, forms, and visualizations dynamically based on your intent.
+미리 만들어진 화면 없이, **항상 준비된 입력창** 하나만 있으면 됩니다. AI가 사용자의 의도에 따라 윈도우, 테이블, 폼, 시각화를 동적으로 생성합니다.
 
-## How It Works
+> [English version](./README.en.md)
+
+## 작동 방식
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                           Frontend                              │
+│                          프론트엔드                               │
 │   ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│   │    Input    │    │    Canvas    │    │     Windows      │  │
-│   │    Field    │    │   (Draw)     │    │    (Rendered)    │  │
+│   │   입력창     │    │   캔버스      │    │    윈도우         │  │
+│   │             │    │   (그리기)    │    │   (렌더링)       │  │
 │   └──────┬──────┘    └──────┬───────┘    └────────▲─────────┘  │
 │          │                  │                     │             │
 │          └────────┬─────────┘                     │             │
 │                   ▼                               │             │
-│            User Message                    OS Actions (JSON)    │
+│            사용자 메시지                    OS Actions (JSON)    │
 │                   │                               │             │
 └───────────────────┼───────────────────────────────┼─────────────┘
                     │          WebSocket            │
 ┌───────────────────▼───────────────────────────────┼─────────────┐
-│                         Server                    │             │
+│                          서버                      │             │
 │   ┌───────────────────────────────────────────────┴──────────┐  │
-│   │                      AI Provider                         │  │
-│   │   • Interprets user intent                               │  │
-│   │   • Injects dynamic context (apps, history)              │  │
-│   │   • Emits OS Actions → Frontend renders                  │  │
+│   │                      AI 프로바이더                         │  │
+│   │   • 사용자 의도를 해석                                     │  │
+│   │   • 동적 컨텍스트 주입 (앱, 히스토리)                       │  │
+│   │   • OS Actions 생성 → 프론트엔드가 렌더링                   │  │
 │   └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Features
+## 주요 기능
 
-### 1. AI Interprets and Renders
+### 1. AI가 해석하고 렌더링
 
-The AI doesn't just respond with text — it **creates the UI**. Ask for a task list, and a window appears with checkboxes. Ask to compare data, and a table renders. The interface adapts to your intent.
-
-```
-You: "Show me today's tasks"
- AI: Creates window with interactive task list
-You: "Compare these two files"
- AI: Creates side-by-side diff view
-```
-
-### 2. Draw and Send
-
-Sketch on the canvas and send it to the AI. Draw a wireframe, diagram, or quick note — the AI interprets your drawing and can generate code, explain concepts, or refine the design.
-
-### 3. Dynamic Context Injection
-
-Context is injected based on what you're doing:
-- Click an app icon → AI loads the app's `SKILL.md` instructions
-- Interact with a window → AI receives the interaction context
-- Reference previous results → AI has conversation history
-
-The AI always knows what's relevant without you having to explain.
-
-### 4. App Development with SKILL.md
-
-Create apps by writing instructions, not code:
+AI는 단순히 텍스트로 응답하지 않고 **UI를 직접 생성**합니다. 할 일 목록을 요청하면 체크박스가 있는 윈도우가 나타나고, 데이터 비교를 요청하면 테이블이 렌더링됩니다. 인터페이스가 의도에 맞춰 적응합니다.
 
 ```
-apps/
-└── myapp/
-    └── SKILL.md    # Instructions for the AI
+사용자: "오늘 할 일 보여줘"
+   AI: 인터랙티브 할 일 목록이 담긴 윈도우 생성
+사용자: "이 두 파일 비교해줘"
+   AI: 나란히 보는 diff 뷰 생성
 ```
 
-Drop a folder in `apps/` with a `SKILL.md` file. It becomes a desktop icon. When clicked, the AI reads your instructions and can:
-- Call APIs
-- Authenticate users
-- Store credentials securely
-- Guide multi-step workflows
+### 2. 그려서 보내기
 
-No frontend code needed. The AI generates interfaces on demand.
+`Alt + 좌클릭 드래그`로 화면 어디서든 스케치할 수 있습니다. 와이어프레임, 다이어그램, 간단한 메모를 그리고 AI에게 보내면 그림을 해석해서 코드를 생성하거나, 개념을 설명하거나, 디자인을 다듬어 줍니다.
 
-## Quick Start
+### 3. 리로드 (빠른 응답)
 
-**Prerequisites:** Node.js >= 24, pnpm >= 10, Claude CLI (`npm install -g @anthropic-ai/claude-code && claude login`)
+윈도우 내용이 변경될 필요가 있을 때, AI에게 다시 물어보지 않고 캐시된 컨텐츠를 즉시 복원합니다. 핑거프린트 기반 캐시로 동일한 내용은 AI 재호출 없이 빠르게 표시됩니다.
+
+### 4. 동적 컨텍스트 주입
+
+하고 있는 작업에 따라 컨텍스트가 자동으로 주입됩니다:
+- 앱 아이콘 클릭 → AI가 해당 앱의 `SKILL.md` 로드
+- 윈도우와 상호작용 → AI가 상호작용 컨텍스트 수신
+- 이전 결과 참조 → AI가 대화 히스토리 보유
+
+따로 설명하지 않아도 AI가 항상 관련 정보를 파악합니다.
+
+### 5. 앱 개발
+
+"테트리스 만들어줘"라고 말하면 AI가 TypeScript를 작성하고, esbuild로 컴파일하고, 바탕화면에 배포합니다. npm 설치 없이 사용 가능한 번들 라이브러리(lodash, anime.js, Konva 등)를 포함하며, 격리된 샌드박스에서 코드를 실행합니다.
+
+외부 API를 활용하는 앱은 `SKILL.md`에 API 사용법을 기술하면 AI가 호출합니다.
+
+자세한 내용은 [앱 개발 가이드](./docs/app-development.md)를 참고하세요.
+
+## 빠른 시작
+
+**사전 요구사항:** Node.js >= 24, pnpm >= 10, Claude CLI (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 ```bash
-pnpm install    # Install dependencies
-make dev        # Start YAAR
+pnpm install    # 의존성 설치
+make dev        # YAAR 시작
 ```
 
-Open http://localhost:5173
+http://localhost:5173 접속
 
-## Project Structure
+## 프로젝트 구조
 
 ```
 yaar/
-├── apps/              # Drop folders here to create apps
+├── apps/              # 여기에 폴더를 넣으면 앱이 됩니다
 ├── packages/
-│   ├── shared/        # OS Actions types
-│   ├── server/        # WebSocket server + AI providers
-│   └── frontend/      # React frontend
+│   ├── shared/        # OS Actions 타입
+│   ├── server/        # WebSocket 서버 + AI 프로바이더
+│   └── frontend/      # React 프론트엔드
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for development details.
+개발 관련 상세 내용은 [CLAUDE.md](./CLAUDE.md)를 참고하세요.

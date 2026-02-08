@@ -83,5 +83,19 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break
     }
+    case 'APPROVAL_REQUEST': {
+      // Convert to a dialog.confirm action and route through the existing dialog system.
+      // This keeps the existing ConfirmDialog UI working; can be upgraded to inline later.
+      handlers.applyActions([{
+        type: 'dialog.confirm' as const,
+        id: message.dialogId,
+        title: message.title,
+        message: message.message,
+        confirmText: message.confirmText,
+        cancelText: message.cancelText,
+        permissionOptions: message.permissionOptions,
+      }])
+      break
+    }
   }
 }

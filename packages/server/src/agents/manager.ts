@@ -57,6 +57,9 @@ export class SessionManager {
 
   private async doInitialize(): Promise<boolean> {
     console.log(`[SessionManager] Lazy initializing pool for ${this.connectionId}`);
+    // Mark as active so MCP tool handlers (which can't resolve the connection
+    // ID from AsyncLocalStorage) fall back to the correct instances.
+    windowStateRegistryManager.setActive(this.connectionId);
     const windowState = windowStateRegistryManager.get(this.connectionId);
     const reloadCache = await reloadCacheManager.ensureLoaded(this.connectionId);
     this.pool = new ContextPool(this.connectionId, windowState, reloadCache, this.restoredContext, this.savedThreadIds);

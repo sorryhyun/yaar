@@ -32,7 +32,10 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined
   // For same-origin content (local apps), don't sandbox - it's trusted
   // For cross-origin, apply sandbox to prevent escape attacks
-  const sandbox = customSandbox ?? (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms')
+  // allow-same-origin: lets the site access its own localStorage/cookies (required by most sites)
+  // allow-scripts: lets the site run JavaScript
+  // allow-forms: lets the site submit forms
+  const sandbox = customSandbox ?? (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin')
 
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [loadState, setLoadState] = useState<LoadState>('loading')

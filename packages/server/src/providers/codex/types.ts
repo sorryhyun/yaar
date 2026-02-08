@@ -3,7 +3,24 @@
  *
  * The app-server uses JSON-RPC 2.0 over stdio for all communication.
  * Requests have an `id` field; notifications do not.
+ *
+ * Domain-specific types are generated from the Codex schema via
+ * `make codex-types` (see packages/server/src/providers/codex/generated/).
+ * Hand-written types below are kept for backward-compatibility; new code
+ * should prefer the generated types.
  */
+
+// Re-export generated protocol unions and approval types
+export type { ServerRequest as CodexServerRequest } from './generated/index.js';
+export type { ServerNotification as CodexServerNotification } from './generated/index.js';
+export type { ClientRequest as CodexClientRequest } from './generated/index.js';
+export type { ReviewDecision } from './generated/index.js';
+export type { ExecCommandApprovalParams } from './generated/index.js';
+export type { ExecCommandApprovalResponse } from './generated/index.js';
+export type { ApplyPatchApprovalParams } from './generated/index.js';
+export type { ApplyPatchApprovalResponse } from './generated/index.js';
+export type { InitializeCapabilities } from './generated/index.js';
+export type { ClientInfo as CodexClientInfo } from './generated/index.js';
 
 // ============================================================================
 // JSON-RPC Base Types
@@ -51,12 +68,24 @@ export interface JsonRpcNotification<T = unknown> {
 }
 
 /**
+ * JSON-RPC server-initiated request (has both id and method).
+ * The server sends these when it needs a response from the client.
+ */
+export interface JsonRpcServerRequest<T = unknown> {
+  jsonrpc?: '2.0';
+  method: string;
+  params?: T;
+  id: number;
+}
+
+/**
  * Union type for any JSON-RPC message from the server.
  */
 export type JsonRpcMessage =
   | JsonRpcResponse
   | JsonRpcErrorResponse
-  | JsonRpcNotification;
+  | JsonRpcNotification
+  | JsonRpcServerRequest;
 
 // ============================================================================
 // Thread/Turn Request & Response Types
@@ -101,12 +130,17 @@ export interface ThreadStartResult {
 
 /**
  * Parameters for initialize request.
+ * @see generated/InitializeParams for the full schema
  */
 export interface InitializeParams {
   clientInfo: {
     name: string;
+    title?: string | null;
     version: string;
   };
+  capabilities?: {
+    experimentalApi: boolean;
+  } | null;
 }
 
 /**
@@ -272,6 +306,15 @@ export function isErrorResponse(
 }
 
 /**
+ * Check if a JSON-RPC message is a server-initiated request (has both id and method).
+ */
+export function isServerRequest(
+  message: JsonRpcMessage
+): message is JsonRpcServerRequest {
+  return 'id' in message && message.id !== undefined && 'method' in message;
+}
+
+/**
  * Check if a JSON-RPC message is a notification (no id).
  */
 export function isNotification(
@@ -281,10 +324,10 @@ export function isNotification(
 }
 
 /**
- * Check if a JSON-RPC message is a response (has id).
+ * Check if a JSON-RPC message is a response (has id, no method).
  */
 export function isResponse(
   message: JsonRpcMessage
 ): message is JsonRpcResponse | JsonRpcErrorResponse {
-  return 'id' in message && message.id !== undefined;
+  return 'id' in message && message.id !== undefined && !('method' in message);
 }

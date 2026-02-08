@@ -28,6 +28,7 @@ make build                       # Build all packages
 pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
+make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
 
 # Run individual packages
 make server                                  # Start server only

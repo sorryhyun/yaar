@@ -2,7 +2,7 @@
  * WebSocket event types for client-server communication.
  */
 
-import type { OSAction } from './actions.js';
+import type { OSAction, PermissionOptions } from './actions.js';
 
 // ============ Client → Server Events ============
 
@@ -180,6 +180,17 @@ export interface MessageQueuedEvent {
   position: number;
 }
 
+export interface ApprovalRequestEvent {
+  type: 'APPROVAL_REQUEST';
+  dialogId: string;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  permissionOptions?: PermissionOptions;
+  agentId?: string;
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -189,4 +200,5 @@ export type ServerEvent =
   | ErrorEvent
   | WindowAgentStatusEvent
   | MessageAcceptedEvent
-  | MessageQueuedEvent;
+  | MessageQueuedEvent
+  | ApprovalRequestEvent;

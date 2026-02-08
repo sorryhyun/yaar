@@ -115,6 +115,26 @@ export class JsonRpcClient extends EventEmitter {
   }
 
   /**
+   * Send a JSON-RPC response to a server-initiated request.
+   */
+  respond(id: number, result: unknown): void {
+    if (this.closed) return;
+    const response = { jsonrpc: '2.0' as const, result, id };
+    const line = JSON.stringify(response) + '\n';
+    this.stdin.write(line);
+  }
+
+  /**
+   * Send a JSON-RPC error response to a server-initiated request.
+   */
+  respondError(id: number, code: number, message: string): void {
+    if (this.closed) return;
+    const response = { jsonrpc: '2.0' as const, error: { code, message }, id };
+    const line = JSON.stringify(response) + '\n';
+    this.stdin.write(line);
+  }
+
+  /**
    * Send a notification (no response expected).
    */
   notify<TParams>(method: string, params?: TParams): void {
@@ -195,10 +215,22 @@ export class JsonRpcClient extends EventEmitter {
 
   /**
    * Handle a parsed JSON-RPC message.
+   *
+   * Discrimination logic:
+   * - has id AND method → server-initiated request → emit 'server_request'
+   * - has id, no method → response to our request → resolve/reject
+   * - no id             → notification → emit 'notification'
    */
   private handleMessage(message: JsonRpcMessage): void {
-    // Check if this is a response (has id)
     if ('id' in message && message.id !== undefined) {
+      // Server-initiated request: has both id and method
+      if ('method' in message && typeof (message as { method?: string }).method === 'string') {
+        const req = message as { id: number; method: string; params?: unknown };
+        this.emit('server_request', req.id, req.method, req.params);
+        return;
+      }
+
+      // Response to a client-initiated request
       const pending = this.pendingRequests.get(message.id);
       if (!pending) {
         // Response for unknown request, ignore

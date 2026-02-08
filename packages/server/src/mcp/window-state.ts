@@ -178,32 +178,52 @@ export class WindowStateRegistry {
 class WindowStateRegistryManager {
   private registries = new Map<ConnectionId, WindowStateRegistry>();
   private unsubscribeAction: (() => void) | null = null;
+  // MCP tool handlers can't resolve the connection ID (AsyncLocalStorage
+  // isn't available in HTTP request context). Track the active registry
+  // so tools using 'global' fallback get the right state.
+  private activeRegistry: WindowStateRegistry | null = null;
 
   init(): void {
     if (this.unsubscribeAction) return;
 
     this.unsubscribeAction = actionEmitter.onAction((event: ActionEvent) => {
       const connectionId = getCurrentConnectionId();
-      if (!connectionId) return;
-      this.get(connectionId).handleAction(event.action);
+      // When called from MCP HTTP context, connectionId is undefined.
+      // Fall back to the active registry so window state is still tracked.
+      const registry = connectionId
+        ? this.get(connectionId)
+        : this.activeRegistry;
+      registry?.handleAction(event.action);
     });
   }
 
   get(connectionId: ConnectionId): WindowStateRegistry {
     let registry = this.registries.get(connectionId);
     if (!registry) {
+      if (connectionId === 'global' && this.activeRegistry) {
+        return this.activeRegistry;
+      }
       registry = new WindowStateRegistry();
       this.registries.set(connectionId, registry);
     }
     return registry;
   }
 
+  /** Mark a registry as the active one (called during session init). */
+  setActive(connectionId: ConnectionId): void {
+    this.activeRegistry = this.get(connectionId);
+  }
+
   clear(connectionId: ConnectionId): void {
+    if (this.activeRegistry === this.registries.get(connectionId)) {
+      this.activeRegistry = null;
+    }
     this.registries.get(connectionId)?.clear();
     this.registries.delete(connectionId);
   }
 
   clearAll(): void {
+    this.activeRegistry = null;
     for (const registry of this.registries.values()) {
       registry.clear();
     }

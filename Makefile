@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean test test-frontend test-server test-shared
+.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build clean test test-frontend test-server test-shared codex-types
 
 # Run both server and frontend (auto-select provider)
 dev:
@@ -55,6 +55,15 @@ test-server:
 # Run shared tests
 test-shared:
 	pnpm --filter @yaar/shared test
+
+# Regenerate Codex app-server TypeScript types
+# Post-processes imports to add .js extensions required by Node ESM (nodenext)
+codex-types:
+	rm -rf packages/server/src/providers/codex/generated
+	codex app-server generate-ts --out packages/server/src/providers/codex/generated --experimental
+	@echo "Adding .js extensions to generated imports..."
+	@find packages/server/src/providers/codex/generated -name '*.ts' -exec sed -i -E 's/from "(\.[^"]+)"/from "\1.js"/g' {} +
+	@sed -i 's|from "./v2.js"|from "./v2/index.js"|g' packages/server/src/providers/codex/generated/index.ts
 
 # Clean generated files
 clean:

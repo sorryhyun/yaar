@@ -15,7 +15,7 @@ import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
 import { getAgentLimiter } from './limiter.js';
-import { acquireWarmProvider } from '../providers/factory.js';
+import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { MainQueuePolicy } from './context-pool-policies/main-queue-policy.js';
@@ -558,7 +558,10 @@ export class ContextPool {
     // 5. Now safe to dispose agents (no in-flight references)
     await this.agentPool.cleanup();
 
-    // 6. Close all tracked windows on the frontend
+    // 6. Stop shared Codex app-server so a fresh one is spawned
+    await getWarmPool().resetCodexAppServer();
+
+    // 7. Close all tracked windows on the frontend
     const openWindows = this.windowState.listWindows();
     if (openWindows.length > 0) {
       const closeActions = openWindows.map((win) => ({

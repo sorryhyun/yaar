@@ -85,8 +85,12 @@ export class AppServer {
   private turnQueue: Array<{ resolve: () => void }> = [];
   private turnActive = false;
 
+  // Capabilities received from initialize handshake
+  private initializeResult: InitializeResult | null = null;
+
   // Event listeners
   private notificationListeners: Array<(method: string, params: unknown) => void> = [];
+  private serverRequestListeners: Array<(id: number, method: string, params: unknown) => void> = [];
   private exitListeners: Array<(code: number | null, signal: string | null) => void> = [];
   private errorListeners: Array<(error: Error) => void> = [];
   private restartListeners: Array<(attempt: number) => void> = [];
@@ -121,12 +125,16 @@ export class AppServer {
       throw new Error('AppServer client is not available');
     }
 
-    await this.client.request<InitializeParams, InitializeResult>(
+    this.initializeResult = await this.client.request<InitializeParams, InitializeResult>(
       'initialize',
       {
         clientInfo: {
           name: 'yaar',
+          title: 'YAAR Desktop',
           version: '1.0.0',
+        },
+        capabilities: {
+          experimentalApi: true,
         },
       }
     );
@@ -188,6 +196,13 @@ export class AppServer {
     this.client.on('notification', (method: string, params: unknown) => {
       for (const listener of this.notificationListeners) {
         listener(method, params);
+      }
+    });
+
+    // Forward server-initiated requests
+    this.client.on('server_request', (id: number, method: string, params: unknown) => {
+      for (const listener of this.serverRequestListeners) {
+        listener(id, method, params);
       }
     });
 
@@ -314,6 +329,27 @@ export class AppServer {
     return this.client;
   }
 
+  /**
+   * Get the capabilities received from the initialize handshake.
+   */
+  getCapabilities(): InitializeResult | null {
+    return this.initializeResult;
+  }
+
+  /**
+   * Send a JSON-RPC response to a server-initiated request.
+   */
+  respond(id: number, result: unknown): void {
+    this.client?.respond(id, result);
+  }
+
+  /**
+   * Send a JSON-RPC error response to a server-initiated request.
+   */
+  respondError(id: number, code: number, message: string): void {
+    this.client?.respondError(id, code, message);
+  }
+
   // ============================================================================
   // Thread/Turn API
   // ============================================================================
@@ -415,6 +451,7 @@ export class AppServer {
   // ============================================================================
 
   on(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  on(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
   on(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
   on(event: 'restart', listener: (attempt: number) => void): this;
@@ -423,6 +460,9 @@ export class AppServer {
     switch (event) {
       case 'notification':
         this.notificationListeners.push(listener as (method: string, params: unknown) => void);
+        break;
+      case 'server_request':
+        this.serverRequestListeners.push(listener as (id: number, method: string, params: unknown) => void);
         break;
       case 'exit':
         this.exitListeners.push(listener as (code: number | null, signal: string | null) => void);
@@ -438,6 +478,7 @@ export class AppServer {
   }
 
   off(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  off(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
   off(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   off(event: 'error', listener: (error: Error) => void): this;
   off(event: 'restart', listener: (attempt: number) => void): this;
@@ -446,6 +487,9 @@ export class AppServer {
     switch (event) {
       case 'notification':
         this.notificationListeners = this.notificationListeners.filter((l) => l !== listener);
+        break;
+      case 'server_request':
+        this.serverRequestListeners = this.serverRequestListeners.filter((l) => l !== listener);
         break;
       case 'exit':
         this.exitListeners = this.exitListeners.filter((l) => l !== listener);
@@ -465,6 +509,7 @@ export class AppServer {
    */
   removeAllListeners(): this {
     this.notificationListeners = [];
+    this.serverRequestListeners = [];
     this.exitListeners = [];
     this.errorListeners = [];
     this.restartListeners = [];

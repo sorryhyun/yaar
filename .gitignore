@@ -44,6 +44,9 @@ apps/*/credentials.json
 # Sandbox (temporary app development)
 /sandbox/
 
+# Codex generated types (regenerate with: make codex-types)
+packages/server/src/providers/codex/generated/
+
 # Claude Code
 .claude/*
 !.claude/agents/

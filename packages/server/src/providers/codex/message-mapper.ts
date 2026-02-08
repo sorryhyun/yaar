@@ -132,10 +132,20 @@ export function mapNotification(
       };
     }
 
-    case 'item/started':
-    case 'item/completed':
-      // Generic item lifecycle events - skip silently
+    case 'item/started': {
+      // Generated schema: { item: ThreadItem, threadId, turnId }
+      const itemParams = params as { item?: { type?: string; id?: string }; threadId?: string; turnId?: string } | undefined;
+      const item = itemParams?.item;
+      console.debug(`[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${itemParams?.turnId ?? '?'}`);
       return null;
+    }
+
+    case 'item/completed': {
+      const itemParams = params as { item?: { type?: string; id?: string }; threadId?: string; turnId?: string } | undefined;
+      const item = itemParams?.item;
+      console.debug(`[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${itemParams?.turnId ?? '?'}`);
+      return null;
+    }
 
     // ========================================================================
     // Command execution events (shell commands)

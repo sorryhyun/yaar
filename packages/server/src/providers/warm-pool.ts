@@ -246,6 +246,29 @@ class ProviderWarmPool {
   }
 
   /**
+   * Stop the shared Codex AppServer and dispose any pooled Codex providers.
+   * Called on session reset so the next acquire() spawns a fresh app-server.
+   */
+  async resetCodexAppServer(): Promise<void> {
+    if (!this.sharedCodexAppServer) return;
+
+    // Dispose pooled providers that reference the old AppServer
+    const kept: AITransport[] = [];
+    for (const provider of this.pool) {
+      if (provider.providerType === 'codex') {
+        await provider.dispose();
+      } else {
+        kept.push(provider);
+      }
+    }
+    this.pool = kept;
+
+    // Force-stop the shared process
+    await this.sharedCodexAppServer.stop();
+    this.sharedCodexAppServer = null;
+  }
+
+  /**
    * Clean up all pooled providers.
    */
   async cleanup(): Promise<void> {
