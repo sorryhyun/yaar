@@ -1,235 +1,297 @@
-type CellMap = Record<string, string>;
-
-const ROWS = 30;
-const COLS = 12;
+import { COLS, ROWS } from './constants';
+import { cloneMap, csvEscape } from './data-utils';
+import { computeFillDestination, sourceForDestination } from './fill-utils';
+import { createFormulaEngine, shiftFormula } from './formula-utils';
+import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
+import { colLabel, key as cellKey, parseRef, rangeRect, refsInRect } from './ref-utils';
+import { getStyleForRef, normalizeStyle } from './style-utils';
+import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
 
 const app = document.createElement('div');
 app.innerHTML = `
   <style>
     :root { color-scheme: light; }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; }
-    .wrap { padding: 12px; display: grid; gap: 10px; }
-    .bar { display: grid; grid-template-columns: 90px 1fr auto auto auto; gap: 8px; align-items: center; }
-    .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
-    input { padding: 8px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 14px; }
-    button { padding: 8px 10px; border: 1px solid #ccd3df; border-radius: 8px; background: white; cursor: pointer; }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; user-select: none; }
+    .wrap { padding: 10px; display: grid; gap: 8px; }
+    .bar { display: grid; grid-template-columns: auto 1fr auto auto auto auto auto auto auto auto auto auto auto; gap: 6px; align-items: center; }
+    .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; min-width: 74px; text-align: center; border: 1px solid #d0d7e2; border-radius: 8px; padding: 7px 8px; background: white; }
+    input, select { padding: 7px 8px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 13px; background: white; }
+    #formulaInput { width: 100%; }
+    button { padding: 7px 10px; border: 1px solid #ccd3df; border-radius: 8px; background: white; cursor: pointer; }
     button:hover { background: #f1f4f9; }
-    .sheetWrap { overflow: auto; border: 1px solid #d9e0ec; border-radius: 10px; background: white; max-height: calc(100vh - 90px); }
-    table { border-collapse: collapse; min-width: 900px; }
+    button.active { background: #dbe8ff; border-color: #96b6ff; }
+    .sheetWrap { overflow: auto; border: 1px solid #d9e0ec; border-radius: 10px; background: white; max-height: calc(100vh - 110px); }
+    table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
     th, td { border: 1px solid #e7ecf5; }
-    th { position: sticky; top: 0; background: #f8faff; z-index: 1; font-weight: 600; }
-    .rowHead { position: sticky; left: 0; background: #f8faff; z-index: 1; text-align: right; padding: 6px 8px; min-width: 42px; }
-    .corner { position: sticky; left: 0; top: 0; z-index: 2; background: #eef3ff; min-width: 42px; }
-    td input { width: 100%; border: none; padding: 6px 8px; box-sizing: border-box; min-width: 90px; outline: none; background: transparent; }
-    td.active { outline: 2px solid #2a6df6; outline-offset: -2px; }
+    th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
+    .rowHead { position: sticky; left: 0; background: #f8faff; z-index: 1; text-align: right; padding: 6px 8px; min-width: 46px; }
+    .corner { position: sticky; left: 0; top: 0; z-index: 3; background: #eef3ff; min-width: 46px; }
+    td { position: relative; min-width: 98px; }
+    td input { width: 100%; border: none; padding: 7px 8px; box-sizing: border-box; outline: none; background: transparent; }
+    td.selected { background: #edf3ff; }
+    td.active { box-shadow: inset 0 0 0 2px #2a6df6; z-index: 1; }
+    .fill-handle { position: absolute; width: 8px; height: 8px; right: -4px; bottom: -4px; border-radius: 1px; background: #2a6df6; cursor: crosshair; z-index: 5; }
+    td.fill-preview { background: #cfe1ff; }
     .hint { color: #5c6475; font-size: 12px; }
   </style>
   <div class="wrap">
     <div class="bar">
       <div class="name" id="cellName">A1</div>
-      <input id="formulaInput" placeholder="Type value or formula like =A1+B1 or =SUM(A1:A5)" />
-      <button id="saveBtn">Save JSON</button>
-      <button id="loadBtn">Load JSON</button>
-      <button id="csvBtn">Export CSV</button>
+      <input id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
+      <button id="boldBtn"><b>B</b></button>
+      <button id="italicBtn"><i>I</i></button>
+      <button id="underlineBtn"><u>U</u></button>
+      <select id="fontSizeSel">
+        <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
+      </select>
+      <input id="textColor" type="color" value="#111827" title="Text color" />
+      <input id="bgColor" type="color" value="#ffffff" title="Cell background" />
+      <select id="alignSel"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+      <button id="undoBtn">Undo</button>
+      <button id="redoBtn">Redo</button>
+      <button id="saveBtn">Save</button>
+      <button id="loadBtn">Load</button>
+      <button id="csvBtn">CSV</button>
     </div>
-    <div class="hint">Supports formulas: + - * /, cell refs (A1), ranges in SUM (A1:A10), and parentheses.</div>
+    <div class="hint">Drag to select cells. Drag blue corner to fill. Shift+click extends selection. Ctrl+B/I/U, Ctrl+Z/Y, Delete supported.</div>
     <div class="sheetWrap" id="sheet"></div>
   </div>
 `;
-
 document.body.appendChild(app);
 
 const sheetEl = document.getElementById('sheet') as HTMLDivElement;
 const formulaInput = document.getElementById('formulaInput') as HTMLInputElement;
 const cellName = document.getElementById('cellName') as HTMLDivElement;
+const boldBtn = document.getElementById('boldBtn') as HTMLButtonElement;
+const italicBtn = document.getElementById('italicBtn') as HTMLButtonElement;
+const underlineBtn = document.getElementById('underlineBtn') as HTMLButtonElement;
+const fontSizeSel = document.getElementById('fontSizeSel') as HTMLSelectElement;
+const textColor = document.getElementById('textColor') as HTMLInputElement;
+const bgColor = document.getElementById('bgColor') as HTMLInputElement;
+const alignSel = document.getElementById('alignSel') as HTMLSelectElement;
+const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
+const redoBtn = document.getElementById('redoBtn') as HTMLButtonElement;
 const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
 const loadBtn = document.getElementById('loadBtn') as HTMLButtonElement;
 const csvBtn = document.getElementById('csvBtn') as HTMLButtonElement;
 
 const cells: CellMap = {};
+const styles: CellStyleMap = {};
+const inputs = new Map<string, HTMLInputElement>();
+const tds = new Map<string, HTMLTableCellElement>();
+
+const fillHandle = document.createElement('div');
+fillHandle.className = 'fill-handle';
+
 let selected = 'A1';
+let selectionStart = 'A1';
+let selectionEnd = 'A1';
+let editingRef: string | null = null;
 
-function colLabel(n: number): string {
-  let s = '';
-  let x = n;
-  while (x > 0) {
-    const r = (x - 1) % 26;
-    s = String.fromCharCode(65 + r) + s;
-    x = Math.floor((x - 1) / 26);
-  }
-  return s;
-}
+let isSelecting = false;
+let isFillDragging = false;
+let fillSource: Rect | null = null;
+let fillTarget: string | null = null;
 
-function key(col: number, row: number) {
-  return `${colLabel(col)}${row}`;
-}
-
-function parseRef(ref: string): { c: number; r: number } | null {
-  const m = ref.match(/^([A-Z]+)(\d+)$/);
-  if (!m) return null;
-  let c = 0;
-  for (const ch of m[1]) c = c * 26 + (ch.charCodeAt(0) - 64);
-  return { c, r: Number(m[2]) };
-}
+const history: Snapshot[] = [];
+const future: Snapshot[] = [];
 
 function getRaw(ref: string): string {
   return cells[ref] ?? '';
 }
 
-function evalCell(ref: string, seen = new Set<string>()): number {
-  if (seen.has(ref)) return NaN;
-  seen.add(ref);
-  const raw = getRaw(ref).trim();
-  if (!raw) return 0;
-  if (!raw.startsWith('=')) {
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : NaN;
+const formulaEngine = createFormulaEngine(getRaw);
+
+function pushHistory() {
+  pushHistorySnapshot(history, future, cells, styles);
+}
+
+function undo() {
+  const prev = history.pop();
+  if (!prev) return;
+
+  future.push({ cells: cloneMap(cells), styles: cloneMap(styles) });
+  applySnapshotToMaps(prev, cells, styles);
+  refreshAll();
+}
+
+function redo() {
+  const next = future.pop();
+  if (!next) return;
+
+  history.push({ cells: cloneMap(cells), styles: cloneMap(styles) });
+  applySnapshotToMaps(next, cells, styles);
+  refreshAll();
+}
+
+function clearHighlights(className: string) {
+  tds.forEach(td => td.classList.remove(className));
+}
+
+function updateToolbarState() {
+  const style = getStyleForRef(styles, selected);
+  boldBtn.classList.toggle('active', style.bold);
+  italicBtn.classList.toggle('active', style.italic);
+  underlineBtn.classList.toggle('active', style.underline);
+  fontSizeSel.value = String(style.fontSize);
+  textColor.value = style.color;
+  bgColor.value = style.bg;
+  alignSel.value = style.align;
+}
+
+function updateSelectionUI() {
+  clearHighlights('selected');
+  clearHighlights('active');
+  clearHighlights('fill-preview');
+
+  const rect = rangeRect(selectionStart, selectionEnd);
+  for (const ref of refsInRect(rect)) tds.get(ref)?.classList.add('selected');
+
+  const activeTd = tds.get(selected);
+  if (activeTd) {
+    activeTd.classList.add('active');
+    activeTd.appendChild(fillHandle);
   }
-  return evalFormula(raw.slice(1), seen);
+
+  cellName.textContent = selectionStart === selectionEnd ? selected : `${selectionStart}:${selectionEnd}`;
+
+  if (editingRef !== selected) formulaInput.value = getRaw(selected);
+  updateToolbarState();
 }
 
-function expandRange(a: string, b: string): string[] {
-  const p1 = parseRef(a);
-  const p2 = parseRef(b);
-  if (!p1 || !p2) return [];
-  const out: string[] = [];
-  const c1 = Math.min(p1.c, p2.c), c2 = Math.max(p1.c, p2.c);
-  const r1 = Math.min(p1.r, p2.r), r2 = Math.max(p1.r, p2.r);
-  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) out.push(key(c, r));
-  return out;
+function setSelection(start: string, end: string, active = false) {
+  selectionStart = start;
+  selectionEnd = end;
+  if (active) selected = end;
+  updateSelectionUI();
 }
 
-function evalFormula(expr: string, seen: Set<string>): number {
-  try {
-    let safe = expr.toUpperCase();
+function refreshCell(ref: string) {
+  const input = inputs.get(ref);
+  if (!input) return;
 
-    safe = safe.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
-      const refs = expandRange(a, b);
-      const sum = refs.reduce((acc, r) => {
-        const v = evalCell(r, new Set(seen));
-        return acc + (Number.isFinite(v) ? v : 0);
-      }, 0);
-      return String(sum);
-    });
+  if (editingRef !== ref) input.value = formulaEngine.display(ref);
 
-    safe = safe.replace(/\b([A-Z]+\d+)\b/g, (_, ref) => {
-      const v = evalCell(ref, new Set(seen));
-      return Number.isFinite(v) ? String(v) : 'NaN';
-    });
+  const style = getStyleForRef(styles, ref);
+  input.style.fontWeight = style.bold ? '700' : '400';
+  input.style.fontStyle = style.italic ? 'italic' : 'normal';
+  input.style.textDecoration = style.underline ? 'underline' : 'none';
+  input.style.fontSize = `${style.fontSize}px`;
+  input.style.color = style.color;
+  input.style.background = style.bg;
+  input.style.textAlign = style.align;
+}
 
-    if (!/^[0-9+\-*/().\sNAN]+$/.test(safe)) return NaN;
-    const result = Function(`"use strict"; return (${safe});`)();
-    return Number.isFinite(result) ? result : NaN;
-  } catch {
-    return NaN;
+function refreshAll() {
+  inputs.forEach((_, ref) => refreshCell(ref));
+  updateSelectionUI();
+}
+
+function commitCell(ref: string, value: string) {
+  const prev = getRaw(ref);
+  if (prev === value) {
+    refreshCell(ref);
+    return;
   }
+
+  pushHistory();
+  if (value) cells[ref] = value;
+  else delete cells[ref];
+  refreshAll();
 }
 
-function display(ref: string): string {
-  const raw = getRaw(ref);
-  if (!raw.startsWith('=')) return raw;
-  const v = evalCell(ref);
-  return Number.isFinite(v) ? String(v) : '#ERR';
-}
+function applyStyleToSelection(patch: Partial<CellStyle>) {
+  pushHistory();
+  const rect = rangeRect(selectionStart, selectionEnd);
 
-function selectCell(ref: string) {
-  selected = ref;
-  cellName.textContent = ref;
-  formulaInput.value = getRaw(ref);
-  document.querySelectorAll('td.active').forEach(el => el.classList.remove('active'));
-  const td = document.querySelector(`td[data-ref="${ref}"]`);
-  if (td) td.classList.add('active');
-}
-
-function render() {
-  const table = document.createElement('table');
-  const thead = document.createElement('thead');
-  const hrow = document.createElement('tr');
-  const corner = document.createElement('th');
-  corner.className = 'corner';
-  hrow.appendChild(corner);
-  for (let c = 1; c <= COLS; c++) {
-    const th = document.createElement('th');
-    th.textContent = colLabel(c);
-    hrow.appendChild(th);
+  for (const ref of refsInRect(rect)) {
+    const merged = { ...getStyleForRef(styles, ref), ...patch };
+    const normalized = normalizeStyle(merged);
+    if (normalized) styles[ref] = normalized;
+    else delete styles[ref];
   }
-  thead.appendChild(hrow);
-  table.appendChild(thead);
 
-  const tbody = document.createElement('tbody');
-  for (let r = 1; r <= ROWS; r++) {
-    const tr = document.createElement('tr');
-    const rh = document.createElement('th');
-    rh.className = 'rowHead';
-    rh.textContent = String(r);
-    tr.appendChild(rh);
-
-    for (let c = 1; c <= COLS; c++) {
-      const ref = key(c, r);
-      const td = document.createElement('td');
-      td.dataset.ref = ref;
-      const input = document.createElement('input');
-      input.value = display(ref);
-      input.addEventListener('focus', () => selectCell(ref));
-      input.addEventListener('dblclick', () => { input.value = getRaw(ref); input.select(); });
-      input.addEventListener('change', () => {
-        const prev = getRaw(ref);
-        cells[ref] = input.value;
-        if (!cells[ref]) delete cells[ref];
-        if (cells[ref] !== prev) refreshValues();
-      });
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          input.blur();
-          const p = parseRef(ref)!;
-          const next = key(p.c, Math.min(ROWS, p.r + 1));
-          const n = document.querySelector(`td[data-ref="${next}"] input`) as HTMLInputElement | null;
-          n?.focus();
-        }
-      });
-      td.appendChild(input);
-      tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  sheetEl.innerHTML = '';
-  sheetEl.appendChild(table);
-  selectCell(selected);
+  refreshAll();
 }
 
-function refreshValues() {
-  for (let r = 1; r <= ROWS; r++) {
-    for (let c = 1; c <= COLS; c++) {
-      const ref = key(c, r);
-      const input = document.querySelector(`td[data-ref="${ref}"] input`) as HTMLInputElement | null;
-      if (input && document.activeElement !== input) input.value = display(ref);
-    }
-  }
-  formulaInput.value = getRaw(selected);
+function toggleStyle(styleKey: 'bold' | 'italic' | 'underline') {
+  const current = getStyleForRef(styles, selected);
+  applyStyleToSelection({ [styleKey]: !current[styleKey] } as Partial<CellStyle>);
 }
 
-function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+function clearSelectionValues() {
+  pushHistory();
+  const rect = rangeRect(selectionStart, selectionEnd);
+  for (const ref of refsInRect(rect)) delete cells[ref];
+  refreshAll();
+}
+
+function updateFillPreview() {
+  clearHighlights('fill-preview');
+  if (!isFillDragging || !fillSource || !fillTarget) return;
+
+  const dest = computeFillDestination(fillSource, fillTarget);
+  if (!dest) return;
+
+  for (const ref of refsInRect(dest)) tds.get(ref)?.classList.add('fill-preview');
+}
+
+function applyFill() {
+  if (!fillSource || !fillTarget) return;
+
+  const dest = computeFillDestination(fillSource, fillTarget);
+  if (!dest) return;
+
+  pushHistory();
+
+  for (const ref of refsInRect(dest)) {
+    const src = sourceForDestination(fillSource, ref);
+    const pDest = parseRef(ref)!;
+    const pSrc = parseRef(src)!;
+    const shifted = shiftFormula(getRaw(src), pDest.r - pSrc.r, pDest.c - pSrc.c);
+
+    if (shifted) cells[ref] = shifted;
+    else delete cells[ref];
+
+    const srcStyle = styles[src];
+    if (srcStyle) styles[ref] = { ...srcStyle };
+    else delete styles[ref];
+  }
+
+  if (dest.r2 > fillSource.r2) {
+    selectionStart = cellKey(fillSource.c1, fillSource.r1);
+    selectionEnd = cellKey(fillSource.c2, dest.r2);
+  } else if (dest.r1 < fillSource.r1) {
+    selectionStart = cellKey(fillSource.c1, dest.r1);
+    selectionEnd = cellKey(fillSource.c2, fillSource.r2);
+  } else if (dest.c2 > fillSource.c2) {
+    selectionStart = cellKey(fillSource.c1, fillSource.r1);
+    selectionEnd = cellKey(dest.c2, fillSource.r2);
+  } else if (dest.c1 < fillSource.c1) {
+    selectionStart = cellKey(dest.c1, fillSource.r1);
+    selectionEnd = cellKey(fillSource.c2, fillSource.r2);
+  }
+
+  refreshAll();
 }
 
 function exportCsv() {
   let maxRow = 1;
   let maxCol = 1;
+
   for (const ref of Object.keys(cells)) {
-    const p = parseRef(ref);
-    if (!p) continue;
-    if ((cells[ref] ?? '').length === 0) continue;
-    maxRow = Math.max(maxRow, p.r);
-    maxCol = Math.max(maxCol, p.c);
+    const parsed = parseRef(ref);
+    if (!parsed) continue;
+    if (!cells[ref]) continue;
+
+    maxRow = Math.max(maxRow, parsed.r);
+    maxCol = Math.max(maxCol, parsed.c);
   }
 
   const lines: string[] = [];
   for (let r = 1; r <= maxRow; r++) {
     const row: string[] = [];
-    for (let c = 1; c <= maxCol; c++) row.push(csvEscape(getRaw(key(c, r))));
+    for (let c = 1; c <= maxCol; c++) row.push(csvEscape(getRaw(cellKey(c, r))));
     lines.push(row.join(','));
   }
 
@@ -243,31 +305,169 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
+function buildSheet() {
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.className = 'corner';
+  hr.appendChild(corner);
+
+  for (let c = 1; c <= COLS; c++) {
+    const th = document.createElement('th');
+    th.textContent = colLabel(c);
+    hr.appendChild(th);
+  }
+
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let r = 1; r <= ROWS; r++) {
+    const tr = document.createElement('tr');
+    const rowHead = document.createElement('th');
+    rowHead.className = 'rowHead';
+    rowHead.textContent = String(r);
+    tr.appendChild(rowHead);
+
+    for (let c = 1; c <= COLS; c++) {
+      const ref = cellKey(c, r);
+      const td = document.createElement('td');
+      td.dataset.ref = ref;
+      const input = document.createElement('input');
+      input.spellcheck = false;
+
+      td.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        if ((e.target as HTMLElement).classList.contains('fill-handle')) return;
+
+        isSelecting = true;
+        if (e.shiftKey) setSelection(selectionStart, ref, true);
+        else {
+          selected = ref;
+          setSelection(ref, ref, true);
+        }
+        input.focus();
+      });
+
+      td.addEventListener('mouseenter', () => {
+        if (isSelecting) setSelection(selectionStart, ref, true);
+        if (isFillDragging) {
+          fillTarget = ref;
+          updateFillPreview();
+        }
+      });
+
+      input.addEventListener('focus', () => {
+        editingRef = ref;
+        selected = ref;
+        if (!isSelecting) setSelection(ref, ref, true);
+        input.value = getRaw(ref);
+      });
+
+      input.addEventListener('blur', () => {
+        const value = input.value;
+        editingRef = null;
+        commitCell(ref, value);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        const parsed = parseRef(ref)!;
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
+          const next = cellKey(parsed.c, Math.min(ROWS, parsed.r + 1));
+          inputs.get(next)?.focus();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          input.blur();
+          const next = cellKey(Math.min(COLS, parsed.c + 1), parsed.r);
+          inputs.get(next)?.focus();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          input.value = formulaEngine.display(ref);
+          input.blur();
+        }
+      });
+
+      td.appendChild(input);
+      tr.appendChild(td);
+      inputs.set(ref, input);
+      tds.set(ref, td);
+    }
+
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  sheetEl.innerHTML = '';
+  sheetEl.appendChild(table);
+
+  fillHandle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isFillDragging = true;
+    fillSource = rangeRect(selectionStart, selectionEnd);
+    fillTarget = selected;
+    updateFillPreview();
+  });
+}
+
 formulaInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
-    cells[selected] = formulaInput.value;
-    if (!cells[selected]) delete cells[selected];
-    refreshValues();
-    const input = document.querySelector(`td[data-ref="${selected}"] input`) as HTMLInputElement | null;
-    input?.focus();
+    commitCell(selected, formulaInput.value);
+    inputs.get(selected)?.focus();
   }
 });
 
+boldBtn.addEventListener('click', () => toggleStyle('bold'));
+italicBtn.addEventListener('click', () => toggleStyle('italic'));
+underlineBtn.addEventListener('click', () => toggleStyle('underline'));
+fontSizeSel.addEventListener('change', () => applyStyleToSelection({ fontSize: Number(fontSizeSel.value) }));
+textColor.addEventListener('change', () => applyStyleToSelection({ color: textColor.value }));
+bgColor.addEventListener('change', () => applyStyleToSelection({ bg: bgColor.value }));
+alignSel.addEventListener('change', () => applyStyleToSelection({ align: alignSel.value as Align }));
+undoBtn.addEventListener('click', undo);
+redoBtn.addEventListener('click', redo);
+
 saveBtn.addEventListener('click', async () => {
-  const json = JSON.stringify(cells, null, 2);
+  const json = JSON.stringify({ cells, styles }, null, 2);
   await navigator.clipboard.writeText(json);
   saveBtn.textContent = 'Copied';
-  setTimeout(() => (saveBtn.textContent = 'Save JSON'), 1200);
+  setTimeout(() => (saveBtn.textContent = 'Save'), 1000);
 });
 
-loadBtn.addEventListener('click', async () => {
-  const text = prompt('Paste JSON map of cells (e.g. {"A1":"10","B1":"=A1*2"})');
+loadBtn.addEventListener('click', () => {
+  const text = prompt('Paste JSON: { cells: {...}, styles: {...} } (legacy cell map also supported)');
   if (!text) return;
+
   try {
-    const obj = JSON.parse(text) as Record<string, string>;
+    const parsed = JSON.parse(text) as any;
+    pushHistory();
+
     for (const k of Object.keys(cells)) delete cells[k];
-    for (const [k, v] of Object.entries(obj)) if (typeof v === 'string') cells[k.toUpperCase()] = v;
-    refreshValues();
+    for (const k of Object.keys(styles)) delete styles[k];
+
+    if (parsed && typeof parsed === 'object' && parsed.cells && typeof parsed.cells === 'object') {
+      for (const [k, v] of Object.entries(parsed.cells)) {
+        if (typeof v === 'string') cells[k.toUpperCase()] = v;
+      }
+
+      if (parsed.styles && typeof parsed.styles === 'object') {
+        for (const [k, v] of Object.entries(parsed.styles)) {
+          if (!v || typeof v !== 'object') continue;
+          const normalized = normalizeStyle(v as CellStyle);
+          if (normalized) styles[k.toUpperCase()] = normalized;
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string') cells[k.toUpperCase()] = v;
+      }
+    }
+
+    refreshAll();
   } catch {
     alert('Invalid JSON');
   }
@@ -275,8 +475,61 @@ loadBtn.addEventListener('click', async () => {
 
 csvBtn.addEventListener('click', () => {
   exportCsv();
-  csvBtn.textContent = 'Exported';
-  setTimeout(() => (csvBtn.textContent = 'Export CSV'), 1200);
+  csvBtn.textContent = 'Done';
+  setTimeout(() => (csvBtn.textContent = 'CSV'), 1000);
 });
 
-render();
+document.addEventListener('mouseup', () => {
+  isSelecting = false;
+
+  if (isFillDragging) {
+    applyFill();
+    isFillDragging = false;
+    fillSource = null;
+    fillTarget = null;
+    clearHighlights('fill-preview');
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  const target = e.target as HTMLElement;
+  const isFormula = target === formulaInput;
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo();
+    else undo();
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+    e.preventDefault();
+    toggleStyle('bold');
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+    e.preventDefault();
+    toggleStyle('italic');
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+    e.preventDefault();
+    toggleStyle('underline');
+    return;
+  }
+
+  if (e.key === 'Delete' && !isFormula) {
+    clearSelectionValues();
+  }
+});
+
+buildSheet();
+refreshAll();

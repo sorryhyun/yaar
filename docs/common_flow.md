@@ -1,212 +1,224 @@
-# Agent Architecture: Pools, Forks, and Message Flow
+# Agent Architecture: Pools, Context, and Message Flow
 
-This document describes how YAAR manages multiple concurrent AI agents through pooling and forking mechanisms.
+This document describes how YAAR manages concurrent AI agents through unified pooling, hierarchical context, and policy-based orchestration.
 
 ## Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              WebSocket Connection                            │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         SessionManager                               │   │
-│  │                                                                       │   │
-│  │   ┌───────────────────────┐      ┌──────────────────────────────┐   │   │
-│  │   │   DefaultAgentPool    │      │      Window Sessions         │   │   │
-│  │   │                       │      │                              │   │   │
-│  │   │  ┌─────┐ ┌─────┐     │      │  window-1 ──┐                │   │   │
-│  │   │  │ A0  │ │ A1  │ ... │      │  window-2 ──┼── Fork from    │   │   │
-│  │   │  └─────┘ └─────┘     │      │  window-3 ──┘   Default      │   │   │
-│  │   │     │                 │      │                              │   │   │
-│  │   │     └── Shared Logger │      │       └── Shared Logger      │   │   │
-│  │   └───────────────────────┘      └──────────────────────────────┘   │   │
-│  │                                                                       │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         WebSocket Connection                         │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │                        SessionManager                          │  │
+│  │                     (lazy init on first message)               │  │
+│  │                                                                │  │
+│  │  ┌──────────────────────────────────────────────────────────┐  │  │
+│  │  │                      ContextPool                         │  │  │
+│  │  │                                                          │  │  │
+│  │  │  ┌────────────┐  ┌─────────────┐  ┌──────────────────┐  │  │  │
+│  │  │  │ AgentPool  │  │ ContextTape │  │ InteractionTime- │  │  │  │
+│  │  │  │            │  │ (message    │  │ line (user +     │  │  │  │
+│  │  │  │ Main(1)    │  │  history by │  │ AI events,       │  │  │  │
+│  │  │  │ Ephemeral* │  │  source)    │  │ drained on main  │  │  │  │
+│  │  │  │ Window*    │  │             │  │ agent's turn)    │  │  │  │
+│  │  │  └────────────┘  └─────────────┘  └──────────────────┘  │  │  │
+│  │  │                                                          │  │  │
+│  │  │  ┌──────────────────────────────────────────────────┐    │  │  │
+│  │  │  │ Policies                                         │    │  │  │
+│  │  │  │ MainQueue · WindowQueue · ContextAssembly        │    │  │  │
+│  │  │  │ ReloadCache · WindowConnection                   │    │  │  │
+│  │  │  └──────────────────────────────────────────────────┘    │  │  │
+│  │  └──────────────────────────────────────────────────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Agent Types
 
-### 1. Default Agent (via DefaultAgentPool)
+### 1. Main Agent
 
-The primary agent that handles user input from the main input field.
+The single persistent agent handling the main conversation flow. Maintains provider session continuity across messages.
 
-- **ID**: `'default'`
-- **Creation**: Automatically created when WebSocket connects
-- **Pooling**: Multiple agents can exist in the pool for concurrent messages
-- **Session ID**: Assigned by Claude Agent SDK on first message
+- **Role**: `main-{messageId}` (set per-message)
+- **Creation**: One main agent created when ContextPool initializes (uses a pre-warmed provider)
+- **Session**: Resumes the same provider session across messages for full conversation history
+- **Canonical ID**: `default`
 
-```typescript
-// packages/server/src/default-agent-pool.ts
-const POOL_CONFIG = {
-  maxAgents: 3,      // Maximum concurrent agents
-  maxQueueSize: 10,  // Queue limit before backpressure
-  idleTimeoutMs: 300000, // Cleanup idle agents after 5 min
-};
-```
+### 2. Ephemeral Agent
 
-### 2. Window Agent
+A temporary agent spawned when the main agent is busy and a new main task arrives. Gets a fresh provider with no conversation history, and is disposed immediately after the task completes.
 
-Spawned for specific windows via button clicks or context menu actions.
+- **Role**: `ephemeral-{messageId}`
+- **Creation**: On demand when main agent is busy (limited by global `AgentLimiter`)
+- **Context**: No conversation history — receives open windows + reload options + task content
+- **Lifecycle**: Created → process task → push to InteractionTimeline → disposed
 
-- **ID**: `'window-{windowId}'`
-- **Creation**: On first `COMPONENT_ACTION` (button click) or `WINDOW_MESSAGE` for that window
-- **Forking**: Inherits conversation context from the default agent
-- **Limit**: Maximum 5 window agents per connection
+### 3. Window Agent
 
-### 3. Subagent
+A persistent agent for handling window-specific interactions (button clicks, context menu messages). Each window (or window group) gets its own agent with its own provider session.
 
-Spawned by default/window agents via Claude Agent SDK's native subagent feature.
-
-- **ID**: Assigned by SDK
-- **Creation**: Agent SDK handles this internally via the `Task` tool
-- **Context**: Inherits from parent agent's conversation
+- **Role**: `window-{windowId}` or `window-{windowId}/{actionId}` (for parallel button actions)
+- **Creation**: On first `COMPONENT_ACTION` or `WINDOW_MESSAGE` for that window
+- **Context**: First interaction receives recent main conversation from ContextTape; subsequent interactions use provider session continuity
+- **Grouping**: Child windows created by a window agent join the parent's group, sharing one agent
+- **Canonical ID**: `window-{agentKey}` (where agentKey = groupId or windowId)
 
 ## Message Flow
 
-### User Message → Default Agent Pool
+### User Message → Main Agent
 
 ```
-Frontend                    Server                      AI Provider
-   │                          │                              │
-   │  USER_MESSAGE            │                              │
-   ├─────────────────────────>│                              │
-   │                          │  Find idle agent             │
-   │                          │  or spawn new one            │
-   │                          │                              │
-   │                          │  query(prompt, {             │
-   │                          │    sessionId,                │
-   │                          │    systemPrompt              │
-   │                          │  })                          │
-   │                          ├─────────────────────────────>│
-   │                          │                              │
-   │  AGENT_THINKING          │<─────────────────────────────│
-   │<─────────────────────────│  Stream messages             │
-   │                          │                              │
-   │  AGENT_RESPONSE          │<─────────────────────────────│
-   │<─────────────────────────│                              │
-   │                          │                              │
+Frontend                    Server                          AI Provider
+   │                          │                                  │
+   │  USER_MESSAGE            │                                  │
+   ├─────────────────────────>│                                  │
+   │                          │  Main agent idle?                │
+   │                          │  ├─ Yes: processMainTask()       │
+   │                          │  └─ No: createEphemeral()        │
+   │                          │       or queue if limit reached  │
+   │                          │                                  │
+   │  MESSAGE_ACCEPTED        │  Build prompt:                   │
+   │<─────────────────────────│  timeline + openWindows +        │
+   │                          │  reloadOptions + content         │
+   │                          │                                  │
+   │                          │  provider.query(prompt, {        │
+   │                          │    sessionId,                    │
+   │                          │    systemPrompt                  │
+   │                          │  })                              │
+   │                          ├─────────────────────────────────>│
+   │                          │                                  │
+   │  AGENT_THINKING          │<─────────────────────────────────│
+   │<─────────────────────────│  Stream messages                 │
+   │                          │                                  │
+   │  AGENT_RESPONSE          │<─────────────────────────────────│
+   │<─────────────────────────│  (actions recorded for cache)    │
+   │                          │                                  │
+   │                          │  Drain main queue if pending     │
+   │                          │                                  │
 ```
 
-### Button Click → Window Agent (Fork)
+### Button Click → Window Agent
 
 ```
-Frontend                    Server                      AI Provider
-   │                          │                              │
-   │  COMPONENT_ACTION        │                              │
-   │  { windowId, action }    │                              │
-   ├─────────────────────────>│                              │
-   │                          │                              │
-   │                          │  Window agent exists?        │
-   │                          │  ├─ Yes: Reuse               │
-   │                          │  └─ No: Create + Fork        │
-   │                          │                              │
-   │  WINDOW_AGENT_STATUS     │  // First message with fork  │
-   │  { status: 'created' }   │  query(action, {             │
-   │<─────────────────────────│    sessionId: parentId,      │
-   │                          │    forkSession: true         │
-   │                          │  })                          │
-   │                          ├─────────────────────────────>│
-   │                          │                              │
-   │  AGENT_RESPONSE          │  // SDK creates new session  │
-   │<─────────────────────────│  // with parent's context    │
-   │                          │                              │
+Frontend                    Server                          AI Provider
+   │                          │                                  │
+   │  COMPONENT_ACTION        │                                  │
+   │  { windowId, action,     │                                  │
+   │    actionId?, formData?} │                                  │
+   ├─────────────────────────>│                                  │
+   │                          │                                  │
+   │                          │  Resolve group: windowId →       │
+   │                          │  agentKey (groupId or windowId)  │
+   │                          │                                  │
+   │                          │  Agent exists for agentKey?      │
+   │                          │  ├─ Yes: Reuse                   │
+   │                          │  └─ No: Create (fresh provider)  │
+   │                          │                                  │
+   │  WINDOW_AGENT_STATUS     │  First message?                  │
+   │  { status: 'active' }    │  ├─ Yes: inject recent main      │
+   │<─────────────────────────│  │  context from ContextTape     │
+   │                          │  └─ No: session continuity       │
+   │                          │                                  │
+   │                          │  provider.query(prompt, {        │
+   │                          │    sessionId                     │
+   │                          │  })                              │
+   │                          ├─────────────────────────────────>│
+   │                          │                                  │
+   │  AGENT_RESPONSE          │  After completion:               │
+   │<─────────────────────────│  - Record to InteractionTimeline │
+   │                          │  - Track child window groups     │
+   │                          │  - Cache actions for reload      │
+   │                          │                                  │
 ```
 
-## Session Forking
+## ContextTape: Hierarchical Message History
 
-When a window agent is created, it **forks** from the default agent's session:
+Messages are tagged with their source for hierarchical tracking:
 
 ```typescript
-// packages/server/src/agent-session.ts
+type ContextSource = 'main' | { window: string };
 
-// On first message of a forked session:
-const shouldFork = !this.hasSentFirstMessage && !!this.forkFromSessionId;
-
-const options: TransportOptions = {
-  systemPrompt: SYSTEM_PROMPT,
-  sessionId: shouldFork ? this.forkFromSessionId : this.sessionId,
-  forkSession: shouldFork ? true : undefined,
-};
+interface ContextMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  source: ContextSource;
+}
 ```
 
-### What Forking Does
+**Usage:**
+- **Main agent prompt**: Does not inject ContextTape (relies on provider session continuity)
+- **Window agent first turn**: Injects last 3 main conversation turns via `buildWindowInitialContext()`
+- **Window close**: Prunes that window's messages from the tape
+- **Session restore**: ContextTape can be restored from a previous session's log
 
-1. **Context Inheritance**: The new session starts with all conversation history from the parent
-2. **Independent Execution**: After forking, the window agent runs independently
-3. **No Bidirectional Sync**: Changes in window agent don't propagate back to parent
+## InteractionTimeline
 
-### SDK Implementation
-
-```typescript
-// packages/server/src/providers/claude/provider.ts
-const sdkOptions: SDKOptions = {
-  resume: options.sessionId,        // Parent session ID when forking
-  forkSession: options.forkSession, // Creates fork instead of continuing
-  // ...
-};
-```
-
-## Shared Session Logger
-
-All agents share a single `SessionLogger` for unified history:
-
-```typescript
-// Default pool creates the logger
-const firstAgent = await this.createAgent();
-this.sharedLogger = firstAgent.session.getSessionLogger();
-
-// Window agents receive the shared logger
-const sharedLogger = this.defaultPool?.getSessionLogger();
-session = new AgentSession(ws, undefined, windowId, defaultSessionId, sharedLogger);
-```
-
-### Log Structure
+A chronological timeline interleaving user-originated events and AI agent action summaries. The main agent drains this on its next turn to see everything that happened while it was idle.
 
 ```
-session_logs/
-└── 2026-01-30_14-38-08/
-    ├── metadata.json     # Session metadata
-    └── messages.jsonl    # All messages from all agents
+User closes window → pushUser({ type: 'window.close', windowId: '...' })
+Window agent runs  → pushAI(role, task, actions, windowId)
+Ephemeral agent    → pushAI(role, task, actions)
+
+Main agent's turn  → timeline.format() → drain()
+  Produces:
+  <timeline>
+  <interaction:user>close:settings-win</interaction:user>
+  <interaction:AI agent="window-main-win">Created window "chart". Updated content.</interaction:AI>
+  </timeline>
 ```
 
-Each log entry includes `agentId` for filtering:
+## Policies
 
-```json
-{"timestamp":"...","type":"user","content":"Hello","agentId":"default"}
-{"timestamp":"...","type":"assistant","content":"Hi!","agentId":"default"}
-{"timestamp":"...","type":"user","content":"Click action","agentId":"window-abc123"}
-{"timestamp":"...","type":"assistant","content":"Done","agentId":"window-abc123"}
+### MainQueuePolicy
+FIFO queue (max 10) for main tasks when the main agent is busy and no ephemeral agent can be created. Mutual exclusion ensures the queue is drained sequentially.
+
+### WindowQueuePolicy
+Per-window queues. Tasks for the same window are serialized (one active at a time). Tasks for different windows run in parallel. Parallel button actions (`actionId`) bypass the queue.
+
+### ContextAssemblyPolicy
+Builds prompts for both main and window agents:
+- **Main**: `timeline + openWindows + reloadOptions + content`
+- **Window (first turn)**: `recentMainContext + openWindows + reloadOptions + content`
+- **Window (subsequent)**: `openWindows + reloadOptions + content`
+
+### ReloadCachePolicy
+Fingerprint-based caching of action sequences. After each task, the actions are recorded with a fingerprint (content hash + window state hash). On the next similar task, matching cached actions are injected as `<reload_options>` so the AI can replay them instantly.
+
+### WindowConnectionPolicy
+Tracks window groups. When a window agent creates a child window, the child joins the parent's group. All windows in a group share one agent. The group's agent is only disposed when the last window closes.
+
+## AgentPool Lifecycle
+
 ```
-
-## DefaultAgentPool Lifecycle
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                     DefaultAgentPool                              │
-│                                                                   │
-│   Message arrives                                                 │
-│        │                                                          │
-│        ▼                                                          │
-│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
-│   │ Find idle   │ No  │ Pool full?  │ Yes │ Queue msg   │       │
-│   │ agent       ├────>│             ├────>│ (max 10)    │       │
-│   └──────┬──────┘     └──────┬──────┘     └─────────────┘       │
-│          │ Yes               │ No                                 │
-│          ▼                   ▼                                    │
-│   ┌─────────────┐     ┌─────────────┐                            │
-│   │ Assign to   │     │ Spawn new   │                            │
-│   │ idle agent  │     │ agent       │                            │
-│   └─────────────┘     │ (max 3)     │                            │
-│                       └─────────────┘                            │
-│                                                                   │
-│   After completion:                                               │
-│   - Start idle timer (5 min)                                     │
-│   - Process queued messages                                      │
-│   - Cleanup idle agents (except first)                           │
-│                                                                   │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                         AgentPool                             │
+│                                                               │
+│   ┌────────────────────────────────────────────────────────┐  │
+│   │ Main Agent (persistent, first created)                  │  │
+│   │ - Created once at pool initialization                  │  │
+│   │ - Provider session continuity across messages          │  │
+│   │ - Recreated on pool reset                              │  │
+│   └────────────────────────────────────────────────────────┘  │
+│                                                               │
+│   ┌────────────────────────────────────────────────────────┐  │
+│   │ Ephemeral Agents (temporary)                           │  │
+│   │ - Created when main is busy + global limit allows      │  │
+│   │ - Fresh provider, no conversation context              │  │
+│   │ - Disposed immediately after task                      │  │
+│   └────────────────────────────────────────────────────────┘  │
+│                                                               │
+│   ┌────────────────────────────────────────────────────────┐  │
+│   │ Window Agents (persistent per group/window)            │  │
+│   │ - Created on first interaction for a window            │  │
+│   │ - Keyed by agentKey (groupId for grouped, windowId     │  │
+│   │   for standalone)                                      │  │
+│   │ - Disposed when last window in group closes            │  │
+│   └────────────────────────────────────────────────────────┘  │
+│                                                               │
+│   Global limit: AgentLimiter (default: 10 concurrent agents)  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## Window Agent Lifecycle
@@ -218,23 +230,36 @@ Each log entry includes `agentId` for filtering:
 │   COMPONENT_ACTION / WINDOW_MESSAGE                               │
 │        │                                                          │
 │        ▼                                                          │
+│   WindowConnectionPolicy: resolve agentKey                        │
+│   (groupId if window belongs to group, else windowId)             │
+│        │                                                          │
+│        ▼                                                          │
 │   ┌─────────────┐                                                │
-│   │ Agent       │ No ──> Create AgentSession                     │
-│   │ exists?     │        with forkFromSessionId                  │
-│   └──────┬──────┘        and sharedLogger                        │
-│          │ Yes                    │                               │
-│          ▼                        ▼                               │
-│   ┌─────────────┐         ┌─────────────┐                        │
-│   │ Agent busy? │ Yes ──> │ Queue msg   │                        │
-│   └──────┬──────┘         └─────────────┘                        │
-│          │ No                                                     │
+│   │ Agent exists │ No ──> getOrCreateWindowAgent(agentKey)        │
+│   │ for key?    │        + acquireWarmProvider()                  │
+│   └──────┬──────┘                                                │
+│          │ Yes                                                    │
 │          ▼                                                        │
 │   ┌─────────────┐                                                │
-│   │ Process     │  First msg: fork from parent                   │
-│   │ message     │  Subsequent: resume own session                │
-│   └─────────────┘                                                │
+│   │ Key busy?   │ Yes ──> WindowQueuePolicy.enqueue()            │
+│   │ (non-par.)  │        → MESSAGE_QUEUED                        │
+│   └──────┬──────┘                                                │
+│          │ No                                                     │
+│          ▼                                                        │
+│   ┌─────────────────────────────────────────────┐                │
+│   │ Process:                                     │                │
+│   │  First msg → ContextTape initial context     │                │
+│   │  Later msgs → provider session continuity    │                │
+│   │                                              │                │
+│   │  After completion:                           │                │
+│   │  - Record actions → ReloadCache              │                │
+│   │  - Connect child windows → group             │                │
+│   │  - Push to InteractionTimeline               │                │
+│   └─────────────────────────────────────────────┘                │
 │                                                                   │
-│   Window closed → destroyWindowAgent()                           │
+│   Window closed → WindowConnectionPolicy.handleClose()            │
+│     ├─ Last in group → disposeWindowAgent() + prune ContextTape  │
+│     └─ Others remain → agent survives, prune window's context    │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -245,56 +270,99 @@ Each log entry includes `agentId` for filtering:
 
 | Event | Description |
 |-------|-------------|
-| `USER_MESSAGE` | Main input field message → DefaultAgentPool |
-| `WINDOW_MESSAGE` | Context menu "Send to window" → Window Agent |
-| `COMPONENT_ACTION` | Button click in window → Window Agent |
+| `USER_MESSAGE` | Main input → ContextPool main queue (sequential) |
+| `WINDOW_MESSAGE` | Context menu "Send to window" → Window agent |
+| `COMPONENT_ACTION` | Button click with optional formData, componentPath → Window agent |
 | `INTERRUPT` | Stop all agents |
-| `INTERRUPT_AGENT` | Stop specific agent by ID |
+| `INTERRUPT_AGENT` | Stop specific agent by role |
+| `RESET` | Interrupt all, clear context, recreate main agent |
+| `SET_PROVIDER` | Switch AI provider (claude/codex) |
+| `RENDERING_FEEDBACK` | Frontend reports window render success/failure |
+| `DIALOG_FEEDBACK` | User response to approval dialog |
+| `TOAST_ACTION` | User dismisses reload toast (marks cache entry failed) |
+| `USER_INTERACTION` | Batch of user interactions (close, focus, move, resize, draw) |
 
 ### Server → Client
 
 | Event | Description |
 |-------|-------------|
-| `AGENT_THINKING` | Agent is processing (with agentId) |
-| `AGENT_RESPONSE` | Agent response chunk/complete (with agentId) |
-| `WINDOW_AGENT_STATUS` | Window agent created/active/idle/destroyed |
+| `ACTIONS` | Array of OS Actions to execute |
+| `AGENT_THINKING` | Agent thinking stream (with agentId) |
+| `AGENT_RESPONSE` | Agent response text stream (with agentId, messageId) |
+| `CONNECTION_STATUS` | connected/disconnected/error (with provider name) |
+| `TOOL_PROGRESS` | Tool execution status (running/complete/error) |
+| `ERROR` | Error message (with optional agentId) |
+| `WINDOW_AGENT_STATUS` | Window agent lifecycle: assigned/active/released |
 | `MESSAGE_ACCEPTED` | Message assigned to an agent |
-| `MESSAGE_QUEUED` | Message queued (agent busy or pool full) |
+| `MESSAGE_QUEUED` | Message queued (agent busy or limit reached) |
+| `APPROVAL_REQUEST` | Permission dialog for user approval |
+
+## Shared Session Logger
+
+All agents share a single `SessionLogger` for unified history:
+
+```
+session_logs/
+└── 2026-02-08_14-38-08/
+    ├── metadata.json     # Session metadata (provider, threadIds)
+    └── messages.jsonl    # All messages from all agents
+```
+
+Each log entry includes `agentId` for filtering:
+
+```json
+{"type":"user","content":"Hello","agentId":"main-msg-1","source":"main"}
+{"type":"assistant","content":"Hi!","agentId":"main-msg-1","source":"main"}
+{"type":"user","content":"Click Save","agentId":"window-settings","source":{"window":"settings"}}
+{"type":"assistant","content":"Saved","agentId":"window-settings","source":{"window":"settings"}}
+```
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `packages/server/src/session-manager.ts` | Routes messages, manages window agents |
-| `packages/server/src/default-agent-pool.ts` | Manages pool of default agents |
-| `packages/server/src/agent-session.ts` | Individual agent session with fork support |
-| `packages/server/src/providers/claude/provider.ts` | Claude Agent SDK integration |
-| `packages/shared/src/events.ts` | Event type definitions |
+| `agents/manager.ts` | SessionManager — routes messages to ContextPool |
+| `agents/context-pool.ts` | ContextPool — unified task orchestration |
+| `agents/agent-pool.ts` | AgentPool — manages main, ephemeral, and window agents |
+| `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |
+| `agents/context.ts` | ContextTape — hierarchical message history |
+| `agents/interaction-timeline.ts` | InteractionTimeline — user + AI event chronicle |
+| `agents/limiter.ts` | AgentLimiter — global semaphore for agent limit |
+| `agents/session-policies/` | StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge |
+| `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection |
+| `providers/factory.ts` | Provider auto-detection and creation |
+| `providers/warm-pool.ts` | Pre-initialized providers for fast first response |
+| `websocket/broadcast-center.ts` | BroadcastCenter — event hub decoupling agents from WebSocket |
+| `mcp/action-emitter.ts` | ActionEmitter — bridges MCP tools to agent sessions |
+| `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per connection |
 
 ## Example: Concurrent Execution
 
 ```
 Timeline:
-─────────────────────────────────────────────────────────────────────────────>
+──────────────────────────────────────────────────────────────────────────>
 
-User types "Hello"          User clicks button in Window A
+User types "Hello"          User clicks Save in Window A
        │                              │
        ▼                              ▼
 ┌──────────────┐              ┌──────────────┐
-│ Default Pool │              │ Window Agent │
-│ Agent #0     │              │ window-A     │
+│ Main Agent   │              │ Window Agent │
+│              │              │ (group-A)    │
+│ Processing   │              │              │
+│ "Hello" with │              │ First turn:  │
+│ full session │              │ ContextTape  │
+│ history      │              │ initial ctx  │
 │              │              │              │
-│ Processing   │              │ Fork from    │
-│ "Hello"      │              │ default      │
-│              │              │              │
-│   ...        │              │ Processing   │
-│              │              │ button action│
-└──────────────┘              └──────────────┘
+│              │              │ Processing   │
+│              │              │ Save action  │
+└──────┬───────┘              └──────┬───────┘
        │                              │
        ▼                              ▼
-   Response                       Response
-   to user                        updates
-                                  Window A
+   Response                    Response updates
+   to user                     Window A
+                                    │
+                                    ▼
+                         InteractionTimeline records:
+                         "window-A: Updated content"
+                         (main agent sees this next turn)
 ```
-
-Both agents run in parallel, each with their own AI session but sharing the same session logger for unified history.

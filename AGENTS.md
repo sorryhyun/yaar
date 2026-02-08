@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notification, etc.).
+YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notifications, etc.).
 
 **Prerequisites:**
 - Node.js >= 24
@@ -19,21 +19,26 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 ```bash
 pnpm install                     # Install all dependencies
+make dev                         # Start with auto-detected provider (opens at localhost:5173)
 make claude                      # Start with Claude provider
 make codex                       # Start with Codex provider
-make dev                         # Start with auto-detected provider
 make claude-dev                  # Claude provider without MCP auth (local dev)
 make codex-dev                   # Codex provider without MCP auth (local dev)
-make server                      # Start server only
-make frontend                    # Start frontend only
 make build                       # Build all packages
 pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
+make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
+
+# Run individual packages
+make server                                  # Start server only
+make frontend                                # Start frontend only
 
 # Testing
 pnpm --filter @yaar/frontend vitest run           # Run all frontend tests
 pnpm --filter @yaar/frontend vitest run store     # Run tests matching "store"
+pnpm --filter @yaar/server vitest run              # Run all server tests
+pnpm --filter @yaar/shared vitest run              # Run all shared tests
 
 # Standalone executable (requires Bun)
 pnpm build:exe                   # Build Windows executable
@@ -60,9 +65,11 @@ yaar/
 │   │   └── moltbook.json       # API credentials for moltbook
 │   ├── permissions.json         # Saved permission decisions
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
-├── storage/                     # Persistent data storage
+├── docs/                        # Architecture documentation
+│   └── common_flow.md           # Agent pools, forks, message flow diagrams
+├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
-│   ├── shared/        # Shared types (OS Actions, WebSocket events)
+│   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
 │   ├── server/        # TypeScript WebSocket server
 │   └── frontend/      # React frontend
 ├── pnpm-workspace.yaml
@@ -73,28 +80,71 @@ yaar/
 
 ```
 @yaar/frontend ──┐
-                     ├──> @yaar/shared
+                  ├──> @yaar/shared (Zod v4 schemas, types)
 @yaar/server ────┘
 ```
 
 ## Architecture
 
 ```
-User Input → WebSocket → TypeScript Server → Claude Agent SDK → OS Actions → Frontend Renders UI
+User Input → WebSocket → TypeScript Server → AI Provider (Claude/Codex) → OS Actions → Frontend Renders UI
 ```
 
-### Key Packages
+Each package has its own `CLAUDE.md` with detailed architecture docs:
+- **`packages/server/CLAUDE.md`** — Agent lifecycle, ContextPool, providers, MCP tools, REST API
+- **`packages/frontend/CLAUDE.md`** — Zustand+Immer store, WebSocket hook, content renderers
+- **`packages/shared/CLAUDE.md`** — OS Actions DSL, WebSocket events, Component DSL, Zod v4 patterns
 
-1. **Frontend** (`@yaar/frontend`): React + Zustand + Vite. Renders windows based on OS Actions. See `packages/frontend/CLAUDE.md`.
+### Key Architectural Concepts
 
-2. **Server** (`@yaar/server`): TypeScript + ws. WebSocket server with pluggable AI providers. See `packages/server/CLAUDE.md`.
+1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
+2. **ContextPool**: Unified task orchestration — main messages processed sequentially, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
+3. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio. Dynamic imports keep SDK dependencies lazy.
+4. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
+5. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
+6. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections.
+7. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
+8. **Session forking**: Window agents fork from the default agent's session, inheriting context but running independently.
+9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
+10. **Policy pattern**: Server decomposes complex behavior into focused policy classes:
+    - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
+    - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
-3. **Shared** (`@yaar/shared`): Shared types for OS Actions and WebSocket events. See `packages/shared/CLAUDE.md`.
+See `docs/common_flow.md` for detailed agent pool, fork, and message flow diagrams.
+
+### Server Subsystems
+
+Beyond agents and providers, the server has additional subsystems:
+- **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
+- **`lib/`** — Standalone utilities with no server internal dependencies:
+  - `compiler/` — esbuild bundler for sandbox apps
+  - `pdf/` — PDF rendering via poppler
+  - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
+- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore
+
+### Connection Lifecycle
+
+```
+WebSocket connects → SessionManager created (lazy init)
+  → First message → ContextPool initialized → AgentPool created → Warm provider acquired
+  → Messages routed: USER_MESSAGE → main queue (sequential), WINDOW_MESSAGE → window handler (parallel)
+  → Window interaction → fork from default agent's session → independent window agent
+  → WebSocket disconnects → all agents disposed
+```
+
+## Development Workflow
+
+- `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server → polls `/health` until ready → starts frontend
+- Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
+- Git branch: uses `master` (not `main`)
 
 ## Code Style
 
-- All packages: TypeScript strict mode
-- Frontend: path alias `@/` → `src/`
+- All packages: TypeScript strict mode, ESM (`"type": "module"`)
+- Frontend: path alias `@/` → `src/`, CSS Modules for component styles
+- Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
+- Server imports use `.js` extensions (ESM requirement for Node.js)
+- ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
 
 ## Apps System
 

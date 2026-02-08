@@ -3,8 +3,8 @@
  *
  * Manages the lifecycle of a `codex app-server` child process:
  * - Spawns with disabled tools and isolated working directory
- * - Auto-restarts on crash (up to MAX_RESTARTS)
  * - Provides JSON-RPC client for communication
+ * - Owned by WarmPool singleton (single owner, no refcounting)
  */
 
 import { spawn, type ChildProcess } from 'child_process';
@@ -19,6 +19,7 @@ import type {
   ThreadStartResponse,
   TurnStartParams,
   ThreadResumeParams,
+  ThreadResumeResponse,
   ThreadForkParams,
   ThreadForkResponse,
   InitializeParams,
@@ -28,8 +29,6 @@ import type {
 // MCP server port (same as main server)
 const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
 
-const MAX_RESTARTS = 3;
-const RESTART_DELAY_MS = 1000;
 
 /**
  * Configuration for the app-server.
@@ -51,8 +50,6 @@ export interface AppServerEvents {
   exit: (code: number | null, signal: string | null) => void;
   /** Emitted when an error occurs */
   error: (error: Error) => void;
-  /** Emitted when the server restarts */
-  restart: (attempt: number) => void;
 }
 
 /**
@@ -77,10 +74,8 @@ export class AppServer {
   private process: ChildProcess | null = null;
   private client: JsonRpcClient | null = null;
   private tempDir: string | null = null;
-  private restartCount = 0;
   private isShuttingDown = false;
   private readonly config: AppServerConfig;
-  private refCount = 0;
 
   // Turn serialization: only one turn runs at a time on a single app-server
   private turnQueue: Array<{ resolve: () => void }> = [];
@@ -94,7 +89,6 @@ export class AppServer {
   private serverRequestListeners: Array<(id: number, method: string, params: unknown) => void> = [];
   private exitListeners: Array<(code: number | null, signal: string | null) => void> = [];
   private errorListeners: Array<(error: Error) => void> = [];
-  private restartListeners: Array<(attempt: number) => void> = [];
 
   constructor(config: AppServerConfig = {}) {
     this.config = config;
@@ -158,7 +152,7 @@ export class AppServer {
       '-c', 'mcp_servers.storage.bearer_token_env_var=YAAR_MCP_TOKEN',
       '-c', `mcp_servers.apps.url=http://127.0.0.1:${MCP_PORT}/mcp/apps`,
       '-c', 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN',
-      '-c', 'model_reasoning_effort = "medium"',
+      '-c', 'model_reasoning_effort = "high"',
       '-c', 'model_personality = "none"',
       '-c', 'sandbox_mode = "danger-full-access"',
       '-c', 'approval_policy = "never"',
@@ -224,7 +218,7 @@ export class AppServer {
     });
 
     // Handle process exit
-    this.process.on('exit', async (code, signal) => {
+    this.process.on('exit', (code, signal) => {
       this.process = null;
       this.client?.close();
       this.client = null;
@@ -232,26 +226,6 @@ export class AppServer {
       // Emit exit event
       for (const listener of this.exitListeners) {
         listener(code, signal);
-      }
-
-      // Auto-restart if not shutting down and under restart limit
-      if (!this.isShuttingDown && this.restartCount < MAX_RESTARTS) {
-        this.restartCount++;
-        for (const listener of this.restartListeners) {
-          listener(this.restartCount);
-        }
-
-        // Delay before restart
-        await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY_MS));
-
-        try {
-          await this.spawnProcess();
-          await this.initialize();
-        } catch (err) {
-          for (const listener of this.errorListeners) {
-            listener(err instanceof Error ? err : new Error(String(err)));
-          }
-        }
       }
     });
 
@@ -313,7 +287,6 @@ export class AppServer {
       this.tempDir = null;
     }
 
-    this.restartCount = 0;
     this.isShuttingDown = false;
   }
 
@@ -372,12 +345,13 @@ export class AppServer {
 
   /**
    * Resume an existing thread.
+   * Returns the thread object so callers can validate it was properly loaded.
    */
-  async threadResume(params: ThreadResumeParams): Promise<void> {
+  async threadResume(params: ThreadResumeParams): Promise<ThreadResumeResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    await this.client.request<ThreadResumeParams, void>('thread/resume', params);
+    return this.client.request<ThreadResumeParams, ThreadResumeResponse>('thread/resume', params);
   }
 
   /**
@@ -435,21 +409,6 @@ export class AppServer {
   }
 
   // ============================================================================
-  // Reference Counting
-  // ============================================================================
-
-  /** Increment reference count (called when a provider starts using this server). */
-  retain(): void {
-    this.refCount++;
-  }
-
-  /** Decrement reference count. Returns true if no more references remain. */
-  release(): boolean {
-    this.refCount = Math.max(0, this.refCount - 1);
-    return this.refCount === 0;
-  }
-
-  // ============================================================================
   // Event Emitter API
   // ============================================================================
 
@@ -457,7 +416,6 @@ export class AppServer {
   on(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
   on(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
-  on(event: 'restart', listener: (attempt: number) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(event: string, listener: (...args: any[]) => void): this {
     switch (event) {
@@ -473,9 +431,6 @@ export class AppServer {
       case 'error':
         this.errorListeners.push(listener as (error: Error) => void);
         break;
-      case 'restart':
-        this.restartListeners.push(listener as (attempt: number) => void);
-        break;
     }
     return this;
   }
@@ -484,7 +439,6 @@ export class AppServer {
   off(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
   off(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   off(event: 'error', listener: (error: Error) => void): this;
-  off(event: 'restart', listener: (attempt: number) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   off(event: string, listener: (...args: any[]) => void): this {
     switch (event) {
@@ -500,9 +454,6 @@ export class AppServer {
       case 'error':
         this.errorListeners = this.errorListeners.filter((l) => l !== listener);
         break;
-      case 'restart':
-        this.restartListeners = this.restartListeners.filter((l) => l !== listener);
-        break;
     }
     return this;
   }
@@ -515,7 +466,6 @@ export class AppServer {
     this.serverRequestListeners = [];
     this.exitListeners = [];
     this.errorListeners = [];
-    this.restartListeners = [];
     return this;
   }
 }

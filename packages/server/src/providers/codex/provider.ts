@@ -2,18 +2,19 @@
  * Codex App-Server Provider.
  *
  * Uses `codex app-server` for long-running JSON-RPC communication.
- * Supports shared AppServer instances with thread forking for parallel agents.
+ * Thin wrapper on an externally-owned AppServer (owned by WarmPool).
  *
  * Architecture:
- * - One AppServer process per connection (shared across agents)
+ * - One AppServer process shared across agents (owned by WarmPool)
  * - Each agent gets its own thread (via thread/start or thread/fork)
  * - Turns are serialized through the AppServer's turn semaphore
  *   (notifications lack thread IDs, so only one turn runs at a time)
+ * - Provider never stops the AppServer — WarmPool handles lifecycle
  */
 
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
-import { AppServer, type AppServerConfig } from './app-server.js';
+import type { AppServer } from './app-server.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 
@@ -30,8 +31,7 @@ export class CodexProvider extends BaseTransport {
   readonly providerType: ProviderType = 'codex';
   readonly systemPrompt = SYSTEM_PROMPT;
 
-  private appServer: AppServer | null = null;
-  private ownsAppServer = false; // true if this provider created the AppServer
+  private appServer: AppServer | null;
   private currentSession: ThreadSession | null = null;
 
   // Interrupt signal: shared instance field so interrupt() can reach the active query.
@@ -40,15 +40,11 @@ export class CodexProvider extends BaseTransport {
 
   /**
    * Create a CodexProvider.
-   * @param sharedAppServer - Optional shared AppServer to use instead of creating a new one.
+   * @param appServer - The shared AppServer (owned by WarmPool, not this provider).
    */
-  constructor(sharedAppServer?: AppServer) {
+  constructor(appServer: AppServer) {
     super();
-    if (sharedAppServer) {
-      this.appServer = sharedAppServer;
-      this.appServer.retain();
-      this.ownsAppServer = false;
-    }
+    this.appServer = appServer;
   }
 
   /**
@@ -66,17 +62,10 @@ export class CodexProvider extends BaseTransport {
   }
 
   /**
-   * Eagerly start the AppServer so it's ready for the first query
-   * and can be shared with other providers.
+   * No-op: AppServer is already started by WarmPool before provider creation.
    */
   async warmup(): Promise<boolean> {
-    try {
-      await this.ensureAppServer();
-      return true;
-    } catch (err) {
-      console.error('[codex] Warmup failed:', err);
-      return false;
-    }
+    return this.appServer?.isRunning ?? false;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -109,12 +98,14 @@ export class CodexProvider extends BaseTransport {
     this.createAbortController();
 
     try {
-      // Ensure app-server is running
-      await this.ensureAppServer(options.model);
+      if (!this.appServer?.isRunning) {
+        yield this.createErrorMessage(new Error('AppServer is not running'));
+        return;
+      }
 
       // Capture a local reference so dispose() nulling this.appServer
       // doesn't crash the finally block.
-      const appServer = this.appServer!;
+      const appServer = this.appServer;
 
       // Handle thread creation: new, fork, or reuse
       const threadCreated = await this.ensureThread(options);
@@ -237,19 +228,8 @@ export class CodexProvider extends BaseTransport {
 
   async dispose(): Promise<void> {
     await super.dispose();
-
-    if (this.appServer) {
-      if (this.ownsAppServer) {
-        // Only stop the process if we created it and no one else is using it
-        if (this.appServer.release()) {
-          await this.appServer.stop();
-        }
-      } else {
-        this.appServer.release();
-      }
-      this.appServer = null;
-    }
-
+    // Don't stop the AppServer — it's owned by WarmPool.
+    this.appServer = null;
     this.currentSession = null;
     this.resolveMessage = null;
   }
@@ -282,12 +262,20 @@ export class CodexProvider extends BaseTransport {
     if (options.resumeThread && options.sessionId) {
       console.log(`[codex] Resuming thread ${options.sessionId}`);
       try {
-        await this.appServer!.threadResume({ threadId: options.sessionId });
-        this.currentSession = {
-          threadId: options.sessionId,
-          systemPrompt: options.systemPrompt,
-        };
-        return true;
+        const result = await this.appServer!.threadResume({ threadId: options.sessionId });
+        // Validate the resume actually loaded conversation history.
+        // If turns is empty, the rollout data was likely missing (e.g. after process restart),
+        // so fall through to create a fresh thread instead.
+        if (result.thread.turns.length === 0) {
+          console.warn(`[codex] Resumed thread has no turns, starting fresh instead`);
+          // Fall through to create new thread
+        } else {
+          this.currentSession = {
+            threadId: options.sessionId,
+            systemPrompt: options.systemPrompt,
+          };
+          return true;
+        }
       } catch (err) {
         console.warn(`[codex] Resume failed, falling back to new thread:`, err);
         // Fall through to create new thread
@@ -314,34 +302,4 @@ export class CodexProvider extends BaseTransport {
     return false;
   }
 
-  /**
-   * Ensure the app-server is running.
-   */
-  private async ensureAppServer(model?: string): Promise<void> {
-    if (this.appServer?.isRunning) {
-      return;
-    }
-
-    const config: AppServerConfig = {
-      model: model ?? 'gpt-5.3-codex',
-    };
-
-    this.appServer = new AppServer(config);
-    this.appServer.retain();
-    this.ownsAppServer = true;
-
-    // Handle errors
-    this.appServer.on('error', (err) => {
-      console.error('[codex] App-server error:', err);
-    });
-
-    // Handle restarts
-    this.appServer.on('restart', (attempt) => {
-      console.log(`[codex] App-server restarting (attempt ${attempt})`);
-      // Invalidate session on restart
-      this.currentSession = null;
-    });
-
-    await this.appServer.start();
-  }
 }

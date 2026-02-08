@@ -5,6 +5,7 @@
  */
 
 import type { AITransport, ProviderType, ProviderInfo } from './types.js';
+import { getWarmPool } from './warm-pool.js';
 
 /**
  * Registry of available providers with metadata.
@@ -42,17 +43,34 @@ function getForcedProvider(): ProviderType | null {
 }
 
 /**
- * Dynamic import loaders for each provider.
- * This keeps SDK dependencies from being loaded until actually needed.
+ * Lightweight availability checkers per provider.
+ * These don't instantiate full providers — just check prerequisites.
  */
-const providerLoaders: Record<ProviderType, () => Promise<AITransport>> = {
+const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
   claude: async () => {
     const { ClaudeSessionProvider } = await import('./claude/index.js');
-    return new ClaudeSessionProvider();
+    const p = new ClaudeSessionProvider();
+    try { return await p.isAvailable(); } finally { await p.dispose(); }
   },
   codex: async () => {
-    const { CodexProvider } = await import('./codex/index.js');
-    return new CodexProvider();
+    // Check CLI + auth without needing an AppServer
+    try {
+      const { execSync } = await import('child_process');
+      execSync('codex --version', { stdio: 'ignore' });
+    } catch {
+      return false;
+    }
+    if (process.env.OPENAI_API_KEY) return true;
+    try {
+      const os = await import('os');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const authPath = path.join(os.homedir(), '.codex', 'auth.json');
+      await fs.access(authPath);
+      return true;
+    } catch {
+      return false;
+    }
   },
 };
 
@@ -63,16 +81,11 @@ export async function getAvailableProviders(): Promise<ProviderType[]> {
   const available: ProviderType[] = [];
 
   for (const providerType of PROVIDER_PREFERENCE) {
-    const loader = providerLoaders[providerType];
-    if (!loader) continue;
+    const checker = availabilityCheckers[providerType];
+    if (!checker) continue;
 
-    const provider = await loader();
-    try {
-      if (await provider.isAvailable()) {
-        available.push(providerType);
-      }
-    } finally {
-      await provider.dispose();
+    if (await checker()) {
+      available.push(providerType);
     }
   }
 
@@ -81,14 +94,20 @@ export async function getAvailableProviders(): Promise<ProviderType[]> {
 
 /**
  * Create a provider instance by provider type.
- * Uses dynamic imports to only load the required SDK.
+ * Claude: creates directly. Codex: uses warm pool (AppServer required).
  */
 export async function createProvider(providerType: ProviderType): Promise<AITransport> {
-  const loader = providerLoaders[providerType];
-  if (!loader) {
-    throw new Error(`Unknown provider: ${providerType}`);
+  if (providerType === 'claude') {
+    const { ClaudeSessionProvider } = await import('./claude/index.js');
+    return new ClaudeSessionProvider();
   }
-  return loader();
+  if (providerType === 'codex') {
+    // Codex providers must go through the warm pool (which owns the AppServer)
+    const provider = await getWarmPool().acquire();
+    if (!provider) throw new Error('Failed to create Codex provider');
+    return provider;
+  }
+  throw new Error(`Unknown provider: ${providerType}`);
 }
 
 /**
@@ -101,14 +120,12 @@ export async function getFirstAvailableProvider(): Promise<AITransport | null> {
   const providers = forcedProvider ? [forcedProvider] : PROVIDER_PREFERENCE;
 
   for (const providerType of providers) {
-    const loader = providerLoaders[providerType];
-    if (!loader) continue;
+    const checker = availabilityCheckers[providerType];
+    if (!checker) continue;
 
-    const provider = await loader();
-    if (await provider.isAvailable()) {
-      return provider;
+    if (await checker()) {
+      return createProvider(providerType);
     }
-    await provider.dispose();
   }
 
   return null;

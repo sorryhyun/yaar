@@ -23,12 +23,13 @@ pnpm vitest run             # Run tests once
 src/
 ├── components/
 │   ├── desktop/           # DesktopSurface, WindowManager
-│   ├── ui/                # CommandPalette, ToastContainer, NotificationCenter, DebugPanel
+│   ├── drawing/           # DrawingOverlay
+│   ├── ui/                # CommandPalette, NotificationCenter, DebugPanel, dialogs, etc.
 │   └── windows/           # WindowFrame, ContentRenderer, LockOverlay
-│       └── renderers/     # MarkdownRenderer, TableRenderer, HtmlRenderer, etc.
-├── contexts/              # ComponentActionContext for interactive components
+│       └── renderers/     # Markdown, Table, Html, Iframe, Component, Text renderers
+├── contexts/              # ComponentActionContext, FormContext
 ├── hooks/                 # useAgentConnection (WebSocket singleton)
-├── store/                 # Zustand store with Immer
+├── store/                 # Zustand store with Immer, split into slices/
 ├── styles/                # CSS Modules
 └── types/                 # WindowModel, DesktopState, RenderingFeedback
 ```
@@ -36,7 +37,8 @@ src/
 ## State Management
 
 **Zustand + Immer** pattern:
-- All UI state in `store/desktop.ts`
+- Store split into slices (`store/slices/`) — windows, agents, notifications, toasts, dialogs, etc.
+- Composed in `store/desktop.ts`
 - AI actions processed via `applyAction()` reducer
 - User interactions (focus, close, move, resize) logged and sent to server
 

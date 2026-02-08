@@ -80,7 +80,7 @@ export function registerAppDevTools(server: McpServer): void {
   server.registerTool(
     'write_ts',
     {
-      description: `Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use this to develop apps before compiling.
+      description: `Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use this to develop apps before compiling. Entry point is src/main.ts. Split code into multiple files (e.g., src/utils.ts, src/renderer.ts) and import them from main.ts — avoid putting everything in one file.
 
 BUNDLED LIBRARIES - Available via @bundled/* imports (no npm install needed):
 • @bundled/uuid - Unique ID generation: v4(), v1(), validate()
@@ -315,15 +315,17 @@ Example:
         await mkdir(join(sandboxPath, 'src'), { recursive: true });
         await cp(appSrcPath, join(sandboxPath, 'src'), { recursive: true });
 
-        // List cloned files for context
+        // List cloned files with sandbox-relative paths (prefixed with src/)
         const files = await readdir(appSrcPath, { recursive: true });
-        const fileList = (files as string[]).filter((f) => !f.includes('node_modules'));
+        const fileList = (files as string[])
+          .filter((f) => !f.includes('node_modules'))
+          .map((f) => `src/${f}`);
 
         return ok(JSON.stringify({
           sandboxId,
           appId,
           files: fileList,
-          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Modify with write_ts or apply_diff_ts, then compile and deploy.`,
+          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
         }, null, 2));
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';

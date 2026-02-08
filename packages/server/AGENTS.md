@@ -19,15 +19,28 @@ pnpm build                  # Build for production
 
 ```
 src/
-├── index.ts           # WebSocket server + REST API endpoints
+├── index.ts           # Thin orchestrator (~35 lines)
+├── config.ts          # Constants, paths, MIME types, PORT
+├── lifecycle.ts       # initializeSubsystems(), startListening(), shutdown()
+├── http/              # HTTP server and route handlers
+│   ├── server.ts      # createHttpServer() — CORS, MCP dispatch, route dispatch
+│   ├── utils.ts       # sendJson(), sendError(), safePath() helpers
+│   └── routes/
+│       ├── api.ts     # REST API routes (health, providers, apps, sessions, agents/stats)
+│       ├── files.ts   # File-serving routes (pdf, sandbox, app-static, storage)
+│       └── static.ts  # Frontend static serving + SPA fallback
+├── websocket/         # WebSocket server + connection registry
+│   ├── server.ts      # createWebSocketServer() with explicit options param
+│   └── broadcast-center.ts  # BroadcastCenter — routes events to WebSocket connections
 ├── agents/            # Agent lifecycle, pooling, context management
-├── events/            # BroadcastCenter - centralized WebSocket event hub
 ├── providers/         # Pluggable AI backends (Claude, Codex)
 ├── mcp/               # MCP server, tools, action emitter
 ├── logging/           # Session logging (write), reading, and window restore
 ├── storage/           # StorageManager + permissions for persistent data
-├── compiler/          # Bun bundler for standalone executables
-└── pdf/               # PDF rendering via poppler
+└── lib/               # Standalone utilities (no server internal imports)
+    ├── compiler/      # esbuild bundler for sandbox apps
+    ├── pdf/           # PDF rendering via poppler
+    └── sandbox/       # Sandboxed JS/TS code execution (node:vm)
 ```
 
 ## Architecture

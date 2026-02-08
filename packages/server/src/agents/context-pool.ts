@@ -550,16 +550,35 @@ export class ContextPool {
     getAgentLimiter().clearWaiting(new Error('Pool resetting'));
 
     // 3. Interrupt running queries so handleMessage loops exit
-    await this.agentPool.interruptAll();
+    try {
+      await this.agentPool.interruptAll();
+    } catch (err) {
+      console.error('[ContextPool] Reset: interruptAll failed:', err);
+    }
 
-    // 4. Wait for all in-flight task functions to return
-    await this.awaitInflight();
+    // 4. Wait for all in-flight task functions to return (with timeout)
+    try {
+      await Promise.race([
+        this.awaitInflight(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+      ]);
+    } catch (err) {
+      console.error('[ContextPool] Reset: awaitInflight failed:', err);
+    }
 
     // 5. Now safe to dispose agents (no in-flight references)
-    await this.agentPool.cleanup();
+    try {
+      await this.agentPool.cleanup();
+    } catch (err) {
+      console.error('[ContextPool] Reset: agentPool.cleanup failed:', err);
+    }
 
     // 6. Stop shared Codex app-server so a fresh one is spawned
-    await getWarmPool().resetCodexAppServer();
+    try {
+      await getWarmPool().resetCodexAppServer();
+    } catch (err) {
+      console.error('[ContextPool] Reset: resetCodexAppServer failed:', err);
+    }
 
     // 7. Close all tracked windows on the frontend
     const openWindows = this.windowState.listWindows();
@@ -571,14 +590,15 @@ export class ContextPool {
       await this.sendEvent({ type: 'ACTIONS', actions: closeActions });
     }
 
-    // 7. Clear remaining state
+    // 8. Clear remaining state (including saved thread IDs so we don't resume old sessions)
     this.contextTape.clear();
     this.timeline.clear();
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
     this.windowState.clear();
+    this.savedThreadIds = undefined;
 
-    // 8. Re-create a fresh main agent
+    // 9. Re-create a fresh main agent
     const provider = await acquireWarmProvider();
     if (provider) {
       const agent = await this.agentPool.createMainAgent(provider);
@@ -595,7 +615,7 @@ export class ContextPool {
     }
 
     this.resetting = false;
-    console.log(`[ContextPool] Reset: disposed agents, cleared context tape, timeline, queues, and window state`);
+    console.log(`[ContextPool] Reset complete: fresh agent, cleared all state`);
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {

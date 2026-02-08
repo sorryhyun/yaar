@@ -146,7 +146,7 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       res.writeHead(200, {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'no-cache',
       });
       res.end(content);
     } catch {

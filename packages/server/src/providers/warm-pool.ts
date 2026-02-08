@@ -9,7 +9,7 @@
  */
 
 import type { AITransport, ProviderType } from './types.js';
-import type { AppServer } from './codex/app-server.js';
+import { AppServer } from './codex/app-server.js';
 
 /**
  * Configuration for the warm pool.
@@ -108,8 +108,7 @@ class ProviderWarmPool {
 
   /**
    * Create and warm up a provider instance.
-   * For Codex, reuses the shared AppServer so new providers start instantly
-   * (no subprocess spawn) and can fork threads for context inheritance.
+   * For Codex, WarmPool creates/starts the AppServer and passes it to the provider.
    */
   private async createWarmProvider(providerType: ProviderType): Promise<AITransport | null> {
     try {
@@ -120,9 +119,11 @@ class ProviderWarmPool {
         const { ClaudeSessionProvider } = await import('./claude/index.js');
         provider = new ClaudeSessionProvider();
       } else {
-        // Use regular provider for Codex, sharing the AppServer if available
+        // Ensure shared AppServer exists and is running
+        await this.ensureCodexAppServer();
+
         const { CodexProvider } = await import('./codex/index.js');
-        provider = new CodexProvider(this.sharedCodexAppServer ?? undefined);
+        provider = new CodexProvider(this.sharedCodexAppServer!);
       }
 
       // Check availability
@@ -131,21 +132,12 @@ class ProviderWarmPool {
         return null;
       }
 
-      // Warm up if supported
+      // Warm up if supported (Claude pre-creates session; Codex is a no-op)
       if (provider.warmup) {
         console.log(`[WarmPool] Warming up ${providerType} provider...`);
         const success = await provider.warmup();
         if (!success) {
           console.warn(`[WarmPool] Warmup failed for ${providerType}`);
-          // Still return the provider - it will work, just not pre-warmed
-        }
-      }
-
-      // Capture the AppServer from the first Codex provider for sharing
-      if (providerType === 'codex' && !this.sharedCodexAppServer) {
-        const getAppServer = (provider as { getAppServer?: () => AppServer | null }).getAppServer;
-        if (getAppServer) {
-          this.sharedCodexAppServer = getAppServer.call(provider);
         }
       }
 
@@ -154,6 +146,30 @@ class ProviderWarmPool {
       console.error(`[WarmPool] Failed to create ${providerType} provider:`, err);
       return null;
     }
+  }
+
+  /**
+   * Ensure the shared Codex AppServer is created and running.
+   * WarmPool is the sole owner of this process.
+   */
+  private async ensureCodexAppServer(): Promise<void> {
+    if (this.sharedCodexAppServer?.isRunning) {
+      return;
+    }
+
+    // Stop any dead AppServer before replacing
+    if (this.sharedCodexAppServer) {
+      await this.sharedCodexAppServer.stop();
+    }
+
+    console.log('[WarmPool] Starting shared Codex AppServer');
+    this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.3-codex' });
+
+    this.sharedCodexAppServer.on('error', (err) => {
+      console.error('[WarmPool] Codex AppServer error:', err);
+    });
+
+    await this.sharedCodexAppServer.start();
   }
 
   /**
@@ -172,8 +188,10 @@ class ProviderWarmPool {
       const sessionId = provider.getSessionId?.() ?? 'no-session';
       console.log(`[WarmPool] Acquired warm provider (session: ${sessionId}), pool size: ${this.pool.length}`);
 
-      // Replenish in background if configured
-      if (this.config.autoReplenish && this.preferredProvider) {
+      // Replenish in background for Claude only.
+      // Codex providers share one AppServer and are cheap to create on demand,
+      // so background replenish just adds race conditions with reset.
+      if (this.config.autoReplenish && this.preferredProvider && this.preferredProvider !== 'codex') {
         this.replenishBackground();
       }
 
@@ -190,20 +208,20 @@ class ProviderWarmPool {
   }
 
   /**
-   * Replenish the pool in the background.
+   * Replenish the pool in the background (Claude only).
    */
   private replenishBackground(): void {
     if (!this.preferredProvider || this.pool.length >= this.config.poolSize) return;
 
-    // Don't await - let it run in background
     this.createWarmProvider(this.preferredProvider)
       .then((provider) => {
-        if (provider && this.pool.length < this.config.poolSize) {
+        if (!provider) return;
+
+        if (this.pool.length < this.config.poolSize) {
           this.pool.push(provider);
           const sessionId = provider.getSessionId?.() ?? 'no-session';
           console.log(`[WarmPool] Replenished pool (session: ${sessionId}), size: ${this.pool.length}`);
-        } else if (provider) {
-          // Pool already full, dispose
+        } else {
           provider.dispose();
         }
       })
@@ -250,8 +268,6 @@ class ProviderWarmPool {
    * Called on session reset so the next acquire() spawns a fresh app-server.
    */
   async resetCodexAppServer(): Promise<void> {
-    if (!this.sharedCodexAppServer) return;
-
     // Dispose pooled providers that reference the old AppServer
     const kept: AITransport[] = [];
     for (const provider of this.pool) {
@@ -263,7 +279,10 @@ class ProviderWarmPool {
     }
     this.pool = kept;
 
-    // Force-stop the shared process
+    if (!this.sharedCodexAppServer) return;
+
+    // Stop the shared process (WarmPool is sole owner)
+    console.log('[WarmPool] Stopping shared Codex AppServer for reset');
     await this.sharedCodexAppServer.stop();
     this.sharedCodexAppServer = null;
   }

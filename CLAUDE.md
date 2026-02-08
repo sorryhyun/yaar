@@ -66,7 +66,8 @@ yaar/
 │   ├── permissions.json         # Saved permission decisions
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
 ├── docs/                        # Architecture documentation
-│   └── common_flow.md           # Agent pools, forks, message flow diagrams
+│   ├── common_flow.md           # Agent pools, context, message flow diagrams
+│   └── claude_codex.md          # Claude vs Codex provider behavioral differences
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
@@ -110,7 +111,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
-See `docs/common_flow.md` for detailed agent pool, fork, and message flow diagrams.
+See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences.
 
 ### Server Subsystems
 
