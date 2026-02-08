@@ -16,13 +16,13 @@ import { getMcpToken } from '../../mcp/index.js';
 import { getCodexBin } from '../../config.js';
 import type {
   ThreadStartParams,
-  ThreadStartResult,
+  ThreadStartResponse,
   TurnStartParams,
   ThreadResumeParams,
   ThreadForkParams,
-  ThreadForkResult,
+  ThreadForkResponse,
   InitializeParams,
-  InitializeResult,
+  InitializeResponse,
 } from './types.js';
 
 // MCP server port (same as main server)
@@ -87,7 +87,7 @@ export class AppServer {
   private turnActive = false;
 
   // Capabilities received from initialize handshake
-  private initializeResult: InitializeResult | null = null;
+  private initializeResult: InitializeResponse | null = null;
 
   // Event listeners
   private notificationListeners: Array<(method: string, params: unknown) => void> = [];
@@ -126,7 +126,7 @@ export class AppServer {
       throw new Error('AppServer client is not available');
     }
 
-    this.initializeResult = await this.client.request<InitializeParams, InitializeResult>(
+    this.initializeResult = await this.client.request<InitializeParams, InitializeResponse>(
       'initialize',
       {
         clientInfo: {
@@ -334,7 +334,7 @@ export class AppServer {
   /**
    * Get the capabilities received from the initialize handshake.
    */
-  getCapabilities(): InitializeResult | null {
+  getCapabilities(): InitializeResponse | null {
     return this.initializeResult;
   }
 
@@ -359,13 +359,14 @@ export class AppServer {
   /**
    * Start a new thread.
    */
-  async threadStart(params: ThreadStartParams = {}): Promise<ThreadStartResult> {
+  async threadStart(params: Omit<ThreadStartParams, 'experimentalRawEvents'> = {}): Promise<ThreadStartResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<ThreadStartParams, ThreadStartResult>(
+    const fullParams: ThreadStartParams = { experimentalRawEvents: false, ...params };
+    return this.client.request<ThreadStartParams, ThreadStartResponse>(
       'thread/start',
-      params
+      fullParams
     );
   }
 
@@ -393,11 +394,11 @@ export class AppServer {
    * Fork an existing thread into a new independent thread.
    * The forked thread inherits the parent's conversation history.
    */
-  async threadFork(params: ThreadForkParams): Promise<ThreadForkResult> {
+  async threadFork(params: ThreadForkParams): Promise<ThreadForkResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<ThreadForkParams, ThreadForkResult>(
+    return this.client.request<ThreadForkParams, ThreadForkResponse>(
       'thread/fork',
       params
     );

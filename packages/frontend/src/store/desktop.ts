@@ -138,6 +138,13 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createQueuedActionsSlice(...a),
     ...createDrawingSlice(...a),
 
+    // Desktop-level state
+    appsVersion: 0,
+    bumpAppsVersion: () => {
+      const [set] = a
+      set((state) => { state.appsVersion += 1 })
+    },
+
     // Action router - routes OS actions to appropriate slice handlers
     applyAction: (action: OSAction) => {
       const store = useDesktopStore.getState()
@@ -165,6 +172,8 @@ export const useDesktopStore = create<DesktopStore>()(
         store.handleToastAction(action)
       } else if (actionType.startsWith('dialog.')) {
         store.handleDialogAction(action)
+      } else if (actionType === 'desktop.refreshApps') {
+        store.bumpAppsVersion()
       }
     },
 
@@ -192,6 +201,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.activityLog = []
         state.debugLog = []
         state.pendingFeedback = []
+        state.appsVersion = 0
       })
     },
   }))

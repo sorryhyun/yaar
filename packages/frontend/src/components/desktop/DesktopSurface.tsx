@@ -6,7 +6,7 @@
  * - Background styling
  * - Contains all windows
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useDesktopStore } from '@/store'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext'
@@ -43,10 +43,14 @@ export function DesktopSurface() {
   const windows = useDesktopStore(s => s.windows)
   const { sendMessage, sendWindowMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
 
+  const appsVersion = useDesktopStore(s => s.appsVersion)
   const [apps, setApps] = useState<AppInfo[]>([])
 
-  // Fetch available apps on mount
+  // Fetch available apps on mount and when appsVersion changes (after deploy)
+  const fetchedVersionRef = useRef(-1)
   useEffect(() => {
+    if (fetchedVersionRef.current === appsVersion) return
+    fetchedVersionRef.current = appsVersion
     async function fetchApps() {
       try {
         const response = await fetch('/api/apps')
@@ -59,7 +63,7 @@ export function DesktopSurface() {
       }
     }
     fetchApps()
-  }, [])
+  }, [appsVersion])
 
   const agentList = Object.values(activeAgents)
 

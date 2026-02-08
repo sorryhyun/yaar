@@ -156,12 +156,15 @@ export class CodexProvider extends BaseTransport {
       appServer.on('notification', notificationHandler);
 
       try {
-        // Build input array with text and optional images
-        const input: Array<{ type: 'text'; text: string } | { type: 'image'; url: string }> = [
-          { type: 'text', text: prompt },
+        // Build input array with text and optional images (UserInput union from generated types)
+        const input: Array<
+          | { type: 'text'; text: string; text_elements: never[] }
+          | { type: 'image'; url: string }
+        > = [
+          { type: 'text', text: prompt, text_elements: [] },
         ];
 
-        // Add images as separate ImageInput objects
+        // Add images as separate input objects
         if (options.images && options.images.length > 0) {
           for (const imageDataUrl of options.images) {
             input.push({ type: 'image', url: imageDataUrl });

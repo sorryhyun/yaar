@@ -1,19 +1,26 @@
 /**
  * App development tools - write, compile, and deploy TypeScript apps.
  *
- * Workflow:
+ * Workflow (new app):
  * 1. write_ts - Write TypeScript code to a sandbox directory
  * 2. compile - Compile TypeScript to a bundled HTML file
  * 3. deploy - Deploy sandbox to apps/ directory as a desktop app
+ *
+ * Workflow (revise existing app):
+ * 1. clone - Clone deployed app source into a new sandbox
+ * 2. apply_diff_ts / write_ts - Modify files in the sandbox
+ * 3. compile - Recompile
+ * 4. deploy - Redeploy (same appId overwrites)
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { writeFile, mkdir, cp, stat } from 'fs/promises';
+import { readFile, writeFile, mkdir, cp, readdir, stat } from 'fs/promises';
 import { join, dirname, normalize, relative } from 'path';
 import { ok } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
+import { actionEmitter } from '../action-emitter.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -256,8 +263,8 @@ Example:
         const metadata = { icon, name: displayName };
         await writeFile(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2), 'utf-8');
 
-        // Optionally clean up sandbox
-        // await rm(sandboxPath, { recursive: true, force: true });
+        // Notify frontend to refresh desktop app icons
+        actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
         return ok(JSON.stringify({
           success: true,
@@ -270,6 +277,123 @@ Example:
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error deploying app: ${error}`);
       }
+    }
+  );
+
+  // clone - Clone deployed app source into a sandbox for editing
+  server.registerTool(
+    'clone',
+    {
+      description:
+        'Clone an existing deployed app\'s source into a new sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy to update the app.',
+      inputSchema: {
+        appId: z.string().describe('The app ID to clone (folder name in apps/)'),
+      },
+    },
+    async (args) => {
+      const { appId } = args;
+
+      // Validate app ID
+      if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
+        return ok('Error: Invalid app ID.');
+      }
+
+      const appPath = join(APPS_DIR, appId);
+      const appSrcPath = join(appPath, 'src');
+
+      // Check app and source exist
+      try {
+        await stat(appSrcPath);
+      } catch {
+        return ok(`Error: No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`);
+      }
+
+      const sandboxId = generateSandboxId();
+      const sandboxPath = getSandboxPath(sandboxId);
+
+      try {
+        await mkdir(join(sandboxPath, 'src'), { recursive: true });
+        await cp(appSrcPath, join(sandboxPath, 'src'), { recursive: true });
+
+        // List cloned files for context
+        const files = await readdir(appSrcPath, { recursive: true });
+        const fileList = (files as string[]).filter((f) => !f.includes('node_modules'));
+
+        return ok(JSON.stringify({
+          sandboxId,
+          appId,
+          files: fileList,
+          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Modify with write_ts or apply_diff_ts, then compile and deploy.`,
+        }, null, 2));
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Unknown error';
+        return ok(`Error cloning app: ${error}`);
+      }
+    }
+  );
+
+  // apply_diff_ts - Apply search-and-replace edit to a sandbox file
+  server.registerTool(
+    'apply_diff_ts',
+    {
+      description:
+        'Apply a search-and-replace edit to an existing file in a sandbox. Finds the exact old_string and replaces it with new_string. Use this to revise code without rewriting the entire file.',
+      inputSchema: {
+        sandboxId: z.string().describe('Sandbox ID containing the file'),
+        path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
+        old_string: z.string().describe('The exact text to find (must be unique in the file)'),
+        new_string: z.string().describe('The replacement text'),
+      },
+    },
+    async (args) => {
+      const { sandboxId, path, old_string, new_string } = args;
+
+      // Validate path
+      if (path.includes('..') || path.startsWith('/')) {
+        return ok('Error: Invalid path. Use relative paths without ".." or leading "/".');
+      }
+
+      // Validate sandbox ID
+      if (!/^\d+$/.test(sandboxId)) {
+        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+      }
+
+      const sandboxPath = getSandboxPath(sandboxId);
+
+      if (!isValidPath(sandboxPath, path)) {
+        return ok('Error: Path escapes sandbox directory.');
+      }
+
+      const fullPath = join(sandboxPath, path);
+
+      // Read existing content
+      let content: string;
+      try {
+        content = await readFile(fullPath, 'utf-8');
+      } catch {
+        return ok(`Error: File not found: ${path}`);
+      }
+
+      // Check old_string exists
+      if (!content.includes(old_string)) {
+        return ok('Error: old_string not found in file. Make sure it matches exactly (including whitespace).');
+      }
+
+      // Check uniqueness
+      const count = content.split(old_string).length - 1;
+      if (count > 1) {
+        return ok(`Error: old_string found ${count} times. Provide more surrounding context to make it unique.`);
+      }
+
+      // Apply replacement
+      const newContent = content.replace(old_string, new_string);
+      await writeFile(fullPath, newContent, 'utf-8');
+
+      return ok(JSON.stringify({
+        sandboxId,
+        path,
+        message: `Applied edit to sandbox/${sandboxId}/${path}`,
+      }, null, 2));
     }
   );
 }

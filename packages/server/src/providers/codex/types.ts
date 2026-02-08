@@ -1,29 +1,59 @@
 /**
- * JSON-RPC types for Codex app-server communication.
- *
- * The app-server uses JSON-RPC 2.0 over stdio for all communication.
- * Requests have an `id` field; notifications do not.
+ * Codex app-server types.
  *
  * Domain-specific types are generated from the Codex schema via
  * `make codex-types` (see packages/server/src/providers/codex/generated/).
- * Hand-written types below are kept for backward-compatibility; new code
- * should prefer the generated types.
+ * This file re-exports generated types and provides JSON-RPC base plumbing.
  */
 
-// Re-export generated protocol unions and approval types
+// ============================================================================
+// Re-exports from generated schema
+// ============================================================================
+
+// Protocol unions
 export type { ServerRequest as CodexServerRequest } from './generated/index.js';
 export type { ServerNotification as CodexServerNotification } from './generated/index.js';
 export type { ClientRequest as CodexClientRequest } from './generated/index.js';
+
+// Approval types
 export type { ReviewDecision } from './generated/index.js';
 export type { ExecCommandApprovalParams } from './generated/index.js';
 export type { ExecCommandApprovalResponse } from './generated/index.js';
 export type { ApplyPatchApprovalParams } from './generated/index.js';
 export type { ApplyPatchApprovalResponse } from './generated/index.js';
+
+// Initialize
+export type { InitializeParams } from './generated/index.js';
+export type { InitializeResponse } from './generated/index.js';
 export type { InitializeCapabilities } from './generated/index.js';
 export type { ClientInfo as CodexClientInfo } from './generated/index.js';
 
+// Thread/Turn request & response types (v2 API)
+export type { ThreadStartParams } from './generated/v2/index.js';
+export type { ThreadStartResponse } from './generated/v2/index.js';
+export type { ThreadResumeParams } from './generated/v2/index.js';
+export type { ThreadResumeResponse } from './generated/v2/index.js';
+export type { ThreadForkParams } from './generated/v2/index.js';
+export type { ThreadForkResponse } from './generated/v2/index.js';
+export type { TurnStartParams } from './generated/v2/index.js';
+export type { UserInput } from './generated/v2/index.js';
+export type { Thread } from './generated/v2/index.js';
+export type { Turn } from './generated/v2/index.js';
+export type { TurnStatus } from './generated/v2/index.js';
+export type { TurnError } from './generated/v2/index.js';
+export type { ThreadItem } from './generated/v2/index.js';
+
+// Notification types (v2 API)
+export type { AgentMessageDeltaNotification } from './generated/v2/index.js';
+export type { ReasoningTextDeltaNotification } from './generated/v2/index.js';
+export type { TurnCompletedNotification } from './generated/v2/index.js';
+export type { TurnStartedNotification } from './generated/v2/index.js';
+export type { ErrorNotification } from './generated/v2/index.js';
+export type { ItemStartedNotification } from './generated/v2/index.js';
+export type { ItemCompletedNotification } from './generated/v2/index.js';
+
 // ============================================================================
-// JSON-RPC Base Types
+// JSON-RPC Base Types (protocol plumbing, not generated)
 // ============================================================================
 
 /**
@@ -86,211 +116,6 @@ export type JsonRpcMessage =
   | JsonRpcErrorResponse
   | JsonRpcNotification
   | JsonRpcServerRequest;
-
-// ============================================================================
-// Thread/Turn Request & Response Types
-// ============================================================================
-
-/**
- * Parameters for thread/start request.
- */
-export interface ThreadStartParams {
-  /** System prompt / base instructions for this thread */
-  baseInstructions?: string;
-}
-
-/**
- * Thread object returned from the app-server.
- */
-export interface Thread {
-  id: string;
-  preview?: string;
-  modelProvider?: string;
-  createdAt?: number;
-  updatedAt?: number;
-  path?: string;
-  cwd?: string;
-  cliVersion?: string;
-  source?: string;
-  turns?: unknown[];
-}
-
-/**
- * Response from thread/start request.
- */
-export interface ThreadStartResult {
-  thread: Thread;
-  model?: string;
-  modelProvider?: string;
-  cwd?: string;
-  approvalPolicy?: string;
-  sandbox?: unknown;
-  reasoningEffort?: string;
-}
-
-/**
- * Parameters for initialize request.
- * @see generated/InitializeParams for the full schema
- */
-export interface InitializeParams {
-  clientInfo: {
-    name: string;
-    title?: string | null;
-    version: string;
-  };
-  capabilities?: {
-    experimentalApi: boolean;
-  } | null;
-}
-
-/**
- * Response from initialize request.
- */
-export interface InitializeResult {
-  userAgent: string;
-}
-
-/**
- * Parameters for thread/resume request.
- */
-export interface ThreadResumeParams {
-  threadId: string;
-}
-
-/**
- * Parameters for thread/fork request.
- * Branches an existing thread into a new independent thread.
- */
-export interface ThreadForkParams {
-  threadId: string;
-}
-
-/**
- * Response from thread/fork request.
- */
-export interface ThreadForkResult {
-  thread: Thread;
-}
-
-/**
- * Parameters for turn/start request.
- */
-export interface TurnStartParams {
-  threadId: string;
-  input: TurnInput[];
-}
-
-/**
- * Input item for a turn (text or image).
- */
-export type TurnInput = TextInput | ImageInput;
-
-export interface TextInput {
-  type: 'text';
-  text: string;
-}
-
-export interface ImageInput {
-  type: 'image';
-  url: string;
-}
-
-// ============================================================================
-// Notification Types (streamed during a turn)
-// ============================================================================
-
-/**
- * Notification methods we handle from the app-server.
- */
-export type NotificationMethod =
-  | 'turn/started'
-  | 'turn/completed'
-  | 'turn/failed'
-  | 'item/agentMessage/delta'
-  | 'item/agentMessage/completed'
-  | 'item/reasoning/textDelta'
-  | 'item/reasoning/completed'
-  | 'item/mcpToolCall/started'
-  | 'item/mcpToolCall/completed'
-  | 'item/commandExecution/started'
-  | 'item/commandExecution/completed'
-  | 'error';
-
-/**
- * Parameters for item/agentMessage/delta notification.
- */
-export interface AgentMessageDeltaParams {
-  delta: string;
-}
-
-/**
- * Parameters for item/agentMessage/completed notification.
- */
-export interface AgentMessageCompletedParams {
-  text: string;
-}
-
-/**
- * Parameters for item/reasoning/textDelta notification.
- */
-export interface ReasoningDeltaParams {
-  delta: string;
-}
-
-/**
- * Parameters for item/reasoning/completed notification.
- */
-export interface ReasoningCompletedParams {
-  text: string;
-}
-
-/**
- * Parameters for turn/completed notification.
- */
-export interface TurnCompletedParams {
-  status: 'completed' | 'interrupted';
-}
-
-/**
- * Parameters for turn/failed notification.
- */
-export interface TurnFailedParams {
-  error?: string;
-  message?: string;
-}
-
-/**
- * Parameters for MCP tool call notifications.
- */
-export interface McpToolCallParams {
-  tool?: string;
-  server?: string;
-  arguments?: Record<string, unknown>;
-  result?: {
-    content: Array<{ type: string; text?: string }>;
-    structured_content?: unknown;
-  };
-  error?: {
-    message: string;
-  };
-}
-
-/**
- * Parameters for command execution notifications.
- */
-export interface CommandExecutionParams {
-  command?: string;
-  exit_code?: number;
-  aggregated_output?: string;
-}
-
-/**
- * Parameters for error notification.
- */
-export interface ErrorParams {
-  message: string;
-  code?: string;
-}
 
 // ============================================================================
 // Helper Types

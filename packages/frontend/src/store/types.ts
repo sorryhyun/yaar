@@ -219,6 +219,8 @@ export type DesktopStore = WindowsSlice &
   InteractionsSlice &
   QueuedActionsSlice &
   DrawingSlice & {
+    appsVersion: number
+    bumpAppsVersion: () => void
     applyAction: (action: OSAction) => void
     applyActions: (actions: OSAction[]) => void
     resetDesktop: () => void

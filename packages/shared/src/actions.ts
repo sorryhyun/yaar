@@ -179,6 +179,12 @@ export interface DialogConfirmAction {
   permissionOptions?: PermissionOptions;
 }
 
+// ============ Desktop Actions ============
+
+export interface DesktopRefreshAppsAction {
+  type: 'desktop.refreshApps';
+}
+
 // ============ Union Types ============
 
 export type WindowAction =
@@ -203,7 +209,9 @@ export type ToastAction = ToastShowAction | ToastDismissAction;
 
 export type DialogAction = DialogConfirmAction;
 
-export type OSAction = WindowAction | NotificationAction | ToastAction | DialogAction;
+export type DesktopAction = DesktopRefreshAppsAction;
+
+export type OSAction = WindowAction | NotificationAction | ToastAction | DialogAction | DesktopAction;
 
 // ============ Type Guards ============
 
