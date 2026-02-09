@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'react'
 import { useDesktopStore, selectToasts } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
-import styles from '@/styles/ToastContainer.module.css'
+import styles from '@/styles/ui/ToastContainer.module.css'
 
 interface ToastContainerProps {
   onToastAction?: (toastId: string, eventId: string) => void

@@ -58,7 +58,7 @@ Tab 3 ──┘
 
 ## Monitor
 
-A **monitor** is a virtual desktop workspace within a session. Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own main agent.
+A **monitor** is a virtual desktop workspace within a session (up to 4 per session). Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own main agent.
 
 ### Why monitors exist
 
@@ -199,7 +199,7 @@ AI emits window.close / user clicks X
 ```
 Session (1 per conversation)
  ├── owns SessionHub registration, EventSequencer, SessionLogger
- ├── has 1+ Monitors (defaults to 1)
+ ├── has 1–4 Monitors (defaults to 1)
  │    ├── each has 1 Main Agent (persistent, sequential within monitor)
  │    ├── each has N Windows (AI-created, user-interactable)
  │    │    └── each may have 1 Window Agent (persistent, parallel)

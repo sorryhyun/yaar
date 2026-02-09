@@ -1,0 +1,131 @@
+/**
+ * Content Renderer Styles
+ *
+ * Unique renderer styles: tables, iframes, HTML, and component wrappers.
+ * Shared styles are imported from split modules:
+ * - typography.module.css: text, markdown
+ * - components.module.css: cards, badges, alerts, progress
+ * - forms.module.css: buttons, inputs
+ * - layout.module.css: stacks, grids, dividers, spacers
+ */
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============ Component Renderer Root ============ */
+.componentRoot {
+  font-size: var(--text-lg);
+  line-height: 1.5;
+}
+
+/* ============ Table ============ */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-md);
+}
+
+.table th,
+.table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: var(--border-subtle);
+}
+
+.table th {
+  font-weight: 600;
+  background: var(--bg-dark-overlay);
+}
+
+.table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ============ HTML ============ */
+.html {
+  font-size: var(--text-lg);
+  line-height: 1.6;
+}
+
+/* ============ Iframe ============ */
+.iframeContainer {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.iframeLoading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  background: var(--bg-modal-backdrop);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--text-md);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.iframeLoadingSpinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.iframeError {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--bg-dark-overlay-strong);
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.iframeErrorIcon {
+  font-size: 32px;
+  opacity: 0.8;
+}
+
+.iframeErrorTitle {
+  font-size: var(--text-xl);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.iframeErrorMessage {
+  font-size: var(--text-base);
+  color: rgba(255, 255, 255, 0.5);
+  max-width: 300px;
+}
+
+.iframeErrorLink {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-overlay-strong);
+  border-radius: var(--radius-md);
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-size: var(--text-md);
+  transition: background var(--transition-fast);
+}
+
+.iframeErrorLink:hover {
+  background: var(--bg-overlay-hover);
+}

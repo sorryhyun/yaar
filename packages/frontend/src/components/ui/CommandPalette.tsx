@@ -8,7 +8,7 @@ import { DebugPanel } from './DebugPanel'
 import { RecentActionsPanel } from './RecentActionsPanel'
 import { SessionsModal } from './SessionsModal'
 import { Taskbar } from './Taskbar'
-import styles from '@/styles/CommandPalette.module.css'
+import styles from '@/styles/ui/CommandPalette.module.css'
 
 export function CommandPalette() {
   const [input, setInput] = useState('')

@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT } from '@yaar/shared'
-import styles from '@/styles/renderers.module.css'
+import styles from '@/styles/windows/renderers.module.css'
 
 interface IframeRendererProps {
   data: string | { url: string; sandbox?: string }

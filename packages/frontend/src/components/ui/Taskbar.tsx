@@ -3,7 +3,7 @@
  */
 import { useDesktopStore, selectMinimizedWindows } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
-import styles from '@/styles/Taskbar.module.css'
+import styles from '@/styles/ui/Taskbar.module.css'
 
 const rendererIcons: Record<string, string> = {
   markdown: '\u{1F4C4}',
@@ -85,14 +85,16 @@ export function Taskbar() {
         </div>
       )}
 
-      {/* New monitor button (right, always visible) */}
-      <button
-        className={styles.newMonitorButton}
-        onClick={() => createMonitor()}
-        title="Create new monitor"
-      >
-        &gt;
-      </button>
+      {/* New monitor button (right, hidden at max 4) */}
+      {monitors.length < 4 && (
+        <button
+          className={styles.newMonitorButton}
+          onClick={() => createMonitor()}
+          title="Create new monitor"
+        >
+          &gt;
+        </button>
+      )}
     </div>
   )
 }

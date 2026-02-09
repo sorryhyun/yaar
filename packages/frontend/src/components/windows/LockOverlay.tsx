@@ -1,7 +1,7 @@
 /**
  * LockOverlay - Displays over locked windows with animated gear.
  */
-import styles from './LockOverlay.module.css'
+import styles from '@/styles/windows/LockOverlay.module.css'
 
 interface LockOverlayProps {
   queuedCount?: number

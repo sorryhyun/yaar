@@ -6,7 +6,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useDesktopStore } from '@/store'
 import type { OSAction } from '@yaar/shared'
-import styles from '@/styles/RecentActionsPanel.module.css'
+import styles from '@/styles/ui/RecentActionsPanel.module.css'
 
 /**
  * Generate a human-readable summary of an OS Action.

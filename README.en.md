@@ -69,6 +69,49 @@ For API-driven apps, describe the API in a `SKILL.md` file and the AI handles th
 
 See the [App Development Guide](./docs/app-development.md#english) for details.
 
+## Session, Monitor, and Window
+
+YAAR's runtime is organized into three nested abstractions.
+
+```
+Session
+├── Monitor 0 ("Desktop 1")
+│   ├── Main Agent (sequential, overflows to ephemeral agents when busy)
+│   ├── Window A ─── Window Agent (parallel)
+│   ├── Window B ─── Window Agent (parallel)
+│   └── CLI history
+├── Monitor 1 ("Desktop 2")
+│   ├── Main Agent (independent, same overflow model)
+│   ├── Window C ─── Window Agent (parallel)
+│   └── CLI history
+└── Event log (messages.jsonl)
+```
+
+### Session — Persistence Beyond Connections
+
+A **session** is the top-level container for an entire conversation. It owns all state — agents, windows, context history. Sessions survive browser tab closures; reconnect with `?sessionId=X` to restore the previous state. Multiple tabs can share the same session.
+
+### Monitor — Independent Parallel Workspaces
+
+A **monitor** is a virtual desktop within a session (up to 4). Each monitor has its own main agent and message queue, operating completely independently. Run a long task on Monitor 1 while continuing work on Monitor 0. Switch with `Ctrl+1`–`Ctrl+9`.
+
+When the main agent is busy and a new message arrives, an **ephemeral agent** is spawned to handle it in parallel. Ephemeral agents are automatically disposed after completing their task.
+
+### Window — AI-Created Interactive UI
+
+A **window** is a UI surface created by the AI via OS Actions. Each window can have a dedicated **window agent** that runs **in parallel** with the main agent and other window agents. Only requests to the same window are serialized.
+
+### Parallelism Summary
+
+| Scope | Execution | Description |
+|-------|-----------|-------------|
+| Across monitors | **Parallel** | Each monitor's main agent runs independently |
+| Monitor main queue | **Sequential + overflow** | Sequential by default; ephemeral agents handle overflow in parallel |
+| Window agents | **Parallel** | Agents for different windows run concurrently |
+| Within a window | **Sequential** | Tasks for one window are serialized |
+
+See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+
 ## Quick Start
 
 **Prerequisites:** Node.js >= 24, pnpm >= 10, Claude CLI (`npm install -g @anthropic-ai/claude-code && claude login`)

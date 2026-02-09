@@ -6,7 +6,7 @@ import { useDesktopStore, selectDialogs } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentConnection } from '@/hooks/useAgentConnection'
 import type { DialogModel } from '@/types/state'
-import styles from '@/styles/ConfirmDialog.module.css'
+import styles from '@/styles/ui/ConfirmDialog.module.css'
 
 function DialogBox({ dialog, onRespond }: {
   dialog: DialogModel

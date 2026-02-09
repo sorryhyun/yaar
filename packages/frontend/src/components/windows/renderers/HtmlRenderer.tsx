@@ -3,7 +3,7 @@
  *
  * WARNING: Only use for trusted content. This renders raw HTML.
  */
-import styles from '@/styles/renderers.module.css'
+import styles from '@/styles/windows/renderers.module.css'
 
 interface HtmlRendererProps {
   data: string

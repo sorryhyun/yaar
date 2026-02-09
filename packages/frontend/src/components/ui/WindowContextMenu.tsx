@@ -2,7 +2,7 @@
  * WindowContextMenu - Right-click context menu for asking about windows.
  */
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
-import styles from './WindowContextMenu.module.css'
+import styles from '@/styles/ui/WindowContextMenu.module.css'
 
 interface WindowContextMenuProps {
   x: number

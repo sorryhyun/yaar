@@ -3,6 +3,8 @@
  */
 import type { SliceCreator, MonitorSlice, DesktopStore } from '../types'
 
+const MAX_MONITORS = 4
+
 let monitorCounter = 1
 
 export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
@@ -13,6 +15,7 @@ export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
     const id = `monitor-${monitorCounter++}`
     const label = `Monitor ${monitorCounter}`
     set((state) => {
+      if (state.monitors.length >= MAX_MONITORS) return
       state.monitors.push({ id, label, createdAt: Date.now() })
       state.activeMonitorId = id
     })

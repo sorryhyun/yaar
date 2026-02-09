@@ -8,7 +8,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import html2canvas from 'html2canvas'
 import { useDesktopStore } from '@/store'
-import styles from '@/styles/DrawingOverlay.module.css'
+import styles from '@/styles/ui/DrawingOverlay.module.css'
 
 interface Point {
   x: number

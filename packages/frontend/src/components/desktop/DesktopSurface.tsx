@@ -19,7 +19,7 @@ import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
 import { DrawingOverlay } from '../drawing/DrawingOverlay'
 import { CliPanel } from '../ui/CliPanel'
-import styles from '@/styles/DesktopSurface.module.css'
+import styles from '@/styles/desktop/DesktopSurface.module.css'
 
 /** App info from /api/apps endpoint */
 interface AppInfo {

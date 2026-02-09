@@ -4,7 +4,7 @@
 import { useEffect, useRef } from 'react'
 import { useDesktopStore } from '@/store'
 import { useShallow } from 'zustand/react/shallow'
-import styles from '@/styles/CliPanel.module.css'
+import styles from '@/styles/ui/CliPanel.module.css'
 
 export function CliPanel() {
   const activeMonitorId = useDesktopStore(s => s.activeMonitorId)

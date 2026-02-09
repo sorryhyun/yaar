@@ -15,7 +15,10 @@ import type {
   SelectComponent,
 } from '@yaar/shared'
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext'
-import styles from '@/styles/renderers.module.css'
+import rendererStyles from '@/styles/windows/renderers.module.css'
+import formStyles from '@/styles/base/forms.module.css'
+import typographyStyles from '@/styles/base/typography.module.css'
+import componentStyles from '@/styles/base/components.module.css'
 
 // Normalize enum values - handles numbers, invalid strings, etc.
 function normalizeEnum<T extends string>(value: unknown, validValues: readonly T[], defaultValue: T): T {
@@ -76,7 +79,7 @@ export const ComponentRenderer = memo(function ComponentRenderer({
   return (
     <FormProvider>
       <div
-        className={styles.componentRoot}
+        className={rendererStyles.componentRoot}
         style={{
           display: 'grid',
           gridTemplateColumns: colsToCss(layout.cols),
@@ -149,10 +152,10 @@ function ButtonRenderer({
   const size = normalizeEnum(node.size, BUTTON_SIZE_VALUES, 'md')
 
   const className = [
-    styles.button,
-    styles[`button${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
-    styles[`buttonSize${size.charAt(0).toUpperCase() + size.slice(1)}`],
-    node.disabled ? styles.buttonDisabled : '',
+    formStyles.button,
+    formStyles[`button${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
+    formStyles[`buttonSize${size.charAt(0).toUpperCase() + size.slice(1)}`],
+    node.disabled ? formStyles.buttonDisabled : '',
   ].filter(Boolean).join(' ')
 
   return (
@@ -162,7 +165,7 @@ function ButtonRenderer({
       disabled={node.disabled}
       type="button"
     >
-      {node.icon && <span className={styles.buttonIcon}>{node.icon}</span>}
+      {node.icon && <span className={formStyles.buttonIcon}>{node.icon}</span>}
       {node.label}
     </button>
   )
@@ -174,10 +177,10 @@ function TextRenderer({ node }: { node: TextComponent }) {
   const align = normalizeEnum(node.textAlign, TEXT_ALIGN_VALUES, 'left')
 
   const className = [
-    styles.text,
-    styles[`text${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
-    styles[`textColor${color.charAt(0).toUpperCase() + color.slice(1)}`],
-    styles[`textAlign${align.charAt(0).toUpperCase() + align.slice(1)}`],
+    typographyStyles.text,
+    typographyStyles[`text${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
+    typographyStyles[`textColor${color.charAt(0).toUpperCase() + color.slice(1)}`],
+    typographyStyles[`textAlign${align.charAt(0).toUpperCase() + align.slice(1)}`],
   ].filter(Boolean).join(' ')
 
   return <div className={className}>{node.content}</div>
@@ -187,8 +190,8 @@ function BadgeRenderer({ node }: { node: BadgeComponent }) {
   const variant = normalizeEnum(node.variant, BADGE_VARIANT_VALUES, 'default')
 
   const className = [
-    styles.badge,
-    styles[`badge${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
+    componentStyles.badge,
+    componentStyles[`badge${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
   ].filter(Boolean).join(' ')
 
   return <span className={className}>{node.label}</span>
@@ -199,21 +202,21 @@ function ProgressRenderer({ node }: { node: ProgressComponent }) {
   const value = Math.max(0, Math.min(100, typeof node.value === 'number' ? node.value : 0))
 
   const className = [
-    styles.progress,
-    styles[`progress${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
+    componentStyles.progress,
+    componentStyles[`progress${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
   ].filter(Boolean).join(' ')
 
   return (
     <div className={className}>
-      {node.label && <div className={styles.progressLabel}>{node.label}</div>}
-      <div className={styles.progressTrack}>
+      {node.label && <div className={componentStyles.progressLabel}>{node.label}</div>}
+      <div className={componentStyles.progressTrack}>
         <div
-          className={styles.progressBar}
+          className={componentStyles.progressBar}
           style={{ width: `${value}%` }}
         />
       </div>
       {node.showValue && (
-        <div className={styles.progressValue}>{value}%</div>
+        <div className={componentStyles.progressValue}>{value}%</div>
       )}
     </div>
   )
@@ -230,7 +233,7 @@ function ImageRenderer({ node }: { node: ImageComponent }) {
 
   return (
     <img
-      className={styles.image}
+      className={componentStyles.image}
       src={node.src}
       alt=""
       style={style}
@@ -261,11 +264,11 @@ function InputRenderer({ node }: { node: InputComponent }) {
   const inputType = node.variant || 'text'
 
   return (
-    <div className={styles.formField}>
-      {node.label && <label className={styles.formLabel}>{node.label}</label>}
+    <div className={formStyles.formField}>
+      {node.label && <label className={formStyles.formLabel}>{node.label}</label>}
       {isMultiline ? (
         <textarea
-          className={styles.formTextarea}
+          className={formStyles.formTextarea}
           placeholder={node.placeholder}
           rows={node.rows}
           value={localValue}
@@ -275,7 +278,7 @@ function InputRenderer({ node }: { node: InputComponent }) {
       ) : (
         <input
           type={inputType}
-          className={styles.formInput}
+          className={formStyles.formInput}
           placeholder={node.placeholder}
           value={localValue}
           onChange={handleInputChange}
@@ -298,10 +301,10 @@ function SelectRenderer({ node }: { node: SelectComponent }) {
   }, [setValue])
 
   return (
-    <div className={styles.formField}>
-      {node.label && <label className={styles.formLabel}>{node.label}</label>}
+    <div className={formStyles.formField}>
+      {node.label && <label className={formStyles.formLabel}>{node.label}</label>}
       <select
-        className={styles.formSelect}
+        className={formStyles.formSelect}
         value={localValue}
         onChange={handleChange}
         disabled={node.disabled}

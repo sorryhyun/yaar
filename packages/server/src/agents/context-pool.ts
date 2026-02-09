@@ -169,6 +169,13 @@ export class ContextPool {
     return this.agentPool.hasMainAgent(monitorId);
   }
 
+  /**
+   * Return the number of active main agents (one per monitor).
+   */
+  getMainAgentCount(): number {
+    return this.agentPool.getMainAgentCount();
+  }
+
   // ── Inflight tracking ────────────────────────────────────────────────
 
   private inflightEnter(): void {

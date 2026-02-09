@@ -163,6 +163,13 @@ export class AgentPool {
     return this.mainAgents.has(monitorId);
   }
 
+  /**
+   * Return the number of active main agents (one per monitor).
+   */
+  getMainAgentCount(): number {
+    return this.mainAgents.size;
+  }
+
   // ── Window agents ──────────────────────────────────────────────────
 
   /**

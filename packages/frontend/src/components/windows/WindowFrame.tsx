@@ -7,7 +7,7 @@ import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
 import { ContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
-import styles from '@/styles/WindowFrame.module.css'
+import styles from '@/styles/windows/WindowFrame.module.css'
 
 function exportContent(content: WindowModel['content'], title: string) {
   const { renderer, data } = content

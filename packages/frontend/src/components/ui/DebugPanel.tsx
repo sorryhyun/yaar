@@ -4,7 +4,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useDesktopStore } from '@/store'
 import type { DebugEntry } from '@/types/state'
-import styles from '@/styles/DebugPanel.module.css'
+import styles from '@/styles/ui/DebugPanel.module.css'
 
 function getSummary(entry: DebugEntry): string {
   const data = entry.data as Record<string, unknown>

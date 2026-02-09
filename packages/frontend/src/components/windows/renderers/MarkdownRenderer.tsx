@@ -5,7 +5,7 @@
  * react-markdown or marked. This is a simplified version.
  */
 import { useMemo } from 'react'
-import styles from '@/styles/renderers.module.css'
+import styles from '@/styles/base/typography.module.css'
 
 interface MarkdownRendererProps {
   data: string

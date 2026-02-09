@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useDesktopStore } from '@/store'
-import styles from '@/styles/CursorSpinner.module.css'
+import styles from '@/styles/ui/CursorSpinner.module.css'
 
 export function CursorSpinner() {
   const activeAgents = useDesktopStore(s => s.activeAgents)
