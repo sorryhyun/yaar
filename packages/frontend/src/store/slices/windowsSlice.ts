@@ -17,6 +17,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
 
     switch (action.type) {
       case 'window.create': {
+        const actionMonitorId = (action as { monitorId?: string }).monitorId
         const window: WindowModel = {
           id: action.windowId,
           title: action.title,
@@ -25,6 +26,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
           minimized: false,
           maximized: false,
           requestId: action.requestId,
+          monitorId: actionMonitorId ?? (store as DesktopStore).activeMonitorId ?? 'monitor-0',
         }
         state.windows[action.windowId] = window
         state.zOrder = state.zOrder.filter(id => id !== action.windowId)

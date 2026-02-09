@@ -5,14 +5,85 @@
 
 .taskbar {
   display: flex;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-1) 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   overflow-x: auto;
   animation: fadeIn var(--transition-normal);
 }
 
 .taskbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Monitor tabs section */
+.monitorTabs {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.monitorTab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.monitorTab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text);
+}
+
+.monitorTabActive {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.monitorClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0;
+  transition: all var(--transition-fast);
+}
+
+.monitorTab:hover .monitorClose {
+  opacity: 0.6;
+}
+
+.monitorClose:hover {
+  opacity: 1 !important;
+  background: var(--color-red);
+  color: #fff;
+}
+
+/* Window tabs section */
+.windowTabs {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.windowTabs::-webkit-scrollbar {
   display: none;
 }
 
@@ -76,4 +147,29 @@
 .tabClose:hover {
   background: var(--color-red);
   color: #fff;
+}
+
+/* New monitor button */
+.newMonitorButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.newMonitorButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.25);
 }

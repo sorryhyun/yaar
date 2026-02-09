@@ -9,10 +9,10 @@ export const selectWindowsInOrder = (state: DesktopStore) =>
 export const selectVisibleWindows = (state: DesktopStore) =>
   state.zOrder
     .map(id => state.windows[id])
-    .filter((w): w is WindowModel => w != null && !w.minimized)
+    .filter((w): w is WindowModel => w != null && !w.minimized && (w.monitorId ?? 'monitor-0') === state.activeMonitorId)
 
 export const selectMinimizedWindows = (state: DesktopStore) =>
-  Object.values(state.windows).filter((w): w is WindowModel => w != null && w.minimized)
+  Object.values(state.windows).filter((w): w is WindowModel => w != null && w.minimized && (w.monitorId ?? 'monitor-0') === state.activeMonitorId)
 
 export const selectToasts = (state: DesktopStore) =>
   Object.values(state.toasts)

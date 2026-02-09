@@ -41,6 +41,8 @@ export interface HandleMessageOptions {
   canonicalAgent?: string;
   /** Saved thread ID to resume (explicit restore only) */
   resumeSessionId?: string;
+  /** Monitor ID for multi-monitor event stamping */
+  monitorId?: string;
 }
 
 interface AgentContext {
@@ -84,6 +86,7 @@ export class AgentSession {
   private currentMessageId: string | null = null;
   private currentRole: string | null = null;
   private recordedActions: OSAction[] = [];
+  private currentMonitorId: string | undefined;
 
   private providerLifecycle: ProviderLifecycleManager;
   private toolActionBridge: ToolActionBridge;
@@ -135,7 +138,10 @@ export class AgentSession {
     );
 
     this.toolActionBridge = new ToolActionBridge(
-      { get currentRole() { return connection.currentRole; } },
+      {
+        get currentRole() { return connection.currentRole; },
+        get monitorId() { return connection.currentMonitorId; },
+      },
       this.sendEvent.bind(this),
       this.getFilterAgentId.bind(this),
       () => this.sessionLogger,
@@ -195,6 +201,7 @@ export class AgentSession {
     const { role, interactions, messageId, onContextMessage } = options;
 
     this.currentRole = role;
+    this.currentMonitorId = options.monitorId;
     const stableAgentId = this.instanceId;
 
     if (!this.provider) {
@@ -209,6 +216,7 @@ export class AgentSession {
       type: 'AGENT_THINKING',
       content: '',
       agentId: role,
+      monitorId: options.monitorId,
     });
 
     // Extract images from draw interactions for vision API
@@ -265,6 +273,7 @@ export class AgentSession {
         options.source,
         onContextMessage,
         async (sessionId: string) => {
+          // onSessionId callback - update session ID and log thread
           // Update internal provider session ID for session resumption/forking.
           // The log session ID (sent to frontend) is managed by ContextPool.
           this.sessionId = sessionId;
@@ -277,6 +286,7 @@ export class AgentSession {
             }
           }
         },
+        options.monitorId,
       );
 
       console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);

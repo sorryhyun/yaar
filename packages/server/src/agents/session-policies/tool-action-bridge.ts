@@ -4,6 +4,7 @@ import type { SessionLogger } from '../../logging/index.js';
 
 export interface ToolActionBridgeState {
   currentRole: string | null;
+  monitorId?: string;
 }
 
 export class ToolActionBridge {
@@ -30,6 +31,8 @@ export class ToolActionBridge {
       agentId: uiAgentId,
     };
 
+    const monitorId = this.state.monitorId;
+
     // Route permission dialogs through APPROVAL_REQUEST instead of ACTIONS
     if (action.type === 'dialog.confirm' && (action as DialogConfirmAction).permissionOptions) {
       const dialog = action as DialogConfirmAction;
@@ -51,6 +54,7 @@ export class ToolActionBridge {
       type: 'ACTIONS',
       actions: [action],
       agentId: uiAgentId,
+      monitorId,
     });
     await this.getLogger()?.logAction(action, uiAgentId);
   }

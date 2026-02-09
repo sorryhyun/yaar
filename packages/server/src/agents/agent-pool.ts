@@ -2,7 +2,7 @@
  * AgentPool - manages agents with role-based lifecycle.
  *
  * Three agent types:
- * - Main agent (id=0): persistent, handles USER_MESSAGE, provider session continuity
+ * - Main agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - Window agents: persistent per-window, fresh provider + initial context
  *
@@ -33,8 +33,8 @@ export class AgentPool {
   private nextAgentId = 0;
   private logger: SessionLogger | null = null;
 
-  /** The single persistent main agent. */
-  private mainAgent: PooledAgent | null = null;
+  /** Persistent main agents, keyed by monitorId. */
+  private mainAgents = new Map<string, PooledAgent>();
 
   /** Persistent per-window agents, keyed by windowId. */
   private windowAgents = new Map<string, PooledAgent>();
@@ -94,14 +94,13 @@ export class AgentPool {
   }
 
   /**
-   * Create the main agent (agent-0) with the given provider.
-   * Called once during pool initialization.
+   * Create a main agent for the given monitor with the given provider.
    */
-  async createMainAgent(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
+  async createMainAgent(monitorId = 'monitor-0', preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
     const agent = await this.createAgentCore(preWarmedProvider);
     if (agent) {
-      this.mainAgent = agent;
-      console.log(`[AgentPool] Main agent created: ${agent.instanceId}`);
+      this.mainAgents.set(monitorId, agent);
+      console.log(`[AgentPool] Main agent created for ${monitorId}: ${agent.instanceId}`);
     }
     return agent;
   }
@@ -135,25 +134,33 @@ export class AgentPool {
   // ── Main agent ─────────────────────────────────────────────────────
 
   /**
-   * Get the main agent.
+   * Get the main agent for a monitor.
    */
-  getMainAgent(): PooledAgent | null {
-    return this.mainAgent;
+  getMainAgent(monitorId = 'monitor-0'): PooledAgent | null {
+    return this.mainAgents.get(monitorId) ?? null;
   }
 
   /**
-   * Check if the main agent is currently busy.
+   * Check if the main agent for a monitor is currently busy.
    */
-  isMainAgentBusy(): boolean {
-    if (!this.mainAgent) return true; // no main agent = effectively busy
-    return this.mainAgent.session.isRunning() || this.mainAgent.currentRole !== null;
+  isMainAgentBusy(monitorId = 'monitor-0'): boolean {
+    const agent = this.mainAgents.get(monitorId);
+    if (!agent) return true; // no main agent = effectively busy
+    return agent.session.isRunning() || agent.currentRole !== null;
   }
 
   /**
-   * Get the main agent's session (for session ID access, provider changes, etc).
+   * Get the main agent's session for a monitor.
    */
-  getMainAgentSession(): AgentSession | null {
-    return this.mainAgent?.session ?? null;
+  getMainAgentSession(monitorId = 'monitor-0'): AgentSession | null {
+    return this.mainAgents.get(monitorId)?.session ?? null;
+  }
+
+  /**
+   * Check if a main agent exists for the given monitor.
+   */
+  hasMainAgent(monitorId: string): boolean {
+    return this.mainAgents.has(monitorId);
   }
 
   // ── Window agents ──────────────────────────────────────────────────
@@ -210,8 +217,8 @@ export class AgentPool {
    * Interrupt all running agents (main, window, ephemeral).
    */
   async interruptAll(): Promise<void> {
-    if (this.mainAgent) {
-      await this.mainAgent.session.interrupt();
+    for (const agent of this.mainAgents.values()) {
+      await agent.session.interrupt();
     }
     for (const agent of this.windowAgents.values()) {
       await agent.session.interrupt();
@@ -225,10 +232,12 @@ export class AgentPool {
    * Interrupt a specific agent by its current role.
    */
   async interruptByRole(role: string): Promise<boolean> {
-    // Check main agent
-    if (this.mainAgent?.currentRole === role) {
-      await this.mainAgent.session.interrupt();
-      return true;
+    // Check main agents
+    for (const agent of this.mainAgents.values()) {
+      if (agent.currentRole === role) {
+        await agent.session.interrupt();
+        return true;
+      }
     }
     // Check window agents
     for (const agent of this.windowAgents.values()) {
@@ -251,7 +260,9 @@ export class AgentPool {
    * Check if any agent has a role starting with the given prefix.
    */
   hasRolePrefix(prefix: string): boolean {
-    if (this.mainAgent?.currentRole?.startsWith(prefix)) return true;
+    for (const agent of this.mainAgents.values()) {
+      if (agent.currentRole?.startsWith(prefix)) return true;
+    }
     for (const agent of this.windowAgents.values()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
@@ -271,6 +282,7 @@ export class AgentPool {
     idleAgents: number;
     busyAgents: number;
     mainAgent: boolean;
+    mainAgents: number;
     windowAgents: number;
     ephemeralAgents: number;
   } {
@@ -287,7 +299,7 @@ export class AgentPool {
       }
     };
 
-    if (this.mainAgent) countAgent(this.mainAgent);
+    for (const agent of this.mainAgents.values()) countAgent(agent);
     for (const agent of this.windowAgents.values()) countAgent(agent);
     for (const agent of this.ephemeralAgents) countAgent(agent);
 
@@ -295,7 +307,8 @@ export class AgentPool {
       totalAgents: total,
       idleAgents: idle,
       busyAgents: busy,
-      mainAgent: this.mainAgent !== null,
+      mainAgent: this.mainAgents.size > 0,
+      mainAgents: this.mainAgents.size,
       windowAgents: this.windowAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
     };
@@ -310,7 +323,7 @@ export class AgentPool {
     const limiter = getAgentLimiter();
     const allAgents: PooledAgent[] = [];
 
-    if (this.mainAgent) allAgents.push(this.mainAgent);
+    for (const agent of this.mainAgents.values()) allAgents.push(agent);
     for (const agent of this.windowAgents.values()) allAgents.push(agent);
     for (const agent of this.ephemeralAgents) allAgents.push(agent);
 
@@ -325,7 +338,7 @@ export class AgentPool {
       limiter.release();
     }
 
-    this.mainAgent = null;
+    this.mainAgents.clear();
     this.windowAgents.clear();
     this.ephemeralAgents.clear();
   }

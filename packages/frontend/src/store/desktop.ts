@@ -27,6 +27,8 @@ import {
   createInteractionsSlice,
   createQueuedActionsSlice,
   createDrawingSlice,
+  createCliSlice,
+  createMonitorSlice,
 } from './slices'
 
 /**
@@ -137,6 +139,8 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createInteractionsSlice(...a),
     ...createQueuedActionsSlice(...a),
     ...createDrawingSlice(...a),
+    ...createCliSlice(...a),
+    ...createMonitorSlice(...a),
 
     // Desktop-level state
     appsVersion: 0,
@@ -202,6 +206,11 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingFeedback = []
         state.selectedWindowIds = []
         state.appsVersion = 0
+        state.cliMode = false
+        state.cliHistory = {}
+        state.cliStreaming = {}
+        state.monitors = [{ id: 'monitor-0', label: 'Monitor 1', createdAt: Date.now() }]
+        state.activeMonitorId = 'monitor-0'
       })
     },
   }))

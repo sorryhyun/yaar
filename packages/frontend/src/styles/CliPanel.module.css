@@ -1,0 +1,126 @@
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cliPanel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  z-index: var(--z-panel);
+}
+
+.cliHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #151515;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.cliTitle {
+  color: #888;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cliClearButton {
+  background: transparent;
+  border: 1px solid #444;
+  color: #888;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cliClearButton:hover {
+  background: #333;
+  color: #ccc;
+}
+
+.cliBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  scroll-behavior: smooth;
+}
+
+.cliBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cliBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cliBody::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.entry {
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.user {
+  color: #4ade80;
+}
+
+.userPrompt {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.thinking {
+  color: #888;
+  font-style: italic;
+}
+
+.response {
+  color: #e0e0e0;
+}
+
+.tool {
+  color: #facc15;
+}
+
+.error {
+  color: #f87171;
+}
+
+.actionSummary {
+  color: #60a5fa;
+}
+
+.cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: #e0e0e0;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+.streamingLabel {
+  color: #666;
+  font-size: 11px;
+  margin-right: 4px;
+}

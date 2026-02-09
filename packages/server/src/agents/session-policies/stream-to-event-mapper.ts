@@ -19,6 +19,7 @@ export class StreamToEventMapper {
     private readonly source: ContextSource,
     private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void,
     private readonly onSessionId?: (sessionId: string) => Promise<void>,
+    private readonly monitorId?: string,
   ) {}
 
   async map(message: StreamMessage): Promise<void> {
@@ -34,6 +35,7 @@ export class StreamToEventMapper {
             content: this.state.responseText,
             isComplete: false,
             agentId: this.role,
+            monitorId: this.monitorId,
             messageId: this.state.currentMessageId ?? undefined,
           });
         }
@@ -46,6 +48,7 @@ export class StreamToEventMapper {
             type: 'AGENT_THINKING',
             content: this.state.thinkingText,
             agentId: this.role,
+            monitorId: this.monitorId,
           });
           await this.logger?.logThinking(message.content, this.role);
         }
@@ -57,6 +60,7 @@ export class StreamToEventMapper {
           toolName: message.toolName ?? 'unknown',
           status: 'running',
           agentId: this.role,
+          monitorId: this.monitorId,
         });
         await this.logger?.logToolUse(
           message.toolName ?? 'unknown',
@@ -72,6 +76,7 @@ export class StreamToEventMapper {
           toolName: message.toolName ?? 'tool',
           status: 'complete',
           agentId: this.role,
+          monitorId: this.monitorId,
         });
         await this.logger?.logToolResult(
           message.toolName ?? 'tool',
@@ -95,6 +100,7 @@ export class StreamToEventMapper {
           content: this.state.responseText,
           isComplete: true,
           agentId: this.role,
+          monitorId: this.monitorId,
           messageId: this.state.currentMessageId ?? undefined,
         });
         break;
@@ -104,6 +110,7 @@ export class StreamToEventMapper {
           type: 'ERROR',
           error: message.error ?? 'Unknown error',
           agentId: this.role,
+          monitorId: this.monitorId,
         });
         break;
 
@@ -112,6 +119,7 @@ export class StreamToEventMapper {
           type: 'ERROR',
           error: `Unhandled stream message for provider ${this.providerName}`,
           agentId: this.role,
+          monitorId: this.monitorId,
         });
     }
   }

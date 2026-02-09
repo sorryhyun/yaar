@@ -6,11 +6,11 @@ This document describes how YAAR manages concurrent AI agents through unified po
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         WebSocket Connection                         │
+│                   SessionHub (singleton registry)                     │
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │                        SessionManager                          │  │
-│  │                     (lazy init on first message)               │  │
+│  │                LiveSession (per conversation)                   │  │
+│  │         survives disconnections, supports multi-tab             │  │
 │  │                                                                │  │
 │  │  ┌──────────────────────────────────────────────────────────┐  │  │
 │  │  │                      ContextPool                         │  │  │
@@ -18,15 +18,15 @@ This document describes how YAAR manages concurrent AI agents through unified po
 │  │  │  ┌────────────┐  ┌─────────────┐  ┌──────────────────┐  │  │  │
 │  │  │  │ AgentPool  │  │ ContextTape │  │ InteractionTime- │  │  │  │
 │  │  │  │            │  │ (message    │  │ line (user +     │  │  │  │
-│  │  │  │ Main(1)    │  │  history by │  │ AI events,       │  │  │  │
+│  │  │  │ Main(1/mon)│  │  history by │  │ AI events,       │  │  │  │
 │  │  │  │ Ephemeral* │  │  source)    │  │ drained on main  │  │  │  │
 │  │  │  │ Window*    │  │             │  │ agent's turn)    │  │  │  │
 │  │  │  └────────────┘  └─────────────┘  └──────────────────┘  │  │  │
 │  │  │                                                          │  │  │
 │  │  │  ┌──────────────────────────────────────────────────┐    │  │  │
 │  │  │  │ Policies                                         │    │  │  │
-│  │  │  │ MainQueue · WindowQueue · ContextAssembly        │    │  │  │
-│  │  │  │ ReloadCache · WindowConnection                   │    │  │  │
+│  │  │  │ MainQueue(per monitor) · WindowQueue ·           │    │  │  │
+│  │  │  │ ContextAssembly · ReloadCache · WindowConnection │    │  │  │
 │  │  │  └──────────────────────────────────────────────────┘    │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────────────────┘  │
@@ -321,9 +321,10 @@ Each log entry includes `agentId` for filtering:
 
 | File | Purpose |
 |------|---------|
-| `agents/manager.ts` | SessionManager — routes messages to ContextPool |
+| `session/live-session.ts` | LiveSession + SessionHub — session lifecycle, multi-connection |
+| `session/event-sequencer.ts` | EventSequencer — monotonic seq for event replay |
 | `agents/context-pool.ts` | ContextPool — unified task orchestration |
-| `agents/agent-pool.ts` | AgentPool — manages main, ephemeral, and window agents |
+| `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, and window agents |
 | `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |
 | `agents/context.ts` | ContextTape — hierarchical message history |
 | `agents/interaction-timeline.ts` | InteractionTimeline — user + AI event chronicle |
@@ -332,9 +333,9 @@ Each log entry includes `agentId` for filtering:
 | `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection |
 | `providers/factory.ts` | Provider auto-detection and creation |
 | `providers/warm-pool.ts` | Pre-initialized providers for fast first response |
-| `websocket/broadcast-center.ts` | BroadcastCenter — event hub decoupling agents from WebSocket |
+| `websocket/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
 | `mcp/action-emitter.ts` | ActionEmitter — bridges MCP tools to agent sessions |
-| `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per connection |
+| `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per session |
 
 ## Example: Concurrent Execution
 

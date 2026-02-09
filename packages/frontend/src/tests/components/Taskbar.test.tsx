@@ -29,9 +29,10 @@ describe('Taskbar', () => {
     })
   })
 
-  it('renders nothing when no minimized windows', () => {
-    const { container } = render(<Taskbar />)
-    expect(container.innerHTML).toBe('')
+  it('renders only the new-monitor button when no minimized windows', () => {
+    render(<Taskbar />)
+    expect(screen.getByTitle('Create new monitor')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Close/ })).not.toBeInTheDocument()
   })
 
   it('renders tabs for each minimized window', () => {

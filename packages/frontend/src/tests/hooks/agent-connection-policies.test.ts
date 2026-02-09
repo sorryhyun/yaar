@@ -14,6 +14,9 @@ function createHandlers() {
     clearAgent: vi.fn(),
     registerWindowAgent: vi.fn(),
     updateWindowAgentStatus: vi.fn(),
+    updateCliStreaming: vi.fn(),
+    finalizeCliStreaming: vi.fn(),
+    addCliEntry: vi.fn(),
   }
 }
 

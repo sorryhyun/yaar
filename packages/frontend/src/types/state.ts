@@ -14,6 +14,22 @@ export interface WindowModel {
   locked?: boolean
   lockedBy?: string  // Agent ID that holds the lock
   requestId?: string  // For tracking iframe feedback
+  monitorId?: string  // Which monitor this window belongs to
+}
+
+export interface CliEntry {
+  id: string
+  type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary'
+  content: string
+  agentId?: string
+  monitorId: string
+  timestamp: number
+}
+
+export interface Monitor {
+  id: string
+  label: string
+  createdAt: number
 }
 
 export interface NotificationModel {

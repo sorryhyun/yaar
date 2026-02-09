@@ -66,6 +66,7 @@ yaar/
 │   ├── permissions.json         # Saved permission decisions
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
 ├── docs/                        # Architecture documentation
+│   ├── monitor_and_windows_guide.md              # Core concepts: Session, Monitor, Window
 │   ├── common_flow.md           # Agent pools, context, message flow diagrams
 │   └── claude_codex.md          # Claude vs Codex provider behavioral differences
 ├── storage/                     # Persistent data storage (git-ignored)
@@ -99,19 +100,19 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 ### Key Architectural Concepts
 
 1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
-2. **ContextPool**: Unified task orchestration — main messages processed sequentially, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
-3. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio. Dynamic imports keep SDK dependencies lazy.
-4. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-5. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
-6. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections.
-7. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
-8. **Session forking**: Window agents fork from the default agent's session, inheriting context but running independently.
+2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own main agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
+4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio. Dynamic imports keep SDK dependencies lazy.
+5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
+6. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
+7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
+8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
 10. **Policy pattern**: Server decomposes complex behavior into focused policy classes:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
-See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences.
+See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences.
 
 ### Server Subsystems
 
@@ -126,11 +127,13 @@ Beyond agents and providers, the server has additional subsystems:
 ### Connection Lifecycle
 
 ```
-WebSocket connects → SessionManager created (lazy init)
+WebSocket connects → SessionHub.getOrCreate(sessionId)
+  → New session: LiveSession created with auto-generated ID
+  → Reconnection: existing LiveSession returned (state preserved)
   → First message → ContextPool initialized → AgentPool created → Warm provider acquired
-  → Messages routed: USER_MESSAGE → main queue (sequential), WINDOW_MESSAGE → window handler (parallel)
-  → Window interaction → fork from default agent's session → independent window agent
-  → WebSocket disconnects → all agents disposed
+  → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE → window handler (parallel)
+  → Window interaction → persistent window agent created on first interaction
+  → WebSocket disconnects → session stays alive for reconnection
 ```
 
 ## Development Workflow

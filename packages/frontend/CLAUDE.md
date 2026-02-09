@@ -37,14 +37,21 @@ src/
 ## State Management
 
 **Zustand + Immer** pattern:
-- Store split into slices (`store/slices/`) — windows, agents, notifications, toasts, dialogs, etc.
+- Store split into slices (`store/slices/`) — windows, monitors, agents, cli, notifications, toasts, dialogs, connection, etc.
 - Composed in `store/desktop.ts`
 - AI actions processed via `applyAction()` reducer
 - User interactions (focus, close, move, resize) logged and sent to server
 
+**Key slices:**
+- `windowsSlice` — window CRUD, z-order, focus, bounds
+- `monitorSlice` — virtual desktops (create, remove, switch). Each window belongs to a monitor via `monitorId`. See `docs/monitor_and_windows_guide.md`.
+- `cliSlice` — per-monitor CLI history
+- `connectionSlice` — WebSocket status, sessionId, provider
+
 **Key selectors:**
 - `selectWindowsInOrder` - Windows sorted by z-order
-- `selectVisibleWindows` - Non-minimized windows
+- `selectVisibleWindows` - Non-minimized windows **on the active monitor**
+- `selectMinimizedWindows` - Minimized windows on the active monitor
 - `selectToasts` - Active toasts
 
 ## WebSocket Connection

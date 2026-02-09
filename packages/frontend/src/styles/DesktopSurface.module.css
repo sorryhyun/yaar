@@ -8,6 +8,12 @@
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   overflow: hidden;
   font-family: var(--font-sans);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.desktop[data-cli-mode="true"] {
+  transform: translateX(70vw);
+  pointer-events: none;
 }
 
 .statusBar {

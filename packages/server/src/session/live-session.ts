@@ -185,14 +185,21 @@ export class LiveSession {
     }
 
     switch (event.type) {
-      case 'USER_MESSAGE':
+      case 'USER_MESSAGE': {
+        const monitorId = event.monitorId ?? 'monitor-0';
+        // Auto-create monitor agent if needed
+        if (monitorId !== 'monitor-0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
+          await this.pool.createMonitorAgent(monitorId);
+        }
         await this.pool?.handleTask({
           type: 'main',
           messageId: event.messageId,
           content: event.content,
           interactions: event.interactions,
+          monitorId,
         });
         break;
+      }
 
       case 'WINDOW_MESSAGE':
         await this.pool?.handleTask({

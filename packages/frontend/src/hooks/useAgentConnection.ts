@@ -57,6 +57,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     registerWindowAgent,
     updateWindowAgentStatus,
     setRestorePrompt,
+    updateCliStreaming,
+    finalizeCliStreaming,
+    addCliEntry,
   } = useDesktopStore()
 
   const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
@@ -99,6 +102,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         clearAgent,
         registerWindowAgent,
         updateWindowAgentStatus,
+        updateCliStreaming,
+        finalizeCliStreaming,
+        addCliEntry,
       })
     } catch (e) {
       console.error('Failed to parse message:', e)
@@ -113,6 +119,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     registerWindowAgent,
     updateWindowAgentStatus,
     checkForPreviousSession,
+    updateCliStreaming,
+    finalizeCliStreaming,
+    addCliEntry,
   ])
 
   const connect = useCallback(() => {
@@ -182,15 +191,18 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const sendMessage = useCallback((content: string) => {
     const drawing = consumeDrawing()
     const messageId = generateMessageId()
+    const monitorId = useDesktopStore.getState().activeMonitorId
+    addCliEntry({ type: 'user', content, monitorId })
     send({
       type: 'USER_MESSAGE',
       messageId,
       content,
+      monitorId,
       interactions: drawing
         ? [{ type: 'draw' as const, timestamp: Date.now(), imageData: drawing }]
         : undefined,
     })
-  }, [send, consumeDrawing])
+  }, [send, consumeDrawing, addCliEntry])
 
   const sendWindowMessage = useCallback((windowId: string, content: string) => {
     const messageId = generateMessageId()

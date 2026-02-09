@@ -18,6 +18,8 @@ import type {
   WindowAgent,
   RenderingFeedback,
   QueuedComponentAction,
+  CliEntry,
+  Monitor,
 } from '@/types/state'
 import type { OSAction, UserInteraction } from '@yaar/shared'
 
@@ -35,6 +37,8 @@ export type {
   WindowAgent,
   RenderingFeedback,
   QueuedComponentAction,
+  CliEntry,
+  Monitor,
 }
 
 // ============ Slice State Types ============
@@ -204,6 +208,35 @@ export interface DrawingSliceActions {
 
 export type DrawingSlice = DrawingSliceState & DrawingSliceActions
 
+export interface CliSliceState {
+  cliMode: boolean
+  cliHistory: Record<string, CliEntry[]>
+  cliStreaming: Record<string, CliEntry>
+}
+
+export interface CliSliceActions {
+  toggleCliMode: () => void
+  addCliEntry: (entry: { type: CliEntry['type']; content: string; agentId?: string; monitorId?: string }) => void
+  updateCliStreaming: (agentId: string, content: string, type: 'thinking' | 'response', monitorId?: string) => void
+  finalizeCliStreaming: (agentId: string) => void
+  clearCliHistory: (monitorId?: string) => void
+}
+
+export type CliSlice = CliSliceState & CliSliceActions
+
+export interface MonitorSliceState {
+  monitors: Monitor[]
+  activeMonitorId: string
+}
+
+export interface MonitorSliceActions {
+  createMonitor: () => string
+  removeMonitor: (id: string) => void
+  switchMonitor: (id: string) => void
+}
+
+export type MonitorSlice = MonitorSliceState & MonitorSliceActions
+
 // ============ Combined Store Type ============
 
 export type DesktopStore = WindowsSlice &
@@ -217,7 +250,9 @@ export type DesktopStore = WindowsSlice &
   FeedbackSlice &
   InteractionsSlice &
   QueuedActionsSlice &
-  DrawingSlice & {
+  DrawingSlice &
+  CliSlice &
+  MonitorSlice & {
     appsVersion: number
     bumpAppsVersion: () => void
     applyAction: (action: OSAction) => void

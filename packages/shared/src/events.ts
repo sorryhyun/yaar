@@ -36,6 +36,7 @@ export interface UserMessageEvent {
   messageId: string;
   content: string;
   interactions?: UserInteraction[];
+  monitorId?: string;
 }
 
 export interface WindowMessageEvent {
@@ -123,6 +124,7 @@ export interface ActionsEvent {
   type: 'ACTIONS';
   actions: OSAction[];
   agentId?: string;
+  monitorId?: string;
   seq?: number;
 }
 
@@ -130,6 +132,7 @@ export interface AgentThinkingEvent {
   type: 'AGENT_THINKING';
   content: string;
   agentId?: string;
+  monitorId?: string;
   seq?: number;
 }
 
@@ -138,6 +141,7 @@ export interface AgentResponseEvent {
   content: string;
   isComplete: boolean;
   agentId?: string;
+  monitorId?: string;
   messageId?: string;
   seq?: number;
 }
@@ -157,6 +161,7 @@ export interface ToolProgressEvent {
   status: 'running' | 'complete' | 'error';
   message?: string;
   agentId?: string;
+  monitorId?: string;
   seq?: number;
 }
 
@@ -164,6 +169,7 @@ export interface ErrorEvent {
   type: 'ERROR';
   error: string;
   agentId?: string;
+  monitorId?: string;
   seq?: number;
 }
 

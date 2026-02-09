@@ -18,6 +18,7 @@ import { CommandPalette } from '../ui/CommandPalette'
 import { WindowContextMenu } from '../ui/WindowContextMenu'
 import { CursorSpinner } from '../ui/CursorSpinner'
 import { DrawingOverlay } from '../drawing/DrawingOverlay'
+import { CliPanel } from '../ui/CliPanel'
 import styles from '@/styles/DesktopSurface.module.css'
 
 /** App info from /api/apps endpoint */
@@ -42,6 +43,8 @@ export function DesktopSurface() {
   const toggleAgentPanel = useDesktopStore(s => s.toggleAgentPanel)
   const windows = useDesktopStore(s => s.windows)
   const setSelectedWindows = useDesktopStore(s => s.setSelectedWindows)
+  const cliMode = useDesktopStore(s => s.cliMode)
+  const switchMonitor = useDesktopStore(s => s.switchMonitor)
   const { sendMessage, sendWindowMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
 
   // Rubber-band selection state
@@ -81,6 +84,27 @@ export function DesktopSurface() {
     }
     fetchApps()
   }, [appsVersion])
+
+  // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault()
+        useDesktopStore.getState().toggleCliMode()
+        return
+      }
+      if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
+        const idx = parseInt(e.key) - 1
+        const mons = useDesktopStore.getState().monitors
+        if (idx < mons.length) {
+          e.preventDefault()
+          switchMonitor(mons[idx].id)
+        }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [switchMonitor])
 
   const agentList = Object.values(activeAgents)
 
@@ -172,158 +196,159 @@ export function DesktopSurface() {
   }, [setSelectedWindows])
 
   return (
-    <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu} onMouseDown={handleDesktopMouseDown}>
-      {/* Connection status indicator */}
-      <div className={styles.statusBar}>
-        <span className={styles.statusDot} data-status={connectionStatus} />
-        <span className={styles.statusText}>
-          {connectionStatus === 'connected'
-            ? `Connected (${providerType || 'agent'})`
-            : connectionStatus === 'connecting'
-            ? 'Connecting...'
-            : 'Disconnected'}
-        </span>
-        {agentList.length > 0 && (
-          <>
-            <span className={styles.statusDivider} />
-            <button
-              className={styles.agentIndicatorButton}
-              onClick={toggleAgentPanel}
-              title="Click to expand agent panel"
-            >
-              {agentList.map((agent) => (
-                <div key={agent.id} className={styles.agentIndicator}>
-                  <span className={styles.agentSpinner} />
-                  <span className={styles.agentStatus}>{agent.status}</span>
-                </div>
-              ))}
-              <span className={styles.expandArrow} data-open={agentPanelOpen}>
-                {agentPanelOpen ? '▲' : '▼'}
-              </span>
-            </button>
-          </>
-        )}
-      </div>
+    <>
+      {/* CLI panel (behind desktop, slides in from left) */}
+      {cliMode && <CliPanel />}
 
-      {/* Expanded agent panel */}
-      {agentPanelOpen && agentList.length > 0 && (
-        <div className={styles.agentPanel}>
-          <div className={styles.agentPanelHeader}>
-            <span>Active Agents</span>
-            <button
-              className={styles.stopAllButton}
-              onClick={interrupt}
-              title="Stop all agents"
-            >
-              Stop All
-            </button>
-          </div>
-          <div className={styles.agentPanelList}>
-            {agentList.map((agent) => {
-              // Find window associated with this agent (keyed by agentId)
-              const windowAgent = windowAgents[agent.id]
-              const windowId = windowAgent?.windowId
-              const windowTitle = windowId ? windows[windowId]?.title : null
-
-              return (
-                <div key={agent.id} className={styles.agentPanelItem}>
-                  <div className={styles.agentPanelInfo}>
-                    <span className={styles.agentPanelId}>{agent.id}</span>
-                    <span className={styles.agentPanelStatus}>{agent.status}</span>
-                    {windowTitle && (
-                      <span className={styles.agentPanelWindow}>
-                        Window: {windowTitle}
-                      </span>
-                    )}
+      <div className={styles.desktop} data-cli-mode={cliMode} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu} onMouseDown={handleDesktopMouseDown}>
+        {/* Connection status indicator */}
+        <div className={styles.statusBar}>
+          <span className={styles.statusDot} data-status={connectionStatus} />
+          <span className={styles.statusText}>
+            {connectionStatus === 'connected'
+              ? `Connected (${providerType || 'agent'})`
+              : connectionStatus === 'connecting'
+              ? 'Connecting...'
+              : 'Disconnected'}
+          </span>
+          {agentList.length > 0 && (
+            <>
+              <span className={styles.statusDivider} />
+              <button
+                className={styles.agentIndicatorButton}
+                onClick={toggleAgentPanel}
+                title="Click to expand agent panel"
+              >
+                {agentList.map((agent) => (
+                  <div key={agent.id} className={styles.agentIndicator}>
+                    <span className={styles.agentSpinner} />
+                    <span className={styles.agentStatus}>{agent.status}</span>
                   </div>
-                  <button
-                    className={styles.stopAgentButton}
-                    onClick={() => interruptAgent(agent.id)}
-                    title={`Stop agent ${agent.id}`}
-                  >
-                    Stop
-                  </button>
-                </div>
-              )
-            })}
-          </div>
+                ))}
+                <span className={styles.expandArrow} data-open={agentPanelOpen}>
+                  {agentPanelOpen ? '▲' : '▼'}
+                </span>
+              </button>
+            </>
+          )}
         </div>
-      )}
 
-      {/* Desktop icons */}
-      <div className={styles.desktopIcons}>
-        <button className={styles.desktopIcon} onClick={handleStorageClick}>
-          <span className={styles.iconImage}>🗄️</span>
-          <span className={styles.iconLabel}>Storage</span>
-        </button>
-        {/* Dynamic app icons */}
-        {apps.map((app) => (
-          <button
-            key={app.id}
-            className={styles.desktopIcon}
-            onClick={() => handleAppClick(app.id)}
-          >
-            {app.iconType === 'image' ? (
-              <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
-            ) : (
-              <span className={styles.iconImage}>
-                {app.icon || '📦'}
-              </span>
-            )}
-            <span className={styles.iconLabel}>{app.name}</span>
+        {/* Expanded agent panel */}
+        {agentPanelOpen && agentList.length > 0 && (
+          <div className={styles.agentPanel}>
+            <div className={styles.agentPanelHeader}>
+              <span>Active Agents</span>
+              <button
+                className={styles.stopAllButton}
+                onClick={interrupt}
+                title="Stop all agents"
+              >
+                Stop All
+              </button>
+            </div>
+            <div className={styles.agentPanelList}>
+              {agentList.map((agent) => {
+                // Find window associated with this agent (keyed by agentId)
+                const windowAgent = windowAgents[agent.id]
+                const windowId = windowAgent?.windowId
+                const windowTitle = windowId ? windows[windowId]?.title : null
+
+                return (
+                  <div key={agent.id} className={styles.agentPanelItem}>
+                    <div className={styles.agentPanelInfo}>
+                      <span className={styles.agentPanelId}>{agent.id}</span>
+                      <span className={styles.agentPanelStatus}>{agent.status}</span>
+                      {windowTitle && (
+                        <span className={styles.agentPanelWindow}>
+                          Window: {windowTitle}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className={styles.stopAgentButton}
+                      onClick={() => interruptAgent(agent.id)}
+                      title={`Stop agent ${agent.id}`}
+                    >
+                      Stop
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Desktop icons */}
+        <div className={styles.desktopIcons}>
+          <button className={styles.desktopIcon} onClick={handleStorageClick}>
+            <span className={styles.iconImage}>🗄️</span>
+            <span className={styles.iconLabel}>Storage</span>
           </button>
-        ))}
+          {/* Dynamic app icons */}
+          {apps.map((app) => (
+            <button
+              key={app.id}
+              className={styles.desktopIcon}
+              onClick={() => handleAppClick(app.id)}
+            >
+              {app.iconType === 'image' ? (
+                <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
+              ) : (
+                <span className={styles.iconImage}>
+                  {app.icon || '📦'}
+                </span>
+              )}
+              <span className={styles.iconLabel}>{app.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Rubber-band selection rectangle */}
+        {selectionRect && (
+          <div
+            className={styles.selectionRect}
+            style={{
+              left: selectionRect.x,
+              top: selectionRect.y,
+              width: selectionRect.w,
+              height: selectionRect.h,
+            }}
+          />
+        )}
+
+        {/* Window container */}
+        <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>
+          <WindowManager />
+        </QueueAwareComponentActionProvider>
+
+        {/* Notification center (top-right) */}
+        <NotificationCenter />
+
+        {/* Window context menu */}
+        {contextMenu && (
+          <WindowContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            windowId={contextMenu.windowId}
+            windowTitle={contextMenu.windowTitle}
+            hasWindowAgent={contextMenu.windowId ? Object.values(windowAgents).some(wa => wa.windowId === contextMenu.windowId) : false}
+            onSend={sendMessage}
+            onSendToWindow={sendWindowMessage}
+            onClose={hideContextMenu}
+          />
+        )}
+
+        {/* Drawing overlay */}
+        <DrawingOverlay />
+
+        {/* Cursor spinner when AI is thinking */}
+        <CursorSpinner />
       </div>
 
-      {/* Rubber-band selection rectangle */}
-      {selectionRect && (
-        <div
-          className={styles.selectionRect}
-          style={{
-            left: selectionRect.x,
-            top: selectionRect.y,
-            width: selectionRect.w,
-            height: selectionRect.h,
-          }}
-        />
-      )}
-
-      {/* Window container */}
-      <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>
-        <WindowManager />
-      </QueueAwareComponentActionProvider>
-
-      {/* Command input (includes taskbar for minimized windows) */}
+      {/* These must be outside .desktop to avoid transform breaking fixed positioning */}
       <CommandPalette />
-
-      {/* Toast notifications (bottom-right) */}
       <ToastContainer onToastAction={sendToastAction} />
-
-      {/* Notification center (top-right) */}
-      <NotificationCenter />
-
-      {/* Window context menu */}
-      {contextMenu && (
-        <WindowContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          windowId={contextMenu.windowId}
-          windowTitle={contextMenu.windowTitle}
-          hasWindowAgent={contextMenu.windowId ? Object.values(windowAgents).some(wa => wa.windowId === contextMenu.windowId) : false}
-          onSend={sendMessage}
-          onSendToWindow={sendWindowMessage}
-          onClose={hideContextMenu}
-        />
-      )}
-
-      {/* Drawing overlay */}
-      <DrawingOverlay />
-
-      {/* Cursor spinner when AI is thinking */}
-      <CursorSpinner />
-
-      {/* Confirmation dialogs */}
       <ConfirmDialog />
-    </div>
+    </>
   )
 }

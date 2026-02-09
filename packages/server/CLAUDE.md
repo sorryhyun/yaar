@@ -29,16 +29,17 @@ src/
 │       ├── api.ts     # REST API routes (health, providers, apps, sessions, agents/stats)
 │       ├── files.ts   # File-serving routes (pdf, sandbox, app-static, storage)
 │       └── static.ts  # Frontend static serving + SPA fallback
+├── session/           # Session management (LiveSession, SessionHub, EventSequencer)
 ├── websocket/         # WebSocket server + connection registry
 │   ├── server.ts      # createWebSocketServer() with explicit options param
-│   └── broadcast-center.ts  # BroadcastCenter — routes events to WebSocket connections
+│   └── broadcast-center.ts  # BroadcastCenter — routes events to all connections in a session
 ├── agents/            # Agent lifecycle, pooling, context management
 ├── providers/         # Pluggable AI backends (Claude, Codex)
 ├── mcp/               # MCP server, domain-organized tools, action emitter
 │   ├── index.ts       # Module re-exports
 │   ├── server.ts      # MCP server init, request handling, token
 │   ├── action-emitter.ts  # ActionEmitter — decouple tools from sessions
-│   ├── window-state.ts    # Per-connection window state tracking
+│   ├── window-state.ts    # WindowStateRegistry — per-session window state tracking
 │   ├── utils.ts       # ok(), okWithImages() response helpers
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
 │   ├── register.ts    # Aggregator: registerAllTools(), getToolNames()
@@ -64,35 +65,43 @@ src/
 
 ## Architecture
 
-### Context-Centric Agent Architecture
+### Session-Centric Architecture
 
 ```
-SessionManager (per WebSocket connection)
-└── ContextPool (unified pool)
-    ├── ContextTape (hierarchical message history)
-    │   ├── [main] user/assistant messages
-    │   └── [window:id] branch messages
-    └── Agents (dynamic role assignment)
-        └── AgentSession → AITransport
+SessionHub (singleton registry)
+└── LiveSession (per conversation, survives disconnections)
+    ├── connections: Map<ConnectionId, WebSocket>   ← multi-tab support
+    ├── WindowStateRegistry                         ← server-side window tracking
+    ├── ReloadCache                                 ← fingerprint-based action caching
+    ├── EventSequencer                              ← monotonic seq for replay
+    └── ContextPool (unified pool)
+        ├── AgentPool
+        │   ├── Main Agents: Map<monitorId, PooledAgent>  ← one per monitor
+        │   ├── Ephemeral Agents (temporary, no context)
+        │   └── Window Agents: Map<agentKey, PooledAgent>  ← persistent per window/group
+        ├── ContextTape (hierarchical message history)
+        │   ├── [main] user/assistant messages
+        │   └── [window:id] branch messages
+        └── Policies (MainQueue per monitor, WindowQueue, ContextAssembly, ...)
 ```
 
 Key concepts:
-- **Single pool**: Agents are just agents, role determined by task
+- **Session > Monitor > Window**: Three nested abstractions (see `docs/monitor_and_windows_guide.md`)
+- **Multi-connection**: Multiple tabs share one LiveSession via SessionHub
+- **Per-monitor main agents**: Each monitor has its own main agent and sequential queue
+- **Parallel windows**: Window agents run concurrently, serialized per-window
 - **Hierarchical context**: Messages tagged with source (main vs window)
-- **Dynamic roles**: `default` for main, `window-{id}` for windows
-- **Sequential main**: USER_MESSAGE tasks processed one at a time
-- **Parallel windows**: WINDOW_MESSAGE tasks run concurrently
 
 ### Message Flow
 
 ```
-WebSocket → SessionManager.routeMessage()
+WebSocket → LiveSession.routeMessage()
   → ContextPool.handleTask()
-  → Main queue (sequential) or Window handler (parallel)
+  → Monitor's main queue (sequential) or Window handler (parallel)
   → AgentSession.handleMessage(content, { role, source, ... })
   → AITransport.query() [async generator]
   → Tools emit actions via actionEmitter
-  → BroadcastCenter.publishToConnection()
+  → BroadcastCenter.publishToSession()
 ```
 
 ### Key Patterns

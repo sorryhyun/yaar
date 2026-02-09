@@ -29,7 +29,7 @@ The language AI uses to control the desktop.
 ## WebSocket Events
 
 **Client → Server:**
-- `USER_MESSAGE` - User input with interaction history
+- `USER_MESSAGE` - User input with interaction history (optional `monitorId` for multi-monitor routing)
 - `WINDOW_MESSAGE` - Message from specific window
 - `INTERRUPT`, `INTERRUPT_AGENT` - Stop agents
 - `SET_PROVIDER` - Switch AI provider
@@ -37,9 +37,9 @@ The language AI uses to control the desktop.
 - `COMPONENT_ACTION` - Interactive component action
 
 **Server → Client:**
-- `ACTIONS` - Array of OS Actions
-- `AGENT_THINKING`, `AGENT_RESPONSE` - AI output stream
-- `CONNECTION_STATUS` - connected/disconnected/error
+- `ACTIONS` - Array of OS Actions (optional `monitorId`)
+- `AGENT_THINKING`, `AGENT_RESPONSE` - AI output stream (optional `monitorId`)
+- `CONNECTION_STATUS` - connected/disconnected/error (includes `sessionId`)
 - `TOOL_PROGRESS` - Tool execution status
 - `WINDOW_AGENT_STATUS` - Window agent lifecycle
 - `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED` - Queue notifications

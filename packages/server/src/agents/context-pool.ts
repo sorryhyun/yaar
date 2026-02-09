@@ -37,6 +37,7 @@ export interface Task {
   content: string;
   interactions?: UserInteraction[];
   actionId?: string; // For parallel button actions
+  monitorId?: string; // Which monitor this task belongs to
 }
 
 /**
@@ -53,7 +54,7 @@ export class ContextPool {
 
   // Window task tracking
   private windowAgentMap: Map<string, string> = new Map();
-  private mainQueuePolicy = new MainQueuePolicy(MAX_QUEUE_SIZE);
+  private mainQueues = new Map<string, MainQueuePolicy>();
   private windowQueuePolicy = new WindowQueuePolicy();
   private contextAssembly = new ContextAssemblyPolicy();
   private reloadPolicy: ReloadCachePolicy;
@@ -104,7 +105,7 @@ export class ContextPool {
     this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);
 
-    const mainAgent = await this.agentPool.createMainAgent(provider);
+    const mainAgent = await this.agentPool.createMainAgent('monitor-0', provider);
     if (!mainAgent) {
       await provider.dispose();
       return false;
@@ -118,6 +119,54 @@ export class ContextPool {
     });
 
     return true;
+  }
+
+  /**
+   * Get or create a MainQueuePolicy for a monitor.
+   */
+  private getOrCreateMainQueue(monitorId: string): MainQueuePolicy {
+    let queue = this.mainQueues.get(monitorId);
+    if (!queue) {
+      queue = new MainQueuePolicy(MAX_QUEUE_SIZE);
+      this.mainQueues.set(monitorId, queue);
+    }
+    return queue;
+  }
+
+  /**
+   * Create a new main agent for a monitor (called when new monitor is created).
+   */
+  async createMonitorAgent(monitorId: string): Promise<boolean> {
+    const provider = await acquireWarmProvider();
+    if (!provider) {
+      await this.sendEvent({
+        type: 'ERROR',
+        error: 'No AI provider available for new monitor.',
+        monitorId,
+      });
+      return false;
+    }
+
+    const agent = await this.agentPool.createMainAgent(monitorId, provider);
+    if (!agent) {
+      await provider.dispose();
+      await this.sendEvent({
+        type: 'ERROR',
+        error: 'Agent limit reached. Cannot create new monitor.',
+        monitorId,
+      });
+      return false;
+    }
+
+    console.log(`[ContextPool] Created monitor agent for ${monitorId}`);
+    return true;
+  }
+
+  /**
+   * Check if a main agent exists for the given monitor.
+   */
+  hasMainAgent(monitorId: string): boolean {
+    return this.agentPool.hasMainAgent(monitorId);
   }
 
   // ── Inflight tracking ────────────────────────────────────────────────
@@ -170,9 +219,11 @@ export class ContextPool {
    * Route a main task: to the main agent if idle, or to an ephemeral agent.
    */
   private async queueMainTask(task: Task): Promise<void> {
-    if (!this.agentPool.isMainAgentBusy()) {
+    const monitorId = task.monitorId ?? 'monitor-0';
+
+    if (!this.agentPool.isMainAgentBusy(monitorId)) {
       // Main agent idle → process directly
-      await this.processMainTask(this.agentPool.getMainAgent()!, task);
+      await this.processMainTask(this.agentPool.getMainAgent(monitorId)!, task);
       return;
     }
 
@@ -184,7 +235,8 @@ export class ContextPool {
     }
 
     // No agents available → queue
-    if (!this.mainQueuePolicy.canEnqueue()) {
+    const queue = this.getOrCreateMainQueue(monitorId);
+    if (!queue.canEnqueue()) {
       await this.sendEvent({
         type: 'ERROR',
         error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
@@ -192,8 +244,8 @@ export class ContextPool {
       return;
     }
 
-    const position = this.mainQueuePolicy.enqueue(task);
-    console.log(`[ContextPool] Queued main task ${task.messageId}, queue size: ${position}`);
+    const position = queue.enqueue(task);
+    console.log(`[ContextPool] Queued main task ${task.messageId} for ${monitorId}, queue size: ${position}`);
 
     await this.sendEvent({
       type: 'MESSAGE_QUEUED',
@@ -207,16 +259,18 @@ export class ContextPool {
    * Drains callback queue before processing.
    */
   private async processMainTask(agent: PooledAgent, task: Task): Promise<void> {
-    agent.currentRole = `main-${task.messageId}`;
+    const monitorId = task.monitorId ?? 'monitor-0';
+    const mainRole = `main-${monitorId}-${task.messageId}`;
+    agent.currentRole = mainRole;
     agent.lastUsed = Date.now();
 
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
       messageId: task.messageId,
-      agentId: `main-${task.messageId}`,
+      agentId: mainRole,
     });
 
-    console.log(`[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id}`);
+    console.log(`[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id} (monitor: ${monitorId})`);
 
     // Build prompt with callback injection
     const windowSnapshot = this.windowState.listWindows();
@@ -231,16 +285,18 @@ export class ContextPool {
     });
     this.contextAssembly.appendUserMessage(this.contextTape, mainContext.contextContent, 'main');
 
-    const resumeSessionId = this.savedThreadIds?.['default'];
-    delete this.savedThreadIds?.['default'];
+    const canonicalMain = `main-${monitorId}`;
+    const resumeSessionId = this.savedThreadIds?.[canonicalMain];
+    delete this.savedThreadIds?.[canonicalMain];
 
     await agent.session.handleMessage(mainContext.prompt, {
       role: agent.currentRole!,
       source: 'main',
       interactions: task.interactions,
       messageId: task.messageId,
-      canonicalAgent: 'default',
+      canonicalAgent: canonicalMain,
       resumeSessionId,
+      monitorId,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
           this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
@@ -253,7 +309,7 @@ export class ContextPool {
     this.reloadPolicy.maybeRecord(task, fp, recordedActions);
 
     agent.currentRole = null;
-    await this.processMainQueue();
+    await this.processMainQueue(monitorId);
   }
 
   /**
@@ -261,7 +317,8 @@ export class ContextPool {
    * Pushes a callback when done, then disposes the agent.
    */
   private async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
-    const ephemeralRole = `ephemeral-${task.messageId}`;
+    const monitorId = task.monitorId ?? 'monitor-0';
+    const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
     agent.currentRole = ephemeralRole;
     agent.lastUsed = Date.now();
 
@@ -310,17 +367,18 @@ export class ContextPool {
   /**
    * Process queued main tasks when the main agent becomes available.
    */
-  private async processMainQueue(): Promise<void> {
-    if (!this.mainQueuePolicy.beginProcessing()) return;
+  private async processMainQueue(monitorId = 'monitor-0'): Promise<void> {
+    const queue = this.mainQueues.get(monitorId);
+    if (!queue || !queue.beginProcessing()) return;
     try {
-      while (this.mainQueuePolicy.size() > 0) {
-        if (this.agentPool.isMainAgentBusy()) break;
+      while (queue.size() > 0) {
+        if (this.agentPool.isMainAgentBusy(monitorId)) break;
 
-        const next = this.mainQueuePolicy.dequeue();
-        if (next) await this.processMainTask(this.agentPool.getMainAgent()!, next.task);
+        const next = queue.dequeue();
+        if (next) await this.processMainTask(this.agentPool.getMainAgent(monitorId)!, next.task);
       }
     } finally {
-      this.mainQueuePolicy.endProcessing();
+      queue.endProcessing();
     }
   }
 
@@ -379,7 +437,7 @@ export class ContextPool {
 
       console.log(`[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`);
 
-      await this.sharedLogger?.registerAgent(agentRole, 'default', windowId);
+      await this.sharedLogger?.registerAgent(agentRole, `main-${task.monitorId ?? 'monitor-0'}`, windowId);
       await this.sendWindowStatus(windowId, agentRole, 'assigned');
 
       await this.sendEvent({
@@ -534,8 +592,8 @@ export class ContextPool {
     return this.sharedLogger;
   }
 
-  getPrimaryAgent(): import('./session.js').AgentSession | null {
-    return this.agentPool.getMainAgentSession();
+  getPrimaryAgent(monitorId?: string): import('./session.js').AgentSession | null {
+    return this.agentPool.getMainAgentSession(monitorId);
   }
 
   async interruptAll(): Promise<void> {
@@ -546,7 +604,7 @@ export class ContextPool {
     this.resetting = true;
 
     // 1. Clear queues so no new tasks start from dequeue
-    this.mainQueuePolicy.clear();
+    this.mainQueues.forEach(q => q.clear()); this.mainQueues.clear();
     this.windowQueuePolicy.clear();
 
     // 2. Reject blocked limiter waiters so they unblock and exit
@@ -604,7 +662,7 @@ export class ContextPool {
     // 9. Re-create a fresh main agent
     const provider = await acquireWarmProvider();
     if (provider) {
-      const agent = await this.agentPool.createMainAgent(provider);
+      const agent = await this.agentPool.createMainAgent('monitor-0', provider);
       if (agent) {
         await this.sendEvent({
           type: 'CONNECTION_STATUS',
@@ -649,7 +707,7 @@ export class ContextPool {
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
     return {
       ...poolStats,
-      mainQueueSize: this.mainQueuePolicy.size(),
+      mainQueueSize: Array.from(this.mainQueues.values()).reduce((sum, q) => sum + q.size(), 0),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
       timelineSize: this.timeline.size,
@@ -680,7 +738,7 @@ export class ContextPool {
 
   async cleanup(): Promise<void> {
     this.resetting = true;
-    this.mainQueuePolicy.clear();
+    this.mainQueues.forEach(q => q.clear()); this.mainQueues.clear();
     this.windowQueuePolicy.clear();
     getAgentLimiter().clearWaiting(new Error('Pool cleaning up'));
     await this.agentPool.interruptAll();
