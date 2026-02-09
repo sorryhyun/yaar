@@ -21,6 +21,7 @@ import { ok } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
+import { componentLayoutSchema } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -43,8 +44,8 @@ function generateSandboxId(): string {
 /**
  * Generate SKILL.md content for a deployed app.
  */
-function generateSkillMd(appId: string, appName: string): string {
-  return `# ${appName}
+function generateSkillMd(appId: string, appName: string, componentFiles: string[] = []): string {
+  let md = `# ${appName}
 
 A compiled TypeScript application.
 
@@ -58,10 +59,19 @@ create({
   content: "/api/apps/${appId}/static/index.html"
 })
 \`\`\`
+`;
 
-## Source
+  if (componentFiles.length > 0) {
+    md += `\n## UI Components\nPre-built component windows (use create_component with jsonfile):\n`;
+    for (const f of componentFiles) {
+      md += `- \`create_component(jsonfile="${appId}/${f}", windowId="...", title="...")\`\n`;
+    }
+  }
+
+  md += `\n## Source
 Source code is available in \`src/\` directory. Use \`read_config\` with path \`src/main.ts\` to view.
 `;
+  return md;
 }
 
 /**
@@ -266,8 +276,22 @@ Example:
           }
         }
 
+        // Copy .yaarcomponent.json files from sandbox root
+        const componentFiles: string[] = [];
+        try {
+          const sandboxFiles = await readdir(sandboxPath);
+          for (const f of sandboxFiles) {
+            if (f.endsWith('.yaarcomponent.json')) {
+              await cp(join(sandboxPath, f), join(appPath, f));
+              componentFiles.push(f);
+            }
+          }
+        } catch {
+          // readdir failure is non-fatal
+        }
+
         // Generate SKILL.md
-        const skillContent = generateSkillMd(appId, displayName);
+        const skillContent = generateSkillMd(appId, displayName, componentFiles);
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
@@ -407,6 +431,64 @@ Example:
         path,
         message: `Applied edit to sandbox/${sandboxId}/${path}`,
       }, null, 2));
+    }
+  );
+
+  // compile_component - Write a .yaarcomponent.json file to sandbox
+  server.registerTool(
+    'compile_component',
+    {
+      description:
+        'Create a .yaarcomponent.json file in a sandbox. This lets you define reusable component window layouts that get deployed alongside the app. After deploy, the AI can load them via create_component(jsonfile="{appId}/{filename}").',
+      inputSchema: {
+        sandboxId: z.string().describe('Sandbox ID to write the component file into'),
+        filename: z.string().describe('Filename (e.g., "dashboard.yaarcomponent.json"). Must end with .yaarcomponent.json.'),
+        components: z.array(z.record(z.string(), z.unknown())).describe('Flat array of UI components (same format as create_component)'),
+        cols: z.union([z.array(z.number()), z.number()]).optional().describe('Column layout'),
+        gap: z.enum(['none', 'sm', 'md', 'lg']).optional().describe('Spacing between components'),
+      },
+    },
+    async (args) => {
+      const { sandboxId, filename } = args;
+
+      if (!filename.endsWith('.yaarcomponent.json')) {
+        return ok('Error: Filename must end with .yaarcomponent.json');
+      }
+      if (filename.includes('/') || filename.includes('..')) {
+        return ok('Error: Filename must not contain path separators.');
+      }
+      if (!/^\d+$/.test(sandboxId)) {
+        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+      }
+
+      const layout = {
+        components: args.components,
+        ...(args.cols !== undefined && { cols: args.cols }),
+        ...(args.gap !== undefined && { gap: args.gap }),
+      };
+
+      // Validate against component layout schema
+      const result = componentLayoutSchema.safeParse(layout);
+      if (!result.success) {
+        return ok(`Error: Invalid component layout: ${result.error.message}`);
+      }
+
+      const sandboxPath = getSandboxPath(sandboxId);
+      const fullPath = join(sandboxPath, filename);
+
+      try {
+        await mkdir(sandboxPath, { recursive: true });
+        await writeFile(fullPath, JSON.stringify(result.data, null, 2), 'utf-8');
+
+        return ok(JSON.stringify({
+          sandboxId,
+          filename,
+          message: `Component file written to sandbox/${sandboxId}/${filename}. It will be deployed alongside the app.`,
+        }, null, 2));
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Unknown error';
+        return ok(`Error: ${error}`);
+      }
     }
   );
 }

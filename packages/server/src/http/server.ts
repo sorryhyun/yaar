@@ -6,7 +6,7 @@ import { createServer, type Server } from 'http';
 import { handleMcpRequest, MCP_SERVERS, type McpServerName } from '../mcp/server.js';
 import { PORT } from '../config.js';
 import { sendJson } from './utils.js';
-import { handleApiRoutes, handleFileRoutes, handleStaticRoutes } from './routes/index.js';
+import { handleApiRoutes, handleFileRoutes, handleProxyRoutes, handleStaticRoutes } from './routes/index.js';
 
 export function createHttpServer(): Server {
   return createServer(async (req, res) => {
@@ -42,6 +42,7 @@ export function createHttpServer(): Server {
 
     // Route dispatch — short-circuit on first match
     if (await handleApiRoutes(req, res, url)) return;
+    if (await handleProxyRoutes(req, res, url)) return;
     if (await handleFileRoutes(req, res, url)) return;
     if (await handleStaticRoutes(req, res, url)) return;
 

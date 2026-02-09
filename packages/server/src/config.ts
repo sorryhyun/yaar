@@ -131,8 +131,9 @@ const CODEX_MCP_NAMESPACES = ['system', 'window', 'storage', 'apps'] as const;
 export function getCodexAppServerArgs(): string[] {
   const args = ['app-server'];
 
-  // Disable shell tool
+  // Disable shell tool and apply_patch (apps use clone-revise-compile-deploy flow)
   args.push('-c', 'features.shell_tool=false');
+  args.push('-c', 'features.apply_patch_freeform=false');
 
   // Configure YAAR MCP servers
   for (const ns of CODEX_MCP_NAMESPACES) {

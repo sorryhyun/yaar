@@ -91,10 +91,14 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       const content = await readFile(normalizedPath);
       const ext = extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, {
+      const headers: Record<string, string> = {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
-      });
+      };
+      if (ext === '.html') {
+        headers['Content-Security-Policy'] = "connect-src 'self'";
+      }
+      res.writeHead(200, headers);
       res.end(content);
     } catch {
       sendError(res, 'File not found', 404);
@@ -168,10 +172,14 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       const content = await readFile(normalizedPath);
       const ext = extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, {
+      const headers: Record<string, string> = {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
-      });
+      };
+      if (ext === '.html') {
+        headers['Content-Security-Policy'] = "connect-src 'self'";
+      }
+      res.writeHead(200, headers);
       res.end(content);
     } catch {
       sendError(res, 'File not found', 404);
