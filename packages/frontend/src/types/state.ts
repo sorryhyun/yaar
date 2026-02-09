@@ -156,8 +156,8 @@ export interface DesktopState {
   // Pending feedback to send to the server
   pendingFeedback: RenderingFeedback[]
 
-  // User interaction log (for context when sending messages)
-  interactionLog: UserInteraction[]
+  // Pending user interactions to send to the server
+  pendingInteractions: UserInteraction[]
 
   // Queued component actions for locked windows
   queuedActions: Record<string, QueuedComponentAction[]>
@@ -220,9 +220,8 @@ export interface DesktopActions {
   addRenderingFeedback: (feedback: RenderingFeedback) => void
   consumePendingFeedback: () => RenderingFeedback[]
 
-  // User interaction logging
-  logInteraction: (interaction: Omit<UserInteraction, 'timestamp'>) => void
-  consumeInteractions: () => UserInteraction[]
+  // Pending user interactions
+  consumePendingInteractions: () => UserInteraction[]
 
   // Queued component actions
   queueComponentAction: (action: QueuedComponentAction) => void

@@ -30,12 +30,6 @@ export const createNotificationsSlice: SliceCreator<NotificationsSlice> = (set, 
   dismissNotification: (id) => set((state) => {
     const notification = state.notifications[id]
     delete state.notifications[id]
-    ;(state as DesktopStore).interactionLog.push({
-      type: 'notification.dismiss',
-      timestamp: Date.now(),
-      details: notification?.title,
-    })
-    // Push to pending for immediate send
     ;(state as DesktopStore).pendingInteractions.push({
       type: 'notification.dismiss',
       timestamp: Date.now(),

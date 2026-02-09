@@ -10,7 +10,7 @@ import { writeFile, mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { bundledLibraryPlugin } from './plugins.js';
 import { PROJECT_ROOT } from '../../config.js';
-import { IFRAME_CAPTURE_HELPER_SCRIPT } from '@yaar/shared';
+import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT } from '@yaar/shared';
 
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
 
@@ -50,6 +50,7 @@ export function generateHtmlWrapper(jsCode: string, title: string): string {
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   </style>
   <script>${IFRAME_CAPTURE_HELPER_SCRIPT}</script>
+  <script>${IFRAME_STORAGE_SDK_SCRIPT}</script>
 </head>
 <body>
   <script type="module">

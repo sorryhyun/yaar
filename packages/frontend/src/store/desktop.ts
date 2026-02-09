@@ -196,7 +196,6 @@ export const useDesktopStore = create<DesktopStore>()(
         state.activeAgents = {}
         state.windowAgents = {}
         state.queuedActions = {}
-        state.interactionLog = []
         state.pendingInteractions = []
         state.activityLog = []
         state.debugLog = []

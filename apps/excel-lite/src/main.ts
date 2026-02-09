@@ -13,10 +13,11 @@ app.innerHTML = `
     :root { color-scheme: light; }
     body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; user-select: none; }
     .wrap { padding: 10px; display: grid; gap: 8px; }
-    .bar { display: grid; grid-template-columns: auto 1fr auto auto auto auto auto auto auto auto auto auto auto; gap: 6px; align-items: center; }
+    .bar { display: grid; grid-template-columns: auto 1fr repeat(16, auto); gap: 6px; align-items: center; }
     .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; min-width: 74px; text-align: center; border: 1px solid #d0d7e2; border-radius: 8px; padding: 7px 8px; background: white; }
     input, select { padding: 7px 8px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 13px; background: white; }
     #formulaInput { width: 100%; }
+    #storagePathInput { min-width: 220px; }
     button { padding: 7px 10px; border: 1px solid #ccd3df; border-radius: 8px; background: white; cursor: pointer; }
     button:hover { background: #f1f4f9; }
     button.active { background: #dbe8ff; border-color: #96b6ff; }
@@ -49,11 +50,15 @@ app.innerHTML = `
       <select id="alignSel"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
       <button id="undoBtn">Undo</button>
       <button id="redoBtn">Redo</button>
-      <button id="saveBtn">Save</button>
-      <button id="loadBtn">Load</button>
+      <button id="saveBtn" title="Copy sheet JSON to clipboard">Copy</button>
+      <button id="loadBtn" title="Paste sheet JSON from a dialog">Paste</button>
+      <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.json" />
+      <button id="saveFileBtn" title="Save workbook JSON to YAAR storage">Save Store</button>
+      <button id="openFileBtn" title="Open workbook JSON from YAAR storage">Open Store</button>
       <button id="csvBtn">CSV</button>
     </div>
-    <div class="hint">Drag to select cells. Drag blue corner to fill. Shift+click extends selection. Ctrl+B/I/U, Ctrl+Z/Y, Delete supported.</div>
+    <div class="hint">Drag to select cells. Drag blue corner to fill. Shift+click extends selection. Ctrl+S saves to storage, Ctrl+O opens from storage, Ctrl+B/I/U, Ctrl+Z/Y, Delete supported.</div>
+    <div class="hint" id="ioStatus">Storage ready.</div>
     <div class="sheetWrap" id="sheet"></div>
   </div>
 `;
@@ -73,7 +78,11 @@ const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redoBtn') as HTMLButtonElement;
 const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
 const loadBtn = document.getElementById('loadBtn') as HTMLButtonElement;
+const storagePathInput = document.getElementById('storagePathInput') as HTMLInputElement;
+const saveFileBtn = document.getElementById('saveFileBtn') as HTMLButtonElement;
+const openFileBtn = document.getElementById('openFileBtn') as HTMLButtonElement;
 const csvBtn = document.getElementById('csvBtn') as HTMLButtonElement;
+const ioStatus = document.getElementById('ioStatus') as HTMLDivElement;
 
 const cells: CellMap = {};
 const styles: CellStyleMap = {};
@@ -101,6 +110,19 @@ function getRaw(ref: string): string {
 }
 
 const formulaEngine = createFormulaEngine(getRaw);
+
+const storageApi = (window as any).yaar?.storage;
+
+function setIoStatus(message: string, isError = false) {
+  ioStatus.textContent = message;
+  ioStatus.style.color = isError ? '#b42318' : '#5c6475';
+}
+
+function storagePath() {
+  const path = storagePathInput.value.trim() || 'excel-lite/sheet.json';
+  storagePathInput.value = path;
+  return path;
+}
 
 function pushHistory() {
   pushHistorySnapshot(history, future, cells, styles);
@@ -431,46 +453,115 @@ alignSel.addEventListener('change', () => applyStyleToSelection({ align: alignSe
 undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 
+function serializeWorkbook() {
+  return JSON.stringify({ cells, styles }, null, 2);
+}
+
+function importWorkbook(parsed: any) {
+  pushHistory();
+
+  for (const k of Object.keys(cells)) delete cells[k];
+  for (const k of Object.keys(styles)) delete styles[k];
+
+  if (parsed && typeof parsed === 'object' && parsed.cells && typeof parsed.cells === 'object') {
+    for (const [k, v] of Object.entries(parsed.cells)) {
+      if (typeof v === 'string') cells[k.toUpperCase()] = v;
+    }
+
+    if (parsed.styles && typeof parsed.styles === 'object') {
+      for (const [k, v] of Object.entries(parsed.styles)) {
+        if (!v || typeof v !== 'object') continue;
+        const normalized = normalizeStyle(v as CellStyle);
+        if (normalized) styles[k.toUpperCase()] = normalized;
+      }
+    }
+  } else {
+    for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v === 'string') cells[k.toUpperCase()] = v;
+    }
+  }
+
+  refreshAll();
+}
+
+function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
+  try {
+    const parsed = JSON.parse(text) as any;
+    importWorkbook(parsed);
+    return true;
+  } catch {
+    alert(errorMessage);
+    return false;
+  }
+}
+
+async function saveWorkbookToStorage() {
+  if (!storageApi) {
+    setIoStatus('Storage API unavailable in this runtime.', true);
+    return;
+  }
+
+  try {
+    const path = storagePath();
+    await storageApi.save(path, serializeWorkbook());
+    setIoStatus(`Saved to storage: ${path}`);
+    saveFileBtn.textContent = 'Saved';
+    setTimeout(() => (saveFileBtn.textContent = 'Save Store'), 1000);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save';
+    setIoStatus(message, true);
+  }
+}
+
+async function openWorkbookFromStorage() {
+  if (!storageApi) {
+    setIoStatus('Storage API unavailable in this runtime.', true);
+    return;
+  }
+
+  try {
+    const path = storagePath();
+    const text = await storageApi.read(path, { as: 'text' });
+    if (typeof text !== 'string') throw new Error('Workbook content is not text');
+
+    if (tryImportWorkbook(text, `Invalid JSON in ${path}`)) {
+      setIoStatus(`Opened from storage: ${path}`);
+      openFileBtn.textContent = 'Opened';
+      setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to open file';
+    setIoStatus(message, true);
+  }
+}
+
 saveBtn.addEventListener('click', async () => {
-  const json = JSON.stringify({ cells, styles }, null, 2);
-  await navigator.clipboard.writeText(json);
-  saveBtn.textContent = 'Copied';
-  setTimeout(() => (saveBtn.textContent = 'Save'), 1000);
+  try {
+    await navigator.clipboard.writeText(serializeWorkbook());
+    saveBtn.textContent = 'Copied';
+    setTimeout(() => (saveBtn.textContent = 'Copy'), 1000);
+  } catch {
+    alert('Clipboard access failed. Use Save Store instead.');
+  }
 });
 
 loadBtn.addEventListener('click', () => {
   const text = prompt('Paste JSON: { cells: {...}, styles: {...} } (legacy cell map also supported)');
   if (!text) return;
 
-  try {
-    const parsed = JSON.parse(text) as any;
-    pushHistory();
-
-    for (const k of Object.keys(cells)) delete cells[k];
-    for (const k of Object.keys(styles)) delete styles[k];
-
-    if (parsed && typeof parsed === 'object' && parsed.cells && typeof parsed.cells === 'object') {
-      for (const [k, v] of Object.entries(parsed.cells)) {
-        if (typeof v === 'string') cells[k.toUpperCase()] = v;
-      }
-
-      if (parsed.styles && typeof parsed.styles === 'object') {
-        for (const [k, v] of Object.entries(parsed.styles)) {
-          if (!v || typeof v !== 'object') continue;
-          const normalized = normalizeStyle(v as CellStyle);
-          if (normalized) styles[k.toUpperCase()] = normalized;
-        }
-      }
-    } else {
-      for (const [k, v] of Object.entries(parsed)) {
-        if (typeof v === 'string') cells[k.toUpperCase()] = v;
-      }
-    }
-
-    refreshAll();
-  } catch {
-    alert('Invalid JSON');
+  if (tryImportWorkbook(text, 'Invalid JSON')) {
+    setIoStatus('Loaded workbook from pasted JSON.');
+    loadBtn.textContent = 'Loaded';
+    setTimeout(() => (loadBtn.textContent = 'Paste'), 1000);
   }
+});
+
+saveFileBtn.addEventListener('click', () => {
+  void saveWorkbookToStorage();
+});
+
+openFileBtn.addEventListener('click', () => {
+  void openWorkbookFromStorage();
 });
 
 csvBtn.addEventListener('click', () => {
@@ -494,6 +585,18 @@ document.addEventListener('mouseup', () => {
 document.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;
   const isFormula = target === formulaInput;
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    void saveWorkbookToStorage();
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+    e.preventDefault();
+    void openWorkbookFromStorage();
+    return;
+  }
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -533,3 +636,7 @@ document.addEventListener('keydown', (e) => {
 
 buildSheet();
 refreshAll();
+
+if (!storageApi) {
+  setIoStatus('Storage API unavailable in this runtime.', true);
+}

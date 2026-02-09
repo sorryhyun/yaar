@@ -110,7 +110,7 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
  */
 export async function storageWrite(
   filePath: string,
-  content: string
+  content: string | Buffer
 ): Promise<StorageWriteResult> {
   const validatedPath = validatePath(filePath);
   if (!validatedPath) {
@@ -124,7 +124,11 @@ export async function storageWrite(
     const parentDir = join(validatedPath, '..');
     await mkdir(parentDir, { recursive: true });
 
-    await writeFile(validatedPath, content, 'utf-8');
+    if (Buffer.isBuffer(content)) {
+      await writeFile(validatedPath, content);
+    } else {
+      await writeFile(validatedPath, content, 'utf-8');
+    }
     return { success: true, path: filePath };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';

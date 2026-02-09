@@ -30,12 +30,6 @@ export const createToastsSlice: SliceCreator<ToastsSlice> = (set, _get) => ({
   dismissToast: (id) => set((state) => {
     const toast = state.toasts[id]
     delete state.toasts[id]
-    ;(state as DesktopStore).interactionLog.push({
-      type: 'toast.dismiss',
-      timestamp: Date.now(),
-      details: toast?.message,
-    })
-    // Push to pending for immediate send
     ;(state as DesktopStore).pendingInteractions.push({
       type: 'toast.dismiss',
       timestamp: Date.now(),

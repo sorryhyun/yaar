@@ -68,7 +68,7 @@ interface WindowFrameProps {
 }
 
 export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, queueBoundsUpdate, showContextMenu, addRenderingFeedback, logInteraction } =
+  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, queueBoundsUpdate, showContextMenu, addRenderingFeedback } =
     useDesktopStore()
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
   const windowAgent = useDesktopStore(selectWindowAgent(window.id))
@@ -266,7 +266,6 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
             className={styles.controlBtn}
             data-action="minimize"
             onClick={() => {
-              logInteraction({ type: 'window.minimize', windowId: window.id, windowTitle: window.title })
               useDesktopStore.getState().applyAction({
                 type: 'window.minimize',
                 windowId: window.id,
@@ -279,7 +278,6 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
             className={styles.controlBtn}
             data-action="maximize"
             onClick={() => {
-              logInteraction({ type: 'window.maximize', windowId: window.id, windowTitle: window.title })
               useDesktopStore.getState().applyAction({
                 type: window.maximized ? 'window.restore' : 'window.maximize',
                 windowId: window.id,

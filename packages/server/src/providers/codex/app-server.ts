@@ -13,7 +13,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcClient, type JsonRpcClientOptions } from './jsonrpc-client.js';
 import { getMcpToken } from '../../mcp/index.js';
-import { getCodexBin } from '../../config.js';
+import { getCodexBin, getCodexAppServerArgs } from '../../config.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
@@ -25,10 +25,6 @@ import type {
   InitializeParams,
   InitializeResponse,
 } from './types.js';
-
-// MCP server port (same as main server)
-const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
-
 
 /**
  * Configuration for the app-server.
@@ -139,24 +135,7 @@ export class AppServer {
    * Spawn the app-server process.
    */
   private async spawnProcess(): Promise<void> {
-    const args = [
-      'app-server',
-      // Disable shell tool
-      '-c', 'features.shell_tool=false',
-      // Configure YAAR MCP servers
-      '-c', `mcp_servers.system.url=http://127.0.0.1:${MCP_PORT}/mcp/system`,
-      '-c', 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN',
-      '-c', `mcp_servers.window.url=http://127.0.0.1:${MCP_PORT}/mcp/window`,
-      '-c', 'mcp_servers.window.bearer_token_env_var=YAAR_MCP_TOKEN',
-      '-c', `mcp_servers.storage.url=http://127.0.0.1:${MCP_PORT}/mcp/storage`,
-      '-c', 'mcp_servers.storage.bearer_token_env_var=YAAR_MCP_TOKEN',
-      '-c', `mcp_servers.apps.url=http://127.0.0.1:${MCP_PORT}/mcp/apps`,
-      '-c', 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN',
-      '-c', 'model_reasoning_effort = "high"',
-      '-c', 'model_personality = "none"',
-      '-c', 'sandbox_mode = "danger-full-access"',
-      '-c', 'approval_policy = "never"',
-    ];
+    const args = getCodexAppServerArgs();
 
     // Add model if specified
     if (this.config.model) {

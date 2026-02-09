@@ -258,14 +258,6 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       state.zOrder.push(windowId)
       state.focusedWindowId = windowId
       win.minimized = false
-      // Log to interaction log (for AI context on next message)
-      ;(state as DesktopStore).interactionLog.push({
-        type: 'window.focus',
-        timestamp: Date.now(),
-        windowId,
-        windowTitle: win.title,
-      })
-      // Push to pending for immediate send
       ;(state as DesktopStore).pendingInteractions.push({
         type: 'window.focus',
         timestamp: Date.now(),
@@ -275,22 +267,12 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   }),
 
   userCloseWindow: (windowId) => set((state) => {
-    const win = state.windows[windowId]
-    const title = win?.title
     delete state.windows[windowId]
     delete (state as DesktopStore).queuedActions[windowId]
     state.zOrder = state.zOrder.filter(id => id !== windowId)
     if (state.focusedWindowId === windowId) {
       state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
     }
-    // Log to interaction log (for AI context on next message)
-    ;(state as DesktopStore).interactionLog.push({
-      type: 'window.close',
-      timestamp: Date.now(),
-      windowId,
-      windowTitle: title,
-    })
-    // Push to pending for immediate send
     ;(state as DesktopStore).pendingInteractions.push({
       type: 'window.close',
       timestamp: Date.now(),
@@ -304,13 +286,6 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       win.bounds.x = x
       win.bounds.y = y
       win.maximized = false
-      ;(state as DesktopStore).interactionLog.push({
-        type: 'window.move',
-        timestamp: Date.now(),
-        windowId,
-        windowTitle: win.title,
-        details: `moved to (${x}, ${y})`,
-      })
     }
   }),
 
@@ -322,13 +297,6 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       if (x !== undefined) win.bounds.x = x
       if (y !== undefined) win.bounds.y = y
       win.maximized = false
-      ;(state as DesktopStore).interactionLog.push({
-        type: 'window.resize',
-        timestamp: Date.now(),
-        windowId,
-        windowTitle: win.title,
-        details: `resized to (${w}x${h})`,
-      })
     }
   }),
 

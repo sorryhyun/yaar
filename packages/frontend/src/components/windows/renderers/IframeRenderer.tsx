@@ -4,7 +4,7 @@
  * Detects CSP/X-Frame-Options blocking and reports back to the AI.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { IFRAME_CAPTURE_HELPER_SCRIPT } from '@yaar/shared'
+import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT } from '@yaar/shared'
 import styles from '@/styles/renderers.module.css'
 
 interface IframeRendererProps {
@@ -116,6 +116,12 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
             script.setAttribute('data-yaar-capture', '1')
             script.textContent = IFRAME_CAPTURE_HELPER_SCRIPT
             doc.head.appendChild(script)
+          }
+          if (doc && !doc.querySelector('script[data-yaar-storage]')) {
+            const storageScript = doc.createElement('script')
+            storageScript.setAttribute('data-yaar-storage', '1')
+            storageScript.textContent = IFRAME_STORAGE_SDK_SCRIPT
+            doc.head.appendChild(storageScript)
           }
         } catch {
           // Cross-origin — can't inject, capture helper must be baked in

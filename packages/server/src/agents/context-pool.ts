@@ -477,8 +477,10 @@ export class ContextPool {
     const groupId = this.windowConnectionPolicy.getGroupId(windowId);
     const agentKey = groupId ?? windowId;
 
-    // Push to timeline about the window closing
-    this.timeline.pushAI(`window-${windowId}`, `Window "${windowId}" closed`, [{ type: 'window.close', windowId }], windowId);
+    // NOTE: No timeline entry pushed here.
+    // - User-initiated closes are already in the timeline via pushUserInteractions()
+    // - AI-initiated closes are already captured in recordedActions summaries
+    //   from processEphemeralTask() or handleWindowTask()
 
     // Update group state and decide if agent should be disposed
     const closeResult = this.windowConnectionPolicy.handleClose(windowId);

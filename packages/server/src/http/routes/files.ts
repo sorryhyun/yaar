@@ -6,11 +6,35 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { readFile, readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
-import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES } from '../../config.js';
-import { sendError, safePath } from '../utils.js';
+import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
+import { sendError, sendJson, safePath } from '../utils.js';
+import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']);
+
+/**
+ * Collect the full request body as a Buffer, enforcing a size limit.
+ * Resolves with the Buffer, or rejects / sends 413 if exceeded.
+ */
+function collectBody(req: IncomingMessage, res: ServerResponse, maxSize: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxSize) {
+        req.destroy();
+        sendError(res, `Request body too large (max ${maxSize} bytes)`, 413);
+        reject(new Error('Body too large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', (err) => reject(err));
+  });
+}
 
 export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
   // Render PDF page as image
@@ -155,8 +179,8 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
     return true;
   }
 
-  // Serve storage files
-  if (url.pathname.startsWith('/api/storage/') && req.method === 'GET') {
+  // Storage API — GET (read/list), POST (write), DELETE
+  if (url.pathname.startsWith('/api/storage/')) {
     const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));
 
     const normalizedPath = safePath(STORAGE_DIR, filePath);
@@ -165,19 +189,64 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       return true;
     }
 
-    try {
-      const content = await readFile(normalizedPath);
-      const ext = extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
-      });
-      res.end(content);
-    } catch {
-      sendError(res, 'File not found', 404);
+    // GET — serve file or list directory
+    if (req.method === 'GET') {
+      // Directory listing mode
+      if (url.searchParams.get('list') === 'true') {
+        const result = await storageList(filePath);
+        if (!result.success) {
+          sendError(res, result.error ?? 'List failed');
+          return true;
+        }
+        sendJson(res, result.entries);
+        return true;
+      }
+
+      // Serve file
+      try {
+        const content = await readFile(normalizedPath);
+        const ext = extname(filePath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Cache-Control': 'no-cache',
+        });
+        res.end(content);
+      } catch {
+        sendError(res, 'File not found', 404);
+      }
+      return true;
     }
-    return true;
+
+    // POST — write file
+    if (req.method === 'POST') {
+      try {
+        const body = await collectBody(req, res, MAX_UPLOAD_SIZE);
+        const result = await storageWrite(filePath, body);
+        if (!result.success) {
+          sendError(res, result.error ?? 'Write failed');
+          return true;
+        }
+        sendJson(res, { ok: true, path: result.path });
+      } catch {
+        // collectBody already sent 413 if body too large
+        if (!res.writableEnded) {
+          sendError(res, 'Write failed');
+        }
+      }
+      return true;
+    }
+
+    // DELETE — remove file
+    if (req.method === 'DELETE') {
+      const result = await storageDelete(filePath);
+      if (!result.success) {
+        sendError(res, result.error ?? 'Delete failed');
+        return true;
+      }
+      sendJson(res, { ok: true, path: result.path });
+      return true;
+    }
   }
 
   return false;

@@ -21,11 +21,32 @@ export class InteractionTimeline {
 
   /**
    * Push a user interaction into the timeline.
+   * Deduplicates redundant interactions:
+   * - Consecutive focus on the same window is collapsed
+   * - Focus immediately before move/resize on the same window is removed
    */
   pushUser(interaction: UserInteraction): void {
+    const content = formatCompactInteraction(interaction);
+    const windowId = interaction.windowId;
+    const verb = interaction.type.split('.')[1]; // 'close', 'focus', 'move', etc.
+
+    if (windowId && this.entries.length > 0) {
+      const last = this.entries[this.entries.length - 1];
+
+      // Skip duplicate consecutive focus on the same window
+      if (verb === 'focus' && last.type === 'user' && last.content === content) {
+        return;
+      }
+
+      // Move/resize implies focus — remove preceding focus on the same window
+      if ((verb === 'move' || verb === 'resize') && last.type === 'user' && last.content === `focus:${windowId}`) {
+        this.entries.pop();
+      }
+    }
+
     this.entries.push({
       type: 'user',
-      content: formatCompactInteraction(interaction),
+      content,
       timestamp: interaction.timestamp,
     });
   }

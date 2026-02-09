@@ -80,7 +80,21 @@ export const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'application/javascript',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.csv': 'text/csv',
+  '.zip': 'application/zip',
+  '.md': 'text/markdown',
+  '.xml': 'application/xml',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.wasm': 'application/wasm',
+  '.ttf': 'font/ttf',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
 };
+
+export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
 export const PORT = parseInt(process.env.PORT ?? '8000', 10);
 
@@ -103,4 +117,38 @@ export function getCodexBin(): string {
     if (existsSync(bundled)) return bundled;
   }
   return 'codex';
+}
+
+// ── Codex app-server configuration ────────────────────────────────────
+
+/** MCP server namespaces to expose to the Codex app-server. */
+const CODEX_MCP_NAMESPACES = ['system', 'window', 'storage', 'apps'] as const;
+
+/**
+ * Build the CLI args for `codex app-server`.
+ * Separates config from process management so it's easy to review/change.
+ */
+export function getCodexAppServerArgs(): string[] {
+  const args = ['app-server'];
+
+  // Disable shell tool
+  args.push('-c', 'features.shell_tool=false');
+
+  // Configure YAAR MCP servers
+  for (const ns of CODEX_MCP_NAMESPACES) {
+    args.push(
+      '-c', `mcp_servers.${ns}.url=http://127.0.0.1:${PORT}/mcp/${ns}`,
+      '-c', `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
+    );
+  }
+
+  // Model behavior
+  args.push(
+    '-c', 'model_reasoning_effort = "medium"',
+    '-c', 'model_personality = "none"',
+    '-c', 'sandbox_mode = "danger-full-access"',
+    '-c', 'approval_policy = "never"',
+  );
+
+  return args;
 }

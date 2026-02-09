@@ -90,10 +90,21 @@ BUNDLED LIBRARIES - Available via @bundled/* imports (no npm install needed):
 • @bundled/anime - Animation library: anime({ targets, translateX, duration, easing })
 • @bundled/konva - 2D canvas graphics: Stage, Layer, Rect, Circle, Text, etc.
 
+STORAGE API - Available at runtime via window.yaar.storage (auto-injected, no import needed):
+• save(path, data) - Write file (string | Blob | ArrayBuffer | Uint8Array)
+• read(path, opts?) - Read file (opts.as: 'text'|'blob'|'arraybuffer'|'json'|'auto')
+• list(dirPath?) - List directory → [{path, isDirectory, size, modifiedAt}]
+• remove(path) - Delete file
+• url(path) - Get URL string for <a>/<img>/etc.
+Files are stored in the server's storage/ directory. Paths are relative (e.g., "myapp/data.json").
+
 Example:
   import { v4 as uuid } from '@bundled/uuid';
   import anime from '@bundled/anime';
-  import { format } from '@bundled/date-fns';`,
+  import { format } from '@bundled/date-fns';
+  // Storage (global, no import):
+  // await yaar.storage.save('scores.json', JSON.stringify(data));
+  // const data = await yaar.storage.read('scores.json', { as: 'json' });`,
       inputSchema: {
         path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
         content: z.string().describe('TypeScript source code'),

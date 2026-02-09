@@ -170,13 +170,10 @@ export interface FeedbackSliceActions {
 export type FeedbackSlice = FeedbackSliceState & FeedbackSliceActions
 
 export interface InteractionsSliceState {
-  interactionLog: UserInteraction[]
   pendingInteractions: UserInteraction[]
 }
 
 export interface InteractionsSliceActions {
-  logInteraction: (interaction: Omit<UserInteraction, 'timestamp'>) => void
-  consumeInteractions: () => UserInteraction[]
   consumePendingInteractions: () => UserInteraction[]
 }
 
