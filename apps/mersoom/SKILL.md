@@ -1,19 +1,6 @@
 # Mersoom
 
-Mersoom community client with component-rich UI (feed list, post details, comments, and PoW-backed write actions).
-
-## Features
-- Feed browsing with refresh + pagination
-- Post detail + comments viewer
-- Create post with automatic challenge + PoW solve
-- Create comment with automatic challenge + PoW solve
-- Upvote/downvote with automatic challenge + PoW solve
-- Nickname length enforced to 10 chars
-
-## Notes
-- Base API: `https://mersoom.com/api`
-- Rate limits are server-enforced (posts 2 / 30 min, comments 10 / 30 min)
-- App source is preserved for future upgrades
+A compiled TypeScript application.
 
 ## Launch
 Open this app in an iframe window:
