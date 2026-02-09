@@ -15,7 +15,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFile, writeFile, mkdir, cp, readdir, stat } from 'fs/promises';
+import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join, dirname, normalize, relative } from 'path';
 import { ok } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
@@ -42,15 +42,16 @@ function generateSandboxId(): string {
 }
 
 /**
- * Generate SKILL.md content for a deployed app.
+ * Generate the Launch section based on what the app has.
+ * - Compiled apps (index.html) → iframe create()
+ * - Component apps (.yaarcomponent.json) → create_component(jsonfile)
+ * - Both → shows both options
  */
-function generateSkillMd(appId: string, appName: string, componentFiles: string[] = []): string {
-  let md = `# ${appName}
+function generateLaunchSection(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = []): string {
+  const parts: string[] = ['## Launch'];
 
-A compiled TypeScript application.
-
-## Launch
-Open this app in an iframe window:
+  if (hasCompiledApp) {
+    parts.push(`Open this app in an iframe window:
 \`\`\`
 create({
   windowId: "${appId}",
@@ -58,20 +59,86 @@ create({
   renderer: "iframe",
   content: "/api/apps/${appId}/static/index.html"
 })
-\`\`\`
-`;
+\`\`\``);
+  }
 
   if (componentFiles.length > 0) {
-    md += `\n## UI Components\nPre-built component windows (use create_component with jsonfile):\n`;
     for (const f of componentFiles) {
-      md += `- \`create_component(jsonfile="${appId}/${f}", windowId="...", title="...")\`\n`;
+      const windowName = f.replace('.yaarcomponent.json', '');
+      parts.push(`\`create_component(jsonfile="${appId}/${f}", windowId="${appId}-${windowName}", title="${appName}")\``);
     }
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * Generate SKILL.md content for a deployed app.
+ * If customSkill is provided, uses it as the base and appends launch/source sections.
+ * Otherwise generates a default template.
+ */
+function generateSkillMd(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = [], customSkill?: string): string {
+  const launchSection = generateLaunchSection(appId, appName, hasCompiledApp, componentFiles);
+  let md: string;
+
+  if (customSkill) {
+    md = customSkill.trimEnd() + '\n\n' + launchSection + '\n';
+  } else {
+    md = `# ${appName}
+
+${hasCompiledApp ? 'A compiled TypeScript application.' : 'A component-based application.'}
+
+${launchSection}
+`;
   }
 
   md += `\n## Source
 Source code is available in \`src/\` directory. Use \`read_config\` with path \`src/main.ts\` to view.
 `;
   return md;
+}
+
+/**
+ * Regenerate SKILL.md for a deployed app, preserving custom content above ## Launch.
+ */
+async function regenerateSkillMd(appId: string, appPath: string): Promise<void> {
+  // Read existing SKILL.md to preserve custom content
+  let customContent: string | undefined;
+  try {
+    const existing = await readFile(join(appPath, 'SKILL.md'), 'utf-8');
+    // Extract everything before ## Launch
+    const launchIdx = existing.indexOf('## Launch');
+    if (launchIdx > 0) {
+      customContent = existing.slice(0, launchIdx).trimEnd();
+    }
+  } catch {
+    // No existing SKILL.md
+  }
+
+  // Detect what the app has
+  let hasCompiledApp = false;
+  try {
+    await stat(join(appPath, 'index.html'));
+    hasCompiledApp = true;
+  } catch { /* no compiled app */ }
+
+  const componentFiles: string[] = [];
+  try {
+    const files = await readdir(appPath);
+    for (const f of files) {
+      if (f.endsWith('.yaarcomponent.json')) componentFiles.push(f);
+    }
+  } catch { /* readdir failure */ }
+
+  // Read display name from app.json
+  let displayName = toDisplayName(appId);
+  try {
+    const meta = JSON.parse(await readFile(join(appPath, 'app.json'), 'utf-8'));
+    if (meta.name) displayName = meta.name;
+  } catch { /* no app.json */ }
+
+  const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, customContent);
+  await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 }
 
 /**
@@ -127,6 +194,11 @@ Example:
       // Validate path
       if (path.includes('..') || path.startsWith('/')) {
         return ok('Error: Invalid path. Use relative paths without ".." or leading "/".');
+      }
+
+      // Validate sandbox ID if provided (must be numeric timestamp)
+      if (providedId && !/^\d+$/.test(providedId)) {
+        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp (from clone or a previous write_ts call). Do not use app names as sandbox IDs.');
       }
 
       // Create or use existing sandbox
@@ -217,6 +289,7 @@ Example:
         name: z.string().optional().describe('Display name (defaults to title-cased appId)'),
         icon: z.string().optional().describe('Emoji icon (default: "🎮")'),
         keepSource: z.boolean().optional().describe('Include src/ in deployed app (default: true)'),
+        skill: z.string().optional().describe('Custom SKILL.md content. The ## Launch section with correct iframe URL will be auto-appended. Write app-specific instructions, usage guides, etc.'),
       },
     },
     async (args) => {
@@ -226,6 +299,7 @@ Example:
         name,
         icon = '🎮',
         keepSource = true,
+        skill,
       } = args;
 
       // Validate sandbox ID
@@ -248,22 +322,53 @@ Example:
         return ok(`Error: Sandbox "${sandboxId}" not found.`);
       }
 
-      // Check dist/index.html exists (must be compiled first)
+      // Check for compiled output (index.html) or component files
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
+      let hasCompiledApp = false;
       try {
         await stat(distIndexPath);
+        hasCompiledApp = true;
       } catch {
-        return ok('Error: No compiled output found. Run compile first.');
+        // No compiled output
+      }
+
+      // Scan for component files early to validate we have something to deploy
+      const componentFiles: string[] = [];
+      try {
+        const sandboxFiles = await readdir(sandboxPath);
+        for (const f of sandboxFiles) {
+          if (f.endsWith('.yaarcomponent.json')) {
+            componentFiles.push(f);
+          }
+        }
+      } catch {
+        // readdir failure is non-fatal
+      }
+
+      if (!hasCompiledApp && componentFiles.length === 0) {
+        return ok('Error: Nothing to deploy. Run compile first or create component files with compile_component.');
       }
 
       const displayName = name ?? toDisplayName(appId);
 
       try {
+        // Clean existing app content before deploying (remove stale files)
+        try {
+          await stat(appPath);
+          // Remove src/ and index.html so stale files don't linger
+          await rm(join(appPath, 'src'), { recursive: true, force: true });
+          await rm(join(appPath, 'index.html'), { force: true });
+        } catch {
+          // App doesn't exist yet, nothing to clean
+        }
+
         // Create app directory
         await mkdir(appPath, { recursive: true });
 
-        // Copy dist/index.html to app root
-        await cp(distIndexPath, join(appPath, 'index.html'));
+        // Copy dist/index.html to app root (if compiled)
+        if (hasCompiledApp) {
+          await cp(distIndexPath, join(appPath, 'index.html'));
+        }
 
         // Optionally copy source
         if (keepSource) {
@@ -276,22 +381,13 @@ Example:
           }
         }
 
-        // Copy .yaarcomponent.json files from sandbox root
-        const componentFiles: string[] = [];
-        try {
-          const sandboxFiles = await readdir(sandboxPath);
-          for (const f of sandboxFiles) {
-            if (f.endsWith('.yaarcomponent.json')) {
-              await cp(join(sandboxPath, f), join(appPath, f));
-              componentFiles.push(f);
-            }
-          }
-        } catch {
-          // readdir failure is non-fatal
+        // Copy .yaarcomponent.json files from sandbox to app
+        for (const f of componentFiles) {
+          await cp(join(sandboxPath, f), join(appPath, f));
         }
 
         // Generate SKILL.md
-        const skillContent = generateSkillMd(appId, displayName, componentFiles);
+        const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, skill);
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
@@ -320,7 +416,7 @@ Example:
     'clone',
     {
       description:
-        'Clone an existing deployed app\'s source into a new sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy to update the app.',
+        'Clone an existing deployed app\'s source into a sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy back to the SAME appId to update the app in-place.',
       inputSchema: {
         appId: z.string().describe('The app ID to clone (folder name in apps/)'),
       },
@@ -360,7 +456,7 @@ Example:
           sandboxId,
           appId,
           files: fileList,
-          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
+          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
         }, null, 2));
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
@@ -484,6 +580,68 @@ Example:
           sandboxId,
           filename,
           message: `Component file written to sandbox/${sandboxId}/${filename}. It will be deployed alongside the app.`,
+        }, null, 2));
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'Unknown error';
+        return ok(`Error: ${error}`);
+      }
+    }
+  );
+
+  // write_json - Write a JSON file directly to a deployed app
+  server.registerTool(
+    'write_json',
+    {
+      description:
+        'Write a JSON file directly to a deployed app directory. Use this for .yaarcomponent.json files or other JSON data. For .yaarcomponent.json files, content is validated against the component layout schema. Also regenerates SKILL.md to include the new component in the Launch section.',
+      inputSchema: {
+        appId: z.string().describe('The app ID (folder name in apps/)'),
+        filename: z.string().describe('Filename (e.g., "dashboard.yaarcomponent.json")'),
+        content: z.record(z.string(), z.unknown()).describe('JSON content to write'),
+      },
+    },
+    async (args) => {
+      const { appId, filename, content } = args;
+
+      // Validate app ID
+      if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
+        return ok('Error: Invalid app ID.');
+      }
+
+      // Validate filename
+      if (filename.includes('/') || filename.includes('..')) {
+        return ok('Error: Filename must not contain path separators.');
+      }
+
+      const appPath = join(APPS_DIR, appId);
+
+      // Check app exists
+      try {
+        await stat(appPath);
+      } catch {
+        return ok(`Error: App "${appId}" not found. Deploy it first.`);
+      }
+
+      // Validate against component schema if it's a component file
+      if (filename.endsWith('.yaarcomponent.json')) {
+        const result = componentLayoutSchema.safeParse(content);
+        if (!result.success) {
+          return ok(`Error: Invalid component layout: ${result.error.message}`);
+        }
+      }
+
+      try {
+        await writeFile(join(appPath, filename), JSON.stringify(content, null, 2), 'utf-8');
+
+        // Regenerate SKILL.md if a component file was added
+        if (filename.endsWith('.yaarcomponent.json')) {
+          await regenerateSkillMd(appId, appPath);
+        }
+
+        return ok(JSON.stringify({
+          appId,
+          filename,
+          message: `Written ${filename} to apps/${appId}/`,
         }, null, 2));
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';

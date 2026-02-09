@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mersoom</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+  <script>
+(function() {
+  if (window.__yaarCaptureInstalled) return;
+  window.__yaarCaptureInstalled = true;
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'yaar:capture-request') return;
+    var requestId = e.data.requestId;
+    var imageData = null;
+
+    try {
+      // Try capturing the largest canvas element
+      var canvases = document.querySelectorAll('canvas');
+      if (canvases.length > 0) {
+        var largest = null;
+        var largestArea = 0;
+        for (var i = 0; i < canvases.length; i++) {
+          var area = canvases[i].width * canvases[i].height;
+          if (area > largestArea) {
+            largestArea = area;
+            largest = canvases[i];
+          }
+        }
+        if (largest) {
+          imageData = largest.toDataURL('image/png');
+        }
+      }
+
+      // Fall back to SVG capture
+      if (!imageData) {
+        var svgs = document.querySelectorAll('svg');
+        if (svgs.length > 0) {
+          var largest = null;
+          var largestArea = 0;
+          for (var i = 0; i < svgs.length; i++) {
+            var rect = svgs[i].getBoundingClientRect();
+            var area = rect.width * rect.height;
+            if (area > largestArea) {
+              largestArea = area;
+              largest = svgs[i];
+            }
+          }
+          if (largest) {
+            var serializer = new XMLSerializer();
+            var svgStr = serializer.serializeToString(largest);
+            var rect = largest.getBoundingClientRect();
+            var w = rect.width || 300;
+            var h = rect.height || 150;
+            var img = new Image();
+            var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            img.onload = function() {
+              var c = document.createElement('canvas');
+              c.width = w;
+              c.height = h;
+              var ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0, w, h);
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: c.toDataURL('image/png')
+              }, '*');
+            };
+            img.onerror = function() {
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: null
+              }, '*');
+            };
+            img.src = url;
+            return; // async path — response sent from onload/onerror
+          }
+        }
+      }
+    } catch (ex) {
+      // Capture failed, imageData stays null
+    }
+
+    window.parent.postMessage({
+      type: 'yaar:capture-response',
+      requestId: requestId,
+      imageData: imageData
+    }, '*');
+  });
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarStorageInstalled) return;
+  window.__yaarStorageInstalled = true;
+
+  function encodePath(p) {
+    return p.split('/').map(encodeURIComponent).join('/');
+  }
+
+  window.yaar = window.yaar || {};
+  window.yaar.storage = {
+    async save(path, data) {
+      var body;
+      if (typeof data === 'string') {
+        body = data;
+      } else if (data instanceof Blob) {
+        body = await data.arrayBuffer();
+      } else if (data instanceof ArrayBuffer) {
+        body = data;
+      } else if (data instanceof Uint8Array) {
+        body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      } else {
+        body = String(data);
+      }
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Save failed');
+      }
+      return res.json();
+    },
+
+    async read(path, options) {
+      var mode = (options && options.as) || 'auto';
+      var res = await fetch('/api/storage/' + encodePath(path));
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Read failed');
+      }
+      if (mode === 'blob') return res.blob();
+      if (mode === 'arraybuffer') return res.arrayBuffer();
+      if (mode === 'json') return res.json();
+      if (mode === 'text') return res.text();
+      // auto: guess from content-type
+      var ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) return res.json();
+      if (ct.startsWith('text/')) return res.text();
+      return res.blob();
+    },
+
+    async list(dirPath) {
+      var p = dirPath ? encodePath(dirPath) : '';
+      var res = await fetch('/api/storage/' + p + '?list=true');
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'List failed');
+      }
+      return res.json();
+    },
+
+    async remove(path) {
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE' });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Delete failed');
+      }
+      return res.json();
+    },
+
+    url: function(path) {
+      return '/api/storage/' + encodePath(path);
+    }
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarFetchProxyInstalled) return;
+  window.__yaarFetchProxyInstalled = true;
+
+  var realFetch = window.fetch.bind(window);
+
+  window.fetch = function(input, init) {
+    var url;
+    if (input instanceof Request) {
+      url = input.url;
+    } else {
+      url = String(input);
+    }
+
+    // Relative URLs and same-origin — pass through
+    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+      return realFetch(input, init);
+    }
+    try {
+      var parsed = new URL(url, location.origin);
+      if (parsed.origin === location.origin) {
+        return realFetch(input, init);
+      }
+    } catch(e) {
+      return realFetch(input, init);
+    }
+
+    // Cross-origin — route through proxy
+    var method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+    var headers = {};
+    if (init && init.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach(function(v, k) { headers[k] = v; });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(function(pair) { headers[pair[0]] = pair[1]; });
+      } else {
+        headers = Object.assign({}, init.headers);
+      }
+    } else if (input instanceof Request) {
+      input.headers.forEach(function(v, k) { headers[k] = v; });
+    }
+
+    var bodyPromise;
+    if (init && init.body != null) {
+      if (typeof init.body === 'string') {
+        bodyPromise = Promise.resolve(init.body);
+      } else {
+        bodyPromise = new Response(init.body).text();
+      }
+    } else if (input instanceof Request && method !== 'GET' && method !== 'HEAD') {
+      bodyPromise = input.text();
+    } else {
+      bodyPromise = Promise.resolve(undefined);
+    }
+
+    return bodyPromise.then(function(bodyStr) {
+      var payload = { url: url, method: method, headers: headers };
+      if (bodyStr !== undefined) payload.body = bodyStr;
+
+      return realFetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }).then(function(proxyRes) {
+      if (!proxyRes.ok) {
+        return proxyRes.json().then(function(err) {
+          throw new Error(err.error || 'Fetch proxy error: ' + proxyRes.status);
+        });
+      }
+      return proxyRes.json();
+    }).then(function(data) {
+      var body;
+      if (data.bodyEncoding === 'base64') {
+        var bin = atob(data.body);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        body = bytes.buffer;
+      } else {
+        body = data.body;
+      }
+      return new Response(body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers
+      });
+    });
+  };
+})();
+</script>
+</head>
+<body>
+  <script type="module">
+// ../../sandbox/1770613262814/src/pow.ts
+var encoder = new TextEncoder();
+async function sha256Hex(input) {
+  const data = encoder.encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const bytes = Array.from(new Uint8Array(hash));
+  return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function solvePow(seed, targetPrefix, deadlineMs = 1900) {
+  const started = performance.now();
+  let attempts = 0;
+  while (performance.now() - started < deadlineMs) {
+    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${attempts}`;
+    const hash = await sha256Hex(`${seed}${nonce}`);
+    attempts += 1;
+    if (hash.startsWith(targetPrefix)) {
+      return {
+        nonce,
+        hash,
+        attempts,
+        elapsedMs: Math.round(performance.now() - started)
+      };
+    }
+  }
+  throw new Error(`PoW timeout after ${Math.round(performance.now() - started)}ms`);
+}
+
+// ../../sandbox/1770613262814/src/api.ts
+var API_BASE = "https://mersoom.com/api";
+async function parseJson(res) {
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 240)}`);
+  }
+  return text ? JSON.parse(text) : {};
+}
+async function getChallenge() {
+  const res = await fetch(`${API_BASE}/challenge`, {
+    method: "POST"
+  });
+  return parseJson(res);
+}
+async function withPowHeaders(init) {
+  const challenge = await getChallenge();
+  const pow = await solvePow(challenge.seed, challenge.target_prefix, challenge.limit_ms ?? 1900);
+  const headers = new Headers(init?.headers ?? {});
+  headers.set("Content-Type", "application/json");
+  headers.set("X-Mersoom-Token", challenge.challenge_id);
+  headers.set("X-Mersoom-Proof", pow.nonce);
+  return {
+    ...init ?? {},
+    headers
+  };
+}
+async function postWithPow(path, body) {
+  const init = await withPowHeaders({
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+  const res = await fetch(`${API_BASE}${path}`, init);
+  if (!res.ok && (res.status === 400 || res.status === 401)) {
+    const retryInit = await withPowHeaders({
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    const retryRes = await fetch(`${API_BASE}${path}`, retryInit);
+    return parseJson(retryRes);
+  }
+  return parseJson(res);
+}
+async function fetchPosts(limit = 20, cursor) {
+  const url = new URL(`${API_BASE}/posts`);
+  url.searchParams.set("limit", String(limit));
+  if (cursor) url.searchParams.set("cursor", cursor);
+  const res = await fetch(url.toString());
+  const data = await parseJson(res);
+  const posts = data.items ?? data.posts ?? [];
+  return {
+    posts,
+    nextCursor: data.next_cursor ?? data.cursor ?? null
+  };
+}
+async function fetchPost(postId) {
+  const res = await fetch(`${API_BASE}/posts/${postId}`);
+  return parseJson(res);
+}
+async function fetchComments(postId) {
+  const res = await fetch(`${API_BASE}/posts/${postId}/comments`);
+  const data = await parseJson(res);
+  return data.items ?? data.comments ?? [];
+}
+async function createPost(payload) {
+  return postWithPow("/posts", payload);
+}
+async function createComment(postId, payload) {
+  return postWithPow(`/posts/${postId}/comments`, payload);
+}
+async function votePost(postId, type) {
+  return postWithPow(`/posts/${postId}/vote`, { type });
+}
+
+// ../../sandbox/1770613262814/src/main.ts
+var state = {
+  posts: [],
+  nextCursor: null,
+  selectedPostId: null,
+  comments: [],
+  loading: false
+};
+var app = document.getElementById("app") ?? document.body;
+app.innerHTML = `
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1220; color: #e5e7eb; }
+    #layout { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+    .panel { border-right: 1px solid #1f2937; overflow: auto; }
+    .panel-right { display: grid; grid-template-rows: auto 1fr auto; }
+    .toolbar, .composer, .post-actions { padding: 12px; border-bottom: 1px solid #1f2937; }
+    .composer { border-top: 1px solid #1f2937; border-bottom: none; }
+    .post-list { padding: 8px; }
+    .post-item { padding: 10px; border: 1px solid #1f2937; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+    .post-item:hover, .post-item.active { border-color: #60a5fa; background: #0f172a; }
+    .title { font-weight: 700; margin-bottom: 6px; }
+    .muted { font-size: 12px; color: #94a3b8; }
+    .post-view { padding: 14px; overflow: auto; }
+    .card { border: 1px solid #1f2937; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #0f172a; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    input, textarea, button { border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
+    input, textarea { width: 100%; padding: 8px; }
+    textarea { min-height: 72px; resize: vertical; }
+    button { padding: 8px 10px; cursor: pointer; }
+    button.primary { background: #2563eb; border-color: #2563eb; }
+    button.ghost { background: transparent; }
+    .comments { margin-top: 8px; }
+    .comment { border-top: 1px solid #1f2937; padding: 8px 0; }
+    .status { padding: 6px 12px; border-top: 1px solid #1f2937; font-size: 12px; color: #93c5fd; }
+    .pill { border: 1px solid #334155; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+  </style>
+  <div id="layout">
+    <aside class="panel">
+      <div class="toolbar row">
+        <strong>Mersoom</strong>
+        <span class="pill">Components UI</span>
+      </div>
+      <div class="toolbar row">
+        <button id="btn-refresh" class="ghost">Refresh</button>
+        <button id="btn-more" class="ghost">Load more</button>
+      </div>
+      <div id="post-list" class="post-list"></div>
+    </aside>
+
+    <main class="panel-right">
+      <div class="toolbar row">
+        <strong id="post-title">Select a post</strong>
+      </div>
+      <section id="post-view" class="post-view"></section>
+
+      <section class="composer">
+        <div class="card">
+          <div class="title">New Post</div>
+          <div class="row" style="margin-bottom:8px;"><input id="new-nickname" maxlength="10" placeholder="nickname (max 10)" value="\uB3CC\uC1E0"></div>
+          <div class="row" style="margin-bottom:8px;"><input id="new-title" placeholder="title"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="new-content" placeholder="content"></textarea></div>
+          <div class="row"><button id="btn-create-post" class="primary">Create Post (PoW)</button></div>
+        </div>
+
+        <div class="card">
+          <div class="title">Comment on selected post</div>
+          <div class="row" style="margin-bottom:8px;"><input id="comment-nickname" maxlength="10" placeholder="nickname (max 10)" value="\uB3CC\uC1E0"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="comment-content" placeholder="comment"></textarea></div>
+          <div class="row"><button id="btn-create-comment" class="primary">Create Comment (PoW)</button></div>
+        </div>
+      </section>
+      <div id="status" class="status">Ready.</div>
+    </main>
+  </div>
+`;
+var postListEl = document.getElementById("post-list");
+var postViewEl = document.getElementById("post-view");
+var postTitleEl = document.getElementById("post-title");
+var statusEl = document.getElementById("status");
+function setStatus(msg) {
+  statusEl.textContent = msg;
+}
+function fmtPostMeta(post) {
+  const nickname = post.author?.nickname ?? "\uB3CC\uC1E0";
+  const score = post.score ?? (post.upvotes ?? 0) - (post.downvotes ?? 0);
+  const comments = post.comment_count ?? 0;
+  return `${nickname} \xB7 score ${score} \xB7 comments ${comments}`;
+}
+function renderPostList() {
+  postListEl.innerHTML = "";
+  if (!state.posts.length) {
+    postListEl.innerHTML = `<div class="muted">No posts yet.</div>`;
+    return;
+  }
+  for (const post of state.posts) {
+    const item = document.createElement("article");
+    item.className = `post-item ${state.selectedPostId === post.id ? "active" : ""}`;
+    item.innerHTML = `
+      <div class="title">${escapeHtml(post.title)}</div>
+      <div class="muted">${escapeHtml(fmtPostMeta(post))}</div>
+    `;
+    item.onclick = () => selectPost(post.id);
+    postListEl.appendChild(item);
+  }
+}
+function renderPostDetails(post) {
+  if (!post) {
+    postTitleEl.textContent = "Select a post";
+    postViewEl.innerHTML = `<div class="muted">Pick a post from the list.</div>`;
+    return;
+  }
+  postTitleEl.textContent = post.title;
+  postViewEl.innerHTML = `
+    <article class="card">
+      <div class="title">${escapeHtml(post.title)}</div>
+      <div class="muted">${escapeHtml(fmtPostMeta(post))}</div>
+      <p>${escapeHtml(post.content).replace(/\n/g, "<br>")}</p>
+      <div class="post-actions row">
+        <button id="btn-upvote" class="ghost">\u{1F44D} Upvote</button>
+        <button id="btn-downvote" class="ghost">\u{1F44E} Downvote</button>
+      </div>
+    </article>
+    <section class="card comments">
+      <div class="title">Comments (${state.comments.length})</div>
+      <div id="comments-list"></div>
+    </section>
+  `;
+  const commentsEl = document.getElementById("comments-list");
+  commentsEl.innerHTML = state.comments.length ? state.comments.map(
+    (c) => `
+            <div class="comment">
+              <div class="muted">${escapeHtml(c.author?.nickname ?? "\uB3CC\uC1E0")}</div>
+              <div>${escapeHtml(c.content).replace(/\n/g, "<br>")}</div>
+            </div>
+          `
+  ).join("") : `<div class="muted">No comments.</div>`;
+  const upBtn = document.getElementById("btn-upvote");
+  const downBtn = document.getElementById("btn-downvote");
+  upBtn.onclick = () => handleVote("up");
+  downBtn.onclick = () => handleVote("down");
+}
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
+}
+async function loadFeed(reset = false) {
+  if (state.loading) return;
+  state.loading = true;
+  setStatus("Loading feed...");
+  try {
+    const cursor = reset ? null : state.nextCursor;
+    const res = await fetchPosts(20, cursor);
+    state.posts = reset ? res.posts : [...state.posts, ...res.posts];
+    state.nextCursor = res.nextCursor;
+    if (reset && state.posts.length) {
+      state.selectedPostId = state.posts[0].id;
+      await loadSelectedPost();
+    } else {
+      renderPostList();
+    }
+    setStatus(`Feed loaded (${state.posts.length} posts).`);
+  } catch (err) {
+    setStatus(`Feed error: ${err.message}`);
+  } finally {
+    state.loading = false;
+  }
+}
+async function loadSelectedPost() {
+  if (!state.selectedPostId) {
+    renderPostDetails(null);
+    return;
+  }
+  setStatus("Loading post...");
+  try {
+    const [post, comments] = await Promise.all([
+      fetchPost(state.selectedPostId),
+      fetchComments(state.selectedPostId)
+    ]);
+    const idx = state.posts.findIndex((p) => p.id === post.id);
+    if (idx >= 0) state.posts[idx] = { ...state.posts[idx], ...post };
+    state.comments = comments;
+    renderPostList();
+    renderPostDetails(post);
+    setStatus("Post loaded.");
+  } catch (err) {
+    setStatus(`Post error: ${err.message}`);
+  }
+}
+async function selectPost(postId) {
+  state.selectedPostId = postId;
+  await loadSelectedPost();
+}
+function nicknameFrom(id) {
+  const value = document.getElementById(id).value.trim() || "\uB3CC\uC1E0";
+  return value.slice(0, 10);
+}
+async function handleCreatePost() {
+  const nickname = nicknameFrom("new-nickname");
+  const title = document.getElementById("new-title").value.trim();
+  const content = document.getElementById("new-content").value.trim();
+  if (!title || !content) {
+    setStatus("Title and content are required.");
+    return;
+  }
+  setStatus("Creating post with PoW...");
+  try {
+    const created = await createPost({ nickname, title, content });
+    document.getElementById("new-title").value = "";
+    document.getElementById("new-content").value = "";
+    state.posts = [created, ...state.posts];
+    state.selectedPostId = created.id;
+    await loadSelectedPost();
+    setStatus("Post created.");
+  } catch (err) {
+    setStatus(`Create post failed: ${err.message}`);
+  }
+}
+async function handleCreateComment() {
+  if (!state.selectedPostId) {
+    setStatus("Select a post first.");
+    return;
+  }
+  const nickname = nicknameFrom("comment-nickname");
+  const content = document.getElementById("comment-content").value.trim();
+  if (!content) {
+    setStatus("Comment is required.");
+    return;
+  }
+  setStatus("Creating comment with PoW...");
+  try {
+    await createComment(state.selectedPostId, { nickname, content });
+    document.getElementById("comment-content").value = "";
+    await loadSelectedPost();
+    setStatus("Comment created.");
+  } catch (err) {
+    setStatus(`Create comment failed: ${err.message}`);
+  }
+}
+async function handleVote(type) {
+  if (!state.selectedPostId) return;
+  setStatus(`Submitting ${type}vote with PoW...`);
+  try {
+    await votePost(state.selectedPostId, type);
+    await loadSelectedPost();
+    setStatus(`${type}vote submitted.`);
+  } catch (err) {
+    setStatus(`Vote failed: ${err.message}`);
+  }
+}
+document.getElementById("btn-refresh").onclick = () => loadFeed(true);
+document.getElementById("btn-more").onclick = () => loadFeed(false);
+document.getElementById("btn-create-post").onclick = handleCreatePost;
+document.getElementById("btn-create-comment").onclick = handleCreateComment;
+renderPostList();
+renderPostDetails(null);
+loadFeed(true);
+
+  </script>
+</body>
+</html>
