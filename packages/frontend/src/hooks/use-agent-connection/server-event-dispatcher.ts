@@ -35,12 +35,10 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
   switch (message.type) {
     case 'ACTIONS': {
       const monitorId = (message as { monitorId?: string }).monitorId
-      if (monitorId) {
-        for (const action of message.actions) {
-          (action as { monitorId?: string }).monitorId = monitorId
-        }
-      }
-      handlers.applyActions(message.actions)
+      const actions = monitorId
+        ? message.actions.map(action => ({ ...action, monitorId }))
+        : message.actions
+      handlers.applyActions(actions)
       // Summarize actions for CLI
       const summary = message.actions.map(a => {
         if (a.type === 'window.create') return `Created window: ${(a as { title?: string }).title ?? a.windowId}`

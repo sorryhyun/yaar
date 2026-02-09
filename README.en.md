@@ -35,33 +35,20 @@ No pre-built screens. Just an **always-ready input field**. The AI creates windo
 
 ### 1. AI Interprets and Renders
 
-The AI doesn't just respond with text — it **creates the UI**. Ask for a task list, and a window appears with checkboxes. Ask to compare data, and a table renders. The interface adapts to your intent.
+The AI doesn't just respond with text — it **creates the UI**. Ask for a task list, and a window appears with checkboxes. Ask to compare data, and a table renders. You can also `Alt + Left-click drag` anywhere to sketch — the AI interprets your drawing to generate code or refine the design.
 
 ```
 You: "Show me today's tasks"
  AI: Creates window with interactive task list
-You: "Compare these two files"
- AI: Creates side-by-side diff view
+You: (wireframe sketch)
+ AI: Interprets sketch and creates actual UI
 ```
 
-### 2. Draw and Send
+### 2. Smart Context
 
-`Alt + Left-click drag` anywhere on screen to sketch. Draw a wireframe, diagram, or quick note — send it to the AI and it interprets your drawing to generate code, explain concepts, or refine the design.
+The AI automatically picks up relevant context based on what you're doing. Click an app icon and it loads that app's skill; interact with a window and it receives the interaction context; previous results are retained in conversation history. When window content needs refreshing, a fingerprint-based cache restores it instantly without re-querying the AI.
 
-### 3. Reload (Fast Response)
-
-When window content needs to be refreshed, cached content is restored instantly without re-querying the AI. A fingerprint-based cache ensures identical content is displayed immediately without additional AI calls.
-
-### 4. Dynamic Context Injection
-
-Context is injected based on what you're doing:
-- Click an app icon → AI loads the app's `SKILL.md` instructions
-- Interact with a window → AI receives the interaction context
-- Reference previous results → AI has conversation history
-
-The AI always knows what's relevant without you having to explain.
-
-### 5. App Development
+### 3. App Development
 
 Say "make me a Tetris game" and the AI writes TypeScript, compiles it with esbuild, and deploys it to your desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox.
 
@@ -69,48 +56,11 @@ For API-driven apps, describe the API in a `SKILL.md` file and the AI handles th
 
 See the [App Development Guide](./docs/app-development.md#english) for details.
 
-## Session, Monitor, and Window
+### 4. Parallel Monitors and Windows
 
-YAAR's runtime is organized into three nested abstractions.
+Work on multiple tasks simultaneously. **Monitors** (`Ctrl+1`–`Ctrl+9`) are independent workspaces — run a long task on Monitor 1 while continuing a different conversation on Monitor 0. Each **window** has its own agent, so requests to different windows are processed in parallel. When the main agent is busy, ephemeral agents are automatically spawned for new messages.
 
-```
-Session
-├── Monitor 0 ("Desktop 1")
-│   ├── Main Agent (sequential, overflows to ephemeral agents when busy)
-│   ├── Window A ─── Window Agent (parallel)
-│   ├── Window B ─── Window Agent (parallel)
-│   └── CLI history
-├── Monitor 1 ("Desktop 2")
-│   ├── Main Agent (independent, same overflow model)
-│   ├── Window C ─── Window Agent (parallel)
-│   └── CLI history
-└── Event log (messages.jsonl)
-```
-
-### Session — Persistence Beyond Connections
-
-A **session** is the top-level container for an entire conversation. It owns all state — agents, windows, context history. Sessions survive browser tab closures; reconnect with `?sessionId=X` to restore the previous state. Multiple tabs can share the same session.
-
-### Monitor — Independent Parallel Workspaces
-
-A **monitor** is a virtual desktop within a session (up to 4). Each monitor has its own main agent and message queue, operating completely independently. Run a long task on Monitor 1 while continuing work on Monitor 0. Switch with `Ctrl+1`–`Ctrl+9`.
-
-When the main agent is busy and a new message arrives, an **ephemeral agent** is spawned to handle it in parallel. Ephemeral agents are automatically disposed after completing their task.
-
-### Window — AI-Created Interactive UI
-
-A **window** is a UI surface created by the AI via OS Actions. Each window can have a dedicated **window agent** that runs **in parallel** with the main agent and other window agents. Only requests to the same window are serialized.
-
-### Parallelism Summary
-
-| Scope | Execution | Description |
-|-------|-----------|-------------|
-| Across monitors | **Parallel** | Each monitor's main agent runs independently |
-| Monitor main queue | **Sequential + overflow** | Sequential by default; ephemeral agents handle overflow in parallel |
-| Window agents | **Parallel** | Agents for different windows run concurrently |
-| Within a window | **Sequential** | Tasks for one window are serialized |
-
-See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+Sessions persist even after closing the browser tab; reconnect with `?sessionId=X` to restore state. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
 
 ## Quick Start
 

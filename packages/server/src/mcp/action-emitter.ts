@@ -19,6 +19,7 @@ export interface ActionEvent {
   requestId?: string;
   sessionId?: string;
   agentId?: string;
+  monitorId?: string;
 }
 
 /**
@@ -68,6 +69,22 @@ class ActionEmitter extends EventEmitter {
   private pendingRequests = new Map<string, PendingRequest>();
   private pendingDialogs = new Map<string, PendingDialog>();
   private requestCounter = 0;
+  private currentMonitorId: string | undefined;
+
+  /**
+   * Set the current monitor ID for action stamping.
+   * Called before a provider turn so emitted actions carry the correct monitor.
+   */
+  setCurrentMonitor(id: string): void {
+    this.currentMonitorId = id;
+  }
+
+  /**
+   * Clear the current monitor ID after a provider turn completes.
+   */
+  clearCurrentMonitor(): void {
+    this.currentMonitorId = undefined;
+  }
 
   /**
    * Generate a unique request ID.
@@ -81,7 +98,7 @@ class ActionEmitter extends EventEmitter {
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
     const currentAgentId = agentId ?? getAgentId();
-    this.emit('action', { action, sessionId, agentId: currentAgentId } as ActionEvent);
+    this.emit('action', { action, sessionId, agentId: currentAgentId, monitorId: this.currentMonitorId } as ActionEvent);
   }
 
   /**
@@ -109,8 +126,8 @@ class ActionEmitter extends EventEmitter {
       this.pendingRequests.set(requestId, { resolve, timeoutId });
     });
 
-    // Emit action with request ID and agentId from context
-    this.emit('action', { action: actionWithAgent, requestId, sessionId, agentId } as ActionEvent);
+    // Emit action with request ID, agentId from context, and monitorId
+    this.emit('action', { action: actionWithAgent, requestId, sessionId, agentId, monitorId: this.currentMonitorId } as ActionEvent);
 
     return feedbackPromise;
   }

@@ -22,6 +22,11 @@ export class ToolActionBridge {
       return;
     }
 
+    // Filter by monitorId: if both the event and this bridge have a monitorId, they must match
+    if (event.monitorId && this.state.monitorId && event.monitorId !== this.state.monitorId) {
+      return;
+    }
+
     this.recordAction(event.action);
 
     const uiAgentId = this.state.currentRole ?? 'default';
@@ -31,7 +36,8 @@ export class ToolActionBridge {
       agentId: uiAgentId,
     };
 
-    const monitorId = this.state.monitorId;
+    // Prefer the event's monitorId (from action emitter) over the bridge's state
+    const monitorId = event.monitorId ?? this.state.monitorId;
 
     // Route permission dialogs through APPROVAL_REQUEST instead of ACTIONS
     if (action.type === 'dialog.confirm' && (action as DialogConfirmAction).permissionOptions) {

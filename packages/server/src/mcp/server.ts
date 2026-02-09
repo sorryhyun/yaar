@@ -10,6 +10,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { registerAllTools } from './register.js';
+import { runWithAgentId } from '../agents/session.js';
 
 /** The 4 MCP server categories. */
 export const MCP_SERVERS = ['system', 'window', 'storage', 'apps'] as const;
@@ -111,5 +112,12 @@ export async function handleMcpRequest(
   }
 
   console.log(`[MCP] ${req.method} ${req.url}`);
-  await entry.transport.handleRequest(req, res);
+
+  // Restore agent context from X-Agent-Id header (set by Claude provider)
+  const agentId = req.headers['x-agent-id'];
+  if (typeof agentId === 'string') {
+    await runWithAgentId(agentId, () => entry.transport.handleRequest(req, res));
+  } else {
+    await entry.transport.handleRequest(req, res);
+  }
 }

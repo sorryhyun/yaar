@@ -50,6 +50,8 @@ export interface TransportOptions {
   forkSession?: boolean; // When true with sessionId, creates a fork instead of continuing
   resumeThread?: boolean; // When true with sessionId, resume via thread/resume
   images?: string[]; // Base64 data URLs for images (e.g., user drawings)
+  monitorId?: string; // Which monitor originated this query (for action routing)
+  agentId?: string; // Agent instance ID (for MCP header-based routing)
 }
 
 /**

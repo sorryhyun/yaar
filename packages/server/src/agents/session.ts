@@ -65,6 +65,23 @@ export function getSessionId(): SessionId | undefined {
   return agentContext.getStore()?.sessionId;
 }
 
+/**
+ * Run a function within a specific agent context.
+ * Used to restore agent identity from HTTP headers (e.g., X-Agent-Id in MCP requests).
+ */
+export function runWithAgentId<T>(agentId: string, fn: () => T): T {
+  // Preserve existing connectionId/sessionId if available, otherwise use placeholders
+  const existing = agentContext.getStore();
+  return agentContext.run(
+    {
+      agentId,
+      connectionId: existing?.connectionId ?? ('' as ConnectionId),
+      sessionId: existing?.sessionId ?? ('' as SessionId),
+    },
+    fn,
+  );
+}
+
 async function loadMemory(): Promise<string> {
   const result = await configRead('memory.md');
   if (!result.success || !result.content?.trim()) {
@@ -255,6 +272,8 @@ export class AgentSession {
         forkSession: options.forkSession,
         resumeThread,
         images: images.length > 0 ? images : undefined,
+        monitorId: options.monitorId,
+        agentId: stableAgentId,
       };
       this.hasSentFirstMessage = true;
 

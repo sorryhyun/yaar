@@ -353,6 +353,7 @@ export class ContextPool {
         source: 'main',
         interactions: task.interactions,
         messageId: task.messageId,
+        monitorId,
         onContextMessage: (role, content) => {
           if (role === 'assistant') {
             this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');

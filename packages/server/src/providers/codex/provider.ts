@@ -17,6 +17,7 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import type { AppServer } from './app-server.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 
 /**
  * Session state for a thread.
@@ -116,6 +117,11 @@ export class CodexProvider extends BaseTransport {
       // Acquire turn lock (only one turn at a time per app-server)
       await appServer.acquireTurn();
 
+      // Stamp monitorId so actions emitted during this turn carry the originating monitor
+      if (options.monitorId) {
+        actionEmitter.setCurrentMonitor(options.monitorId);
+      }
+
       // pendingMessages is local per-query to avoid cross-talk.
       // resolveMessage uses the instance field so interrupt() can signal it.
       const pendingMessages: StreamMessage[] = [];
@@ -194,6 +200,7 @@ export class CodexProvider extends BaseTransport {
         }
       } finally {
         appServer.off('notification', notificationHandler);
+        actionEmitter.clearCurrentMonitor();
         appServer.releaseTurn();
       }
     } catch (err) {

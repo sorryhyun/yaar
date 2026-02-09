@@ -3,6 +3,8 @@
   50% { opacity: 0; }
 }
 
+/* ---- Grid container ---- */
+
 .cliPanel {
   position: fixed;
   top: 0;
@@ -14,27 +16,80 @@
   font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.5;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   z-index: var(--z-panel);
+  gap: 1px;
 }
 
-.cliHeader {
+.grid1 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.grid2 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+.grid4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* ---- Pane ---- */
+
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #333;
+  cursor: pointer;
+}
+
+.pane[data-focused="true"] {
+  border-color: #22c55e;
+}
+
+/* ---- Pane badge ---- */
+
+.paneBadge {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  color: #555;
+  font-weight: 700;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pane[data-focused="true"] .paneBadge {
+  color: #22c55e;
+}
+
+/* ---- Pane header ---- */
+
+.paneHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 4px 12px 4px 24px;
   background: #151515;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #252525;
   flex-shrink: 0;
 }
 
-.cliTitle {
-  color: #888;
-  font-size: 12px;
+.paneLabel {
+  color: #666;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.pane[data-focused="true"] .paneLabel {
+  color: #888;
 }
 
 .cliClearButton {
@@ -52,6 +107,8 @@
   background: #333;
   color: #ccc;
 }
+
+/* ---- Scrollable body ---- */
 
 .cliBody {
   flex: 1;
@@ -72,6 +129,8 @@
   background: #333;
   border-radius: 3px;
 }
+
+/* ---- Entries ---- */
 
 .entry {
   padding: 1px 0;

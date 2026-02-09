@@ -103,7 +103,14 @@ export class ClaudeSessionProvider extends BaseTransport {
   /**
    * Get SDK options for queries.
    */
-  private getSDKOptions(resumeSession?: string, systemPrompt?: string): SDKOptions {
+  private getSDKOptions(resumeSession?: string, systemPrompt?: string, agentId?: string): SDKOptions {
+    const mcpHeaders: Record<string, string> = {
+      Authorization: `Bearer ${getMcpToken()}`,
+    };
+    if (agentId) {
+      mcpHeaders['X-Agent-Id'] = agentId;
+    }
+
     return {
       abortController: this.createAbortController(),
       systemPrompt: systemPrompt ?? this.systemPrompt,
@@ -119,9 +126,7 @@ export class ClaudeSessionProvider extends BaseTransport {
           {
             type: 'http' as const,
             url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
-            headers: {
-              Authorization: `Bearer ${getMcpToken()}`,
-            },
+            headers: mcpHeaders,
           },
         ])
       ),
@@ -266,7 +271,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       })();
     }
 
-    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt);
+    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt, options.agentId);
 
     // Override model if specified
     if (options.model) {
