@@ -1,14 +1,16 @@
 /**
- * WebSocket server factory with explicit options param.
+ * WebSocket server factory with LiveSession join protocol.
+ *
+ * Multiple WebSocket connections can join the same LiveSession.
+ * New connections receive a snapshot of current window state.
  */
 
 import type { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { SessionManager } from '../agents/index.js';
-import { windowStateRegistryManager } from '../mcp/window-state.js';
+import { getSessionHub, type LiveSessionOptions } from '../session/live-session.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from './broadcast-center.js';
-import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
+import type { ClientEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 
 export interface WebSocketServerOptions {
@@ -23,88 +25,65 @@ export function createWebSocketServer(
 ): WebSocketServer {
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  wss.on('connection', async (ws: WebSocket) => {
+  wss.on('connection', async (ws: WebSocket, req) => {
     const connectionId = generateConnectionId();
     const broadcastCenter = getBroadcastCenter();
 
-    console.log(`WebSocket client connected: ${connectionId}`);
+    // Parse requested session ID from query params (for reconnection)
+    const url = new URL(req.url!, `http://${req.headers.host}`);
+    const requestedSessionId = url.searchParams.get('sessionId');
 
-    // Register connection with broadcast center
-    broadcastCenter.subscribe(connectionId, ws);
+    // Get or create session
+    const hub = getSessionHub();
+    const sessionOptions: LiveSessionOptions = {
+      restoreActions: options.restoreActions,
+      contextMessages: options.contextMessages,
+      savedThreadIds: options.savedThreadIds,
+    };
+    const session = hub.getOrCreate(requestedSessionId, sessionOptions);
 
-    const manager = new SessionManager(connectionId, options.contextMessages, options.savedThreadIds);
+    // Register connection with session and broadcast center
+    session.addConnection(connectionId, ws);
+    broadcastCenter.subscribe(connectionId, ws, session.sessionId);
 
-    const windowState = windowStateRegistryManager.get(connectionId);
-    if (options.restoreActions.length > 0) {
-      windowState.restoreFromActions(options.restoreActions);
+    console.log(`WebSocket client connected: ${connectionId} → session ${session.sessionId}`);
+
+    // Send connection status to this connection only
+    session.sendTo(connectionId, {
+      type: 'CONNECTION_STATUS',
+      status: 'connected',
+      provider: getWarmPool().getPreferredProvider() ?? 'claude',
+      sessionId: session.sessionId,
+    });
+
+    // Send snapshot of current windows to new connection
+    const snapshotActions = session.generateSnapshot();
+    if (snapshotActions.length > 0) {
+      session.sendTo(connectionId, { type: 'ACTIONS', actions: snapshotActions });
     }
 
-
-    // Track initialization state and queue early messages
-    let initialized = false;
-    const earlyMessageQueue: ClientEvent[] = [];
-
-    // Register message handler IMMEDIATELY to capture any early messages
+    // Message handler
     ws.on('message', async (data) => {
       try {
         const event = JSON.parse(data.toString()) as ClientEvent;
-
-        if (!initialized) {
-          console.log('Queuing early message:', event.type);
-          earlyMessageQueue.push(event);
-          return;
-        }
-
-        await manager.routeMessage(event);
+        await session.routeMessage(event, connectionId);
       } catch (err) {
         console.error('Failed to process message:', err);
       }
     });
 
-    // Handle close
-    ws.on('close', async () => {
+    // Handle close - session persists for other connections!
+    ws.on('close', () => {
       console.log(`WebSocket client disconnected: ${connectionId}`);
-      await manager.cleanup();
+      session.removeConnection(connectionId);
       broadcastCenter.unsubscribe(connectionId);
+      // Session stays alive for other connections
     });
 
     // Handle errors
     ws.on('error', (err) => {
       console.error('WebSocket error:', err);
     });
-
-    // Mark as initialized immediately — pool initialization is lazy (on first message)
-    initialized = true;
-
-    await manager.initialize();
-
-    // Send ready status
-    const readyEvent: ServerEvent = {
-      type: 'CONNECTION_STATUS',
-      status: 'connected',
-      provider: getWarmPool().getPreferredProvider() ?? 'claude',
-    };
-    ws.send(JSON.stringify(readyEvent));
-
-    // Send restored window state from previous session
-    if (options.restoreActions.length > 0) {
-      const restoreEvent: ServerEvent = {
-        type: 'ACTIONS',
-        actions: options.restoreActions,
-      };
-      ws.send(JSON.stringify(restoreEvent));
-    }
-
-    if (earlyMessageQueue.length > 0) {
-      console.log(`Processing ${earlyMessageQueue.length} queued message(s)`);
-      for (const event of earlyMessageQueue) {
-        try {
-          await manager.routeMessage(event);
-        } catch (err) {
-          console.error('Failed to process queued message:', err);
-        }
-      }
-    }
   });
 
   return wss;

@@ -5,22 +5,29 @@
  * - Agents to send events without holding WebSocket references
  * - Connection lifecycle management separate from agent lifecycle
  * - Centralized event routing and logging
+ * - Session-aware broadcasting to all connections in a session
  */
 
 import type { WebSocket } from 'ws';
 import type { ServerEvent } from '@yaar/shared';
+import type { SessionId } from '../session/types.js';
 
 export type ConnectionId = string;
 
+interface ConnectionEntry {
+  ws: WebSocket;
+  sessionId: SessionId;
+}
+
 export class BroadcastCenter {
-  private connections: Map<ConnectionId, WebSocket> = new Map();
+  private connections: Map<ConnectionId, ConnectionEntry> = new Map();
 
   /**
-   * Register a WebSocket connection.
+   * Register a WebSocket connection with its session.
    */
-  subscribe(connectionId: ConnectionId, ws: WebSocket): void {
-    this.connections.set(connectionId, ws);
-    console.log(`[BroadcastCenter] Connection subscribed: ${connectionId}`);
+  subscribe(connectionId: ConnectionId, ws: WebSocket, sessionId: SessionId): void {
+    this.connections.set(connectionId, { ws, sessionId });
+    console.log(`[BroadcastCenter] Connection subscribed: ${connectionId} (session: ${sessionId})`);
   }
 
   /**
@@ -35,23 +42,23 @@ export class BroadcastCenter {
    * Check if a connection is still active.
    */
   isConnectionActive(connectionId: ConnectionId): boolean {
-    const ws = this.connections.get(connectionId);
-    return ws !== undefined && ws.readyState === ws.OPEN;
+    const entry = this.connections.get(connectionId);
+    return entry !== undefined && entry.ws.readyState === entry.ws.OPEN;
   }
 
   /**
-   * Publish an event directly to a connection.
+   * Publish an event directly to a single connection.
    * Returns true if the event was sent successfully.
    */
   publishToConnection(event: ServerEvent, connectionId: ConnectionId): boolean {
-    const ws = this.connections.get(connectionId);
-    if (!ws || ws.readyState !== ws.OPEN) {
+    const entry = this.connections.get(connectionId);
+    if (!entry || entry.ws.readyState !== entry.ws.OPEN) {
       console.warn(`[BroadcastCenter] Connection not available: ${connectionId}`);
       return false;
     }
 
     try {
-      ws.send(JSON.stringify(event));
+      entry.ws.send(JSON.stringify(event));
       return true;
     } catch (err) {
       console.error(`[BroadcastCenter] Failed to send event to ${connectionId}:`, err);
@@ -60,14 +67,40 @@ export class BroadcastCenter {
   }
 
   /**
-   * Broadcast an event to all connections.
+   * Publish an event to all connections belonging to a session.
+   * Returns the number of connections that received the event.
+   */
+  publishToSession(sessionId: SessionId, event: ServerEvent): number {
+    let count = 0;
+    const data = JSON.stringify(event);
+    for (const [, entry] of this.connections) {
+      if (entry.sessionId === sessionId && entry.ws.readyState === entry.ws.OPEN) {
+        try {
+          entry.ws.send(data);
+          count++;
+        } catch (err) {
+          console.error(`[BroadcastCenter] Failed to send session event:`, err);
+        }
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Broadcast an event to all connections (all sessions).
    * Returns the number of connections that received the event.
    */
   broadcast(event: ServerEvent): number {
     let count = 0;
-    for (const [connectionId] of this.connections) {
-      if (this.publishToConnection(event, connectionId)) {
-        count++;
+    const data = JSON.stringify(event);
+    for (const [, entry] of this.connections) {
+      if (entry.ws.readyState === entry.ws.OPEN) {
+        try {
+          entry.ws.send(data);
+          count++;
+        } catch (err) {
+          console.error(`[BroadcastCenter] Failed to broadcast:`, err);
+        }
       }
     }
     return count;

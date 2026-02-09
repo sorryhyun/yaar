@@ -11,6 +11,7 @@ import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
 import type { SessionLogger } from '../logging/index.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
+import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
@@ -45,6 +46,7 @@ export interface HandleMessageOptions {
 interface AgentContext {
   agentId: string;
   connectionId: ConnectionId;
+  sessionId: SessionId;
 }
 
 const agentContext = new AsyncLocalStorage<AgentContext>();
@@ -57,6 +59,10 @@ export function getCurrentConnectionId(): ConnectionId | undefined {
   return agentContext.getStore()?.connectionId;
 }
 
+export function getSessionId(): SessionId | undefined {
+  return agentContext.getStore()?.sessionId;
+}
+
 async function loadMemory(): Promise<string> {
   const result = await configRead('memory.md');
   if (!result.success || !result.content?.trim()) {
@@ -67,6 +73,7 @@ async function loadMemory(): Promise<string> {
 
 export class AgentSession {
   private connectionId: ConnectionId;
+  private liveSessionId: SessionId;
   private provider: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
@@ -86,8 +93,10 @@ export class AgentSession {
     sessionId?: string,
     sharedLogger?: SessionLogger,
     instanceId?: string,
+    liveSessionId?: SessionId,
   ) {
     this.connectionId = connectionId;
+    this.liveSessionId = liveSessionId ?? connectionId;
     this.sessionId = sessionId ?? null;
     this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.sessionLogger = sharedLogger ?? null;
@@ -271,7 +280,7 @@ export class AgentSession {
       );
 
       console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);
-      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId }, async () => {
+      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId, sessionId: this.liveSessionId }, async () => {
         console.log(`[AgentSession] ${role} entered agentContext.run`);
         for await (const message of this.provider!.query(fullContent, transportOptions)) {
           if (!this.running) break;
@@ -329,7 +338,7 @@ export class AgentSession {
   }
 
   private async sendEvent(event: ServerEvent): Promise<void> {
-    getBroadcastCenter().publishToConnection(event, this.connectionId);
+    getBroadcastCenter().publishToSession(this.liveSessionId, event);
   }
 
   async cleanup(): Promise<void> {

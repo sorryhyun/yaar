@@ -10,7 +10,6 @@
  */
 
 export * from './session.js';
-export * from './manager.js';
 export * from './limiter.js';
 export * from './context.js';
 export * from './agent-pool.js';

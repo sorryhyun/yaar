@@ -1,20 +1,12 @@
-import { windowStateRegistryManager } from '../mcp/window-state.js'
-import { reloadCacheManager } from '../reload/index.js'
+import { WindowStateRegistry } from '../mcp/window-state.js'
+import { ReloadCache } from '../reload/cache.js'
 import type { Fingerprint } from '../reload/types.js'
 import type { OSAction } from '@yaar/shared'
 
-describe('connection-scoped state', () => {
-  const connA = 'conn-a'
-  const connB = 'conn-b'
-
-  afterEach(() => {
-    windowStateRegistryManager.clearAll()
-    reloadCacheManager.clearAll()
-  })
-
-  it('isolates window state across two connections', () => {
-    const stateA = windowStateRegistryManager.get(connA)
-    const stateB = windowStateRegistryManager.get(connB)
+describe('session-scoped state', () => {
+  it('isolates window state across two sessions', () => {
+    const stateA = new WindowStateRegistry()
+    const stateB = new WindowStateRegistry()
 
     stateA.handleAction({
       type: 'window.create',
@@ -38,9 +30,9 @@ describe('connection-scoped state', () => {
     expect(stateB.hasWindow('a-win')).toBe(false)
   })
 
-  it('isolates reload cache entries across two connections', () => {
-    const cacheA = reloadCacheManager.get(connA)
-    const cacheB = reloadCacheManager.get(connB)
+  it('isolates reload cache entries across two sessions', () => {
+    const cacheA = new ReloadCache('/tmp/test-cache-a.json')
+    const cacheB = new ReloadCache('/tmp/test-cache-b.json')
 
     const fingerprint: Fingerprint = {
       triggerType: 'main',
@@ -68,11 +60,9 @@ describe('connection-scoped state', () => {
     expect(cacheB.listEntries()[0]?.label).toBe('entry B')
   })
 
-  it('clearing one connection does not clear the other', () => {
-    const stateA = windowStateRegistryManager.get(connA)
-    const stateB = windowStateRegistryManager.get(connB)
-    const cacheA = reloadCacheManager.get(connA)
-    const cacheB = reloadCacheManager.get(connB)
+  it('clearing one registry does not affect the other', () => {
+    const stateA = new WindowStateRegistry()
+    const stateB = new WindowStateRegistry()
 
     stateA.handleAction({
       type: 'window.create',
@@ -89,23 +79,9 @@ describe('connection-scoped state', () => {
       content: { renderer: 'markdown', data: 'B' },
     })
 
-    cacheA.record(
-      { triggerType: 'main', ngrams: ['a'], contentHash: 'a', windowStateHash: 'a' },
-      [],
-      'A only'
-    )
-    cacheB.record(
-      { triggerType: 'main', ngrams: ['b'], contentHash: 'b', windowStateHash: 'b' },
-      [],
-      'B only'
-    )
+    stateA.clear()
 
-    windowStateRegistryManager.clear(connA)
-    reloadCacheManager.clear(connA)
-
-    expect(windowStateRegistryManager.get(connA).listWindows()).toHaveLength(0)
-    expect(windowStateRegistryManager.get(connB).listWindows()).toHaveLength(1)
-    expect(reloadCacheManager.get(connA).listEntries()).toHaveLength(0)
-    expect(reloadCacheManager.get(connB).listEntries()).toHaveLength(1)
+    expect(stateA.listWindows()).toHaveLength(0)
+    expect(stateB.listWindows()).toHaveLength(1)
   })
 })

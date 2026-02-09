@@ -12,7 +12,7 @@
 import { AgentSession } from './session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
-import type { ConnectionId } from '../websocket/broadcast-center.js';
+import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport } from '../providers/types.js';
 
@@ -29,7 +29,7 @@ export interface PooledAgent {
 }
 
 export class AgentPool {
-  private connectionId: ConnectionId;
+  private sessionId: SessionId;
   private nextAgentId = 0;
   private logger: SessionLogger | null = null;
 
@@ -42,8 +42,8 @@ export class AgentPool {
   /** Ephemeral agents currently in-flight (disposed after task). */
   private ephemeralAgents = new Set<PooledAgent>();
 
-  constructor(connectionId: ConnectionId) {
-    this.connectionId = connectionId;
+  constructor(sessionId: SessionId) {
+    this.sessionId = sessionId;
   }
 
   setLogger(logger: SessionLogger): void {
@@ -67,10 +67,11 @@ export class AgentPool {
     const instanceId = `agent-${id}-${Date.now()}`;
 
     const session = new AgentSession(
-      this.connectionId,
+      this.sessionId, // connectionId (legacy, used as fallback)
       undefined,
       this.logger ?? undefined,
       instanceId,
+      this.sessionId, // liveSessionId for session-scoped broadcasting
     );
 
     const initialized = await session.initialize(preWarmedProvider);

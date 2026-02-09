@@ -13,7 +13,8 @@ import { AgentPool, type PooledAgent } from './agent-pool.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
-import { getBroadcastCenter, type ConnectionId } from '../websocket/broadcast-center.js';
+import { getBroadcastCenter } from '../websocket/broadcast-center.js';
+import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
@@ -43,7 +44,7 @@ export interface Task {
  * ephemeral overflow agents, and persistent per-window agents.
  */
 export class ContextPool {
-  private connectionId: ConnectionId;
+  private sessionId: SessionId;
   private agentPool: AgentPool;
   private contextTape: ContextTape;
   private timeline: InteractionTimeline;
@@ -66,13 +67,13 @@ export class ContextPool {
   private inflightResolve: (() => void) | null = null;
 
   constructor(
-    connectionId: ConnectionId,
+    sessionId: SessionId,
     windowState: WindowStateRegistry,
     reloadCache: ReloadCache,
     restoredContext: ContextMessage[] = [],
     savedThreadIds?: Record<string, string>,
   ) {
-    this.connectionId = connectionId;
+    this.sessionId = sessionId;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
@@ -82,7 +83,7 @@ export class ContextPool {
       this.contextTape.restore(restoredContext);
       console.log(`[ContextPool] Restored ${restoredContext.length} context messages from previous session`);
     }
-    this.agentPool = new AgentPool(connectionId);
+    this.agentPool = new AgentPool(sessionId);
   }
 
   /**
@@ -672,7 +673,7 @@ export class ContextPool {
   }
 
   private async sendEvent(event: ServerEvent): Promise<void> {
-    getBroadcastCenter().publishToConnection(event, this.connectionId);
+    getBroadcastCenter().publishToSession(this.sessionId, event);
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────

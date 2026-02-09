@@ -123,12 +123,14 @@ export interface ActionsEvent {
   type: 'ACTIONS';
   actions: OSAction[];
   agentId?: string;
+  seq?: number;
 }
 
 export interface AgentThinkingEvent {
   type: 'AGENT_THINKING';
   content: string;
   agentId?: string;
+  seq?: number;
 }
 
 export interface AgentResponseEvent {
@@ -137,6 +139,7 @@ export interface AgentResponseEvent {
   isComplete: boolean;
   agentId?: string;
   messageId?: string;
+  seq?: number;
 }
 
 export interface ConnectionStatusEvent {
@@ -145,6 +148,7 @@ export interface ConnectionStatusEvent {
   provider?: string;
   sessionId?: string;
   error?: string;
+  seq?: number;
 }
 
 export interface ToolProgressEvent {
@@ -153,12 +157,14 @@ export interface ToolProgressEvent {
   status: 'running' | 'complete' | 'error';
   message?: string;
   agentId?: string;
+  seq?: number;
 }
 
 export interface ErrorEvent {
   type: 'ERROR';
   error: string;
   agentId?: string;
+  seq?: number;
 }
 
 export interface WindowAgentStatusEvent {
@@ -166,18 +172,21 @@ export interface WindowAgentStatusEvent {
   windowId: string;
   agentId: string;
   status: 'assigned' | 'active' | 'released';
+  seq?: number;
 }
 
 export interface MessageAcceptedEvent {
   type: 'MESSAGE_ACCEPTED';
   messageId: string;
   agentId: string;
+  seq?: number;
 }
 
 export interface MessageQueuedEvent {
   type: 'MESSAGE_QUEUED';
   messageId: string;
   position: number;
+  seq?: number;
 }
 
 export interface ApprovalRequestEvent {
@@ -189,6 +198,7 @@ export interface ApprovalRequestEvent {
   cancelText?: string;
   permissionOptions?: PermissionOptions;
   agentId?: string;
+  seq?: number;
 }
 
 export type ServerEvent =

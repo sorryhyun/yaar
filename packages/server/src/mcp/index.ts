@@ -25,7 +25,7 @@ export {
 } from './action-emitter.js';
 
 // Window state
-export { windowStateRegistryManager, WindowStateRegistry, type WindowState } from './window-state.js';
+export { WindowStateRegistry, type WindowState } from './window-state.js';
 
 // Utils
 export { ok, okWithImages } from './utils.js';

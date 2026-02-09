@@ -18,6 +18,17 @@ import { generateActionId, generateMessageId } from './use-agent-connection/outb
 
 const wsManager = createWsManager()
 
+function buildWsUrl(): string {
+  const state = useDesktopStore.getState()
+  const sessionId = state.sessionId
+  if (sessionId) {
+    const url = new URL(WS_URL, window.location.href)
+    url.searchParams.set('sessionId', sessionId)
+    return url.toString()
+  }
+  return WS_URL
+}
+
 interface UseAgentConnectionOptions {
   autoConnect?: boolean
 }
@@ -113,7 +124,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     setIsConnecting(true)
     setConnectionStatus('connecting')
 
-    wsManager.ws = new WebSocket(WS_URL)
+    wsManager.ws = new WebSocket(buildWsUrl())
 
     wsManager.ws.onopen = () => {
       wsManager.reconnectAttempts = 0

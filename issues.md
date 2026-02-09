@@ -1,3 +1,0 @@
-1. I think apply_patch tool should be disabled for codex. it tries to modify content in apps/ directly, not via clone-revise-compile-deploy flow.
-2. can we introduce 'jsonfile' param for create_component? it will allow haste window component especially in built apps. I think it should look in different format like, *.yaarcomponent.json and denote 'use create_component(filepath='*.yaarcomponent.json')' or something in skill.md, and maybe we should introduce compile_component tool for app dev.
-3. 

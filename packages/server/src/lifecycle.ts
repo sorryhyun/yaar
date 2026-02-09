@@ -6,11 +6,11 @@ import type { Server } from 'http';
 import type { WebSocketServer } from 'ws';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
-import { windowStateRegistryManager } from './mcp/window-state.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import { listSessions, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from './logging/index.js';
 import { PORT } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
+import { initSessionHub } from './session/live-session.js';
 
 /**
  * Initialize all subsystems (storage, MCP, warm pool, session restore).
@@ -18,7 +18,10 @@ import type { WebSocketServerOptions } from './websocket/index.js';
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   await ensureStorageDir();
-  windowStateRegistryManager.init();
+
+  // Initialize session hub (LiveSession instances created on first WS connection)
+  initSessionHub();
+
   await initMcpServer();
 
   // Pre-warm provider pool for faster first connection

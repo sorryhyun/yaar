@@ -16,7 +16,7 @@ export const MAX_RECONNECT_ATTEMPTS = 5
 
 export const WS_URL = import.meta.env.VITE_WS_URL ||
   (typeof window !== 'undefined'
-    ? `ws://${window.location.host}/ws`
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
     : 'ws://localhost:8000/ws')
 
 export function createWsManager() {

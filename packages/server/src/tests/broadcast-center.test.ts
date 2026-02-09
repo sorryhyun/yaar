@@ -25,12 +25,12 @@ describe('BroadcastCenter', () => {
 
   describe('connection management', () => {
     it('subscribes and tracks connections', () => {
-      bc.subscribe('c1', createMockWs())
+      bc.subscribe('c1', createMockWs(), 'ses-test')
       expect(bc.getStats().connectionCount).toBe(1)
     })
 
     it('unsubscribe removes connection', () => {
-      bc.subscribe('c1', createMockWs())
+      bc.subscribe('c1', createMockWs(), 'ses-test')
       bc.unsubscribe('c1')
       expect(bc.getStats().connectionCount).toBe(0)
     })
@@ -39,7 +39,7 @@ describe('BroadcastCenter', () => {
   describe('publishing', () => {
     it('publishToConnection sends JSON', () => {
       const ws = createMockWs()
-      bc.subscribe('c1', ws)
+      bc.subscribe('c1', ws, 'ses-test')
 
       const result = bc.publishToConnection(testEvent, 'c1')
       expect(result).toBe(true)
@@ -51,15 +51,15 @@ describe('BroadcastCenter', () => {
     })
 
     it('returns false for closed connection', () => {
-      bc.subscribe('c1', createMockWs(3 /* CLOSED */))
+      bc.subscribe('c1', createMockWs(3 /* CLOSED */), 'ses-test')
       expect(bc.publishToConnection(testEvent, 'c1')).toBe(false)
     })
 
     it('broadcast sends to all connections', () => {
       const ws1 = createMockWs()
       const ws2 = createMockWs()
-      bc.subscribe('c1', ws1)
-      bc.subscribe('c2', ws2)
+      bc.subscribe('c1', ws1, 'ses-test')
+      bc.subscribe('c2', ws2, 'ses-test')
 
       const count = bc.broadcast(testEvent)
       expect(count).toBe(2)
@@ -69,7 +69,7 @@ describe('BroadcastCenter', () => {
   })
 
   it('clear removes everything', () => {
-    bc.subscribe('c1', createMockWs())
+    bc.subscribe('c1', createMockWs(), 'ses-test')
     bc.clear()
     expect(bc.getStats()).toEqual({ connectionCount: 0 })
   })

@@ -14,17 +14,22 @@ import { registerHttpTools } from './http/index.js';
 import { registerAppDevTools } from './app-dev/index.js';
 import { registerSandboxTools } from './sandbox/index.js';
 import { registerReloadTools } from '../reload/tools.js';
-import { reloadCacheManager } from '../reload/index.js';
-import { windowStateRegistryManager } from './window-state.js';
-import { getCurrentConnectionId } from '../agents/session.js';
+import { getSessionHub } from '../session/live-session.js';
+import { WindowStateRegistry } from './window-state.js';
+import { ReloadCache } from '../reload/cache.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
  */
 export function registerAllTools(servers: Record<McpServerName, McpServer>): void {
-  const resolveConnectionId = () => getCurrentConnectionId() ?? 'global';
-  const getWindowState = () => windowStateRegistryManager.get(resolveConnectionId());
-  const getReloadCache = () => reloadCacheManager.get(resolveConnectionId());
+  const getWindowState = () => {
+    const session = getSessionHub().getDefault();
+    return session?.windowState ?? new WindowStateRegistry();
+  };
+  const getReloadCache = () => {
+    const session = getSessionHub().getDefault();
+    return session?.reloadCache ?? new ReloadCache('/dev/null');
+  };
 
   registerSystemTools(servers.system);
   registerHttpTools(servers.system);
