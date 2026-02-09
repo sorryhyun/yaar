@@ -28,10 +28,10 @@ app.innerHTML = `
     .corner { position: sticky; left: 0; top: 0; z-index: 3; background: #eef3ff; min-width: 46px; }
     td { position: relative; min-width: 98px; }
     td input { width: 100%; border: none; padding: 7px 8px; box-sizing: border-box; outline: none; background: transparent; }
-    td.selected { background: #edf3ff; }
+    td.selected { background: #d6e6ff; box-shadow: inset 0 0 0 1px #8eb3ff; }
     td.active { box-shadow: inset 0 0 0 2px #2a6df6; z-index: 1; }
     .fill-handle { position: absolute; width: 8px; height: 8px; right: -4px; bottom: -4px; border-radius: 1px; background: #2a6df6; cursor: crosshair; z-index: 5; }
-    td.fill-preview { background: #cfe1ff; }
+    td.fill-preview { background: #c1d9ff; box-shadow: inset 0 0 0 1px #79a3ff; }
     .hint { color: #5c6475; font-size: 12px; }
   </style>
   <div class="wrap">

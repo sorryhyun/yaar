@@ -72,6 +72,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
     useDesktopStore()
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
   const windowAgent = useDesktopStore(selectWindowAgent(window.id))
+  const isSelected = useDesktopStore(s => s.selectedWindowIds.includes(window.id))
   const sendComponentAction = useComponentAction()
 
   const handleComponentAction = useCallback((
@@ -214,6 +215,7 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       style={style}
       data-window-id={window.id}
       data-focused={isFocused}
+      data-selected={isSelected}
       data-dragging={isDragging}
       data-resizing={isResizing}
       data-agent-active={windowAgent?.status === 'active'}

@@ -253,3 +253,12 @@
   text-align: center;
   word-wrap: break-word;
 }
+
+/* Rubber-band selection rectangle */
+.selectionRect {
+  position: fixed;
+  background: rgba(0, 120, 215, 0.18);
+  border: 1px solid rgba(0, 120, 215, 0.7);
+  pointer-events: none;
+  z-index: 1;
+}

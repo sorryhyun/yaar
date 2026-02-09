@@ -201,6 +201,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.activityLog = []
         state.debugLog = []
         state.pendingFeedback = []
+        state.selectedWindowIds = []
         state.appsVersion = 0
       })
     },

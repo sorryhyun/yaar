@@ -7,6 +7,7 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   contextMenu: null,
   sessionsModalOpen: false,
   restorePrompt: null,
+  selectedWindowIds: [],
 
   showContextMenu: (x, y, windowId?) => set((state) => {
     if (windowId) {
@@ -33,5 +34,9 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
 
   dismissRestorePrompt: () => set((state) => {
     state.restorePrompt = null
+  }),
+
+  setSelectedWindows: (ids) => set((state) => {
+    state.selectedWindowIds = ids
   }),
 })

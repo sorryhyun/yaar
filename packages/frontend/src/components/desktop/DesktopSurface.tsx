@@ -41,7 +41,24 @@ export function DesktopSurface() {
   const agentPanelOpen = useDesktopStore(s => s.agentPanelOpen)
   const toggleAgentPanel = useDesktopStore(s => s.toggleAgentPanel)
   const windows = useDesktopStore(s => s.windows)
+  const setSelectedWindows = useDesktopStore(s => s.setSelectedWindows)
   const { sendMessage, sendWindowMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } = useAgentConnection({ autoConnect: false })
+
+  // Rubber-band selection state
+  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const selectionStart = useRef<{ x: number; y: number } | null>(null)
+  const selectionActive = useRef(false)
+  const selectionListeners = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null)
+
+  // Clean up selection listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (selectionListeners.current) {
+        document.removeEventListener('mousemove', selectionListeners.current.move)
+        document.removeEventListener('mouseup', selectionListeners.current.up)
+      }
+    }
+  }, [])
 
   const appsVersion = useDesktopStore(s => s.appsVersion)
   const [apps, setApps] = useState<AppInfo[]>([])
@@ -71,10 +88,11 @@ export function DesktopSurface() {
     // Only handle clicks directly on the desktop
     if (e.target === e.currentTarget) {
       useDesktopStore.setState({ focusedWindowId: null })
+      setSelectedWindows([])
     }
     // Always close context menu on background click
     hideContextMenu()
-  }, [hideContextMenu])
+  }, [hideContextMenu, setSelectedWindows])
 
   const handleBackgroundContextMenu = useCallback((e: React.MouseEvent) => {
     // Only handle right-clicks directly on the desktop background
@@ -92,8 +110,69 @@ export function DesktopSurface() {
     sendMessage(`<user_interaction:click>app: ${appId}</user_interaction:click>`)
   }, [sendMessage])
 
+  const handleDesktopMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only start selection when clicking directly on the desktop background
+    if (e.target !== e.currentTarget || e.button !== 0) return
+
+    const startX = e.clientX
+    const startY = e.clientY
+    selectionStart.current = { x: startX, y: startY }
+    selectionActive.current = false
+
+    const DRAG_THRESHOLD = 5
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - startX
+      const dy = e.clientY - startY
+
+      // Don't show rect until past threshold
+      if (!selectionActive.current && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
+      selectionActive.current = true
+
+      const rect = {
+        x: Math.min(startX, e.clientX),
+        y: Math.min(startY, e.clientY),
+        w: Math.abs(dx),
+        h: Math.abs(dy),
+      }
+      setSelectionRect(rect)
+
+      // Compute which visible windows intersect
+      const store = useDesktopStore.getState()
+      const ids: string[] = []
+      for (const wid of store.zOrder) {
+        const win = store.windows[wid]
+        if (!win || win.minimized) continue
+        const b = win.bounds
+        // AABB intersection test
+        if (!(rect.x > b.x + b.w || rect.x + rect.w < b.x || rect.y > b.y + b.h || rect.y + rect.h < b.y)) {
+          ids.push(wid)
+        }
+      }
+      setSelectedWindows(ids)
+    }
+
+    const handleMouseUp = () => {
+      selectionStart.current = null
+      setSelectionRect(null)
+      selectionActive.current = false
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      selectionListeners.current = null
+    }
+
+    // Clean up any previous listeners (defensive)
+    if (selectionListeners.current) {
+      document.removeEventListener('mousemove', selectionListeners.current.move)
+      document.removeEventListener('mouseup', selectionListeners.current.up)
+    }
+    selectionListeners.current = { move: handleMouseMove, up: handleMouseUp }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [setSelectedWindows])
+
   return (
-    <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu}>
+    <div className={styles.desktop} onClick={handleBackgroundClick} onContextMenu={handleBackgroundContextMenu} onMouseDown={handleDesktopMouseDown}>
       {/* Connection status indicator */}
       <div className={styles.statusBar}>
         <span className={styles.statusDot} data-status={connectionStatus} />
@@ -195,6 +274,19 @@ export function DesktopSurface() {
           </button>
         ))}
       </div>
+
+      {/* Rubber-band selection rectangle */}
+      {selectionRect && (
+        <div
+          className={styles.selectionRect}
+          style={{
+            left: selectionRect.x,
+            top: selectionRect.y,
+            width: selectionRect.w,
+            height: selectionRect.h,
+          }}
+        />
+      )}
 
       {/* Window container */}
       <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>

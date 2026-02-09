@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Lite</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+  <script>
+(function() {
+  if (window.__yaarCaptureInstalled) return;
+  window.__yaarCaptureInstalled = true;
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'yaar:capture-request') return;
+    var requestId = e.data.requestId;
+    var imageData = null;
+
+    try {
+      // Try capturing the largest canvas element
+      var canvases = document.querySelectorAll('canvas');
+      if (canvases.length > 0) {
+        var largest = null;
+        var largestArea = 0;
+        for (var i = 0; i < canvases.length; i++) {
+          var area = canvases[i].width * canvases[i].height;
+          if (area > largestArea) {
+            largestArea = area;
+            largest = canvases[i];
+          }
+        }
+        if (largest) {
+          imageData = largest.toDataURL('image/png');
+        }
+      }
+
+      // Fall back to SVG capture
+      if (!imageData) {
+        var svgs = document.querySelectorAll('svg');
+        if (svgs.length > 0) {
+          var largest = null;
+          var largestArea = 0;
+          for (var i = 0; i < svgs.length; i++) {
+            var rect = svgs[i].getBoundingClientRect();
+            var area = rect.width * rect.height;
+            if (area > largestArea) {
+              largestArea = area;
+              largest = svgs[i];
+            }
+          }
+          if (largest) {
+            var serializer = new XMLSerializer();
+            var svgStr = serializer.serializeToString(largest);
+            var rect = largest.getBoundingClientRect();
+            var w = rect.width || 300;
+            var h = rect.height || 150;
+            var img = new Image();
+            var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            img.onload = function() {
+              var c = document.createElement('canvas');
+              c.width = w;
+              c.height = h;
+              var ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0, w, h);
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: c.toDataURL('image/png')
+              }, '*');
+            };
+            img.onerror = function() {
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: null
+              }, '*');
+            };
+            img.src = url;
+            return; // async path — response sent from onload/onerror
+          }
+        }
+      }
+    } catch (ex) {
+      // Capture failed, imageData stays null
+    }
+
+    window.parent.postMessage({
+      type: 'yaar:capture-response',
+      requestId: requestId,
+      imageData: imageData
+    }, '*');
+  });
+})();
+</script>
+</head>
+<body>
+  <script type="module">
+// ../../sandbox/1770597364051/src/styles.ts
+var styles = `
+:root {
+  --bg: #0f172a;
+  --panel: #111827;
+  --toolbar: #1f2937;
+  --surface: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --border: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: var(--bg);
+}
+
+#app {
+  height: 100%;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100%;
+  color: #e5e7eb;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid #374151;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.brand-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--toolbar);
+  border-bottom: 1px solid #374151;
+}
+
+.group {
+  display: inline-flex;
+  gap: 6px;
+  padding-right: 8px;
+  margin-right: 4px;
+  border-right: 1px solid #374151;
+}
+
+.group:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+button, select {
+  border: 1px solid #4b5563;
+  background: #111827;
+  color: #f3f4f6;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button:hover, select:hover {
+  border-color: #9ca3af;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: #1e40af;
+}
+
+.editor-wrap {
+  overflow: auto;
+  padding: 24px;
+  background: #0b1220;
+}
+
+.page {
+  max-width: 860px;
+  min-height: calc(100% - 4px);
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
+  color: var(--text);
+  padding: 36px 44px;
+  outline: none;
+  line-height: 1.5;
+  font-size: 16px;
+}
+
+.page:empty:before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+}
+
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-top: 1px solid #374151;
+  color: #d1d5db;
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+`;
+
+// ../../sandbox/1770597364051/src/utils.ts
+var STORAGE_KEY = "word-lite-document-v1";
+function debounce(fn, delay = 500) {
+  let timer = null;
+  return (...args) => {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), delay);
+  };
+}
+function countTextStats(text) {
+  const trimmed = text.trim();
+  const words = trimmed ? trimmed.split(/\s+/).length : 0;
+  return {
+    words,
+    chars: text.length
+  };
+}
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function nowLabel() {
+  return (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// ../../sandbox/1770597364051/src/main.ts
+var app = document.getElementById("app") || document.body;
+app.innerHTML = `
+  <style>${styles}</style>
+  <div class="app-shell">
+    <div class="topbar">
+      <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
+      <div class="muted">Simple document editor</div>
+    </div>
+
+    <div class="toolbar">
+      <div class="group">
+        <button data-cmd="bold"><b>B</b></button>
+        <button data-cmd="italic"><i>I</i></button>
+        <button data-cmd="underline"><u>U</u></button>
+      </div>
+
+      <div class="group">
+        <select id="format-block" title="Style">
+          <option value="P">Paragraph</option>
+          <option value="H1">Heading 1</option>
+          <option value="H2">Heading 2</option>
+          <option value="H3">Heading 3</option>
+          <option value="BLOCKQUOTE">Quote</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <button data-cmd="justifyLeft">Left</button>
+        <button data-cmd="justifyCenter">Center</button>
+        <button data-cmd="justifyRight">Right</button>
+        <button data-cmd="insertUnorderedList">\u2022 List</button>
+        <button data-cmd="insertOrderedList">1. List</button>
+      </div>
+
+      <div class="group">
+        <button id="btn-link">Link</button>
+        <button data-cmd="removeFormat">Clear</button>
+        <button data-cmd="undo">Undo</button>
+        <button data-cmd="redo">Redo</button>
+      </div>
+
+      <div class="group">
+        <button id="btn-new">New</button>
+        <button id="btn-open">Open</button>
+        <button id="btn-save" class="primary">Save</button>
+        <button id="btn-export-txt">.txt</button>
+        <button id="btn-export-html">.html</button>
+      </div>
+    </div>
+
+    <div class="editor-wrap">
+      <article id="editor" class="page" contenteditable="true" spellcheck="true" data-placeholder="Start typing..."></article>
+      <input id="file-input" type="file" accept=".txt,.html,.htm" style="display:none" />
+    </div>
+
+    <div class="statusbar">
+      <span id="stats">0 words \u2022 0 chars</span>
+      <span id="save-state">Not saved</span>
+    </div>
+  </div>
+`;
+var editor = document.getElementById("editor");
+var fileInput = document.getElementById("file-input");
+var statsEl = document.getElementById("stats");
+var saveState = document.getElementById("save-state");
+var formatBlock = document.getElementById("format-block");
+var exec = (cmd, value) => {
+  editor.focus();
+  document.execCommand(cmd, false, value);
+  refreshStats();
+};
+var refreshStats = () => {
+  const { words, chars } = countTextStats(editor.innerText || "");
+  statsEl.textContent = `${words} words \u2022 ${chars} chars`;
+};
+var saveDoc = () => {
+  localStorage.setItem(STORAGE_KEY, editor.innerHTML);
+  saveState.textContent = `Saved at ${nowLabel()}`;
+};
+var autoSave = debounce(() => {
+  saveDoc();
+}, 550);
+var loadDoc = () => {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    editor.innerHTML = stored;
+    saveState.textContent = "Loaded saved draft";
+  } else {
+    editor.innerHTML = "<h1>Untitled Document</h1><p></p>";
+    saveState.textContent = "New document";
+  }
+  refreshStats();
+};
+for (const btn of Array.from(document.querySelectorAll("button[data-cmd]"))) {
+  btn.addEventListener("click", () => {
+    const cmd = btn.dataset.cmd;
+    exec(cmd);
+  });
+}
+formatBlock.addEventListener("change", () => {
+  exec("formatBlock", formatBlock.value);
+});
+document.getElementById("btn-link")?.addEventListener("click", () => {
+  const link = prompt("Enter URL (https://...)");
+  if (!link) return;
+  exec("createLink", link);
+});
+document.getElementById("btn-new")?.addEventListener("click", () => {
+  const ok = confirm("Start a new blank document?");
+  if (!ok) return;
+  editor.innerHTML = "<p></p>";
+  refreshStats();
+  saveState.textContent = "Unsaved new document";
+  editor.focus();
+});
+document.getElementById("btn-open")?.addEventListener("click", () => {
+  fileInput.value = "";
+  fileInput.click();
+});
+document.getElementById("btn-save")?.addEventListener("click", () => {
+  saveDoc();
+});
+document.getElementById("btn-export-txt")?.addEventListener("click", () => {
+  downloadFile("document.txt", editor.innerText || "", "text/plain;charset=utf-8");
+});
+document.getElementById("btn-export-html")?.addEventListener("click", () => {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Document</title></head><body>${editor.innerHTML}</body></html>`;
+  downloadFile("document.html", html, "text/html;charset=utf-8");
+});
+fileInput.addEventListener("change", async () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  if (/\.html?$/i.test(file.name)) {
+    editor.innerHTML = text;
+  } else {
+    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+    editor.innerHTML = `<p>${escaped}</p>`;
+  }
+  refreshStats();
+  saveState.textContent = `Opened ${file.name}`;
+  saveDoc();
+});
+editor.addEventListener("input", () => {
+  refreshStats();
+  saveState.textContent = "Editing\u2026";
+  autoSave();
+});
+editor.addEventListener("keyup", refreshStats);
+document.addEventListener("keydown", (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  const key = e.key.toLowerCase();
+  if (key === "s") {
+    e.preventDefault();
+    saveDoc();
+  } else if (key === "b") {
+    e.preventDefault();
+    exec("bold");
+  } else if (key === "i") {
+    e.preventDefault();
+    exec("italic");
+  } else if (key === "u") {
+    e.preventDefault();
+    exec("underline");
+  }
+});
+loadDoc();
+editor.focus();
+
+  </script>
+</body>
+</html>

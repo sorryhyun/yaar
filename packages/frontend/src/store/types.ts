@@ -143,6 +143,7 @@ export interface UiSliceState {
   contextMenu: ContextMenuState | null
   sessionsModalOpen: boolean
   restorePrompt: RestorePrompt | null
+  selectedWindowIds: string[]
 }
 
 export interface UiSliceActions {
@@ -151,6 +152,7 @@ export interface UiSliceActions {
   toggleSessionsModal: () => void
   setRestorePrompt: (prompt: RestorePrompt | null) => void
   dismissRestorePrompt: () => void
+  setSelectedWindows: (ids: string[]) => void
 }
 
 export type UiSlice = UiSliceState & UiSliceActions
