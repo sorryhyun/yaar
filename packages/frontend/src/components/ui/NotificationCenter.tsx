@@ -12,14 +12,15 @@ export function NotificationCenter() {
   const dismissNotification = useDesktopStore(s => s.dismissNotification)
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  // Auto-dismiss notifications that have a duration
+  // Auto-dismiss all notifications (default 8s if no duration specified)
+  const DEFAULT_DURATION = 8000
   useEffect(() => {
     for (const notif of notifications) {
-      if (notif.duration && !timersRef.current.has(notif.id)) {
+      if (!timersRef.current.has(notif.id)) {
         const timer = setTimeout(() => {
           dismissNotification(notif.id)
           timersRef.current.delete(notif.id)
-        }, notif.duration)
+        }, notif.duration || DEFAULT_DURATION)
         timersRef.current.set(notif.id, timer)
       }
     }

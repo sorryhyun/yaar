@@ -5,6 +5,7 @@ import type { SliceCreator, FeedbackSlice } from '../types'
 
 export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingFeedback: [],
+  pendingAppProtocolResponses: [],
 
   addRenderingFeedback: (feedback) => set((state) => {
     state.pendingFeedback.push(feedback)
@@ -22,5 +23,19 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
       })
     }
     return feedback
+  },
+
+  addPendingAppProtocolResponse: (item) => set((state) => {
+    state.pendingAppProtocolResponses.push(item)
+  }),
+
+  consumePendingAppProtocolResponses: () => {
+    const items = get().pendingAppProtocolResponses
+    if (items.length > 0) {
+      set((state) => {
+        state.pendingAppProtocolResponses = []
+      })
+    }
+    return items
   },
 })

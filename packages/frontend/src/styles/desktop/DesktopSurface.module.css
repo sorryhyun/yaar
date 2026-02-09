@@ -237,6 +237,11 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.desktopIcon:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .iconImage {
   font-size: 48px;
   line-height: 1;

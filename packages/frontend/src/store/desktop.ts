@@ -10,7 +10,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopStore } from './types'
-import type { OSAction, WindowCaptureAction } from '@yaar/shared'
+import type { OSAction, WindowCaptureAction, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared'
 import { toWindowKey } from './helpers'
 import html2canvas from 'html2canvas'
 
@@ -125,6 +125,77 @@ async function captureWindow(windowId: string, requestId: string) {
   }
 }
 
+/**
+ * Handle an App Protocol request by forwarding it to the target iframe via postMessage,
+ * then collecting the response and pushing it as pending feedback.
+ */
+function handleAppProtocolRequest(requestId: string, windowId: string, request: AppProtocolRequest) {
+  const state = useDesktopStore.getState()
+  const monitorId = state.activeMonitorId ?? 'monitor-0'
+  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId)
+
+  const el = document.querySelector(`[data-window-id="${key}"]`) as HTMLElement | null
+  if (!el) {
+    useDesktopStore.getState().addPendingAppProtocolResponse({
+      requestId, windowId, response: { kind: request.kind, error: 'Window element not found' } as AppProtocolResponse
+    })
+    return
+  }
+
+  const iframe = el.querySelector('iframe') as HTMLIFrameElement | null
+  if (!iframe?.contentWindow) {
+    useDesktopStore.getState().addPendingAppProtocolResponse({
+      requestId, windowId, response: { kind: request.kind, error: 'No iframe found in window' } as AppProtocolResponse
+    })
+    return
+  }
+
+  // Build postMessage based on request kind
+  let msg: Record<string, unknown>
+  if (request.kind === 'manifest') {
+    msg = { type: 'yaar:app-manifest-request', requestId }
+  } else if (request.kind === 'query') {
+    msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey }
+  } else {
+    msg = { type: 'yaar:app-command-request', requestId, command: request.command, params: request.params }
+  }
+
+  // Listen for response with timeout
+  const timeoutId = setTimeout(() => {
+    window.removeEventListener('message', handler)
+    useDesktopStore.getState().addPendingAppProtocolResponse({
+      requestId, windowId, response: { kind: request.kind, error: 'Timeout waiting for app response' } as AppProtocolResponse
+    })
+  }, 5000)
+
+  function handler(e: MessageEvent) {
+    if (!e.data?.requestId || e.data.requestId !== requestId) return
+    const type = e.data.type as string
+    if (!type?.startsWith('yaar:app-')) return
+
+    clearTimeout(timeoutId)
+    window.removeEventListener('message', handler)
+
+    let response: AppProtocolResponse
+    if (type === 'yaar:app-manifest-response') {
+      response = { kind: 'manifest', manifest: e.data.manifest, error: e.data.error }
+    } else if (type === 'yaar:app-query-response') {
+      response = { kind: 'query', data: e.data.data, error: e.data.error }
+    } else if (type === 'yaar:app-command-response') {
+      response = { kind: 'command', result: e.data.result, error: e.data.error }
+    } else {
+      return
+    }
+
+    useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response })
+  }
+
+  window.addEventListener('message', handler)
+  iframe.contentWindow.postMessage(msg, '*')
+}
+
+export { handleAppProtocolRequest }
+
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
     // Combine all slices
@@ -210,6 +281,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.activityLog = []
         state.debugLog = []
         state.pendingFeedback = []
+        state.pendingAppProtocolResponses = []
         state.selectedWindowIds = []
         state.appsVersion = 0
         state.cliMode = false

@@ -21,7 +21,7 @@ import type {
   CliEntry,
   Monitor,
 } from '@/types/state'
-import type { OSAction, UserInteraction } from '@yaar/shared'
+import type { OSAction, UserInteraction, AppProtocolResponse } from '@yaar/shared'
 
 // Re-export for convenience
 export type {
@@ -161,14 +161,23 @@ export interface UiSliceActions {
 
 export type UiSlice = UiSliceState & UiSliceActions
 
+export interface AppProtocolResponseItem {
+  requestId: string
+  windowId: string
+  response: AppProtocolResponse
+}
+
 export interface FeedbackSliceState {
   pendingFeedback: RenderingFeedback[]
+  pendingAppProtocolResponses: AppProtocolResponseItem[]
 }
 
 export interface FeedbackSliceActions {
   addRenderingFeedback: (feedback: RenderingFeedback) => void
   consumePendingFeedback: () => RenderingFeedback[]
   addPendingFeedback: (feedback: RenderingFeedback) => void
+  addPendingAppProtocolResponse: (item: AppProtocolResponseItem) => void
+  consumePendingAppProtocolResponses: () => AppProtocolResponseItem[]
 }
 
 export type FeedbackSlice = FeedbackSliceState & FeedbackSliceActions

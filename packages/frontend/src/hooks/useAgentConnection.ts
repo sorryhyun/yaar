@@ -3,8 +3,8 @@
  * Uses a singleton pattern to share the WebSocket across all components.
  */
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react'
-import { useDesktopStore } from '@/store'
-import type { ClientEvent, ServerEvent } from '@/types'
+import { useDesktopStore, handleAppProtocolRequest } from '@/store'
+import type { ClientEvent, ServerEvent, AppProtocolRequest } from '@/types'
 import {
   createWsManager,
   MAX_RECONNECT_ATTEMPTS,
@@ -54,6 +54,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAllAgents,
     consumePendingFeedback,
     consumePendingInteractions,
+    consumePendingAppProtocolResponses,
     consumeDrawing,
     registerWindowAgent,
     updateWindowAgentStatus,
@@ -89,6 +90,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
   }, [setRestorePrompt])
 
+  const handleAppProtocolRequestCb = useCallback(
+    (requestId: string, windowId: string, request: AppProtocolRequest) => {
+      handleAppProtocolRequest(requestId, windowId, request)
+    },
+    [],
+  )
+
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const message = JSON.parse(event.data) as ServerEvent
@@ -106,6 +114,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         updateCliStreaming,
         finalizeCliStreaming,
         addCliEntry,
+        handleAppProtocolRequest: handleAppProtocolRequestCb,
       })
     } catch (e) {
       console.error('Failed to parse message:', e)
@@ -123,6 +132,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     updateCliStreaming,
     finalizeCliStreaming,
     addCliEntry,
+    handleAppProtocolRequestCb,
   ])
 
   const connect = useCallback(() => {
@@ -280,6 +290,23 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     })
     return unsubscribe
   }, [consumePendingFeedback, send])
+
+  useEffect(() => {
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.pendingAppProtocolResponses.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+        const items = consumePendingAppProtocolResponses()
+        for (const item of items) {
+          send({
+            type: 'APP_PROTOCOL_RESPONSE',
+            requestId: item.requestId,
+            windowId: getRawWindowId(item.windowId),
+            response: item.response,
+          })
+        }
+      }
+    })
+    return unsubscribe
+  }, [consumePendingAppProtocolResponses, send])
 
   useEffect(() => {
     const unsubscribe = useDesktopStore.subscribe((state) => {

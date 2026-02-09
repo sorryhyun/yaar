@@ -17,6 +17,7 @@ function createHandlers() {
     updateCliStreaming: vi.fn(),
     finalizeCliStreaming: vi.fn(),
     addCliEntry: vi.fn(),
+    handleAppProtocolRequest: vi.fn(),
   }
 }
 

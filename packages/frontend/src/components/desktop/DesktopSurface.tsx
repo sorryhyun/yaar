@@ -126,13 +126,29 @@ export function DesktopSurface() {
     }
   }, [showContextMenu])
 
+  // Double-click prevention: track which icon is in cooldown
+  const [cooldownId, setCooldownId] = useState<string | null>(null)
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  const startCooldown = useCallback((id: string) => {
+    setCooldownId(id)
+    clearTimeout(cooldownTimer.current)
+    cooldownTimer.current = setTimeout(() => setCooldownId(null), 1000)
+  }, [])
+
+  useEffect(() => () => clearTimeout(cooldownTimer.current), [])
+
   const handleStorageClick = useCallback(() => {
+    if (cooldownId === '__storage') return
+    startCooldown('__storage')
     sendMessage('<user_interaction:click>storage</user_interaction:click>')
-  }, [sendMessage])
+  }, [sendMessage, cooldownId, startCooldown])
 
   const handleAppClick = useCallback((appId: string) => {
+    if (cooldownId === appId) return
+    startCooldown(appId)
     sendMessage(`<user_interaction:click>app: ${appId}</user_interaction:click>`)
-  }, [sendMessage])
+  }, [sendMessage, cooldownId, startCooldown])
 
   const handleDesktopMouseDown = useCallback((e: React.MouseEvent) => {
     // Only start selection when clicking directly on the desktop background
@@ -280,7 +296,7 @@ export function DesktopSurface() {
 
         {/* Desktop icons */}
         <div className={styles.desktopIcons}>
-          <button className={styles.desktopIcon} onClick={handleStorageClick}>
+          <button className={styles.desktopIcon} onClick={handleStorageClick} disabled={cooldownId === '__storage'}>
             <span className={styles.iconImage}>🗄️</span>
             <span className={styles.iconLabel}>Storage</span>
           </button>
@@ -290,6 +306,7 @@ export function DesktopSurface() {
               key={app.id}
               className={styles.desktopIcon}
               onClick={() => handleAppClick(app.id)}
+              disabled={cooldownId === app.id}
             >
               {app.iconType === 'image' ? (
                 <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />

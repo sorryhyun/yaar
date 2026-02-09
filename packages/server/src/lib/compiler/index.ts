@@ -10,7 +10,7 @@ import { writeFile, mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { bundledLibraryPlugin } from './plugins.js';
 import { PROJECT_ROOT } from '../../config.js';
-import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_FETCH_PROXY_SCRIPT } from '@yaar/shared';
+import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_FETCH_PROXY_SCRIPT, IFRAME_APP_PROTOCOL_SCRIPT } from '@yaar/shared';
 
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
 
@@ -52,6 +52,7 @@ export function generateHtmlWrapper(jsCode: string, title: string): string {
   <script>${IFRAME_CAPTURE_HELPER_SCRIPT}</script>
   <script>${IFRAME_STORAGE_SDK_SCRIPT}</script>
   <script>${IFRAME_FETCH_PROXY_SCRIPT}</script>
+  <script>${IFRAME_APP_PROTOCOL_SCRIPT}</script>
 </head>
 <body>
   <script type="module">

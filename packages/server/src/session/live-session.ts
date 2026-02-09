@@ -22,7 +22,7 @@ import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
 import type { ConnectionId } from '../websocket/broadcast-center.js';
 import { getBroadcastCenter } from '../websocket/broadcast-center.js';
-import type { ClientEvent, ServerEvent, OSAction } from '@yaar/shared';
+import type { ClientEvent, ServerEvent, OSAction, AppProtocolRequest } from '@yaar/shared';
 import type { WebSocket } from 'ws';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
@@ -51,6 +51,9 @@ export class LiveSession {
 
   // Action listener for window state tracking
   private unsubscribeAction: (() => void) | null = null;
+  // App protocol listener for iframe communication
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private appProtocolListener: ((...args: any[]) => void) | null = null;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -72,6 +75,17 @@ export class LiveSession {
     this.unsubscribeAction = actionEmitter.onAction((event) => {
       this.windowState.handleAction(event.action);
     });
+
+    // Subscribe to app protocol requests from tools
+    this.appProtocolListener = (data: { requestId: string; windowId: string; request: AppProtocolRequest }) => {
+      this.broadcast({
+        type: 'APP_PROTOCOL_REQUEST',
+        requestId: data.requestId,
+        windowId: data.windowId,
+        request: data.request,
+      });
+    };
+    actionEmitter.on('app-protocol', this.appProtocolListener);
   }
 
   // ── Connection management ───────────────────────────────────────────
@@ -276,6 +290,10 @@ export class LiveSession {
         });
         break;
 
+      case 'APP_PROTOCOL_RESPONSE':
+        actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
+        break;
+
       case 'TOAST_ACTION':
         this.reloadCache.markFailed(event.eventId);
         console.log(`[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`);
@@ -326,6 +344,10 @@ export class LiveSession {
     if (this.unsubscribeAction) {
       this.unsubscribeAction();
       this.unsubscribeAction = null;
+    }
+    if (this.appProtocolListener) {
+      actionEmitter.off('app-protocol', this.appProtocolListener);
+      this.appProtocolListener = null;
     }
 
     if (this.pool) {

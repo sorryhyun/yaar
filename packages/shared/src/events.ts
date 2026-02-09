@@ -3,6 +3,7 @@
  */
 
 import type { OSAction, PermissionOptions } from './actions.js';
+import type { AppProtocolRequest, AppProtocolResponse } from './app-protocol.js';
 
 // ============ Client → Server Events ============
 
@@ -105,6 +106,13 @@ export interface UserInteractionEvent {
   interactions: UserInteraction[];
 }
 
+export interface AppProtocolResponseEvent {
+  type: 'APP_PROTOCOL_RESPONSE';
+  requestId: string;
+  windowId: string;
+  response: AppProtocolResponse;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -116,7 +124,8 @@ export type ClientEvent =
   | ComponentActionEvent
   | DialogFeedbackEvent
   | ToastActionEvent
-  | UserInteractionEvent;
+  | UserInteractionEvent
+  | AppProtocolResponseEvent;
 
 // ============ Server → Client Events ============
 
@@ -207,6 +216,14 @@ export interface ApprovalRequestEvent {
   seq?: number;
 }
 
+export interface AppProtocolRequestEvent {
+  type: 'APP_PROTOCOL_REQUEST';
+  requestId: string;
+  windowId: string;
+  request: AppProtocolRequest;
+  seq?: number;
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -217,4 +234,5 @@ export type ServerEvent =
   | WindowAgentStatusEvent
   | MessageAcceptedEvent
   | MessageQueuedEvent
-  | ApprovalRequestEvent;
+  | ApprovalRequestEvent
+  | AppProtocolRequestEvent;

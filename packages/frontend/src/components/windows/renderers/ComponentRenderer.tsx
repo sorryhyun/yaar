@@ -126,6 +126,8 @@ function LeafRenderer({ node, onAction }: LeafRendererProps) {
 
 // ============ Component Renderers ============
 
+const BUTTON_COOLDOWN_MS = 800
+
 function ButtonRenderer({
   node,
   onAction,
@@ -134,9 +136,13 @@ function ButtonRenderer({
   onAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }) {
   const formContext = useFormContext()
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const handleClick = useCallback(() => {
-    if (!node.disabled && onAction) {
+    if (!node.disabled && !isProcessing && onAction) {
+      setIsProcessing(true)
+      setTimeout(() => setIsProcessing(false), BUTTON_COOLDOWN_MS)
+
       const isParallel = node.parallel !== false
 
       if (node.submitForm && formContext) {
@@ -146,23 +152,24 @@ function ButtonRenderer({
         onAction(node.action, isParallel, undefined, undefined, [`Button:${node.label}`])
       }
     }
-  }, [node.action, node.disabled, node.parallel, node.submitForm, node.label, onAction, formContext])
+  }, [node.action, node.disabled, node.parallel, node.submitForm, node.label, onAction, formContext, isProcessing])
 
   const variant = normalizeEnum(node.variant, BUTTON_VARIANT_VALUES, 'secondary')
   const size = normalizeEnum(node.size, BUTTON_SIZE_VALUES, 'md')
+  const disabled = node.disabled || isProcessing
 
   const className = [
     formStyles.button,
     formStyles[`button${variant.charAt(0).toUpperCase() + variant.slice(1)}`],
     formStyles[`buttonSize${size.charAt(0).toUpperCase() + size.slice(1)}`],
-    node.disabled ? formStyles.buttonDisabled : '',
+    disabled ? formStyles.buttonDisabled : '',
   ].filter(Boolean).join(' ')
 
   return (
     <button
       className={className}
       onClick={handleClick}
-      disabled={node.disabled}
+      disabled={disabled}
       type="button"
     >
       {node.icon && <span className={formStyles.buttonIcon}>{node.icon}</span>}

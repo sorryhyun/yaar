@@ -4,7 +4,7 @@
  * Detects CSP/X-Frame-Options blocking and reports back to the AI.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT } from '@yaar/shared'
+import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_APP_PROTOCOL_SCRIPT } from '@yaar/shared'
 import styles from '@/styles/windows/renderers.module.css'
 
 interface IframeRendererProps {
@@ -122,6 +122,12 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
             storageScript.setAttribute('data-yaar-storage', '1')
             storageScript.textContent = IFRAME_STORAGE_SDK_SCRIPT
             doc.head.appendChild(storageScript)
+          }
+          if (doc && !doc.querySelector('script[data-yaar-app-protocol]')) {
+            const appProtocolScript = doc.createElement('script')
+            appProtocolScript.setAttribute('data-yaar-app-protocol', '1')
+            appProtocolScript.textContent = IFRAME_APP_PROTOCOL_SCRIPT
+            doc.head.appendChild(appProtocolScript)
           }
         } catch {
           // Cross-origin — can't inject, capture helper must be baked in

@@ -1,4 +1,4 @@
-import type { ServerEvent, OSAction } from '@/types'
+import type { ServerEvent, OSAction, AppProtocolRequestEvent, AppProtocolRequest } from '@/types'
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void
@@ -14,6 +14,7 @@ export interface ServerEventDispatchHandlers {
   updateCliStreaming: (agentId: string, content: string, type: 'thinking' | 'response', monitorId?: string) => void
   finalizeCliStreaming: (agentId: string) => void
   addCliEntry: (entry: { type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary'; content: string; agentId?: string; monitorId?: string }) => void
+  handleAppProtocolRequest: (requestId: string, windowId: string, request: AppProtocolRequest) => void
 }
 
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
@@ -123,6 +124,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         cancelText: message.cancelText,
         permissionOptions: message.permissionOptions,
       }])
+      break
+    }
+    case 'APP_PROTOCOL_REQUEST': {
+      const m = message as AppProtocolRequestEvent
+      handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request)
       break
     }
   }

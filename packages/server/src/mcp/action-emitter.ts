@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { OSAction, DialogConfirmAction, PermissionOptions } from '@yaar/shared';
+import type { OSAction, DialogConfirmAction, PermissionOptions, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { getAgentId } from '../agents/session.js';
 import { checkPermission, savePermission, type PermissionDecision } from '../storage/permissions.js';
 
@@ -63,11 +63,28 @@ interface PendingDialog {
 }
 
 /**
+ * Data emitted for an app protocol request.
+ */
+export interface AppProtocolRequestData {
+  windowId: string;
+  request: AppProtocolRequest;
+}
+
+/**
+ * Pending app protocol request waiting for response from iframe.
+ */
+interface PendingAppRequest {
+  resolve: (response: AppProtocolResponse) => void;
+  timeoutId: NodeJS.Timeout;
+}
+
+/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
   private pendingRequests = new Map<string, PendingRequest>();
   private pendingDialogs = new Map<string, PendingDialog>();
+  private pendingAppRequests = new Map<string, PendingAppRequest>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
 
@@ -268,6 +285,46 @@ class ActionEmitter extends EventEmitter {
       }
 
       pending.resolve(feedback.confirmed);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Send an app protocol request to an iframe app and wait for its response.
+   * Returns null if the app does not respond within the timeout.
+   */
+  async emitAppProtocolRequest(
+    windowId: string,
+    request: AppProtocolRequest,
+    timeoutMs: number = 5000
+  ): Promise<AppProtocolResponse | null> {
+    const requestId = this.generateRequestId();
+
+    const responsePromise = new Promise<AppProtocolResponse | null>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingAppRequests.delete(requestId);
+        resolve(null);
+      }, timeoutMs);
+
+      this.pendingAppRequests.set(requestId, { resolve, timeoutId });
+    });
+
+    this.emit('app-protocol', { requestId, windowId, request });
+
+    return responsePromise;
+  }
+
+  /**
+   * Resolve a pending app protocol request with a response from the iframe.
+   * Called by the session when it receives an APP_PROTOCOL_RESPONSE from the frontend.
+   */
+  resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
+    const pending = this.pendingAppRequests.get(requestId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      this.pendingAppRequests.delete(requestId);
+      pending.resolve(response);
       return true;
     }
     return false;
