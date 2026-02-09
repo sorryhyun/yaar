@@ -1,28 +1,22 @@
 /**
  * MCP tool registration aggregator.
+ *
+ * Wires each domain's tools to the correct MCP server namespace.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { McpServerName } from '../server.js';
-import { registerSystemTools } from './system.js';
-import { registerWindowTools } from './window.js';
-import { registerStorageTools } from './storage.js';
-import { registerAppsTools } from './apps.js';
-import { registerHttpTools } from './http.js';
-import { registerAppDevTools } from './app-dev.js';
-import { registerSandboxTools } from './sandbox.js';
-import { registerReloadTools } from '../../reload/tools.js';
-import { reloadCacheManager } from '../../reload/index.js';
-import { windowStateRegistryManager } from '../window-state.js';
-import { getCurrentConnectionId } from '../../agents/session.js';
-
-export { registerSystemTools } from './system.js';
-export { registerWindowTools } from './window.js';
-export { registerStorageTools } from './storage.js';
-export { registerAppsTools } from './apps.js';
-export { registerHttpTools } from './http.js';
-export { registerAppDevTools } from './app-dev.js';
-export { registerSandboxTools } from './sandbox.js';
+import type { McpServerName } from './server.js';
+import { registerSystemTools } from './system/index.js';
+import { registerWindowTools } from './window/index.js';
+import { registerStorageTools } from './storage/index.js';
+import { registerAppsTools } from './apps/index.js';
+import { registerHttpTools } from './http/index.js';
+import { registerAppDevTools } from './app-dev/index.js';
+import { registerSandboxTools } from './sandbox/index.js';
+import { registerReloadTools } from '../reload/tools.js';
+import { reloadCacheManager } from '../reload/index.js';
+import { windowStateRegistryManager } from './window-state.js';
+import { getCurrentConnectionId } from '../agents/session.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.

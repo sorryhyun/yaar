@@ -5,7 +5,7 @@
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { configRead, configWrite } from '../../storage/index.js';
+import { configRead, configWrite } from '../storage/index.js';
 
 const ALLOWED_DOMAINS_FILE = 'curl_allowed_domains.yaml';
 

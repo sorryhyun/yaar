@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
 import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
-import { listApps } from '../../mcp/tools/apps.js';
+import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../websocket/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';

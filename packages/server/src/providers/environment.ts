@@ -7,7 +7,7 @@
 
 import { platform } from 'os';
 import type { ProviderType } from './types.js';
-import { listApps } from '../mcp/tools/apps.js';
+import { listApps } from '../mcp/apps/discovery.js';
 import { storageList } from '../storage/storage-manager.js';
 import { IS_BUNDLED_EXE } from '../config.js';
 

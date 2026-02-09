@@ -9,7 +9,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { registerAllTools } from './tools/index.js';
+import { registerAllTools } from './register.js';
 
 /** The 4 MCP server categories. */
 export const MCP_SERVERS = ['system', 'window', 'storage', 'apps'] as const;

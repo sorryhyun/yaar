@@ -5,11 +5,17 @@
 // Server
 export { initMcpServer, handleMcpRequest, getMcpToken, MCP_SERVERS, type McpServerName } from './server.js';
 
-// Tools
-export { registerAllTools, getToolNames } from './tools/index.js';
-export { registerSystemTools } from './tools/system.js';
-export { registerWindowTools } from './tools/window.js';
-export { registerStorageTools } from './tools/storage.js';
+// Tool registration
+export { registerAllTools, getToolNames } from './register.js';
+
+// Domain tool registrations
+export { registerSystemTools } from './system/index.js';
+export { registerWindowTools } from './window/index.js';
+export { registerStorageTools } from './storage/index.js';
+export { registerAppsTools } from './apps/index.js';
+export { registerHttpTools } from './http/index.js';
+export { registerAppDevTools } from './app-dev/index.js';
+export { registerSandboxTools } from './sandbox/index.js';
 
 // Action emitter
 export {

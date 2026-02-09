@@ -8,7 +8,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { sendError, sendJson } from '../utils.js';
-import { extractDomain, isDomainAllowed } from '../../mcp/tools/domains.js';
+import { extractDomain, isDomainAllowed } from '../../mcp/domains.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 const TIMEOUT_MS = 30_000;

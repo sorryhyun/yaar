@@ -34,7 +34,26 @@ src/
 │   └── broadcast-center.ts  # BroadcastCenter — routes events to WebSocket connections
 ├── agents/            # Agent lifecycle, pooling, context management
 ├── providers/         # Pluggable AI backends (Claude, Codex)
-├── mcp/               # MCP server, tools, action emitter
+├── mcp/               # MCP server, domain-organized tools, action emitter
+│   ├── index.ts       # Module re-exports
+│   ├── server.ts      # MCP server init, request handling, token
+│   ├── action-emitter.ts  # ActionEmitter — decouple tools from sessions
+│   ├── window-state.ts    # Per-connection window state tracking
+│   ├── utils.ts       # ok(), okWithImages() response helpers
+│   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
+│   ├── tools/index.ts # Aggregator: registerAllTools(), getToolNames()
+│   ├── system/        # get_time, calculate, get_info, get_env_var, generate_random, memorize
+│   ├── window/        # create, update, close, lock/unlock, list, view, notifications
+│   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts
+│   ├── storage/       # read, write, list, delete
+│   ├── http/          # http_get, http_post, request_allowing_domain
+│   │   ├── curl.ts, request.ts, permission.ts
+│   ├── sandbox/       # run_js, run_ts
+│   ├── apps/          # list, load_skill, read_config, write_config
+│   │   ├── discovery.ts (listApps, loadAppSkill — used by API routes)
+│   │   ├── config.ts (credentials, read/write config)
+│   └── app-dev/       # write_ts, apply_diff_ts, compile, deploy, clone, write_json
+│       ├── helpers.ts, write.ts, compile.ts, deploy.ts
 ├── logging/           # Session logging (write), reading, and window restore
 ├── storage/           # StorageManager + permissions for persistent data
 └── lib/               # Standalone utilities (no server internal imports)
@@ -119,14 +138,23 @@ The system prompt includes a handshake protocol: "ping" → "pong"
 
 ## Tools (MCP)
 
-Window tools with lock protection:
-- `create_window`, `update_window`, `close_window`
-- `lock_window`, `unlock_window` - Prevent concurrent modifications
-- `show_notification`, `dismiss_notification`
+Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. The aggregator at `mcp/tools/index.ts` wires them to the correct MCP server namespace.
+
+| Domain | MCP Server | Tools |
+|--------|-----------|-------|
+| `system/` | system | get_time, calculate, get_info, get_env_var, generate_random, memorize |
+| `http/` | system | http_get, http_post, request_allowing_domain |
+| `sandbox/` | system | run_js, run_ts |
+| `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification |
+| `storage/` | storage | read, write, list, delete |
+| `apps/` | apps | list, load_skill, read_config, write_config |
+| `app-dev/` | apps | write_ts, apply_diff_ts, compile, compile_component, deploy, clone, write_json |
 
 Tools use `actionEmitter.emitAction()` which:
 - Broadcasts action to frontend
 - Optionally waits for rendering feedback (e.g., iframe embed success)
+
+Window tools support lock protection — only the locking agent can modify or unlock a locked window.
 
 ## REST API
 

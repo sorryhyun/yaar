@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
 import { executeJs, executeTs } from '../../lib/sandbox/index.js';
-import { readAllowedDomains } from './domains.js';
+import { readAllowedDomains } from '../domains.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const MAX_TIMEOUT = 30000;
