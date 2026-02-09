@@ -15,6 +15,7 @@ import {
 } from './use-agent-connection/transport-manager'
 import { dispatchServerEvent } from './use-agent-connection/server-event-dispatcher'
 import { generateActionId, generateMessageId } from './use-agent-connection/outbound-command-helpers'
+import { getRawWindowId } from '@/store/helpers'
 
 const wsManager = createWsManager()
 
@@ -206,7 +207,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   const sendWindowMessage = useCallback((windowId: string, content: string) => {
     const messageId = generateMessageId()
-    send({ type: 'WINDOW_MESSAGE', messageId, windowId, content })
+    send({ type: 'WINDOW_MESSAGE', messageId, windowId: getRawWindowId(windowId), content })
   }, [send])
 
   const sendDialogFeedback = useCallback((
@@ -231,7 +232,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     componentPath?: string[],
   ) => {
     const actionId = generateActionId(parallel)
-    send({ type: 'COMPONENT_ACTION', windowId, windowTitle, action, actionId, formData, formId, componentPath })
+    send({ type: 'COMPONENT_ACTION', windowId: getRawWindowId(windowId), windowTitle, action, actionId, formData, formId, componentPath })
   }, [send])
 
   const interrupt = useCallback(() => {
@@ -266,7 +267,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           send({
             type: 'RENDERING_FEEDBACK',
             requestId: item.requestId,
-            windowId: item.windowId,
+            windowId: getRawWindowId(item.windowId),
             renderer: item.renderer,
             success: item.success,
             error: item.error,
@@ -285,7 +286,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       if (state.pendingInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
         const interactions = consumePendingInteractions()
         if (interactions.length > 0) {
-          send({ type: 'USER_INTERACTION', interactions })
+          // Unscope windowIds before sending to server (store uses monitorId-scoped keys)
+          const unscopedInteractions = interactions.map(i =>
+            i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i
+          )
+          send({ type: 'USER_INTERACTION', interactions: unscopedInteractions })
         }
       }
     })

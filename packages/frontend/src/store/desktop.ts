@@ -11,6 +11,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { DesktopStore } from './types'
 import type { OSAction, WindowCaptureAction } from '@yaar/shared'
+import { toWindowKey } from './helpers'
 import html2canvas from 'html2canvas'
 
 // Import all slice creators
@@ -163,7 +164,12 @@ export const useDesktopStore = create<DesktopStore>()(
         // Handle capture async (outside Immer)
         const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string }
         if (requestId) {
-          captureWindow(windowId, requestId)
+          // Resolve scoped key: server sends raw windowId, store uses monitorId-scoped keys
+          const state = useDesktopStore.getState()
+          const actionMonitorId = (action as { monitorId?: string }).monitorId
+          const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0'
+          const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId)
+          captureWindow(key, requestId)
         }
         return
       }

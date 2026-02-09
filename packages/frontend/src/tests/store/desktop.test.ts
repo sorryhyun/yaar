@@ -3,6 +3,9 @@
  */
 import { useDesktopStore, selectVisibleWindows, selectWindowsInOrder } from '../../store/desktop'
 
+// Window store keys are scoped by monitorId: "monitor-0/w1"
+const key = (id: string) => `monitor-0/${id}`
+
 describe('Desktop Store', () => {
   beforeEach(() => {
     useDesktopStore.setState({
@@ -32,8 +35,8 @@ describe('Desktop Store', () => {
       })
 
       const state = useDesktopStore.getState()
-      expect(state.windows['w1']).toMatchObject({
-        id: 'w1',
+      expect(state.windows[key('w1')]).toMatchObject({
+        id: key('w1'),
         title: 'Test Window',
         bounds: { x: 100, y: 100, w: 400, h: 300 },
         minimized: false,
@@ -51,8 +54,8 @@ describe('Desktop Store', () => {
       ])
 
       const state = useDesktopStore.getState()
-      expect(state.zOrder).toEqual(['w1', 'w2', 'w3'])
-      expect(state.focusedWindowId).toBe('w3')
+      expect(state.zOrder).toEqual([key('w1'), key('w2'), key('w3')])
+      expect(state.focusedWindowId).toBe(key('w3'))
     })
 
     it('updates z-order on focus', () => {
@@ -66,8 +69,8 @@ describe('Desktop Store', () => {
       applyAction({ type: 'window.focus', windowId: 'w1' })
 
       const state = useDesktopStore.getState()
-      expect(state.zOrder).toEqual(['w2', 'w1'])
-      expect(state.focusedWindowId).toBe('w1')
+      expect(state.zOrder).toEqual([key('w2'), key('w1')])
+      expect(state.focusedWindowId).toBe(key('w1'))
     })
 
     it('handles close correctly', () => {
@@ -81,9 +84,9 @@ describe('Desktop Store', () => {
       applyAction({ type: 'window.close', windowId: 'w2' })
 
       const state = useDesktopStore.getState()
-      expect(state.windows['w2']).toBeUndefined()
-      expect(state.zOrder).toEqual(['w1'])
-      expect(state.focusedWindowId).toBe('w1')
+      expect(state.windows[key('w2')]).toBeUndefined()
+      expect(state.zOrder).toEqual([key('w1')])
+      expect(state.focusedWindowId).toBe(key('w1'))
     })
 
     it('handles minimize/restore', () => {
@@ -98,10 +101,10 @@ describe('Desktop Store', () => {
       })
 
       applyAction({ type: 'window.minimize', windowId: 'w1' })
-      expect(useDesktopStore.getState().windows['w1'].minimized).toBe(true)
+      expect(useDesktopStore.getState().windows[key('w1')].minimized).toBe(true)
 
       applyAction({ type: 'window.restore', windowId: 'w1' })
-      expect(useDesktopStore.getState().windows['w1'].minimized).toBe(false)
+      expect(useDesktopStore.getState().windows[key('w1')].minimized).toBe(false)
     })
 
     it('handles maximize/restore with bounds preservation', () => {
@@ -119,14 +122,44 @@ describe('Desktop Store', () => {
       applyAction({ type: 'window.maximize', windowId: 'w1' })
 
       let state = useDesktopStore.getState()
-      expect(state.windows['w1'].maximized).toBe(true)
-      expect(state.windows['w1'].previousBounds).toEqual(originalBounds)
+      expect(state.windows[key('w1')].maximized).toBe(true)
+      expect(state.windows[key('w1')].previousBounds).toEqual(originalBounds)
 
       applyAction({ type: 'window.restore', windowId: 'w1' })
 
       state = useDesktopStore.getState()
-      expect(state.windows['w1'].maximized).toBe(false)
-      expect(state.windows['w1'].bounds).toEqual(originalBounds)
+      expect(state.windows[key('w1')].maximized).toBe(false)
+      expect(state.windows[key('w1')].bounds).toEqual(originalBounds)
+    })
+
+    it('scopes windows by monitorId to prevent cross-monitor collisions', () => {
+      const { applyAction } = useDesktopStore.getState()
+
+      // Create same windowId on two different monitors
+      applyAction({
+        type: 'window.create',
+        windowId: 'win-storage',
+        title: 'Storage (Monitor 0)',
+        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        content: { renderer: 'markdown', data: '# Monitor 0' },
+        monitorId: 'monitor-0',
+      } as Parameters<typeof applyAction>[0])
+
+      applyAction({
+        type: 'window.create',
+        windowId: 'win-storage',
+        title: 'Storage (Monitor 1)',
+        bounds: { x: 50, y: 50, w: 400, h: 300 },
+        content: { renderer: 'markdown', data: '# Monitor 1' },
+        monitorId: 'monitor-1',
+      } as Parameters<typeof applyAction>[0])
+
+      const state = useDesktopStore.getState()
+      // Both windows should exist with different scoped keys
+      expect(state.windows['monitor-0/win-storage']).toBeDefined()
+      expect(state.windows['monitor-1/win-storage']).toBeDefined()
+      expect(state.windows['monitor-0/win-storage'].title).toBe('Storage (Monitor 0)')
+      expect(state.windows['monitor-1/win-storage'].title).toBe('Storage (Monitor 1)')
     })
   })
 
@@ -143,7 +176,7 @@ describe('Desktop Store', () => {
 
       const visible = selectVisibleWindows(useDesktopStore.getState())
       expect(visible.length).toBe(1)
-      expect(visible[0].id).toBe('w1')
+      expect(visible[0].id).toBe(key('w1'))
     })
 
     it('selectWindowsInOrder returns correct order', () => {
@@ -156,7 +189,7 @@ describe('Desktop Store', () => {
       ])
 
       const inOrder = selectWindowsInOrder(useDesktopStore.getState())
-      expect(inOrder.map(w => w.id)).toEqual(['w2', 'w1'])
+      expect(inOrder.map(w => w.id)).toEqual([key('w2'), key('w1')])
     })
   })
 

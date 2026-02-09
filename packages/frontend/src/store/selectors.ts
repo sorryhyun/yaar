@@ -2,6 +2,7 @@
  * Selectors for the desktop store.
  */
 import type { DesktopStore, WindowModel } from './types'
+import { getRawWindowId } from './helpers'
 
 export const selectWindowsInOrder = (state: DesktopStore) =>
   state.zOrder.map(id => state.windows[id]).filter(Boolean)
@@ -29,8 +30,12 @@ export const selectActiveAgents = (state: DesktopStore) =>
 export const selectWindowAgents = (state: DesktopStore) =>
   state.windowAgents
 
-export const selectWindowAgent = (windowId: string) => (state: DesktopStore) =>
-  Object.values(state.windowAgents).find(wa => wa.windowId === windowId)
+export const selectWindowAgent = (windowId: string) => (state: DesktopStore) => {
+  // windowId from component is scoped (e.g. "monitor-0/win-storage"),
+  // but windowAgents uses raw IDs from the server. Compare both forms.
+  const rawId = getRawWindowId(windowId)
+  return Object.values(state.windowAgents).find(wa => wa.windowId === rawId || wa.windowId === windowId)
+}
 
 export const selectQueuedActionsCount = (windowId: string) => (state: DesktopStore) =>
   state.queuedActions[windowId]?.length ?? 0

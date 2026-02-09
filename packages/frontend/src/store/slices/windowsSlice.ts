@@ -1,11 +1,14 @@
 /**
  * Windows slice - manages windows, z-order, and focus.
  * This is the most complex slice with cross-slice dependencies.
+ *
+ * Window store keys are scoped by monitorId: "monitor-0/win-storage".
+ * This prevents collisions when multiple monitors create windows with the same ID.
  */
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types'
 import type { OSAction } from '@yaar/shared'
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared'
-import { emptyContentByRenderer, addDebugLogEntry } from '../helpers'
+import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers'
 
 export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   windows: {},
@@ -15,35 +18,47 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   handleWindowAction: (action: OSAction) => set((state) => {
     const store = state as DesktopStore
 
+    // Resolve an action's windowId to the correct store key.
+    // For UI-originated actions, windowId is already a scoped key (found directly).
+    // For server-originated actions, windowId is raw and needs scoping via monitorId.
+    const resolveKey = (rawId: string): string => {
+      if (state.windows[rawId]) return rawId
+      const monId = (action as { monitorId?: string }).monitorId ?? store.activeMonitorId ?? 'monitor-0'
+      return toWindowKey(monId, rawId)
+    }
+
     switch (action.type) {
       case 'window.create': {
         const actionMonitorId = (action as { monitorId?: string }).monitorId
+        const monitorId = actionMonitorId ?? (store as DesktopStore).activeMonitorId ?? 'monitor-0'
+        const key = toWindowKey(monitorId, action.windowId)
         const window: WindowModel = {
-          id: action.windowId,
+          id: key,
           title: action.title,
           bounds: { ...action.bounds },
           content: { ...action.content },
           minimized: false,
           maximized: false,
           requestId: action.requestId,
-          monitorId: actionMonitorId ?? (store as DesktopStore).activeMonitorId ?? 'monitor-0',
+          monitorId,
         }
-        state.windows[action.windowId] = window
-        state.zOrder = state.zOrder.filter(id => id !== action.windowId)
-        state.zOrder.push(action.windowId)
-        state.focusedWindowId = action.windowId
+        state.windows[key] = window
+        state.zOrder = state.zOrder.filter(id => id !== key)
+        state.zOrder.push(key)
+        state.focusedWindowId = key
         break
       }
 
       case 'window.close': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         const actionAgentId = (action as { agentId?: string }).agentId
         const reqId = (action as { requestId?: string }).requestId
         if (win?.locked && win.lockedBy !== actionAgentId) {
           if (reqId) {
             store.pendingFeedback.push({
               requestId: reqId,
-              windowId: action.windowId,
+              windowId: key,
               renderer: 'lock',
               success: false,
               error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
@@ -51,29 +66,31 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
           }
           break
         }
-        delete state.windows[action.windowId]
-        delete store.queuedActions[action.windowId]
-        state.zOrder = state.zOrder.filter(id => id !== action.windowId)
-        if (state.focusedWindowId === action.windowId) {
+        delete state.windows[key]
+        delete store.queuedActions[key]
+        state.zOrder = state.zOrder.filter(id => id !== key)
+        if (state.focusedWindowId === key) {
           state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null
         }
         break
       }
 
       case 'window.focus': {
-        if (state.windows[action.windowId]) {
-          state.zOrder = state.zOrder.filter(id => id !== action.windowId)
-          state.zOrder.push(action.windowId)
-          state.focusedWindowId = action.windowId
-          state.windows[action.windowId].minimized = false
+        const key = resolveKey(action.windowId)
+        if (state.windows[key]) {
+          state.zOrder = state.zOrder.filter(id => id !== key)
+          state.zOrder.push(key)
+          state.focusedWindowId = key
+          state.windows[key].minimized = false
         }
         break
       }
 
       case 'window.minimize': {
-        if (state.windows[action.windowId]) {
-          state.windows[action.windowId].minimized = true
-          if (state.focusedWindowId === action.windowId) {
+        const key = resolveKey(action.windowId)
+        if (state.windows[key]) {
+          state.windows[key].minimized = true
+          if (state.focusedWindowId === key) {
             const visible = state.zOrder.filter(id => !state.windows[id]?.minimized)
             state.focusedWindowId = visible[visible.length - 1] ?? null
           }
@@ -82,7 +99,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.maximize': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win && !win.maximized) {
           win.previousBounds = { ...win.bounds }
           win.maximized = true
@@ -91,7 +109,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.restore': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win) {
           if (win.maximized && win.previousBounds) {
             win.bounds = { ...win.previousBounds }
@@ -103,7 +122,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.move': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win) {
           win.bounds.x = action.x
           win.bounds.y = action.y
@@ -112,7 +132,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.resize': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win) {
           win.bounds.w = action.w
           win.bounds.h = action.h
@@ -121,21 +142,23 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.setTitle': {
-        if (state.windows[action.windowId]) {
-          state.windows[action.windowId].title = action.title
+        const key = resolveKey(action.windowId)
+        if (state.windows[key]) {
+          state.windows[key].title = action.title
         }
         break
       }
 
       case 'window.setContent': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         const actionAgentId = (action as { agentId?: string }).agentId
         const reqId = (action as { requestId?: string }).requestId
         if (win?.locked && win.lockedBy !== actionAgentId) {
           if (reqId) {
             store.pendingFeedback.push({
               requestId: reqId,
-              windowId: action.windowId,
+              windowId: key,
               renderer: 'lock',
               success: false,
               error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
@@ -150,14 +173,15 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.updateContent': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         const actionAgentId = (action as { agentId?: string }).agentId
         const reqId = (action as { requestId?: string }).requestId
         if (win?.locked && win.lockedBy !== actionAgentId) {
           if (reqId) {
             store.pendingFeedback.push({
               requestId: reqId,
-              windowId: action.windowId,
+              windowId: key,
               renderer: 'lock',
               success: false,
               error: `Window is currently locked by another agent. Use unlock_window to release the lock before updating.`,
@@ -208,7 +232,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
             }
           } else {
             addDebugLogEntry(store, 'window.updateContent.invalid', {
-              windowId: action.windowId,
+              windowId: key,
               renderer: targetRenderer,
               operation,
             })
@@ -223,7 +247,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
           if (reqId && win.locked) {
             store.pendingFeedback.push({
               requestId: reqId,
-              windowId: action.windowId,
+              windowId: key,
               renderer: 'lock',
               success: true,
               locked: true,
@@ -234,7 +258,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.lock': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win && !win.locked) {
           win.locked = true
           win.lockedBy = action.agentId
@@ -243,7 +268,8 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
 
       case 'window.unlock': {
-        const win = state.windows[action.windowId]
+        const key = resolveKey(action.windowId)
+        const win = state.windows[key]
         if (win && win.locked && win.lockedBy === action.agentId) {
           win.locked = false
           win.lockedBy = undefined
