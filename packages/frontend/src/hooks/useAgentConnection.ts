@@ -55,6 +55,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     consumePendingFeedback,
     consumePendingInteractions,
     consumePendingAppProtocolResponses,
+    consumeAppProtocolReady,
     consumeDrawing,
     registerWindowAgent,
     updateWindowAgentStatus,
@@ -307,6 +308,21 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     })
     return unsubscribe
   }, [consumePendingAppProtocolResponses, send])
+
+  useEffect(() => {
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.pendingAppProtocolReady.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+        const windowIds = consumeAppProtocolReady()
+        for (const windowId of windowIds) {
+          send({
+            type: 'APP_PROTOCOL_READY',
+            windowId: getRawWindowId(windowId),
+          })
+        }
+      }
+    })
+    return unsubscribe
+  }, [consumeAppProtocolReady, send])
 
   useEffect(() => {
     const unsubscribe = useDesktopStore.subscribe((state) => {

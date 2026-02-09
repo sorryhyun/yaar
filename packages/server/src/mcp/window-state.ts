@@ -150,6 +150,14 @@ export class WindowStateRegistry {
     return this.windows.get(windowId);
   }
 
+  setAppProtocol(windowId: string): void {
+    const win = this.windows.get(windowId);
+    if (win) {
+      win.appProtocol = true;
+      win.updatedAt = Date.now();
+    }
+  }
+
   hasWindow(windowId: string): boolean {
     return this.windows.has(windowId);
   }

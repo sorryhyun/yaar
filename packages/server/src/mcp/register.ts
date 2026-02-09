@@ -74,7 +74,6 @@ export function getToolNames(): string[] {
     'mcp__window__show_notification',
     'mcp__window__dismiss_notification',
     // App protocol tools
-    'mcp__window__app_get_manifest',
     'mcp__window__app_query',
     'mcp__window__app_command',
     // Storage tools

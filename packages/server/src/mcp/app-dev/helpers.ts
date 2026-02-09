@@ -2,7 +2,7 @@
  * App development helpers - path validation, naming, SKILL.md generation.
  */
 
-import { readFile, writeFile, readdir, stat } from 'fs/promises';
+import { readFile, writeFile, readdir } from 'fs/promises';
 import { join, normalize, relative } from 'path';
 
 /**
@@ -68,7 +68,7 @@ create({
  * If customSkill is provided, uses it as the base and appends launch/source sections.
  * Otherwise generates a default template.
  */
-export function generateSkillMd(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = [], customSkill?: string): string {
+export function generateSkillMd(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = [], customSkill?: string, hasAppProtocol?: boolean): string {
   const launchSection = generateLaunchSection(appId, appName, hasCompiledApp, componentFiles);
   let md: string;
 
@@ -86,6 +86,22 @@ ${launchSection}
   md += `\n## Source
 Source code is available in \`src/\` directory. Use \`read_config\` with path \`src/main.ts\` to view.
 `;
+
+  if (hasAppProtocol) {
+    md += `
+## App Protocol
+
+This app supports the App Protocol for programmatic interaction.
+
+### Discover capabilities
+\`\`\`
+app_query({ windowId: "${appId}", stateKey: "manifest" })
+\`\`\`
+
+Use \`app_query\` with stateKey \`"manifest"\` to discover available state queries and commands, then use \`app_query\` and \`app_command\` to interact with the app.
+`;
+  }
+
   return md;
 }
 
@@ -108,9 +124,11 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
 
   // Detect what the app has
   let hasCompiledApp = false;
+  let hasAppProtocol = false;
   try {
-    await stat(join(appPath, 'index.html'));
+    const indexHtml = await readFile(join(appPath, 'index.html'), 'utf-8');
     hasCompiledApp = true;
+    hasAppProtocol = indexHtml.includes('.app.register');
   } catch { /* no compiled app */ }
 
   const componentFiles: string[] = [];
@@ -128,6 +146,6 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     if (meta.name) displayName = meta.name;
   } catch { /* no app.json */ }
 
-  const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, customContent);
+  const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, customContent, hasAppProtocol);
   await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 }

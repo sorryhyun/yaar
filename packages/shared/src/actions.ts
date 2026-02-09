@@ -31,6 +31,7 @@ export interface WindowState {
   content: WindowContent;
   locked: boolean;
   lockedBy?: string;
+  appProtocol?: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -113,6 +113,11 @@ export interface AppProtocolResponseEvent {
   response: AppProtocolResponse;
 }
 
+export interface AppProtocolReadyEvent {
+  type: 'APP_PROTOCOL_READY';
+  windowId: string;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -125,7 +130,8 @@ export type ClientEvent =
   | DialogFeedbackEvent
   | ToastActionEvent
   | UserInteractionEvent
-  | AppProtocolResponseEvent;
+  | AppProtocolResponseEvent
+  | AppProtocolReadyEvent;
 
 // ============ Server → Client Events ============
 

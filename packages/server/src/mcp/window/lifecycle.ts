@@ -117,6 +117,7 @@ export function registerLifecycleTools(server: McpServer, getWindowState: () => 
         renderer: win.content.renderer,
         locked: win.locked,
         lockedBy: win.lockedBy,
+        ...(win.appProtocol ? { appProtocol: true } : {}),
       }));
 
       return ok(JSON.stringify(windowList, null, 2));

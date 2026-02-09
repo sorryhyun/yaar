@@ -146,6 +146,60 @@ apps/weather/
 └── SKILL.md    # API 문서, 인증, 워크플로우 등
 ```
 
+## App Protocol
+
+컴파일된 앱은 **App Protocol**을 통해 AI 에이전트와 양방향 통신할 수 있습니다. 앱이 자신의 기능(상태 조회, 명령)을 매니페스트로 선언하면, 에이전트가 런타임에 이를 발견하고 상태를 읽거나 명령을 실행합니다.
+
+```
+에이전트 → MCP 도구 → WebSocket → postMessage → iframe 앱
+iframe 앱 → postMessage → WebSocket → MCP 도구 응답
+```
+
+### 앱에서 등록하기
+
+`window.yaar.app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다. SDK 스크립트는 iframe에 자동 주입됩니다.
+
+```typescript
+window.yaar.app.register({
+  appId: 'my-app',
+  name: 'My App',
+  state: {
+    items: {
+      description: '현재 아이템 목록',
+      handler: () => [...items],
+    },
+  },
+  commands: {
+    addItem: {
+      description: '아이템 추가. Params: { text: string }',
+      params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      handler: (p: { text: string }) => {
+        items.push(p.text);
+        render();
+        return { ok: true };
+      },
+    },
+  },
+});
+```
+
+### MCP 도구
+
+| 도구 | 설명 |
+|------|------|
+| `app_query` | 상태 키로 앱의 구조화된 데이터 읽기 (`"manifest"`로 매니페스트 조회) |
+| `app_command` | 앱에 명령 실행 |
+
+에이전트는 먼저 `app_query`에 stateKey `"manifest"`를 사용하여 앱이 지원하는 기능을 확인한 뒤, `app_query`와 `app_command`로 상호작용합니다.
+
+### 예시: Excel Lite
+
+```
+app_query({ windowId: "excel-lite", stateKey: "manifest" })
+app_query({ windowId: "excel-lite", stateKey: "cells" })
+app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
+```
+
 ## 자격 증명 관리
 
 앱 자격 증명은 `config/credentials/{appId}.json`에 저장됩니다 (git-ignored).
@@ -308,6 +362,60 @@ You can also create apps manually. Just put a `SKILL.md` in `apps/`.
 ```
 apps/weather/
 └── SKILL.md    # API docs, auth, workflows
+```
+
+## App Protocol
+
+Compiled apps can communicate bidirectionally with AI agents via the **App Protocol**. Apps declare their capabilities (state queries, commands) in a manifest, and the agent discovers them at runtime to read state or execute commands.
+
+```
+Agent → MCP tool → WebSocket → postMessage → Iframe App
+Iframe App → postMessage → WebSocket → MCP tool returns
+```
+
+### Registering in Your App
+
+Call `window.yaar.app.register()` with state handlers and command handlers. The SDK script is auto-injected into iframes.
+
+```typescript
+window.yaar.app.register({
+  appId: 'my-app',
+  name: 'My App',
+  state: {
+    items: {
+      description: 'Current list of items',
+      handler: () => [...items],
+    },
+  },
+  commands: {
+    addItem: {
+      description: 'Add an item. Params: { text: string }',
+      params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      handler: (p: { text: string }) => {
+        items.push(p.text);
+        render();
+        return { ok: true };
+      },
+    },
+  },
+});
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `app_query` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
+| `app_command` | Execute a command on the app |
+
+The agent first calls `app_query` with stateKey `"manifest"` to discover capabilities, then uses `app_query` and `app_command` to interact.
+
+### Example: Excel Lite
+
+```
+app_query({ windowId: "excel-lite", stateKey: "manifest" })
+app_query({ windowId: "excel-lite", stateKey: "cells" })
+app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
 ## Credential Management

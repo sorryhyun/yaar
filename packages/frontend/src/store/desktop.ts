@@ -196,6 +196,32 @@ function handleAppProtocolRequest(requestId: string, windowId: string, request: 
 
 export { handleAppProtocolRequest }
 
+/**
+ * Listen for `yaar:app-ready` postMessages from iframes that register with the App Protocol.
+ * Resolves the iframe source to a windowId and queues an APP_PROTOCOL_READY event.
+ */
+function initAppProtocolReadyListener() {
+  window.addEventListener('message', (e: MessageEvent) => {
+    if (e.data?.type !== 'yaar:app-ready') return
+
+    // Find the iframe whose contentWindow matches the message source
+    const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
+    for (const iframe of iframes) {
+      if (iframe.contentWindow === e.source) {
+        const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
+        const windowId = windowEl?.dataset.windowId
+        if (windowId) {
+          useDesktopStore.getState().addAppProtocolReady(windowId)
+        }
+        break
+      }
+    }
+  })
+}
+
+// Initialize the listener immediately
+initAppProtocolReadyListener()
+
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
     // Combine all slices
@@ -282,6 +308,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.debugLog = []
         state.pendingFeedback = []
         state.pendingAppProtocolResponses = []
+        state.pendingAppProtocolReady = []
         state.selectedWindowIds = []
         state.appsVersion = 0
         state.cliMode = false

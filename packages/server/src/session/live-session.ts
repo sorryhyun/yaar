@@ -294,6 +294,10 @@ export class LiveSession {
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
         break;
 
+      case 'APP_PROTOCOL_READY':
+        this.windowState.setAppProtocol(event.windowId);
+        break;
+
       case 'TOAST_ACTION':
         this.reloadCache.markFailed(event.eventId);
         console.log(`[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`);

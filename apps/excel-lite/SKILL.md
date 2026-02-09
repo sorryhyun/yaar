@@ -22,7 +22,7 @@ This app supports the App Protocol for programmatic interaction.
 
 ### Discover capabilities
 ```
-app_get_manifest({ windowId: "excel-lite" })
+app_query({ windowId: "excel-lite", stateKey: "manifest" })
 ```
 
 ### Read state

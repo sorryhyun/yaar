@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
+import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { ok } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
@@ -64,9 +64,11 @@ export function registerDeployTools(server: McpServer): void {
       // Check for compiled output (index.html) or component files
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
       let hasCompiledApp = false;
+      let hasAppProtocol = false;
       try {
-        await stat(distIndexPath);
+        const distHtml = await readFile(distIndexPath, 'utf-8');
         hasCompiledApp = true;
+        hasAppProtocol = distHtml.includes('.app.register');
       } catch {
         // No compiled output
       }
@@ -126,7 +128,7 @@ export function registerDeployTools(server: McpServer): void {
         }
 
         // Generate SKILL.md
-        const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, skill);
+        const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, skill, hasAppProtocol);
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
