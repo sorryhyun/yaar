@@ -128,7 +128,7 @@ export function DesktopSurface() {
 
   // Double-click prevention: track which icon is in cooldown
   const [cooldownId, setCooldownId] = useState<string | null>(null)
-  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>()
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const startCooldown = useCallback((id: string) => {
     setCooldownId(id)

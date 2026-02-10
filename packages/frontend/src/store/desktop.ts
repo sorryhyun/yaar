@@ -42,7 +42,7 @@ import { applyDialogAction } from './slices/dialogsSlice'
  * Try capturing iframe content via the postMessage self-capture protocol.
  * Returns a base64 PNG data URL or null if the iframe doesn't respond.
  */
-function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000): Promise<string | null> {
+export function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000): Promise<string | null> {
   return new Promise((resolve) => {
     const requestId = `capture-${Date.now()}-${Math.random().toString(36).slice(2)}`
 

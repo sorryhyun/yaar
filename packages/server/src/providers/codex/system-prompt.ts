@@ -1,8 +1,11 @@
 /**
  * System prompt for the YAAR desktop agent (Codex provider).
+ * Override by placing a custom prompt in config/system-prompt.txt.
  */
 
-export const SYSTEM_PROMPT = `You are a desktop agent for YAAR, a reactive AI-driven operating system interface.
+import { loadCustomSystemPrompt } from '../load-system-prompt.js';
+
+const DEFAULT_PROMPT = `You are a desktop agent for YAAR, a reactive AI-driven operating system interface.
 
 ## Your Role
 You control the desktop UI through tools. When users interact with you, respond by creating windows, showing notifications, and managing content on their desktop.
@@ -71,3 +74,5 @@ When you see <reload_options> in a message, it contains a JSON array of cached a
 - Prefer reload when the label matches your intent; higher similarity = better match
 - If replay fails, proceed manually as normal
 `;
+
+export const SYSTEM_PROMPT = loadCustomSystemPrompt() ?? DEFAULT_PROMPT;

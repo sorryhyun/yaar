@@ -73,8 +73,9 @@ export class CodexProvider extends BaseTransport {
   }
 
   async isAvailable(): Promise<boolean> {
-    // Check if Codex CLI is installed
-    const cliAvailable = await this.isCliAvailable('codex');
+    // Check if Codex CLI is installed (use getCodexBin() for bundled exe support)
+    const { getCodexBin } = await import('../../config.js');
+    const cliAvailable = await this.isCliAvailable(getCodexBin());
     if (!cliAvailable) return false;
 
     // Check for authentication: either API key or OAuth (auth.json)

@@ -87,7 +87,7 @@ export abstract class BaseTransport implements AITransport {
   protected async isCliAvailable(command: string): Promise<boolean> {
     try {
       const { execSync } = await import('child_process');
-      execSync(`${command} --version`, { stdio: 'ignore' });
+      execSync(`"${command}" --version`, { stdio: 'ignore' });
       return true;
     } catch {
       return false;

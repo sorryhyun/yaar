@@ -54,9 +54,11 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
   },
   codex: async () => {
     // Check CLI + auth without needing an AppServer
+    // Use getCodexBin() to find the binary (supports bundled exe mode)
     try {
       const { execSync } = await import('child_process');
-      execSync('codex --version', { stdio: 'ignore' });
+      const { getCodexBin } = await import('../config.js');
+      execSync(`"${getCodexBin()}" --version`, { stdio: 'ignore' });
     } catch {
       return false;
     }

@@ -37,6 +37,11 @@
   opacity: var(--opacity-hover);
 }
 
+.frame[data-dragging="true"] .content,
+.frame[data-resizing="true"] .content {
+  pointer-events: none;
+}
+
 .titleBar {
   display: flex;
   align-items: center;

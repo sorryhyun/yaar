@@ -3,13 +3,25 @@
  */
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store'
+import { tryIframeSelfCapture } from '@/store/desktop'
 import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
 import { MemoizedContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
 import styles from '@/styles/windows/WindowFrame.module.css'
 
-function exportContent(content: WindowModel['content'], title: string) {
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename.replace(/[/\\?%*:|"<>]/g, '-')
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+async function exportContent(content: WindowModel['content'], title: string, windowId?: string) {
   const { renderer, data } = content
   let blob: Blob
   let filename: string
@@ -40,6 +52,34 @@ function exportContent(content: WindowModel['content'], title: string) {
       break
     }
     case 'iframe': {
+      // Three-tier iframe export: same-origin HTML → screenshot → URL fallback
+      if (windowId) {
+        const el = document.querySelector(`[data-window-id="${windowId}"] iframe`) as HTMLIFrameElement | null
+        if (el) {
+          // Tier 1: Same-origin HTML export
+          try {
+            const doc = el.contentDocument
+            if (doc) {
+              const html = doc.documentElement.outerHTML
+              triggerDownload(new Blob([html], { type: 'text/html' }), `${title}.html`)
+              return
+            }
+          } catch { /* cross-origin — fall through */ }
+
+          // Tier 2: Screenshot via self-capture protocol
+          if (el.contentWindow) {
+            const imageData = await tryIframeSelfCapture(el)
+            if (imageData) {
+              const res = await fetch(imageData)
+              const pngBlob = await res.blob()
+              triggerDownload(pngBlob, `${title}.png`)
+              return
+            }
+          }
+        }
+      }
+
+      // Tier 3: URL fallback
       const iframeData = data as { url?: string } | string
       const url = typeof iframeData === 'string' ? iframeData : iframeData?.url
       blob = new Blob([url || ''], { type: 'text/plain' })
@@ -51,14 +91,7 @@ function exportContent(content: WindowModel['content'], title: string) {
       filename = `${title}.json`
   }
 
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename.replace(/[/\\?%*:|"<>]/g, '-')
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  triggerDownload(blob, filename)
 }
 
 interface WindowFrameProps {
@@ -127,6 +160,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
 
     e.preventDefault()
     setIsDragging(true)
+    document.documentElement.classList.add('yaar-dragging')
     dragOffset.current = {
       x: e.clientX - window.bounds.x,
       y: e.clientY - window.bounds.y,
@@ -153,6 +187,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     const entry = { move: handleMouseMove, up: handleMouseUp }
     function handleMouseUp() {
       setIsDragging(false)
+      document.documentElement.classList.remove('yaar-dragging')
       queueBoundsUpdate(window.id)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -169,6 +204,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     e.preventDefault()
     e.stopPropagation()
     setIsResizing(true)
+    document.documentElement.classList.add('yaar-dragging')
 
     const startBounds = { ...window.bounds }
     const startMouseX = e.clientX
@@ -222,6 +258,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     const entry = { move: handleMouseMove, up: handleMouseUp }
     function handleMouseUp() {
       setIsResizing(false)
+      document.documentElement.classList.remove('yaar-dragging')
       queueBoundsUpdate(window.id)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -300,9 +337,9 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
             className={styles.controlBtn}
             data-action="export"
             title="Export content"
-            onClick={() => exportContent(window.content, window.title)}
+            onClick={() => exportContent(window.content, window.title, window.id)}
           >
-            ↓
+            ↑
           </button>
           <button
             className={styles.controlBtn}
