@@ -39,6 +39,9 @@ export class CodexProvider extends BaseTransport {
   // Safe because the turn semaphore ensures only one query runs at a time.
   private resolveMessage: ((done: boolean) => void) | null = null;
 
+  // Current in-flight turn ID for interrupt support
+  private currentTurnId: string | null = null;
+
   /**
    * Create a CodexProvider.
    * @param appServer - The shared AppServer (owned by WarmPool, not this provider).
@@ -168,11 +171,12 @@ export class CodexProvider extends BaseTransport {
           }
         }
 
-        // Start the turn
-        await appServer.turnStart({
+        // Start the turn and capture the turn ID for interrupt support
+        const turnResult = await appServer.turnStart({
           threadId: this.currentSession!.threadId,
           input,
         });
+        this.currentTurnId = turnResult.turn.id;
 
         // Yield messages as they arrive
         while (true) {
@@ -201,6 +205,7 @@ export class CodexProvider extends BaseTransport {
       } finally {
         appServer.off('notification', notificationHandler);
         actionEmitter.clearCurrentMonitor();
+        this.currentTurnId = null;
         appServer.releaseTurn();
       }
     } catch (err) {
@@ -225,6 +230,15 @@ export class CodexProvider extends BaseTransport {
   }
 
   interrupt(): void {
+    // Send turn/interrupt to the Codex app-server to cancel the in-flight turn
+    const threadId = this.currentSession?.threadId;
+    const turnId = this.currentTurnId;
+    if (this.appServer?.isRunning && threadId && turnId) {
+      this.appServer.turnInterrupt({ threadId, turnId }).catch((err) => {
+        console.warn(`[codex] turn/interrupt failed:`, err);
+      });
+    }
+
     super.interrupt();
     // Signal any pending waiters to stop
     if (this.resolveMessage) {
@@ -238,6 +252,7 @@ export class CodexProvider extends BaseTransport {
     // Don't stop the AppServer — it's owned by WarmPool.
     this.appServer = null;
     this.currentSession = null;
+    this.currentTurnId = null;
     this.resolveMessage = null;
   }
 

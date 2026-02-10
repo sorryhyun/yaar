@@ -323,6 +323,18 @@ export class AgentSession {
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
+      // Always notify frontend that this agent is done.
+      // When interrupted, the stream never emits a 'complete' message,
+      // so the frontend would never clear the agent from the dashboard.
+      // In the normal completion case this is a harmless no-op (clearAgent is idempotent).
+      await this.sendEvent({
+        type: 'AGENT_RESPONSE',
+        content: '',
+        isComplete: true,
+        agentId: role,
+        monitorId: options.monitorId,
+        messageId: messageId ?? undefined,
+      });
       this.running = false;
       this.currentMessageId = null;
       this.currentRole = null;

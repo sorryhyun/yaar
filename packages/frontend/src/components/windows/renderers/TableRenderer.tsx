@@ -1,6 +1,7 @@
 /**
  * TableRenderer - Renders tabular data.
  */
+import { memo } from 'react'
 import styles from '@/styles/windows/renderers.module.css'
 
 interface TableRendererProps {
@@ -10,7 +11,7 @@ interface TableRendererProps {
   }
 }
 
-export function TableRenderer({ data }: TableRendererProps) {
+function TableRenderer({ data }: TableRendererProps) {
   if (!data.headers || !data.rows) {
     return <div>Invalid table data</div>
   }
@@ -36,3 +37,5 @@ export function TableRenderer({ data }: TableRendererProps) {
     </table>
   )
 }
+
+export const MemoizedTableRenderer = memo(TableRenderer)

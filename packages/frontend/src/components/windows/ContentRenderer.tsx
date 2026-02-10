@@ -1,12 +1,13 @@
 /**
  * ContentRenderer - Renders window content based on renderer type.
  */
+import { memo, useCallback } from 'react'
 import type { WindowContent } from '@/types'
-import { MarkdownRenderer } from './renderers/MarkdownRenderer'
-import { TableRenderer } from './renderers/TableRenderer'
-import { HtmlRenderer } from './renderers/HtmlRenderer'
-import { TextRenderer } from './renderers/TextRenderer'
-import { IframeRenderer } from './renderers/IframeRenderer'
+import { MemoizedMarkdownRenderer } from './renderers/MarkdownRenderer'
+import { MemoizedTableRenderer } from './renderers/TableRenderer'
+import { MemoizedHtmlRenderer } from './renderers/HtmlRenderer'
+import { MemoizedTextRenderer } from './renderers/TextRenderer'
+import { MemoizedIframeRenderer } from './renderers/IframeRenderer'
 import { ComponentRenderer } from './renderers/ComponentRenderer'
 
 type FormValue = string | number | boolean
@@ -20,24 +21,32 @@ interface ContentRendererProps {
   onComponentAction?: (action: string, parallel?: boolean, formData?: Record<string, FormValue>, formId?: string, componentPath?: string[]) => void
 }
 
-export function ContentRenderer({ content, windowId, requestId, onRenderSuccess, onRenderError, onComponentAction }: ContentRendererProps) {
+function ContentRenderer({ content, windowId, requestId, onRenderSuccess, onRenderError, onComponentAction }: ContentRendererProps) {
+  const handleIframeSuccess = useCallback(() => {
+    if (requestId) onRenderSuccess?.(requestId, windowId, 'iframe')
+  }, [requestId, windowId, onRenderSuccess])
+
+  const handleIframeError = useCallback((error: string, url: string) => {
+    if (requestId) onRenderError?.(requestId, windowId, 'iframe', error, url)
+  }, [requestId, windowId, onRenderError])
+
   switch (content.renderer) {
     case 'markdown':
-      return <MarkdownRenderer data={content.data as string} />
+      return <MemoizedMarkdownRenderer data={content.data as string} />
 
     case 'table':
-      return <TableRenderer data={content.data as { headers: string[]; rows: string[][] }} />
+      return <MemoizedTableRenderer data={content.data as { headers: string[]; rows: string[][] }} />
 
     case 'html':
-      return <HtmlRenderer data={content.data as string} />
+      return <MemoizedHtmlRenderer data={content.data as string} />
 
     case 'iframe':
       return (
-        <IframeRenderer
+        <MemoizedIframeRenderer
           data={content.data as string | { url: string; sandbox?: string }}
           requestId={requestId}
-          onRenderSuccess={() => requestId && onRenderSuccess?.(requestId, windowId, 'iframe')}
-          onRenderError={(error, url) => requestId && onRenderError?.(requestId, windowId, 'iframe', error, url)}
+          onRenderSuccess={handleIframeSuccess}
+          onRenderError={handleIframeError}
         />
       )
 
@@ -52,6 +61,8 @@ export function ContentRenderer({ content, windowId, requestId, onRenderSuccess,
 
     case 'text':
     default:
-      return <TextRenderer data={String(content.data ?? '')} />
+      return <MemoizedTextRenderer data={String(content.data ?? '')} />
   }
 }
+
+export const MemoizedContentRenderer = memo(ContentRenderer)

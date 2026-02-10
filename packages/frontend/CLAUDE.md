@@ -58,9 +58,9 @@ src/
 
 `useAgentConnection` hook manages:
 - Singleton WebSocket with auto-reconnect (exponential backoff)
-- Incoming events: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`
-- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`
-- Sends rendering feedback and user interactions back to server
+- Incoming events: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`, `APP_PROTOCOL_REQUEST`
+- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`
+- Sends rendering feedback, user interactions, and app protocol responses back to server
 
 ## Content Renderers
 
@@ -70,7 +70,7 @@ src/
 | `table` | `{headers, rows}` | Table rendering |
 | `html` | `string` | Raw HTML |
 | `text` | `string` | Plain text |
-| `iframe` | `string` (URL) | Embedded iframe |
+| `iframe` | `string` (URL) | Embedded iframe (injects `IFRAME_APP_PROTOCOL_SCRIPT` for agent communication) |
 | `component` | `ComponentNode` | Interactive React components from JSON |
 
 ## Adding a New Content Renderer
@@ -79,6 +79,14 @@ src/
 2. Add case in `src/components/windows/ContentRenderer.tsx`
 3. Add styles in `src/styles/renderers.module.css`
 4. Update renderer enum in `@yaar/server` tools
+
+## App Protocol
+
+Bidirectional agent-to-iframe communication. The frontend acts as a relay between server (WebSocket) and iframe apps (postMessage).
+
+- `store/desktop.ts` — `handleAppProtocolRequest()` forwards server requests to the target iframe via postMessage, collects responses. `initAppProtocolReadyListener()` listens for `yaar:app-ready` from iframes and queues `APP_PROTOCOL_READY` events.
+- `hooks/useAgentConnection.ts` — Subscribes to `pendingAppProtocolResponses` and `pendingAppProtocolReady` in the store, sends `APP_PROTOCOL_RESPONSE` and `APP_PROTOCOL_READY` events to the server.
+- `components/windows/renderers/IframeRenderer.tsx` — Injects `IFRAME_APP_PROTOCOL_SCRIPT` into iframe `<head>` to provide `window.yaar.app.register()` SDK.
 
 ## Testing
 

@@ -7,6 +7,19 @@ async function sha256Hex(input: string): Promise<string> {
   return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Yield to the macrotask queue so postMessage handlers and other events
+ * can run during long-running PoW. Uses MessageChannel which is NOT
+ * throttled in background tabs (unlike setTimeout).
+ */
+function yieldToMacroTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => resolve();
+    ch.port2.postMessage(undefined);
+  });
+}
+
 export type PowResult = {
   nonce: string;
   hash: string;
@@ -38,8 +51,12 @@ export async function solvePow(
       };
     }
 
-    if (attempts % 200 === 0) {
-      await Promise.resolve();
+    // Yield to macrotask queue every 100 iterations so the browser can
+    // process postMessage events (app protocol queries/commands).
+    // MessageChannel is used instead of setTimeout because setTimeout
+    // gets clamped to ≥1s in background tabs.
+    if (attempts % 100 === 0) {
+      await yieldToMacroTask();
     }
   }
 

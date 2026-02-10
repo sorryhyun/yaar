@@ -43,7 +43,6 @@ export function QueueAwareComponentActionProvider({
   children: React.ReactNode
   sendComponentAction: SendComponentAction
 }) {
-  const windows = useDesktopStore(s => s.windows)
   const queueComponentAction = useDesktopStore(s => s.queueComponentAction)
 
   const queueAwareSend: SendComponentAction = useCallback((
@@ -55,7 +54,8 @@ export function QueueAwareComponentActionProvider({
     formId,
     componentPath
   ) => {
-    const window = windows[windowId]
+    // Check lock state at click time via getState() to avoid subscribing to all window mutations
+    const window = useDesktopStore.getState().windows[windowId]
 
     // If window is locked, queue the action
     if (window?.locked) {
@@ -74,7 +74,7 @@ export function QueueAwareComponentActionProvider({
 
     // Otherwise send immediately
     sendComponentAction(windowId, windowTitle, action, parallel, formData, formId, componentPath)
-  }, [windows, queueComponentAction, sendComponentAction])
+  }, [queueComponentAction, sendComponentAction])
 
   return (
     <ComponentActionContext.Provider value={queueAwareSend}>

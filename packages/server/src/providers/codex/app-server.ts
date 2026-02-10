@@ -18,6 +18,9 @@ import type {
   ThreadStartParams,
   ThreadStartResponse,
   TurnStartParams,
+  TurnStartResponse,
+  TurnInterruptParams,
+  TurnInterruptResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
   ThreadForkParams,
@@ -336,11 +339,21 @@ export class AppServer {
   /**
    * Start a turn in a thread.
    */
-  async turnStart(params: TurnStartParams): Promise<void> {
+  async turnStart(params: TurnStartParams): Promise<TurnStartResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    await this.client.request<TurnStartParams, void>('turn/start', params);
+    return this.client.request<TurnStartParams, TurnStartResponse>('turn/start', params);
+  }
+
+  /**
+   * Interrupt an in-flight turn.
+   */
+  async turnInterrupt(params: TurnInterruptParams): Promise<TurnInterruptResponse> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<TurnInterruptParams, TurnInterruptResponse>('turn/interrupt', params);
   }
 
   /**

@@ -3,7 +3,7 @@
  *
  * Detects CSP/X-Frame-Options blocking and reports back to the AI.
  */
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { memo, useEffect, useRef, useState, useCallback } from 'react'
 import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_APP_PROTOCOL_SCRIPT } from '@yaar/shared'
 import styles from '@/styles/windows/renderers.module.css'
 
@@ -28,7 +28,7 @@ function isSameOrigin(url: string): boolean {
   }
 }
 
-export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
+function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
   const url = typeof data === 'string' ? data : data.url
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined
   // For same-origin content (local apps), don't sandbox - it's trusted
@@ -192,3 +192,5 @@ export function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError
     </div>
   )
 }
+
+export const MemoizedIframeRenderer = memo(IframeRenderer)

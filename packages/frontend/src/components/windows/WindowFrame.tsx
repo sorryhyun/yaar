@@ -1,11 +1,11 @@
 /**
  * WindowFrame - Draggable, resizable window container.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store'
 import { useComponentAction } from '@/contexts/ComponentActionContext'
 import type { WindowModel } from '@/types/state'
-import { ContentRenderer } from './ContentRenderer'
+import { MemoizedContentRenderer } from './ContentRenderer'
 import { LockOverlay } from './LockOverlay'
 import styles from '@/styles/windows/WindowFrame.module.css'
 
@@ -67,9 +67,14 @@ interface WindowFrameProps {
   isFocused: boolean
 }
 
-export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
-  const { userFocusWindow, userCloseWindow, userMoveWindow, userResizeWindow, queueBoundsUpdate, showContextMenu, addRenderingFeedback } =
-    useDesktopStore()
+function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
+  // Subscribe to individual stable action refs — never triggers re-renders
+  const userFocusWindow = useDesktopStore(s => s.userFocusWindow)
+  const userCloseWindow = useDesktopStore(s => s.userCloseWindow)
+  const userMoveWindow = useDesktopStore(s => s.userMoveWindow)
+  const userResizeWindow = useDesktopStore(s => s.userResizeWindow)
+  const queueBoundsUpdate = useDesktopStore(s => s.queueBoundsUpdate)
+  const showContextMenu = useDesktopStore(s => s.showContextMenu)
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id))
   const windowAgent = useDesktopStore(selectWindowAgent(window.id))
   const isSelected = useDesktopStore(s => s.selectedWindowIds.includes(window.id))
@@ -84,6 +89,15 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
   ) => {
     sendComponentAction?.(window.id, window.title, action, parallel, formData, formId, componentPath)
   }, [sendComponentAction, window.id, window.title])
+
+  // Stabilize render callbacks — use getState() inside to avoid addRenderingFeedback dep
+  const windowId = window.id
+  const onRenderSuccess = useCallback((requestId: string, winId: string, renderer: string) => {
+    useDesktopStore.getState().addRenderingFeedback({ requestId, windowId: winId, renderer, success: true })
+  }, [])
+  const onRenderError = useCallback((requestId: string, winId: string, renderer: string, error: string, url?: string) => {
+    useDesktopStore.getState().addRenderingFeedback({ requestId, windowId: winId, renderer, success: false, error, url })
+  }, [])
 
   const frameRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -332,16 +346,12 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
           showContextMenu(e.clientX, e.clientY, window.id)
         }}
       >
-        <ContentRenderer
+        <MemoizedContentRenderer
           content={window.content}
-          windowId={window.id}
+          windowId={windowId}
           requestId={window.requestId}
-          onRenderSuccess={(requestId, windowId, renderer) => {
-            addRenderingFeedback({ requestId, windowId, renderer, success: true })
-          }}
-          onRenderError={(requestId, windowId, renderer, error, url) => {
-            addRenderingFeedback({ requestId, windowId, renderer, success: false, error, url })
-          }}
+          onRenderSuccess={onRenderSuccess}
+          onRenderError={onRenderError}
           onComponentAction={handleComponentAction}
         />
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
@@ -361,3 +371,5 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
     </div>
   )
 }
+
+export const WindowFrame = memo(WindowFrameInner)

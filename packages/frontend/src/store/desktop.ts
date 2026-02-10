@@ -32,6 +32,12 @@ import {
   createMonitorSlice,
 } from './slices'
 
+// Import pure mutation functions for batched action processing
+import { applyWindowAction } from './slices/windowsSlice'
+import { applyNotificationAction } from './slices/notificationsSlice'
+import { applyToastAction } from './slices/toastsSlice'
+import { applyDialogAction } from './slices/dialogsSlice'
+
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
  * Returns a base64 PNG data URL or null if the iframe doesn't respond.
@@ -285,9 +291,33 @@ export const useDesktopStore = create<DesktopStore>()(
     },
 
     applyActions: (actions: OSAction[]) => {
-      const store = useDesktopStore.getState()
+      // Partition into sync (batchable) and async (must run outside Immer) actions
+      const syncActions: OSAction[] = []
+      const asyncActions: OSAction[] = []
       for (const action of actions) {
-        store.applyAction(action)
+        if (action.type === 'window.capture') asyncActions.push(action)
+        else syncActions.push(action)
+      }
+
+      // Batch all sync actions into a single Immer transaction → 1 re-render
+      if (syncActions.length > 0) {
+        const [set] = a
+        set((state) => {
+          for (const action of syncActions) {
+            state.activityLog.push(action)
+            const t = action.type
+            if (t.startsWith('window.')) applyWindowAction(state as DesktopStore, action)
+            else if (t.startsWith('notification.')) applyNotificationAction(state, action)
+            else if (t.startsWith('toast.')) applyToastAction(state, action)
+            else if (t.startsWith('dialog.')) applyDialogAction(state, action)
+            else if (t === 'desktop.refreshApps') state.appsVersion += 1
+          }
+        })
+      }
+
+      // Handle async actions individually (e.g. window.capture needs DOM access)
+      for (const action of asyncActions) {
+        useDesktopStore.getState().applyAction(action)
       }
     },
 

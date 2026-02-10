@@ -4,9 +4,10 @@ Shared types between frontend and server.
 
 ## Exports
 
-- `actions.ts` - OS Actions DSL
+- `actions.ts` - OS Actions DSL (includes `WindowState` with `appProtocol?: boolean`)
 - `events.ts` - WebSocket event types
 - `components.ts` - Component schemas, types, and type guards (Zod v4)
+- `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
 
 ## OS Actions
 
@@ -35,6 +36,8 @@ The language AI uses to control the desktop.
 - `SET_PROVIDER` - Switch AI provider
 - `RENDERING_FEEDBACK` - Window content rendering status
 - `COMPONENT_ACTION` - Interactive component action
+- `APP_PROTOCOL_RESPONSE` - Iframe app's response to an agent query/command
+- `APP_PROTOCOL_READY` - Iframe app registered with the App Protocol
 
 **Server → Client:**
 - `ACTIONS` - Array of OS Actions (optional `monitorId`)
@@ -43,6 +46,7 @@ The language AI uses to control the desktop.
 - `TOOL_PROGRESS` - Tool execution status
 - `WINDOW_AGENT_STATUS` - Window agent lifecycle
 - `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED` - Queue notifications
+- `APP_PROTOCOL_REQUEST` - Agent requesting state/command from an iframe app
 
 ## Component DSL
 

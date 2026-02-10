@@ -4,14 +4,14 @@
  * Note: For production, use a proper markdown library like
  * react-markdown or marked. This is a simplified version.
  */
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import styles from '@/styles/base/typography.module.css'
 
 interface MarkdownRendererProps {
   data: string
 }
 
-export function MarkdownRenderer({ data }: MarkdownRendererProps) {
+function MarkdownRenderer({ data }: MarkdownRendererProps) {
   // Simple markdown conversion (production should use proper library)
   const html = useMemo(() => {
     const result = data
@@ -44,3 +44,5 @@ export function MarkdownRenderer({ data }: MarkdownRendererProps) {
     />
   )
 }
+
+export const MemoizedMarkdownRenderer = memo(MarkdownRenderer)

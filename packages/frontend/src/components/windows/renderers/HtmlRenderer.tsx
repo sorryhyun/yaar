@@ -3,13 +3,14 @@
  *
  * WARNING: Only use for trusted content. This renders raw HTML.
  */
+import { memo } from 'react'
 import styles from '@/styles/windows/renderers.module.css'
 
 interface HtmlRendererProps {
   data: string
 }
 
-export function HtmlRenderer({ data }: HtmlRendererProps) {
+function HtmlRenderer({ data }: HtmlRendererProps) {
   return (
     <div
       className={styles.html}
@@ -17,3 +18,5 @@ export function HtmlRenderer({ data }: HtmlRendererProps) {
     />
   )
 }
+
+export const MemoizedHtmlRenderer = memo(HtmlRenderer)
