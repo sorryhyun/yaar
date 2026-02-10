@@ -135,6 +135,13 @@
   color: var(--color-text);
 }
 
+/* Transparent overlay to capture clicks on non-focused iframe windows */
+.iframeFocusOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
 /* Resize edges — 12px hit zone centered on border */
 .resizeN, .resizeS { position: absolute; left: 16px; right: 16px; height: 12px; }
 .resizeW, .resizeE { position: absolute; top: 16px; bottom: 16px; width: 12px; }

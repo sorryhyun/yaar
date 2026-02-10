@@ -5,7 +5,7 @@
  * for list_windows and view_window tools.
  */
 
-import type { OSAction, ContentUpdateOperation, WindowState } from '@yaar/shared';
+import type { OSAction, ContentUpdateOperation, WindowState, AppProtocolRequest } from '@yaar/shared';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
@@ -15,6 +15,7 @@ export type { WindowState } from '@yaar/shared';
  */
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
+  private appCommands: Map<string, AppProtocolRequest[]> = new Map();
   private onWindowCloseCallback?: (windowId: string) => void;
 
   /**
@@ -44,6 +45,7 @@ export class WindowStateRegistry {
 
       case 'window.close': {
         this.windows.delete(action.windowId);
+        this.appCommands.delete(action.windowId);
         this.onWindowCloseCallback?.(action.windowId);
         break;
       }
@@ -150,6 +152,19 @@ export class WindowStateRegistry {
     return this.windows.get(windowId);
   }
 
+  recordAppCommand(windowId: string, request: AppProtocolRequest): void {
+    let commands = this.appCommands.get(windowId);
+    if (!commands) {
+      commands = [];
+      this.appCommands.set(windowId, commands);
+    }
+    commands.push(request);
+  }
+
+  getAppCommands(windowId: string): AppProtocolRequest[] {
+    return this.appCommands.get(windowId) ?? [];
+  }
+
   setAppProtocol(windowId: string): void {
     const win = this.windows.get(windowId);
     if (win) {
@@ -164,6 +179,7 @@ export class WindowStateRegistry {
 
   clear(): void {
     this.windows.clear();
+    this.appCommands.clear();
   }
 
   getWindowCount(): number {

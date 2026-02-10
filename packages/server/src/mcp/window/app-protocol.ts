@@ -6,6 +6,7 @@
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { AppProtocolRequest } from '@yaar/shared';
 import { z } from 'zod';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
@@ -71,10 +72,12 @@ export function registerAppProtocolTools(server: McpServer, getWindowState: () =
         if (!ready) return ok('App did not register with the App Protocol (timeout). The iframe app may not call window.yaar.app.register().');
       }
 
-      const response = await actionEmitter.emitAppProtocolRequest(args.windowId, { kind: 'command', command: args.command, params: args.params }, 5000);
+      const request: AppProtocolRequest = { kind: 'command', command: args.command, params: args.params };
+      const response = await actionEmitter.emitAppProtocolRequest(args.windowId, request, 5000);
       if (!response) return ok('App did not respond (timeout).');
       if (response.kind !== 'command') return ok('Unexpected response kind.');
       if (response.error) return ok(`Error: ${response.error}`);
+      getWindowState().recordAppCommand(args.windowId, request);
       return ok(JSON.stringify(response.result, null, 2));
     }
   );

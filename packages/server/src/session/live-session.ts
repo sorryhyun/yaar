@@ -300,10 +300,16 @@ export class LiveSession {
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
         break;
 
-      case 'APP_PROTOCOL_READY':
+      case 'APP_PROTOCOL_READY': {
+        const wasReady = this.windowState.getWindow(event.windowId)?.appProtocol ?? false;
         this.windowState.setAppProtocol(event.windowId);
         actionEmitter.notifyAppReady(event.windowId);
+        // Replay stored commands only on re-registration (reload/remount), not first time
+        if (wasReady) {
+          this.replayAppCommands(event.windowId);
+        }
         break;
+      }
 
       case 'TOAST_ACTION':
         this.reloadCache.markFailed(event.eventId);
@@ -340,6 +346,27 @@ export class LiveSession {
         this.pool?.pushUserInteractions(event.interactions);
         break;
       }
+    }
+  }
+
+  // ── App protocol replay ─────────────────────────────────────────────
+
+  /**
+   * Replay stored app commands to a window that just re-registered.
+   * This restores iframe app state after reload or remount.
+   */
+  private replayAppCommands(windowId: string): void {
+    const commands = this.windowState.getAppCommands(windowId);
+    if (commands.length === 0) return;
+
+    console.log(`[LiveSession ${this.sessionId}] Replaying ${commands.length} app commands to window ${windowId}`);
+    for (let i = 0; i < commands.length; i++) {
+      this.broadcast({
+        type: 'APP_PROTOCOL_REQUEST',
+        requestId: `replay-${windowId}-${Date.now()}-${i}`,
+        windowId,
+        request: commands[i],
+      });
     }
   }
 

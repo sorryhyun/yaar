@@ -392,6 +392,9 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
           onComponentAction={handleComponentAction}
         />
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
+        {!isFocused && window.content.renderer === 'iframe' && (
+          <div className={styles.iframeFocusOverlay} />
+        )}
       </div>
 
       {/* Resize edges and corners */}
