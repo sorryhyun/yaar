@@ -49,18 +49,14 @@ export function getToolNames(): string[] {
     // Built-in Claude tools
     'WebSearch',
     // System tools
-    'mcp__system__get_time',
-    'mcp__system__calculate',
     'mcp__system__get_info',
     'mcp__system__get_env_var',
-    'mcp__system__generate_random',
     'mcp__system__memorize',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
     'mcp__system__http_post',
     // Sandbox tools
     'mcp__system__run_js',
-    'mcp__system__run_ts',
     // Window tools
     'mcp__window__create',
     'mcp__window__create_component',

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Slides Lite</title>
+  <title>PDF Viewer &amp; Export</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; }
@@ -424,347 +424,289 @@
 <body>
   <div id="app"></div>
   <script type="module">
-// ../../sandbox/1770707653279/src/storage.ts
-var KEY = "slides-lite:draft";
-function saveDeck(deck2) {
-  localStorage.setItem(KEY, JSON.stringify(deck2));
-}
-function loadDeck() {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
+// ../../sandbox/1770710456876/src/main.ts
+var root = document.getElementById("app");
+if (!root) throw new Error("Missing app root");
+root.innerHTML = `
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    body { margin: 0; }
+    .wrap { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+    .top {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #d0d7de;
+      background: #f6f8fa;
+      flex-wrap: wrap;
+    }
+    .top button, .top select, .top input, .top textarea {
+      font: inherit;
+    }
+    .top button {
+      padding: 6px 10px;
+      border: 1px solid #b6c2cf;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+    }
+    .top button.active { background: #0969da; color: #fff; border-color: #0969da; }
+    .top .spacer { flex: 1; }
+    .pane { height: calc(100vh - 58px); }
+    .hidden { display: none !important; }
+    .viewer-pane { display: grid; grid-template-rows: auto 1fr; }
+    .viewer-controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      border-bottom: 1px solid #d0d7de;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .viewer-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #f0f0f0;
+    }
+    .drop {
+      border: 2px dashed #9aa4b2;
+      border-radius: 12px;
+      padding: 28px;
+      margin: 12px;
+      text-align: center;
+      color: #57606a;
+    }
+    .drop.drag { border-color: #0969da; color: #0969da; }
+    .export-pane { display: grid; grid-template-columns: 1fr 1fr; height: 100%; }
+    .left, .right { padding: 10px; overflow: auto; }
+    .left { border-right: 1px solid #d0d7de; }
+    textarea {
+      width: 100%;
+      height: calc(100% - 60px);
+      min-height: 220px;
+      resize: vertical;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 10px;
+      box-sizing: border-box;
+      background: white;
+      color: #111;
+    }
+    .preview {
+      background: white;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 20px;
+      min-height: 92%;
+      color: #111;
+    }
+    .hint { color: #57606a; font-size: 12px; }
+    .status { font-size: 12px; color: #57606a; }
+    @media print {
+      body * { visibility: hidden !important; }
+      #print-area, #print-area * { visibility: visible !important; }
+      #print-area {
+        position: fixed;
+        inset: 0;
+        background: white;
+        color: #000;
+        padding: 20mm;
+      }
+    }
+  </style>
 
-// ../../sandbox/1770707653279/src/main.ts
-var THEMES = {
-  "classic-light": { name: "Classic Light", bg: "#ffffff", fg: "#1f2937", accent: "#2563eb" },
-  "midnight-dark": { name: "Midnight Dark", bg: "#111827", fg: "#f9fafb", accent: "#60a5fa" },
-  ocean: { name: "Ocean", bg: "#e0f2fe", fg: "#0c4a6e", accent: "#0284c7" },
-  sunset: { name: "Sunset", bg: "#fff7ed", fg: "#7c2d12", accent: "#ea580c" }
-};
-var app = document.getElementById("app");
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
-}
-function newSlide(layout = "title-body") {
-  return { id: uid(), layout, title: "New Slide", body: "", imageUrl: "" };
-}
-function newDeck() {
-  return {
-    title: "Untitled Deck",
-    themeId: "classic-light",
-    slides: [newSlide()],
-    activeIndex: 0
-  };
-}
-var deck = loadDeck() ?? newDeck();
-var presenting = false;
-var presentIndex = 0;
-function clampActive() {
-  if (deck.activeIndex < 0) deck.activeIndex = 0;
-  if (deck.activeIndex > deck.slides.length - 1) deck.activeIndex = deck.slides.length - 1;
-}
-function persist() {
-  saveDeck(deck);
-}
-function activeSlide() {
-  clampActive();
-  return deck.slides[deck.activeIndex];
-}
-function renderSlideHtml(slide, themeId) {
-  const t = THEMES[themeId];
-  const image = slide.imageUrl ? `<img src="${slide.imageUrl}" style="max-width:100%; max-height:260px; border-radius:10px; margin-top:12px;"/>` : "";
-  if (slide.layout === "section") {
-    return `<div class="slide section" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
-      <h1>${escapeHtml(slide.title || "Section")}</h1>
-      <p>${escapeHtml(slide.body || "")}</p>
-    </div>`;
-  }
-  if (slide.layout === "title-image") {
-    return `<div class="slide" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
-      <h1>${escapeHtml(slide.title || "Title")}</h1>
-      ${image || '<div style="opacity:.6">No image selected</div>'}
-      <p>${escapeHtml(slide.body || "")}</p>
-    </div>`;
-  }
-  return `<div class="slide" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
-    <h1>${escapeHtml(slide.title || "Title")}</h1>
-    <p>${escapeHtml(slide.body || "")}</p>
-  </div>`;
-}
-function escapeHtml(s) {
-  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
-function render() {
-  if (!deck.slides.length) deck.slides.push(newSlide());
-  clampActive();
-  const t = THEMES[deck.themeId];
-  const slide = activeSlide();
-  app.innerHTML = `
-    <style>
-      * { box-sizing: border-box; }
-      body { margin: 0; font-family: Inter, system-ui, Arial, sans-serif; }
-      .root { height: 100vh; display: grid; grid-template-rows: 56px 1fr; }
-      .topbar {
-        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb; background: #f9fafb;
-      }
-      .topbar input, .topbar select, .topbar button, .panel input, .panel textarea, .panel select {
-        border: 1px solid #d1d5db; border-radius: 8px; padding: 7px 9px; font-size: 13px;
-      }
-      .topbar button { cursor: pointer; background: white; }
-      .topbar button.primary { background: #111827; color: white; border-color: #111827; }
-      .main { display: grid; grid-template-columns: 220px 1fr 280px; height: calc(100vh - 56px); }
-      .left { border-right: 1px solid #e5e7eb; overflow: auto; padding: 10px; }
-      .thumb { border: 1px solid #d1d5db; border-radius: 10px; padding: 8px; margin-bottom: 8px; cursor: pointer; background: white; }
-      .thumb.active { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
-      .thumb h4 { margin: 0 0 4px; font-size: 12px; }
-      .thumb p { margin: 0; font-size: 11px; color: #6b7280; }
-      .thumb-actions { margin-top: 6px; display: flex; gap: 4px; }
-      .thumb-actions button { font-size: 11px; padding: 4px 6px; }
-      .center { display: grid; place-items: center; background: #f3f4f6; padding: 18px; }
-      .slide {
-        width: min(900px, 100%); aspect-ratio: 16 / 9; border-radius: 14px;
-        padding: 36px; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.12);
-      }
-      .slide h1 { margin-top: 0; margin-bottom: 14px; font-size: clamp(24px, 4vw, 44px); }
-      .slide p { font-size: clamp(14px, 1.7vw, 26px); line-height: 1.35; white-space: pre-wrap; }
-      .panel { border-left: 1px solid #e5e7eb; padding: 12px; overflow: auto; }
-      .field { margin-bottom: 10px; display: grid; gap: 6px; }
-      .field label { font-size: 12px; color: #4b5563; font-weight: 600; }
-      .panel textarea { min-height: 140px; resize: vertical; }
-      .muted { font-size: 12px; color: #6b7280; }
-      .present {
-        position: fixed; inset: 0; z-index: 9999; background: #0b1020; display: grid; place-items: center;
-      }
-      .present-ui { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display:flex; gap:8px; }
-      .present-ui button { border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
-    </style>
-    <div class="root">
-      <div class="topbar">
-        <input id="deckTitle" value="${escapeHtml(deck.title)}" style="min-width:220px;" />
-        <select id="themeSelect">
-          ${Object.entries(THEMES).map(([id, meta]) => `<option value="${id}" ${id === deck.themeId ? "selected" : ""}>${meta.name}</option>`).join("")}
-        </select>
-        <button id="newDeckBtn">New</button>
-        <button id="dupBtn">Duplicate Slide</button>
-        <button id="addBtn">Add Slide</button>
-        <button id="saveBtn">Save</button>
-        <button class="primary" id="presentBtn">Present</button>
-        <button id="exportBtn">Export PDF</button>
-        <span class="muted" style="margin-left:auto;">${deck.slides.length} slides</span>
+  <div class="wrap">
+    <div class="top">
+      <button id="btn-viewer" class="active">PDF Viewer</button>
+      <button id="btn-export">Export to PDF</button>
+      <div class="spacer"></div>
+      <span id="global-status" class="status">Ready</span>
+    </div>
+
+    <div id="viewer-pane" class="pane viewer-pane">
+      <div class="viewer-controls">
+        <input id="file-input" type="file" accept="application/pdf" />
+        <button id="open-storage">Open from Storage Path</button>
+        <input id="storage-path" type="text" placeholder="e.g. mydocs/report.pdf" style="min-width: 260px; padding: 6px 8px; border-radius: 8px; border: 1px solid #d0d7de;" />
+        <button id="clear-pdf">Clear</button>
+        <span id="pdf-status" class="status">No PDF loaded.</span>
       </div>
-      <div class="main">
-        <div class="left" id="thumbs"></div>
-        <div class="center" id="canvas"></div>
-        <div class="panel">
-          <div class="field"><label>Layout</label>
-            <select id="layoutSel">
-              <option value="title-body" ${slide.layout === "title-body" ? "selected" : ""}>Title + Body</option>
-              <option value="title-image" ${slide.layout === "title-image" ? "selected" : ""}>Title + Image</option>
-              <option value="section" ${slide.layout === "section" ? "selected" : ""}>Section</option>
-            </select>
-          </div>
-          <div class="field"><label>Title</label><input id="titleIn" value="${escapeHtml(slide.title)}"></div>
-          <div class="field"><label>Body</label><textarea id="bodyIn">${escapeHtml(slide.body)}</textarea></div>
-          <div class="field"><label>Image URL</label><input id="imgIn" placeholder="https://..." value="${escapeHtml(slide.imageUrl)}"></div>
-          <div class="field"><button id="delBtn">Delete Slide</button></div>
-          <div class="muted">Autosave is on. Tip: Ctrl/Cmd+S to save manually.</div>
+      <div id="drop" class="drop">Drop a PDF file here, or use the file picker above.</div>
+      <iframe id="pdf-frame" class="viewer-frame hidden"></iframe>
+    </div>
+
+    <div id="export-pane" class="pane export-pane hidden">
+      <div class="left">
+        <h3 style="margin: 0 0 8px;">Content</h3>
+        <p class="hint" style="margin-top: 0;">Type plain text or basic HTML. Use preview, then click \u201CExport PDF\u201D.</p>
+        <textarea id="content-input" placeholder="Paste document/content here..."></textarea>
+      </div>
+      <div class="right">
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button id="preview-btn">Refresh Preview</button>
+          <button id="export-btn">Export PDF</button>
+          <button id="save-html-btn">Save HTML to Storage</button>
         </div>
+        <div id="print-area" class="preview"></div>
       </div>
     </div>
-  `;
-  const thumbs = app.querySelector("#thumbs");
-  thumbs.innerHTML = "";
-  deck.slides.forEach((s, idx) => {
-    const el = document.createElement("div");
-    el.className = `thumb ${idx === deck.activeIndex ? "active" : ""}`;
-    el.innerHTML = `<h4>${idx + 1}. ${escapeHtml(s.title || "Untitled")}</h4><p>${escapeHtml((s.body || "").slice(0, 60))}</p>
-      <div class="thumb-actions">
-        <button data-act="up" data-idx="${idx}">\u2191</button>
-        <button data-act="down" data-idx="${idx}">\u2193</button>
-      </div>`;
-    el.addEventListener("click", (e) => {
-      const target = e.target;
-      if (target.tagName.toLowerCase() === "button") return;
-      deck.activeIndex = idx;
-      render();
-    });
-    el.querySelectorAll("button").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const b = e.currentTarget;
-        const i = Number(b.dataset.idx);
-        if (b.dataset.act === "up" && i > 0) {
-          [deck.slides[i - 1], deck.slides[i]] = [deck.slides[i], deck.slides[i - 1]];
-          deck.activeIndex = i - 1;
-        }
-        if (b.dataset.act === "down" && i < deck.slides.length - 1) {
-          [deck.slides[i + 1], deck.slides[i]] = [deck.slides[i], deck.slides[i + 1]];
-          deck.activeIndex = i + 1;
-        }
-        persist();
-        render();
-      });
-    });
-    thumbs.appendChild(el);
-  });
-  app.querySelector("#canvas").innerHTML = renderSlideHtml(slide, deck.themeId);
-  bindUi();
-  persist();
+  </div>
+`;
+var els = {
+  btnViewer: document.getElementById("btn-viewer"),
+  btnExport: document.getElementById("btn-export"),
+  viewerPane: document.getElementById("viewer-pane"),
+  exportPane: document.getElementById("export-pane"),
+  globalStatus: document.getElementById("global-status"),
+  fileInput: document.getElementById("file-input"),
+  pdfFrame: document.getElementById("pdf-frame"),
+  pdfStatus: document.getElementById("pdf-status"),
+  drop: document.getElementById("drop"),
+  clearPdf: document.getElementById("clear-pdf"),
+  openStorage: document.getElementById("open-storage"),
+  storagePath: document.getElementById("storage-path"),
+  contentInput: document.getElementById("content-input"),
+  previewBtn: document.getElementById("preview-btn"),
+  exportBtn: document.getElementById("export-btn"),
+  saveHtmlBtn: document.getElementById("save-html-btn"),
+  printArea: document.getElementById("print-area")
+};
+var mode = "viewer";
+var currentPdfUrl = null;
+function setMode(next) {
+  mode = next;
+  const viewer = next === "viewer";
+  els.viewerPane.classList.toggle("hidden", !viewer);
+  els.exportPane.classList.toggle("hidden", viewer);
+  els.btnViewer.classList.toggle("active", viewer);
+  els.btnExport.classList.toggle("active", !viewer);
+  els.globalStatus.textContent = viewer ? "Viewer mode" : "Export mode";
 }
-function bindUi() {
-  const slide = activeSlide();
-  app.querySelector("#deckTitle").oninput = (e) => {
-    deck.title = e.target.value;
-    persist();
-  };
-  app.querySelector("#themeSelect").onchange = (e) => {
-    deck.themeId = e.target.value;
-    render();
-  };
-  app.querySelector("#layoutSel").onchange = (e) => {
-    slide.layout = e.target.value;
-    render();
-  };
-  app.querySelector("#titleIn").oninput = (e) => {
-    slide.title = e.target.value;
-    render();
-  };
-  app.querySelector("#bodyIn").oninput = (e) => {
-    slide.body = e.target.value;
-    render();
-  };
-  app.querySelector("#imgIn").oninput = (e) => {
-    slide.imageUrl = e.target.value;
-    render();
-  };
-  app.querySelector("#addBtn").onclick = () => {
-    deck.slides.splice(deck.activeIndex + 1, 0, newSlide());
-    deck.activeIndex += 1;
-    render();
-  };
-  app.querySelector("#dupBtn").onclick = () => {
-    const s = activeSlide();
-    deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uid(), title: `${s.title} (copy)` });
-    deck.activeIndex += 1;
-    render();
-  };
-  app.querySelector("#delBtn").onclick = () => {
-    if (deck.slides.length === 1) {
-      deck.slides[0] = newSlide();
-      deck.activeIndex = 0;
-    } else {
-      deck.slides.splice(deck.activeIndex, 1);
-      clampActive();
-    }
-    render();
-  };
-  app.querySelector("#newDeckBtn").onclick = () => {
-    deck = newDeck();
-    render();
-  };
-  app.querySelector("#saveBtn").onclick = () => {
-    persist();
-    flash("Saved");
-  };
-  app.querySelector("#presentBtn").onclick = () => {
-    presenting = true;
-    presentIndex = deck.activeIndex;
-    renderPresent();
-  };
-  app.querySelector("#exportBtn").onclick = exportPdf;
+function revokeCurrentPdfUrl() {
+  if (currentPdfUrl && currentPdfUrl.startsWith("blob:")) URL.revokeObjectURL(currentPdfUrl);
+  currentPdfUrl = null;
 }
-function flash(msg) {
-  const n = document.createElement("div");
-  n.textContent = msg;
-  n.style.cssText = "position:fixed;top:14px;right:14px;background:#111827;color:white;padding:8px 10px;border-radius:8px;z-index:99999";
-  document.body.appendChild(n);
-  setTimeout(() => n.remove(), 1e3);
+function showPdfUrl(url, label) {
+  revokeCurrentPdfUrl();
+  currentPdfUrl = url;
+  els.pdfFrame.src = url;
+  els.pdfFrame.classList.remove("hidden");
+  els.drop.classList.add("hidden");
+  els.pdfStatus.textContent = `Loaded: ${label}`;
+  els.globalStatus.textContent = "PDF loaded";
 }
-function renderPresent() {
-  if (!presenting) return;
-  const s = deck.slides[presentIndex];
-  const wrap = document.createElement("div");
-  wrap.className = "present";
-  wrap.innerHTML = `
-    <div style="width:min(1200px,96vw);">${renderSlideHtml(s, deck.themeId)}</div>
-    <div class="present-ui">
-      <button id="prevP">Prev</button>
-      <button id="nextP">Next</button>
-      <button id="exitP">Exit</button>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-  const close = () => {
-    presenting = false;
-    wrap.remove();
-    window.removeEventListener("keydown", onKey);
-  };
-  const rerenderPresent = () => {
-    wrap.querySelector("div").innerHTML = renderSlideHtml(deck.slides[presentIndex], deck.themeId);
-  };
-  const onKey = (e) => {
-    if (!presenting) return;
-    if (e.key === "Escape") close();
-    if (e.key === "ArrowRight" && presentIndex < deck.slides.length - 1) {
-      presentIndex += 1;
-      rerenderPresent();
-    }
-    if (e.key === "ArrowLeft" && presentIndex > 0) {
-      presentIndex -= 1;
-      rerenderPresent();
-    }
-  };
-  window.addEventListener("keydown", onKey);
-  wrap.querySelector("#prevP").onclick = () => {
-    if (presentIndex > 0) presentIndex -= 1;
-    rerenderPresent();
-  };
-  wrap.querySelector("#nextP").onclick = () => {
-    if (presentIndex < deck.slides.length - 1) presentIndex += 1;
-    rerenderPresent();
-  };
-  wrap.querySelector("#exitP").onclick = close;
+async function openFromStorage(path) {
+  const clean = path.trim().replace(/^\/+/, "");
+  if (!clean) {
+    els.pdfStatus.textContent = "Enter a storage path first.";
+    return;
+  }
+  const storage = window.yaar?.storage;
+  if (!storage) {
+    els.pdfStatus.textContent = "Storage API unavailable in this app context.";
+    return;
+  }
+  try {
+    const bytes = await storage.read(clean, { as: "arraybuffer" });
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    showPdfUrl(url, clean);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    els.pdfStatus.textContent = `Failed to read storage file: ${msg}`;
+  }
 }
-function exportPdf() {
-  const html = `
-    <html>
-      <head>
-        <title>${escapeHtml(deck.title)}</title>
-        <style>
-          body { margin:0; font-family: Inter, Arial, sans-serif; }
-          .page { page-break-after: always; padding: 24px; }
-          .slide { width: 100%; aspect-ratio: 16/9; border-radius: 12px; padding: 32px; box-sizing: border-box; }
-          .slide h1 { margin:0 0 12px; font-size: 42px; }
-          .slide p { font-size: 24px; white-space: pre-wrap; }
-          @media print { .page:last-child { page-break-after: auto; } }
-        </style>
-      </head>
-      <body>
-        ${deck.slides.map((s) => `<div class="page">${renderSlideHtml(s, deck.themeId)}</div>`).join("")}
-        <script>window.onload = () => window.print();<\/script>
-      </body>
-    </html>
-  `;
-  const w = window.open("", "_blank");
-  if (!w) return alert("Popup blocked. Please allow popups to export PDF.");
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+function renderPreview() {
+  const raw = els.contentInput.value.trim();
+  if (!raw) {
+    els.printArea.innerHTML = '<p style="color:#57606a;">No content yet.</p>';
+    return;
+  }
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+  if (looksLikeHtml) {
+    els.printArea.innerHTML = raw;
+  } else {
+    const escaped = raw.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replaceAll("\n", "<br>");
+    els.printArea.innerHTML = `<div>${escaped}</div>`;
+  }
 }
-window.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    persist();
-    flash("Saved");
+async function saveHtmlSnapshot() {
+  const storage = window.yaar?.storage;
+  if (!storage) {
+    els.globalStatus.textContent = "Storage API unavailable";
+    return;
+  }
+  const ts = (/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-");
+  const path = `pdf-viewer/exports/export-${ts}.html`;
+  await storage.save(path, els.printArea.innerHTML || "<p></p>");
+  els.globalStatus.textContent = `Saved HTML: ${path}`;
+}
+els.btnViewer.addEventListener("click", () => setMode("viewer"));
+els.btnExport.addEventListener("click", () => setMode("export"));
+els.fileInput.addEventListener("change", () => {
+  const file = els.fileInput.files?.[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  showPdfUrl(url, file.name);
+});
+els.clearPdf.addEventListener("click", () => {
+  revokeCurrentPdfUrl();
+  els.pdfFrame.src = "";
+  els.pdfFrame.classList.add("hidden");
+  els.drop.classList.remove("hidden");
+  els.pdfStatus.textContent = "No PDF loaded.";
+  els.globalStatus.textContent = "Viewer cleared";
+});
+els.openStorage.addEventListener("click", () => openFromStorage(els.storagePath.value));
+els.storagePath.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") openFromStorage(els.storagePath.value);
+});
+els.drop.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  els.drop.classList.add("drag");
+});
+els.drop.addEventListener("dragleave", () => els.drop.classList.remove("drag"));
+els.drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  els.drop.classList.remove("drag");
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    els.pdfStatus.textContent = "Only PDF files are supported.";
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  showPdfUrl(url, file.name);
+});
+els.previewBtn.addEventListener("click", () => {
+  renderPreview();
+  els.globalStatus.textContent = "Preview updated";
+});
+els.exportBtn.addEventListener("click", () => {
+  renderPreview();
+  els.globalStatus.textContent = "Opening print dialog... choose Save as PDF";
+  window.print();
+});
+els.saveHtmlBtn.addEventListener("click", async () => {
+  renderPreview();
+  try {
+    await saveHtmlSnapshot();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    els.globalStatus.textContent = `Save failed: ${msg}`;
   }
 });
-render();
+els.contentInput.value = `<h1>Document Title</h1>
+<p>Write or paste your content here, then click <strong>Export PDF</strong>.</p>
+<ul><li>Supports plain text</li><li>Supports basic HTML</li></ul>`;
+renderPreview();
+setMode("viewer");
+window.addEventListener("beforeunload", () => revokeCurrentPdfUrl());
 
   </script>
 </body>

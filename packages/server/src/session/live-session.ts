@@ -26,6 +26,7 @@ import type { ClientEvent, ServerEvent, OSAction, AppProtocolRequest } from '@ya
 import type { WebSocket } from 'ws';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
+import { getWarmPool } from '../providers/warm-pool.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -258,7 +259,12 @@ export class LiveSession {
         break;
 
       case 'RESET':
-        await this.pool?.reset();
+        if (this.pool) {
+          await this.pool.reset();
+        } else {
+          // Pool not yet initialized — still flush stale warm-pool providers
+          await getWarmPool().resetCodexAppServer();
+        }
         break;
 
       case 'INTERRUPT_AGENT':

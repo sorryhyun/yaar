@@ -211,9 +211,10 @@
   left: var(--space-5);
   display: flex;
   flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--space-4);
   max-height: calc(100vh - 160px);
-  overflow-y: auto;
+  overflow-x: auto;
 }
 
 .desktopIcon {
@@ -226,6 +227,7 @@
   border: none;
   border-radius: var(--radius-lg);
   cursor: pointer;
+  font-family: inherit;
   transition: background var(--transition-fast);
 }
 

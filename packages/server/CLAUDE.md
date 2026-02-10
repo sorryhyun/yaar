@@ -43,13 +43,13 @@ src/
 │   ├── utils.ts       # ok(), okWithImages() response helpers
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
 │   ├── register.ts    # Aggregator: registerAllTools(), getToolNames()
-│   ├── system/        # get_time, calculate, get_info, get_env_var, generate_random, memorize
+│   ├── system/        # get_info, get_env_var, memorize
 │   ├── window/        # create, update, close, lock/unlock, list, view, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
 │   ├── storage/       # read, write, list, delete
 │   ├── http/          # http_get, http_post, request_allowing_domain
 │   │   ├── curl.ts, request.ts, permission.ts
-│   ├── sandbox/       # run_js, run_ts
+│   ├── sandbox/       # run_js
 │   ├── apps/          # list, load_skill, read_config, write_config
 │   │   ├── discovery.ts (listApps, loadAppSkill — used by API routes)
 │   │   ├── config.ts (credentials, read/write config)
@@ -156,9 +156,9 @@ Tools are organized into domain folders under `mcp/`, each with an `index.ts` th
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_time, calculate, get_info, get_env_var, generate_random, memorize |
+| `system/` | system | get_info, get_env_var, memorize |
 | `http/` | system | http_get, http_post, request_allowing_domain |
-| `sandbox/` | system | run_js, run_ts |
+| `sandbox/` | system | run_js |
 | `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |
 | `storage/` | storage | read, write, list, delete |
 | `apps/` | apps | list, load_skill, read_config, write_config |

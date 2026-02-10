@@ -55,6 +55,7 @@ export function generateHtmlWrapper(jsCode: string, title: string): string {
   <script>${IFRAME_APP_PROTOCOL_SCRIPT}</script>
 </head>
 <body>
+  <div id="app"></div>
   <script type="module">
 ${jsCode}
   </script>
