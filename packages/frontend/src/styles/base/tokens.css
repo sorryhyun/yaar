@@ -5,6 +5,38 @@
  * Based on Catppuccin Mocha palette.
  */
 
+@font-face {
+  font-family: 'NanumSquareNeo';
+  src: url('/NanumSquareNeoOTF-Lt.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NanumSquareNeo';
+  src: url('/NanumSquareNeoOTF-Rg.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NanumSquareNeo';
+  src: url('/NanumSquareNeoOTF-Bd.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NanumSquareNeo';
+  src: url('/NanumSquareNeoOTF-Eb.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* === Catppuccin Mocha Colors === */
   --color-base: #1e1e2e;
@@ -88,7 +120,7 @@
 
   /* === Typography === */
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-sans: 'NanumSquareNeo', system-ui, -apple-system, sans-serif;
 
   /* Font sizes */
   --text-xs: 10px;

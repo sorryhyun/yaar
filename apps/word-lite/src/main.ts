@@ -193,3 +193,110 @@ document.addEventListener('keydown', (e) => {
 
 loadDoc();
 editor.focus();
+
+// ── App Protocol: expose state and commands to the AI agent ──────
+
+const appApi = (window as any).yaar?.app;
+
+function setEditorFromPlainText(text: string) {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+  editor.innerHTML = `<p>${escaped}</p>`;
+  refreshStats();
+}
+
+if (appApi) {
+  appApi.register({
+    appId: 'word-lite',
+    name: 'Word Lite',
+    state: {
+      html: {
+        description: 'Current document HTML content',
+        handler: () => editor.innerHTML,
+      },
+      text: {
+        description: 'Current document plain text content',
+        handler: () => editor.innerText || '',
+      },
+      stats: {
+        description: 'Current text stats as { words, chars }',
+        handler: () => countTextStats(editor.innerText || ''),
+      },
+      saveState: {
+        description: 'Current save status label',
+        handler: () => saveState.textContent || '',
+      },
+    },
+    commands: {
+      setHtml: {
+        description: 'Replace document with HTML. Params: { html: string }',
+        params: {
+          type: 'object',
+          properties: { html: { type: 'string' } },
+          required: ['html'],
+        },
+        handler: (p: { html: string }) => {
+          editor.innerHTML = p.html || '<p></p>';
+          refreshStats();
+          saveState.textContent = 'Updated via app protocol';
+          saveDoc();
+          return { ok: true };
+        },
+      },
+      setText: {
+        description: 'Replace document with plain text. Params: { text: string }',
+        params: {
+          type: 'object',
+          properties: { text: { type: 'string' } },
+          required: ['text'],
+        },
+        handler: (p: { text: string }) => {
+          setEditorFromPlainText(p.text || '');
+          saveState.textContent = 'Updated via app protocol';
+          saveDoc();
+          return { ok: true };
+        },
+      },
+      appendText: {
+        description: 'Append plain text to the document. Params: { text: string, newline?: boolean }',
+        params: {
+          type: 'object',
+          properties: {
+            text: { type: 'string' },
+            newline: { type: 'boolean' },
+          },
+          required: ['text'],
+        },
+        handler: (p: { text: string; newline?: boolean }) => {
+          const existing = editor.innerText || '';
+          const next = p.newline === false ? `${existing}${p.text}` : `${existing}${existing ? '\n' : ''}${p.text}`;
+          setEditorFromPlainText(next);
+          saveState.textContent = 'Updated via app protocol';
+          saveDoc();
+          return { ok: true };
+        },
+      },
+      newDocument: {
+        description: 'Clear current document to a blank paragraph. Params: {}',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          editor.innerHTML = '<p></p>';
+          refreshStats();
+          saveState.textContent = 'Unsaved new document';
+          return { ok: true };
+        },
+      },
+      saveDraft: {
+        description: 'Save current document to local draft storage. Params: {}',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          saveDoc();
+          return { ok: true, savedAt: nowLabel() };
+        },
+      },
+    },
+  });
+}

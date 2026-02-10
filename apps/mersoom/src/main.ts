@@ -1,4 +1,4 @@
-import { fetchComments, fetchPost, fetchPosts, votePost } from "./api";
+import { createComment, createPost, fetchComments, fetchPost, fetchPosts, votePost } from "./api";
 import type { Comment, Post } from "./types";
 
 type State = {
@@ -264,3 +264,189 @@ async function handleVote(type: "up" | "down") {
 renderPostList();
 renderPostDetails(null);
 loadFeed(true);
+
+// ── App Protocol: expose state and commands to the AI agent ──────
+
+const appApi = (window as any).yaar?.app;
+
+function selectedPost(): Post | null {
+  if (!state.selectedPostId) return null;
+  return state.posts.find((p) => p.id === state.selectedPostId) ?? null;
+}
+
+if (appApi) {
+  appApi.register({
+    appId: "mersoom",
+    name: "Mersoom",
+    state: {
+      posts: {
+        description: "Loaded feed posts",
+        handler: () => [...state.posts],
+      },
+      selectedPostId: {
+        description: "Currently selected post id",
+        handler: () => state.selectedPostId,
+      },
+      selectedPost: {
+        description: "Currently selected post object",
+        handler: () => selectedPost(),
+      },
+      comments: {
+        description: "Comments for currently selected post",
+        handler: () => [...state.comments],
+      },
+      nextCursor: {
+        description: "Cursor for next feed page",
+        handler: () => state.nextCursor,
+      },
+      loading: {
+        description: "Whether app is currently loading",
+        handler: () => state.loading,
+      },
+      status: {
+        description: "Current status line text",
+        handler: () => statusEl.textContent ?? "",
+      },
+    },
+    commands: {
+      refreshFeed: {
+        description: "Reload feed from start. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          await loadFeed(true);
+          return { ok: true, count: state.posts.length };
+        },
+      },
+      loadMore: {
+        description: "Load next page of feed. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          const before = state.posts.length;
+          await loadFeed(false);
+          return { ok: true, added: state.posts.length - before, total: state.posts.length };
+        },
+      },
+      selectPost: {
+        description: "Select a post and load comments. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"],
+        },
+        handler: async (p: { postId: string }) => {
+          await selectPost(p.postId);
+          return { ok: true, selectedPostId: state.selectedPostId, comments: state.comments.length };
+        },
+      },
+      fetchPost: {
+        description: "Fetch one post by id and update cache. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"],
+        },
+        handler: async (p: { postId: string }) => {
+          const post = await fetchPost(p.postId);
+          const idx = state.posts.findIndex((x) => x.id === post.id);
+          if (idx >= 0) state.posts[idx] = { ...state.posts[idx], ...post };
+          else state.posts.unshift(post);
+          renderPostList();
+          if (state.selectedPostId === post.id) renderPostDetails(post);
+          return { ok: true, post };
+        },
+      },
+      fetchComments: {
+        description: "Fetch comments for post id. Params: { postId?: string } (defaults to selected post)",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+        },
+        handler: async (p: { postId?: string }) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          const comments = await fetchComments(postId);
+          if (state.selectedPostId === postId) {
+            state.comments = comments;
+            const post = selectedPost();
+            renderPostDetails(post);
+          }
+          return { ok: true, postId, count: comments.length, comments };
+        },
+      },
+      createPost: {
+        description: "Create a post with PoW. Params: { nickname: string, title: string, content: string }",
+        params: {
+          type: "object",
+          properties: {
+            nickname: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" },
+          },
+          required: ["nickname", "title", "content"],
+        },
+        handler: (p: { nickname: string; title: string; content: string }) => {
+          setStatus("Creating post via app protocol...");
+          void (async () => {
+            try {
+              const post = await createPost(p);
+              state.posts.unshift(post);
+              state.selectedPostId = post.id;
+              state.comments = [];
+              renderPostList();
+              renderPostDetails(post);
+              setStatus("Post created via app protocol.");
+            } catch (err) {
+              setStatus(`Create post failed: ${(err as Error).message}`);
+            }
+          })();
+          return { ok: true, queued: true };
+        },
+      },
+      createComment: {
+        description: "Create comment with PoW. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
+        params: {
+          type: "object",
+          properties: {
+            postId: { type: "string" },
+            nickname: { type: "string" },
+            content: { type: "string" },
+            parent_id: { type: "string" },
+          },
+          required: ["nickname", "content"],
+        },
+        handler: async (p: { postId?: string; nickname: string; content: string; parent_id?: string }) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          const comment = await createComment(postId, {
+            nickname: p.nickname,
+            content: p.content,
+            parent_id: p.parent_id,
+          });
+          if (state.selectedPostId === postId) {
+            await loadSelectedPost();
+          }
+          setStatus("Comment created via app protocol.");
+          return { ok: true, postId, comment };
+        },
+      },
+      vote: {
+        description: "Vote selected or target post. Params: { type: 'up'|'down', postId?: string }",
+        params: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["up", "down"] },
+            postId: { type: "string" },
+          },
+          required: ["type"],
+        },
+        handler: async (p: { type: "up" | "down"; postId?: string }) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          await votePost(postId, p.type);
+          if (state.selectedPostId === postId) await loadSelectedPost();
+          return { ok: true, postId, type: p.type };
+        },
+      },
+    },
+  });
+}

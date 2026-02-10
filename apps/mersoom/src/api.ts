@@ -20,7 +20,8 @@ export async function getChallenge(): Promise<Challenge> {
 
 async function withPowHeaders(init?: RequestInit): Promise<RequestInit> {
   const challenge = await getChallenge();
-  const pow = await solvePow(challenge.seed, challenge.target_prefix, challenge.limit_ms ?? 1900);
+  const powBudgetMs = Math.max(challenge.limit_ms ?? 1900, 30000);
+  const pow = await solvePow(challenge.seed, challenge.target_prefix, powBudgetMs);
 
   const headers = new Headers(init?.headers ?? {});
   headers.set("Content-Type", "application/json");

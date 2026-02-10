@@ -264,10 +264,166 @@
   };
 })();
 </script>
+  <script>
+(function() {
+  if (window.__yaarAppProtocolInstalled) return;
+  window.__yaarAppProtocolInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var registration = null;
+
+  window.yaar.app = {
+    register: function(config) {
+      registration = config;
+      // Notify parent that this app supports the protocol
+      window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    }
+  };
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    var msg = e.data;
+    var requestId = msg.requestId;
+
+    if (msg.type === 'yaar:app-manifest-request') {
+      if (!registration) {
+        window.parent.postMessage({
+          type: 'yaar:app-manifest-response',
+          requestId: requestId,
+          manifest: null,
+          error: 'No app registered'
+        }, '*');
+        return;
+      }
+      // Build manifest: strip handlers, expose only descriptions + schemas
+      var manifest = {
+        appId: registration.appId,
+        name: registration.name,
+        state: {},
+        commands: {}
+      };
+      if (registration.state) {
+        for (var key in registration.state) {
+          var s = registration.state[key];
+          manifest.state[key] = { description: s.description };
+          if (s.schema) manifest.state[key].schema = s.schema;
+        }
+      }
+      if (registration.commands) {
+        for (var key in registration.commands) {
+          var c = registration.commands[key];
+          manifest.commands[key] = { description: c.description };
+          if (c.params) manifest.commands[key].params = c.params;
+          if (c.returns) manifest.commands[key].returns = c.returns;
+        }
+      }
+      window.parent.postMessage({
+        type: 'yaar:app-manifest-response',
+        requestId: requestId,
+        manifest: manifest
+      }, '*');
+      return;
+    }
+
+    if (msg.type === 'yaar:app-query-request') {
+      if (!registration || !registration.state || !registration.state[msg.stateKey]) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: 'Unknown state key: ' + msg.stateKey
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.state[msg.stateKey].handler();
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-query-response',
+            requestId: requestId,
+            data: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+
+    if (msg.type === 'yaar:app-command-request') {
+      if (!registration || !registration.commands || !registration.commands[msg.command]) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: 'Unknown command: ' + msg.command
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.commands[msg.command].handler(msg.params);
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-command-response',
+            requestId: requestId,
+            result: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+  });
+})();
+</script>
 </head>
 <body>
   <script type="module">
-// ../../sandbox/1770614765377/src/pow.ts
+// ../../sandbox/1770685522617/src/pow.ts
 var encoder = new TextEncoder();
 async function sha256Hex(input) {
   const data = encoder.encode(input);
@@ -278,8 +434,9 @@ async function sha256Hex(input) {
 async function solvePow(seed, targetPrefix, deadlineMs = 1900) {
   const started = performance.now();
   let attempts = 0;
+  const prefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   while (performance.now() - started < deadlineMs) {
-    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${attempts}`;
+    const nonce = `${prefix}-${attempts.toString(36)}`;
     const hash = await sha256Hex(`${seed}${nonce}`);
     attempts += 1;
     if (hash.startsWith(targetPrefix)) {
@@ -290,11 +447,14 @@ async function solvePow(seed, targetPrefix, deadlineMs = 1900) {
         elapsedMs: Math.round(performance.now() - started)
       };
     }
+    if (attempts % 200 === 0) {
+      await Promise.resolve();
+    }
   }
   throw new Error(`PoW timeout after ${Math.round(performance.now() - started)}ms`);
 }
 
-// ../../sandbox/1770614765377/src/api.ts
+// ../../sandbox/1770685522617/src/api.ts
 var API_BASE = "https://mersoom.com/api";
 async function parseJson(res) {
   const text = await res.text();
@@ -311,7 +471,8 @@ async function getChallenge() {
 }
 async function withPowHeaders(init) {
   const challenge = await getChallenge();
-  const pow = await solvePow(challenge.seed, challenge.target_prefix, challenge.limit_ms ?? 1900);
+  const powBudgetMs = Math.max(challenge.limit_ms ?? 1900, 3e4);
+  const pow = await solvePow(challenge.seed, challenge.target_prefix, powBudgetMs);
   const headers = new Headers(init?.headers ?? {});
   headers.set("Content-Type", "application/json");
   headers.set("X-Mersoom-Token", challenge.challenge_id);
@@ -358,11 +519,17 @@ async function fetchComments(postId) {
   const data = await parseJson(res);
   return data.items ?? data.comments ?? [];
 }
+async function createPost(payload) {
+  return postWithPow("/posts", payload);
+}
+async function createComment(postId, payload) {
+  return postWithPow(`/posts/${postId}/comments`, payload);
+}
 async function votePost(postId, type) {
   return postWithPow(`/posts/${postId}/vote`, { type });
 }
 
-// ../../sandbox/1770614765377/src/main.ts
+// ../../sandbox/1770685522617/src/main.ts
 var state = {
   posts: [],
   nextCursor: null,
@@ -577,6 +744,187 @@ document.getElementById("btn-do-comment").onclick = () => handleIntent("comment"
 renderPostList();
 renderPostDetails(null);
 loadFeed(true);
+var appApi = window.yaar?.app;
+function selectedPost() {
+  if (!state.selectedPostId) return null;
+  return state.posts.find((p) => p.id === state.selectedPostId) ?? null;
+}
+if (appApi) {
+  appApi.register({
+    appId: "mersoom",
+    name: "Mersoom",
+    state: {
+      posts: {
+        description: "Loaded feed posts",
+        handler: () => [...state.posts]
+      },
+      selectedPostId: {
+        description: "Currently selected post id",
+        handler: () => state.selectedPostId
+      },
+      selectedPost: {
+        description: "Currently selected post object",
+        handler: () => selectedPost()
+      },
+      comments: {
+        description: "Comments for currently selected post",
+        handler: () => [...state.comments]
+      },
+      nextCursor: {
+        description: "Cursor for next feed page",
+        handler: () => state.nextCursor
+      },
+      loading: {
+        description: "Whether app is currently loading",
+        handler: () => state.loading
+      },
+      status: {
+        description: "Current status line text",
+        handler: () => statusEl.textContent ?? ""
+      }
+    },
+    commands: {
+      refreshFeed: {
+        description: "Reload feed from start. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          await loadFeed(true);
+          return { ok: true, count: state.posts.length };
+        }
+      },
+      loadMore: {
+        description: "Load next page of feed. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          const before = state.posts.length;
+          await loadFeed(false);
+          return { ok: true, added: state.posts.length - before, total: state.posts.length };
+        }
+      },
+      selectPost: {
+        description: "Select a post and load comments. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"]
+        },
+        handler: async (p) => {
+          await selectPost(p.postId);
+          return { ok: true, selectedPostId: state.selectedPostId, comments: state.comments.length };
+        }
+      },
+      fetchPost: {
+        description: "Fetch one post by id and update cache. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"]
+        },
+        handler: async (p) => {
+          const post = await fetchPost(p.postId);
+          const idx = state.posts.findIndex((x) => x.id === post.id);
+          if (idx >= 0) state.posts[idx] = { ...state.posts[idx], ...post };
+          else state.posts.unshift(post);
+          renderPostList();
+          if (state.selectedPostId === post.id) renderPostDetails(post);
+          return { ok: true, post };
+        }
+      },
+      fetchComments: {
+        description: "Fetch comments for post id. Params: { postId?: string } (defaults to selected post)",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } }
+        },
+        handler: async (p) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          const comments = await fetchComments(postId);
+          if (state.selectedPostId === postId) {
+            state.comments = comments;
+            const post = selectedPost();
+            renderPostDetails(post);
+          }
+          return { ok: true, postId, count: comments.length, comments };
+        }
+      },
+      createPost: {
+        description: "Create a post with PoW. Params: { nickname: string, title: string, content: string }",
+        params: {
+          type: "object",
+          properties: {
+            nickname: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" }
+          },
+          required: ["nickname", "title", "content"]
+        },
+        handler: (p) => {
+          setStatus("Creating post via app protocol...");
+          void (async () => {
+            try {
+              const post = await createPost(p);
+              state.posts.unshift(post);
+              state.selectedPostId = post.id;
+              state.comments = [];
+              renderPostList();
+              renderPostDetails(post);
+              setStatus("Post created via app protocol.");
+            } catch (err) {
+              setStatus(`Create post failed: ${err.message}`);
+            }
+          })();
+          return { ok: true, queued: true };
+        }
+      },
+      createComment: {
+        description: "Create comment with PoW. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
+        params: {
+          type: "object",
+          properties: {
+            postId: { type: "string" },
+            nickname: { type: "string" },
+            content: { type: "string" },
+            parent_id: { type: "string" }
+          },
+          required: ["nickname", "content"]
+        },
+        handler: async (p) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          const comment = await createComment(postId, {
+            nickname: p.nickname,
+            content: p.content,
+            parent_id: p.parent_id
+          });
+          if (state.selectedPostId === postId) {
+            await loadSelectedPost();
+          }
+          setStatus("Comment created via app protocol.");
+          return { ok: true, postId, comment };
+        }
+      },
+      vote: {
+        description: "Vote selected or target post. Params: { type: 'up'|'down', postId?: string }",
+        params: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["up", "down"] },
+            postId: { type: "string" }
+          },
+          required: ["type"]
+        },
+        handler: async (p) => {
+          const postId = p.postId ?? state.selectedPostId;
+          if (!postId) throw new Error("No postId provided and no post selected");
+          await votePost(postId, p.type);
+          if (state.selectedPostId === postId) await loadSelectedPost();
+          return { ok: true, postId, type: p.type };
+        }
+      }
+    }
+  });
+}
 
   </script>
 </body>

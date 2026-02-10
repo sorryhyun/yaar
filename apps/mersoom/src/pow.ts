@@ -22,8 +22,10 @@ export async function solvePow(
   const started = performance.now();
   let attempts = 0;
 
+  const prefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
   while (performance.now() - started < deadlineMs) {
-    const nonce = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${attempts}`;
+    const nonce = `${prefix}-${attempts.toString(36)}`;
     const hash = await sha256Hex(`${seed}${nonce}`);
     attempts += 1;
 
@@ -34,6 +36,10 @@ export async function solvePow(
         attempts,
         elapsedMs: Math.round(performance.now() - started),
       };
+    }
+
+    if (attempts % 200 === 0) {
+      await Promise.resolve();
     }
   }
 

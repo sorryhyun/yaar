@@ -98,10 +98,332 @@
   });
 })();
 </script>
+  <script>
+(function() {
+  if (window.__yaarStorageInstalled) return;
+  window.__yaarStorageInstalled = true;
+
+  function encodePath(p) {
+    return p.split('/').map(encodeURIComponent).join('/');
+  }
+
+  window.yaar = window.yaar || {};
+  window.yaar.storage = {
+    async save(path, data) {
+      var body;
+      if (typeof data === 'string') {
+        body = data;
+      } else if (data instanceof Blob) {
+        body = await data.arrayBuffer();
+      } else if (data instanceof ArrayBuffer) {
+        body = data;
+      } else if (data instanceof Uint8Array) {
+        body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      } else {
+        body = String(data);
+      }
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Save failed');
+      }
+      return res.json();
+    },
+
+    async read(path, options) {
+      var mode = (options && options.as) || 'auto';
+      var res = await fetch('/api/storage/' + encodePath(path));
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Read failed');
+      }
+      if (mode === 'blob') return res.blob();
+      if (mode === 'arraybuffer') return res.arrayBuffer();
+      if (mode === 'json') return res.json();
+      if (mode === 'text') return res.text();
+      // auto: guess from content-type
+      var ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) return res.json();
+      if (ct.startsWith('text/')) return res.text();
+      return res.blob();
+    },
+
+    async list(dirPath) {
+      var p = dirPath ? encodePath(dirPath) : '';
+      var res = await fetch('/api/storage/' + p + '?list=true');
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'List failed');
+      }
+      return res.json();
+    },
+
+    async remove(path) {
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE' });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Delete failed');
+      }
+      return res.json();
+    },
+
+    url: function(path) {
+      return '/api/storage/' + encodePath(path);
+    }
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarFetchProxyInstalled) return;
+  window.__yaarFetchProxyInstalled = true;
+
+  var realFetch = window.fetch.bind(window);
+
+  window.fetch = function(input, init) {
+    var url;
+    if (input instanceof Request) {
+      url = input.url;
+    } else {
+      url = String(input);
+    }
+
+    // Relative URLs and same-origin — pass through
+    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+      return realFetch(input, init);
+    }
+    try {
+      var parsed = new URL(url, location.origin);
+      if (parsed.origin === location.origin) {
+        return realFetch(input, init);
+      }
+    } catch(e) {
+      return realFetch(input, init);
+    }
+
+    // Cross-origin — route through proxy
+    var method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+    var headers = {};
+    if (init && init.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach(function(v, k) { headers[k] = v; });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(function(pair) { headers[pair[0]] = pair[1]; });
+      } else {
+        headers = Object.assign({}, init.headers);
+      }
+    } else if (input instanceof Request) {
+      input.headers.forEach(function(v, k) { headers[k] = v; });
+    }
+
+    var bodyPromise;
+    if (init && init.body != null) {
+      if (typeof init.body === 'string') {
+        bodyPromise = Promise.resolve(init.body);
+      } else {
+        bodyPromise = new Response(init.body).text();
+      }
+    } else if (input instanceof Request && method !== 'GET' && method !== 'HEAD') {
+      bodyPromise = input.text();
+    } else {
+      bodyPromise = Promise.resolve(undefined);
+    }
+
+    return bodyPromise.then(function(bodyStr) {
+      var payload = { url: url, method: method, headers: headers };
+      if (bodyStr !== undefined) payload.body = bodyStr;
+
+      return realFetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }).then(function(proxyRes) {
+      if (!proxyRes.ok) {
+        return proxyRes.json().then(function(err) {
+          throw new Error(err.error || 'Fetch proxy error: ' + proxyRes.status);
+        });
+      }
+      return proxyRes.json();
+    }).then(function(data) {
+      var body;
+      if (data.bodyEncoding === 'base64') {
+        var bin = atob(data.body);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        body = bytes.buffer;
+      } else {
+        body = data.body;
+      }
+      return new Response(body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers
+      });
+    });
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarAppProtocolInstalled) return;
+  window.__yaarAppProtocolInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var registration = null;
+
+  window.yaar.app = {
+    register: function(config) {
+      registration = config;
+      // Notify parent that this app supports the protocol
+      window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    }
+  };
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    var msg = e.data;
+    var requestId = msg.requestId;
+
+    if (msg.type === 'yaar:app-manifest-request') {
+      if (!registration) {
+        window.parent.postMessage({
+          type: 'yaar:app-manifest-response',
+          requestId: requestId,
+          manifest: null,
+          error: 'No app registered'
+        }, '*');
+        return;
+      }
+      // Build manifest: strip handlers, expose only descriptions + schemas
+      var manifest = {
+        appId: registration.appId,
+        name: registration.name,
+        state: {},
+        commands: {}
+      };
+      if (registration.state) {
+        for (var key in registration.state) {
+          var s = registration.state[key];
+          manifest.state[key] = { description: s.description };
+          if (s.schema) manifest.state[key].schema = s.schema;
+        }
+      }
+      if (registration.commands) {
+        for (var key in registration.commands) {
+          var c = registration.commands[key];
+          manifest.commands[key] = { description: c.description };
+          if (c.params) manifest.commands[key].params = c.params;
+          if (c.returns) manifest.commands[key].returns = c.returns;
+        }
+      }
+      window.parent.postMessage({
+        type: 'yaar:app-manifest-response',
+        requestId: requestId,
+        manifest: manifest
+      }, '*');
+      return;
+    }
+
+    if (msg.type === 'yaar:app-query-request') {
+      if (!registration || !registration.state || !registration.state[msg.stateKey]) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: 'Unknown state key: ' + msg.stateKey
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.state[msg.stateKey].handler();
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-query-response',
+            requestId: requestId,
+            data: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+
+    if (msg.type === 'yaar:app-command-request') {
+      if (!registration || !registration.commands || !registration.commands[msg.command]) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: 'Unknown command: ' + msg.command
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.commands[msg.command].handler(msg.params);
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-command-response',
+            requestId: requestId,
+            result: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+  });
+})();
+</script>
 </head>
 <body>
   <script type="module">
-// ../../sandbox/1770597364051/src/styles.ts
+// ../../sandbox/1770684810395/src/styles.ts
 var styles = `
 :root {
   --bg: #0f172a;
@@ -244,7 +566,7 @@ button.primary {
 }
 `;
 
-// ../../sandbox/1770597364051/src/utils.ts
+// ../../sandbox/1770684810395/src/utils.ts
 var STORAGE_KEY = "word-lite-document-v1";
 function debounce(fn, delay = 500) {
   let timer = null;
@@ -274,7 +596,7 @@ function nowLabel() {
   return (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// ../../sandbox/1770597364051/src/main.ts
+// ../../sandbox/1770684810395/src/main.ts
 var app = document.getElementById("app") || document.body;
 app.innerHTML = `
   <style>${styles}</style>
@@ -443,6 +765,104 @@ document.addEventListener("keydown", (e) => {
 });
 loadDoc();
 editor.focus();
+var appApi = window.yaar?.app;
+function setEditorFromPlainText(text) {
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+  editor.innerHTML = `<p>${escaped}</p>`;
+  refreshStats();
+}
+if (appApi) {
+  appApi.register({
+    appId: "word-lite",
+    name: "Word Lite",
+    state: {
+      html: {
+        description: "Current document HTML content",
+        handler: () => editor.innerHTML
+      },
+      text: {
+        description: "Current document plain text content",
+        handler: () => editor.innerText || ""
+      },
+      stats: {
+        description: "Current text stats as { words, chars }",
+        handler: () => countTextStats(editor.innerText || "")
+      },
+      saveState: {
+        description: "Current save status label",
+        handler: () => saveState.textContent || ""
+      }
+    },
+    commands: {
+      setHtml: {
+        description: "Replace document with HTML. Params: { html: string }",
+        params: {
+          type: "object",
+          properties: { html: { type: "string" } },
+          required: ["html"]
+        },
+        handler: (p) => {
+          editor.innerHTML = p.html || "<p></p>";
+          refreshStats();
+          saveState.textContent = "Updated via app protocol";
+          saveDoc();
+          return { ok: true };
+        }
+      },
+      setText: {
+        description: "Replace document with plain text. Params: { text: string }",
+        params: {
+          type: "object",
+          properties: { text: { type: "string" } },
+          required: ["text"]
+        },
+        handler: (p) => {
+          setEditorFromPlainText(p.text || "");
+          saveState.textContent = "Updated via app protocol";
+          saveDoc();
+          return { ok: true };
+        }
+      },
+      appendText: {
+        description: "Append plain text to the document. Params: { text: string, newline?: boolean }",
+        params: {
+          type: "object",
+          properties: {
+            text: { type: "string" },
+            newline: { type: "boolean" }
+          },
+          required: ["text"]
+        },
+        handler: (p) => {
+          const existing = editor.innerText || "";
+          const next = p.newline === false ? `${existing}${p.text}` : `${existing}${existing ? "\n" : ""}${p.text}`;
+          setEditorFromPlainText(next);
+          saveState.textContent = "Updated via app protocol";
+          saveDoc();
+          return { ok: true };
+        }
+      },
+      newDocument: {
+        description: "Clear current document to a blank paragraph. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: () => {
+          editor.innerHTML = "<p></p>";
+          refreshStats();
+          saveState.textContent = "Unsaved new document";
+          return { ok: true };
+        }
+      },
+      saveDraft: {
+        description: "Save current document to local draft storage. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: () => {
+          saveDoc();
+          return { ok: true, savedAt: nowLabel() };
+        }
+      }
+    }
+  });
+}
 
   </script>
 </body>

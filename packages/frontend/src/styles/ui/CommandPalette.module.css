@@ -36,7 +36,7 @@
   border: none;
   color: var(--color-text);
   font-size: var(--text-lg);
-  font-family: inherit;
+  font-family: var(--font-sans);
   padding: var(--space-2) var(--space-3);
   resize: none;
   outline: none;

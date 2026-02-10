@@ -32,10 +32,20 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
         const actionMonitorId = (action as { monitorId?: string }).monitorId
         const monitorId = actionMonitorId ?? (store as DesktopStore).activeMonitorId ?? 'monitor-0'
         const key = toWindowKey(monitorId, action.windowId)
+        // Clamp bounds to viewport so the title bar is always reachable
+        const TITLEBAR_H = 36
+        const TASKBAR_H = 36
+        const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : 1280
+        const vh = typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : 720
+        const b = { ...action.bounds }
+        b.x = Math.max(0, Math.min(b.x, vw - 100))
+        b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_H - TITLEBAR_H))
+        b.w = Math.min(b.w, vw - b.x)
+        b.h = Math.min(b.h, vh - TASKBAR_H - b.y)
         const window: WindowModel = {
           id: key,
           title: action.title,
-          bounds: { ...action.bounds },
+          bounds: b,
           content: { ...action.content },
           minimized: false,
           maximized: false,

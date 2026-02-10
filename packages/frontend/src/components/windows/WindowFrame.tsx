@@ -118,12 +118,22 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       y: e.clientY - window.bounds.y,
     }
 
+    const TITLEBAR_H = 36
+    const TASKBAR_H = 36
+
     const handleMouseMove = (e: MouseEvent) => {
-      userMoveWindow(
-        window.id,
-        e.clientX - dragOffset.current.x,
-        e.clientY - dragOffset.current.y
-      )
+      const vw = globalThis.innerWidth
+      const vh = globalThis.innerHeight
+
+      let newX = e.clientX - dragOffset.current.x
+      let newY = e.clientY - dragOffset.current.y
+
+      // Keep title bar reachable: at least 100px of width visible horizontally
+      newX = Math.max(-(window.bounds.w - 100), Math.min(newX, vw - 100))
+      // Top: can't go above viewport; Bottom: title bar must stay above taskbar
+      newY = Math.max(0, Math.min(newY, vh - TASKBAR_H - TITLEBAR_H))
+
+      userMoveWindow(window.id, newX, newY)
     }
 
     const entry = { move: handleMouseMove, up: handleMouseUp }
@@ -155,9 +165,13 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
     const resizeLeft = direction.includes('w')
     const resizeRight = direction.includes('e')
 
+    const TASKBAR_H = 36
+
     const handleMouseMove = (e: MouseEvent) => {
       const dx = e.clientX - startMouseX
       const dy = e.clientY - startMouseY
+      const vh = globalThis.innerHeight
+      const vw = globalThis.innerWidth
 
       let newX = startBounds.x
       let newY = startBounds.y
@@ -169,9 +183,23 @@ export function WindowFrame({ window, zIndex, isFocused }: WindowFrameProps) {
       if (resizeBottom) newH = startBounds.h + dy
       if (resizeTop) { newH = startBounds.h - dy; newY = startBounds.y + dy }
 
-      // Enforce minimums and clamp position
+      // Enforce minimums
       if (newW < 200) { if (resizeLeft) newX = startBounds.x + startBounds.w - 200; newW = 200 }
       if (newH < 150) { if (resizeTop) newY = startBounds.y + startBounds.h - 150; newH = 150 }
+
+      // Clamp: top edge can't go above viewport
+      if (newY < 0) { newH += newY; newY = 0 }
+      // Clamp: bottom edge can't go below viewport minus taskbar
+      const maxH = vh - TASKBAR_H - newY
+      if (newH > maxH) newH = maxH
+      // Clamp: right edge within viewport
+      if (newX + newW > vw) newW = vw - newX
+      // Clamp: left edge within viewport
+      if (newX < 0) { newW += newX; newX = 0 }
+
+      // Re-enforce minimums after clamping
+      if (newW < 200) newW = 200
+      if (newH < 150) newH = 150
 
       const posChanged = resizeLeft || resizeTop
       userResizeWindow(window.id, newW, newH, posChanged ? newX : undefined, posChanged ? newY : undefined)
