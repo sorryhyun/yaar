@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slides Lite</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+  <script>
+(function() {
+  if (window.__yaarCaptureInstalled) return;
+  window.__yaarCaptureInstalled = true;
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'yaar:capture-request') return;
+    var requestId = e.data.requestId;
+    var imageData = null;
+
+    try {
+      // Try capturing the largest canvas element
+      var canvases = document.querySelectorAll('canvas');
+      if (canvases.length > 0) {
+        var largest = null;
+        var largestArea = 0;
+        for (var i = 0; i < canvases.length; i++) {
+          var area = canvases[i].width * canvases[i].height;
+          if (area > largestArea) {
+            largestArea = area;
+            largest = canvases[i];
+          }
+        }
+        if (largest) {
+          imageData = largest.toDataURL('image/png');
+        }
+      }
+
+      // Fall back to SVG capture
+      if (!imageData) {
+        var svgs = document.querySelectorAll('svg');
+        if (svgs.length > 0) {
+          var largest = null;
+          var largestArea = 0;
+          for (var i = 0; i < svgs.length; i++) {
+            var rect = svgs[i].getBoundingClientRect();
+            var area = rect.width * rect.height;
+            if (area > largestArea) {
+              largestArea = area;
+              largest = svgs[i];
+            }
+          }
+          if (largest) {
+            var serializer = new XMLSerializer();
+            var svgStr = serializer.serializeToString(largest);
+            var rect = largest.getBoundingClientRect();
+            var w = rect.width || 300;
+            var h = rect.height || 150;
+            var img = new Image();
+            var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            img.onload = function() {
+              var c = document.createElement('canvas');
+              c.width = w;
+              c.height = h;
+              var ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0, w, h);
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: c.toDataURL('image/png')
+              }, '*');
+            };
+            img.onerror = function() {
+              URL.revokeObjectURL(url);
+              window.parent.postMessage({
+                type: 'yaar:capture-response',
+                requestId: requestId,
+                imageData: null
+              }, '*');
+            };
+            img.src = url;
+            return; // async path — response sent from onload/onerror
+          }
+        }
+      }
+    } catch (ex) {
+      // Capture failed, imageData stays null
+    }
+
+    window.parent.postMessage({
+      type: 'yaar:capture-response',
+      requestId: requestId,
+      imageData: imageData
+    }, '*');
+  });
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarStorageInstalled) return;
+  window.__yaarStorageInstalled = true;
+
+  function encodePath(p) {
+    return p.split('/').map(encodeURIComponent).join('/');
+  }
+
+  window.yaar = window.yaar || {};
+  window.yaar.storage = {
+    async save(path, data) {
+      var body;
+      if (typeof data === 'string') {
+        body = data;
+      } else if (data instanceof Blob) {
+        body = await data.arrayBuffer();
+      } else if (data instanceof ArrayBuffer) {
+        body = data;
+      } else if (data instanceof Uint8Array) {
+        body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      } else {
+        body = String(data);
+      }
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Save failed');
+      }
+      return res.json();
+    },
+
+    async read(path, options) {
+      var mode = (options && options.as) || 'auto';
+      var res = await fetch('/api/storage/' + encodePath(path));
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Read failed');
+      }
+      if (mode === 'blob') return res.blob();
+      if (mode === 'arraybuffer') return res.arrayBuffer();
+      if (mode === 'json') return res.json();
+      if (mode === 'text') return res.text();
+      // auto: guess from content-type
+      var ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) return res.json();
+      if (ct.startsWith('text/')) return res.text();
+      return res.blob();
+    },
+
+    async list(dirPath) {
+      var p = dirPath ? encodePath(dirPath) : '';
+      var res = await fetch('/api/storage/' + p + '?list=true');
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'List failed');
+      }
+      return res.json();
+    },
+
+    async remove(path) {
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE' });
+      if (!res.ok) {
+        var err = await res.json().catch(function() { return { error: res.statusText }; });
+        throw new Error(err.error || 'Delete failed');
+      }
+      return res.json();
+    },
+
+    url: function(path) {
+      return '/api/storage/' + encodePath(path);
+    }
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarFetchProxyInstalled) return;
+  window.__yaarFetchProxyInstalled = true;
+
+  var realFetch = window.fetch.bind(window);
+
+  window.fetch = function(input, init) {
+    var url;
+    if (input instanceof Request) {
+      url = input.url;
+    } else {
+      url = String(input);
+    }
+
+    // Relative URLs and same-origin — pass through
+    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+      return realFetch(input, init);
+    }
+    try {
+      var parsed = new URL(url, location.origin);
+      if (parsed.origin === location.origin) {
+        return realFetch(input, init);
+      }
+    } catch(e) {
+      return realFetch(input, init);
+    }
+
+    // Cross-origin — route through proxy
+    var method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+    var headers = {};
+    if (init && init.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach(function(v, k) { headers[k] = v; });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(function(pair) { headers[pair[0]] = pair[1]; });
+      } else {
+        headers = Object.assign({}, init.headers);
+      }
+    } else if (input instanceof Request) {
+      input.headers.forEach(function(v, k) { headers[k] = v; });
+    }
+
+    var bodyPromise;
+    if (init && init.body != null) {
+      if (typeof init.body === 'string') {
+        bodyPromise = Promise.resolve(init.body);
+      } else {
+        bodyPromise = new Response(init.body).text();
+      }
+    } else if (input instanceof Request && method !== 'GET' && method !== 'HEAD') {
+      bodyPromise = input.text();
+    } else {
+      bodyPromise = Promise.resolve(undefined);
+    }
+
+    return bodyPromise.then(function(bodyStr) {
+      var payload = { url: url, method: method, headers: headers };
+      if (bodyStr !== undefined) payload.body = bodyStr;
+
+      return realFetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }).then(function(proxyRes) {
+      if (!proxyRes.ok) {
+        return proxyRes.json().then(function(err) {
+          throw new Error(err.error || 'Fetch proxy error: ' + proxyRes.status);
+        });
+      }
+      return proxyRes.json();
+    }).then(function(data) {
+      var body;
+      if (data.bodyEncoding === 'base64') {
+        var bin = atob(data.body);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        body = bytes.buffer;
+      } else {
+        body = data.body;
+      }
+      return new Response(body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers
+      });
+    });
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarAppProtocolInstalled) return;
+  window.__yaarAppProtocolInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var registration = null;
+
+  window.yaar.app = {
+    register: function(config) {
+      registration = config;
+      // Notify parent that this app supports the protocol
+      window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    }
+  };
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    var msg = e.data;
+    var requestId = msg.requestId;
+
+    if (msg.type === 'yaar:app-manifest-request') {
+      if (!registration) {
+        window.parent.postMessage({
+          type: 'yaar:app-manifest-response',
+          requestId: requestId,
+          manifest: null,
+          error: 'No app registered'
+        }, '*');
+        return;
+      }
+      // Build manifest: strip handlers, expose only descriptions + schemas
+      var manifest = {
+        appId: registration.appId,
+        name: registration.name,
+        state: {},
+        commands: {}
+      };
+      if (registration.state) {
+        for (var key in registration.state) {
+          var s = registration.state[key];
+          manifest.state[key] = { description: s.description };
+          if (s.schema) manifest.state[key].schema = s.schema;
+        }
+      }
+      if (registration.commands) {
+        for (var key in registration.commands) {
+          var c = registration.commands[key];
+          manifest.commands[key] = { description: c.description };
+          if (c.params) manifest.commands[key].params = c.params;
+          if (c.returns) manifest.commands[key].returns = c.returns;
+        }
+      }
+      window.parent.postMessage({
+        type: 'yaar:app-manifest-response',
+        requestId: requestId,
+        manifest: manifest
+      }, '*');
+      return;
+    }
+
+    if (msg.type === 'yaar:app-query-request') {
+      if (!registration || !registration.state || !registration.state[msg.stateKey]) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: 'Unknown state key: ' + msg.stateKey
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.state[msg.stateKey].handler();
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-query-response',
+            requestId: requestId,
+            data: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+
+    if (msg.type === 'yaar:app-command-request') {
+      if (!registration || !registration.commands || !registration.commands[msg.command]) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: 'Unknown command: ' + msg.command
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.commands[msg.command].handler(msg.params);
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-command-response',
+            requestId: requestId,
+            result: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+  });
+})();
+</script>
+</head>
+<body>
+  <script type="module">
+// ../../sandbox/1770707653279/src/storage.ts
+var KEY = "slides-lite:draft";
+function saveDeck(deck2) {
+  localStorage.setItem(KEY, JSON.stringify(deck2));
+}
+function loadDeck() {
+  const raw = localStorage.getItem(KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+// ../../sandbox/1770707653279/src/main.ts
+var THEMES = {
+  "classic-light": { name: "Classic Light", bg: "#ffffff", fg: "#1f2937", accent: "#2563eb" },
+  "midnight-dark": { name: "Midnight Dark", bg: "#111827", fg: "#f9fafb", accent: "#60a5fa" },
+  ocean: { name: "Ocean", bg: "#e0f2fe", fg: "#0c4a6e", accent: "#0284c7" },
+  sunset: { name: "Sunset", bg: "#fff7ed", fg: "#7c2d12", accent: "#ea580c" }
+};
+var app = document.getElementById("app");
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+function newSlide(layout = "title-body") {
+  return { id: uid(), layout, title: "New Slide", body: "", imageUrl: "" };
+}
+function newDeck() {
+  return {
+    title: "Untitled Deck",
+    themeId: "classic-light",
+    slides: [newSlide()],
+    activeIndex: 0
+  };
+}
+var deck = loadDeck() ?? newDeck();
+var presenting = false;
+var presentIndex = 0;
+function clampActive() {
+  if (deck.activeIndex < 0) deck.activeIndex = 0;
+  if (deck.activeIndex > deck.slides.length - 1) deck.activeIndex = deck.slides.length - 1;
+}
+function persist() {
+  saveDeck(deck);
+}
+function activeSlide() {
+  clampActive();
+  return deck.slides[deck.activeIndex];
+}
+function renderSlideHtml(slide, themeId) {
+  const t = THEMES[themeId];
+  const image = slide.imageUrl ? `<img src="${slide.imageUrl}" style="max-width:100%; max-height:260px; border-radius:10px; margin-top:12px;"/>` : "";
+  if (slide.layout === "section") {
+    return `<div class="slide section" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
+      <h1>${escapeHtml(slide.title || "Section")}</h1>
+      <p>${escapeHtml(slide.body || "")}</p>
+    </div>`;
+  }
+  if (slide.layout === "title-image") {
+    return `<div class="slide" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
+      <h1>${escapeHtml(slide.title || "Title")}</h1>
+      ${image || '<div style="opacity:.6">No image selected</div>'}
+      <p>${escapeHtml(slide.body || "")}</p>
+    </div>`;
+  }
+  return `<div class="slide" style="background:${t.bg};color:${t.fg};border-top:10px solid ${t.accent};">
+    <h1>${escapeHtml(slide.title || "Title")}</h1>
+    <p>${escapeHtml(slide.body || "")}</p>
+  </div>`;
+}
+function escapeHtml(s) {
+  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+function render() {
+  if (!deck.slides.length) deck.slides.push(newSlide());
+  clampActive();
+  const t = THEMES[deck.themeId];
+  const slide = activeSlide();
+  app.innerHTML = `
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, system-ui, Arial, sans-serif; }
+      .root { height: 100vh; display: grid; grid-template-rows: 56px 1fr; }
+      .topbar {
+        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+        border-bottom: 1px solid #e5e7eb; background: #f9fafb;
+      }
+      .topbar input, .topbar select, .topbar button, .panel input, .panel textarea, .panel select {
+        border: 1px solid #d1d5db; border-radius: 8px; padding: 7px 9px; font-size: 13px;
+      }
+      .topbar button { cursor: pointer; background: white; }
+      .topbar button.primary { background: #111827; color: white; border-color: #111827; }
+      .main { display: grid; grid-template-columns: 220px 1fr 280px; height: calc(100vh - 56px); }
+      .left { border-right: 1px solid #e5e7eb; overflow: auto; padding: 10px; }
+      .thumb { border: 1px solid #d1d5db; border-radius: 10px; padding: 8px; margin-bottom: 8px; cursor: pointer; background: white; }
+      .thumb.active { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
+      .thumb h4 { margin: 0 0 4px; font-size: 12px; }
+      .thumb p { margin: 0; font-size: 11px; color: #6b7280; }
+      .thumb-actions { margin-top: 6px; display: flex; gap: 4px; }
+      .thumb-actions button { font-size: 11px; padding: 4px 6px; }
+      .center { display: grid; place-items: center; background: #f3f4f6; padding: 18px; }
+      .slide {
+        width: min(900px, 100%); aspect-ratio: 16 / 9; border-radius: 14px;
+        padding: 36px; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.12);
+      }
+      .slide h1 { margin-top: 0; margin-bottom: 14px; font-size: clamp(24px, 4vw, 44px); }
+      .slide p { font-size: clamp(14px, 1.7vw, 26px); line-height: 1.35; white-space: pre-wrap; }
+      .panel { border-left: 1px solid #e5e7eb; padding: 12px; overflow: auto; }
+      .field { margin-bottom: 10px; display: grid; gap: 6px; }
+      .field label { font-size: 12px; color: #4b5563; font-weight: 600; }
+      .panel textarea { min-height: 140px; resize: vertical; }
+      .muted { font-size: 12px; color: #6b7280; }
+      .present {
+        position: fixed; inset: 0; z-index: 9999; background: #0b1020; display: grid; place-items: center;
+      }
+      .present-ui { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display:flex; gap:8px; }
+      .present-ui button { border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+    </style>
+    <div class="root">
+      <div class="topbar">
+        <input id="deckTitle" value="${escapeHtml(deck.title)}" style="min-width:220px;" />
+        <select id="themeSelect">
+          ${Object.entries(THEMES).map(([id, meta]) => `<option value="${id}" ${id === deck.themeId ? "selected" : ""}>${meta.name}</option>`).join("")}
+        </select>
+        <button id="newDeckBtn">New</button>
+        <button id="dupBtn">Duplicate Slide</button>
+        <button id="addBtn">Add Slide</button>
+        <button id="saveBtn">Save</button>
+        <button class="primary" id="presentBtn">Present</button>
+        <button id="exportBtn">Export PDF</button>
+        <span class="muted" style="margin-left:auto;">${deck.slides.length} slides</span>
+      </div>
+      <div class="main">
+        <div class="left" id="thumbs"></div>
+        <div class="center" id="canvas"></div>
+        <div class="panel">
+          <div class="field"><label>Layout</label>
+            <select id="layoutSel">
+              <option value="title-body" ${slide.layout === "title-body" ? "selected" : ""}>Title + Body</option>
+              <option value="title-image" ${slide.layout === "title-image" ? "selected" : ""}>Title + Image</option>
+              <option value="section" ${slide.layout === "section" ? "selected" : ""}>Section</option>
+            </select>
+          </div>
+          <div class="field"><label>Title</label><input id="titleIn" value="${escapeHtml(slide.title)}"></div>
+          <div class="field"><label>Body</label><textarea id="bodyIn">${escapeHtml(slide.body)}</textarea></div>
+          <div class="field"><label>Image URL</label><input id="imgIn" placeholder="https://..." value="${escapeHtml(slide.imageUrl)}"></div>
+          <div class="field"><button id="delBtn">Delete Slide</button></div>
+          <div class="muted">Autosave is on. Tip: Ctrl/Cmd+S to save manually.</div>
+        </div>
+      </div>
+    </div>
+  `;
+  const thumbs = app.querySelector("#thumbs");
+  thumbs.innerHTML = "";
+  deck.slides.forEach((s, idx) => {
+    const el = document.createElement("div");
+    el.className = `thumb ${idx === deck.activeIndex ? "active" : ""}`;
+    el.innerHTML = `<h4>${idx + 1}. ${escapeHtml(s.title || "Untitled")}</h4><p>${escapeHtml((s.body || "").slice(0, 60))}</p>
+      <div class="thumb-actions">
+        <button data-act="up" data-idx="${idx}">\u2191</button>
+        <button data-act="down" data-idx="${idx}">\u2193</button>
+      </div>`;
+    el.addEventListener("click", (e) => {
+      const target = e.target;
+      if (target.tagName.toLowerCase() === "button") return;
+      deck.activeIndex = idx;
+      render();
+    });
+    el.querySelectorAll("button").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const b = e.currentTarget;
+        const i = Number(b.dataset.idx);
+        if (b.dataset.act === "up" && i > 0) {
+          [deck.slides[i - 1], deck.slides[i]] = [deck.slides[i], deck.slides[i - 1]];
+          deck.activeIndex = i - 1;
+        }
+        if (b.dataset.act === "down" && i < deck.slides.length - 1) {
+          [deck.slides[i + 1], deck.slides[i]] = [deck.slides[i], deck.slides[i + 1]];
+          deck.activeIndex = i + 1;
+        }
+        persist();
+        render();
+      });
+    });
+    thumbs.appendChild(el);
+  });
+  app.querySelector("#canvas").innerHTML = renderSlideHtml(slide, deck.themeId);
+  bindUi();
+  persist();
+}
+function bindUi() {
+  const slide = activeSlide();
+  app.querySelector("#deckTitle").oninput = (e) => {
+    deck.title = e.target.value;
+    persist();
+  };
+  app.querySelector("#themeSelect").onchange = (e) => {
+    deck.themeId = e.target.value;
+    render();
+  };
+  app.querySelector("#layoutSel").onchange = (e) => {
+    slide.layout = e.target.value;
+    render();
+  };
+  app.querySelector("#titleIn").oninput = (e) => {
+    slide.title = e.target.value;
+    render();
+  };
+  app.querySelector("#bodyIn").oninput = (e) => {
+    slide.body = e.target.value;
+    render();
+  };
+  app.querySelector("#imgIn").oninput = (e) => {
+    slide.imageUrl = e.target.value;
+    render();
+  };
+  app.querySelector("#addBtn").onclick = () => {
+    deck.slides.splice(deck.activeIndex + 1, 0, newSlide());
+    deck.activeIndex += 1;
+    render();
+  };
+  app.querySelector("#dupBtn").onclick = () => {
+    const s = activeSlide();
+    deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uid(), title: `${s.title} (copy)` });
+    deck.activeIndex += 1;
+    render();
+  };
+  app.querySelector("#delBtn").onclick = () => {
+    if (deck.slides.length === 1) {
+      deck.slides[0] = newSlide();
+      deck.activeIndex = 0;
+    } else {
+      deck.slides.splice(deck.activeIndex, 1);
+      clampActive();
+    }
+    render();
+  };
+  app.querySelector("#newDeckBtn").onclick = () => {
+    deck = newDeck();
+    render();
+  };
+  app.querySelector("#saveBtn").onclick = () => {
+    persist();
+    flash("Saved");
+  };
+  app.querySelector("#presentBtn").onclick = () => {
+    presenting = true;
+    presentIndex = deck.activeIndex;
+    renderPresent();
+  };
+  app.querySelector("#exportBtn").onclick = exportPdf;
+}
+function flash(msg) {
+  const n = document.createElement("div");
+  n.textContent = msg;
+  n.style.cssText = "position:fixed;top:14px;right:14px;background:#111827;color:white;padding:8px 10px;border-radius:8px;z-index:99999";
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 1e3);
+}
+function renderPresent() {
+  if (!presenting) return;
+  const s = deck.slides[presentIndex];
+  const wrap = document.createElement("div");
+  wrap.className = "present";
+  wrap.innerHTML = `
+    <div style="width:min(1200px,96vw);">${renderSlideHtml(s, deck.themeId)}</div>
+    <div class="present-ui">
+      <button id="prevP">Prev</button>
+      <button id="nextP">Next</button>
+      <button id="exitP">Exit</button>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  const close = () => {
+    presenting = false;
+    wrap.remove();
+    window.removeEventListener("keydown", onKey);
+  };
+  const rerenderPresent = () => {
+    wrap.querySelector("div").innerHTML = renderSlideHtml(deck.slides[presentIndex], deck.themeId);
+  };
+  const onKey = (e) => {
+    if (!presenting) return;
+    if (e.key === "Escape") close();
+    if (e.key === "ArrowRight" && presentIndex < deck.slides.length - 1) {
+      presentIndex += 1;
+      rerenderPresent();
+    }
+    if (e.key === "ArrowLeft" && presentIndex > 0) {
+      presentIndex -= 1;
+      rerenderPresent();
+    }
+  };
+  window.addEventListener("keydown", onKey);
+  wrap.querySelector("#prevP").onclick = () => {
+    if (presentIndex > 0) presentIndex -= 1;
+    rerenderPresent();
+  };
+  wrap.querySelector("#nextP").onclick = () => {
+    if (presentIndex < deck.slides.length - 1) presentIndex += 1;
+    rerenderPresent();
+  };
+  wrap.querySelector("#exitP").onclick = close;
+}
+function exportPdf() {
+  const html = `
+    <html>
+      <head>
+        <title>${escapeHtml(deck.title)}</title>
+        <style>
+          body { margin:0; font-family: Inter, Arial, sans-serif; }
+          .page { page-break-after: always; padding: 24px; }
+          .slide { width: 100%; aspect-ratio: 16/9; border-radius: 12px; padding: 32px; box-sizing: border-box; }
+          .slide h1 { margin:0 0 12px; font-size: 42px; }
+          .slide p { font-size: 24px; white-space: pre-wrap; }
+          @media print { .page:last-child { page-break-after: auto; } }
+        </style>
+      </head>
+      <body>
+        ${deck.slides.map((s) => `<div class="page">${renderSlideHtml(s, deck.themeId)}</div>`).join("")}
+        <script>window.onload = () => window.print();<\/script>
+      </body>
+    </html>
+  `;
+  const w = window.open("", "_blank");
+  if (!w) return alert("Popup blocked. Please allow popups to export PDF.");
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    persist();
+    flash("Saved");
+  }
+});
+render();
+
+  </script>
+</body>
+</html>

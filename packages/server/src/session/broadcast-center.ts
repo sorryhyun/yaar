@@ -10,7 +10,7 @@
 
 import type { WebSocket } from 'ws';
 import type { ServerEvent } from '@yaar/shared';
-import type { SessionId } from '../session/types.js';
+import type { SessionId } from './types.js';
 
 export type ConnectionId = string;
 

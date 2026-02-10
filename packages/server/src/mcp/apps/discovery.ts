@@ -6,6 +6,7 @@ import { readdir, readFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { PROJECT_ROOT } from '../../config.js';
 import { hasCredentials } from './config.js';
+import type { FileAssociation } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -21,6 +22,7 @@ export interface AppInfo {
   hasCredentials: boolean;
   isCompiled?: boolean;  // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
+  fileAssociations?: FileAssociation[];
 }
 
 /**
@@ -63,6 +65,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
       let appProtocol: boolean | undefined;
+      let fileAssociations: FileAssociation[] | undefined;
       try {
         const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
         const meta = JSON.parse(metaContent);
@@ -70,6 +73,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (icon) iconType = 'emoji';
         displayName = meta.name;
         if (meta.appProtocol) appProtocol = true;
+        if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
       } catch {
         // No metadata or invalid JSON
       }
@@ -108,6 +112,7 @@ export async function listApps(): Promise<AppInfo[]> {
         hasCredentials: appHasCredentials,
         isCompiled,
         ...(appProtocol && { appProtocol }),
+        ...(fileAssociations && { fileAssociations }),
       });
     }
 

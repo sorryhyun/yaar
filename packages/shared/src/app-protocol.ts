@@ -9,6 +9,15 @@
  *   Iframe App → postMessage → Frontend → WebSocket → ActionEmitter resolves → MCP tool returns
  */
 
+// ── File association types ──────────────────────────────────────────
+
+/** Declares which file types an app can open and how to send content to it. */
+export interface FileAssociation {
+  extensions: string[];
+  command: string;
+  paramKey: string;
+}
+
 // ── Manifest types ──────────────────────────────────────────────────
 
 export interface AppStateDescriptor {

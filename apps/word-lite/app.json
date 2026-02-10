@@ -1,4 +1,9 @@
 {
   "icon": "📝",
-  "name": "Word Lite"
+  "name": "Word Lite",
+  "appProtocol": true,
+  "fileAssociations": [
+    { "extensions": [".txt", ".md"], "command": "setText", "paramKey": "text" },
+    { "extensions": [".html", ".htm"], "command": "setHtml", "paramKey": "html" }
+  ]
 }

@@ -1,4 +1,8 @@
 {
   "icon": "📊",
-  "name": "Excel Lite"
+  "name": "Excel Lite",
+  "appProtocol": true,
+  "fileAssociations": [
+    { "extensions": [".csv"], "command": "setCells", "paramKey": "cells" }
+  ]
 }

@@ -1,4 +1,4 @@
-import { BroadcastCenter } from '../websocket/broadcast-center.js'
+import { BroadcastCenter } from '../session/broadcast-center.js'
 import type { ServerEvent } from '@yaar/shared'
 
 /** Minimal mock of WebSocket */

@@ -13,7 +13,7 @@ import { AgentPool, type PooledAgent } from './agent-pool.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
-import { getBroadcastCenter } from '../websocket/broadcast-center.js';
+import { getBroadcastCenter } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';

@@ -9,7 +9,7 @@ import type { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { getSessionHub, type LiveSessionOptions } from '../session/live-session.js';
 import { getWarmPool } from '../providers/factory.js';
-import { getBroadcastCenter, generateConnectionId } from './broadcast-center.js';
+import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import type { ClientEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 

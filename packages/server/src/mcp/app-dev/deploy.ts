@@ -29,6 +29,12 @@ export function registerDeployTools(server: McpServer): void {
         icon: z.string().optional().describe('Emoji icon (default: "🎮")'),
         keepSource: z.boolean().optional().describe('Include src/ in deployed app (default: true)'),
         skill: z.string().optional().describe('Custom SKILL.md content. The ## Launch section with correct iframe URL will be auto-appended. Write app-specific instructions, usage guides, etc.'),
+        appProtocol: z.boolean().optional().describe('Mark app as supporting App Protocol. Auto-detected from compiled HTML if not set.'),
+        fileAssociations: z.array(z.object({
+          extensions: z.array(z.string()).describe('File extensions (e.g. [".txt", ".md"])'),
+          command: z.string().describe('app_command command name to send file content'),
+          paramKey: z.string().describe('Parameter key for the file content'),
+        })).optional().describe('File types this app can open. Each entry maps extensions to an app_command call.'),
       },
     },
     async (args) => {
@@ -39,6 +45,8 @@ export function registerDeployTools(server: McpServer): void {
         icon = '🎮',
         keepSource = true,
         skill,
+        appProtocol: explicitAppProtocol,
+        fileAssociations,
       } = args;
 
       // Validate sandbox ID
@@ -64,11 +72,14 @@ export function registerDeployTools(server: McpServer): void {
       // Check for compiled output (index.html) or component files
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
       let hasCompiledApp = false;
-      let hasAppProtocol = false;
+      let hasAppProtocol = explicitAppProtocol ?? false;
       try {
         const distHtml = await readFile(distIndexPath, 'utf-8');
         hasCompiledApp = true;
-        hasAppProtocol = distHtml.includes('.app.register');
+        // Auto-detect from HTML only if not explicitly set
+        if (explicitAppProtocol === undefined) {
+          hasAppProtocol = distHtml.includes('.app.register');
+        }
       } catch {
         // No compiled output
       }
@@ -132,7 +143,12 @@ export function registerDeployTools(server: McpServer): void {
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
-        const metadata = { icon, name: displayName, ...(hasAppProtocol && { appProtocol: true }) };
+        const metadata = {
+          icon,
+          name: displayName,
+          ...(hasAppProtocol && { appProtocol: true }),
+          ...(fileAssociations?.length && { fileAssociations }),
+        };
         await writeFile(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2), 'utf-8');
 
         // Notify frontend to refresh desktop app icons
