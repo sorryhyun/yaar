@@ -20,6 +20,7 @@ export interface AppInfo {
   hasSkill: boolean;
   hasCredentials: boolean;
   isCompiled?: boolean;  // Has index.html (TypeScript compiled app)
+  appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
 }
 
 /**
@@ -61,12 +62,14 @@ export async function listApps(): Promise<AppInfo[]> {
       let icon: string | undefined;
       let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
+      let appProtocol: boolean | undefined;
       try {
         const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
         const meta = JSON.parse(metaContent);
         icon = meta.icon;
         if (icon) iconType = 'emoji';
         displayName = meta.name;
+        if (meta.appProtocol) appProtocol = true;
       } catch {
         // No metadata or invalid JSON
       }
@@ -104,6 +107,7 @@ export async function listApps(): Promise<AppInfo[]> {
         hasSkill,
         hasCredentials: appHasCredentials,
         isCompiled,
+        ...(appProtocol && { appProtocol }),
       });
     }
 

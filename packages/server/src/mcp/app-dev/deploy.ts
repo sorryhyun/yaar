@@ -132,7 +132,7 @@ export function registerDeployTools(server: McpServer): void {
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
-        const metadata = { icon, name: displayName };
+        const metadata = { icon, name: displayName, ...(hasAppProtocol && { appProtocol: true }) };
         await writeFile(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2), 'utf-8');
 
         // Notify frontend to refresh desktop app icons

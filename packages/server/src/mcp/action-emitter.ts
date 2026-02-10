@@ -85,6 +85,7 @@ class ActionEmitter extends EventEmitter {
   private pendingRequests = new Map<string, PendingRequest>();
   private pendingDialogs = new Map<string, PendingDialog>();
   private pendingAppRequests = new Map<string, PendingAppRequest>();
+  private readyWindows = new Set<string>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
 
@@ -288,6 +289,47 @@ class ActionEmitter extends EventEmitter {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Notify that an iframe app has registered with the App Protocol.
+   * Resolves any pending waitForAppReady() calls for this window.
+   */
+  notifyAppReady(windowId: string): void {
+    this.readyWindows.add(windowId);
+    this.emit('app-ready', windowId);
+  }
+
+  /**
+   * Check if an app has already signaled readiness.
+   */
+  isAppReady(windowId: string): boolean {
+    return this.readyWindows.has(windowId);
+  }
+
+  /**
+   * Wait for an iframe app to register with the App Protocol.
+   * Resolves true if the app is already ready or becomes ready within the timeout.
+   */
+  waitForAppReady(windowId: string, timeoutMs: number = 5000): Promise<boolean> {
+    if (this.readyWindows.has(windowId)) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.off('app-ready', handler);
+        resolve(false);
+      }, timeoutMs);
+
+      const handler = (readyWindowId: string) => {
+        if (readyWindowId === windowId) {
+          clearTimeout(timeout);
+          this.off('app-ready', handler);
+          resolve(true);
+        }
+      };
+
+      this.on('app-ready', handler);
+    });
   }
 
   /**

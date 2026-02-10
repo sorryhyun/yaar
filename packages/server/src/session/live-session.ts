@@ -296,6 +296,7 @@ export class LiveSession {
 
       case 'APP_PROTOCOL_READY':
         this.windowState.setAppProtocol(event.windowId);
+        actionEmitter.notifyAppReady(event.windowId);
         break;
 
       case 'TOAST_ACTION':

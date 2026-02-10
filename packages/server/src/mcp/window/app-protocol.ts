@@ -27,6 +27,12 @@ export function registerAppProtocolTools(server: McpServer, getWindowState: () =
       if (!win) return ok(`Window "${args.windowId}" not found.`);
       if (win.content.renderer !== 'iframe') return ok(`Window "${args.windowId}" is not an iframe app.`);
 
+      // Wait for the app to register with the App Protocol before querying
+      if (!win.appProtocol) {
+        const ready = await actionEmitter.waitForAppReady(args.windowId, 5000);
+        if (!ready) return ok('App did not register with the App Protocol (timeout). The iframe app may not call window.yaar.app.register().');
+      }
+
       if (args.stateKey === 'manifest') {
         const response = await actionEmitter.emitAppProtocolRequest(args.windowId, { kind: 'manifest' }, 5000);
         if (!response) return ok('App did not respond to manifest request (timeout). The app may not support the App Protocol.');
@@ -58,6 +64,12 @@ export function registerAppProtocolTools(server: McpServer, getWindowState: () =
       const win = getWindowState().getWindow(args.windowId);
       if (!win) return ok(`Window "${args.windowId}" not found.`);
       if (win.content.renderer !== 'iframe') return ok(`Window "${args.windowId}" is not an iframe app.`);
+
+      // Wait for the app to register with the App Protocol before sending commands
+      if (!win.appProtocol) {
+        const ready = await actionEmitter.waitForAppReady(args.windowId, 5000);
+        if (!ready) return ok('App did not register with the App Protocol (timeout). The iframe app may not call window.yaar.app.register().');
+      }
 
       const response = await actionEmitter.emitAppProtocolRequest(args.windowId, { kind: 'command', command: args.command, params: args.params }, 5000);
       if (!response) return ok('App did not respond (timeout).');

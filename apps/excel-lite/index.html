@@ -173,10 +173,257 @@
   };
 })();
 </script>
+  <script>
+(function() {
+  if (window.__yaarFetchProxyInstalled) return;
+  window.__yaarFetchProxyInstalled = true;
+
+  var realFetch = window.fetch.bind(window);
+
+  window.fetch = function(input, init) {
+    var url;
+    if (input instanceof Request) {
+      url = input.url;
+    } else {
+      url = String(input);
+    }
+
+    // Relative URLs and same-origin — pass through
+    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+      return realFetch(input, init);
+    }
+    try {
+      var parsed = new URL(url, location.origin);
+      if (parsed.origin === location.origin) {
+        return realFetch(input, init);
+      }
+    } catch(e) {
+      return realFetch(input, init);
+    }
+
+    // Cross-origin — route through proxy
+    var method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+    var headers = {};
+    if (init && init.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach(function(v, k) { headers[k] = v; });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(function(pair) { headers[pair[0]] = pair[1]; });
+      } else {
+        headers = Object.assign({}, init.headers);
+      }
+    } else if (input instanceof Request) {
+      input.headers.forEach(function(v, k) { headers[k] = v; });
+    }
+
+    var bodyPromise;
+    if (init && init.body != null) {
+      if (typeof init.body === 'string') {
+        bodyPromise = Promise.resolve(init.body);
+      } else {
+        bodyPromise = new Response(init.body).text();
+      }
+    } else if (input instanceof Request && method !== 'GET' && method !== 'HEAD') {
+      bodyPromise = input.text();
+    } else {
+      bodyPromise = Promise.resolve(undefined);
+    }
+
+    return bodyPromise.then(function(bodyStr) {
+      var payload = { url: url, method: method, headers: headers };
+      if (bodyStr !== undefined) payload.body = bodyStr;
+
+      return realFetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    }).then(function(proxyRes) {
+      if (!proxyRes.ok) {
+        return proxyRes.json().then(function(err) {
+          throw new Error(err.error || 'Fetch proxy error: ' + proxyRes.status);
+        });
+      }
+      return proxyRes.json();
+    }).then(function(data) {
+      var body;
+      if (data.bodyEncoding === 'base64') {
+        var bin = atob(data.body);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        body = bytes.buffer;
+      } else {
+        body = data.body;
+      }
+      return new Response(body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers
+      });
+    });
+  };
+})();
+</script>
+  <script>
+(function() {
+  if (window.__yaarAppProtocolInstalled) return;
+  window.__yaarAppProtocolInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var registration = null;
+
+  window.yaar.app = {
+    register: function(config) {
+      registration = config;
+      // Notify parent that this app supports the protocol
+      window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    }
+  };
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    var msg = e.data;
+    var requestId = msg.requestId;
+
+    if (msg.type === 'yaar:app-manifest-request') {
+      if (!registration) {
+        window.parent.postMessage({
+          type: 'yaar:app-manifest-response',
+          requestId: requestId,
+          manifest: null,
+          error: 'No app registered'
+        }, '*');
+        return;
+      }
+      // Build manifest: strip handlers, expose only descriptions + schemas
+      var manifest = {
+        appId: registration.appId,
+        name: registration.name,
+        state: {},
+        commands: {}
+      };
+      if (registration.state) {
+        for (var key in registration.state) {
+          var s = registration.state[key];
+          manifest.state[key] = { description: s.description };
+          if (s.schema) manifest.state[key].schema = s.schema;
+        }
+      }
+      if (registration.commands) {
+        for (var key in registration.commands) {
+          var c = registration.commands[key];
+          manifest.commands[key] = { description: c.description };
+          if (c.params) manifest.commands[key].params = c.params;
+          if (c.returns) manifest.commands[key].returns = c.returns;
+        }
+      }
+      window.parent.postMessage({
+        type: 'yaar:app-manifest-response',
+        requestId: requestId,
+        manifest: manifest
+      }, '*');
+      return;
+    }
+
+    if (msg.type === 'yaar:app-query-request') {
+      if (!registration || !registration.state || !registration.state[msg.stateKey]) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: 'Unknown state key: ' + msg.stateKey
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.state[msg.stateKey].handler();
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-query-response',
+              requestId: requestId,
+              data: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-query-response',
+            requestId: requestId,
+            data: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+
+    if (msg.type === 'yaar:app-command-request') {
+      if (!registration || !registration.commands || !registration.commands[msg.command]) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: 'Unknown command: ' + msg.command
+        }, '*');
+        return;
+      }
+      try {
+        var result = registration.commands[msg.command].handler(msg.params);
+        // Handle async handlers
+        if (result && typeof result.then === 'function') {
+          result.then(function(data) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: data
+            }, '*');
+          }).catch(function(err) {
+            window.parent.postMessage({
+              type: 'yaar:app-command-response',
+              requestId: requestId,
+              result: null,
+              error: String(err)
+            }, '*');
+          });
+        } else {
+          window.parent.postMessage({
+            type: 'yaar:app-command-response',
+            requestId: requestId,
+            result: result
+          }, '*');
+        }
+      } catch (err) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: String(err)
+        }, '*');
+      }
+      return;
+    }
+  });
+})();
+</script>
 </head>
 <body>
   <script type="module">
-// ../../sandbox/1770601102206/src/constants.ts
+// ../../sandbox/1770684621990/src/constants.ts
 var ROWS = 60;
 var COLS = 20;
 var DEFAULT_STYLE = {
@@ -189,7 +436,7 @@ var DEFAULT_STYLE = {
   align: "left"
 };
 
-// ../../sandbox/1770601102206/src/data-utils.ts
+// ../../sandbox/1770684621990/src/data-utils.ts
 function cloneMap(map) {
   return JSON.parse(JSON.stringify(map));
 }
@@ -198,7 +445,7 @@ function csvEscape(value) {
   return value;
 }
 
-// ../../sandbox/1770601102206/src/ref-utils.ts
+// ../../sandbox/1770684621990/src/ref-utils.ts
 function colLabel(n) {
   let s = "";
   let x = n;
@@ -254,7 +501,7 @@ function expandRange(a, b) {
   return out;
 }
 
-// ../../sandbox/1770601102206/src/fill-utils.ts
+// ../../sandbox/1770684621990/src/fill-utils.ts
 function computeFillDestination(source, targetRef) {
   const t = parseRef(targetRef);
   if (!t) return null;
@@ -285,7 +532,7 @@ function sourceForDestination(source, destRef) {
   return key(sc, sr);
 }
 
-// ../../sandbox/1770601102206/src/formula-utils.ts
+// ../../sandbox/1770684621990/src/formula-utils.ts
 function createFormulaEngine(getRaw2) {
   function evalCell(ref, seen = /* @__PURE__ */ new Set()) {
     if (seen.has(ref)) return NaN;
@@ -337,7 +584,7 @@ function shiftFormula(raw, rowShift, colShift) {
   });
 }
 
-// ../../sandbox/1770601102206/src/history-utils.ts
+// ../../sandbox/1770684621990/src/history-utils.ts
 function pushHistorySnapshot(history2, future2, cells2, styles2, limit = 100) {
   history2.push({ cells: cloneMap(cells2), styles: cloneMap(styles2) });
   if (history2.length > limit) history2.shift();
@@ -350,7 +597,7 @@ function applySnapshotToMaps(snapshot, cells2, styles2) {
   for (const [k, v] of Object.entries(snapshot.styles)) styles2[k] = v;
 }
 
-// ../../sandbox/1770601102206/src/style-utils.ts
+// ../../sandbox/1770684621990/src/style-utils.ts
 function getStyleForRef(styles2, ref) {
   const s = styles2[ref] ?? {};
   return {
@@ -375,7 +622,7 @@ function normalizeStyle(style) {
   return Object.keys(normalized).length ? normalized : null;
 }
 
-// ../../sandbox/1770601102206/src/main.ts
+// ../../sandbox/1770684621990/src/main.ts
 var app = document.createElement("div");
 app.innerHTML = `
   <style>
@@ -908,6 +1155,95 @@ buildSheet();
 refreshAll();
 if (!storageApi) {
   setIoStatus("Storage API unavailable in this runtime.", true);
+}
+var appApi = window.yaar?.app;
+if (appApi) {
+  appApi.register({
+    appId: "excel-lite",
+    name: "Excel Lite",
+    state: {
+      cells: {
+        description: 'All cell values as a { [ref]: rawValue } object (e.g., {"A1":"Hello","B2":"=A1+1"})',
+        handler: () => ({ ...cells })
+      },
+      styles: {
+        description: "All cell styles as a { [ref]: CellStyle } object",
+        handler: () => ({ ...styles })
+      },
+      selection: {
+        description: "Current selection: { active, start, end }",
+        handler: () => ({ active: selected, start: selectionStart, end: selectionEnd })
+      }
+    },
+    commands: {
+      setCells: {
+        description: "Set one or more cell values. Params: { cells: { [ref]: value } }",
+        params: { type: "object", properties: { cells: { type: "object", additionalProperties: { type: "string" } } }, required: ["cells"] },
+        handler: (p) => {
+          pushHistory();
+          for (const [ref, value] of Object.entries(p.cells)) {
+            const upper = ref.toUpperCase();
+            if (value) cells[upper] = value;
+            else delete cells[upper];
+          }
+          refreshAll();
+          return { ok: true, count: Object.keys(p.cells).length };
+        }
+      },
+      setStyles: {
+        description: "Set styles for one or more cells. Params: { styles: { [ref]: Partial<CellStyle> } }",
+        params: { type: "object", properties: { styles: { type: "object" } }, required: ["styles"] },
+        handler: (p) => {
+          pushHistory();
+          for (const [ref, patch] of Object.entries(p.styles)) {
+            const upper = ref.toUpperCase();
+            const merged = { ...getStyleForRef(styles, upper), ...patch };
+            const normalized = normalizeStyle(merged);
+            if (normalized) styles[upper] = normalized;
+            else delete styles[upper];
+          }
+          refreshAll();
+          return { ok: true };
+        }
+      },
+      selectCell: {
+        description: "Select a cell or range. Params: { ref: string } or { start: string, end: string }",
+        params: { type: "object", properties: { ref: { type: "string" }, start: { type: "string" }, end: { type: "string" } } },
+        handler: (p) => {
+          const start = (p.start ?? p.ref ?? "A1").toUpperCase();
+          const end = (p.end ?? start).toUpperCase();
+          selected = start;
+          setSelection(start, end, true);
+          return { ok: true };
+        }
+      },
+      clearRange: {
+        description: "Clear all cell values in a range. Params: { start: string, end: string }",
+        params: { type: "object", properties: { start: { type: "string" }, end: { type: "string" } }, required: ["start", "end"] },
+        handler: (p) => {
+          pushHistory();
+          const rect = rangeRect(p.start.toUpperCase(), p.end.toUpperCase());
+          let count = 0;
+          for (const ref of refsInRect(rect)) {
+            if (cells[ref]) {
+              delete cells[ref];
+              count++;
+            }
+          }
+          refreshAll();
+          return { ok: true, cleared: count };
+        }
+      },
+      importWorkbook: {
+        description: "Import a full workbook JSON. Params: { data: { cells: {...}, styles?: {...} } }",
+        params: { type: "object", properties: { data: { type: "object" } }, required: ["data"] },
+        handler: (p) => {
+          importWorkbook(p.data);
+          return { ok: true };
+        }
+      }
+    }
+  });
 }
 
   </script>
