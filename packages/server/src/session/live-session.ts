@@ -263,7 +263,7 @@ export class LiveSession {
           await this.pool.reset();
         } else {
           // Pool not yet initialized — still flush stale warm-pool providers
-          await getWarmPool().resetCodexAppServer();
+          await getWarmPool().resetCodexProviders();
         }
         break;
 

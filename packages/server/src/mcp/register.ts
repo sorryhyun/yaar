@@ -13,6 +13,7 @@ import { registerAppsTools } from './apps/index.js';
 import { registerHttpTools } from './http/index.js';
 import { registerAppDevTools } from './app-dev/index.js';
 import { registerSandboxTools } from './sandbox/index.js';
+import { registerGuidelineTools } from './guidelines/index.js';
 import { registerReloadTools } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
 import { WindowStateRegistry } from './window-state.js';
@@ -32,6 +33,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   };
 
   registerSystemTools(servers.system);
+  registerGuidelineTools(servers.system);
   registerHttpTools(servers.system);
   registerSandboxTools(servers.system);
   registerWindowTools(servers.window, getWindowState);
@@ -52,6 +54,7 @@ export function getToolNames(): string[] {
     'mcp__system__get_info',
     'mcp__system__get_env_var',
     'mcp__system__memorize',
+    'mcp__system__guideline',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
     'mcp__system__http_post',

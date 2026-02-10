@@ -96,7 +96,7 @@ export function registerCreateTools(server: McpServer): void {
     'create_component',
     {
       description:
-        'Create a window with interactive UI components (buttons, forms, inputs, ... etc). Components are a flat array laid out with CSS grid. Prefer multi-column layouts (cols: 2 or ratio like [7,3]) for richer UIs; use 1 column only for simple single-component windows.\n\nYou can provide components inline OR load from a .yaarcomponent.json file via jsonfile param (e.g., jsonfile: "myapp/dashboard.yaarcomponent.json"). The jsonfile path is relative to apps/.\n\nExample: 2-col layout with 7:3 ratio:\n  cols: [7, 3],\n  components: [\n    { type: "text", content: "Name", variant: "caption" },\n    { type: "badge", label: "Active", variant: "success" },\n    { type: "input", name: "query", formId: "f1", placeholder: "Search..." },\n    { type: "button", label: "Go", action: "search", submitForm: "f1" }\n  ]',
+        'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid. Use guideline("components") for layout patterns and examples.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),

@@ -642,11 +642,11 @@ export class ContextPool {
       console.error('[ContextPool] Reset: agentPool.cleanup failed:', err);
     }
 
-    // 6. Stop shared Codex app-server so a fresh one is spawned
+    // 6. Dispose pooled Codex providers (AppServer process stays alive)
     try {
-      await getWarmPool().resetCodexAppServer();
+      await getWarmPool().resetCodexProviders();
     } catch (err) {
-      console.error('[ContextPool] Reset: resetCodexAppServer failed:', err);
+      console.error('[ContextPool] Reset: resetCodexProviders failed:', err);
     }
 
     // 7. Close all tracked windows on the frontend

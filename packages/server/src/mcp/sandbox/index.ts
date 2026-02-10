@@ -46,28 +46,8 @@ export function registerSandboxTools(server: McpServer): void {
   server.registerTool(
     'run_js',
     {
-      description: `Execute JavaScript code in a sandboxed environment and return the result.
-
-The code runs in an async IIFE — \`await\` is supported at the top level.
-
-Available globals:
-- console (log, info, warn, error, debug) - output is captured and returned
-- fetch, Headers, Request, Response - HTTP requests (restricted to allowed domains)
-- JSON, Math, Date
-- Object, Array, String, Number, Boolean, Map, Set, etc.
-- RegExp, Error types
-- URL, URLSearchParams
-- TextEncoder, TextDecoder, atob, btoa
-- parseInt, parseFloat, isNaN, isFinite
-- Promise, structuredClone, crypto.createHash
-
-NOT available (for security):
-- process, require, import (no Node.js access)
-- setTimeout, setInterval (could escape timeout)
-- eval, Function (no dynamic code generation)
-- fs, child_process, os (no system access)
-
-Use \`return\` to return a value. Use \`await\` for async operations like fetch.`,
+      description:
+        'Execute JavaScript code in a sandboxed environment and return the result. Code runs in an async IIFE (await supported). Use guideline("sandbox") for available globals and restrictions.',
       inputSchema: {
         code: z.string().describe('JavaScript code to execute'),
         timeout: z

@@ -15,31 +15,8 @@ export function registerWriteTools(server: McpServer): void {
   server.registerTool(
     'write_ts',
     {
-      description: `Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use this to develop apps before compiling. Entry point is src/main.ts. Split code into multiple files (e.g., src/utils.ts, src/renderer.ts) and import them from main.ts — avoid putting everything in one file.
-
-BUNDLED LIBRARIES - Available via @bundled/* imports (no npm install needed):
-• @bundled/uuid - Unique ID generation: v4(), v1(), validate()
-• @bundled/lodash - Utilities: debounce, throttle, cloneDeep, groupBy, sortBy, uniq, chunk, etc.
-• @bundled/date-fns - Date utilities: format, addDays, differenceInDays, isToday, etc.
-• @bundled/clsx - CSS class names: clsx('foo', { bar: true })
-• @bundled/anime - Animation library: anime({ targets, translateX, duration, easing })
-• @bundled/konva - 2D canvas graphics: Stage, Layer, Rect, Circle, Text, etc.
-
-STORAGE API - Available at runtime via window.yaar.storage (auto-injected, no import needed):
-• save(path, data) - Write file (string | Blob | ArrayBuffer | Uint8Array)
-• read(path, opts?) - Read file (opts.as: 'text'|'blob'|'arraybuffer'|'json'|'auto')
-• list(dirPath?) - List directory → [{path, isDirectory, size, modifiedAt}]
-• remove(path) - Delete file
-• url(path) - Get URL string for <a>/<img>/etc.
-Files are stored in the server's storage/ directory. Paths are relative (e.g., "myapp/data.json").
-
-Example:
-  import { v4 as uuid } from '@bundled/uuid';
-  import anime from '@bundled/anime';
-  import { format } from '@bundled/date-fns';
-  // Storage (global, no import):
-  // await yaar.storage.save('scores.json', JSON.stringify(data));
-  // const data = await yaar.storage.read('scores.json', { as: 'json' });`,
+      description:
+        'Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use guideline("app_dev") for available bundled libraries and storage API.',
       inputSchema: {
         path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
         content: z.string().describe('TypeScript source code'),

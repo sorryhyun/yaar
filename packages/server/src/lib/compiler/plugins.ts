@@ -17,6 +17,8 @@ const BUNDLED_LIBRARIES: Record<string, string> = {
   'clsx': 'clsx',
   'anime': 'animejs',
   'konva': 'konva',
+  'three': 'three',
+  'cannon-es': 'cannon-es',
 };
 
 /**
@@ -34,7 +36,7 @@ export function bundledLibraryPlugin(): Plugin {
     name: 'bundled-libraries',
     setup(build) {
       // Intercept @bundled/* imports
-      build.onResolve({ filter: /^@bundled\// }, (args) => {
+      build.onResolve({ filter: /^@bundled\// }, async (args) => {
         const libName = args.path.replace('@bundled/', '');
         const actualModule = BUNDLED_LIBRARIES[libName];
 
@@ -47,12 +49,17 @@ export function bundledLibraryPlugin(): Plugin {
           };
         }
 
-        // Resolve to the actual npm module (installed as devDep)
-        // Return external: false to bundle the library into the output
-        return {
-          path: actualModule,
-          external: false,
-        };
+        // Resolve via esbuild so it finds the absolute path in node_modules
+        const result = await build.resolve(actualModule, {
+          kind: args.kind,
+          resolveDir: args.resolveDir,
+        });
+
+        if (result.errors.length > 0) {
+          return { errors: result.errors };
+        }
+
+        return { path: result.path };
       });
     },
   };
