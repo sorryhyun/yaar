@@ -237,28 +237,52 @@ export { handleAppProtocolRequest }
 /**
  * Listen for `yaar:app-ready` postMessages from iframes that register with the App Protocol.
  * Resolves the iframe source to a windowId and queues an APP_PROTOCOL_READY event.
+ *
+ * Also listens for `yaar:app-interaction` postMessages — app-initiated events that get
+ * routed to the window's agent via WINDOW_MESSAGE.
  */
-function initAppProtocolReadyListener() {
+function initAppProtocolListeners() {
   window.addEventListener('message', (e: MessageEvent) => {
-    if (e.data?.type !== 'yaar:app-ready') return
+    if (!e.data?.type) return
 
-    // Find the iframe whose contentWindow matches the message source
-    const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
-    for (const iframe of iframes) {
-      if (iframe.contentWindow === e.source) {
-        const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
-        const windowId = windowEl?.dataset.windowId
-        if (windowId) {
-          useDesktopStore.getState().addAppProtocolReady(windowId)
+    if (e.data.type === 'yaar:app-ready') {
+      // Find the iframe whose contentWindow matches the message source
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
+      for (const iframe of iframes) {
+        if (iframe.contentWindow === e.source) {
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
+          const windowId = windowEl?.dataset.windowId
+          if (windowId) {
+            useDesktopStore.getState().addAppProtocolReady(windowId)
+          }
+          break
         }
-        break
+      }
+      return
+    }
+
+    if (e.data.type === 'yaar:app-interaction') {
+      const content = e.data.content
+      if (typeof content !== 'string' || !content) return
+
+      // Find the iframe whose contentWindow matches the message source
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
+      for (const iframe of iframes) {
+        if (iframe.contentWindow === e.source) {
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
+          const windowId = windowEl?.dataset.windowId
+          if (windowId) {
+            useDesktopStore.getState().addPendingAppInteraction({ windowId, content })
+          }
+          break
+        }
       }
     }
   })
 }
 
-// Initialize the listener immediately
-initAppProtocolReadyListener()
+// Initialize the listeners immediately
+initAppProtocolListeners()
 
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
@@ -372,6 +396,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingFeedback = []
         state.pendingAppProtocolResponses = []
         state.pendingAppProtocolReady = []
+        state.pendingAppInteractions = []
         state.selectedWindowIds = []
         state.appsVersion = 0
         state.cliMode = false

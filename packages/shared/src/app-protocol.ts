@@ -125,6 +125,12 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       registration = config;
       // Notify parent that this app supports the protocol
       window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    },
+    sendInteraction: function(description) {
+      window.parent.postMessage({
+        type: 'yaar:app-interaction',
+        content: typeof description === 'string' ? description : JSON.stringify(description)
+      }, '*');
     }
   };
 

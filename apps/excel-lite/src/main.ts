@@ -1,5 +1,6 @@
 import { Chart, registerables } from '@bundled/chart.js';
 import { format } from '@bundled/date-fns';
+import * as d3 from '@bundled/d3';
 import { debounce } from '@bundled/lodash';
 import { selectionChartPoints } from './chart-utils';
 import { COLS, ROWS } from './constants';
@@ -99,6 +100,27 @@ app.innerHTML = `
       font-size: 13px;
     }
     #chartCanvas { width: 100%; max-height: 220px; }
+    .statsPanel {
+      border: 1px solid #d8e1ef;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 10px;
+      display: none;
+    }
+    .statsPanel.open { display: block; }
+    .statsGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .statCard {
+      border: 1px solid #e5ecf8;
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 8px;
+    }
+    .statLabel { font-size: 11px; color: #64748b; }
+    .statValue { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; }
     table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
     th, td { border: 1px solid #e7ecf5; }
     th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
@@ -138,6 +160,7 @@ app.innerHTML = `
         <button id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">📋</button>
         <button id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
         <button id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">📊</button>
+        <button id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
         <select id="chartTypeSel" title="Chart type">
           <option value="bar" selected>Bar</option>
           <option value="line">Line</option>
@@ -169,6 +192,7 @@ app.innerHTML = `
       </div>
       <canvas id="chartCanvas" height="180"></canvas>
     </div>
+    <div class="statsPanel" id="statsPanel"></div>
     <div class="sheetWrap" id="sheet"></div>
   </div>
 `;
@@ -193,8 +217,10 @@ const saveFileBtn = document.getElementById('saveFileBtn') as HTMLButtonElement;
 const openFileBtn = document.getElementById('openFileBtn') as HTMLButtonElement;
 const csvBtn = document.getElementById('csvBtn') as HTMLButtonElement;
 const chartBtn = document.getElementById('chartBtn') as HTMLButtonElement;
+const statsBtn = document.getElementById('statsBtn') as HTMLButtonElement;
 const chartTypeSel = document.getElementById('chartTypeSel') as HTMLSelectElement;
 const chartPanel = document.getElementById('chartPanel') as HTMLDivElement;
+const statsPanel = document.getElementById('statsPanel') as HTMLDivElement;
 const chartCanvas = document.getElementById('chartCanvas') as HTMLCanvasElement;
 const chartTitle = document.getElementById('chartTitle') as HTMLHeadingElement;
 const closeChartBtn = document.getElementById('closeChartBtn') as HTMLButtonElement;
@@ -489,6 +515,40 @@ function renderSelectionChart() {
   setIoStatus(`Rendered ${chartType} chart from selection.`);
 }
 
+function renderSelectionStats() {
+  const rect = rangeRect(selectionStart, selectionEnd);
+  const refs = refsInRect(rect);
+  const numeric = refs
+    .map((ref) => Number.parseFloat(formulaEngine.display(ref)))
+    .filter((value) => Number.isFinite(value));
+
+  if (!numeric.length) {
+    setIoStatus('Selection has no numeric values for stats.', true);
+    return;
+  }
+
+  const rows = [
+    { label: 'Count', value: String(numeric.length) },
+    { label: 'Sum', value: d3.format(',.4~f')(d3.sum(numeric)) },
+    { label: 'Mean', value: d3.format(',.4~f')(d3.mean(numeric) ?? 0) },
+    { label: 'Median', value: d3.format(',.4~f')(d3.median(numeric) ?? 0) },
+    { label: 'Min', value: d3.format(',.4~f')(d3.min(numeric) ?? 0) },
+    { label: 'Max', value: d3.format(',.4~f')(d3.max(numeric) ?? 0) },
+  ];
+
+  statsPanel.innerHTML = `
+    <div class="chartPanelHead">
+      <strong>Selection Stats</strong>
+      <span>${selectionStart === selectionEnd ? selected : `${selectionStart}:${selectionEnd}`}</span>
+    </div>
+    <div class="statsGrid">
+      ${rows.map((row) => `<div class="statCard"><div class="statLabel">${row.label}</div><div class="statValue">${row.value}</div></div>`).join('')}
+    </div>
+  `;
+  statsPanel.classList.add('open');
+  setIoStatus('Computed stats with d3 for selected range.');
+}
+
 function exportCsv() {
   let maxRow = 1;
   let maxCol = 1;
@@ -769,6 +829,10 @@ csvBtn.addEventListener('click', () => {
 
 chartBtn.addEventListener('click', () => {
   renderSelectionChart();
+});
+
+statsBtn.addEventListener('click', () => {
+  renderSelectionStats();
 });
 
 chartTypeSel.addEventListener('change', () => {

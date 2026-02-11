@@ -181,10 +181,16 @@ export interface AppProtocolResponseItem {
   response: AppProtocolResponse
 }
 
+export interface AppInteractionItem {
+  windowId: string
+  content: string
+}
+
 export interface FeedbackSliceState {
   pendingFeedback: RenderingFeedback[]
   pendingAppProtocolResponses: AppProtocolResponseItem[]
   pendingAppProtocolReady: string[]
+  pendingAppInteractions: AppInteractionItem[]
 }
 
 export interface FeedbackSliceActions {
@@ -195,6 +201,8 @@ export interface FeedbackSliceActions {
   consumePendingAppProtocolResponses: () => AppProtocolResponseItem[]
   addAppProtocolReady: (windowId: string) => void
   consumeAppProtocolReady: () => string[]
+  addPendingAppInteraction: (item: AppInteractionItem) => void
+  consumePendingAppInteractions: () => AppInteractionItem[]
 }
 
 export type FeedbackSlice = FeedbackSliceState & FeedbackSliceActions

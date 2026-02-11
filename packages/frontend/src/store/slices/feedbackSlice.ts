@@ -7,6 +7,7 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingFeedback: [],
   pendingAppProtocolResponses: [],
   pendingAppProtocolReady: [],
+  pendingAppInteractions: [],
 
   addRenderingFeedback: (feedback) => set((state) => {
     state.pendingFeedback.push(feedback)
@@ -49,6 +50,20 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
     if (items.length > 0) {
       set((state) => {
         state.pendingAppProtocolReady = []
+      })
+    }
+    return items
+  },
+
+  addPendingAppInteraction: (item) => set((state) => {
+    state.pendingAppInteractions.push(item)
+  }),
+
+  consumePendingAppInteractions: () => {
+    const items = get().pendingAppInteractions
+    if (items.length > 0) {
+      set((state) => {
+        state.pendingAppInteractions = []
       })
     }
     return items

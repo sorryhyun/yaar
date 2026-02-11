@@ -76,7 +76,7 @@ export function registerReadTools(server: McpServer): void {
           return ok(JSON.stringify({ sandboxId, path, files }, null, 2));
         }
         const content = await readFile(fullPath, 'utf-8');
-        return ok(JSON.stringify({ sandboxId, path, content }, null, 2));
+        return ok(content);
       } catch {
         return ok(`Error: File not found: ${path}`);
       }
