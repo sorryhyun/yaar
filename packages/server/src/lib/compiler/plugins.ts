@@ -2,6 +2,7 @@
  * esbuild plugins for the app compiler.
  *
  * Provides bundled library support via @bundled/* imports.
+ * In bundled exe mode, resolves from embedded pre-bundled files.
  */
 
 import type { Plugin } from 'esbuild';
@@ -15,7 +16,7 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
  * Map of @bundled/* import names to actual npm module paths.
  * These libraries are installed as devDependencies and bundled into apps.
  */
-const BUNDLED_LIBRARIES: Record<string, string> = {
+export const BUNDLED_LIBRARIES: Record<string, string> = {
   'uuid': 'uuid',
   'lodash': 'lodash-es',
   'date-fns': 'date-fns',
@@ -73,6 +74,44 @@ export function bundledLibraryPlugin(): Plugin {
         }
 
         return { path: result.path };
+      });
+    },
+  };
+}
+
+/**
+ * Bun plugin that resolves @bundled/* from pre-bundled files embedded in the exe.
+ *
+ * At build time, scripts/prebundle-libs.js bundles each library into dist/bundled-libs/.
+ * scripts/build-exe-bundle.js embeds them via `with { type: "file" }` and sets
+ * globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
+ *
+ * At runtime this plugin reads the embedded content via Bun.file().
+ */
+export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
+  return {
+    name: 'bundled-libraries-bun',
+    setup(build: any) {
+      const NAMESPACE = 'bundled-lib';
+
+      build.onResolve({ filter: /^@bundled\// }, (args: any) => {
+        const libName = args.path.replace('@bundled/', '');
+        if (!BUNDLED_LIBRARIES[libName]) {
+          const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
+          throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
+        }
+        return { path: libName, namespace: NAMESPACE };
+      });
+
+      build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
+        const libName = args.path;
+        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as Record<string, string> | undefined;
+        if (!embeddedLibs || !embeddedLibs[libName]) {
+          throw new Error(`Embedded library not found: "${libName}". Was prebundle-libs.js run?`);
+        }
+        const BunApi = (globalThis as any).Bun;
+        const contents = await BunApi.file(embeddedLibs[libName]).text();
+        return { contents, loader: 'js' };
       });
     },
   };

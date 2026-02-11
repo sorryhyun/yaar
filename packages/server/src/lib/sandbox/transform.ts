@@ -2,9 +2,10 @@
  * TypeScript compiler for sandbox execution.
  *
  * Uses esbuild's transform API for fast in-memory compilation.
+ * Falls back to Bun.Transpiler when running as a bundled exe.
  */
 
-import * as esbuild from 'esbuild';
+import { IS_BUNDLED_EXE } from '../../config.js';
 
 export interface CompileResult {
   success: boolean;
@@ -13,11 +14,34 @@ export interface CompileResult {
 }
 
 /**
- * Compile TypeScript code to JavaScript using esbuild transform API.
+ * Compile TypeScript code to JavaScript.
  *
- * This doesn't require any file system access - it compiles in memory.
+ * - Bundled exe: uses Bun.Transpiler (no external binary needed)
+ * - Development: uses esbuild.transform()
  */
 export async function compileTypeScript(code: string): Promise<CompileResult> {
+  if (IS_BUNDLED_EXE) {
+    return compileWithBunTranspiler(code);
+  }
+  return compileWithEsbuild(code);
+}
+
+function compileWithBunTranspiler(code: string): CompileResult {
+  try {
+    const BunApi = (globalThis as any).Bun;
+    const transpiler = new BunApi.Transpiler({ loader: 'ts' });
+    const result = transpiler.transformSync(code);
+    return { success: true, code: result };
+  } catch (err) {
+    return {
+      success: false,
+      errors: [String(err)],
+    };
+  }
+}
+
+async function compileWithEsbuild(code: string): Promise<CompileResult> {
+  const esbuild = await import('esbuild');
   try {
     const result = await esbuild.transform(code, {
       loader: 'ts',
@@ -27,7 +51,6 @@ export async function compileTypeScript(code: string): Promise<CompileResult> {
     });
 
     if (result.warnings.length > 0) {
-      // Warnings don't prevent execution but we can log them
       const warnings = result.warnings.map((w) => w.text);
       return {
         success: true,
@@ -57,7 +80,7 @@ export async function compileTypeScript(code: string): Promise<CompileResult> {
 
     return {
       success: false,
-      errors: [err instanceof Error ? err.message : 'Unknown compilation error'],
+      errors: [String(err)],
     };
   }
 }

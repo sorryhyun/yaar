@@ -1,16 +1,16 @@
 /**
  * TypeScript compiler module.
  *
- * Compiles TypeScript from sandbox directories to bundled HTML applications
- * using esbuild for fast compilation.
+ * Compiles TypeScript from sandbox directories to bundled HTML applications.
+ * - Development: uses esbuild (Go binary)
+ * - Bundled exe: uses Bun.build() (no external binary needed)
  */
 
-import * as esbuild from 'esbuild';
 import { writeFile, mkdir, stat, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
 import { execFile } from 'child_process';
-import { bundledLibraryPlugin } from './plugins.js';
-import { PROJECT_ROOT } from '../../config.js';
+import { bundledLibraryPlugin, bundledLibraryPluginBun } from './plugins.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
 import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_FETCH_PROXY_SCRIPT, IFRAME_APP_PROTOCOL_SCRIPT } from '@yaar/shared';
 
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
@@ -57,8 +57,17 @@ function getRawSdkScripts(): string {
 async function getSdkScripts(minify: boolean): Promise<string> {
   if (!sdkScriptsCache) {
     const raw = getRawSdkScripts();
-    const result = await esbuild.transform(raw, { minify: true });
-    sdkScriptsCache = { raw, minified: result.code.trim() };
+    let minified: string;
+    if (IS_BUNDLED_EXE) {
+      const BunApi = (globalThis as any).Bun;
+      const transpiler = new BunApi.Transpiler({ minifyWhitespace: true });
+      minified = transpiler.transformSync(raw).trim();
+    } else {
+      const esbuild = await import('esbuild');
+      const result = await esbuild.transform(raw, { minify: true });
+      minified = result.code.trim();
+    }
+    sdkScriptsCache = { raw, minified };
   }
   return minify ? sdkScriptsCache.minified : sdkScriptsCache.raw;
 }
@@ -98,6 +107,57 @@ function escapeHtml(text: string): string {
 }
 
 /**
+ * Bundle an entry point using Bun.build() (exe mode — no esbuild binary).
+ */
+async function compileWithBun(entryPoint: string, minify: boolean): Promise<string> {
+  const BunApi = (globalThis as any).Bun;
+  const result = await BunApi.build({
+    entrypoints: [entryPoint],
+    minify,
+    format: 'esm',
+    target: 'browser',
+    plugins: [bundledLibraryPluginBun()],
+  });
+
+  if (!result.success) {
+    const errors = result.logs
+      .filter((l: any) => l.level === 'error')
+      .map((l: any) => l.message || String(l));
+    throw new Error(errors.join('\n') || `Bun.build() failed for ${entryPoint}`);
+  }
+
+  const output = result.outputs[0];
+  if (!output) {
+    throw new Error(`Bun.build() produced no output for ${entryPoint}`);
+  }
+  return await output.text();
+}
+
+/**
+ * Bundle an entry point using esbuild.build() (dev mode).
+ */
+async function compileWithEsbuild(entryPoint: string, minify: boolean): Promise<string> {
+  const esbuild = await import('esbuild');
+  const result = await esbuild.build({
+    entryPoints: [entryPoint],
+    bundle: true,
+    minify,
+    format: 'esm',
+    target: ['es2020'],
+    write: false,
+    sourcemap: false,
+    logLevel: 'silent',
+    plugins: [bundledLibraryPlugin()],
+  });
+
+  if (result.errors.length > 0) {
+    throw new Error(result.errors.map((e: { text: string }) => e.text).join('\n'));
+  }
+
+  return result.outputFiles?.[0]?.text ?? '';
+}
+
+/**
  * Compile TypeScript from a sandbox directory to a bundled HTML file.
  */
 export async function compileTypeScript(
@@ -123,28 +183,10 @@ export async function compileTypeScript(
     // Ensure dist directory exists
     await mkdir(distDir, { recursive: true });
 
-    // Bundle TypeScript to JavaScript using esbuild
-    const result = await esbuild.build({
-      entryPoints: [entryPoint],
-      bundle: true,
-      minify,
-      format: 'esm',
-      target: ['es2020'],
-      write: false,
-      sourcemap: false,
-      logLevel: 'silent',
-      plugins: [bundledLibraryPlugin()],
-    });
-
-    if (result.errors.length > 0) {
-      return {
-        success: false,
-        errors: result.errors.map((e: { text: string }) => e.text),
-      };
-    }
-
-    // Get the bundled JavaScript
-    const jsCode = result.outputFiles?.[0]?.text ?? '';
+    // Bundle TypeScript to JavaScript
+    const jsCode = IS_BUNDLED_EXE
+      ? await compileWithBun(entryPoint, minify)
+      : await compileWithEsbuild(entryPoint, minify);
 
     // Get SDK scripts (minified when minify is enabled)
     const sdkCode = await getSdkScripts(minify);
@@ -160,10 +202,9 @@ export async function compileTypeScript(
       outputPath,
     };
   } catch (err) {
-    const error = err instanceof Error ? err.message : 'Unknown error';
     return {
       success: false,
-      errors: [error],
+      errors: [String(err)],
     };
   }
 }
@@ -184,6 +225,11 @@ const TSC_PATH = resolve(
 export async function typecheckSandbox(
   sandboxPath: string,
 ): Promise<TypecheckResult> {
+  // tsc is not available in bundled exe mode (no node_modules)
+  if (IS_BUNDLED_EXE) {
+    return { success: true, diagnostics: [] };
+  }
+
   const tsconfigPath = join(sandboxPath, 'tsconfig.typecheck.json');
 
   const tsconfig = {

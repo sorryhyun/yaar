@@ -4,11 +4,13 @@
 
 import type { Server } from 'http';
 import type { WebSocketServer } from 'ws';
+import { mkdir } from 'fs/promises';
+import { join } from 'path';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import { listSessions, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from './logging/index.js';
-import { PORT } from './config.js';
+import { PORT, PROJECT_ROOT, IS_BUNDLED_EXE } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/live-session.js';
 
@@ -18,6 +20,15 @@ import { initSessionHub } from './session/live-session.js';
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   await ensureStorageDir();
+
+  // In bundled exe mode, auto-create runtime directories
+  if (IS_BUNDLED_EXE) {
+    await Promise.all([
+      mkdir(join(PROJECT_ROOT, 'apps'), { recursive: true }),
+      mkdir(join(PROJECT_ROOT, 'sandbox'), { recursive: true }),
+      mkdir(join(PROJECT_ROOT, 'config'), { recursive: true }),
+    ]);
+  }
 
   // Initialize session hub (LiveSession instances created on first WS connection)
   initSessionHub();
