@@ -22,6 +22,12 @@ type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
 /** Extract the commandExecution variant from ThreadItem */
 type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
 
+/** Format MCP tool name with server namespace: "apps:typecheck" */
+function mcpToolName(server?: string, tool?: string): string {
+  if (server && tool) return `${server}:${tool}`;
+  return tool ?? 'mcp_tool';
+}
+
 /**
  * Map a JSON-RPC notification to a StreamMessage.
  * Returns null for notifications that should be skipped.
@@ -106,7 +112,7 @@ export function mapNotification(
         case 'mcpToolCall':
           return {
             type: 'tool_use',
-            toolName: item.tool ?? 'mcp_tool',
+            toolName: mcpToolName(item.server, item.tool),
             toolInput: item.arguments,
           };
         case 'commandExecution':
@@ -129,13 +135,13 @@ export function mapNotification(
           if (item.error) {
             return {
               type: 'tool_result',
-              toolName: item.tool ?? 'mcp_tool',
+              toolName: mcpToolName(item.server, item.tool),
               content: `Error: ${item.error.message}`,
             };
           }
           return {
             type: 'tool_result',
-            toolName: item.tool ?? 'mcp_tool',
+            toolName: mcpToolName(item.server, item.tool),
             content: formatMcpResult(item),
           };
         case 'commandExecution':
@@ -158,7 +164,7 @@ export function mapNotification(
       const item = params as Partial<McpToolCallItem> | undefined;
       return {
         type: 'tool_use',
-        toolName: item?.tool ?? 'mcp_tool',
+        toolName: mcpToolName(item?.server, item?.tool),
         toolInput: item?.arguments,
       };
     }
@@ -168,13 +174,13 @@ export function mapNotification(
       if (item?.error) {
         return {
           type: 'tool_result',
-          toolName: item?.tool ?? 'mcp_tool',
+          toolName: mcpToolName(item?.server, item?.tool),
           content: `Error: ${item.error.message}`,
         };
       }
       return {
         type: 'tool_result',
-        toolName: item?.tool ?? 'mcp_tool',
+        toolName: mcpToolName(item?.server, item?.tool),
         content: formatMcpResult(item),
       };
     }

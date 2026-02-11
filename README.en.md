@@ -58,7 +58,7 @@ See the [App Development Guide](./docs/app-development.md#english) for details.
 
 ### 4. Parallel Monitors and Windows
 
-Work on multiple tasks simultaneously. **Monitors** (`Ctrl+1`–`Ctrl+9`) are independent workspaces — run a long task on Monitor 1 while continuing a different conversation on Monitor 0. Each **window** has its own agent, so requests to different windows are processed in parallel. When the main agent is busy, ephemeral agents are automatically spawned for new messages.
+Work on multiple tasks simultaneously. **Monitors** (`Ctrl+1`–`Ctrl+4`) are independent workspaces — run a long task on Monitor 1 while continuing a different conversation on Monitor 0. Each **window** has its own agent, so requests to different windows are processed in parallel. When the main agent is busy, ephemeral agents are automatically spawned for new messages.
 
 Sessions persist even after closing the browser tab; reconnect with `?sessionId=X` to restore state. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
 

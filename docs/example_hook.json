@@ -1,0 +1,107 @@
+{
+  "hooks": [
+    {
+      "id": "hook-1",
+      "event": "tool_use",
+      "filter": { "toolName": "apps:clone" },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "window.create",
+          "windowId": "dev-progress",
+          "title": "App Dev Progress",
+          "bounds": { "x": 900, "y": 20, "w": 280, "h": 120 },
+          "content": {
+            "renderer": "component",
+            "data": {
+              "components": [
+                { "type": "progress", "value": 10, "variant": "default", "label": "Cloning..." },
+                { "type": "text", "content": "Setting up project files", "variant": "caption" }
+              ],
+              "gap": "sm"
+            }
+          }
+        }
+      },
+      "label": "Show progress on clone",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-2",
+      "event": "tool_use",
+      "filter": { "toolName": ["apps:write_ts", "apps:apply_diff_ts"] },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "window.setContent",
+          "windowId": "dev-progress",
+          "content": {
+            "renderer": "component",
+            "data": {
+              "components": [
+                { "type": "progress", "value": 50, "variant": "default", "label": "Writing code..." },
+                { "type": "text", "content": "Updating source files", "variant": "caption" }
+              ],
+              "gap": "sm"
+            }
+          }
+        }
+      },
+      "label": "Show progress on write",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-3",
+      "event": "tool_use",
+      "filter": { "toolName": "apps:compile" },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "window.setContent",
+          "windowId": "dev-progress",
+          "content": {
+            "renderer": "component",
+            "data": {
+              "components": [
+                { "type": "progress", "value": 80, "variant": "default", "label": "Compiling..." },
+                { "type": "text", "content": "Building application bundle", "variant": "caption" }
+              ],
+              "gap": "sm"
+            }
+          }
+        }
+      },
+      "label": "Show progress on compile",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-4",
+      "event": "tool_use",
+      "filter": { "toolName": "apps:deploy" },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "window.setContent",
+          "windowId": "dev-progress",
+          "content": {
+            "renderer": "component",
+            "data": {
+              "components": [
+                { "type": "progress", "value": 100, "variant": "success", "label": "Deployed!" },
+                { "type": "text", "content": "App is live", "variant": "caption" }
+              ],
+              "gap": "sm"
+            }
+          }
+        }
+      },
+      "label": "Show progress on deploy",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    }
+  ],
+  "idCounter": 4
+}

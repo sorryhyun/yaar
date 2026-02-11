@@ -8,6 +8,7 @@ export interface Slide {
   title: string;
   body: string;
   imageUrl: string;
+  notes: string;
 }
 
 export interface Deck {

@@ -7,6 +7,9 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { StreamMessage } from '../types.js';
 
+/** Track tool_use_id → toolName from content_block_start events */
+const toolNameById = new Map<string, string>();
+
 /**
  * Map a Claude SDK message to a StreamMessage.
  * Returns null for messages that should be skipped.
@@ -69,7 +72,19 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
 function mapStreamEvent(event: unknown): StreamMessage | null {
   if (!event || typeof event !== 'object') return null;
 
-  const evt = event as { type: string; delta?: unknown };
+  const evt = event as { type: string; delta?: unknown; content_block?: unknown };
+
+  if (evt.type === 'content_block_start') {
+    const block = evt.content_block as { type: string; name?: string; id?: string } | undefined;
+    if (block?.type === 'tool_use' && block.name) {
+      if (block.id) toolNameById.set(block.id, block.name);
+      return {
+        type: 'tool_use',
+        toolName: block.name,
+        toolUseId: block.id,
+      };
+    }
+  }
 
   if (evt.type === 'content_block_delta') {
     const delta = evt.delta as { type: string; text?: string; thinking?: string } | undefined;
@@ -129,10 +144,14 @@ function extractToolResult(message: unknown): StreamMessage | null {
       }
 
       if (resultText) {
+        // Look up tool name from prior content_block_start event
+        const toolName = (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
+        if (toolResult.tool_use_id) toolNameById.delete(toolResult.tool_use_id);
         return {
           type: 'tool_result',
-          toolName: 'mcp_tool',
+          toolName,
           content: resultText,
+          toolUseId: toolResult.tool_use_id,
         };
       }
     }

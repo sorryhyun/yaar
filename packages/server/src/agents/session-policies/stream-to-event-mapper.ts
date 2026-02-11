@@ -3,6 +3,8 @@ import type { ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
 import { formatToolDisplay } from '../../mcp/register.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
+import { getToolUseHooks } from '../../mcp/system/hooks.js';
 
 export interface StreamMappingState {
   responseText: string;
@@ -55,10 +57,11 @@ export class StreamToEventMapper {
         }
         break;
 
-      case 'tool_use':
+      case 'tool_use': {
+        const displayName = formatToolDisplay(message.toolName ?? 'unknown');
         await this.sendEvent({
           type: 'TOOL_PROGRESS',
-          toolName: formatToolDisplay(message.toolName ?? 'unknown'),
+          toolName: displayName,
           status: 'running',
           toolInput: message.toolInput,
           agentId: this.role,
@@ -70,7 +73,20 @@ export class StreamToEventMapper {
           message.toolUseId,
           this.role,
         );
+
+        // Execute matching tool_use hooks
+        const hooks = await getToolUseHooks(displayName);
+        for (const hook of hooks) {
+          if (hook.action.type === 'os_action') {
+            const actions = Array.isArray(hook.action.payload)
+              ? hook.action.payload : [hook.action.payload];
+            for (const action of actions) {
+              actionEmitter.emitAction(action);
+            }
+          }
+        }
         break;
+      }
 
       case 'tool_result':
         await this.sendEvent({

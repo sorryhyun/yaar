@@ -5,16 +5,21 @@
  * or commands on specific triggers (e.g., session launch).
  */
 
+import type { OSAction } from '@yaar/shared';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
 
-export interface HookAction {
-  type: 'interaction';
-  payload: string;
+export type HookAction =
+  | { type: 'interaction'; payload: string }
+  | { type: 'os_action'; payload: OSAction | OSAction[] };
+
+export interface HookFilter {
+  toolName?: string | string[];
 }
 
 export interface Hook {
   id: string;
   event: string;
+  filter?: HookFilter;
   action: HookAction;
   label: string;
   enabled: boolean;
@@ -67,6 +72,7 @@ export async function addHook(
   event: string,
   action: HookAction,
   label: string,
+  filter?: HookFilter,
 ): Promise<Hook> {
   const data = await loadHooksFile();
   data.idCounter += 1;
@@ -74,6 +80,7 @@ export async function addHook(
   const hook: Hook = {
     id: `hook-${data.idCounter}`,
     event,
+    ...(filter && { filter }),
     action,
     label,
     enabled: true,
@@ -83,6 +90,18 @@ export async function addHook(
   data.hooks.push(hook);
   await saveHooksFile(data);
   return hook;
+}
+
+/**
+ * Get enabled tool_use hooks that match a given tool name.
+ */
+export async function getToolUseHooks(toolName: string): Promise<Hook[]> {
+  const hooks = await getHooksByEvent('tool_use');
+  return hooks.filter((h) => {
+    if (!h.filter?.toolName) return true;
+    const names = Array.isArray(h.filter.toolName) ? h.filter.toolName : [h.filter.toolName];
+    return names.includes(toolName);
+  });
 }
 
 /**
