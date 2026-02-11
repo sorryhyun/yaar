@@ -1,24 +1,6 @@
-# Codex App Server Integration Guide
+# Codex App Server Protocol Reference
 
-This document explains our Codex App Server integration: the architectural decisions, protocol details, and roadmap for full feature utilization.
-
-**Reference:** [Unlocking the Codex Harness](https://openai.com/index/unlocking-the-codex-harness/) — OpenAI's official App Server documentation.
-
----
-
-## Table of Contents
-
-1. [Quick Start](#quick-start)
-2. [Why App Server Mode](#why-app-server-mode)
-3. [Architecture](#architecture)
-4. [Protocol Reference](#protocol-reference)
-5. [Configuration](#configuration)
-6. [Disabled Features & Rationale](#disabled-features--rationale)
-7. [Implementation Reference](#implementation-reference)
-8. [Roadmap: Full Feature Unlock](#roadmap-full-feature-unlock)
-9. [Appendix: Codex Internals](#appendix-codex-internals)
-
----
+This document covers the Codex App Server JSON-RPC protocol, configuration, and internals. For a comparison of Claude vs Codex provider behavior within YAAR, see [claude_codex.md](./claude_codex.md).
 
 ## Quick Start
 
@@ -53,7 +35,52 @@ codex app-server generate-ts
 codex app-server generate-json-schema
 ```
 
-### JSON-RPC Protocol (over stdio)
+---
+
+## Why App Server Mode
+
+We evaluated three integration modes:
+
+| Mode | Session State | Multimodal | Streaming |
+|------|---------------|------------|-----------|
+| `codex` CLI (per-query spawn) | None | Yes | No |
+| `codex mcp-server` | Per-call | **Text-only** | No |
+| `codex app-server` | Thread-based | Yes | Yes |
+
+### Why not per-query spawn?
+
+2-3 second overhead per message. No conversation context across messages.
+
+### Why not MCP Server?
+
+The MCP server interface is a text-only bottleneck:
+
+```
+MCP Client (image support) → MCP Server (text-only) → Codex Core (full multimodal)
+```
+
+```rust
+// codex-rs/mcp-server/src/codex_tool_config.rs
+pub struct CodexToolCallParam {
+    pub prompt: String,  // Text only - no image support
+}
+```
+
+YAAR users share images — this is a dealbreaker.
+
+### Why App Server wins
+
+- **Thread-based sessions** — create once, resume indefinitely
+- **Full multimodal** — direct access to Codex core
+- **Streaming deltas** — real-time text, reasoning, tool calls
+- **Per-thread instructions** — each thread has its own system prompt
+- **Bidirectional protocol** — server can request client input (approvals)
+
+---
+
+## Protocol Reference
+
+### JSON-RPC Basics (over stdio)
 
 **Initialize (required first):**
 
@@ -101,122 +128,6 @@ Streaming notifications follow (no `id` field):
 ← {"id": 4, "result": {"thread": {"id": "thread_def456"}}}
 ```
 
----
-
-## Why App Server Mode
-
-We evaluated three integration modes:
-
-| Mode | Session State | Multimodal | Streaming |
-|------|---------------|------------|-----------|
-| `codex` CLI (per-query spawn) | None | Yes | No |
-| `codex mcp-server` | Per-call | **Text-only** | No |
-| `codex app-server` | Thread-based | Yes | Yes |
-
-### Why not per-query spawn?
-
-2-3 second overhead per message. No conversation context across messages.
-
-### Why not MCP Server?
-
-The MCP server interface is a text-only bottleneck:
-
-```
-MCP Client (image support) → MCP Server (text-only) → Codex Core (full multimodal)
-```
-
-```rust
-// codex-rs/mcp-server/src/codex_tool_config.rs
-pub struct CodexToolCallParam {
-    pub prompt: String,  // Text only - no image support
-}
-```
-
-YAAR users share images — this is a dealbreaker.
-
-### Why App Server wins
-
-- **Thread-based sessions** — create once, resume indefinitely
-- **Full multimodal** — direct access to Codex core
-- **Streaming deltas** — real-time text, reasoning, tool calls
-- **Per-thread instructions** — each thread has its own system prompt
-- **Bidirectional protocol** — server can request client input (approvals)
-
----
-
-## Architecture
-
-### Process Model
-
-```
-YAAR Server
-└── Shared AppServer (child process: codex app-server)
-    ├── Thread "default" (main agent)
-    ├── Thread "window-1" (forked from default)
-    ├── Thread "window-2" (forked from default)
-    └── ... (one thread per agent)
-```
-
-### Why Shared AppServer
-
-YAAR uses a **single shared AppServer** with multiple threads, rather than per-agent instances:
-
-**Shared approach (current):**
-- Lower memory footprint (one process)
-- MCP servers configured once at startup, shared by all threads
-- Thread forking inherits parent conversation context
-- Turn serialization (one active turn at a time) prevents notification cross-talk
-
-**Per-agent approach (future option):**
-- Full isolation between agents
-- Agent-specific MCP configurations
-- Crash isolation (one agent down ≠ all agents down)
-- Higher memory usage (one process per agent)
-
-We use the shared approach because YAAR's MCP servers (system, window, storage, apps) are the same for all agents. If we need agent-specific tools, we'd switch to per-agent instances.
-
-### Turn Serialization
-
-App Server notifications lack thread/turn IDs. Only **one turn runs at a time** per AppServer process. YAAR enforces this with a turn semaphore:
-
-```
-Agent A wants to send → acquireTurn() → sends turn → receives notifications → releaseTurn()
-Agent B wants to send → acquireTurn() blocks → ... → unblocked → sends turn → ...
-```
-
-### Connection Lifecycle
-
-```
-WebSocket connects → SessionManager
-  → First message → ContextPool → AgentPool → acquires warm Codex provider
-  → Provider has shared AppServer (via warm pool capture)
-  → thread/start with baseInstructions → threadId stored as sessionId
-  → Messages flow: prompt → turn/start → streaming notifications → StreamMessages
-  → Window interaction → thread/fork from default session → independent window thread
-  → WebSocket disconnects → provider.dispose() → release AppServer ref
-```
-
-### Warm Pool Integration
-
-```
-Server startup
-  → initWarmPool()
-  → createWarmProvider('codex')
-  → new CodexProvider() → new AppServer() → spawn process → initialize()
-  → provider.warmup() → thread/start (creates first thread)
-  → Capture AppServer reference for sharing
-  → Pool ready
-
-New connection
-  → warmPool.acquire() → pre-warmed provider with active thread
-  → Subsequent providers: new CodexProvider(sharedAppServer)
-  → Shares the same child process, creates own thread
-```
-
----
-
-## Protocol Reference
-
 ### Conversation Primitives
 
 The App Server protocol has three primitives (per the Codex harness blog):
@@ -261,9 +172,9 @@ The App Server protocol has three primitives (per the Codex harness blog):
 | `item/reasoning/summaryTextCompleted` | Summary not needed |
 | `item/started` | Item type tracking not yet implemented |
 | `item/completed` | Item lifecycle tracking not yet implemented |
-| `codex/event/*` | Internal telemetry (planned for Phase 4) |
+| `codex/event/*` | Internal telemetry |
 
-### Bidirectional Requests (Not Yet Implemented)
+### Bidirectional Requests (Approval Flow)
 
 The protocol is **fully bidirectional**. The server can send JSON-RPC **requests** (with `id` + `method`) that pause the turn until the client responds:
 
@@ -272,10 +183,17 @@ Server → Client (request):
 {"id": 42, "method": "item/commandExecution/requestApproval", "params": {"command": "pnpm test"}}
 
 Client → Server (response):
-{"id": 42, "result": {"decision": "allow"}}
+{"id": 42, "result": {"decision": "accept"}}
 ```
 
-This is the approval flow. See [Roadmap: Phase 2](#phase-2-approval-flow) for implementation plan.
+**Handled request types:**
+
+| Method | Description | Decision Values |
+|--------|-------------|-----------------|
+| `item/commandExecution/requestApproval` | Shell command approval | `accept`, `decline`, `acceptForSession`, `cancel` |
+| `item/fileChange/requestApproval` | File modification approval | `accept`, `decline`, `acceptForSession`, `cancel` |
+
+These are routed through YAAR's existing permission dialog system (`actionEmitter.showPermissionDialog()`), which supports "Remember my choice" persistence. The CodexProvider handles the request in `handleServerRequest()`, shows the dialog, and responds back via `appServer.respond()`.
 
 ---
 
@@ -328,7 +246,7 @@ YAAR is a desktop agent interface, not an IDE. Several Codex defaults work again
 
 | Feature | Config | Why Disabled |
 |---------|--------|-------------|
-| Shell tool | `features.shell_tool=false` | No approval flow yet; re-enable in Phase 2 |
+| Shell tool | `features.shell_tool=false` | No approval flow yet |
 | Approval policy | `approval_policy=never` | No client-side approval UI yet |
 | Web search | (default off with shell disabled) | YAAR controls HTTP access via MCP tools |
 | View image | (default off) | YAAR handles images directly |
@@ -351,74 +269,6 @@ Implications:
 - Changing personality mid-conversation requires a new thread
 - Per-turn instruction changes are ignored
 - YAAR detects system prompt changes and creates new threads automatically
-
-### The `instructions` Config Field is Dead Code
-
-```rust
-// ConfigToml struct in config/mod.rs
-pub instructions: Option<String>,  // Never used!
-```
-
-No code reads `cfg.instructions`. Use `base_instructions` or `model_instructions_file` instead.
-
----
-
-## Implementation Reference
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `packages/server/src/providers/codex/provider.ts` | `CodexProvider` implementing `AITransport` |
-| `packages/server/src/providers/codex/app-server.ts` | `AppServer` process lifecycle manager |
-| `packages/server/src/providers/codex/jsonrpc-client.ts` | JSON-RPC 2.0 client over stdio |
-| `packages/server/src/providers/codex/types.ts` | JSON-RPC type definitions |
-| `packages/server/src/providers/codex/message-mapper.ts` | Notification → `StreamMessage` mapping |
-| `packages/server/src/providers/codex/system-prompt.ts` | YAAR desktop agent system prompt |
-| `packages/server/src/providers/warm-pool.ts` | Warm pool with shared AppServer capture |
-
-### Session Recovery
-
-When the AppServer restarts (crash, idle timeout), threads become invalid:
-
-1. `query()` catches errors containing "thread" or "invalid"
-2. Invalidates `currentSession` (sets to `null`)
-3. Recursively retries `query()` — creates a new thread automatically
-4. User sees seamless conversation continuation
-
-### Error Handling
-
-- AppServer auto-restarts up to 3 times on crash (1-second delay between attempts)
-- Session is invalidated on each restart
-- `interrupt()` signals pending promise resolvers to unblock the query loop
-- `dispose()` drains the turn queue so blocked providers unblock and fail gracefully
-
----
-
-## Roadmap: Full Feature Unlock
-
-See [docs/codex-app-server-plan.md](./docs/codex-app-server-plan.md) for the detailed implementation plan.
-
-### Phase 1: Protocol Foundation
-- Bidirectional JSON-RPC (server-initiated requests)
-- Generated TypeScript types from `codex app-server generate-ts`
-- Item lifecycle tracking (`item/started` → `item/completed`)
-
-### Phase 2: Approval Flow
-- Enable `shell_tool` and `apply_patch` with `approval_policy = "always"`
-- Handle `item/commandExecution/requestApproval` server requests
-- New `StreamMessage` type: `'approval_request'`
-- Full-stack approval UI: server → WebSocket → frontend dialog → response
-
-### Phase 3: Diff Handling
-- Map `item/patch/*` notifications to a new `'diff'` StreamMessage
-- Frontend diff renderer with syntax highlighting
-
-### Phase 4: Enhanced Protocol
-- Enriched `initialize` handshake with capabilities
-- Thread archiving for memory management
-- `codex/event/*` telemetry for operational metrics
-- Per-agent AppServer instances (if needed)
 
 ---
 

@@ -18,6 +18,7 @@ import type { AppServer } from './app-server.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
+import type { CommandExecutionRequestApprovalParams, FileChangeRequestApprovalParams } from './types.js';
 
 /**
  * Session state for a thread.
@@ -156,6 +157,15 @@ export class CodexProvider extends BaseTransport {
 
       appServer.on('notification', notificationHandler);
 
+      // Handle server-initiated requests (approval dialogs)
+      const serverRequestHandler = (id: number, method: string, params: unknown) => {
+        this.handleServerRequest(appServer, id, method, params).catch((err) => {
+          console.error(`[codex] Failed to handle server request ${method}:`, err);
+          appServer.respondError(id, -32000, err instanceof Error ? err.message : 'Internal error');
+        });
+      };
+      appServer.on('server_request', serverRequestHandler);
+
       try {
         // Build input array with text and optional images (UserInput union from generated types)
         const input: Array<
@@ -205,6 +215,7 @@ export class CodexProvider extends BaseTransport {
         }
       } finally {
         appServer.off('notification', notificationHandler);
+        appServer.off('server_request', serverRequestHandler);
         actionEmitter.clearCurrentMonitor();
         this.currentTurnId = null;
         appServer.releaseTurn();
@@ -245,6 +256,57 @@ export class CodexProvider extends BaseTransport {
     if (this.resolveMessage) {
       this.resolveMessage(true);
       this.resolveMessage = null;
+    }
+  }
+
+  /**
+   * Handle a server-initiated JSON-RPC request (e.g. approval dialogs).
+   * The Codex turn is paused until we respond, so no notifications arrive while waiting.
+   */
+  private async handleServerRequest(
+    appServer: AppServer,
+    id: number,
+    method: string,
+    params: unknown
+  ): Promise<void> {
+    switch (method) {
+      case 'item/commandExecution/requestApproval': {
+        const p = params as CommandExecutionRequestApprovalParams;
+        const description = p.command ?? 'unknown command';
+        const title = 'Command Execution';
+        const message = p.reason
+          ? `${p.reason}\n\n\`${description}\``
+          : `Codex wants to run:\n\n\`${description}\``;
+
+        const approved = await actionEmitter.showPermissionDialog(
+          title, message, 'codex_command', p.command ?? undefined,
+        );
+        appServer.respond(id, {
+          decision: approved ? 'accept' : 'decline',
+        });
+        break;
+      }
+
+      case 'item/fileChange/requestApproval': {
+        const p = params as FileChangeRequestApprovalParams;
+        const title = 'File Change';
+        const message = p.reason
+          ? p.reason
+          : `Codex wants to modify files${p.grantRoot ? ` under ${p.grantRoot}` : ''}`;
+
+        const approved = await actionEmitter.showPermissionDialog(
+          title, message, 'codex_file_change', p.grantRoot ?? undefined,
+        );
+        appServer.respond(id, {
+          decision: approved ? 'accept' : 'decline',
+        });
+        break;
+      }
+
+      default:
+        console.warn(`[codex] Unhandled server request: ${method}`);
+        appServer.respondError(id, -32601, `Unhandled method: ${method}`);
+        break;
     }
   }
 

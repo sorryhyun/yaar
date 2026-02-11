@@ -46,6 +46,14 @@ export type { TurnStatus } from './generated/v2/index.js';
 export type { TurnError } from './generated/v2/index.js';
 export type { ThreadItem } from './generated/v2/index.js';
 
+// Approval types (v2 API)
+export type { CommandExecutionRequestApprovalParams } from './generated/v2/index.js';
+export type { CommandExecutionRequestApprovalResponse } from './generated/v2/index.js';
+export type { CommandExecutionApprovalDecision } from './generated/v2/index.js';
+export type { FileChangeRequestApprovalParams } from './generated/v2/index.js';
+export type { FileChangeRequestApprovalResponse } from './generated/v2/index.js';
+export type { FileChangeApprovalDecision } from './generated/v2/index.js';
+
 // Notification types (v2 API)
 export type { AgentMessageDeltaNotification } from './generated/v2/index.js';
 export type { ReasoningTextDeltaNotification } from './generated/v2/index.js';

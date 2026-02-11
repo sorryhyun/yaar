@@ -13,7 +13,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 **SDKs:**
 - **Claude:** Uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access. See [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) for API documentation.
-- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [CODEX_CLI_TIPS.md](./CODEX_CLI_TIPS.md) for protocol details.
+- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/codex_protocol.md](./docs/codex_protocol.md) for protocol details.
 
 ## Commands
 

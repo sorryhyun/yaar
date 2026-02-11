@@ -148,7 +148,7 @@ export function getCodexAppServerArgs(): string[] {
     '-c', 'model_reasoning_effort = "medium"',
     '-c', 'model_personality = "none"',
     '-c', 'sandbox_mode = "danger-full-access"',
-    '-c', 'approval_policy = "never"',
+    '-c', 'approval_policy = "on-request"',
   );
 
   return args;
