@@ -17,7 +17,7 @@ import type { Fingerprint } from './types.js';
 export function normalizeContent(text: string): string {
   return text
     .replace(/<open_windows>[\s\S]*?<\/open_windows>/g, '')
-    .replace(/<user_interaction:\w+>[\s\S]*?<\/user_interaction:\w+>/g, '')
+    .replace(/<user_interaction:\w+>([\s\S]*?)<\/user_interaction:\w+>/g, '$1')
     .replace(/<previous_interactions>[\s\S]*?<\/previous_interactions>/g, '')
     .replace(/<timeline>[\s\S]*?<\/timeline>/g, '')
     .replace(/<interaction:\w+[^>]*>[\s\S]*?<\/interaction:\w+>/g, '')

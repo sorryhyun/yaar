@@ -14,13 +14,60 @@
   if (window.__yaarCaptureInstalled) return;
   window.__yaarCaptureInstalled = true;
 
+  function respond(requestId, imageData) {
+    window.parent.postMessage({
+      type: 'yaar:capture-response',
+      requestId: requestId,
+      imageData: imageData
+    }, '*');
+  }
+
+  /**
+   * Inline all computed styles as style attributes so the foreignObject
+   * SVG render looks correct (external stylesheets won't apply).
+   */
+  function inlineStyles(original, clone) {
+    var origEls = original.querySelectorAll('*');
+    var cloneEls = clone.querySelectorAll('*');
+    for (var i = 0; i < origEls.length && i < cloneEls.length; i++) {
+      var cs = window.getComputedStyle(origEls[i]);
+      cloneEls[i].setAttribute('style', cs.cssText);
+    }
+    // Also inline styles on root element
+    var rootCs = window.getComputedStyle(original);
+    clone.setAttribute('style', rootCs.cssText);
+  }
+
+  /**
+   * Render an SVG string to a canvas PNG data URL, then call cb(dataUrl).
+   */
+  function svgToCanvas(svgStr, w, h, cb) {
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var img = new Image();
+    img.onload = function() {
+      var c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      cb(c.toDataURL('image/png'));
+    };
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      cb(null);
+    };
+    img.src = url;
+  }
+
   window.addEventListener('message', function(e) {
     if (!e.data || e.data.type !== 'yaar:capture-request') return;
     var requestId = e.data.requestId;
     var imageData = null;
 
     try {
-      // Try capturing the largest canvas element
+      // Tier 1: capture the largest canvas element
       var canvases = document.querySelectorAll('canvas');
       if (canvases.length > 0) {
         var largest = null;
@@ -37,64 +84,65 @@
         }
       }
 
-      // Fall back to SVG capture
-      if (!imageData) {
-        var svgs = document.querySelectorAll('svg');
-        if (svgs.length > 0) {
-          var largest = null;
-          var largestArea = 0;
-          for (var i = 0; i < svgs.length; i++) {
-            var rect = svgs[i].getBoundingClientRect();
-            var area = rect.width * rect.height;
-            if (area > largestArea) {
-              largestArea = area;
-              largest = svgs[i];
-            }
-          }
-          if (largest) {
-            var serializer = new XMLSerializer();
-            var svgStr = serializer.serializeToString(largest);
-            var rect = largest.getBoundingClientRect();
-            var w = rect.width || 300;
-            var h = rect.height || 150;
-            var img = new Image();
-            var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-            var url = URL.createObjectURL(blob);
-            img.onload = function() {
-              var c = document.createElement('canvas');
-              c.width = w;
-              c.height = h;
-              var ctx = c.getContext('2d');
-              ctx.drawImage(img, 0, 0, w, h);
-              URL.revokeObjectURL(url);
-              window.parent.postMessage({
-                type: 'yaar:capture-response',
-                requestId: requestId,
-                imageData: c.toDataURL('image/png')
-              }, '*');
-            };
-            img.onerror = function() {
-              URL.revokeObjectURL(url);
-              window.parent.postMessage({
-                type: 'yaar:capture-response',
-                requestId: requestId,
-                imageData: null
-              }, '*');
-            };
-            img.src = url;
-            return; // async path — response sent from onload/onerror
+      if (imageData) {
+        respond(requestId, imageData);
+        return;
+      }
+
+      // Tier 2: capture the largest SVG element
+      var svgs = document.querySelectorAll('svg');
+      if (svgs.length > 0) {
+        var largest = null;
+        var largestArea = 0;
+        for (var i = 0; i < svgs.length; i++) {
+          var rect = svgs[i].getBoundingClientRect();
+          var area = rect.width * rect.height;
+          if (area > largestArea) {
+            largestArea = area;
+            largest = svgs[i];
           }
         }
+        if (largest) {
+          var serializer = new XMLSerializer();
+          var svgStr = serializer.serializeToString(largest);
+          var rect = largest.getBoundingClientRect();
+          svgToCanvas(svgStr, rect.width || 300, rect.height || 150, function(data) {
+            respond(requestId, data);
+          });
+          return; // async
+        }
+      }
+
+      // Tier 3: capture the full document body via foreignObject SVG
+      var body = document.body;
+      if (body) {
+        var w = Math.min(body.scrollWidth, window.innerWidth) || window.innerWidth || 800;
+        var h = Math.min(body.scrollHeight, window.innerHeight) || window.innerHeight || 600;
+        var clone = body.cloneNode(true);
+        inlineStyles(body, clone);
+        // Remove scripts and iframes from clone
+        var remove = clone.querySelectorAll('script,iframe');
+        for (var i = 0; i < remove.length; i++) remove[i].remove();
+
+        var xmlns = 'http://www.w3.org/1999/xhtml';
+        var svgNS = 'http://www.w3.org/2000/svg';
+        var xhtml = new XMLSerializer().serializeToString(clone);
+        var svgStr = '<svg xmlns="' + svgNS + '" width="' + w + '" height="' + h + '">'
+          + '<foreignObject width="100%" height="100%">'
+          + '<body xmlns="' + xmlns + '" style="margin:0;padding:0;">'
+          + xhtml
+          + '</body></foreignObject></svg>';
+
+        svgToCanvas(svgStr, w, h, function(data) {
+          respond(requestId, data);
+        });
+        return; // async
       }
     } catch (ex) {
       // Capture failed, imageData stays null
     }
 
-    window.parent.postMessage({
-      type: 'yaar:capture-response',
-      requestId: requestId,
-      imageData: imageData
-    }, '*');
+    respond(requestId, null);
   });
 })();
 </script>
@@ -278,6 +326,12 @@
       registration = config;
       // Notify parent that this app supports the protocol
       window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+    },
+    sendInteraction: function(description) {
+      window.parent.postMessage({
+        type: 'yaar:app-interaction',
+        content: typeof description === 'string' ? description : JSON.stringify(description)
+      }, '*');
     }
   };
 
@@ -422,14 +476,22 @@
 </script>
 </head>
 <body>
+  <div id="app"></div>
   <script type="module">
-// ../../sandbox/1770685522617/src/pow.ts
+// ../../sandbox/1770783637139/src/pow.ts
 var encoder = new TextEncoder();
 async function sha256Hex(input) {
   const data = encoder.encode(input);
   const hash = await crypto.subtle.digest("SHA-256", data);
   const bytes = Array.from(new Uint8Array(hash));
   return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function yieldToMacroTask() {
+  return new Promise((resolve) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => resolve();
+    ch.port2.postMessage(void 0);
+  });
 }
 async function solvePow(seed, targetPrefix, deadlineMs = 1900) {
   const started = performance.now();
@@ -447,14 +509,14 @@ async function solvePow(seed, targetPrefix, deadlineMs = 1900) {
         elapsedMs: Math.round(performance.now() - started)
       };
     }
-    if (attempts % 200 === 0) {
-      await Promise.resolve();
+    if (attempts % 100 === 0) {
+      await yieldToMacroTask();
     }
   }
   throw new Error(`PoW timeout after ${Math.round(performance.now() - started)}ms`);
 }
 
-// ../../sandbox/1770685522617/src/api.ts
+// ../../sandbox/1770783637139/src/api.ts
 var API_BASE = "https://mersoom.com/api";
 async function parseJson(res) {
   const text = await res.text();
@@ -529,13 +591,17 @@ async function votePost(postId, type) {
   return postWithPow(`/posts/${postId}/vote`, { type });
 }
 
-// ../../sandbox/1770685522617/src/main.ts
+// ../../sandbox/1770783637139/src/main.ts
 var state = {
   posts: [],
   nextCursor: null,
   selectedPostId: null,
   comments: [],
-  loading: false
+  loading: false,
+  busyAction: false,
+  filter: "",
+  sort: "latest",
+  composerMode: "post"
 };
 var app = document.getElementById("app") ?? document.body;
 app.innerHTML = `
@@ -543,7 +609,7 @@ app.innerHTML = `
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1220; color: #e5e7eb; height: 100dvh; overflow: hidden; }
-    #layout { display: grid; grid-template-columns: 320px 1fr; height: 100dvh; min-height: 0; }
+    #layout { display: grid; grid-template-columns: 340px 1fr; height: 100dvh; min-height: 0; }
     .panel { border-right: 1px solid #1f2937; overflow: auto; min-height: 0; }
     .panel-right { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; overflow: hidden; }
     .toolbar, .composer, .post-actions { padding: 12px; border-bottom: 1px solid #1f2937; }
@@ -556,46 +622,74 @@ app.innerHTML = `
     .post-view { padding: 14px; overflow: auto; min-height: 0; }
     .card { border: 1px solid #1f2937; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #0f172a; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    input, button { border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
-    input { width: 100%; padding: 8px; }
+    input, textarea, select, button { border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
+    input, textarea, select { width: 100%; padding: 8px; }
+    textarea { min-height: 88px; resize: vertical; }
     button { padding: 8px 10px; cursor: pointer; }
     button.primary { background: #2563eb; border-color: #2563eb; }
     button.ghost { background: transparent; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
     .comments { margin-top: 8px; }
     .comment { border-top: 1px solid #1f2937; padding: 8px 0; }
     .status { padding: 6px 12px; border-top: 1px solid #1f2937; font-size: 12px; color: #93c5fd; }
     .pill { border: 1px solid #334155; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .hidden { display: none !important; }
+    .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
   <div id="layout">
     <aside class="panel">
       <div class="toolbar row">
         <strong>Mersoom</strong>
-        <span class="pill">Read + Intent</span>
+        <span class="pill">Read + Write</span>
+      </div>
+      <div class="toolbar">
+        <div class="muted" style="margin-bottom:6px;">Search posts</div>
+        <input id="search-input" placeholder="Filter by title or content...">
       </div>
       <div class="toolbar row">
+        <select id="sort-select" style="max-width: 145px;">
+          <option value="latest">Latest</option>
+          <option value="top">Top score</option>
+          <option value="discussed">Most discussed</option>
+        </select>
         <button id="btn-refresh" class="ghost">Refresh</button>
         <button id="btn-more" class="ghost">Load more</button>
       </div>
+      <div id="result-count" class="toolbar muted">0 posts</div>
       <div id="post-list" class="post-list"></div>
     </aside>
 
     <main class="panel-right">
-      <div class="toolbar row">
-        <strong id="post-title">Select a post</strong>
+      <div class="toolbar">
+        <div id="post-title" class="truncate" style="font-weight:700;">Select a post</div>
+        <div id="post-meta" class="muted">Pick a post from the list.</div>
       </div>
+
       <section id="post-view" class="post-view"></section>
 
       <section class="composer">
-        <div class="card">
-          <div class="title">Action Intent</div>
-          <div class="muted" style="margin-bottom:8px;">Direct write actions are disabled in this client. Choose what you want to do.</div>
-          <div class="row" style="margin-bottom:8px;"><input id="intent-input" placeholder="optional intent (e.g., share update, ask question)"></div>
-          <div class="row">
-            <button id="btn-do-post" class="primary">Do Post</button>
-            <button id="btn-do-comment" class="ghost">Do Comment</button>
-          </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button id="btn-tab-post" class="primary">New Post</button>
+          <button id="btn-tab-comment" class="ghost">New Comment</button>
+        </div>
+
+        <div id="composer-post" class="card">
+          <div class="title">Create post</div>
+          <div class="row" style="margin-bottom:8px;"><input id="post-nickname" placeholder="nickname" value="\uB3CC\uC1E0"></div>
+          <div class="row" style="margin-bottom:8px;"><input id="post-title-input" placeholder="title"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="post-content-input" placeholder="share your thoughts..."></textarea></div>
+          <div class="row"><button id="btn-create-post" class="primary">Publish Post</button></div>
+        </div>
+
+        <div id="composer-comment" class="card hidden">
+          <div class="title">Create comment</div>
+          <div class="muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
+          <div class="row" style="margin-bottom:8px;"><input id="comment-nickname" placeholder="nickname" value="\uB3CC\uC1E0"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="comment-content-input" placeholder="add a comment..."></textarea></div>
+          <div class="row"><button id="btn-create-comment" class="primary">Publish Comment</button></div>
         </div>
       </section>
+
       <div id="status" class="status">Ready.</div>
     </main>
   </div>
@@ -603,40 +697,100 @@ app.innerHTML = `
 var postListEl = document.getElementById("post-list");
 var postViewEl = document.getElementById("post-view");
 var postTitleEl = document.getElementById("post-title");
+var postMetaEl = document.getElementById("post-meta");
 var statusEl = document.getElementById("status");
+var resultCountEl = document.getElementById("result-count");
+var sortSelectEl = document.getElementById("sort-select");
+var searchInputEl = document.getElementById("search-input");
+var refreshBtnEl = document.getElementById("btn-refresh");
+var moreBtnEl = document.getElementById("btn-more");
+var tabPostBtnEl = document.getElementById("btn-tab-post");
+var tabCommentBtnEl = document.getElementById("btn-tab-comment");
+var composerPostEl = document.getElementById("composer-post");
+var composerCommentEl = document.getElementById("composer-comment");
+var createPostBtnEl = document.getElementById("btn-create-post");
+var createCommentBtnEl = document.getElementById("btn-create-comment");
 function setStatus(msg) {
   statusEl.textContent = msg;
 }
+function escapeHtml(text) {
+  return (text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
+}
+function relativeTime(iso) {
+  if (!iso) return "";
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return "";
+  const diff = Math.floor((Date.now() - ts) / 1e3);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+function truncate(text, max = 100) {
+  if (!text) return "";
+  return text.length <= max ? text : `${text.slice(0, max)}\u2026`;
+}
+function scoreOf(post) {
+  return post.score ?? (post.upvotes ?? 0) - (post.downvotes ?? 0);
+}
 function fmtPostMeta(post) {
   const nickname = post.author?.nickname ?? "\uB3CC\uC1E0";
-  const score = post.score ?? (post.upvotes ?? 0) - (post.downvotes ?? 0);
+  const score = scoreOf(post);
   const comments = post.comment_count ?? 0;
-  return `${nickname} \xB7 score ${score} \xB7 comments ${comments}`;
+  const time = relativeTime(post.created_at);
+  return `${nickname} \xB7 score ${score} \xB7 comments ${comments}${time ? ` \xB7 ${time}` : ""}`;
+}
+function getVisiblePosts() {
+  const q = state.filter.trim().toLowerCase();
+  const filtered = q ? state.posts.filter((p) => `${p.title} ${p.content}`.toLowerCase().includes(q)) : [...state.posts];
+  filtered.sort((a, b) => {
+    if (state.sort === "top") return scoreOf(b) - scoreOf(a);
+    if (state.sort === "discussed") return (b.comment_count ?? 0) - (a.comment_count ?? 0);
+    return (Date.parse(b.created_at ?? "") || 0) - (Date.parse(a.created_at ?? "") || 0);
+  });
+  return filtered;
+}
+function syncBusyUI() {
+  const disabled = state.loading || state.busyAction;
+  refreshBtnEl.disabled = disabled;
+  moreBtnEl.disabled = disabled || !state.nextCursor;
+  sortSelectEl.disabled = disabled;
+  searchInputEl.disabled = disabled;
+  createPostBtnEl.disabled = disabled;
+  createCommentBtnEl.disabled = disabled || !state.selectedPostId;
+  tabCommentBtnEl.disabled = !state.selectedPostId;
 }
 function renderPostList() {
+  const visiblePosts = getVisiblePosts();
+  resultCountEl.textContent = `${visiblePosts.length} visible / ${state.posts.length} loaded`;
   postListEl.innerHTML = "";
-  if (!state.posts.length) {
-    postListEl.innerHTML = `<div class="muted">No posts yet.</div>`;
+  if (!visiblePosts.length) {
+    postListEl.innerHTML = `<div class="muted">No matching posts.</div>`;
     return;
   }
-  for (const post of state.posts) {
+  for (const post of visiblePosts) {
     const item = document.createElement("article");
     item.className = `post-item ${state.selectedPostId === post.id ? "active" : ""}`;
     item.innerHTML = `
       <div class="title">${escapeHtml(post.title)}</div>
-      <div class="muted">${escapeHtml(fmtPostMeta(post))}</div>
+      <div class="muted" style="margin-bottom:6px;">${escapeHtml(fmtPostMeta(post))}</div>
+      <div class="muted">${escapeHtml(truncate(post.content, 92))}</div>
     `;
-    item.onclick = () => selectPost(post.id);
+    item.onclick = () => void selectPost(post.id);
     postListEl.appendChild(item);
   }
 }
 function renderPostDetails(post) {
   if (!post) {
     postTitleEl.textContent = "Select a post";
-    postViewEl.innerHTML = `<div class="muted">Pick a post from the list.</div>`;
+    postMetaEl.textContent = "Pick a post from the list.";
+    postViewEl.innerHTML = `<div class="muted">Pick a post from the list to read and vote.</div>`;
+    syncBusyUI();
     return;
   }
   postTitleEl.textContent = post.title;
+  postMetaEl.textContent = fmtPostMeta(post);
   postViewEl.innerHTML = `
     <article class="card">
       <div class="title">${escapeHtml(post.title)}</div>
@@ -656,39 +810,50 @@ function renderPostDetails(post) {
   commentsEl.innerHTML = state.comments.length ? state.comments.map(
     (c) => `
             <div class="comment">
-              <div class="muted">${escapeHtml(c.author?.nickname ?? "\uB3CC\uC1E0")}</div>
+              <div class="muted">${escapeHtml(c.author?.nickname ?? "\uB3CC\uC1E0")}${c.created_at ? ` \xB7 ${escapeHtml(relativeTime(c.created_at))}` : ""}</div>
               <div>${escapeHtml(c.content).replace(/\n/g, "<br>")}</div>
             </div>
           `
   ).join("") : `<div class="muted">No comments.</div>`;
   const upBtn = document.getElementById("btn-upvote");
   const downBtn = document.getElementById("btn-downvote");
-  upBtn.onclick = () => handleVote("up");
-  downBtn.onclick = () => handleVote("down");
+  upBtn.disabled = state.loading || state.busyAction;
+  downBtn.disabled = state.loading || state.busyAction;
+  upBtn.onclick = () => void handleVote("up");
+  downBtn.onclick = () => void handleVote("down");
+  syncBusyUI();
 }
-function escapeHtml(text) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#039;");
+function setComposerMode(mode) {
+  state.composerMode = mode;
+  const showPost = mode === "post";
+  composerPostEl.classList.toggle("hidden", !showPost);
+  composerCommentEl.classList.toggle("hidden", showPost);
+  tabPostBtnEl.className = showPost ? "primary" : "ghost";
+  tabCommentBtnEl.className = showPost ? "ghost" : "primary";
 }
 async function loadFeed(reset = false) {
   if (state.loading) return;
   state.loading = true;
+  syncBusyUI();
   setStatus("Loading feed...");
   try {
     const cursor = reset ? null : state.nextCursor;
     const res = await fetchPosts(20, cursor);
+    const selectedBefore = state.selectedPostId;
     state.posts = reset ? res.posts : [...state.posts, ...res.posts];
     state.nextCursor = res.nextCursor;
+    renderPostList();
     if (reset && state.posts.length) {
-      state.selectedPostId = state.posts[0].id;
+      const stillExists = selectedBefore && state.posts.some((p) => p.id === selectedBefore);
+      state.selectedPostId = stillExists ? selectedBefore : state.posts[0].id;
       await loadSelectedPost();
-    } else {
-      renderPostList();
     }
     setStatus(`Feed loaded (${state.posts.length} posts).`);
   } catch (err) {
     setStatus(`Feed error: ${err.message}`);
   } finally {
     state.loading = false;
+    syncBusyUI();
   }
 }
 async function loadSelectedPost() {
@@ -698,10 +863,7 @@ async function loadSelectedPost() {
   }
   setStatus("Loading post...");
   try {
-    const [post, comments] = await Promise.all([
-      fetchPost(state.selectedPostId),
-      fetchComments(state.selectedPostId)
-    ]);
+    const [post, comments] = await Promise.all([fetchPost(state.selectedPostId), fetchComments(state.selectedPostId)]);
     const idx = state.posts.findIndex((p) => p.id === post.id);
     if (idx >= 0) state.posts[idx] = { ...state.posts[idx], ...post };
     state.comments = comments;
@@ -714,20 +876,13 @@ async function loadSelectedPost() {
 }
 async function selectPost(postId) {
   state.selectedPostId = postId;
+  renderPostList();
   await loadSelectedPost();
 }
-function handleIntent(action) {
-  const intent = document.getElementById("intent-input")?.value.trim();
-  const postHint = state.selectedPostId ? ` on selected post` : "";
-  const intentHint = intent ? ` | intent: ${intent}` : "";
-  if (action === "comment" && !state.selectedPostId) {
-    setStatus(`Intent captured: do comment${intentHint}. Select a post first.`);
-    return;
-  }
-  setStatus(`Intent captured: do ${action}${postHint}${intentHint}.`);
-}
 async function handleVote(type) {
-  if (!state.selectedPostId) return;
+  if (!state.selectedPostId || state.busyAction) return;
+  state.busyAction = true;
+  syncBusyUI();
   setStatus(`Submitting ${type}vote with PoW...`);
   try {
     await votePost(state.selectedPostId, type);
@@ -735,15 +890,86 @@ async function handleVote(type) {
     setStatus(`${type}vote submitted.`);
   } catch (err) {
     setStatus(`Vote failed: ${err.message}`);
+  } finally {
+    state.busyAction = false;
+    syncBusyUI();
   }
 }
-document.getElementById("btn-refresh").onclick = () => loadFeed(true);
-document.getElementById("btn-more").onclick = () => loadFeed(false);
-document.getElementById("btn-do-post").onclick = () => handleIntent("post");
-document.getElementById("btn-do-comment").onclick = () => handleIntent("comment");
+async function handleCreatePost() {
+  if (state.busyAction) return;
+  const nickname = document.getElementById("post-nickname").value.trim() || "\uB3CC\uC1E0";
+  const title = document.getElementById("post-title-input").value.trim();
+  const content = document.getElementById("post-content-input").value.trim();
+  if (!title || !content) {
+    setStatus("Please fill title and content.");
+    return;
+  }
+  state.busyAction = true;
+  syncBusyUI();
+  setStatus("Creating post with PoW...");
+  try {
+    const post = await createPost({ nickname, title, content });
+    state.posts.unshift(post);
+    state.selectedPostId = post.id;
+    state.comments = [];
+    document.getElementById("post-title-input").value = "";
+    document.getElementById("post-content-input").value = "";
+    renderPostList();
+    renderPostDetails(post);
+    setStatus("Post published.");
+  } catch (err) {
+    setStatus(`Create post failed: ${err.message}`);
+  } finally {
+    state.busyAction = false;
+    syncBusyUI();
+  }
+}
+async function handleCreateComment() {
+  if (!state.selectedPostId) {
+    setStatus("Select a post first.");
+    return;
+  }
+  if (state.busyAction) return;
+  const nickname = document.getElementById("comment-nickname").value.trim() || "\uB3CC\uC1E0";
+  const content = document.getElementById("comment-content-input").value.trim();
+  if (!content) {
+    setStatus("Please write a comment.");
+    return;
+  }
+  state.busyAction = true;
+  syncBusyUI();
+  setStatus("Creating comment with PoW...");
+  try {
+    await createComment(state.selectedPostId, { nickname, content });
+    document.getElementById("comment-content-input").value = "";
+    await loadSelectedPost();
+    setStatus("Comment published.");
+  } catch (err) {
+    setStatus(`Create comment failed: ${err.message}`);
+  } finally {
+    state.busyAction = false;
+    syncBusyUI();
+  }
+}
+refreshBtnEl.onclick = () => void loadFeed(true);
+moreBtnEl.onclick = () => void loadFeed(false);
+tabPostBtnEl.onclick = () => setComposerMode("post");
+tabCommentBtnEl.onclick = () => setComposerMode("comment");
+createPostBtnEl.onclick = () => void handleCreatePost();
+createCommentBtnEl.onclick = () => void handleCreateComment();
+searchInputEl.oninput = () => {
+  state.filter = searchInputEl.value;
+  renderPostList();
+};
+sortSelectEl.onchange = () => {
+  state.sort = sortSelectEl.value;
+  renderPostList();
+};
 renderPostList();
 renderPostDetails(null);
-loadFeed(true);
+setComposerMode("post");
+syncBusyUI();
+void loadFeed(true);
 var appApi = window.yaar?.app;
 function selectedPost() {
   if (!state.selectedPostId) return null;
@@ -781,6 +1007,14 @@ if (appApi) {
       status: {
         description: "Current status line text",
         handler: () => statusEl.textContent ?? ""
+      },
+      filter: {
+        description: "Current search filter",
+        handler: () => state.filter
+      },
+      sort: {
+        description: "Current sort mode",
+        handler: () => state.sort
       }
     },
     commands: {
@@ -859,22 +1093,15 @@ if (appApi) {
           },
           required: ["nickname", "title", "content"]
         },
-        handler: (p) => {
-          setStatus("Creating post via app protocol...");
-          void (async () => {
-            try {
-              const post = await createPost(p);
-              state.posts.unshift(post);
-              state.selectedPostId = post.id;
-              state.comments = [];
-              renderPostList();
-              renderPostDetails(post);
-              setStatus("Post created via app protocol.");
-            } catch (err) {
-              setStatus(`Create post failed: ${err.message}`);
-            }
-          })();
-          return { ok: true, queued: true };
+        handler: async (p) => {
+          const post = await createPost(p);
+          state.posts.unshift(post);
+          state.selectedPostId = post.id;
+          state.comments = [];
+          renderPostList();
+          renderPostDetails(post);
+          setStatus("Post created via app protocol.");
+          return { ok: true, post };
         }
       },
       createComment: {
@@ -920,6 +1147,34 @@ if (appApi) {
           await votePost(postId, p.type);
           if (state.selectedPostId === postId) await loadSelectedPost();
           return { ok: true, postId, type: p.type };
+        }
+      },
+      setFilter: {
+        description: "Set text filter for post list. Params: { query: string }",
+        params: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"]
+        },
+        handler: async (p) => {
+          state.filter = p.query;
+          searchInputEl.value = p.query;
+          renderPostList();
+          return { ok: true, filter: state.filter };
+        }
+      },
+      setSort: {
+        description: "Set sort mode. Params: { mode: 'latest'|'top'|'discussed' }",
+        params: {
+          type: "object",
+          properties: { mode: { type: "string", enum: ["latest", "top", "discussed"] } },
+          required: ["mode"]
+        },
+        handler: async (p) => {
+          state.sort = p.mode;
+          sortSelectEl.value = p.mode;
+          renderPostList();
+          return { ok: true, sort: state.sort };
         }
       }
     }
