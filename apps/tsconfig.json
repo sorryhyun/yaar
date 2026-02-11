@@ -8,10 +8,8 @@
     "skipLibCheck": true,
     "types": []
   },
-  "files": [
-    "../packages/server/src/lib/compiler/bundled.d.ts"
-  ],
   "include": [
-    "*/src/**/*.ts"
+    "*/src/**/*.ts",
+    "../packages/server/src/lib/bundled-types/*.d.ts"
   ]
 }

@@ -2,12 +2,62 @@
  * Inline JS capture helper script for iframe self-capture.
  *
  * Injected into iframes so the parent can request a screenshot via postMessage.
- * Captures the largest <canvas> element, or falls back to SVG serialization.
+ * Capture priority:
+ *   1. Largest <canvas> element (direct toDataURL)
+ *   2. Largest <svg> element (serialize → Image → canvas)
+ *   3. Full document via foreignObject SVG (inline styles baked in)
  */
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 (function() {
   if (window.__yaarCaptureInstalled) return;
   window.__yaarCaptureInstalled = true;
+
+  function respond(requestId, imageData) {
+    window.parent.postMessage({
+      type: 'yaar:capture-response',
+      requestId: requestId,
+      imageData: imageData
+    }, '*');
+  }
+
+  /**
+   * Inline all computed styles as style attributes so the foreignObject
+   * SVG render looks correct (external stylesheets won't apply).
+   */
+  function inlineStyles(original, clone) {
+    var origEls = original.querySelectorAll('*');
+    var cloneEls = clone.querySelectorAll('*');
+    for (var i = 0; i < origEls.length && i < cloneEls.length; i++) {
+      var cs = window.getComputedStyle(origEls[i]);
+      cloneEls[i].setAttribute('style', cs.cssText);
+    }
+    // Also inline styles on root element
+    var rootCs = window.getComputedStyle(original);
+    clone.setAttribute('style', rootCs.cssText);
+  }
+
+  /**
+   * Render an SVG string to a canvas PNG data URL, then call cb(dataUrl).
+   */
+  function svgToCanvas(svgStr, w, h, cb) {
+    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var img = new Image();
+    img.onload = function() {
+      var c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      var ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      cb(c.toDataURL('image/png'));
+    };
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      cb(null);
+    };
+    img.src = url;
+  }
 
   window.addEventListener('message', function(e) {
     if (!e.data || e.data.type !== 'yaar:capture-request') return;
@@ -15,7 +65,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     var imageData = null;
 
     try {
-      // Try capturing the largest canvas element
+      // Tier 1: capture the largest canvas element
       var canvases = document.querySelectorAll('canvas');
       if (canvases.length > 0) {
         var largest = null;
@@ -32,64 +82,65 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         }
       }
 
-      // Fall back to SVG capture
-      if (!imageData) {
-        var svgs = document.querySelectorAll('svg');
-        if (svgs.length > 0) {
-          var largest = null;
-          var largestArea = 0;
-          for (var i = 0; i < svgs.length; i++) {
-            var rect = svgs[i].getBoundingClientRect();
-            var area = rect.width * rect.height;
-            if (area > largestArea) {
-              largestArea = area;
-              largest = svgs[i];
-            }
-          }
-          if (largest) {
-            var serializer = new XMLSerializer();
-            var svgStr = serializer.serializeToString(largest);
-            var rect = largest.getBoundingClientRect();
-            var w = rect.width || 300;
-            var h = rect.height || 150;
-            var img = new Image();
-            var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-            var url = URL.createObjectURL(blob);
-            img.onload = function() {
-              var c = document.createElement('canvas');
-              c.width = w;
-              c.height = h;
-              var ctx = c.getContext('2d');
-              ctx.drawImage(img, 0, 0, w, h);
-              URL.revokeObjectURL(url);
-              window.parent.postMessage({
-                type: 'yaar:capture-response',
-                requestId: requestId,
-                imageData: c.toDataURL('image/png')
-              }, '*');
-            };
-            img.onerror = function() {
-              URL.revokeObjectURL(url);
-              window.parent.postMessage({
-                type: 'yaar:capture-response',
-                requestId: requestId,
-                imageData: null
-              }, '*');
-            };
-            img.src = url;
-            return; // async path — response sent from onload/onerror
+      if (imageData) {
+        respond(requestId, imageData);
+        return;
+      }
+
+      // Tier 2: capture the largest SVG element
+      var svgs = document.querySelectorAll('svg');
+      if (svgs.length > 0) {
+        var largest = null;
+        var largestArea = 0;
+        for (var i = 0; i < svgs.length; i++) {
+          var rect = svgs[i].getBoundingClientRect();
+          var area = rect.width * rect.height;
+          if (area > largestArea) {
+            largestArea = area;
+            largest = svgs[i];
           }
         }
+        if (largest) {
+          var serializer = new XMLSerializer();
+          var svgStr = serializer.serializeToString(largest);
+          var rect = largest.getBoundingClientRect();
+          svgToCanvas(svgStr, rect.width || 300, rect.height || 150, function(data) {
+            respond(requestId, data);
+          });
+          return; // async
+        }
+      }
+
+      // Tier 3: capture the full document body via foreignObject SVG
+      var body = document.body;
+      if (body) {
+        var w = Math.min(body.scrollWidth, window.innerWidth) || window.innerWidth || 800;
+        var h = Math.min(body.scrollHeight, window.innerHeight) || window.innerHeight || 600;
+        var clone = body.cloneNode(true);
+        inlineStyles(body, clone);
+        // Remove scripts and iframes from clone
+        var remove = clone.querySelectorAll('script,iframe');
+        for (var i = 0; i < remove.length; i++) remove[i].remove();
+
+        var xmlns = 'http://www.w3.org/1999/xhtml';
+        var svgNS = 'http://www.w3.org/2000/svg';
+        var xhtml = new XMLSerializer().serializeToString(clone);
+        var svgStr = '<svg xmlns="' + svgNS + '" width="' + w + '" height="' + h + '">'
+          + '<foreignObject width="100%" height="100%">'
+          + '<body xmlns="' + xmlns + '" style="margin:0;padding:0;">'
+          + xhtml
+          + '</body></foreignObject></svg>';
+
+        svgToCanvas(svgStr, w, h, function(data) {
+          respond(requestId, data);
+        });
+        return; // async
       }
     } catch (ex) {
       // Capture failed, imageData stays null
     }
 
-    window.parent.postMessage({
-      type: 'yaar:capture-response',
-      requestId: requestId,
-      imageData: imageData
-    }, '*');
+    respond(requestId, null);
   });
 })();
 `;

@@ -7,6 +7,7 @@ import { useDesktopStore } from '@/store'
 import { DebugPanel } from './DebugPanel'
 import { RecentActionsPanel } from './RecentActionsPanel'
 import { SessionsModal } from './SessionsModal'
+import { SettingsModal } from './SettingsModal'
 import { Taskbar } from './Taskbar'
 import styles from '@/styles/ui/CommandPalette.module.css'
 
@@ -23,6 +24,8 @@ export function CommandPalette() {
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel)
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen)
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
+  const settingsModalOpen = useDesktopStore((state) => state.settingsModalOpen)
+  const toggleSettingsModal = useDesktopStore((state) => state.toggleSettingsModal)
   const activeAgents = useDesktopStore((state) => state.activeAgents)
   const applyAction = useDesktopStore((state) => state.applyAction)
   const hasDrawing = useDesktopStore((state) => state.hasDrawing)
@@ -86,6 +89,7 @@ export function CommandPalette() {
       {debugPanelOpen && <DebugPanel />}
       {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
+      {settingsModalOpen && <SettingsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
         {hasDrawing && (
           <div className={styles.drawingIndicator}>
@@ -119,6 +123,13 @@ export function CommandPalette() {
               {/* Settings popover */}
               {settingsOpen && (
                 <div ref={settingsRef} className={styles.settingsPopover}>
+                  <button
+                    className={styles.settingsItem}
+                    onClick={() => { toggleSettingsModal(); setSettingsOpen(false) }}
+                    data-active={settingsModalOpen}
+                  >
+                    Settings
+                  </button>
                   <button
                     className={styles.settingsItem}
                     onClick={() => { toggleSessionsModal(); setSettingsOpen(false) }}

@@ -23,6 +23,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/compiler/bundled.d.ts'],
+    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**'],
   }
 )

@@ -24,6 +24,7 @@ import {
   createDebugSlice,
   createAgentsSlice,
   createUiSlice,
+  createSettingsSlice,
   createFeedbackSlice,
   createInteractionsSlice,
   createQueuedActionsSlice,
@@ -70,6 +71,11 @@ export function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000
 
 /**
  * Capture a window element as a PNG image and push feedback.
+ *
+ * Three-tier capture for iframe windows:
+ *   1. Iframe self-capture via postMessage (canvas/svg inside the iframe)
+ *   2. html2canvas on the iframe's content document (same-origin only)
+ *   3. html2canvas on the window frame element (non-iframe or cross-origin fallback)
  */
 async function captureWindow(windowId: string, requestId: string) {
   try {
@@ -85,9 +91,10 @@ async function captureWindow(windowId: string, requestId: string) {
       return
     }
 
-    // If the window contains an iframe, try self-capture first
+    // If the window contains an iframe, try capture strategies in order
     const iframe = el.querySelector('iframe') as HTMLIFrameElement | null
     if (iframe?.contentWindow) {
+      // Tier 1: iframe self-capture (captures canvas/svg elements inside)
       const iframeData = await tryIframeSelfCapture(iframe)
       if (iframeData) {
         const base64 = iframeData.replace(/^data:image\/png;base64,/, '')
@@ -100,9 +107,35 @@ async function captureWindow(windowId: string, requestId: string) {
         })
         return
       }
+
+      // Tier 2: html2canvas on iframe's content document (same-origin only)
+      try {
+        const doc = iframe.contentDocument
+        if (doc?.documentElement) {
+          const canvas = await html2canvas(doc.documentElement, {
+            useCORS: true,
+            logging: false,
+            scale: 1,
+            width: iframe.clientWidth || undefined,
+            height: iframe.clientHeight || undefined,
+          })
+          const dataUrl = canvas.toDataURL('image/png')
+          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+          useDesktopStore.getState().addRenderingFeedback({
+            requestId,
+            windowId,
+            renderer: 'capture',
+            success: true,
+            imageData: base64,
+          })
+          return
+        }
+      } catch {
+        // Cross-origin or html2canvas failure — fall through to Tier 3
+      }
     }
 
-    // Fall back to html2canvas
+    // Tier 3: html2canvas on the window frame element
     const canvas = await html2canvas(el, {
       useCORS: true,
       logging: false,
@@ -110,7 +143,6 @@ async function captureWindow(windowId: string, requestId: string) {
     })
 
     const dataUrl = canvas.toDataURL('image/png')
-    // Strip the data:image/png;base64, prefix
     const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
 
     useDesktopStore.getState().addRenderingFeedback({
@@ -239,6 +271,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createDebugSlice(...a),
     ...createAgentsSlice(...a),
     ...createUiSlice(...a),
+    ...createSettingsSlice(...a),
     ...createFeedbackSlice(...a),
     ...createInteractionsSlice(...a),
     ...createQueuedActionsSlice(...a),

@@ -146,6 +146,7 @@ export type AgentsSlice = AgentsSliceState & AgentsSliceActions
 export interface UiSliceState {
   contextMenu: ContextMenuState | null
   sessionsModalOpen: boolean
+  settingsModalOpen: boolean
   restorePrompt: RestorePrompt | null
   selectedWindowIds: string[]
 }
@@ -154,12 +155,25 @@ export interface UiSliceActions {
   showContextMenu: (x: number, y: number, windowId?: string) => void
   hideContextMenu: () => void
   toggleSessionsModal: () => void
+  toggleSettingsModal: () => void
   setRestorePrompt: (prompt: RestorePrompt | null) => void
   dismissRestorePrompt: () => void
   setSelectedWindows: (ids: string[]) => void
 }
 
 export type UiSlice = UiSliceState & UiSliceActions
+
+export interface SettingsSliceState {
+  userName: string
+  language: string
+}
+
+export interface SettingsSliceActions {
+  setUserName: (name: string) => void
+  setLanguage: (lang: string) => void
+}
+
+export type SettingsSlice = SettingsSliceState & SettingsSliceActions
 
 export interface AppProtocolResponseItem {
   requestId: string
@@ -259,6 +273,7 @@ export type DesktopStore = WindowsSlice &
   DebugSlice &
   AgentsSlice &
   UiSlice &
+  SettingsSlice &
   FeedbackSlice &
   InteractionsSlice &
   QueuedActionsSlice &

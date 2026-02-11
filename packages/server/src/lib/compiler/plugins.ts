@@ -5,6 +5,11 @@
  */
 
 import type { Plugin } from 'esbuild';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+/** Directory of this file — inside packages/server, where devDependencies are installed. */
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Map of @bundled/* import names to actual npm module paths.
@@ -20,6 +25,12 @@ const BUNDLED_LIBRARIES: Record<string, string> = {
   'three': 'three',
   'cannon-es': 'cannon-es',
   'xlsx': 'xlsx',
+  'chart.js': 'chart.js',
+  'd3': 'd3',
+  'matter-js': 'matter-js',
+  'tone': 'tone',
+  'pixi.js': 'pixi.js',
+  'p5': 'p5',
 };
 
 /**
@@ -50,10 +61,11 @@ export function bundledLibraryPlugin(): Plugin {
           };
         }
 
-        // Resolve via esbuild so it finds the absolute path in node_modules
+        // Resolve from the server package directory where devDependencies are installed,
+        // not from the sandbox directory (which has no node_modules).
         const result = await build.resolve(actualModule, {
           kind: args.kind,
-          resolveDir: args.resolveDir,
+          resolveDir: PLUGIN_DIR,
         });
 
         if (result.errors.length > 0) {

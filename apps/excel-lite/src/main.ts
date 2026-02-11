@@ -1,3 +1,7 @@
+import { Chart, registerables } from '@bundled/chart.js';
+import { format } from '@bundled/date-fns';
+import { debounce } from '@bundled/lodash';
+import { selectionChartPoints } from './chart-utils';
 import { COLS, ROWS } from './constants';
 import { cloneMap, csvEscape } from './data-utils';
 import { computeFillDestination, sourceForDestination } from './fill-utils';
@@ -12,17 +16,89 @@ const app = document.createElement('div');
 app.innerHTML = `
   <style>
     :root { color-scheme: light; }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; user-select: none; }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f3f6fc; user-select: none; color: #111827; }
     .wrap { padding: 10px; display: grid; gap: 8px; }
-    .bar { display: grid; grid-template-columns: auto 1fr repeat(16, auto); gap: 6px; align-items: center; }
-    .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; min-width: 74px; text-align: center; border: 1px solid #d0d7e2; border-radius: 8px; padding: 7px 8px; background: white; }
-    input, select { padding: 7px 8px; border: 1px solid #d0d7e2; border-radius: 8px; font-size: 13px; background: white; }
+    .toolbar {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid #d8e1ef;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      box-shadow: 0 6px 18px rgba(42, 109, 246, 0.08);
+      position: sticky;
+      top: 8px;
+      z-index: 10;
+    }
+    .toolbar-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: nowrap;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+    }
+    .toolbar-row.file #storagePathInput { flex: 1 1 280px; min-width: 240px; }
+    .toolbar-row.edit #formulaInput { flex: 1 1 360px; min-width: 260px; }
+    .toolbar-row.edit .name { flex: 0 0 auto; }
+    .name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
+      min-width: 78px;
+      text-align: center;
+      border: 1px solid #cfd8e6;
+      border-radius: 8px;
+      padding: 7px 8px;
+      background: #f7faff;
+    }
+    input, select {
+      height: 34px;
+      padding: 6px 9px;
+      border: 1px solid #ccd6e4;
+      border-radius: 8px;
+      font-size: 13px;
+      background: white;
+      box-sizing: border-box;
+    }
     #formulaInput { width: 100%; }
-    #storagePathInput { min-width: 220px; }
-    button { padding: 7px 10px; border: 1px solid #ccd3df; border-radius: 8px; background: white; cursor: pointer; }
-    button:hover { background: #f1f4f9; }
-    button.active { background: #dbe8ff; border-color: #96b6ff; }
-    .sheetWrap { overflow: auto; border: 1px solid #d9e0ec; border-radius: 10px; background: white; max-height: calc(100vh - 110px); }
+    #storagePathInput { min-width: 260px; }
+    #textColor, #bgColor { width: 42px; padding: 2px; }
+    button {
+      height: 34px;
+      min-width: 34px;
+      padding: 6px 10px;
+      border: 1px solid #c8d3e3;
+      border-radius: 9px;
+      background: linear-gradient(180deg, #ffffff, #f7f9fd);
+      cursor: pointer;
+      transition: all 120ms ease;
+      font-weight: 600;
+      color: #1f2937;
+    }
+    button:hover { background: #edf3ff; border-color: #aec2e6; transform: translateY(-1px); }
+    button.active { background: #dce8ff; border-color: #89abf0; }
+    .sheetWrap { overflow: auto; border: 1px solid #d8e1ef; border-radius: 10px; background: white; max-height: calc(100vh - 160px); }
+    .chartPanel {
+      border: 1px solid #d8e1ef;
+      border-radius: 10px;
+      background: #ffffff;
+      padding: 8px;
+      display: none;
+      min-height: 220px;
+      box-shadow: inset 0 0 0 1px #eef3ff;
+    }
+    .chartPanel.open { display: block; }
+    .chartPanelHead {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      color: #1e293b;
+      font-size: 13px;
+    }
+    #chartCanvas { width: 100%; max-height: 220px; }
     table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
     th, td { border: 1px solid #e7ecf5; }
     th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
@@ -30,36 +106,69 @@ app.innerHTML = `
     .corner { position: sticky; left: 0; top: 0; z-index: 3; background: #eef3ff; min-width: 46px; }
     td { position: relative; min-width: 98px; }
     td input { width: 100%; border: none; padding: 7px 8px; box-sizing: border-box; outline: none; background: transparent; }
-    td.selected { background: #d6e6ff; box-shadow: inset 0 0 0 1px #8eb3ff; }
+    td.selected { background: #dce8ff; box-shadow: inset 0 0 0 1px #93b4f4; }
     td.active { box-shadow: inset 0 0 0 2px #2a6df6; z-index: 1; }
     .fill-handle { position: absolute; width: 8px; height: 8px; right: -4px; bottom: -4px; border-radius: 1px; background: #2a6df6; cursor: crosshair; z-index: 5; }
-    td.fill-preview { background: #c1d9ff; box-shadow: inset 0 0 0 1px #79a3ff; }
-    .hint { color: #5c6475; font-size: 12px; }
+    td.fill-preview { background: #c7dcff; box-shadow: inset 0 0 0 1px #79a3ff; }
+    .hint { color: #5c6475; font-size: 12px; display: none; }
+    .io-status {
+      position: fixed;
+      right: 18px;
+      bottom: 14px;
+      z-index: 30;
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid #d8e1ef;
+      background: rgba(255, 255, 255, 0.95);
+      color: #374151;
+      box-shadow: 0 6px 20px rgba(16, 24, 40, 0.12);
+      display: none;
+    }
+    @media (max-width: 1200px) {
+      #formulaInput, #storagePathInput { min-width: 220px; }
+    }
   </style>
   <div class="wrap">
-    <div class="bar">
-      <div class="name" id="cellName">A1</div>
-      <input id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
-      <button id="boldBtn"><b>B</b></button>
-      <button id="italicBtn"><i>I</i></button>
-      <button id="underlineBtn"><u>U</u></button>
-      <select id="fontSizeSel">
-        <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
-      </select>
-      <input id="textColor" type="color" value="#111827" title="Text color" />
-      <input id="bgColor" type="color" value="#ffffff" title="Cell background" />
-      <select id="alignSel"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
-      <button id="undoBtn">Undo</button>
-      <button id="redoBtn">Redo</button>
-      <button id="saveBtn" title="Copy sheet JSON to clipboard">Copy</button>
-      <button id="loadBtn" title="Paste sheet JSON from a dialog">Paste</button>
-      <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
-      <button id="saveFileBtn" title="Save workbook XLSX to YAAR storage">Save Store</button>
-      <button id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)">Open Store</button>
-      <button id="csvBtn">CSV</button>
+    <div class="toolbar">
+      <div class="toolbar-row file">
+        <button id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">💾</button>
+        <button id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">📂</button>
+        <button id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
+        <button id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">📋</button>
+        <button id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
+        <button id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">📊</button>
+        <select id="chartTypeSel" title="Chart type">
+          <option value="bar" selected>Bar</option>
+          <option value="line">Line</option>
+          <option value="pie">Pie</option>
+        </select>
+        <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
+      </div>
+      <div class="toolbar-row edit">
+        <button id="undoBtn" title="Undo" aria-label="Undo">↶</button>
+        <button id="redoBtn" title="Redo" aria-label="Redo">↷</button>
+        <div class="name" id="cellName">A1</div>
+        <input id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
+        <button id="boldBtn"><b>B</b></button>
+        <button id="italicBtn"><i>I</i></button>
+        <button id="underlineBtn"><u>U</u></button>
+        <select id="fontSizeSel" title="Font size">
+          <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
+        </select>
+        <input id="textColor" type="color" value="#111827" title="Text color" />
+        <input id="bgColor" type="color" value="#ffffff" title="Cell background" />
+        <select id="alignSel" title="Alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+      </div>
     </div>
-    <div class="hint">Drag to select cells. Drag blue corner to fill. Shift+click extends selection. Ctrl+S saves to storage, Ctrl+O opens from storage, Ctrl+B/I/U, Ctrl+Z/Y, Delete supported.</div>
-    <div class="hint" id="ioStatus">Storage ready.</div>
+    <div class="hint io-status" id="ioStatus" aria-live="polite">Storage ready.</div>
+    <div class="chartPanel" id="chartPanel">
+      <div class="chartPanelHead">
+        <strong id="chartTitle">Selection Chart</strong>
+        <button id="closeChartBtn" title="Close chart">✕</button>
+      </div>
+      <canvas id="chartCanvas" height="180"></canvas>
+    </div>
     <div class="sheetWrap" id="sheet"></div>
   </div>
 `;
@@ -83,6 +192,12 @@ const storagePathInput = document.getElementById('storagePathInput') as HTMLInpu
 const saveFileBtn = document.getElementById('saveFileBtn') as HTMLButtonElement;
 const openFileBtn = document.getElementById('openFileBtn') as HTMLButtonElement;
 const csvBtn = document.getElementById('csvBtn') as HTMLButtonElement;
+const chartBtn = document.getElementById('chartBtn') as HTMLButtonElement;
+const chartTypeSel = document.getElementById('chartTypeSel') as HTMLSelectElement;
+const chartPanel = document.getElementById('chartPanel') as HTMLDivElement;
+const chartCanvas = document.getElementById('chartCanvas') as HTMLCanvasElement;
+const chartTitle = document.getElementById('chartTitle') as HTMLHeadingElement;
+const closeChartBtn = document.getElementById('closeChartBtn') as HTMLButtonElement;
 const ioStatus = document.getElementById('ioStatus') as HTMLDivElement;
 
 const cells: CellMap = {};
@@ -111,18 +226,44 @@ function getRaw(ref: string): string {
 }
 
 const formulaEngine = createFormulaEngine(getRaw);
+Chart.register(...registerables);
 
 const storageApi = (window as any).yaar?.storage;
 
+let ioStatusTimer: number | undefined;
+let selectionChart: Chart | null = null;
+
 function setIoStatus(message: string, isError = false) {
-  ioStatus.textContent = message;
-  ioStatus.style.color = isError ? '#b42318' : '#5c6475';
+  ioStatus.textContent = `[${format(new Date(), 'HH:mm:ss')}] ${message}`;
+  ioStatus.style.display = 'block';
+  ioStatus.style.color = isError ? '#b42318' : '#374151';
+  ioStatus.style.borderColor = isError ? '#f6b5ad' : '#d8e1ef';
+
+  if (ioStatusTimer) window.clearTimeout(ioStatusTimer);
+  ioStatusTimer = window.setTimeout(() => {
+    ioStatus.style.display = 'none';
+  }, isError ? 4200 : 2400);
 }
 
 function storagePath() {
   const path = storagePathInput.value.trim() || 'excel-lite/sheet.xlsx';
   storagePathInput.value = path;
   return path;
+}
+
+const autosavePath = 'excel-lite/autosave.json';
+
+const autosaveWorkbook = debounce(async () => {
+  if (!storageApi) return;
+  try {
+    await storageApi.save(autosavePath, serializeWorkbook());
+  } catch {
+    // ignore autosave errors; explicit save still reports errors
+  }
+}, 1400);
+
+function scheduleAutosave() {
+  void autosaveWorkbook();
 }
 
 function pushHistory() {
@@ -221,6 +362,7 @@ function commitCell(ref: string, value: string) {
   if (value) cells[ref] = value;
   else delete cells[ref];
   refreshAll();
+  scheduleAutosave();
 }
 
 function applyStyleToSelection(patch: Partial<CellStyle>) {
@@ -235,6 +377,7 @@ function applyStyleToSelection(patch: Partial<CellStyle>) {
   }
 
   refreshAll();
+  scheduleAutosave();
 }
 
 function toggleStyle(styleKey: 'bold' | 'italic' | 'underline') {
@@ -247,6 +390,7 @@ function clearSelectionValues() {
   const rect = rangeRect(selectionStart, selectionEnd);
   for (const ref of refsInRect(rect)) delete cells[ref];
   refreshAll();
+  scheduleAutosave();
 }
 
 function updateFillPreview() {
@@ -296,6 +440,53 @@ function applyFill() {
   }
 
   refreshAll();
+  scheduleAutosave();
+}
+
+function renderSelectionChart() {
+  const rect = rangeRect(selectionStart, selectionEnd);
+  const refs = refsInRect(rect);
+  const points = selectionChartPoints(refs, cells, (ref) => formulaEngine.display(ref));
+
+  if (!points.length) {
+    setIoStatus('Selection has no numeric values for charting.', true);
+    return;
+  }
+
+  const chartType = chartTypeSel.value as 'bar' | 'line' | 'pie';
+  selectionChart?.destroy();
+  selectionChart = new Chart(chartCanvas, {
+    type: chartType,
+    data: {
+      labels: points.map((p) => p.label),
+      datasets: [
+        {
+          label: chartType.toUpperCase(),
+          data: points.map((p) => p.value),
+          borderColor: '#2a6df6',
+          backgroundColor: chartType === 'pie'
+            ? ['#2a6df6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#2563eb']
+            : 'rgba(42, 109, 246, 0.35)',
+          borderWidth: 2,
+          fill: chartType === 'line',
+          tension: 0.25,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: chartType === 'pie',
+        },
+      },
+    },
+  });
+
+  chartTitle.textContent = `${selectionStart === selectionEnd ? selected : `${selectionStart}:${selectionEnd}`} (${points.length} pts)`;
+  chartPanel.classList.add('open');
+  setIoStatus(`Rendered ${chartType} chart from selection.`);
 }
 
 function exportCsv() {
@@ -483,6 +674,7 @@ function importWorkbook(parsed: any) {
   }
 
   refreshAll();
+  scheduleAutosave();
 }
 
 function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
@@ -507,8 +699,6 @@ async function saveWorkbookToStorage() {
     const binary = createXlsxWorkbook(cells);
     await storageApi.save(path, binary);
     setIoStatus(`Saved XLSX to storage: ${path}`);
-    saveFileBtn.textContent = 'Saved';
-    setTimeout(() => (saveFileBtn.textContent = 'Save Store'), 1000);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save';
     setIoStatus(message, true);
@@ -531,8 +721,6 @@ async function openWorkbookFromStorage() {
 
       if (tryImportWorkbook(text, `Invalid JSON in ${path}`)) {
         setIoStatus(`Opened JSON from storage: ${path}`);
-        openFileBtn.textContent = 'Opened';
-        setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
       }
       return;
     }
@@ -542,8 +730,6 @@ async function openWorkbookFromStorage() {
     const parsed = parseXlsxWorkbook(bytes);
     importWorkbook(parsed);
     setIoStatus(`Opened XLSX from storage: ${path}`);
-    openFileBtn.textContent = 'Opened';
-    setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to open file';
     setIoStatus(message, true);
@@ -553,8 +739,7 @@ async function openWorkbookFromStorage() {
 saveBtn.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(serializeWorkbook());
-    saveBtn.textContent = 'Copied';
-    setTimeout(() => (saveBtn.textContent = 'Copy'), 1000);
+    setIoStatus('Workbook JSON copied to clipboard.');
   } catch {
     alert('Clipboard access failed. Use Save Store instead.');
   }
@@ -566,8 +751,6 @@ loadBtn.addEventListener('click', () => {
 
   if (tryImportWorkbook(text, 'Invalid JSON')) {
     setIoStatus('Loaded workbook from pasted JSON.');
-    loadBtn.textContent = 'Loaded';
-    setTimeout(() => (loadBtn.textContent = 'Paste'), 1000);
   }
 });
 
@@ -581,8 +764,21 @@ openFileBtn.addEventListener('click', () => {
 
 csvBtn.addEventListener('click', () => {
   exportCsv();
-  csvBtn.textContent = 'Done';
-  setTimeout(() => (csvBtn.textContent = 'CSV'), 1000);
+  setIoStatus('CSV exported.');
+});
+
+chartBtn.addEventListener('click', () => {
+  renderSelectionChart();
+});
+
+chartTypeSel.addEventListener('change', () => {
+  if (chartPanel.classList.contains('open')) renderSelectionChart();
+});
+
+closeChartBtn.addEventListener('click', () => {
+  selectionChart?.destroy();
+  selectionChart = null;
+  chartPanel.classList.remove('open');
 });
 
 document.addEventListener('mouseup', () => {
@@ -652,6 +848,23 @@ document.addEventListener('keydown', (e) => {
 buildSheet();
 refreshAll();
 
+async function tryRecoverAutosave() {
+  if (!storageApi) return;
+  if (Object.keys(cells).length > 0) return;
+
+  try {
+    const raw = await storageApi.read(autosavePath, { as: 'text' });
+    if (typeof raw !== 'string' || !raw.trim()) return;
+    if (tryImportWorkbook(raw, 'Autosave is corrupted and could not be restored.')) {
+      setIoStatus(`Recovered autosave from ${autosavePath}`);
+    }
+  } catch {
+    // no autosave yet
+  }
+}
+
+void tryRecoverAutosave();
+
 if (!storageApi) {
   setIoStatus('Storage API unavailable in this runtime.', true);
 }
@@ -689,6 +902,7 @@ if (appApi) {
             else delete cells[upper];
           }
           refreshAll();
+          scheduleAutosave();
           return { ok: true, count: Object.keys(p.cells).length };
         },
       },
@@ -705,6 +919,7 @@ if (appApi) {
             else delete styles[upper];
           }
           refreshAll();
+          scheduleAutosave();
           return { ok: true };
         },
       },
@@ -730,6 +945,7 @@ if (appApi) {
             if (cells[ref]) { delete cells[ref]; count++; }
           }
           refreshAll();
+          scheduleAutosave();
           return { ok: true, cleared: count };
         },
       },

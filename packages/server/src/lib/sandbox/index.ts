@@ -6,7 +6,7 @@
 
 import vm from 'node:vm';
 import { createCapturedConsole, createSandboxContext, formatLogs, type LogEntry } from './context.js';
-import { compileTypeScript, wrapCodeForExecution } from './compiler.js';
+import { compileTypeScript, wrapCodeForExecution } from './transform.js';
 
 export type { LogEntry } from './context.js';
 

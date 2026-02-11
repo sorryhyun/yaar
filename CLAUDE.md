@@ -119,6 +119,7 @@ See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) f
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
+  - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
   - `compiler/` — esbuild bundler for sandbox apps
   - `pdf/` — PDF rendering via poppler
   - `sandbox/` — Sandboxed JS/TS code execution (node:vm)

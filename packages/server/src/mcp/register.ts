@@ -86,6 +86,7 @@ export function getToolNames(): string[] {
     'mcp__apps__read_config',
     'mcp__apps__write_config',
     // App development tools
+    'mcp__apps__read_ts',
     'mcp__apps__write_ts',
     'mcp__apps__compile',
     'mcp__apps__deploy',
