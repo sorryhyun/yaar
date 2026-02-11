@@ -26,15 +26,25 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 | 도구 | 설명 |
 |------|------|
 | `write_ts` | 샌드박스에 TypeScript 파일 작성 |
+| `read_ts` | 샌드박스 파일 읽기 (경로 미지정 시 파일 목록) |
+| `apply_diff_ts` | 샌드박스 파일에 검색-치환 편집 |
 | `compile` | `src/main.ts` → 단일 HTML로 번들 (esbuild) |
+| `compile_component` | 샌드박스에 `.yaarcomponent.json` 파일 생성 |
 | `deploy` | 컴파일된 앱을 바탕화면에 배포 |
+| `clone` | 배포된 앱의 소스를 샌드박스로 복제 (편집용) |
+| `write_json` | 배포된 앱에 JSON 파일 직접 쓰기 |
 
 ### 코드 실행 도구
 
 | 도구 | 설명 |
 |------|------|
 | `run_js` | JavaScript를 샌드박스 VM에서 실행 |
-| `run_ts` | TypeScript를 컴파일 후 샌드박스 VM에서 실행 |
+
+### 레퍼런스 도구
+
+| 도구 | 설명 |
+|------|------|
+| `guideline` | 토픽별 참조 문서 로드 (`app_dev`, `sandbox`, `components`) |
 
 ### 앱 관리 도구
 
@@ -74,12 +84,25 @@ AI가 iframe 윈도우를 열어 컴파일 결과를 바로 확인합니다.
 ### 4단계: 배포 — `deploy`
 
 ```
-deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀", keepSource?: true)
+deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀",
+       keepSource?: true, skill?: "...", appProtocol?: true,
+       fileAssociations?: [{ extensions: [".txt"], command: "openFile", paramKey: "content" }])
 ```
 
 - 컴파일된 HTML을 `apps/{appId}/`로 복사
 - `SKILL.md`와 `app.json` 자동 생성
 - 바탕화면에 아이콘 즉시 등장
+- `appProtocol`: App Protocol 지원 여부 (HTML에서 자동 감지, 수동 설정 가능)
+- `fileAssociations`: 앱이 열 수 있는 파일 확장자 매핑
+
+### 기존 앱 수정 — `clone` → 편집 → `compile` → `deploy`
+
+```
+clone(appId: "my-app") → sandboxId 반환
+apply_diff_ts(sandboxId, path, old_string, new_string)  // 또는 write_ts로 전체 교체
+compile(sandbox: sandboxId)
+deploy(sandbox: sandboxId, appId: "my-app")  // 동일 appId로 덮어쓰기
+```
 
 ## 번들 라이브러리
 
@@ -93,6 +116,15 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 | clsx | `@bundled/clsx` | CSS 클래스 조합 |
 | anime.js | `@bundled/anime` | 애니메이션 |
 | Konva | `@bundled/konva` | 2D 캔버스 그래픽 |
+| Three.js | `@bundled/three` | 3D 그래픽 |
+| cannon-es | `@bundled/cannon-es` | 3D 물리 엔진 |
+| xlsx | `@bundled/xlsx` | 스프레드시트 파싱/생성 |
+| Chart.js | `@bundled/chart.js` | 차트/그래프 |
+| D3 | `@bundled/d3` | 데이터 시각화 |
+| Matter.js | `@bundled/matter-js` | 2D 물리 엔진 |
+| Tone.js | `@bundled/tone` | 오디오/음악 |
+| PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
+| p5.js | `@bundled/p5` | 크리에이티브 코딩 |
 
 ```typescript
 import { v4 as uuid } from '@bundled/uuid';
@@ -200,6 +232,17 @@ app_query({ windowId: "excel-lite", stateKey: "cells" })
 app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
+## 컴포넌트 파일
+
+`.yaarcomponent.json` 파일을 통해 앱과 함께 재사용 가능한 컴포넌트 레이아웃을 배포할 수 있습니다.
+
+```
+compile_component(sandboxId, filename: "dashboard.yaarcomponent.json",
+                  components: [...], cols?: [1, 2], gap?: "md")
+```
+
+배포 후 AI가 `create_component(jsonfile="{appId}/{filename}")`로 로드할 수 있습니다. `write_json`을 사용하면 이미 배포된 앱에 직접 컴포넌트 파일을 추가할 수도 있습니다.
+
 ## 자격 증명 관리
 
 앱 자격 증명은 `config/credentials/{appId}.json`에 저장됩니다 (git-ignored).
@@ -244,15 +287,25 @@ Users don't need to write code. The AI writes TypeScript in a sandbox, compiles 
 | Tool | Description |
 |------|-------------|
 | `write_ts` | Write TypeScript files to sandbox |
+| `read_ts` | Read sandbox files (omit path to list all files) |
+| `apply_diff_ts` | Apply search-and-replace edits to sandbox files |
 | `compile` | Bundle `src/main.ts` → single HTML (esbuild) |
+| `compile_component` | Create `.yaarcomponent.json` files in sandbox |
 | `deploy` | Deploy compiled app to desktop |
+| `clone` | Clone a deployed app's source into a sandbox for editing |
+| `write_json` | Write JSON files directly to a deployed app |
 
 ### Code Execution Tools
 
 | Tool | Description |
 |------|-------------|
 | `run_js` | Execute JavaScript in sandboxed VM |
-| `run_ts` | Compile and execute TypeScript in sandboxed VM |
+
+### Reference Tools
+
+| Tool | Description |
+|------|-------------|
+| `guideline` | Load reference docs by topic (`app_dev`, `sandbox`, `components`) |
 
 ### App Management Tools
 
@@ -292,12 +345,25 @@ The AI opens an iframe window to preview the compiled result immediately.
 ### Step 4: Deploy — `deploy`
 
 ```
-deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀", keepSource?: true)
+deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀",
+       keepSource?: true, skill?: "...", appProtocol?: true,
+       fileAssociations?: [{ extensions: [".txt"], command: "openFile", paramKey: "content" }])
 ```
 
 - Copies compiled HTML to `apps/{appId}/`
 - Auto-generates `SKILL.md` and `app.json`
 - Icon appears on desktop immediately
+- `appProtocol`: Mark app as supporting App Protocol (auto-detected from HTML if not set)
+- `fileAssociations`: Map file extensions to app_command calls for file opening
+
+### Editing Existing Apps — `clone` → edit → `compile` → `deploy`
+
+```
+clone(appId: "my-app") → returns sandboxId
+apply_diff_ts(sandboxId, path, old_string, new_string)  // or write_ts for full replacement
+compile(sandbox: sandboxId)
+deploy(sandbox: sandboxId, appId: "my-app")  // same appId overwrites in-place
+```
 
 ## Bundled Libraries
 
@@ -311,6 +377,15 @@ Available via `@bundled/*` imports — no npm install needed:
 | clsx | `@bundled/clsx` | CSS class composition |
 | anime.js | `@bundled/anime` | Animation |
 | Konva | `@bundled/konva` | 2D canvas graphics |
+| Three.js | `@bundled/three` | 3D graphics |
+| cannon-es | `@bundled/cannon-es` | 3D physics engine |
+| xlsx | `@bundled/xlsx` | Spreadsheet parsing/generation |
+| Chart.js | `@bundled/chart.js` | Charts and graphs |
+| D3 | `@bundled/d3` | Data visualization |
+| Matter.js | `@bundled/matter-js` | 2D physics engine |
+| Tone.js | `@bundled/tone` | Audio/music synthesis |
+| PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
+| p5.js | `@bundled/p5` | Creative coding |
 
 ```typescript
 import { v4 as uuid } from '@bundled/uuid';
@@ -417,6 +492,17 @@ app_query({ windowId: "excel-lite", stateKey: "manifest" })
 app_query({ windowId: "excel-lite", stateKey: "cells" })
 app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
 ```
+
+## Component Files
+
+`.yaarcomponent.json` files let you deploy reusable component layouts alongside apps.
+
+```
+compile_component(sandboxId, filename: "dashboard.yaarcomponent.json",
+                  components: [...], cols?: [1, 2], gap?: "md")
+```
+
+After deploy, the AI can load them via `create_component(jsonfile="{appId}/{filename}")`. Use `write_json` to add component files directly to an already-deployed app.
 
 ## Credential Management
 

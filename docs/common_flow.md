@@ -281,6 +281,8 @@ Tracks window groups. When a window agent creates a child window, the child join
 | `DIALOG_FEEDBACK` | User response to approval dialog |
 | `TOAST_ACTION` | User dismisses reload toast (marks cache entry failed) |
 | `USER_INTERACTION` | Batch of user interactions (close, focus, move, resize, draw) |
+| `APP_PROTOCOL_RESPONSE` | Iframe app's response to an agent query/command |
+| `APP_PROTOCOL_READY` | Iframe app has registered with the App Protocol |
 
 ### Server → Client
 
@@ -296,6 +298,7 @@ Tracks window groups. When a window agent creates a child window, the child join
 | `MESSAGE_ACCEPTED` | Message assigned to an agent |
 | `MESSAGE_QUEUED` | Message queued (agent busy or limit reached) |
 | `APPROVAL_REQUEST` | Permission dialog for user approval |
+| `APP_PROTOCOL_REQUEST` | Agent requesting state/command from an iframe app |
 
 ## Shared Session Logger
 
@@ -336,6 +339,10 @@ Each log entry includes `agentId` for filtering:
 | `websocket/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
 | `mcp/action-emitter.ts` | ActionEmitter — bridges MCP tools to agent sessions |
 | `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per session |
+| `mcp/domains.ts` | Domain allowlist for HTTP tools and sandbox fetch |
+| `mcp/guidelines/` | Dynamic reference docs (app_dev, sandbox, components) |
+| `mcp/app-dev/` | App development tools (write, read, diff, compile, deploy, clone) |
+| `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |
 
 ## Example: Concurrent Execution
 

@@ -62,6 +62,19 @@ Work on multiple tasks simultaneously. **Monitors** (`Ctrl+1`–`Ctrl+9`) are in
 
 Sessions persist even after closing the browser tab; reconnect with `?sessionId=X` to restore state. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
 
+## Security
+
+Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
+
+- **Sandbox isolation**: `run_js` code executes in `node:vm` with `eval`, `Function`, `require`, `import`, filesystem access, and WebAssembly all disabled.
+- **Domain allowlist**: HTTP requests (`http_get`/`http_post`) and sandbox `fetch` are restricted to domains listed in `config/curl_allowed_domains.yaml`. New domains require user approval via a confirmation dialog.
+- **MCP authentication**: MCP tool calls are authenticated with a Bearer token generated at server startup. Set `MCP_SKIP_AUTH=1` for local development.
+- **Remembered permissions**: User allow/deny decisions are persisted in `config/permissions.json` so repeated requests don't re-prompt.
+- **Credential isolation**: App credentials are stored in `config/credentials/` and git-ignored.
+- **Path validation**: Storage and sandbox file access is guarded against path traversal.
+- **CORS**: Only frontend dev server origins (`localhost:5173`, `localhost:3000`) are allowed.
+- **Iframe isolation**: Compiled apps run inside iframes and communicate with the server only via `postMessage`.
+
 ## Quick Start
 
 **Prerequisites:** Node.js >= 24, pnpm >= 10, Claude CLI (`npm install -g @anthropic-ai/claude-code && claude login`)
