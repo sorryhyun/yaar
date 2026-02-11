@@ -19,6 +19,7 @@ const BUNDLED_LIBRARIES: Record<string, string> = {
   'konva': 'konva',
   'three': 'three',
   'cannon-es': 'cannon-es',
+  'xlsx': 'xlsx',
 };
 
 /**

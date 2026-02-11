@@ -7,15 +7,20 @@ import { getRawWindowId } from './helpers'
 export const selectWindowsInOrder = (state: DesktopStore) =>
   state.zOrder.map(id => state.windows[id]).filter(Boolean)
 
-let _visibleCache: { zOrder: string[]; windows: Record<string, WindowModel>; monitorId: string; result: WindowModel[] } =
-  { zOrder: [], windows: {}, monitorId: '', result: [] }
+let _visibleCache: { windows: Record<string, WindowModel>; monitorId: string; result: WindowModel[] } =
+  { windows: {}, monitorId: '', result: [] }
+/**
+ * Returns visible (non-minimized) windows on the active monitor in stable
+ * insertion order.  Z-order is intentionally NOT used here so that changing
+ * focus only updates CSS z-index values without reordering DOM nodes — which
+ * would cause browsers to reload iframes (e.g. YouTube videos restart).
+ */
 export const selectVisibleWindows = (state: DesktopStore): WindowModel[] => {
-  if (state.zOrder === _visibleCache.zOrder && state.windows === _visibleCache.windows && state.activeMonitorId === _visibleCache.monitorId)
+  if (state.windows === _visibleCache.windows && state.activeMonitorId === _visibleCache.monitorId)
     return _visibleCache.result
-  const result = state.zOrder
-    .map(id => state.windows[id])
+  const result = Object.values(state.windows)
     .filter((w): w is WindowModel => w != null && !w.minimized && (w.monitorId ?? 'monitor-0') === state.activeMonitorId)
-  _visibleCache = { zOrder: state.zOrder, windows: state.windows, monitorId: state.activeMonitorId, result }
+  _visibleCache = { windows: state.windows, monitorId: state.activeMonitorId, result }
   return result
 }
 

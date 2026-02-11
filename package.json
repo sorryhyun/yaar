@@ -28,6 +28,7 @@
     "pnpm": ">=10"
   },
   "devDependencies": {
-    "node-poppler-win32": "1.0.2"
+    "node-poppler-win32": "1.0.2",
+    "xlsx": "^0.18.5"
   }
 }
