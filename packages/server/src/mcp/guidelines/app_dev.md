@@ -1,5 +1,17 @@
 # App Development Guide
 
+## Workflow
+
+To create a new app from scratch:
+1. `write_ts(path: "src/main.ts", content: "...")` — creates a new sandbox, returns sandboxId
+2. `compile(sandbox: sandboxId)` — bundles to HTML, returns preview URL
+3. `deploy(sandbox: sandboxId, appId: "my-app")` — installs to `apps/`, appears on desktop
+
+To edit an existing app:
+1. `clone(appId)` — copies source into a new sandbox, returns sandboxId
+2. Edit with `write_ts` or `apply_diff_ts` using that sandboxId
+3. `compile` → `deploy` back to the same appId
+
 ## Sandbox Structure
 
 Entry point is `src/main.ts`. Split code into multiple files (e.g., `src/utils.ts`, `src/renderer.ts`) and import them from main.ts — avoid putting everything in one file.
