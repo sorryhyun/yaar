@@ -7,7 +7,7 @@
  * via Bun's `with { type: "file" }` import mechanism.
  */
 
-import * as esbuild from 'esbuild';
+import { createRequire } from 'module';
 import { mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -35,8 +35,10 @@ const BUNDLED_LIBRARIES = {
   'p5': 'p5',
 };
 
-// Resolve from server's node_modules where devDependencies are installed
+// Resolve esbuild from server's node_modules where it's a devDependency
 const resolveDir = join(rootDir, 'packages', 'server');
+const require = createRequire(join(resolveDir, 'package.json'));
+const esbuild = require('esbuild');
 
 mkdirSync(outDir, { recursive: true });
 
