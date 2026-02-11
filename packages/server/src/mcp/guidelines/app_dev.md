@@ -8,16 +8,7 @@ Entry point is `src/main.ts`. Split code into multiple files (e.g., `src/utils.t
 
 Available via `@bundled/*` imports (no npm install needed):
 
-| Import | Description |
-|--------|-------------|
-| `@bundled/uuid` | Unique ID generation: `v4()`, `v1()`, `validate()` |
-| `@bundled/lodash` | Utilities: `debounce`, `throttle`, `cloneDeep`, `groupBy`, `sortBy`, `uniq`, `chunk`, etc. |
-| `@bundled/date-fns` | Date utilities: `format`, `addDays`, `differenceInDays`, `isToday`, etc. |
-| `@bundled/clsx` | CSS class names: `clsx('foo', { bar: true })` |
-| `@bundled/anime` | Animation library: `anime({ targets, translateX, duration, easing })` |
-| `@bundled/konva` | 2D canvas graphics: `Stage`, `Layer`, `Rect`, `Circle`, `Text`, etc. |
-| `@bundled/three` | 3D rendering engine: `Scene`, `Camera`, `Mesh`, `BoxGeometry`, `MeshStandardMaterial`, etc. |
-| `@bundled/cannon-es` | 3D physics engine: `World`, `Body`, `Box`, `Sphere`, `Vec3`, `ContactMaterial`, etc. |
+{{BUNDLED_LIBRARIES}}
 
 Example:
 ```ts

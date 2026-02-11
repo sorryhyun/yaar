@@ -88,13 +88,23 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const agentId = (message as { agentId?: string }).agentId || 'default'
       const toolName = (message as { toolName?: string }).toolName || 'tool'
       const status = (message as { status?: string }).status
+      const toolInput = (message as { toolInput?: unknown }).toolInput
       const monitorId = (message as { monitorId?: string }).monitorId
       if (status === 'running') {
         handlers.setAgentActive(agentId, `Running: ${toolName}`)
       } else if (status === 'complete' || status === 'error') {
         handlers.setAgentActive(agentId, 'Thinking...')
       }
-      handlers.addCliEntry({ type: 'tool', content: `[${toolName}] ${status}`, agentId, monitorId })
+      // Only show tool calls and errors in CLI; skip successful results
+      if (status === 'complete') break
+      let content: string
+      if (status === 'running' && toolInput) {
+        const inputStr = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput)
+        content = `[${toolName}] ${inputStr}`
+      } else {
+        content = `[${toolName}] ${status}`
+      }
+      handlers.addCliEntry({ type: status === 'error' ? 'error' : 'tool', content, agentId, monitorId })
       break
     }
     case 'ERROR': {

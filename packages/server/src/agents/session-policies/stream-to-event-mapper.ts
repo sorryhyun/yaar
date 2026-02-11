@@ -59,6 +59,7 @@ export class StreamToEventMapper {
           type: 'TOOL_PROGRESS',
           toolName: message.toolName ?? 'unknown',
           status: 'running',
+          toolInput: message.toolInput,
           agentId: this.role,
           monitorId: this.monitorId,
         });
@@ -75,6 +76,7 @@ export class StreamToEventMapper {
           type: 'TOOL_PROGRESS',
           toolName: message.toolName ?? 'tool',
           status: 'complete',
+          message: message.content,
           agentId: this.role,
           monitorId: this.monitorId,
         });

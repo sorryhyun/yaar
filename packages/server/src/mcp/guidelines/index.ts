@@ -8,6 +8,7 @@ import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ok } from '../utils.js';
+import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +37,11 @@ export function registerGuidelineTools(server: McpServer): void {
       }
 
       try {
-        const content = await readFile(join(__dirname, filename), 'utf-8');
+        let content = await readFile(join(__dirname, filename), 'utf-8');
+        if (content.includes('{{BUNDLED_LIBRARIES}}')) {
+          const libs = getAvailableBundledLibraries().map(l => `\`@bundled/${l}\``).join(', ');
+          content = content.replace('{{BUNDLED_LIBRARIES}}', libs);
+        }
         return ok(content);
       } catch {
         return ok(`Error: Could not load guideline for "${args.topic}".`);

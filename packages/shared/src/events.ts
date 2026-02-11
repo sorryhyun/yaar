@@ -175,6 +175,7 @@ export interface ToolProgressEvent {
   toolName: string;
   status: 'running' | 'complete' | 'error';
   message?: string;
+  toolInput?: unknown;
   agentId?: string;
   monitorId?: string;
   seq?: number;

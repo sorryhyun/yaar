@@ -6,6 +6,7 @@ import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
 import { colLabel, key as cellKey, parseRef, rangeRect, refsInRect } from './ref-utils';
 import { getStyleForRef, normalizeStyle } from './style-utils';
 import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
+import { createXlsxWorkbook, parseXlsxWorkbook } from './xlsx-utils';
 
 const app = document.createElement('div');
 app.innerHTML = `
@@ -52,9 +53,9 @@ app.innerHTML = `
       <button id="redoBtn">Redo</button>
       <button id="saveBtn" title="Copy sheet JSON to clipboard">Copy</button>
       <button id="loadBtn" title="Paste sheet JSON from a dialog">Paste</button>
-      <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.json" />
-      <button id="saveFileBtn" title="Save workbook JSON to YAAR storage">Save Store</button>
-      <button id="openFileBtn" title="Open workbook JSON from YAAR storage">Open Store</button>
+      <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
+      <button id="saveFileBtn" title="Save workbook XLSX to YAAR storage">Save Store</button>
+      <button id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)">Open Store</button>
       <button id="csvBtn">CSV</button>
     </div>
     <div class="hint">Drag to select cells. Drag blue corner to fill. Shift+click extends selection. Ctrl+S saves to storage, Ctrl+O opens from storage, Ctrl+B/I/U, Ctrl+Z/Y, Delete supported.</div>
@@ -119,7 +120,7 @@ function setIoStatus(message: string, isError = false) {
 }
 
 function storagePath() {
-  const path = storagePathInput.value.trim() || 'excel-lite/sheet.json';
+  const path = storagePathInput.value.trim() || 'excel-lite/sheet.xlsx';
   storagePathInput.value = path;
   return path;
 }
@@ -503,8 +504,9 @@ async function saveWorkbookToStorage() {
 
   try {
     const path = storagePath();
-    await storageApi.save(path, serializeWorkbook());
-    setIoStatus(`Saved to storage: ${path}`);
+    const binary = createXlsxWorkbook(cells);
+    await storageApi.save(path, binary);
+    setIoStatus(`Saved XLSX to storage: ${path}`);
     saveFileBtn.textContent = 'Saved';
     setTimeout(() => (saveFileBtn.textContent = 'Save Store'), 1000);
   } catch (err) {
@@ -521,14 +523,27 @@ async function openWorkbookFromStorage() {
 
   try {
     const path = storagePath();
-    const text = await storageApi.read(path, { as: 'text' });
-    if (typeof text !== 'string') throw new Error('Workbook content is not text');
+    const lower = path.toLowerCase();
 
-    if (tryImportWorkbook(text, `Invalid JSON in ${path}`)) {
-      setIoStatus(`Opened from storage: ${path}`);
-      openFileBtn.textContent = 'Opened';
-      setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
+    if (lower.endsWith('.json')) {
+      const text = await storageApi.read(path, { as: 'text' });
+      if (typeof text !== 'string') throw new Error('Workbook content is not text');
+
+      if (tryImportWorkbook(text, `Invalid JSON in ${path}`)) {
+        setIoStatus(`Opened JSON from storage: ${path}`);
+        openFileBtn.textContent = 'Opened';
+        setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
+      }
+      return;
     }
+
+    const data = await storageApi.read(path, { as: 'arraybuffer' });
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
+    const parsed = parseXlsxWorkbook(bytes);
+    importWorkbook(parsed);
+    setIoStatus(`Opened XLSX from storage: ${path}`);
+    openFileBtn.textContent = 'Opened';
+    setTimeout(() => (openFileBtn.textContent = 'Open Store'), 1000);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to open file';
     setIoStatus(message, true);

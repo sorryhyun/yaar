@@ -609,6 +609,7 @@ export class ContextPool {
   }
 
   async reset(): Promise<void> {
+    if (this.resetting) return;
     this.resetting = true;
 
     // 1. Clear queues so no new tasks start from dequeue
