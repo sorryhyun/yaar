@@ -5,7 +5,7 @@ A compiled TypeScript application.
 ## Launch
 Open this app in an iframe window:
 ```
-create_window({
+create({
   windowId: "falling-blocks",
   title: "Falling Blocks",
   renderer: "iframe",
@@ -14,4 +14,4 @@ create_window({
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `apps_read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.

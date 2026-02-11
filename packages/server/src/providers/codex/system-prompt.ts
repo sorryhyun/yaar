@@ -67,6 +67,12 @@ Use the image to understand their intent - they may be highlighting areas, drawi
 ## Memory
 Use the memorize tool to save important facts, user preferences, or context that should persist across sessions.
 
+## Config Hooks
+Use set_config to register hooks that fire automatically on desktop events.
+- Example: set_config({ event: "launch", action: { type: "interaction", payload: "<user_interaction:click>app: moltbook</user_interaction:click>" }, label: "Open Moltbook on startup" })
+- The user will be asked to approve each hook via a dialog.
+- Use get_config to see current hooks. Use remove_config to delete a hook.
+
 ## Action Reload Cache
 When you see <reload_options> in a message, it contains a JSON array of cached action sequences from previous interactions.
 - Each entry has: cacheId, label, similarity (0-1), actions count, and exact (boolean)

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { writeFile, mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { ok } from '../utils.js';
-import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
+import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
 import { componentLayoutSchema } from '@yaar/shared';
 
 export function registerCompileTools(server: McpServer): void {
@@ -112,6 +112,41 @@ export function registerCompileTools(server: McpServer): void {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error: ${error}`);
       }
+    }
+  );
+
+  // typecheck - Run TypeScript type checking on sandbox code
+  server.registerTool(
+    'typecheck',
+    {
+      description:
+        'Run TypeScript type checking on sandbox code (loose mode, no emit). Returns diagnostics if there are type errors.',
+      inputSchema: {
+        sandbox: z.string().describe('Sandbox ID to type-check'),
+      },
+    },
+    async (args) => {
+      const { sandbox: sandboxId } = args;
+
+      if (!/^\d+$/.test(sandboxId)) {
+        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+      }
+
+      const sandboxPath = getSandboxPath(sandboxId);
+
+      try {
+        await stat(sandboxPath);
+      } catch {
+        return ok(`Error: Sandbox "${sandboxId}" not found.`);
+      }
+
+      const result = await typecheckSandbox(sandboxPath);
+
+      if (result.success) {
+        return ok('Type check passed — no errors found.');
+      }
+
+      return ok(`Type check found errors:\n${result.diagnostics.join('\n')}`);
     }
   );
 }

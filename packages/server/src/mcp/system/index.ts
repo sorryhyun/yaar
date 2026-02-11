@@ -6,6 +6,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
+import { actionEmitter } from '../action-emitter.js';
+import { addHook, loadHooks, removeHook } from './hooks.js';
 
 export function registerSystemTools(server: McpServer): void {
   // get_system_info
@@ -86,6 +88,91 @@ export function registerSystemTools(server: McpServer): void {
         return ok(`Error saving memory: ${result.error}`);
       }
       return ok(`Memorized: "${args.content}"`);
+    }
+  );
+
+  // set_config — register a hook
+  server.registerTool(
+    'set_config',
+    {
+      description:
+        'Register an automated hook that fires on a desktop event. Currently supports "launch" events that trigger when a new session starts.',
+      inputSchema: {
+        event: z
+          .enum(['launch'])
+          .describe('The event that triggers this hook'),
+        action: z.object({
+          type: z.literal('interaction').describe('Action type'),
+          payload: z.string().describe('The interaction text to inject (e.g., app click)'),
+        }).describe('What happens when the hook fires'),
+        label: z
+          .string()
+          .describe('Human-readable description shown in permission dialog'),
+      },
+    },
+    async (args) => {
+      const approved = await actionEmitter.showPermissionDialog(
+        'Add Startup Hook',
+        `The AI wants to add a startup hook: **${args.label}**. Allow?`,
+        'config_hook',
+        args.event,
+      );
+
+      if (!approved) {
+        return ok('Permission denied — hook was not added.');
+      }
+
+      const hook = await addHook(args.event, args.action, args.label);
+      return ok(`Hook registered: "${hook.label}" (${hook.id})`);
+    }
+  );
+
+  // get_config — read hooks
+  server.registerTool(
+    'get_config',
+    {
+      description:
+        'Read current configuration. Returns registered hooks.',
+      inputSchema: {
+        section: z
+          .enum(['hooks'])
+          .optional()
+          .describe('Config section to read (default: all)'),
+      },
+    },
+    async () => {
+      const hooks = await loadHooks();
+      return ok(JSON.stringify({ hooks }, null, 2));
+    }
+  );
+
+  // remove_config — delete a hook
+  server.registerTool(
+    'remove_config',
+    {
+      description:
+        'Remove a registered hook by its ID.',
+      inputSchema: {
+        hookId: z.string().describe('The hook ID to remove (e.g., "hook-1")'),
+      },
+    },
+    async (args) => {
+      const confirmed = await actionEmitter.showConfirmDialog(
+        'Remove Hook',
+        `Remove hook "${args.hookId}"?`,
+        'Remove',
+        'Cancel',
+      );
+
+      if (!confirmed) {
+        return ok('Cancelled — hook was not removed.');
+      }
+
+      const removed = await removeHook(args.hookId);
+      if (!removed) {
+        return ok(`Hook "${args.hookId}" not found.`);
+      }
+      return ok(`Hook "${args.hookId}" removed.`);
     }
   );
 }

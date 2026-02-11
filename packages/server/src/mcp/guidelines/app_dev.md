@@ -40,6 +40,19 @@ const data = await yaar.storage.read('scores.json', { as: 'json' });
 const imgUrl = yaar.storage.url('photos/cat.png');
 ```
 
+## Deploy
+
+`deploy(sandbox, appId, ...)` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `name` | Title-cased appId | Display name shown on desktop |
+| `icon` | "🎮" | Emoji icon |
+| `keepSource` | `true` | Include `src/` so the app can be cloned later |
+| `skill` | auto-generated | Custom SKILL.md body. The `## Launch` section with the correct iframe URL is always auto-appended — only write app-specific instructions, usage guides, etc. |
+| `appProtocol` | auto-detected | Set explicitly if auto-detection (scanning HTML for `.app.register`) isn't reliable |
+| `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
+
 ## App Protocol
 
 Apps can communicate bidirectionally with the AI agent via `window.yaar.app` (auto-injected, no import needed).

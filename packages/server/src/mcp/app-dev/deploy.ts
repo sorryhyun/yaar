@@ -21,20 +21,20 @@ export function registerDeployTools(server: McpServer): void {
     'deploy',
     {
       description:
-        'Deploy a compiled sandbox as a desktop app. Creates the app folder in apps/, copies files, and generates SKILL.md so the app appears on the desktop.',
+        'Deploy a compiled sandbox as a desktop app. Use guideline("app_dev") for deploy options reference.',
       inputSchema: {
         sandbox: z.string().describe('Sandbox ID to deploy'),
-        appId: z.string().describe('App ID (becomes folder name in apps/). Use lowercase with hyphens.'),
-        name: z.string().optional().describe('Display name (defaults to title-cased appId)'),
-        icon: z.string().optional().describe('Emoji icon (default: "🎮")'),
-        keepSource: z.boolean().optional().describe('Include src/ in deployed app (default: true)'),
-        skill: z.string().optional().describe('Custom SKILL.md content. The ## Launch section with correct iframe URL will be auto-appended. Write app-specific instructions, usage guides, etc.'),
-        appProtocol: z.boolean().optional().describe('Mark app as supporting App Protocol. Auto-detected from compiled HTML if not set.'),
+        appId: z.string().describe('App ID (lowercase with hyphens)'),
+        name: z.string().optional().describe('Display name'),
+        icon: z.string().optional().describe('Emoji icon'),
+        keepSource: z.boolean().optional().describe('Include src/ in deployed app'),
+        skill: z.string().optional().describe('Custom SKILL.md content (## Launch auto-appended)'),
+        appProtocol: z.boolean().optional().describe('App Protocol support (auto-detected if omitted)'),
         fileAssociations: z.array(z.object({
-          extensions: z.array(z.string()).describe('File extensions (e.g. [".txt", ".md"])'),
-          command: z.string().describe('app_command command name to send file content'),
-          paramKey: z.string().describe('Parameter key for the file content'),
-        })).optional().describe('File types this app can open. Each entry maps extensions to an app_command call.'),
+          extensions: z.array(z.string()),
+          command: z.string(),
+          paramKey: z.string(),
+        })).optional().describe('File types this app can open'),
       },
     },
     async (args) => {

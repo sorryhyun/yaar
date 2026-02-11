@@ -12,6 +12,7 @@ import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import type { ClientEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
+import { getHooksByEvent } from '../mcp/system/hooks.js';
 
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
@@ -60,6 +61,24 @@ export function createWebSocketServer(
     const snapshotActions = session.generateSnapshot();
     if (snapshotActions.length > 0) {
       session.sendTo(connectionId, { type: 'ACTIONS', actions: snapshotActions });
+    }
+
+    // Execute launch hooks for fresh sessions (not reconnections)
+    if (!requestedSessionId && !session.launchHooksExecuted) {
+      session.launchHooksExecuted = true;
+      getHooksByEvent('launch').then(async (hooks) => {
+        for (const hook of hooks) {
+          if (hook.action.type === 'interaction') {
+            const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            await session.routeMessage(
+              { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
+              connectionId,
+            );
+          }
+        }
+      }).catch((err) => {
+        console.error('Failed to execute launch hooks:', err);
+      });
     }
 
     // Message handler

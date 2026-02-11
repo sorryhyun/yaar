@@ -5,10 +5,32 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { readFile, readdir } from 'fs/promises';
 import { join, extname } from 'path';
+import { gzip } from 'zlib';
+import { promisify } from 'util';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { sendError, sendJson, safePath } from '../utils.js';
 import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
+
+const gzipAsync = promisify(gzip);
+
+/** Content types eligible for gzip compression. */
+const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json']);
+
+/** Gzip-compress a buffer if the client accepts it and the content type is compressible. */
+async function maybeGzip(
+  req: IncomingMessage,
+  headers: Record<string, string>,
+  body: Buffer,
+): Promise<Buffer> {
+  const contentType = headers['Content-Type']?.split(';')[0];
+  if (!contentType || !COMPRESSIBLE.has(contentType)) return body;
+  if (body.length < 256) return body; // not worth compressing tiny responses
+  const accept = req.headers['accept-encoding'] ?? '';
+  if (!accept.includes('gzip')) return body;
+  headers['Content-Encoding'] = 'gzip';
+  return gzipAsync(body) as Promise<Buffer>;
+}
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']);
@@ -98,8 +120,9 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       if (ext === '.html') {
         headers['Content-Security-Policy'] = "connect-src 'self'";
       }
+      const body = await maybeGzip(req, headers, content);
       res.writeHead(200, headers);
-      res.end(content);
+      res.end(body);
     } catch {
       sendError(res, 'File not found', 404);
     }
@@ -179,8 +202,9 @@ export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse
       if (ext === '.html') {
         headers['Content-Security-Policy'] = "connect-src 'self'";
       }
+      const body = await maybeGzip(req, headers, content);
       res.writeHead(200, headers);
-      res.end(content);
+      res.end(body);
     } catch {
       sendError(res, 'File not found', 404);
     }

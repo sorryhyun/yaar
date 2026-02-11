@@ -2,6 +2,7 @@ import type { StreamMessage } from '../../providers/types.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
+import { formatToolDisplay } from '../../mcp/register.js';
 
 export interface StreamMappingState {
   responseText: string;
@@ -57,7 +58,7 @@ export class StreamToEventMapper {
       case 'tool_use':
         await this.sendEvent({
           type: 'TOOL_PROGRESS',
-          toolName: message.toolName ?? 'unknown',
+          toolName: formatToolDisplay(message.toolName ?? 'unknown'),
           status: 'running',
           toolInput: message.toolInput,
           agentId: this.role,
@@ -74,7 +75,7 @@ export class StreamToEventMapper {
       case 'tool_result':
         await this.sendEvent({
           type: 'TOOL_PROGRESS',
-          toolName: message.toolName ?? 'tool',
+          toolName: formatToolDisplay(message.toolName ?? 'tool'),
           status: 'complete',
           message: message.content,
           agentId: this.role,

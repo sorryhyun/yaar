@@ -50,6 +50,9 @@ export class LiveSession {
   private restoredContext: ContextMessage[];
   private savedThreadIds?: Record<string, string>;
 
+  /** True once launch hooks have been executed — prevents re-firing on reconnect or second tab. */
+  launchHooksExecuted = false;
+
   // Action listener for window state tracking
   private unsubscribeAction: (() => void) | null = null;
   // App protocol listener for iframe communication
@@ -263,6 +266,10 @@ export class LiveSession {
           await this.pool.reset();
         } else {
           // Pool not yet initialized — still flush stale warm-pool providers
+          // and clear restored state so the next pool init starts fresh
+          console.log('[LiveSession] Reset before pool init — flushing warm-pool providers');
+          this.restoredContext = [];
+          this.savedThreadIds = undefined;
           await getWarmPool().resetCodexProviders();
         }
         break;

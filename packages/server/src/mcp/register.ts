@@ -44,6 +44,16 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
 }
 
 /**
+ * Format a raw MCP tool name for CLI display.
+ * "mcp__apps__read_ts" → "apps:read_ts"
+ */
+export function formatToolDisplay(raw: string): string {
+  const m = raw.match(/^mcp__(\w+)__(.+)$/);
+  if (m) return `${m[1]}:${m[2]}`;
+  return raw;
+}
+
+/**
  * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
@@ -54,6 +64,9 @@ export function getToolNames(): string[] {
     'mcp__system__get_info',
     'mcp__system__get_env_var',
     'mcp__system__memorize',
+    'mcp__system__set_config',
+    'mcp__system__get_config',
+    'mcp__system__remove_config',
     'mcp__system__guideline',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
@@ -89,6 +102,7 @@ export function getToolNames(): string[] {
     'mcp__apps__read_ts',
     'mcp__apps__write_ts',
     'mcp__apps__compile',
+    'mcp__apps__typecheck',
     'mcp__apps__deploy',
     // Reload cache tools
     'mcp__system__reload_cached',
