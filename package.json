@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Reactive AI interface where the AI decides what to show and do next",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "./scripts/dev.sh",
     "dev:server": "pnpm --filter @yaar/server dev",
