@@ -181,15 +181,16 @@ export function DrawingOverlay() {
         document.activeElement.blur()
       }
     }
-    if (!pencilMode && prevPencilMode.current && hasStrokesRef.current) {
-      // Exiting pencil mode — capture drawing
-      console.log('[Drawing] EXITING pencil mode with strokes — calling captureScreenWithDrawing')
+    if (!pencilMode && prevPencilMode.current) {
       isDrawingRef.current = false
       lastPointRef.current = null
-      captureScreenWithDrawing()
-    }
-    if (!pencilMode && prevPencilMode.current && !hasStrokesRef.current) {
-      console.log('[Drawing] EXITING pencil mode WITHOUT strokes — no capture')
+      if (hasStrokesRef.current && useDesktopStore.getState().hasDrawing) {
+        // Upgrade with screenshot composite (only if drawing wasn't already consumed)
+        console.log('[Drawing] EXITING pencil mode — upgrading with composite capture')
+        captureScreenWithDrawing()
+      } else {
+        console.log('[Drawing] EXITING pencil mode — no upgrade needed')
+      }
     }
     prevPencilMode.current = pencilMode
   }, [pencilMode, captureScreenWithDrawing])
@@ -247,6 +248,10 @@ export function DrawingOverlay() {
       console.log('[Drawing] mouseup — stroke complete')
       isDrawingRef.current = false
       lastPointRef.current = null
+      // Save canvas immediately so "Drawing attached" shows right away
+      const dataUrl = canvas.toDataURL('image/webp', 0.95)
+      console.log('[Drawing] quick-save on stroke end, length:', dataUrl.length)
+      saveDrawing(dataUrl)
     }
 
     canvas.addEventListener('mousedown', onMouseDown)

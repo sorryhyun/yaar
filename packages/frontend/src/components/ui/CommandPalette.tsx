@@ -31,6 +31,7 @@ export function CommandPalette() {
   const hasDrawing = useDesktopStore((state) => state.hasDrawing)
   const clearDrawing = useDesktopStore((state) => state.clearDrawing)
   const pencilMode = useDesktopStore((state) => state.pencilMode)
+  const setPencilMode = useDesktopStore((state) => state.setPencilMode)
   const togglePencilMode = useDesktopStore((state) => state.togglePencilMode)
 
   // Close settings popover on outside click
@@ -53,9 +54,11 @@ export function CommandPalette() {
     // Allow sending if there's text OR a drawing attached
     if ((!trimmed && !hasDrawing) || !isConnected) return
 
+    // Auto-exit pencil mode on send
+    if (pencilMode) setPencilMode(false)
     sendMessage(trimmed)
     setInput('')
-  }, [input, isConnected, sendMessage, hasDrawing])
+  }, [input, isConnected, sendMessage, hasDrawing, pencilMode, setPencilMode])
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -93,13 +96,7 @@ export function CommandPalette() {
       {sessionsModalOpen && <SessionsModal />}
       {settingsModalOpen && <SettingsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
-        {pencilMode && (
-          <div className={styles.drawingIndicator}>
-            <span className={styles.drawingIcon}>&#9998;</span>
-            <span>Drawing&hellip;</span>
-          </div>
-        )}
-        {hasDrawing && !pencilMode && (
+        {hasDrawing && (
           <div className={styles.drawingIndicator}>
             <span className={styles.drawingIcon}>&#9998;</span>
             <span>Drawing attached</span>
