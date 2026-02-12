@@ -234,7 +234,21 @@ export class ContextPool {
       return;
     }
 
-    // Main agent busy → try ephemeral
+    // Main agent busy → try to steer the active turn (Codex mid-turn injection)
+    const steered = await this.agentPool.steerMainAgent(monitorId, task.content);
+    if (steered) {
+      console.log(`[ContextPool] Steered active turn for ${monitorId} with message ${task.messageId}`);
+      this.contextAssembly.appendUserMessage(this.contextTape, task.content, 'main');
+      const agent = this.agentPool.getMainAgent(monitorId)!;
+      await this.sendEvent({
+        type: 'MESSAGE_ACCEPTED',
+        messageId: task.messageId,
+        agentId: agent.currentRole!,
+      });
+      return;
+    }
+
+    // Steer not supported or failed → try ephemeral
     const ephemeral = await this.agentPool.createEphemeral();
     if (ephemeral) {
       await this.processEphemeralTask(ephemeral, task);

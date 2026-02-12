@@ -218,6 +218,18 @@ export class AgentPool {
     console.log(`[AgentPool] Window agent disposed for ${windowId}: ${agent.instanceId}`);
   }
 
+  // ── Steer ──────────────────────────────────────────────────────────
+
+  /**
+   * Try to steer the main agent's active turn with additional input.
+   * Returns true if steering succeeded, false otherwise.
+   */
+  async steerMainAgent(monitorId = 'monitor-0', content: string): Promise<boolean> {
+    const agent = this.mainAgents.get(monitorId);
+    if (!agent || !agent.session.isRunning()) return false;
+    return agent.session.steer(content);
+  }
+
   // ── Query / interrupt ───────────────────────────────────────────────
 
   /**

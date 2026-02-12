@@ -19,6 +19,7 @@ import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import type { CommandExecutionRequestApprovalParams, FileChangeRequestApprovalParams } from './types.js';
+import { convertToWebP } from '../../lib/image.js';
 
 /**
  * Session state for a thread.
@@ -175,9 +176,10 @@ export class CodexProvider extends BaseTransport {
           { type: 'text', text: prompt, text_elements: [] },
         ];
 
-        // Add images as separate input objects
+        // Add images as separate input objects (converted to WebP for smaller payloads)
         if (options.images && options.images.length > 0) {
-          for (const imageDataUrl of options.images) {
+          const converted = await Promise.all(options.images.map(convertToWebP));
+          for (const imageDataUrl of converted) {
             input.push({ type: 'image', url: imageDataUrl });
           }
         }
@@ -238,6 +240,24 @@ export class CodexProvider extends BaseTransport {
       }
 
       yield this.createErrorMessage(err);
+    }
+  }
+
+  async steer(content: string): Promise<boolean> {
+    const threadId = this.currentSession?.threadId;
+    const turnId = this.currentTurnId;
+    if (!this.appServer?.isRunning || !threadId || !turnId) return false;
+
+    try {
+      await this.appServer.turnSteer({
+        threadId,
+        input: [{ type: 'text', text: content }],
+        expectedTurnId: turnId,
+      });
+      return true;
+    } catch (err) {
+      console.warn('[codex] turn/steer failed:', err);
+      return false;
     }
   }
 

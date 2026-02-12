@@ -80,6 +80,12 @@ export interface AITransport {
   dispose(): Promise<void>;
 
   /**
+   * Optional: Inject additional input into the active turn (mid-turn steering).
+   * Returns true if successfully steered, false if not supported or failed.
+   */
+  steer?(content: string): Promise<boolean>;
+
+  /**
    * Optional: Pre-warm the provider by initializing a session.
    * Providers that support this can be used for faster first response.
    */

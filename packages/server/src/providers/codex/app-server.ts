@@ -21,6 +21,8 @@ import type {
   TurnStartResponse,
   TurnInterruptParams,
   TurnInterruptResponse,
+  TurnSteerParams,
+  TurnSteerResponse,
   ThreadResumeParams,
   ThreadResumeResponse,
   ThreadForkParams,
@@ -344,6 +346,16 @@ export class AppServer {
       throw new Error('AppServer is not running');
     }
     return this.client.request<TurnStartParams, TurnStartResponse>('turn/start', params);
+  }
+
+  /**
+   * Steer an in-flight turn by injecting additional input.
+   */
+  async turnSteer(params: TurnSteerParams): Promise<TurnSteerResponse> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<TurnSteerParams, TurnSteerResponse>('turn/steer', params);
   }
 
   /**

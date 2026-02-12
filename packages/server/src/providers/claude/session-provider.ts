@@ -6,18 +6,16 @@
  */
 
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
-import sharp from 'sharp';
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { getStorageDir } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
+import { type ImageMediaType, parseDataUrl, convertToWebP } from '../../lib/image.js';
 
 // Port for the MCP HTTP server (same as main server)
 const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
-
-type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
 
 interface ImageContentBlock {
   type: 'image';
@@ -34,45 +32,6 @@ interface TextContentBlock {
 }
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
-
-/**
- * Parse a data URL to extract media type and base64 data.
- */
-function parseDataUrl(dataUrl: string): { mediaType: ImageMediaType; data: string } | null {
-  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,(.+)$/);
-  if (!match) return null;
-  return {
-    mediaType: match[1] as ImageMediaType,
-    data: match[2],
-  };
-}
-
-/**
- * Convert an image data URL to WebP format for better compression.
- * Reduces token usage when sending base64 images to Claude.
- */
-async function convertToWebP(dataUrl: string): Promise<string> {
-  const parsed = parseDataUrl(dataUrl);
-  if (!parsed) return dataUrl;
-
-  // Skip if already WebP or GIF (might be animated)
-  if (parsed.mediaType === 'image/webp' || parsed.mediaType === 'image/gif') {
-    return dataUrl;
-  }
-
-  try {
-    const inputBuffer = Buffer.from(parsed.data, 'base64');
-    const webpBuffer = await sharp(inputBuffer).webp({ quality: 90 }).toBuffer();
-    const originalSize = inputBuffer.length;
-    const newSize = webpBuffer.length;
-    const savings = ((originalSize - newSize) / originalSize * 100).toFixed(1);
-    console.log(`[ClaudeSessionProvider] Converted ${parsed.mediaType} to WebP: ${originalSize} → ${newSize} bytes (${savings}% smaller)`);
-    return `data:image/webp;base64,${webpBuffer.toString('base64')}`;
-  } catch (err) {
-    console.warn(`[ClaudeSessionProvider] WebP conversion failed, using original:`, err);
-    return dataUrl;
-  }
-}
 
 // Warmup message - simple ping/pong handshake (see system prompt)
 const WARMUP_MESSAGE = 'ping';
@@ -95,6 +54,7 @@ export class ClaudeSessionProvider extends BaseTransport {
   private sessionId: string | null = null;
   private warmedUp = false;
   private warmupPromise: Promise<boolean> | null = null;
+  private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
   async isAvailable(): Promise<boolean> {
     return this.isCliAvailable('claude');
@@ -207,6 +167,23 @@ export class ClaudeSessionProvider extends BaseTransport {
     return this.warmedUp && this.sessionId !== null;
   }
 
+  async steer(content: string): Promise<boolean> {
+    if (!this.currentQuery) return false;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await this.currentQuery.streamInput((async function* (): AsyncGenerator<any> {
+        yield {
+          type: 'user',
+          message: { role: 'user', content },
+        };
+      })());
+      return true;
+    } catch (err) {
+      console.warn('[claude] streamInput failed:', err);
+      return false;
+    }
+  }
+
   async *query(
     prompt: string,
     options: TransportOptions
@@ -216,8 +193,9 @@ export class ClaudeSessionProvider extends BaseTransport {
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
     console.log(`[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`);
 
-    // Build prompt: either a string or an async generator for multimodal content
-    let promptInput: Parameters<typeof sdkQuery>[0]['prompt'] = prompt;
+    // Build user message content: multimodal (with images) or text-only
+    // Always use async generator for streaming input mode (enables mid-turn steering via streamInput)
+    let messageContent: string | ContentBlock[] = prompt;
 
     console.log(`[ClaudeSessionProvider] options.images: ${options.images?.length ?? 0} images`);
     if (options.images && options.images.length > 0) {
@@ -256,20 +234,16 @@ export class ClaudeSessionProvider extends BaseTransport {
       });
 
       console.log(`[ClaudeSessionProvider] Using multimodal prompt with ${contentBlocks.length} content blocks`);
-
-      // Create async generator for multimodal message
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      promptInput = (async function* (): AsyncGenerator<any> {
-        console.log(`[ClaudeSessionProvider] Generator yielding multimodal message`);
-        yield {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: contentBlocks,
-          },
-        };
-      })();
+      messageContent = contentBlocks;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptInput = (async function* (): AsyncGenerator<any> {
+      yield {
+        type: 'user',
+        message: { role: 'user', content: messageContent },
+      };
+    })();
 
     const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt, options.agentId);
 
@@ -285,6 +259,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     try {
       const stream = sdkQuery({ prompt: promptInput, options: sdkOptions });
+      this.currentQuery = stream;
       let messageCount = 0;
 
       for await (const msg of stream) {
@@ -315,10 +290,13 @@ export class ClaudeSessionProvider extends BaseTransport {
         return;
       }
       yield this.createErrorMessage(err);
+    } finally {
+      this.currentQuery = null;
     }
   }
 
   async dispose(): Promise<void> {
+    this.currentQuery = null;
     this.sessionId = null;
     this.warmedUp = false;
     await super.dispose();

@@ -341,6 +341,11 @@ export class AgentSession {
     }
   }
 
+  async steer(content: string): Promise<boolean> {
+    if (!this.running || !this.provider?.steer) return false;
+    return this.provider.steer(content);
+  }
+
   async interrupt(): Promise<void> {
     this.running = false;
     this.provider?.interrupt();

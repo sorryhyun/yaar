@@ -64,6 +64,26 @@ export type { ItemStartedNotification } from './generated/v2/index.js';
 export type { ItemCompletedNotification } from './generated/v2/index.js';
 
 // ============================================================================
+// Manual types (not yet in generated schema)
+// ============================================================================
+
+/**
+ * Parameters for turn/steer — inject additional input into an active turn.
+ */
+export interface TurnSteerParams {
+  threadId: string;
+  input: Array<{ type: 'text'; text: string; text_elements?: never[] }>;
+  expectedTurnId: string;
+}
+
+/**
+ * Response from turn/steer.
+ */
+export interface TurnSteerResponse {
+  turnId: string;
+}
+
+// ============================================================================
 // JSON-RPC Base Types (protocol plumbing, not generated)
 // ============================================================================
 

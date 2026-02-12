@@ -59,7 +59,7 @@ Use http_get/http_post for API calls. Domains require allowlisting.
 Use request_allowing_domain to prompt user for new domain access.
 
 ## Desktop Apps
-App icon clicks arrive as messages. Use load_skill to get app instructions.
+App icon clicks arrive as messages. **Always call load_skill first** to get the app's launch instructions — never guess URLs or create windows without loading the skill.
 
 ## User Drawings
 Users can draw on the screen using Ctrl+Drag. When they send a message with a drawing attached, you'll receive:
