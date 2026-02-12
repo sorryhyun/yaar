@@ -6,6 +6,7 @@ import type { SliceCreator, DrawingSlice } from '../types'
 export const createDrawingSlice: SliceCreator<DrawingSlice> = (set, get) => ({
   hasDrawing: false,
   canvasDataUrl: null,
+  pencilMode: false,
 
   saveDrawing: (dataUrl) => set((state) => {
     state.hasDrawing = true
@@ -27,4 +28,12 @@ export const createDrawingSlice: SliceCreator<DrawingSlice> = (set, get) => ({
     }
     return dataUrl
   },
+
+  togglePencilMode: () => set((state) => {
+    state.pencilMode = !state.pencilMode
+  }),
+
+  setPencilMode: (active) => set((state) => {
+    state.pencilMode = active
+  }),
 })

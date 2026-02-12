@@ -232,12 +232,15 @@ export type QueuedActionsSlice = QueuedActionsSliceState & QueuedActionsSliceAct
 export interface DrawingSliceState {
   hasDrawing: boolean
   canvasDataUrl: string | null
+  pencilMode: boolean
 }
 
 export interface DrawingSliceActions {
   saveDrawing: (dataUrl: string) => void
   clearDrawing: () => void
   consumeDrawing: () => string | null
+  togglePencilMode: () => void
+  setPencilMode: (active: boolean) => void
 }
 
 export type DrawingSlice = DrawingSliceState & DrawingSliceActions

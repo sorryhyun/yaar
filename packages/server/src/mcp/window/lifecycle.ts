@@ -164,7 +164,7 @@ export function registerLifecycleTools(server: McpServer, getWindowState: () => 
         if (feedback?.success && feedback.imageData) {
           return okWithImages(
             JSON.stringify(windowInfo, null, 2),
-            [{ data: feedback.imageData, mimeType: 'image/png' }]
+            [{ data: feedback.imageData, mimeType: 'image/webp' }]
           );
         }
 

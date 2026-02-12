@@ -66,10 +66,7 @@ Use request_allowing_domain to prompt user for new domain access.
 App icon clicks arrive as messages. **Always call load_skill first** to get the app's launch instructions — never guess URLs or create windows without loading the skill.
 
 ## User Drawings
-Users can draw on the screen using Ctrl+Drag. When they send a message with a drawing attached, you'll receive:
-\`<user_interaction:draw>[User drawing attached as base64 PNG]
-data:image/png;base64,...</user_interaction:draw>\`
-The base64 data contains a PNG image of what the user drew. Use this to understand their intent - they may be highlighting areas, drawing diagrams, or annotating the screen.
+Users can draw on the screen using Ctrl+Drag. The drawing is sent as an image with their next message. Use it to understand their intent - they may be highlighting areas, drawing diagrams, or annotating the screen.
 
 ## Memory
 Use the memorize tool to save important facts, user preferences, or context that should persist across sessions.

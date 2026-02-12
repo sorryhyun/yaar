@@ -12,7 +12,7 @@ import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { getStorageDir } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import { type ImageMediaType, parseDataUrl, convertToWebP } from '../../lib/image.js';
+import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 
 // Port for the MCP HTTP server (same as main server)
 const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
@@ -201,16 +201,11 @@ export class ClaudeSessionProvider extends BaseTransport {
     if (options.images && options.images.length > 0) {
       console.log(`[ClaudeSessionProvider] First image prefix: ${options.images[0].slice(0, 50)}...`);
 
-      // Convert images to WebP for better compression
-      const convertedImages = await Promise.all(
-        options.images.map(convertToWebP)
-      );
-
       // Build multimodal content blocks
       const contentBlocks: ContentBlock[] = [];
 
-      // Add image blocks first
-      for (const dataUrl of convertedImages) {
+      // Add image blocks (already WebP from frontend capture)
+      for (const dataUrl of options.images) {
         const parsed = parseDataUrl(dataUrl);
         if (parsed) {
           console.log(`[ClaudeSessionProvider] Adding image block: ${parsed.mediaType}, data length: ${parsed.data.length}`);

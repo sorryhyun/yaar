@@ -1,8 +1,8 @@
 /**
  * DrawingOverlay - Full-screen canvas for freehand drawing.
  *
- * Users can Ctrl+LeftDrag to draw on the screen.
- * The drawing is saved and sent with the next message.
+ * Double-press Ctrl (or click the pencil button) to toggle pencil mode.
+ * Then click+drag to draw. Double-press Ctrl again or Escape to exit and capture.
  * The saved image includes a screenshot of the current screen with annotations on top.
  */
 import { useRef, useState, useEffect, useCallback } from 'react'
@@ -15,32 +15,22 @@ interface Point {
   y: number
 }
 
+const DOUBLE_PRESS_MS = 350
+
 export function DrawingOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [ctrlHeld, setCtrlHeld] = useState(false)
   const [hasStrokes, setHasStrokes] = useState(false)
+  const pencilMode = useDesktopStore(state => state.pencilMode)
+  const setPencilMode = useDesktopStore(state => state.setPencilMode)
   const saveDrawing = useDesktopStore(state => state.saveDrawing)
   const hasDrawing = useDesktopStore(state => state.hasDrawing)
 
-  // Use refs to avoid stale closure issues in mouse handlers
   const isDrawingRef = useRef(false)
   const lastPointRef = useRef<Point | null>(null)
+  const lastCtrlUpRef = useRef(0)
+  const hasStrokesRef = useRef(false)
 
-  // Track Ctrl key state globally
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(true)
-    }
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control') setCtrlHeld(false)
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [])
+  hasStrokesRef.current = hasStrokes
 
   // Clear canvas when drawing is consumed
   useEffect(() => {
@@ -62,7 +52,6 @@ export function DrawingOverlay() {
     if (!canvas) return
 
     const resize = () => {
-      // Save current drawing
       const tempCanvas = document.createElement('canvas')
       tempCanvas.width = canvas.width
       tempCanvas.height = canvas.height
@@ -71,11 +60,9 @@ export function DrawingOverlay() {
         tempCtx.drawImage(canvas, 0, 0)
       }
 
-      // Resize
       canvas.width = window.innerWidth
       canvas.height = window.innerHeight
 
-      // Restore drawing
       const ctx = canvas.getContext('2d')
       if (ctx && tempCtx) {
         ctx.drawImage(tempCanvas, 0, 0)
@@ -97,30 +84,114 @@ export function DrawingOverlay() {
     ctx.beginPath()
     ctx.moveTo(from.x, from.y)
     ctx.lineTo(to.x, to.y)
-    ctx.strokeStyle = 'rgba(255, 100, 50, 0.8)'
-    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(255, 50, 30, 0.9)'
+    ctx.lineWidth = 4
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.stroke()
   }, [])
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Only start drawing with Ctrl+LeftClick
-    if (!e.ctrlKey || e.button !== 0) return
+  // Capture screen with drawing overlay
+  const captureScreenWithDrawing = useCallback(async () => {
+    const drawingCanvas = canvasRef.current
+    if (!drawingCanvas) return
 
+    try {
+      const dpr = window.devicePixelRatio || 1
+      const screenshot = await html2canvas(document.body, {
+        ignoreElements: (element) => element === drawingCanvas,
+        useCORS: true,
+        logging: false,
+        scale: dpr,
+      })
+
+      const compositeCanvas = document.createElement('canvas')
+      compositeCanvas.width = screenshot.width
+      compositeCanvas.height = screenshot.height
+      const ctx = compositeCanvas.getContext('2d')
+
+      if (ctx) {
+        ctx.drawImage(screenshot, 0, 0)
+        ctx.drawImage(drawingCanvas, 0, 0, drawingCanvas.width, drawingCanvas.height,
+          0, 0, screenshot.width, screenshot.height)
+        const dataUrl = compositeCanvas.toDataURL('image/webp', 0.95)
+        saveDrawing(dataUrl)
+      }
+    } catch (error) {
+      console.error('Failed to capture screen:', error)
+      const dataUrl = drawingCanvas.toDataURL('image/webp', 0.95)
+      saveDrawing(dataUrl)
+    }
+  }, [saveDrawing])
+
+  // Exit pencil mode and capture
+  const exitPencilMode = useCallback(() => {
+    setPencilMode(false)
+    isDrawingRef.current = false
+    lastPointRef.current = null
+    if (hasStrokesRef.current) {
+      captureScreenWithDrawing()
+    }
+  }, [captureScreenWithDrawing, setPencilMode])
+
+  // Double-press Ctrl to toggle pencil mode, Escape to exit
+  useEffect(() => {
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        const now = Date.now()
+        if (now - lastCtrlUpRef.current < DOUBLE_PRESS_MS) {
+          const current = useDesktopStore.getState().pencilMode
+          if (current) {
+            exitPencilMode()
+          } else {
+            setPencilMode(true)
+          }
+          lastCtrlUpRef.current = 0
+        } else {
+          lastCtrlUpRef.current = now
+        }
+      }
+      if (e.key === 'Escape' && useDesktopStore.getState().pencilMode) {
+        exitPencilMode()
+      }
+    }
+    window.addEventListener('keyup', handleKeyUp)
+    return () => window.removeEventListener('keyup', handleKeyUp)
+  }, [exitPencilMode, setPencilMode])
+
+  // When pencilMode changes externally (e.g. button)
+  const prevPencilMode = useRef(false)
+  useEffect(() => {
+    if (pencilMode && !prevPencilMode.current) {
+      // Entering pencil mode — blur active element so canvas receives events
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+    }
+    if (prevPencilMode.current && !pencilMode && hasStrokesRef.current) {
+      // Exiting pencil mode — capture
+      isDrawingRef.current = false
+      lastPointRef.current = null
+      captureScreenWithDrawing()
+    }
+    prevPencilMode.current = pencilMode
+  }, [pencilMode, captureScreenWithDrawing])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return
     e.preventDefault()
     isDrawingRef.current = true
     const point = { x: e.clientX, y: e.clientY }
     lastPointRef.current = point
 
-    // Draw initial dot so first click is visible
+    // Draw initial dot
     const canvas = canvasRef.current
     if (canvas) {
       const ctx = canvas.getContext('2d')
       if (ctx) {
         ctx.beginPath()
-        ctx.arc(point.x, point.y, 1.5, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(255, 100, 50, 0.8)'
+        ctx.arc(point.x, point.y, 2, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(255, 50, 30, 0.9)'
         ctx.fill()
         setHasStrokes(true)
       }
@@ -136,72 +207,17 @@ export function DrawingOverlay() {
     setHasStrokes(true)
   }, [drawLine])
 
-  // Capture screen with drawing overlay
-  const captureScreenWithDrawing = useCallback(async () => {
-    const drawingCanvas = canvasRef.current
-    if (!drawingCanvas) return
-
-    try {
-      // Capture the screen content (excluding the drawing overlay)
-      const screenshot = await html2canvas(document.body, {
-        ignoreElements: (element) => element === drawingCanvas,
-        useCORS: true,
-        logging: false,
-        scale: 1,
-      })
-
-      // Create a composite canvas
-      const compositeCanvas = document.createElement('canvas')
-      compositeCanvas.width = screenshot.width
-      compositeCanvas.height = screenshot.height
-      const ctx = compositeCanvas.getContext('2d')
-
-      if (ctx) {
-        // Draw screenshot first
-        ctx.drawImage(screenshot, 0, 0)
-        // Draw annotations on top
-        ctx.drawImage(drawingCanvas, 0, 0)
-        // Save the composite
-        const dataUrl = compositeCanvas.toDataURL('image/png')
-        saveDrawing(dataUrl)
-      }
-    } catch (error) {
-      console.error('Failed to capture screen:', error)
-      // Fallback to just the drawing
-      const dataUrl = drawingCanvas.toDataURL('image/png')
-      saveDrawing(dataUrl)
-    }
-  }, [saveDrawing])
-
   const handleMouseUp = useCallback(() => {
     if (!isDrawingRef.current) return
-
     isDrawingRef.current = false
     lastPointRef.current = null
-
-    // Capture screen with drawing annotations
-    captureScreenWithDrawing()
-  }, [captureScreenWithDrawing])
-
-  // Handle mouse leaving the window while drawing
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (isDrawingRef.current) {
-        isDrawingRef.current = false
-        lastPointRef.current = null
-        captureScreenWithDrawing()
-      }
-    }
-
-    window.addEventListener('mouseup', handleGlobalMouseUp)
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp)
-  }, [captureScreenWithDrawing])
+  }, [])
 
   return (
     <canvas
       ref={canvasRef}
       className={styles.overlay}
-      data-ctrl-held={ctrlHeld}
+      data-active={pencilMode}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

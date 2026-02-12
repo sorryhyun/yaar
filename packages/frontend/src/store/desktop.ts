@@ -97,7 +97,7 @@ async function captureWindow(windowId: string, requestId: string) {
       // Tier 1: iframe self-capture (captures canvas/svg elements inside)
       const iframeData = await tryIframeSelfCapture(iframe)
       if (iframeData) {
-        const base64 = iframeData.replace(/^data:image\/png;base64,/, '')
+        const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '')
         useDesktopStore.getState().addRenderingFeedback({
           requestId,
           windowId,
@@ -119,8 +119,8 @@ async function captureWindow(windowId: string, requestId: string) {
             width: iframe.clientWidth || undefined,
             height: iframe.clientHeight || undefined,
           })
-          const dataUrl = canvas.toDataURL('image/png')
-          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+          const dataUrl = canvas.toDataURL('image/webp', 0.9)
+          const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '')
           useDesktopStore.getState().addRenderingFeedback({
             requestId,
             windowId,
@@ -142,8 +142,8 @@ async function captureWindow(windowId: string, requestId: string) {
       scale: 1,
     })
 
-    const dataUrl = canvas.toDataURL('image/png')
-    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+    const dataUrl = canvas.toDataURL('image/webp', 0.9)
+    const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '')
 
     useDesktopStore.getState().addRenderingFeedback({
       requestId,

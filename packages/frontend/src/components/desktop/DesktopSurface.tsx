@@ -355,14 +355,12 @@ export function DesktopSurface() {
           />
         )}
 
-        {/* Drawing overlay */}
-        <DrawingOverlay />
-
         {/* Cursor spinner when AI is thinking */}
         <CursorSpinner />
       </div>
 
       {/* These must be outside .desktop to avoid transform breaking fixed positioning */}
+      <DrawingOverlay />
       <CommandPalette />
       <ToastContainer onToastAction={sendToastAction} />
       <ConfirmDialog />

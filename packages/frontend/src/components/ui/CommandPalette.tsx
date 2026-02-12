@@ -30,6 +30,8 @@ export function CommandPalette() {
   const applyAction = useDesktopStore((state) => state.applyAction)
   const hasDrawing = useDesktopStore((state) => state.hasDrawing)
   const clearDrawing = useDesktopStore((state) => state.clearDrawing)
+  const pencilMode = useDesktopStore((state) => state.pencilMode)
+  const togglePencilMode = useDesktopStore((state) => state.togglePencilMode)
 
   // Close settings popover on outside click
   useEffect(() => {
@@ -163,6 +165,16 @@ export function CommandPalette() {
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M1.66669 3.33334V8.33334H6.66669" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M3.51669 12.5C4.09225 14.1245 5.19153 15.5077 6.64804 16.4297C8.10455 17.3517 9.8327 17.7602 11.5504 17.5894C13.2682 17.4186 14.8764 16.6787 16.1113 15.4888C17.3463 14.2989 18.1348 12.7265 18.3593 11.0178C18.5838 9.30909 18.231 7.57261 17.357 6.09244C16.4831 4.61227 15.1384 3.47475 13.5359 2.85192C11.9335 2.22909 10.1668 2.15772 8.51986 2.64888C6.87291 3.14005 5.44223 4.16467 4.45003 5.56668L1.66669 8.33334" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button
+              className={styles.pencilButton}
+              onClick={togglePencilMode}
+              title={pencilMode ? "Exit drawing (Esc)" : "Draw on screen (Ctrl Ctrl)"}
+              data-active={pencilMode}
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14.167 2.5C14.3856 2.28141 14.6454 2.10753 14.9314 1.98775C15.2173 1.86797 15.5238 1.80469 15.8337 1.80141C16.1435 1.79813 16.4513 1.85491 16.7398 1.96858C17.0283 2.08225 17.2917 2.25055 17.5149 2.46381C17.7382 2.67707 17.917 2.9311 18.0398 3.21256C18.1627 3.49403 18.2275 3.79715 18.2302 4.10408C18.233 4.41102 18.1738 4.71528 18.0559 4.99897C17.938 5.28267 17.764 5.53993 17.5437 5.755L6.25036 17.0833L1.66699 18.3333L2.91699 13.75L14.167 2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
           </div>

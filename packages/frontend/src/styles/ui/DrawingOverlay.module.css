@@ -8,8 +8,8 @@
   pointer-events: none;
 }
 
-/* Enable pointer events when Ctrl is held */
-.overlay[data-ctrl-held="true"] {
+/* Enable pointer events when pencil mode is active */
+.overlay[data-active="true"] {
   pointer-events: auto;
   cursor: crosshair;
 }

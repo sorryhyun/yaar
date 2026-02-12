@@ -19,7 +19,6 @@ import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import type { CommandExecutionRequestApprovalParams, FileChangeRequestApprovalParams } from './types.js';
-import { convertToWebP } from '../../lib/image.js';
 
 /**
  * Session state for a thread.
@@ -176,10 +175,9 @@ export class CodexProvider extends BaseTransport {
           { type: 'text', text: prompt, text_elements: [] },
         ];
 
-        // Add images as separate input objects (converted to WebP for smaller payloads)
+        // Add images as separate input objects (WebP from frontend capture)
         if (options.images && options.images.length > 0) {
-          const converted = await Promise.all(options.images.map(convertToWebP));
-          for (const imageDataUrl of converted) {
+          for (const imageDataUrl of options.images) {
             input.push({ type: 'image', url: imageDataUrl });
           }
         }

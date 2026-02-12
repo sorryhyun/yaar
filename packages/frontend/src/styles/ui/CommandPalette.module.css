@@ -180,6 +180,33 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* Pencil draw button */
+.pencilButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-lg);
+}
+
+.pencilButton:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pencilButton[data-active="true"] {
+  color: var(--color-peach);
+  border-color: var(--color-peach);
+  background: rgba(250, 179, 135, 0.12);
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Spinner box for active agents */

@@ -209,12 +209,10 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 
 ### Claude
 
-Images are converted to WebP format (via `sharp`) for smaller payloads, then sent as multimodal content blocks:
+Images are captured as WebP on the frontend (via Canvas `toDataURL('image/webp')`), then sent as multimodal content blocks:
 
 ```typescript
-// Convert to WebP for compression
-const webpBuffer = await sharp(inputBuffer).webp({ quality: 90 }).toBuffer();
-
+// Images arrive as WebP data URLs from the frontend
 // Build multimodal prompt via async generator
 promptInput = async function*() {
   yield {
