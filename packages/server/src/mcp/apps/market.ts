@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { unlink } from 'fs/promises';
 import { ok } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
 import { PROJECT_ROOT } from '../../config.js';
@@ -76,13 +77,15 @@ export function registerMarketTools(server: McpServer): void {
       const buffer = Buffer.from(await res.arrayBuffer());
       await writeFile(tmpFile, buffer);
 
-      // Extract tar.gz
+      // Extract tar.gz and clean up temp file
       await mkdir(appDir, { recursive: true });
       try {
         await execFileAsync('tar', ['xzf', tmpFile, '--strip-components=1', '-C', appDir]);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         return ok(`Error: Failed to extract app archive: ${msg}`);
+      } finally {
+        await unlink(tmpFile).catch(() => {});
       }
 
       // Refresh desktop apps

@@ -58,6 +58,7 @@ src/
 ├── logging/           # Session logging (write), reading, and window restore
 ├── storage/           # StorageManager + permissions for persistent data
 └── lib/               # Standalone utilities (no server internal imports)
+    ├── bundled-types/ # Per-library .d.ts files for @bundled/* imports (used by apps/tsconfig.json)
     ├── compiler/      # esbuild bundler for sandbox apps
     ├── pdf/           # PDF rendering via poppler
     └── sandbox/       # Sandboxed JS/TS code execution (node:vm)

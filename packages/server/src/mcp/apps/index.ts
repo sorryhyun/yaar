@@ -13,7 +13,7 @@ export function registerAppsTools(server: McpServer): void {
   server.registerTool(
     'list',
     {
-      description: 'List all available apps in the apps/ directory. Returns app ID, name, and whether it has SKILL.md and credentials.',
+      description: 'List all available apps in the local directory "apps/". Returns app ID, name, and whether it has SKILL.md and credentials.',
     },
     async () => {
       const apps = await listApps();
