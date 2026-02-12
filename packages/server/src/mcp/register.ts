@@ -19,7 +19,7 @@ import { registerReloadTools } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
 import { WindowStateRegistry } from './window-state.js';
 import { ReloadCache } from '../reload/cache.js';
-import { IS_BUNDLED_EXE } from '../config.js';
+import { APP_DEV_ENABLED } from '../config.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
@@ -42,7 +42,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
   registerMarketTools(servers.apps);
-  if (!IS_BUNDLED_EXE) {
+  if (APP_DEV_ENABLED) {
     registerAppDevTools(servers.dev);
   }
   registerReloadTools(servers.system, getReloadCache, getWindowState);
@@ -132,5 +132,5 @@ export function getToolNames(): string[] {
     'mcp__apps__market_list',
     'mcp__apps__market_get',
   ];
-  return IS_BUNDLED_EXE ? all.filter(n => !APP_DEV_TOOLS.includes(n)) : all;
+  return APP_DEV_ENABLED ? all : all.filter(n => !APP_DEV_TOOLS.includes(n));
 }

@@ -11,6 +11,14 @@ import { fileURLToPath } from 'url';
 declare const __YAAR_BUNDLED: boolean | undefined;
 export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BUNDLED;
 
+// Detect if running as a dev-mode executable (bundled but without embedded libs)
+// __YAAR_DEV_MODE is injected at compile time for yaar-dev-* builds
+declare const __YAAR_DEV_MODE: boolean | undefined;
+export const IS_DEV_EXE = IS_BUNDLED_EXE && typeof __YAAR_DEV_MODE !== 'undefined' && __YAAR_DEV_MODE;
+
+/** True when app-dev tools should be available (dev source or dev exe). */
+export const APP_DEV_ENABLED = !IS_BUNDLED_EXE || IS_DEV_EXE;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -122,9 +130,9 @@ export function getCodexBin(): string {
 // ── Codex app-server configuration ────────────────────────────────────
 
 /** MCP server namespaces to expose to the Codex app-server. */
-const CODEX_MCP_NAMESPACES = IS_BUNDLED_EXE
-  ? ['system', 'window', 'storage', 'apps'] as const
-  : ['system', 'window', 'storage', 'apps', 'dev'] as const;
+const CODEX_MCP_NAMESPACES = APP_DEV_ENABLED
+  ? ['system', 'window', 'storage', 'apps', 'dev'] as const
+  : ['system', 'window', 'storage', 'apps'] as const;
 
 /**
  * Build the CLI args for `codex app-server`.

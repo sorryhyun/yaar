@@ -7,7 +7,7 @@
 
 import type { Plugin } from 'esbuild';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 
 /** Directory of this file — inside packages/server, where devDependencies are installed. */
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
@@ -80,13 +80,13 @@ export function bundledLibraryPlugin(): Plugin {
 }
 
 /**
- * Bun plugin that resolves @bundled/* from pre-bundled files embedded in the exe.
+ * Bun plugin that resolves @bundled/* from pre-bundled files.
  *
- * At build time, scripts/prebundle-libs.js bundles each library into dist/bundled-libs/.
- * scripts/build-exe-bundle.js embeds them via `with { type: "file" }` and sets
- * globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
- *
- * At runtime this plugin reads the embedded content via Bun.file().
+ * Two resolution strategies:
+ * 1. **Embedded** (production exe): Libraries embedded via `with { type: "file" }`,
+ *    available as globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
+ * 2. **Disk** (dev exe): Libraries read from `bundled-libs/` directory next to the exe.
+ *    Requires `pnpm build:exe:libs` to have been run.
  */
 export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
   return {
@@ -105,13 +105,29 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
         const libName = args.path;
-        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as Record<string, string> | undefined;
-        if (!embeddedLibs || !embeddedLibs[libName]) {
-          throw new Error(`Embedded library not found: "${libName}". Was prebundle-libs.js run?`);
-        }
         const BunApi = (globalThis as any).Bun;
-        const contents = await BunApi.file(embeddedLibs[libName]).text();
-        return { contents, loader: 'js' };
+
+        // Strategy 1: embedded libs (production exe)
+        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as Record<string, string> | undefined;
+        if (embeddedLibs?.[libName]) {
+          const contents = await BunApi.file(embeddedLibs[libName]).text();
+          return { contents, loader: 'js' };
+        }
+
+        // Strategy 2: disk libs (dev exe) — bundled-libs/ next to executable
+        const exeDir = dirname(process.execPath);
+        const diskPath = join(exeDir, 'bundled-libs', `${libName}.js`);
+        const file = BunApi.file(diskPath);
+        if (await file.exists()) {
+          const contents = await file.text();
+          return { contents, loader: 'js' };
+        }
+
+        throw new Error(
+          `Bundled library "${libName}" not found. ` +
+          `Looked for embedded lib and disk file at ${diskPath}. ` +
+          `Run "pnpm build:exe:libs" to generate bundled-libs/.`
+        );
       });
     },
   };

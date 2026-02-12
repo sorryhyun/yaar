@@ -68,7 +68,7 @@ test-shared:
 codex-types:
 	node scripts/generate-codex-types.js $(CODEX_BIN)
 
-# Build standalone Windows executables (yaar-claude.exe + yaar-codex.exe)
+# Build standalone executables (yaar-{claude,codex}.exe + yaar-dev-{claude,codex}.exe)
 build-exe: codex-types
 	pnpm build:exe
 
