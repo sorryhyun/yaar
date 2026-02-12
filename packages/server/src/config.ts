@@ -122,7 +122,9 @@ export function getCodexBin(): string {
 // ── Codex app-server configuration ────────────────────────────────────
 
 /** MCP server namespaces to expose to the Codex app-server. */
-const CODEX_MCP_NAMESPACES = ['system', 'window', 'storage', 'apps'] as const;
+const CODEX_MCP_NAMESPACES = IS_BUNDLED_EXE
+  ? ['system', 'window', 'storage', 'apps'] as const
+  : ['system', 'window', 'storage', 'apps', 'dev'] as const;
 
 /**
  * Build the CLI args for `codex app-server`.

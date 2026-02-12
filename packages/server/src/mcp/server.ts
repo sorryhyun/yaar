@@ -12,8 +12,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { registerAllTools } from './register.js';
 import { runWithAgentId } from '../agents/session.js';
 
-/** The 4 MCP server categories. */
-export const MCP_SERVERS = ['system', 'window', 'storage', 'apps'] as const;
+/** MCP server categories. */
+export const MCP_SERVERS = ['system', 'window', 'storage', 'apps', 'dev'] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
 interface McpServerEntry {

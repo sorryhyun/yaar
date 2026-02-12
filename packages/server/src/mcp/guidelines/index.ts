@@ -9,14 +9,19 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ok } from '../utils.js';
 import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';
+import { IS_BUNDLED_EXE } from '../../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const TOPICS: Record<string, string> = {
+const ALL_TOPICS: Record<string, string> = {
   app_dev: 'app_dev.md',
   sandbox: 'sandbox.md',
   components: 'components.md',
 };
+
+const TOPICS: Record<string, string> = IS_BUNDLED_EXE
+  ? Object.fromEntries(Object.entries(ALL_TOPICS).filter(([k]) => k !== 'app_dev'))
+  : ALL_TOPICS;
 
 export function registerGuidelineTools(server: McpServer): void {
   const topicList = Object.keys(TOPICS).join(', ');

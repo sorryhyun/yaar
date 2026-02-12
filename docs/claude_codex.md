@@ -86,6 +86,49 @@ await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] })
 | History storage | Server-side (Anthropic) | Server-side (OpenAI) |
 | Concurrency | Unlimited parallel queries | One turn at a time (semaphore) |
 
+## Mid-Turn Steering
+
+Both providers support injecting additional user input into an active turn, allowing the user to redirect the AI mid-response without interrupting and restarting.
+
+### Claude: `streamInput()`
+
+The Agent SDK's `Query` object exposes `streamInput()` for sending user messages into an active query. Requires streaming input mode (async generator prompt):
+
+```typescript
+// query() always uses async generator for streaming input mode
+const promptInput = async function*() {
+  yield { type: 'user', message: { role: 'user', content: prompt } };
+};
+const stream = sdkQuery({ prompt: promptInput, options });
+
+// Mid-turn: inject additional input
+await stream.streamInput(async function*() {
+  yield { type: 'user', message: { role: 'user', content: 'Actually, change approach...' } };
+}());
+```
+
+### Codex: `turn/steer`
+
+A dedicated JSON-RPC method that appends input to an in-flight turn:
+
+```json
+→ {"method": "turn/steer", "params": {"threadId": "thread_abc", "input": [{"type": "text", "text": "Actually..."}], "expectedTurnId": "turn_xyz"}, "id": 5}
+← {"id": 5, "result": {"turnId": "turn_xyz"}}
+```
+
+### Comparison
+
+| Aspect | Claude | Codex |
+|--------|--------|-------|
+| Mechanism | `Query.streamInput()` | `turn/steer` JSON-RPC |
+| Requirement | Streaming input mode (async generator prompt) | Active turn with known `turnId` |
+| Validation | None (SDK handles) | `expectedTurnId` must match active turn |
+| Failure mode | Promise rejection | JSON-RPC error |
+
+### Server Integration
+
+Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the main agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/parallel_capability.md`](./parallel_capability.md) for the full concurrency strategy.
+
 ## Warmup
 
 Both providers support warmup for faster first response, but the mechanism differs:

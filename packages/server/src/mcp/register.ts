@@ -10,14 +10,16 @@ import { registerSystemTools } from './system/index.js';
 import { registerWindowTools } from './window/index.js';
 import { registerStorageTools } from './storage/index.js';
 import { registerAppsTools } from './apps/index.js';
+import { registerMarketTools } from './apps/market.js';
 import { registerHttpTools } from './http/index.js';
-import { registerAppDevTools } from './app-dev/index.js';
+import { registerAppDevTools } from './dev/index.js';
 import { registerSandboxTools } from './sandbox/index.js';
 import { registerGuidelineTools } from './guidelines/index.js';
 import { registerReloadTools } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
 import { WindowStateRegistry } from './window-state.js';
 import { ReloadCache } from '../reload/cache.js';
+import { IS_BUNDLED_EXE } from '../config.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
@@ -39,7 +41,10 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerWindowTools(servers.window, getWindowState);
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
-  registerAppDevTools(servers.apps);
+  registerMarketTools(servers.apps);
+  if (!IS_BUNDLED_EXE) {
+    registerAppDevTools(servers.dev);
+  }
   registerReloadTools(servers.system, getReloadCache, getWindowState);
 }
 
@@ -53,11 +58,23 @@ export function formatToolDisplay(raw: string): string {
   return raw;
 }
 
+const APP_DEV_TOOLS = [
+  'mcp__dev__read_ts',
+  'mcp__dev__write_ts',
+  'mcp__dev__apply_diff_ts',
+  'mcp__dev__compile',
+  'mcp__dev__compile_component',
+  'mcp__dev__typecheck',
+  'mcp__dev__deploy',
+  'mcp__dev__clone',
+  'mcp__dev__write_json',
+];
+
 /**
  * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
-  return [
+  const all = [
     // Built-in Claude tools
     'WebSearch',
     // System tools
@@ -98,14 +115,22 @@ export function getToolNames(): string[] {
     'mcp__apps__load_skill',
     'mcp__apps__read_config',
     'mcp__apps__write_config',
-    // App development tools
-    'mcp__apps__read_ts',
-    'mcp__apps__write_ts',
-    'mcp__apps__compile',
-    'mcp__apps__typecheck',
-    'mcp__apps__deploy',
+    // App development tools (dev namespace)
+    'mcp__dev__read_ts',
+    'mcp__dev__write_ts',
+    'mcp__dev__apply_diff_ts',
+    'mcp__dev__compile',
+    'mcp__dev__compile_component',
+    'mcp__dev__typecheck',
+    'mcp__dev__deploy',
+    'mcp__dev__clone',
+    'mcp__dev__write_json',
     // Reload cache tools
     'mcp__system__reload_cached',
     'mcp__system__list_reload_options',
+    // Market tools
+    'mcp__apps__market_list',
+    'mcp__apps__market_get',
   ];
+  return IS_BUNDLED_EXE ? all.filter(n => !APP_DEV_TOOLS.includes(n)) : all;
 }

@@ -128,6 +128,23 @@ Streaming notifications follow (no `id` field):
 ← {"id": 4, "result": {"thread": {"id": "thread_def456"}}}
 ```
 
+**Steer an in-flight turn:**
+
+```json
+→ {"method": "turn/steer", "params": {"threadId": "thread_abc123", "input": [{"type": "text", "text": "Actually, focus on the header instead"}], "expectedTurnId": "turn_xyz789"}, "id": 5}
+← {"id": 5, "result": {"turnId": "turn_xyz789"}}
+```
+
+`turn/steer` injects additional user input into an active turn without interrupting it. The `expectedTurnId` must match the currently running turn — if the turn has already completed or a different turn is active, the request fails. This enables mid-response redirection where the AI incorporates the new input into its ongoing response.
+
+**Interrupt a turn:**
+
+```json
+→ {"method": "turn/interrupt", "params": {"threadId": "thread_abc123", "turnId": "turn_xyz789"}, "id": 6}
+← {"id": 6, "result": {}}
+← {"method": "turn/completed", "params": {"status": "interrupted"}}
+```
+
 ### Conversation Primitives
 
 The App Server protocol has three primitives (per the Codex harness blog):
