@@ -32,9 +32,10 @@ export function DrawingOverlay() {
 
   hasStrokesRef.current = hasStrokes
 
-  // Clear canvas when drawing is consumed
+  // Clear canvas when drawing is consumed (hasDrawing: true → false)
+  const prevHasDrawingRef = useRef(false)
   useEffect(() => {
-    if (!hasDrawing && hasStrokes) {
+    if (prevHasDrawingRef.current && !hasDrawing) {
       const canvas = canvasRef.current
       if (canvas) {
         const ctx = canvas.getContext('2d')
@@ -44,7 +45,8 @@ export function DrawingOverlay() {
         }
       }
     }
-  }, [hasDrawing, hasStrokes])
+    prevHasDrawingRef.current = hasDrawing
+  }, [hasDrawing])
 
   // Resize canvas to match window size
   useEffect(() => {
@@ -93,17 +95,23 @@ export function DrawingOverlay() {
 
   // Capture screen with drawing overlay
   const captureScreenWithDrawing = useCallback(async () => {
+    console.log('[Drawing] captureScreenWithDrawing called')
     const drawingCanvas = canvasRef.current
-    if (!drawingCanvas) return
+    if (!drawingCanvas) {
+      console.log('[Drawing] captureScreenWithDrawing — no canvas ref!')
+      return
+    }
 
     try {
       const dpr = window.devicePixelRatio || 1
+      console.log('[Drawing] calling html2canvas...', { dpr, bodySize: `${document.body.clientWidth}x${document.body.clientHeight}` })
       const screenshot = await html2canvas(document.body, {
         ignoreElements: (element) => element === drawingCanvas,
         useCORS: true,
         logging: false,
         scale: dpr,
       })
+      console.log('[Drawing] html2canvas done', { width: screenshot.width, height: screenshot.height })
 
       const compositeCanvas = document.createElement('canvas')
       compositeCanvas.width = screenshot.width
@@ -115,24 +123,27 @@ export function DrawingOverlay() {
         ctx.drawImage(drawingCanvas, 0, 0, drawingCanvas.width, drawingCanvas.height,
           0, 0, screenshot.width, screenshot.height)
         const dataUrl = compositeCanvas.toDataURL('image/webp', 0.95)
+        console.log('[Drawing] saveDrawing called, dataUrl length:', dataUrl.length)
         saveDrawing(dataUrl)
+        console.log('[Drawing] store state after save:', {
+          hasDrawing: useDesktopStore.getState().hasDrawing,
+          canvasDataUrl: useDesktopStore.getState().canvasDataUrl?.length,
+        })
+      } else {
+        console.log('[Drawing] failed to get composite canvas context')
       }
     } catch (error) {
-      console.error('Failed to capture screen:', error)
+      console.error('[Drawing] html2canvas FAILED:', error)
       const dataUrl = drawingCanvas.toDataURL('image/webp', 0.95)
+      console.log('[Drawing] fallback saveDrawing, dataUrl length:', dataUrl.length)
       saveDrawing(dataUrl)
     }
   }, [saveDrawing])
 
-  // Exit pencil mode and capture
+  // Exit pencil mode — capture is handled by the lifecycle effect below
   const exitPencilMode = useCallback(() => {
     setPencilMode(false)
-    isDrawingRef.current = false
-    lastPointRef.current = null
-    if (hasStrokesRef.current) {
-      captureScreenWithDrawing()
-    }
-  }, [captureScreenWithDrawing, setPencilMode])
+  }, [setPencilMode])
 
   // Double-press Ctrl to toggle pencil mode, Escape to exit
   useEffect(() => {
@@ -159,34 +170,60 @@ export function DrawingOverlay() {
     return () => window.removeEventListener('keyup', handleKeyUp)
   }, [exitPencilMode, setPencilMode])
 
-  // When pencilMode changes externally (e.g. button)
+  // Pencil mode lifecycle: blur on enter, capture on exit
   const prevPencilMode = useRef(false)
   useEffect(() => {
+    console.log('[Drawing] lifecycle effect', { pencilMode, prev: prevPencilMode.current, hasStrokes: hasStrokesRef.current })
     if (pencilMode && !prevPencilMode.current) {
       // Entering pencil mode — blur active element so canvas receives events
+      console.log('[Drawing] ENTERING pencil mode, activeElement:', document.activeElement?.tagName, document.activeElement?.className)
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur()
       }
     }
-    if (prevPencilMode.current && !pencilMode && hasStrokesRef.current) {
-      // Exiting pencil mode — capture
+    if (!pencilMode && prevPencilMode.current && hasStrokesRef.current) {
+      // Exiting pencil mode — capture drawing
+      console.log('[Drawing] EXITING pencil mode with strokes — calling captureScreenWithDrawing')
       isDrawingRef.current = false
       lastPointRef.current = null
       captureScreenWithDrawing()
     }
+    if (!pencilMode && prevPencilMode.current && !hasStrokesRef.current) {
+      console.log('[Drawing] EXITING pencil mode WITHOUT strokes — no capture')
+    }
     prevPencilMode.current = pencilMode
   }, [pencilMode, captureScreenWithDrawing])
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    isDrawingRef.current = true
-    const point = { x: e.clientX, y: e.clientY }
-    lastPointRef.current = point
+  // Native event listeners for drawing.
+  useEffect(() => {
+    if (!pencilMode) return
 
-    // Draw initial dot
     const canvas = canvasRef.current
-    if (canvas) {
+    if (!canvas) return
+
+    console.log('[Drawing] pencilMode ON — attaching listeners', {
+      canvasSize: `${canvas.width}x${canvas.height}`,
+      pointerEvents: getComputedStyle(canvas).pointerEvents,
+      zIndex: getComputedStyle(canvas).zIndex,
+      clipPath: getComputedStyle(canvas).clipPath,
+      dataActive: canvas.getAttribute('data-active'),
+    })
+
+    // Debug: log what element is actually at click point
+    const debugClick = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      console.log('[Drawing] document click — elementFromPoint:', el?.tagName, el?.className, el === canvas ? '(IS CANVAS)' : '(NOT canvas)')
+    }
+    document.addEventListener('click', debugClick, true)
+
+    const onMouseDown = (e: MouseEvent) => {
+      console.log('[Drawing] mousedown', { button: e.button, x: e.clientX, y: e.clientY, target: e.target })
+      if (e.button !== 0) return
+      e.preventDefault()
+      isDrawingRef.current = true
+      const point = { x: e.clientX, y: e.clientY }
+      lastPointRef.current = point
+
       const ctx = canvas.getContext('2d')
       if (ctx) {
         ctx.beginPath()
@@ -196,31 +233,42 @@ export function DrawingOverlay() {
         setHasStrokes(true)
       }
     }
-  }, [])
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current || !lastPointRef.current) return
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDrawingRef.current || !lastPointRef.current) return
+      const currentPoint = { x: e.clientX, y: e.clientY }
+      drawLine(lastPointRef.current, currentPoint)
+      lastPointRef.current = currentPoint
+      setHasStrokes(true)
+    }
 
-    const currentPoint = { x: e.clientX, y: e.clientY }
-    drawLine(lastPointRef.current, currentPoint)
-    lastPointRef.current = currentPoint
-    setHasStrokes(true)
-  }, [drawLine])
+    const onMouseUp = () => {
+      if (!isDrawingRef.current) return
+      console.log('[Drawing] mouseup — stroke complete')
+      isDrawingRef.current = false
+      lastPointRef.current = null
+    }
 
-  const handleMouseUp = useCallback(() => {
-    if (!isDrawingRef.current) return
-    isDrawingRef.current = false
-    lastPointRef.current = null
-  }, [])
+    canvas.addEventListener('mousedown', onMouseDown)
+    canvas.addEventListener('mousemove', onMouseMove)
+    canvas.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('mouseup', onMouseUp)
+
+    return () => {
+      console.log('[Drawing] pencilMode OFF — removing listeners')
+      document.removeEventListener('click', debugClick, true)
+      canvas.removeEventListener('mousedown', onMouseDown)
+      canvas.removeEventListener('mousemove', onMouseMove)
+      canvas.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [pencilMode, drawLine])
 
   return (
     <canvas
       ref={canvasRef}
       className={styles.overlay}
       data-active={pencilMode}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
     />
   )
 }

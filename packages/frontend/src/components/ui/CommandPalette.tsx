@@ -93,7 +93,13 @@ export function CommandPalette() {
       {sessionsModalOpen && <SessionsModal />}
       {settingsModalOpen && <SettingsModal />}
       <div className={styles.container} data-expanded={isExpanded}>
-        {hasDrawing && (
+        {pencilMode && (
+          <div className={styles.drawingIndicator}>
+            <span className={styles.drawingIcon}>&#9998;</span>
+            <span>Drawing&hellip;</span>
+          </div>
+        )}
+        {hasDrawing && !pencilMode && (
           <div className={styles.drawingIndicator}>
             <span className={styles.drawingIcon}>&#9998;</span>
             <span>Drawing attached</span>
