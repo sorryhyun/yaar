@@ -11,7 +11,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getBrowserPool } from '../../lib/browser/index.js';
-import type { BrowserSession, PageState } from '../../lib/browser/index.js';
+import type { BrowserSession } from '../../lib/browser/index.js';
 import { actionEmitter } from '../action-emitter.js';
 import { getAgentId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/live-session.js';

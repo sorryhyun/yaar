@@ -4,4 +4,5 @@
 
 export { BrowserPool, getBrowserPool } from './pool.js';
 export { BrowserSession } from './session.js';
+export type { BrowserSessionUpdate } from './session.js';
 export type { PageState, PageContent } from './types.js';

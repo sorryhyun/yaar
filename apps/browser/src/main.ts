@@ -1,6 +1,7 @@
 /**
- * Browser app — displays live screenshots from Playwright browser sessions.
- * Communicates via App Protocol for refresh commands.
+ * Browser app — displays live screenshots from browser sessions.
+ * Subscribes to SSE (/api/browser/{sessionId}/events) for real-time updates.
+ * Also registers with App Protocol for state queries and manual commands.
  */
 
 const root = document.getElementById('app');
@@ -154,6 +155,7 @@ const els = {
 };
 
 let currentUrl = initialUrl;
+let lastVersion = -1;
 
 function updateUrlBar(url: string, title?: string) {
   currentUrl = url;
@@ -205,7 +207,33 @@ function clearDisplay() {
   els.titleText.textContent = '';
 }
 
-// User clicks on the screenshot area — signal takeover
+// ── SSE subscription for live updates ─────────────────────────────────
+
+if (sessionId) {
+  const evtSource = new EventSource(`/api/browser/${sessionId}/events`);
+
+  evtSource.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data) as { url: string; title: string; version: number };
+      // Skip if we've already processed this version
+      if (data.version <= lastVersion) return;
+      lastVersion = data.version;
+
+      if (data.url) updateUrlBar(data.url, data.title);
+      refreshScreenshot();
+    } catch {
+      // ignore malformed events
+    }
+  };
+
+  evtSource.onerror = () => {
+    // EventSource auto-reconnects; if the session is gone the 404 will
+    // stop reconnection attempts after a few tries.
+  };
+}
+
+// ── User clicks on the screenshot area — signal takeover ──────────────
+
 els.screenshotArea.addEventListener('click', () => {
   if (currentUrl === 'about:blank') return;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,7 +243,8 @@ els.screenshotArea.addEventListener('click', () => {
   }
 });
 
-// Register with App Protocol
+// ── Register with App Protocol (for state queries + manual commands) ──
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const yaar = (window as any).yaar;
 if (yaar?.app?.register) {

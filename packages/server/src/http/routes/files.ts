@@ -95,6 +95,71 @@ export async function handleFileRoutes(
     return true;
   }
 
+  // SSE stream for browser session updates
+  // URL format: /api/browser/{sessionId}/events
+  const browserEventsMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/events$/);
+  if (browserEventsMatch && req.method === 'GET') {
+    const sessionId = decodeURIComponent(browserEventsMatch[1]);
+    try {
+      const { getBrowserPool } = await import('../../lib/browser/index.js');
+      const session = getBrowserPool().getSession(sessionId);
+      if (!session) {
+        sendError(res, 'Browser session not found', 404);
+        return true;
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      });
+
+      // Send current state immediately so the client doesn't miss anything
+      const initial = JSON.stringify({
+        url: session.currentUrl,
+        title: session.currentTitle,
+        version: session.version,
+      });
+      res.write(`data: ${initial}\n\n`);
+
+      const cleanup = () => {
+        clearInterval(heartbeat);
+        session.off('updated', onUpdate);
+        session.off('closed', onClosed);
+      };
+
+      // Stream subsequent updates
+      const onUpdate = (update: { url: string; title: string; version: number }) => {
+        if (res.destroyed) {
+          cleanup();
+          return;
+        }
+        res.write(`data: ${JSON.stringify(update)}\n\n`);
+      };
+      const onClosed = () => {
+        if (!res.destroyed) res.end();
+        cleanup();
+      };
+
+      // Keep connection alive through proxies
+      const heartbeat = setInterval(() => {
+        if (res.destroyed) {
+          cleanup();
+          return;
+        }
+        res.write(': heartbeat\n\n');
+      }, 30_000);
+
+      session.on('updated', onUpdate);
+      session.on('closed', onClosed);
+      req.on('close', cleanup);
+    } catch {
+      sendError(res, 'Browser not available', 404);
+    }
+    return true;
+  }
+
   // Render PDF page as image
   // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
   const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);

@@ -3,8 +3,12 @@
  *
  * Each session tracks its bound YAAR window, current URL, and latest screenshot.
  * Screenshots are stored in memory as JPEG buffers and served via HTTP.
+ *
+ * Emits 'updated' events after each state change so listeners (SSE, etc.)
+ * can push live updates to the browser app iframe.
  */
 
+import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
 import type { PageState, PageContent } from './types.js';
 
@@ -13,18 +17,26 @@ const SCREENSHOT_HEIGHT = 800;
 const SCREENSHOT_QUALITY = 80;
 const TEXT_SNIPPET_LENGTH = 500;
 
-export class BrowserSession {
+export interface BrowserSessionUpdate {
+  url: string;
+  title: string;
+  version: number;
+}
+
+export class BrowserSession extends EventEmitter {
   readonly id: string;
   windowId: string | undefined;
   currentUrl = 'about:blank';
   currentTitle = '';
   lastScreenshot: Buffer | null = null;
   lastActivity = Date.now();
+  version = 0;
 
   private cdp: CDPClient;
   private closed = false;
 
   private constructor(id: string, cdp: CDPClient) {
+    super();
     this.id = id;
     this.cdp = cdp;
   }
@@ -56,6 +68,16 @@ export class BrowserSession {
 
   private touch() {
     this.lastActivity = Date.now();
+  }
+
+  /** Bump version and emit 'updated' so SSE listeners can push to the browser app. */
+  private notifyUpdate(): void {
+    this.version++;
+    this.emit('updated', {
+      url: this.currentUrl,
+      title: this.currentTitle,
+      version: this.version,
+    } satisfies BrowserSessionUpdate);
   }
 
   private async takeScreenshot(): Promise<Buffer> {
@@ -109,7 +131,9 @@ export class BrowserSession {
     await new Promise((r) => setTimeout(r, 500));
 
     if (!this.closed) await this.takeScreenshot();
-    return this.getPageState();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
   }
 
   async click(selector?: string, text?: string): Promise<PageState> {
@@ -179,7 +203,9 @@ export class BrowserSession {
     await new Promise((r) => setTimeout(r, 500));
 
     if (!this.closed) await this.takeScreenshot();
-    return this.getPageState();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
   }
 
   async type(selector: string, text: string): Promise<PageState> {
@@ -211,7 +237,9 @@ export class BrowserSession {
     });
 
     if (!this.closed) await this.takeScreenshot();
-    return this.getPageState();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
   }
 
   async press(key: string): Promise<PageState> {
@@ -252,7 +280,9 @@ export class BrowserSession {
 
     await new Promise((r) => setTimeout(r, 300));
     if (!this.closed) await this.takeScreenshot();
-    return this.getPageState();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
   }
 
   async scroll(direction: 'up' | 'down', amount = 500): Promise<PageState> {
@@ -265,7 +295,9 @@ export class BrowserSession {
 
     await new Promise((r) => setTimeout(r, 300));
     if (!this.closed) await this.takeScreenshot();
-    return this.getPageState();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
   }
 
   async screenshot(): Promise<Buffer> {
@@ -331,6 +363,8 @@ export class BrowserSession {
     if (this.closed) return;
     this.closed = true;
     this.cdp.close();
+    this.emit('closed');
+    this.removeAllListeners();
   }
 
   get isClosed(): boolean {
