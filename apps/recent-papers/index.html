@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recent Papers</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=!0;function s(r,n){window.parent.postMessage({type:"yaar:capture-response",requestId:r,imageData:n},"*")}function o(r,n){for(var d=r.querySelectorAll("*"),u=n.querySelectorAll("*"),i=0;i<d.length&&i<u.length;i++){var t=window.getComputedStyle(d[i]);u[i].setAttribute("style",t.cssText)}var a=window.getComputedStyle(r);n.setAttribute("style",a.cssText)}function e(r,n,d,u){var i=new Blob([r],{type:"image/svg+xml;charset=utf-8"}),t=URL.createObjectURL(i),a=new Image;a.onload=function(){var f=document.createElement("canvas");f.width=n,f.height=d;var p=f.getContext("2d");p.drawImage(a,0,0,n,d),URL.revokeObjectURL(t),u(f.toDataURL("image/png"))},a.onerror=function(){URL.revokeObjectURL(t),u(null)},a.src=t}window.addEventListener("message",function(r){if(!(!r.data||r.data.type!=="yaar:capture-request")){var n=r.data.requestId,d=null;try{var u=document.querySelectorAll("canvas");if(u.length>0){for(var i=null,t=0,a=0;a<u.length;a++){var f=u[a].width*u[a].height;f>t&&(t=f,i=u[a])}i&&(d=i.toDataURL("image/png"))}if(d){s(n,d);return}var p=document.querySelectorAll("svg");if(p.length>0){for(var i=null,t=0,a=0;a<p.length;a++){var c=p[a].getBoundingClientRect(),f=c.width*c.height;f>t&&(t=f,i=p[a])}if(i){var v=new XMLSerializer,w=v.serializeToString(i),c=i.getBoundingClientRect();e(w,c.width||300,c.height||150,function(j){s(n,j)});return}}var l=document.body;if(l){var h=Math.min(l.scrollWidth,window.innerWidth)||window.innerWidth||800,g=Math.min(l.scrollHeight,window.innerHeight)||window.innerHeight||600,y=l.cloneNode(!0);o(l,y);for(var m=y.querySelectorAll("script,iframe"),a=0;a<m.length;a++)m[a].remove();var q="http://www.w3.org/1999/xhtml",b="http://www.w3.org/2000/svg",I=new XMLSerializer().serializeToString(y),w='<svg xmlns="'+b+'" width="'+h+'" height="'+g+'"><foreignObject width="100%" height="100%"><body xmlns="'+q+'" style="margin:0;padding:0;">'+I+"</body></foreignObject></svg>";e(w,h,g,function(S){s(n,S)});return}}catch{}s(n,null)}})})(),function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=!0;function s(o){return o.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{},window.yaar.storage={async save(o,e){var r;typeof e=="string"?r=e:e instanceof Blob?r=await e.arrayBuffer():e instanceof ArrayBuffer?r=e:e instanceof Uint8Array?r=e.buffer.slice(e.byteOffset,e.byteOffset+e.byteLength):r=String(e);var n=await fetch("/api/storage/"+s(o),{method:"POST",body:r});if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Save failed")}return n.json()},async read(o,e){var r=e&&e.as||"auto",n=await fetch("/api/storage/"+s(o));if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Read failed")}if(r==="blob")return n.blob();if(r==="arraybuffer")return n.arrayBuffer();if(r==="json")return n.json();if(r==="text")return n.text();var u=n.headers.get("content-type")||"";return u.includes("json")?n.json():u.startsWith("text/")?n.text():n.blob()},async list(o){var e=o?s(o):"",r=await fetch("/api/storage/"+e+"?list=true");if(!r.ok){var n=await r.json().catch(function(){return{error:r.statusText}});throw new Error(n.error||"List failed")}return r.json()},async remove(o){var e=await fetch("/api/storage/"+s(o),{method:"DELETE"});if(!e.ok){var r=await e.json().catch(function(){return{error:e.statusText}});throw new Error(r.error||"Delete failed")}return e.json()},url:function(o){return"/api/storage/"+s(o)}}}(),function(){if(!window.__yaarFetchProxyInstalled){window.__yaarFetchProxyInstalled=!0;var s=window.fetch.bind(window);window.fetch=function(o,e){var r;if(o instanceof Request?r=o.url:r=String(o),r.startsWith("/")||r.startsWith("./")||r.startsWith("../"))return s(o,e);try{var n=new URL(r,location.origin);if(n.origin===location.origin)return s(o,e)}catch{return s(o,e)}var d=e&&e.method||(o instanceof Request?o.method:"GET"),u={};e&&e.headers?e.headers instanceof Headers?e.headers.forEach(function(t,a){u[a]=t}):Array.isArray(e.headers)?e.headers.forEach(function(t){u[t[0]]=t[1]}):u=Object.assign({},e.headers):o instanceof Request&&o.headers.forEach(function(t,a){u[a]=t});var i;return e&&e.body!=null?typeof e.body=="string"?i=Promise.resolve(e.body):i=new Response(e.body).text():o instanceof Request&&d!=="GET"&&d!=="HEAD"?i=o.text():i=Promise.resolve(void 0),i.then(function(t){var a={url:r,method:d,headers:u};return t!==void 0&&(a.body=t),s("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(a)})}).then(function(t){return t.ok?t.json():t.json().then(function(a){throw new Error(a.error||"Fetch proxy error: "+t.status)})}).then(function(t){var a;if(t.bodyEncoding==="base64"){for(var f=atob(t.body),p=new Uint8Array(f.length),c=0;c<f.length;c++)p[c]=f.charCodeAt(c);a=p.buffer}else a=t.body;return new Response(a,{status:t.status,statusText:t.statusText,headers:t.headers})})}}}(),function(){if(!window.__yaarAppProtocolInstalled){window.__yaarAppProtocolInstalled=!0,window.yaar=window.yaar||{};var s=null;window.yaar.app={register:function(o){s=o,window.parent.postMessage({type:"yaar:app-ready",appId:o.appId},"*")},sendInteraction:function(o){window.parent.postMessage({type:"yaar:app-interaction",content:typeof o=="string"?o:JSON.stringify(o)},"*")}},window.addEventListener("message",function(o){if(!(!o.data||!o.data.type)){var e=o.data,r=e.requestId;if(e.type==="yaar:app-manifest-request"){if(!s){window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:null,error:"No app registered"},"*");return}var n={appId:s.appId,name:s.name,state:{},commands:{}};if(s.state)for(var d in s.state){var u=s.state[d];n.state[d]={description:u.description},u.schema&&(n.state[d].schema=u.schema)}if(s.commands)for(var d in s.commands){var i=s.commands[d];n.commands[d]={description:i.description},i.params&&(n.commands[d].params=i.params),i.returns&&(n.commands[d].returns=i.returns)}window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:n},"*");return}if(e.type==="yaar:app-query-request"){if(!s||!s.state||!s.state[e.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:"Unknown state key: "+e.stateKey},"*");return}try{var t=s.state[e.stateKey].handler();t&&typeof t.then=="function"?t.then(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:a},"*")}).catch(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}):window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}return}if(e.type==="yaar:app-command-request"){if(!s||!s.commands||!s.commands[e.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:"Unknown command: "+e.command},"*");return}try{var t=s.commands[e.command].handler(e.params);t&&typeof t.then=="function"?t.then(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:f},"*")}).catch(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(f)},"*")}):window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(a)},"*")}return}}})}}();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var D=document.createElement("div");D.innerHTML=`
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1117;
+      --panel: #161a22;
+      --muted: #9aa3b2;
+      --text: #e7ecf3;
+      --accent: #6ea8fe;
+      --border: #2a3140;
+      --good: #9ad08f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-y: auto;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+    .top { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-bottom: 14px; }
+    h1 { margin:0; font-size: 20px; }
+    .spacer { flex:1; }
+    .muted { color: var(--muted); font-size: 13px; }
+    button, select {
+      background: #202838; color: var(--text); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 10px; font: inherit; cursor: pointer;
+    }
+    button:hover { border-color: #3b4660; }
+    .recommend-btn { border-color: #385995; }
+    .recommend-box {
+      margin-top: 10px;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #141a25;
+      display: none;
+    }
+    .recommend-title { margin: 0 0 8px; color: var(--good); font-size: 14px; }
+    .recommend-item { margin: 0 0 8px; font-size: 13px; color: #d5deea; }
+    .recommend-item:last-child { margin-bottom: 0; }
+    .recommend-item a { color: var(--accent); text-decoration: none; }
+    .recommend-item a:hover { text-decoration: underline; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .card-inner { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
+    .thumb { width: 100%; height: 100%; min-height: 130px; object-fit: cover; background: #11151f; }
+    .content { padding: 12px 14px 14px 0; }
+    .title { margin: 0 0 8px; font-size: 17px; line-height: 1.3; }
+    .title a { color: var(--text); text-decoration: none; }
+    .title a:hover { color: var(--accent); text-decoration: underline; }
+    .meta { display:flex; gap:10px; flex-wrap:wrap; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .summary { margin: 0; color: #cdd6e3; font-size: 14px; line-height: 1.45; }
+    .links { margin-top: 10px; display:flex; gap:10px; }
+    .links a { color: var(--accent); font-size: 13px; text-decoration: none; }
+    .links a:hover { text-decoration: underline; }
+    .empty { padding: 24px; text-align:center; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); }
+    @media (max-width: 760px) {
+      .card-inner { grid-template-columns: 1fr; }
+      .content { padding: 0 12px 12px 12px; }
+      .thumb { min-height: 180px; }
+    }
+  </style>
+  <div class="wrap">
+    <div class="top">
+      <h1>\u{1F4DA} Recent Papers</h1>
+      <span class="muted">Source: Hugging Face Daily Papers</span>
+      <div class="spacer"></div>
+
+      <label class="muted" for="limit">Limit</label>
+      <select id="limit">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="40">40</option>
+      </select>
+
+      <label class="muted" for="dayRange">Days</label>
+      <select id="dayRange">
+        <option value="all" selected>All</option>
+        <option value="1">1 day</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+
+      <label class="muted" for="sortBy">Sort</label>
+      <select id="sortBy">
+        <option value="newest" selected>Newest</option>
+        <option value="oldest">Oldest</option>
+        <option value="vote">Most votes</option>
+        <option value="comments">Most comments</option>
+        <option value="title">Title (A\u2192Z)</option>
+      </select>
+
+      <button id="recommend2" class="recommend-btn">Recommend 2 papers</button>
+      <button id="refresh">Refresh</button>
+    </div>
+    <div id="status" class="muted">Loading\u2026</div>
+    <div id="recommendations" class="recommend-box"></div>
+    <div id="list" class="grid" style="margin-top:10px"></div>
+  </div>
+`;document.body.appendChild(D);var S=document.getElementById("status"),$=document.getElementById("list"),x=document.getElementById("limit"),k=document.getElementById("dayRange"),p=document.getElementById("sortBy"),f=document.getElementById("recommendations"),M=document.getElementById("recommend2"),N=document.getElementById("refresh"),u=[],o=[],m=[],b={},v=!1;function F(e){if(!e)return"Unknown date";let t=new Date(e);return Number.isNaN(t.getTime())?e:t.toLocaleString()}function I(e){return e?.paper?.publishedAt||e?.publishedAt}function s(e){let t=I(e);if(!t)return 0;let r=new Date(t).getTime();return Number.isFinite(r)?r:0}function g(e){let t=e?.paper?.upvotes??e?.upvotes??0;return Number.isFinite(t)?t:0}function d(e){let t=e?.numComments??0;return Number.isFinite(t)?t:0}function c(e){return e?.paper?.id||"unknown"}function y(e){return e?.paper?.title||e?.title||"Untitled paper"}function B(e){return e?.paper?.ai_summary||e?.summary||e?.paper?.summary||"No summary available."}function P(){let e=k.value,t=p.value,r=[...u];if(e!=="all"){let n=Number(e);if(Number.isFinite(n)&&n>0){let a=Date.now()-n*24*60*60*1e3;r=r.filter(i=>s(i)>=a)}}t==="newest"?r.sort((n,a)=>s(a)-s(n)):t==="oldest"?r.sort((n,a)=>s(n)-s(a)):t==="vote"?r.sort((n,a)=>{let i=g(a)-g(n);if(i!==0)return i;let h=d(a)-d(n);return h!==0?h:s(a)-s(n)}):t==="comments"?r.sort((n,a)=>d(a)-d(n)):t==="title"&&r.sort((n,a)=>y(n).localeCompare(y(a))),o=r}function T(){if(!m.length){f.style.display="none",f.innerHTML="";return}f.style.display="block",f.innerHTML=`
+    <h3 class="recommend-title">\u{1F916} Today's 2 recommended papers</h3>
+    ${m.map((e,t)=>`
+      <p class="recommend-item">
+        <strong>${t+1}.</strong>
+        <a href="https://huggingface.co/papers/${e.id}" target="_blank" rel="noreferrer">${e.title}</a>
+        \u2014 ${e.reason} (\u{1F44D} ${e.upvotes}, \u{1F4AC} ${e.comments})
+      </p>
+    `).join("")}
+  `}function w(){if(S.textContent=v?"Loading papers...":`Showing ${o.length} of ${u.length} papers \u2022 Last updated ${new Date().toLocaleTimeString()}`,T(),!o.length){$.innerHTML='<div class="empty">No papers available for this filter.</div>';return}$.innerHTML=o.map(e=>{let t=c(e),r=y(e),n=B(e),a=I(e),i=e?.organization?.fullname||e?.organization?.name,h=d(e),H=g(e);return`
+        <article class="card">
+          <div class="card-inner">
+            <img class="thumb" src="${e?.thumbnail||"https://huggingface.co/front/assets/huggingface_logo-noborder.svg"}" alt="thumbnail for ${r.replace(/"/g,"&quot;")}" loading="lazy" />
+            <div class="content">
+              <h2 class="title"><a href="https://huggingface.co/papers/${t}" target="_blank" rel="noreferrer">${r}</a></h2>
+              <div class="meta">
+                <span>\u{1F5D3} ${F(a)}</span>
+                <span>\u{1F44D} ${H}</span>
+                <span>\u{1F4AC} ${h} comments</span>
+                ${i?`<span>\u{1F3E2} ${i}</span>`:""}
+              </div>
+              <p class="summary">${n}</p>
+              <div class="links">
+                <a href="https://huggingface.co/papers/${t}" target="_blank" rel="noreferrer">Hugging Face</a>
+                <a href="https://arxiv.org/abs/${t}" target="_blank" rel="noreferrer">arXiv</a>
+              </div>
+            </div>
+          </div>
+        </article>
+      `}).join("")}function C(e){return e==="vote"?"trending":"publishedAt"}async function E(e){let t=String(e||"").trim();if(!t)throw new Error("Missing paper id");if(b[t])return b[t];let r=await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(t)}`);if(!r.ok)throw new Error(`HTTP ${r.status}`);let n=await r.json(),a={id:n?.id||t,title:n?.title||"",summary:n?.summary||"",aiSummary:n?.ai_summary||"",keywords:Array.isArray(n?.ai_keywords)?n.ai_keywords:[],authors:Array.isArray(n?.authors)?n.authors.map(i=>i?.name).filter(Boolean):[],upvotes:Number(n?.upvotes||0),publishedAt:n?.publishedAt||"",projectPage:n?.projectPage||"",githubRepo:n?.githubRepo||"",githubStars:Number(n?.githubStars||0),links:{huggingFace:`https://huggingface.co/papers/${n?.id||t}`,arxiv:`https://arxiv.org/abs/${n?.id||t}`}};return b[t]=a,a}async function l(){if(!v){v=!0,w();try{let e=Number(x.value||20),t=C(p.value),r=await fetch(`https://huggingface.co/api/daily_papers?limit=${e}&sort=${t}`);if(!r.ok)throw new Error(`HTTP ${r.status}`);let n=await r.json();u=Array.isArray(n)?n:[],P()}catch(e){u=[],o=[],S.textContent=`Failed to load papers: ${e?.message||String(e)}`}finally{v=!1,w()}}}function L(){P(),w()}function R(e){let t={event:"recent-papers:recommend-2",source:e,date:new Date().toISOString(),context:{limit:Number(x.value||20),dayRange:k.value,sortBy:p.value,visibleCount:o.length},papers:o.slice(0,Math.max(1,Number(x.value||20))).map(r=>({id:c(r),title:y(r),summary:r?.summary||r?.paper?.summary||"",aiSummary:r?.paper?.ai_summary||"",upvotes:g(r),comments:d(r),publishedAt:I(r),authors:(r?.paper?.authors||[]).map(n=>n?.name).filter(Boolean),links:{huggingFace:`https://huggingface.co/papers/${c(r)}`,arxiv:`https://arxiv.org/abs/${c(r)}`}}))};window.yaar?.app?.sendInteraction?.(t)}N.addEventListener("click",()=>{l()});x.addEventListener("change",()=>{l()});k.addEventListener("change",()=>{L()});p.addEventListener("change",async()=>{p.value==="vote"||p.value==="newest"?await l():L()});M.addEventListener("click",()=>{R("button")});l();var A=window.yaar?.app;A&&A.register({appId:"recent-papers",name:"Recent Papers",state:{papers:{description:"Current filtered paper list loaded in the UI",handler:()=>o.map(e=>({id:c(e),title:y(e),summary:B(e),upvotes:g(e),comments:d(e)}))},recommendations:{description:"Current recommended papers",handler:()=>m},paperDetailsCache:{description:"Cached detailed paper data fetched by paper id",handler:()=>b}},commands:{refresh:{description:"Reload daily papers from Hugging Face",params:{type:"object",properties:{}},handler:async()=>(await l(),{ok:!0,count:o.length})},recommendTop2Today:{description:"Ask the AI agent to recommend 2 papers from current context",params:{type:"object",properties:{}},handler:async()=>(u.length||await l(),R("app-command"),{ok:!0,queued:!0,candidateCount:o.length})},fetchPaperDetails:{description:"Fetch detailed summary/content metadata for one paper by id",params:{type:"object",properties:{id:{type:"string"}},required:["id"]},handler:async e=>({ok:!0,detail:await E(e.id)})},fetchPaperDetailsBatch:{description:"Fetch detailed summary/content metadata for multiple paper ids",params:{type:"object",properties:{ids:{type:"array",items:{type:"string"}}},required:["ids"]},handler:async e=>{let t=Array.isArray(e.ids)?e.ids.filter(Boolean).slice(0,20):[],r=[];for(let n of t)try{r.push(await E(n))}catch(a){r.push({id:n,error:a?.message||String(a)})}return{ok:!0,count:r.length,details:r}}},setRecommendations:{description:"Set AI-generated recommendations to display in the UI",params:{type:"object",properties:{recommendations:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},reason:{type:"string"},upvotes:{type:"number"},comments:{type:"number"}},required:["id","title","reason"]}}},required:["recommendations"]},handler:async e=>(m=(e.recommendations||[]).slice(0,2).map(t=>({id:String(t.id||""),title:String(t.title||"Untitled paper"),reason:String(t.reason||""),upvotes:Number(t.upvotes||0),comments:Number(t.comments||0)})),T(),{ok:!0,count:m.length})}}});
+
+</script>
+</body>
+</html>
