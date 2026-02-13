@@ -52,6 +52,7 @@ export interface TransportOptions {
   images?: string[]; // Base64 data URLs for images (e.g., user drawings)
   monitorId?: string; // Which monitor originated this query (for action routing)
   agentId?: string; // Agent instance ID (for MCP header-based routing)
+  allowedTools?: string[]; // Profile-specific tool subset (overrides default getToolNames())
 }
 
 /**

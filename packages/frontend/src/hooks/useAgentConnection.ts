@@ -151,6 +151,12 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     wsManager.ws.onopen = () => {
       wsManager.reconnectAttempts = 0
       wsManager.notify()
+
+      // Subscribe to the current monitor
+      const activeMonitorId = useDesktopStore.getState().activeMonitorId
+      if (activeMonitorId && wsManager.ws?.readyState === WebSocket.OPEN) {
+        sendEvent(wsManager, { type: 'SUBSCRIBE_MONITOR', monitorId: activeMonitorId })
+      }
     }
 
     wsManager.ws.onmessage = handleMessage
@@ -386,6 +392,19 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
     return unsubscribe
   }, [sendComponentAction])
+
+  useEffect(() => {
+    let previousMonitorId = useDesktopStore.getState().activeMonitorId
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.activeMonitorId !== previousMonitorId) {
+        previousMonitorId = state.activeMonitorId
+        if (wsManager.ws?.readyState === WebSocket.OPEN) {
+          sendEvent(wsManager, { type: 'SUBSCRIBE_MONITOR', monitorId: state.activeMonitorId })
+        }
+      }
+    })
+    return unsubscribe
+  }, [])
 
   return {
     isConnected,

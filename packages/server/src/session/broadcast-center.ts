@@ -17,6 +17,7 @@ export type ConnectionId = string;
 interface ConnectionEntry {
   ws: WebSocket;
   sessionId: SessionId;
+  subscribedMonitors: Set<string>;
 }
 
 export class BroadcastCenter {
@@ -26,7 +27,7 @@ export class BroadcastCenter {
    * Register a WebSocket connection with its session.
    */
   subscribe(connectionId: ConnectionId, ws: WebSocket, sessionId: SessionId): void {
-    this.connections.set(connectionId, { ws, sessionId });
+    this.connections.set(connectionId, { ws, sessionId, subscribedMonitors: new Set() });
     console.log(`[BroadcastCenter] Connection subscribed: ${connectionId} (session: ${sessionId})`);
   }
 
@@ -36,6 +37,19 @@ export class BroadcastCenter {
   unsubscribe(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
     console.log(`[BroadcastCenter] Connection unsubscribed: ${connectionId}`);
+  }
+
+  /**
+   * Subscribe a connection to a specific monitor.
+   * Connections with subscriptions only receive monitor-scoped events for subscribed monitors.
+   * Connections with no subscriptions receive all events (backward compat).
+   */
+  subscribeToMonitor(connectionId: ConnectionId, monitorId: string): void {
+    const entry = this.connections.get(connectionId);
+    if (entry) {
+      entry.subscribedMonitors.add(monitorId);
+      console.log(`[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`);
+    }
   }
 
   /**
@@ -80,6 +94,30 @@ export class BroadcastCenter {
           count++;
         } catch (err) {
           console.error(`[BroadcastCenter] Failed to send session event:`, err);
+        }
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Publish an event to connections in a session that are subscribed to a specific monitor.
+   * Connections with empty subscribedMonitors receive all events (backward compat).
+   * Returns the number of connections that received the event.
+   */
+  publishToMonitor(sessionId: SessionId, monitorId: string, event: ServerEvent): number {
+    let count = 0;
+    const data = JSON.stringify(event);
+    for (const [, entry] of this.connections) {
+      if (entry.sessionId === sessionId && entry.ws.readyState === entry.ws.OPEN) {
+        // Send if: no subscriptions (backward compat) OR subscribed to this monitor
+        if (entry.subscribedMonitors.size === 0 || entry.subscribedMonitors.has(monitorId)) {
+          try {
+            entry.ws.send(data);
+            count++;
+          } catch (err) {
+            console.error(`[BroadcastCenter] Failed to send monitor event:`, err);
+          }
         }
       }
     }

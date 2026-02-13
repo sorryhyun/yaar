@@ -7,6 +7,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServerName } from './server.js';
 import { registerSystemTools } from './system/index.js';
+import { registerDispatchTools } from './system/dispatch.js';
 import { registerWindowTools } from './window/index.js';
 import { registerStorageTools } from './storage/index.js';
 import { registerAppsTools } from './apps/index.js';
@@ -35,6 +36,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   };
 
   registerSystemTools(servers.system);
+  registerDispatchTools(servers.system);
   registerGuidelineTools(servers.system);
   registerHttpTools(servers.system);
   registerSandboxTools(servers.system);
@@ -88,6 +90,8 @@ export function getToolNames(): string[] {
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
     'mcp__system__http_post',
+    // Dispatch
+    'mcp__system__dispatch_task',
     // Sandbox tools
     'mcp__system__run_js',
     // Window tools

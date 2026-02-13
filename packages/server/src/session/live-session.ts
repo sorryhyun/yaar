@@ -120,7 +120,13 @@ export class LiveSession {
    */
   broadcast(event: ServerEvent): void {
     const stamped = this.sequencer.stamp(event);
-    getBroadcastCenter().publishToSession(this.sessionId, stamped);
+    const monitorId = (event as { monitorId?: string }).monitorId;
+    const bc = getBroadcastCenter();
+    if (monitorId) {
+      bc.publishToMonitor(this.sessionId, monitorId, stamped);
+    } else {
+      bc.publishToSession(this.sessionId, stamped);
+    }
   }
 
   /**
@@ -192,7 +198,7 @@ export class LiveSession {
    * Route incoming messages to the appropriate handler.
    * Absorbed from SessionManager.routeMessage().
    */
-  async routeMessage(event: ClientEvent, _connectionId: ConnectionId): Promise<void> {
+  async routeMessage(event: ClientEvent, connectionId: ConnectionId): Promise<void> {
     // Lazy initialize on first message that needs the pool
     if (!this.initialized && (event.type === 'USER_MESSAGE' || event.type === 'WINDOW_MESSAGE' || event.type === 'COMPONENT_ACTION')) {
       const success = await this.ensureInitialized();
@@ -353,6 +359,10 @@ export class LiveSession {
         this.pool?.pushUserInteractions(event.interactions);
         break;
       }
+
+      case 'SUBSCRIBE_MONITOR':
+        getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
+        break;
     }
   }
 

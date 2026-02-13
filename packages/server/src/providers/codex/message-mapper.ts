@@ -223,7 +223,11 @@ export function mapNotification(
 
     default:
       // Skip noisy codex internal events
-      if (method.startsWith('codex/event/')) {
+      if (
+        method.startsWith('codex/event/') ||
+        method === 'thread/tokenUsage/updated' ||
+        method === 'account/rateLimits/updated'
+      ) {
         return null;
       }
       // Log truly unknown events for debugging

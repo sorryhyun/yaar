@@ -47,6 +47,12 @@ export function createWebSocketServer(
     session.addConnection(connectionId, ws);
     broadcastCenter.subscribe(connectionId, ws, session.sessionId);
 
+    // Auto-subscribe to monitor if specified in query params
+    const monitorId = url.searchParams.get('monitorId');
+    if (monitorId) {
+      broadcastCenter.subscribeToMonitor(connectionId, monitorId);
+    }
+
     console.log(`WebSocket client connected: ${connectionId} → session ${session.sessionId}`);
 
     // Send connection status to this connection only

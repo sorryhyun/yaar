@@ -43,12 +43,17 @@ export interface HandleMessageOptions {
   resumeSessionId?: string;
   /** Monitor ID for multi-monitor event stamping */
   monitorId?: string;
+  /** Override the provider's base system prompt (used by task agents with profile prompts) */
+  systemPromptOverride?: string;
+  /** Profile-specific tool subset (passed through to transport) */
+  allowedTools?: string[];
 }
 
 interface AgentContext {
   agentId: string;
   connectionId: ConnectionId;
   sessionId: SessionId;
+  monitorId?: string;
 }
 
 const agentContext = new AsyncLocalStorage<AgentContext>();
@@ -63,6 +68,10 @@ export function getCurrentConnectionId(): ConnectionId | undefined {
 
 export function getSessionId(): SessionId | undefined {
   return agentContext.getStore()?.sessionId;
+}
+
+export function getMonitorId(): string | undefined {
+  return agentContext.getStore()?.monitorId;
 }
 
 /**
@@ -266,14 +275,16 @@ export class AgentSession {
         loadMemory(),
         buildEnvironmentSection(this.provider.providerType),
       ]);
+      const basePrompt = options.systemPromptOverride ?? this.provider.systemPrompt;
       const transportOptions: TransportOptions = {
-        systemPrompt: this.provider.systemPrompt + environment + memory,
+        systemPrompt: basePrompt + environment + memory,
         sessionId: sessionIdToUse,
         forkSession: options.forkSession,
         resumeThread,
         images: images.length > 0 ? images : undefined,
         monitorId: options.monitorId,
         agentId: stableAgentId,
+        allowedTools: options.allowedTools,
       };
       this.hasSentFirstMessage = true;
 
@@ -309,7 +320,7 @@ export class AgentSession {
       );
 
       console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);
-      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId, sessionId: this.liveSessionId }, async () => {
+      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId, sessionId: this.liveSessionId, monitorId: options.monitorId }, async () => {
         console.log(`[AgentSession] ${role} entered agentContext.run`);
         for await (const message of this.provider!.query(fullContent, transportOptions)) {
           if (!this.running) break;

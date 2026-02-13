@@ -11,7 +11,7 @@
 import { ContextTape, type ContextMessage, type ContextSource } from './context.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import { InteractionTimeline } from './interaction-timeline.js';
-import type { ServerEvent, UserInteraction } from '@yaar/shared';
+import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
@@ -24,6 +24,7 @@ import { WindowQueuePolicy } from './context-pool-policies/window-queue-policy.j
 import { ContextAssemblyPolicy } from './context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from './context-pool-policies/reload-cache-policy.js';
 import { WindowConnectionPolicy } from './context-pool-policies/window-connection-policy.js';
+import { getProfile, ORCHESTRATOR_PROFILE } from './profiles.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -318,6 +319,7 @@ export class ContextPool {
       canonicalAgent: canonicalMain,
       resumeSessionId,
       monitorId,
+      allowedTools: ORCHESTRATOR_PROFILE.allowedTools,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
           this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
@@ -402,6 +404,104 @@ export class ContextPool {
     } finally {
       queue.endProcessing();
     }
+  }
+
+  // ── Task dispatch ────────────────────────────────────────────────────
+
+  /**
+   * Dispatch a task to a specialized agent.
+   * The task agent forks the main agent's Claude session (inheriting full conversation context)
+   * and runs with a profile-specific tool subset and system prompt.
+   */
+  async dispatchTask(options: {
+    objective?: string;
+    profile?: string;
+    hint?: string;
+    monitorId?: string;
+    messageId?: string;
+  }): Promise<{
+    status: 'completed' | 'failed' | 'interrupted';
+    summary: string;
+    actions: { type: string; windowId?: string; title?: string }[];
+    error?: string;
+  }> {
+    const monitorId = options.monitorId ?? 'monitor-0';
+    const profile = getProfile(options.profile ?? 'default');
+
+    // 1. Get main agent's session ID for forking
+    const mainAgent = this.agentPool.getMainAgent(monitorId);
+    const parentSessionId = mainAgent?.session.getRawSessionId() ?? undefined;
+
+    // 2. Create task agent
+    const taskAgent = await this.agentPool.createTaskAgent();
+    if (!taskAgent) {
+      return {
+        status: 'failed',
+        summary: '',
+        actions: [],
+        error: 'Agent limit reached — cannot create task agent.',
+      };
+    }
+
+    const taskRole = `task-${options.messageId ?? Date.now()}-${Date.now()}`;
+    taskAgent.currentRole = taskRole;
+
+    // 3. Build prompt (minimal — fork carries context)
+    const prompt = options.objective ?? 'Execute the user request.';
+
+    // 4. Run with fork
+    try {
+      await taskAgent.session.handleMessage(prompt, {
+        role: taskRole,
+        source: 'main',
+        forkSession: !!parentSessionId,
+        parentSessionId,
+        systemPromptOverride: profile.systemPrompt,
+        allowedTools: profile.allowedTools,
+        monitorId,
+      });
+
+      const actions = taskAgent.session.getRecordedActions();
+      const summary = this.formatActionSummary(actions);
+      this.timeline.pushAI(taskRole, options.hint ?? 'task', actions);
+
+      return {
+        status: 'completed',
+        summary,
+        actions: actions.map(a => this.summarizeAction(a)),
+      };
+    } catch (err) {
+      return {
+        status: 'failed',
+        summary: '',
+        actions: [],
+        error: String(err),
+      };
+    } finally {
+      taskAgent.currentRole = null;
+      await this.agentPool.disposeTaskAgent(taskAgent);
+    }
+  }
+
+  private formatActionSummary(actions: OSAction[]): string {
+    if (actions.length === 0) return 'No actions taken.';
+    return actions.map(a => {
+      switch (a.type) {
+        case 'window.create': return `Created window "${a.windowId}"`;
+        case 'window.close': return `Closed window "${a.windowId}"`;
+        case 'window.setContent': return `Updated window "${a.windowId}"`;
+        case 'window.setTitle': return `Set title of "${a.windowId}"`;
+        case 'notification.show': return `Showed notification "${a.title}"`;
+        default: return `Action: ${a.type}`;
+      }
+    }).join('. ') + '.';
+  }
+
+  private summarizeAction(action: OSAction): { type: string; windowId?: string; title?: string } {
+    const result: { type: string; windowId?: string; title?: string } = { type: action.type };
+    if ('windowId' in action) result.windowId = action.windowId;
+    if ('title' in action && typeof action.title === 'string') result.title = action.title;
+    return result;
   }
 
   // ── Window task processing ────────────────────────────────────────────
@@ -725,6 +825,7 @@ export class ContextPool {
     mainAgent: boolean;
     windowAgents: number;
     ephemeralAgents: number;
+    taskAgents: number;
   } {
     const poolStats = this.agentPool.getStats();
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();

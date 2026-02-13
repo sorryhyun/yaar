@@ -118,6 +118,11 @@ export interface AppProtocolReadyEvent {
   windowId: string;
 }
 
+export interface SubscribeMonitorEvent {
+  type: 'SUBSCRIBE_MONITOR';
+  monitorId: string;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -131,7 +136,8 @@ export type ClientEvent =
   | ToastActionEvent
   | UserInteractionEvent
   | AppProtocolResponseEvent
-  | AppProtocolReadyEvent;
+  | AppProtocolReadyEvent
+  | SubscribeMonitorEvent;
 
 // ============ Server → Client Events ============
 

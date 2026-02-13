@@ -349,6 +349,8 @@ export class CodexProvider extends BaseTransport {
       try {
         const result = await this.appServer!.threadFork({
           threadId: options.sessionId,
+          // Override base instructions so task agents get their profile prompt
+          baseInstructions: options.systemPrompt,
         });
         this.currentSession = {
           threadId: result.thread.id,

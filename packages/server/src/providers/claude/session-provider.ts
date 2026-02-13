@@ -63,7 +63,7 @@ export class ClaudeSessionProvider extends BaseTransport {
   /**
    * Get SDK options for queries.
    */
-  private getSDKOptions(resumeSession?: string, systemPrompt?: string, agentId?: string): SDKOptions {
+  private getSDKOptions(resumeSession?: string, systemPrompt?: string, agentId?: string, allowedTools?: string[]): SDKOptions {
     const mcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${getMcpToken()}`,
     };
@@ -78,7 +78,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: ['WebSearch'],
-      allowedTools: getToolNames(),
+      allowedTools: allowedTools ?? getToolNames(),
       maxThinkingTokens: 4096,
       mcpServers: Object.fromEntries(
         MCP_SERVERS.map((name: string) => [
@@ -240,7 +240,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       };
     })();
 
-    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt, options.agentId);
+    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt, options.agentId, options.allowedTools);
 
     // Override model if specified
     if (options.model) {
