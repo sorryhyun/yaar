@@ -10,7 +10,7 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var D=document.createElement("div");D.innerHTML=`
+var _=`
   <style>
     :root {
       color-scheme: dark;
@@ -35,11 +35,13 @@ var D=document.createElement("div");D.innerHTML=`
     h1 { margin:0; font-size: 20px; }
     .spacer { flex:1; }
     .muted { color: var(--muted); font-size: 13px; }
-    button, select {
+    input, button, select {
       background: #202838; color: var(--text); border: 1px solid var(--border);
-      border-radius: 10px; padding: 8px 10px; font: inherit; cursor: pointer;
+      border-radius: 10px; padding: 8px 10px; font: inherit;
     }
+    button { cursor: pointer; }
     button:hover { border-color: #3b4660; }
+    input { min-width: 270px; }
     .recommend-btn { border-color: #385995; }
     .recommend-box {
       margin-top: 10px;
@@ -65,21 +67,30 @@ var D=document.createElement("div");D.innerHTML=`
     .title a:hover { color: var(--accent); text-decoration: underline; }
     .meta { display:flex; gap:10px; flex-wrap:wrap; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
     .summary { margin: 0; color: #cdd6e3; font-size: 14px; line-height: 1.45; }
-    .links { margin-top: 10px; display:flex; gap:10px; }
+    .links { margin-top: 10px; display:flex; gap:10px; flex-wrap: wrap; }
     .links a { color: var(--accent); font-size: 13px; text-decoration: none; }
     .links a:hover { text-decoration: underline; }
+    .tag { display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:99px; font-size:11px; }
     .empty { padding: 24px; text-align:center; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); }
     @media (max-width: 760px) {
       .card-inner { grid-template-columns: 1fr; }
       .content { padding: 0 12px 12px 12px; }
       .thumb { min-height: 180px; }
+      input { min-width: 100%; }
     }
   </style>
   <div class="wrap">
     <div class="top">
       <h1>\u{1F4DA} Recent Papers</h1>
-      <span class="muted">Source: Hugging Face Daily Papers</span>
+      <span class="muted">Sources: Hugging Face + arXiv</span>
       <div class="spacer"></div>
+
+      <label class="muted" for="sourceMode">Source</label>
+      <select id="sourceMode">
+        <option value="huggingface" selected>Hugging Face</option>
+        <option value="arxiv">arXiv</option>
+        <option value="both">Both</option>
+      </select>
 
       <label class="muted" for="limit">Limit</label>
       <select id="limit">
@@ -107,6 +118,8 @@ var D=document.createElement("div");D.innerHTML=`
         <option value="title">Title (A\u2192Z)</option>
       </select>
 
+      <input id="arxivQuery" value="cat:cs.AI OR cat:cs.LG" placeholder="arXiv query (e.g. all:transformer OR cat:cs.AI)" />
+
       <button id="recommend2" class="recommend-btn">Recommend 2 papers</button>
       <button id="refresh">Refresh</button>
     </div>
@@ -114,36 +127,48 @@ var D=document.createElement("div");D.innerHTML=`
     <div id="recommendations" class="recommend-box"></div>
     <div id="list" class="grid" style="margin-top:10px"></div>
   </div>
-`;document.body.appendChild(D);var S=document.getElementById("status"),$=document.getElementById("list"),x=document.getElementById("limit"),k=document.getElementById("dayRange"),p=document.getElementById("sortBy"),f=document.getElementById("recommendations"),M=document.getElementById("recommend2"),N=document.getElementById("refresh"),u=[],o=[],m=[],b={},v=!1;function F(e){if(!e)return"Unknown date";let t=new Date(e);return Number.isNaN(t.getTime())?e:t.toLocaleString()}function I(e){return e?.paper?.publishedAt||e?.publishedAt}function s(e){let t=I(e);if(!t)return 0;let r=new Date(t).getTime();return Number.isFinite(r)?r:0}function g(e){let t=e?.paper?.upvotes??e?.upvotes??0;return Number.isFinite(t)?t:0}function d(e){let t=e?.numComments??0;return Number.isFinite(t)?t:0}function c(e){return e?.paper?.id||"unknown"}function y(e){return e?.paper?.title||e?.title||"Untitled paper"}function B(e){return e?.paper?.ai_summary||e?.summary||e?.paper?.summary||"No summary available."}function P(){let e=k.value,t=p.value,r=[...u];if(e!=="all"){let n=Number(e);if(Number.isFinite(n)&&n>0){let a=Date.now()-n*24*60*60*1e3;r=r.filter(i=>s(i)>=a)}}t==="newest"?r.sort((n,a)=>s(a)-s(n)):t==="oldest"?r.sort((n,a)=>s(n)-s(a)):t==="vote"?r.sort((n,a)=>{let i=g(a)-g(n);if(i!==0)return i;let h=d(a)-d(n);return h!==0?h:s(a)-s(n)}):t==="comments"?r.sort((n,a)=>d(a)-d(n)):t==="title"&&r.sort((n,a)=>y(n).localeCompare(y(a))),o=r}function T(){if(!m.length){f.style.display="none",f.innerHTML="";return}f.style.display="block",f.innerHTML=`
+`;function j(e){if(!e)return"Unknown date";let t=new Date(e);return Number.isNaN(t.getTime())?e:t.toLocaleString()}function s(e){return e.source||"huggingface"}function b(e){return e?.paper?.publishedAt||e?.publishedAt}function d(e){let t=b(e);if(!t)return 0;let r=new Date(t).getTime();return Number.isFinite(r)?r:0}function y(e){let t=e?.paper?.upvotes??e?.upvotes??0;return Number.isFinite(t)?t:0}function l(e){let t=e?.numComments??0;return Number.isFinite(t)?t:0}function f(e){return e?.paper?.id||e?.id||"unknown"}function h(e){return e?.paper?.title||e?.title||"Untitled paper"}function A(e){return e?.paper?.ai_summary||e?.summary||e?.paper?.summary||"No summary available."}function P(e){return e?.arxiv?.absUrl?e.arxiv.absUrl:`https://arxiv.org/abs/${f(e)}`}function R(e){return String(e||"").replace(/\s+/g," ").trim()}function q(e){let t=String(e||"").trim();return t?t.match(/\/abs\/(.+)$/)?.[1]||t:""}function v(e,t){let r=e.getElementsByTagName(t)[0];return R(r?.textContent||"")}function O(e){return e==="vote"?"trending":"publishedAt"}async function X(e,t,r){let n=R(t||"cat:cs.AI OR cat:cs.LG")||"cat:cs.AI OR cat:cs.LG",o=r==="newest"?"submittedDate":"lastUpdatedDate",i=r==="oldest"?"ascending":"descending",x=`https://export.arxiv.org/api/query?search_query=${encodeURIComponent(n)}&start=0&max_results=${Math.max(1,e)}&sortBy=${o}&sortOrder=${i}`,g=await fetch(x);if(!g.ok)throw new Error(`arXiv HTTP ${g.status}`);let D=await g.text(),$=new DOMParser().parseFromString(D,"application/xml");if($.querySelector("parsererror"))throw new Error("arXiv feed parse error");return Array.from($.getElementsByTagName("entry")).map(p=>{let z=v(p,"id"),H=q(z),te=v(p,"title"),re=v(p,"summary"),ae=v(p,"published")||v(p,"updated"),ne=Array.from(p.getElementsByTagName("author")).map(B=>v(B,"name")).filter(Boolean),oe=Array.from(p.getElementsByTagName("link")).find(B=>B.getAttribute("title")==="pdf")?.getAttribute("href")||"",ie=(p.getElementsByTagName("arxiv:primary_category")[0]||p.getElementsByTagName("primary_category")[0])?.getAttribute("term")||"";return{source:"arxiv",id:H,title:te,summary:re,publishedAt:ae,upvotes:0,numComments:0,arxiv:{absUrl:z||`https://arxiv.org/abs/${H}`,pdfUrl:oe||`https://arxiv.org/pdf/${H}.pdf`,primaryCategory:ie,authors:ne}}})}async function Q(e,t){let r=O(t),a=await fetch(`https://huggingface.co/api/daily_papers?limit=${e}&sort=${r}`);if(!a.ok)throw new Error(`HF HTTP ${a.status}`);let n=await a.json();return(Array.isArray(n)?n:[]).map(o=>({...o,source:"huggingface"}))}async function N(e,t){let r=String(e||"").trim();if(!r)throw new Error("Missing paper id");if(t[r])return t[r];let a=await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(r)}`);if(!a.ok)throw new Error(`HTTP ${a.status}`);let n=await a.json(),o={id:n?.id||r,title:n?.title||"",summary:n?.summary||"",aiSummary:n?.ai_summary||"",keywords:Array.isArray(n?.ai_keywords)?n.ai_keywords:[],authors:Array.isArray(n?.authors)?n.authors.map(i=>i?.name).filter(Boolean):[],upvotes:Number(n?.upvotes||0),publishedAt:n?.publishedAt||"",projectPage:n?.projectPage||"",githubRepo:n?.githubRepo||"",githubStars:Number(n?.githubStars||0),links:{huggingFace:`https://huggingface.co/papers/${n?.id||r}`,arxiv:`https://arxiv.org/abs/${n?.id||r}`}};return t[r]=o,o}function se(e,t){if(!t.length){e.style.display="none",e.innerHTML="";return}e.style.display="block",e.innerHTML=`
     <h3 class="recommend-title">\u{1F916} Today's 2 recommended papers</h3>
-    ${m.map((e,t)=>`
+    ${t.map((r,a)=>`
       <p class="recommend-item">
-        <strong>${t+1}.</strong>
-        <a href="https://huggingface.co/papers/${e.id}" target="_blank" rel="noreferrer">${e.title}</a>
-        \u2014 ${e.reason} (\u{1F44D} ${e.upvotes}, \u{1F4AC} ${e.comments})
+        <strong>${a+1}.</strong>
+        <a href="${r.url||`https://arxiv.org/abs/${r.id}`}" target="_blank" rel="noreferrer">${r.title}</a>
+        \u2014 ${r.reason} (\u{1F44D} ${r.upvotes}, \u{1F4AC} ${r.comments})
       </p>
     `).join("")}
-  `}function w(){if(S.textContent=v?"Loading papers...":`Showing ${o.length} of ${u.length} papers \u2022 Last updated ${new Date().toLocaleTimeString()}`,T(),!o.length){$.innerHTML='<div class="empty">No papers available for this filter.</div>';return}$.innerHTML=o.map(e=>{let t=c(e),r=y(e),n=B(e),a=I(e),i=e?.organization?.fullname||e?.organization?.name,h=d(e),H=g(e);return`
-        <article class="card">
-          <div class="card-inner">
-            <img class="thumb" src="${e?.thumbnail||"https://huggingface.co/front/assets/huggingface_logo-noborder.svg"}" alt="thumbnail for ${r.replace(/"/g,"&quot;")}" loading="lazy" />
-            <div class="content">
-              <h2 class="title"><a href="https://huggingface.co/papers/${t}" target="_blank" rel="noreferrer">${r}</a></h2>
-              <div class="meta">
-                <span>\u{1F5D3} ${F(a)}</span>
-                <span>\u{1F44D} ${H}</span>
-                <span>\u{1F4AC} ${h} comments</span>
-                ${i?`<span>\u{1F3E2} ${i}</span>`:""}
-              </div>
-              <p class="summary">${n}</p>
-              <div class="links">
-                <a href="https://huggingface.co/papers/${t}" target="_blank" rel="noreferrer">Hugging Face</a>
-                <a href="https://arxiv.org/abs/${t}" target="_blank" rel="noreferrer">arXiv</a>
-              </div>
-            </div>
+  `}function Z(e){let t=s(e),r=f(e),a=h(e),n=A(e),o=b(e),i=e?.organization?.fullname||e?.organization?.name||e?.arxiv?.primaryCategory,x=l(e),g=y(e);return`
+    <article class="card">
+      <div class="card-inner">
+        <img class="thumb" src="${t==="huggingface"?e?.thumbnail||"https://huggingface.co/front/assets/huggingface_logo-noborder.svg":"https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg"}" alt="thumbnail for ${a.replace(/"/g,"&quot;")}" loading="lazy" />
+        <div class="content">
+          <h2 class="title"><a href="${P(e)}" target="_blank" rel="noreferrer">${a}</a></h2>
+          <div class="meta">
+            <span class="tag">${t==="huggingface"?"Hugging Face":"arXiv"}</span>
+            <span>\u{1F5D3} ${j(o)}</span>
+            <span>\u{1F44D} ${g}</span>
+            <span>\u{1F4AC} ${x} comments</span>
+            ${i?`<span>\u{1F3F7} ${i}</span>`:""}
           </div>
-        </article>
-      `}).join("")}function C(e){return e==="vote"?"trending":"publishedAt"}async function E(e){let t=String(e||"").trim();if(!t)throw new Error("Missing paper id");if(b[t])return b[t];let r=await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(t)}`);if(!r.ok)throw new Error(`HTTP ${r.status}`);let n=await r.json(),a={id:n?.id||t,title:n?.title||"",summary:n?.summary||"",aiSummary:n?.ai_summary||"",keywords:Array.isArray(n?.ai_keywords)?n.ai_keywords:[],authors:Array.isArray(n?.authors)?n.authors.map(i=>i?.name).filter(Boolean):[],upvotes:Number(n?.upvotes||0),publishedAt:n?.publishedAt||"",projectPage:n?.projectPage||"",githubRepo:n?.githubRepo||"",githubStars:Number(n?.githubStars||0),links:{huggingFace:`https://huggingface.co/papers/${n?.id||t}`,arxiv:`https://arxiv.org/abs/${n?.id||t}`}};return b[t]=a,a}async function l(){if(!v){v=!0,w();try{let e=Number(x.value||20),t=C(p.value),r=await fetch(`https://huggingface.co/api/daily_papers?limit=${e}&sort=${t}`);if(!r.ok)throw new Error(`HTTP ${r.status}`);let n=await r.json();u=Array.isArray(n)?n:[],P()}catch(e){u=[],o=[],S.textContent=`Failed to load papers: ${e?.message||String(e)}`}finally{v=!1,w()}}}function L(){P(),w()}function R(e){let t={event:"recent-papers:recommend-2",source:e,date:new Date().toISOString(),context:{limit:Number(x.value||20),dayRange:k.value,sortBy:p.value,visibleCount:o.length},papers:o.slice(0,Math.max(1,Number(x.value||20))).map(r=>({id:c(r),title:y(r),summary:r?.summary||r?.paper?.summary||"",aiSummary:r?.paper?.ai_summary||"",upvotes:g(r),comments:d(r),publishedAt:I(r),authors:(r?.paper?.authors||[]).map(n=>n?.name).filter(Boolean),links:{huggingFace:`https://huggingface.co/papers/${c(r)}`,arxiv:`https://arxiv.org/abs/${c(r)}`}}))};window.yaar?.app?.sendInteraction?.(t)}N.addEventListener("click",()=>{l()});x.addEventListener("change",()=>{l()});k.addEventListener("change",()=>{L()});p.addEventListener("change",async()=>{p.value==="vote"||p.value==="newest"?await l():L()});M.addEventListener("click",()=>{R("button")});l();var A=window.yaar?.app;A&&A.register({appId:"recent-papers",name:"Recent Papers",state:{papers:{description:"Current filtered paper list loaded in the UI",handler:()=>o.map(e=>({id:c(e),title:y(e),summary:B(e),upvotes:g(e),comments:d(e)}))},recommendations:{description:"Current recommended papers",handler:()=>m},paperDetailsCache:{description:"Cached detailed paper data fetched by paper id",handler:()=>b}},commands:{refresh:{description:"Reload daily papers from Hugging Face",params:{type:"object",properties:{}},handler:async()=>(await l(),{ok:!0,count:o.length})},recommendTop2Today:{description:"Ask the AI agent to recommend 2 papers from current context",params:{type:"object",properties:{}},handler:async()=>(u.length||await l(),R("app-command"),{ok:!0,queued:!0,candidateCount:o.length})},fetchPaperDetails:{description:"Fetch detailed summary/content metadata for one paper by id",params:{type:"object",properties:{id:{type:"string"}},required:["id"]},handler:async e=>({ok:!0,detail:await E(e.id)})},fetchPaperDetailsBatch:{description:"Fetch detailed summary/content metadata for multiple paper ids",params:{type:"object",properties:{ids:{type:"array",items:{type:"string"}}},required:["ids"]},handler:async e=>{let t=Array.isArray(e.ids)?e.ids.filter(Boolean).slice(0,20):[],r=[];for(let n of t)try{r.push(await E(n))}catch(a){r.push({id:n,error:a?.message||String(a)})}return{ok:!0,count:r.length,details:r}}},setRecommendations:{description:"Set AI-generated recommendations to display in the UI",params:{type:"object",properties:{recommendations:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},reason:{type:"string"},upvotes:{type:"number"},comments:{type:"number"}},required:["id","title","reason"]}}},required:["recommendations"]},handler:async e=>(m=(e.recommendations||[]).slice(0,2).map(t=>({id:String(t.id||""),title:String(t.title||"Untitled paper"),reason:String(t.reason||""),upvotes:Number(t.upvotes||0),comments:Number(t.comments||0)})),T(),{ok:!0,count:m.length})}}});
+          <p class="summary">${n}</p>
+          <div class="links">
+            ${t==="huggingface"?`<a href="https://huggingface.co/papers/${r}" target="_blank" rel="noreferrer">Hugging Face</a>`:""}
+            <a href="${P(e)}" target="_blank" rel="noreferrer">arXiv</a>
+            ${e?.arxiv?.pdfUrl?`<a href="${e.arxiv.pdfUrl}" target="_blank" rel="noreferrer">PDF</a>`:""}
+          </div>
+        </div>
+      </div>
+    </article>
+  `}function G(e,t){return t.length?`
+    <section style="margin-top: 12px;">
+      <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${e} (${t.length})</h3>
+      <div class="grid">${t.map(r=>Z(r)).join("")}</div>
+    </section>
+  `:`
+      <section style="margin-top: 12px;">
+        <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${e} (0)</h3>
+        <div class="empty">No papers available for this source.</div>
+      </section>
+    `}function J({statusEl:e,listEl:t,recommendBoxEl:r,papers:a,sourcePapers:n,recommendations:o,loading:i,sourceMode:x}){let g=a.filter(c=>s(c)==="huggingface").length,D=a.filter(c=>s(c)==="arxiv").length;if(e.textContent=i?"Loading papers...":`Showing ${a.length} of ${n.length} papers (HF ${g} \u2022 arXiv ${D}) \u2022 Last updated ${new Date().toLocaleTimeString()}`,se(r,o),!a.length){t.innerHTML='<div class="empty">No papers available for this filter.</div>';return}if(x==="both"){let c=a.filter(E=>s(E)==="huggingface"),$=a.filter(E=>s(E)==="arxiv");t.innerHTML=`${G("Hugging Face Papers",c)}${G("arXiv Papers",$)}`;return}t.innerHTML=`<div class="grid">${a.map(c=>Z(c)).join("")}</div>`}var W=document.createElement("div");W.innerHTML=_;document.body.appendChild(W);var Y=document.getElementById("status"),pe=document.getElementById("list"),M=document.getElementById("sourceMode"),k=document.getElementById("limit"),F=document.getElementById("dayRange"),w=document.getElementById("sortBy"),U=document.getElementById("arxivQuery"),le=document.getElementById("recommendations"),ce=document.getElementById("recommend2"),de=document.getElementById("refresh"),I=[],m=[],T=[],C={},S=!1;function V(){let e=F.value,t=w.value,r=[...I];if(e!=="all"){let a=Number(e);if(Number.isFinite(a)&&a>0){let n=Date.now()-a*24*60*60*1e3;r=r.filter(o=>d(o)>=n)}}t==="newest"?r.sort((a,n)=>d(n)-d(a)):t==="oldest"?r.sort((a,n)=>d(a)-d(n)):t==="vote"?r.sort((a,n)=>{let o=y(n)-y(a);if(o!==0)return o;let i=l(n)-l(a);return i!==0?i:d(n)-d(a)}):t==="comments"?r.sort((a,n)=>l(n)-l(a)):t==="title"&&r.sort((a,n)=>h(a).localeCompare(h(n))),m=r}function L(){J({statusEl:Y,listEl:pe,recommendBoxEl:le,papers:m,sourcePapers:I,recommendations:T,loading:S,sourceMode:M.value})}async function u(){if(!S){S=!0,L();try{let e=Number(k.value||20),t=M.value,r=[],a=[];if(t==="huggingface"||t==="both"){let n=t==="both"?Math.ceil(e/2):e;r=await Q(n,w.value)}if(t==="arxiv"||t==="both"){let n=t==="both"?Math.floor(e/2)||1:e;a=await X(n,U.value,w.value)}I=[...r,...a],V()}catch(e){I=[],m=[],Y.textContent=`Failed to load papers: ${e?.message||String(e)}`}finally{S=!1,L()}}}function me(){V(),L()}function ee(e){let t={event:"recent-papers:recommend-2",source:e,date:new Date().toISOString(),context:{mode:M.value,arxivQuery:U.value,limit:Number(k.value||20),dayRange:F.value,sortBy:w.value,visibleCount:m.length},papers:m.slice(0,Math.max(1,Number(k.value||20))).map(r=>({id:f(r),title:h(r),source:s(r),summary:r?.summary||r?.paper?.summary||"",aiSummary:r?.paper?.ai_summary||"",upvotes:y(r),comments:l(r),publishedAt:b(r),authors:s(r)==="arxiv"?r?.arxiv?.authors||[]:(r?.paper?.authors||[]).map(a=>a?.name).filter(Boolean),links:{huggingFace:`https://huggingface.co/papers/${f(r)}`,arxiv:P(r)}}))};window.yaar?.app?.sendInteraction?.(t)}de.addEventListener("click",()=>u());M.addEventListener("change",()=>u());k.addEventListener("change",()=>u());F.addEventListener("change",()=>me());w.addEventListener("change",async()=>u());U.addEventListener("keydown",e=>{e.key==="Enter"&&u()});ce.addEventListener("click",()=>ee("button"));u();var K=window.yaar?.app;K&&K.register({appId:"recent-papers",name:"Recent Papers",state:{papers:{description:"Current filtered paper list loaded in the UI",handler:()=>m.map(e=>({id:f(e),source:s(e),title:h(e),summary:A(e),upvotes:y(e),comments:l(e)}))},recommendations:{description:"Current recommended papers",handler:()=>T},paperDetailsCache:{description:"Cached detailed paper data fetched by paper id",handler:()=>C}},commands:{refresh:{description:"Reload papers from selected sources",params:{type:"object",properties:{}},handler:async()=>(await u(),{ok:!0,count:m.length})},recommendTop2Today:{description:"Ask the AI agent to recommend 2 papers from current context",params:{type:"object",properties:{}},handler:async()=>(I.length||await u(),ee("app-command"),{ok:!0,queued:!0,candidateCount:m.length})},fetchPaperDetails:{description:"Fetch detailed summary/content metadata for one Hugging Face paper by id",params:{type:"object",properties:{id:{type:"string"}},required:["id"]},handler:async e=>({ok:!0,detail:await N(e.id,C)})},fetchPaperDetailsBatch:{description:"Fetch detailed summary/content metadata for multiple Hugging Face paper ids",params:{type:"object",properties:{ids:{type:"array",items:{type:"string"}}},required:["ids"]},handler:async e=>{let t=Array.isArray(e.ids)?e.ids.filter(Boolean).slice(0,20):[],r=[];for(let a of t)try{r.push(await N(a,C))}catch(n){r.push({id:a,error:n?.message||String(n)})}return{ok:!0,count:r.length,details:r}}},setRecommendations:{description:"Set AI-generated recommendations to display in the UI",params:{type:"object",properties:{recommendations:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},reason:{type:"string"},upvotes:{type:"number"},comments:{type:"number"},source:{type:"string"},url:{type:"string"}},required:["id","title","reason"]}}},required:["recommendations"]},handler:async e=>(T=(e.recommendations||[]).slice(0,2).map(t=>({id:String(t.id||""),title:String(t.title||"Untitled paper"),reason:String(t.reason||""),upvotes:Number(t.upvotes||0),comments:Number(t.comments||0),source:t.source||"arxiv",url:String(t.url||"")})),L(),{ok:!0,count:T.length})}}});
 
 </script>
 </body>
