@@ -28,8 +28,10 @@ export function registerAppsTools(server: McpServer): void {
         if (app.hasSkill) flags.push('skill');
         if (app.hasCredentials) flags.push('credentials');
         if (app.appProtocol) flags.push('app-protocol');
+        if (app.hidden) flags.push('hidden');
         const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
         let line = `- ${app.name} (${app.id})${flagStr}`;
+        if (app.description) line += `\n  ${app.description}`;
         if (app.fileAssociations?.length) {
           const assocParts = app.fileAssociations.map(
             (fa) => `${fa.extensions.join(', ')} → ${fa.command}(${fa.paramKey})`,

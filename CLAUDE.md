@@ -153,15 +153,43 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 
 ## Apps System
 
-YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically.
+YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically (unless hidden).
 
 ### How It Works
 
 1. **Frontend startup**: Calls `GET /api/apps` to list apps
-2. **Desktop renders**: Shows one icon per app folder
+2. **Desktop renders**: Shows one icon per non-hidden app folder
 3. **User clicks icon**: Sends `<user_interaction:click>app: {appId}</user_interaction:click>`
 4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
 5. **AI responds**: Uses skill instructions to help user
+
+### `app.json` Schema
+
+Each app folder can contain an `app.json` with optional metadata:
+
+```json
+{
+  "name": "My App",
+  "description": "Brief description of what the app does",
+  "icon": "📦",
+  "hidden": true,
+  "appProtocol": false,
+  "fileAssociations": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name (defaults to title-cased folder name) |
+| `description` | string | Brief description shown in `apps_list` output |
+| `icon` | string | Emoji icon (overridden by `icon.png` if present) |
+| `hidden` | boolean | If true, no desktop icon — AI knows about it via system prompt |
+| `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
+| `fileAssociations` | array | File extensions this app can open |
+
+### System Apps (Hidden)
+
+Apps with `"hidden": true` in `app.json` don't show a desktop icon. Instead, their `SKILL.md` is automatically injected into the AI's system prompt so the AI knows about them immediately. Use this for system capabilities (like storage) that the AI should always know about.
 
 ### Creating a New App
 
@@ -171,7 +199,8 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
    - API endpoints and authentication
    - Available actions
    - Example workflows
-3. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
+3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
+4. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
 
 ### Apps Tools (MCP)
 

@@ -16,10 +16,12 @@ const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']
 export interface AppInfo {
   id: string;
   name: string;
+  description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
   hasCredentials: boolean;
+  hidden?: boolean;
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   fileAssociations?: FileAssociation[];
@@ -64,6 +66,8 @@ export async function listApps(): Promise<AppInfo[]> {
       let icon: string | undefined;
       let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
+      let description: string | undefined;
+      let hidden: boolean | undefined;
       let appProtocol: boolean | undefined;
       let fileAssociations: FileAssociation[] | undefined;
       try {
@@ -72,6 +76,8 @@ export async function listApps(): Promise<AppInfo[]> {
         icon = meta.icon;
         if (icon) iconType = 'emoji';
         displayName = meta.name;
+        if (meta.description) description = meta.description;
+        if (meta.hidden) hidden = true;
         if (meta.appProtocol) appProtocol = true;
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
       } catch {
@@ -108,10 +114,12 @@ export async function listApps(): Promise<AppInfo[]> {
       apps.push({
         id: appId,
         name,
+        ...(description && { description }),
         icon,
         iconType,
         hasSkill,
         hasCredentials: appHasCredentials,
+        ...(hidden && { hidden }),
         isCompiled,
         ...(appProtocol && { appProtocol }),
         ...(fileAssociations && { fileAssociations }),

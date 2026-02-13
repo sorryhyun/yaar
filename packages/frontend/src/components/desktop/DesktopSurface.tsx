@@ -25,10 +25,12 @@ import styles from '@/styles/desktop/DesktopSurface.module.css';
 interface AppInfo {
   id: string;
   name: string;
+  description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
   hasCredentials: boolean;
+  hidden?: boolean;
 }
 
 export function DesktopSurface() {
@@ -158,12 +160,6 @@ export function DesktopSurface() {
   }, []);
 
   useEffect(() => () => clearTimeout(cooldownTimer.current), []);
-
-  const handleStorageClick = useCallback(() => {
-    if (cooldownId === '__storage') return;
-    startCooldown('__storage');
-    sendMessage('<user_interaction:click>storage</user_interaction:click>');
-  }, [sendMessage, cooldownId, startCooldown]);
 
   const handleAppClick = useCallback(
     (appId: string) => {
@@ -335,30 +331,24 @@ export function DesktopSurface() {
 
         {/* Desktop icons */}
         <div className={styles.desktopIcons}>
-          <button
-            className={styles.desktopIcon}
-            onClick={handleStorageClick}
-            disabled={cooldownId === '__storage'}
-          >
-            <span className={styles.iconImage}>🗄️</span>
-            <span className={styles.iconLabel}>Storage</span>
-          </button>
-          {/* Dynamic app icons */}
-          {apps.map((app) => (
-            <button
-              key={app.id}
-              className={styles.desktopIcon}
-              onClick={() => handleAppClick(app.id)}
-              disabled={cooldownId === app.id}
-            >
-              {app.iconType === 'image' ? (
-                <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
-              ) : (
-                <span className={styles.iconImage}>{app.icon || '📦'}</span>
-              )}
-              <span className={styles.iconLabel}>{app.name}</span>
-            </button>
-          ))}
+          {/* Dynamic app icons (hidden apps filtered out) */}
+          {apps
+            .filter((a) => !a.hidden)
+            .map((app) => (
+              <button
+                key={app.id}
+                className={styles.desktopIcon}
+                onClick={() => handleAppClick(app.id)}
+                disabled={cooldownId === app.id}
+              >
+                {app.iconType === 'image' ? (
+                  <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
+                ) : (
+                  <span className={styles.iconImage}>{app.icon || '📦'}</span>
+                )}
+                <span className={styles.iconLabel}>{app.name}</span>
+              </button>
+            ))}
         </div>
 
         {/* Rubber-band selection rectangle */}

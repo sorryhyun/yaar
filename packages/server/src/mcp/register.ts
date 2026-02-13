@@ -21,6 +21,7 @@ import { getSessionHub } from '../session/live-session.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { APP_DEV_ENABLED } from '../config.js';
+import { registerBrowserTools, getBrowserToolNames } from './browser/index.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
@@ -50,6 +51,11 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
     registerAppDevTools(servers.dev);
   }
   registerReloadTools(servers.system, getReloadCache, getWindowState);
+
+  // Browser tools (conditional — only if Chrome/Edge is available)
+  registerBrowserTools(servers.system).catch(() => {
+    // Chrome not found — browser tools unavailable
+  });
 }
 
 /**
@@ -137,6 +143,8 @@ export function getToolNames(): string[] {
     // Market tools
     'mcp__apps__market_list',
     'mcp__apps__market_get',
+    // Browser tools (conditional — only if Playwright is available)
+    ...getBrowserToolNames(),
   ];
   return APP_DEV_ENABLED ? all : all.filter((n) => !APP_DEV_TOOLS.includes(n));
 }

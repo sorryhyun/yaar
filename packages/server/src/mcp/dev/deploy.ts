@@ -26,7 +26,9 @@ export function registerDeployTools(server: McpServer): void {
         sandbox: z.string().describe('Sandbox ID to deploy'),
         appId: z.string().describe('App ID (lowercase with hyphens)'),
         name: z.string().optional().describe('Display name'),
+        description: z.string().optional().describe('Brief description of what the app does'),
         icon: z.string().optional().describe('Emoji icon'),
+        hidden: z.boolean().optional().describe('Hide from desktop (system app, AI-only access)'),
         keepSource: z.boolean().optional().describe('Include src/ in deployed app'),
         skill: z.string().optional().describe('Custom SKILL.md content (## Launch auto-appended)'),
         appProtocol: z
@@ -50,7 +52,9 @@ export function registerDeployTools(server: McpServer): void {
         sandbox: sandboxId,
         appId,
         name,
+        description,
         icon = '🎮',
+        hidden,
         keepSource = true,
         skill,
         appProtocol: explicitAppProtocol,
@@ -165,6 +169,8 @@ export function registerDeployTools(server: McpServer): void {
         const metadata = {
           icon,
           name: displayName,
+          ...(description && { description }),
+          ...(hidden && { hidden: true }),
           ...(hasAppProtocol && { appProtocol: true }),
           ...(fileAssociations?.length && { fileAssociations }),
         };

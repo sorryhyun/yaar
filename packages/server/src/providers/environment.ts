@@ -38,8 +38,11 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push(`- Mode: Standalone executable${IS_DEV_EXE ? ' (dev)' : ''}`);
   }
 
-  if (apps.length > 0) {
-    lines.push(`- Installed apps: ${apps.map((a) => a.id).join(', ')}`);
+  const visibleApps = apps.filter((a) => !a.hidden);
+  const hiddenApps = apps.filter((a) => a.hidden);
+
+  if (visibleApps.length > 0) {
+    lines.push(`- Installed apps: ${visibleApps.map((a) => a.id).join(', ')}`);
   }
 
   if (storage.success && storage.entries && storage.entries.length > 0) {
@@ -47,6 +50,15 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push(`- Storage: ${names}`);
   } else {
     lines.push('- Storage: empty');
+  }
+
+  if (hiddenApps.length > 0) {
+    const systemLines = hiddenApps.map((a) => {
+      let line = `  - **${a.name}**: ${a.description || a.id}`;
+      if (a.isCompiled) line += ` (iframe: /api/apps/${a.id}/static/index.html)`;
+      return line;
+    });
+    lines.push(`- System apps:\n${systemLines.join('\n')}`);
   }
 
   return `\n\n## Environment\n${lines.join('\n')}`;

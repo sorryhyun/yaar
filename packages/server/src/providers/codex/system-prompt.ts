@@ -43,9 +43,6 @@ User interactions (window close, focus, move, resize, etc.) and AI actions appea
 ## Notifications
 Use show_notification for important alerts. They persist in the notification center until dismissed.
 
-## Storage
-You have persistent storage for user data, notes, and files across sessions.
-
 ## Guidelines
 Use guideline(topic) to load reference docs before starting unfamiliar tasks:
 ${APP_DEV_ENABLED ? '- **app_dev** — building and deploying TypeScript apps (workflow, bundled libraries, storage API, app protocol)\n' : ''}- **sandbox** — run_js globals and restrictions

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browser</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=!0;function s(r,n){window.parent.postMessage({type:"yaar:capture-response",requestId:r,imageData:n},"*")}function o(r,n){for(var d=r.querySelectorAll("*"),u=n.querySelectorAll("*"),i=0;i<d.length&&i<u.length;i++){var t=window.getComputedStyle(d[i]);u[i].setAttribute("style",t.cssText)}var a=window.getComputedStyle(r);n.setAttribute("style",a.cssText)}function e(r,n,d,u){var i=new Blob([r],{type:"image/svg+xml;charset=utf-8"}),t=URL.createObjectURL(i),a=new Image;a.onload=function(){var f=document.createElement("canvas");f.width=n,f.height=d;var p=f.getContext("2d");p.drawImage(a,0,0,n,d),URL.revokeObjectURL(t),u(f.toDataURL("image/png"))},a.onerror=function(){URL.revokeObjectURL(t),u(null)},a.src=t}window.addEventListener("message",function(r){if(!(!r.data||r.data.type!=="yaar:capture-request")){var n=r.data.requestId,d=null;try{var u=document.querySelectorAll("canvas");if(u.length>0){for(var i=null,t=0,a=0;a<u.length;a++){var f=u[a].width*u[a].height;f>t&&(t=f,i=u[a])}i&&(d=i.toDataURL("image/png"))}if(d){s(n,d);return}var p=document.querySelectorAll("svg");if(p.length>0){for(var i=null,t=0,a=0;a<p.length;a++){var c=p[a].getBoundingClientRect(),f=c.width*c.height;f>t&&(t=f,i=p[a])}if(i){var v=new XMLSerializer,w=v.serializeToString(i),c=i.getBoundingClientRect();e(w,c.width||300,c.height||150,function(j){s(n,j)});return}}var l=document.body;if(l){var h=Math.min(l.scrollWidth,window.innerWidth)||window.innerWidth||800,g=Math.min(l.scrollHeight,window.innerHeight)||window.innerHeight||600,y=l.cloneNode(!0);o(l,y);for(var m=y.querySelectorAll("script,iframe"),a=0;a<m.length;a++)m[a].remove();var q="http://www.w3.org/1999/xhtml",b="http://www.w3.org/2000/svg",I=new XMLSerializer().serializeToString(y),w='<svg xmlns="'+b+'" width="'+h+'" height="'+g+'"><foreignObject width="100%" height="100%"><body xmlns="'+q+'" style="margin:0;padding:0;">'+I+"</body></foreignObject></svg>";e(w,h,g,function(S){s(n,S)});return}}catch{}s(n,null)}})})(),function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=!0;function s(o){return o.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{},window.yaar.storage={async save(o,e){var r;typeof e=="string"?r=e:e instanceof Blob?r=await e.arrayBuffer():e instanceof ArrayBuffer?r=e:e instanceof Uint8Array?r=e.buffer.slice(e.byteOffset,e.byteOffset+e.byteLength):r=String(e);var n=await fetch("/api/storage/"+s(o),{method:"POST",body:r});if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Save failed")}return n.json()},async read(o,e){var r=e&&e.as||"auto",n=await fetch("/api/storage/"+s(o));if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Read failed")}if(r==="blob")return n.blob();if(r==="arraybuffer")return n.arrayBuffer();if(r==="json")return n.json();if(r==="text")return n.text();var u=n.headers.get("content-type")||"";return u.includes("json")?n.json():u.startsWith("text/")?n.text():n.blob()},async list(o){var e=o?s(o):"",r=await fetch("/api/storage/"+e+"?list=true");if(!r.ok){var n=await r.json().catch(function(){return{error:r.statusText}});throw new Error(n.error||"List failed")}return r.json()},async remove(o){var e=await fetch("/api/storage/"+s(o),{method:"DELETE"});if(!e.ok){var r=await e.json().catch(function(){return{error:e.statusText}});throw new Error(r.error||"Delete failed")}return e.json()},url:function(o){return"/api/storage/"+s(o)}}}(),function(){if(!window.__yaarFetchProxyInstalled){window.__yaarFetchProxyInstalled=!0;var s=window.fetch.bind(window);window.fetch=function(o,e){var r;if(o instanceof Request?r=o.url:r=String(o),r.startsWith("/")||r.startsWith("./")||r.startsWith("../"))return s(o,e);try{var n=new URL(r,location.origin);if(n.origin===location.origin)return s(o,e)}catch{return s(o,e)}var d=e&&e.method||(o instanceof Request?o.method:"GET"),u={};e&&e.headers?e.headers instanceof Headers?e.headers.forEach(function(t,a){u[a]=t}):Array.isArray(e.headers)?e.headers.forEach(function(t){u[t[0]]=t[1]}):u=Object.assign({},e.headers):o instanceof Request&&o.headers.forEach(function(t,a){u[a]=t});var i;return e&&e.body!=null?typeof e.body=="string"?i=Promise.resolve(e.body):i=new Response(e.body).text():o instanceof Request&&d!=="GET"&&d!=="HEAD"?i=o.text():i=Promise.resolve(void 0),i.then(function(t){var a={url:r,method:d,headers:u};return t!==void 0&&(a.body=t),s("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(a)})}).then(function(t){return t.ok?t.json():t.json().then(function(a){throw new Error(a.error||"Fetch proxy error: "+t.status)})}).then(function(t){var a;if(t.bodyEncoding==="base64"){for(var f=atob(t.body),p=new Uint8Array(f.length),c=0;c<f.length;c++)p[c]=f.charCodeAt(c);a=p.buffer}else a=t.body;return new Response(a,{status:t.status,statusText:t.statusText,headers:t.headers})})}}}(),function(){if(!window.__yaarAppProtocolInstalled){window.__yaarAppProtocolInstalled=!0,window.yaar=window.yaar||{};var s=null;window.yaar.app={register:function(o){s=o,window.parent.postMessage({type:"yaar:app-ready",appId:o.appId},"*")},sendInteraction:function(o){window.parent.postMessage({type:"yaar:app-interaction",content:typeof o=="string"?o:JSON.stringify(o)},"*")}},window.addEventListener("message",function(o){if(!(!o.data||!o.data.type)){var e=o.data,r=e.requestId;if(e.type==="yaar:app-manifest-request"){if(!s){window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:null,error:"No app registered"},"*");return}var n={appId:s.appId,name:s.name,state:{},commands:{}};if(s.state)for(var d in s.state){var u=s.state[d];n.state[d]={description:u.description},u.schema&&(n.state[d].schema=u.schema)}if(s.commands)for(var d in s.commands){var i=s.commands[d];n.commands[d]={description:i.description},i.params&&(n.commands[d].params=i.params),i.returns&&(n.commands[d].returns=i.returns)}window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:n},"*");return}if(e.type==="yaar:app-query-request"){if(!s||!s.state||!s.state[e.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:"Unknown state key: "+e.stateKey},"*");return}try{var t=s.state[e.stateKey].handler();t&&typeof t.then=="function"?t.then(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:a},"*")}).catch(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}):window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}return}if(e.type==="yaar:app-command-request"){if(!s||!s.commands||!s.commands[e.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:"Unknown command: "+e.command},"*");return}try{var t=s.commands[e.command].handler(e.params);t&&typeof t.then=="function"?t.then(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:f},"*")}).catch(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(f)},"*")}):window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(a)},"*")}return}}})}}();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var s=document.getElementById("app");if(!s)throw new Error("Missing app root");var i=new URLSearchParams(window.location.search),a=i.get("sessionId")||"",c=/^[a-zA-Z0-9_-]+$/.test(a)?a:"";s.innerHTML=`
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1e1e1e; overflow: hidden; }
+
+    .browser-chrome {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .url-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #3e3e3e;
+      min-height: 40px;
+    }
+
+    .url-bar .lock {
+      font-size: 12px;
+      color: #4caf50;
+      flex-shrink: 0;
+    }
+
+    .url-bar .lock.insecure {
+      color: #ff9800;
+    }
+
+    .url-bar .url-text {
+      flex: 1;
+      font-size: 13px;
+      color: #ccc;
+      background: #3e3e3e;
+      border: none;
+      border-radius: 16px;
+      padding: 6px 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      font-family: inherit;
+    }
+
+    .url-bar .title-text {
+      font-size: 11px;
+      color: #888;
+      flex-shrink: 0;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .screenshot-area {
+      position: relative;
+      overflow: auto;
+      background: #1a1a1a;
+      cursor: pointer;
+    }
+
+    .screenshot-area img {
+      display: block;
+      width: 100%;
+      height: auto;
+      image-rendering: auto;
+    }
+
+    .screenshot-area .placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .loading-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: #4fc3f7;
+      animation: loading 1.5s ease-in-out infinite;
+      display: none;
+    }
+
+    .loading-bar.active {
+      display: block;
+    }
+
+    @keyframes loading {
+      0% { width: 0%; }
+      50% { width: 70%; }
+      100% { width: 100%; opacity: 0; }
+    }
+  </style>
+
+  <div class="browser-chrome">
+    <div class="url-bar">
+      <span id="lock" class="lock">\u{1F512}</span>
+      <input id="url-text" class="url-text" readonly value="about:blank" />
+      <span id="title-text" class="title-text"></span>
+    </div>
+    <div id="screenshot-area" class="screenshot-area">
+      <div id="loading-bar" class="loading-bar"></div>
+      <div id="placeholder" class="placeholder">Waiting for navigation...</div>
+      <img id="screenshot" style="display:none" alt="Browser screenshot" />
+    </div>
+  </div>
+`;var e={lock:document.getElementById("lock"),urlText:document.getElementById("url-text"),titleText:document.getElementById("title-text"),screenshotArea:document.getElementById("screenshot-area"),loadingBar:document.getElementById("loading-bar"),placeholder:document.getElementById("placeholder"),screenshot:document.getElementById("screenshot")},o="about:blank";function l(t,r){o=t,e.urlText.value=t,r&&(e.titleText.textContent=r);try{new URL(t).protocol==="https:"?(e.lock.textContent="\u{1F512}",e.lock.className="lock"):(e.lock.textContent="\u{1F513}",e.lock.className="lock insecure")}catch{e.lock.textContent="\u{1F513}",e.lock.className="lock insecure"}}function d(){let t=Date.now(),r=`/api/browser/${c}/screenshot?t=${t}`;e.loadingBar.classList.add("active"),e.screenshot.onload=()=>{e.placeholder.style.display="none",e.screenshot.style.display="block",e.loadingBar.classList.remove("active")},e.screenshot.onerror=()=>{e.loadingBar.classList.remove("active")},e.screenshot.src=r}function p(){e.screenshot.style.display="none",e.placeholder.style.display="flex",e.placeholder.textContent="Browser closed.",l("about:blank"),e.titleText.textContent=""}e.screenshotArea.addEventListener("click",()=>{if(o==="about:blank")return;let t=window.yaar;t?.app?.sendInteraction&&t.app.sendInteraction({type:"user_takeover",url:o})});var n=window.yaar;n?.app?.register&&n.app.register({appId:"browser",name:"Browser",state:{manifest:{description:"App capabilities",handler:()=>({state:["currentUrl"],commands:["refresh","clear"]})},currentUrl:{description:"Currently displayed URL",handler:()=>o}},commands:{refresh:{description:"Refresh screenshot and update URL bar",handler:t=>(t.url&&l(t.url,t.title),d(),{ok:!0})},clear:{description:"Clear the browser display",handler:()=>(p(),{ok:!0})}}});
+
+</script>
+</body>
+</html>

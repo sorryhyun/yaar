@@ -89,9 +89,6 @@ Button clicks send: \`<user_interaction:click>button "{action}" in window "{titl
 **Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
 **Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.
 
-## Storage
-You have persistent storage for user data, notes, and files across sessions.
-
 ## HTTP Access
 Use http_get/http_post for API calls. Domains require allowlisting.
 Use request_allowing_domain to prompt user for new domain access.

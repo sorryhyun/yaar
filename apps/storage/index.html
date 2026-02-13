@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storage</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=!0;function s(r,n){window.parent.postMessage({type:"yaar:capture-response",requestId:r,imageData:n},"*")}function o(r,n){for(var d=r.querySelectorAll("*"),u=n.querySelectorAll("*"),i=0;i<d.length&&i<u.length;i++){var t=window.getComputedStyle(d[i]);u[i].setAttribute("style",t.cssText)}var a=window.getComputedStyle(r);n.setAttribute("style",a.cssText)}function e(r,n,d,u){var i=new Blob([r],{type:"image/svg+xml;charset=utf-8"}),t=URL.createObjectURL(i),a=new Image;a.onload=function(){var f=document.createElement("canvas");f.width=n,f.height=d;var p=f.getContext("2d");p.drawImage(a,0,0,n,d),URL.revokeObjectURL(t),u(f.toDataURL("image/png"))},a.onerror=function(){URL.revokeObjectURL(t),u(null)},a.src=t}window.addEventListener("message",function(r){if(!(!r.data||r.data.type!=="yaar:capture-request")){var n=r.data.requestId,d=null;try{var u=document.querySelectorAll("canvas");if(u.length>0){for(var i=null,t=0,a=0;a<u.length;a++){var f=u[a].width*u[a].height;f>t&&(t=f,i=u[a])}i&&(d=i.toDataURL("image/png"))}if(d){s(n,d);return}var p=document.querySelectorAll("svg");if(p.length>0){for(var i=null,t=0,a=0;a<p.length;a++){var c=p[a].getBoundingClientRect(),f=c.width*c.height;f>t&&(t=f,i=p[a])}if(i){var v=new XMLSerializer,w=v.serializeToString(i),c=i.getBoundingClientRect();e(w,c.width||300,c.height||150,function(j){s(n,j)});return}}var l=document.body;if(l){var h=Math.min(l.scrollWidth,window.innerWidth)||window.innerWidth||800,g=Math.min(l.scrollHeight,window.innerHeight)||window.innerHeight||600,y=l.cloneNode(!0);o(l,y);for(var m=y.querySelectorAll("script,iframe"),a=0;a<m.length;a++)m[a].remove();var q="http://www.w3.org/1999/xhtml",b="http://www.w3.org/2000/svg",I=new XMLSerializer().serializeToString(y),w='<svg xmlns="'+b+'" width="'+h+'" height="'+g+'"><foreignObject width="100%" height="100%"><body xmlns="'+q+'" style="margin:0;padding:0;">'+I+"</body></foreignObject></svg>";e(w,h,g,function(S){s(n,S)});return}}catch{}s(n,null)}})})(),function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=!0;function s(o){return o.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{},window.yaar.storage={async save(o,e){var r;typeof e=="string"?r=e:e instanceof Blob?r=await e.arrayBuffer():e instanceof ArrayBuffer?r=e:e instanceof Uint8Array?r=e.buffer.slice(e.byteOffset,e.byteOffset+e.byteLength):r=String(e);var n=await fetch("/api/storage/"+s(o),{method:"POST",body:r});if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Save failed")}return n.json()},async read(o,e){var r=e&&e.as||"auto",n=await fetch("/api/storage/"+s(o));if(!n.ok){var d=await n.json().catch(function(){return{error:n.statusText}});throw new Error(d.error||"Read failed")}if(r==="blob")return n.blob();if(r==="arraybuffer")return n.arrayBuffer();if(r==="json")return n.json();if(r==="text")return n.text();var u=n.headers.get("content-type")||"";return u.includes("json")?n.json():u.startsWith("text/")?n.text():n.blob()},async list(o){var e=o?s(o):"",r=await fetch("/api/storage/"+e+"?list=true");if(!r.ok){var n=await r.json().catch(function(){return{error:r.statusText}});throw new Error(n.error||"List failed")}return r.json()},async remove(o){var e=await fetch("/api/storage/"+s(o),{method:"DELETE"});if(!e.ok){var r=await e.json().catch(function(){return{error:e.statusText}});throw new Error(r.error||"Delete failed")}return e.json()},url:function(o){return"/api/storage/"+s(o)}}}(),function(){if(!window.__yaarFetchProxyInstalled){window.__yaarFetchProxyInstalled=!0;var s=window.fetch.bind(window);window.fetch=function(o,e){var r;if(o instanceof Request?r=o.url:r=String(o),r.startsWith("/")||r.startsWith("./")||r.startsWith("../"))return s(o,e);try{var n=new URL(r,location.origin);if(n.origin===location.origin)return s(o,e)}catch{return s(o,e)}var d=e&&e.method||(o instanceof Request?o.method:"GET"),u={};e&&e.headers?e.headers instanceof Headers?e.headers.forEach(function(t,a){u[a]=t}):Array.isArray(e.headers)?e.headers.forEach(function(t){u[t[0]]=t[1]}):u=Object.assign({},e.headers):o instanceof Request&&o.headers.forEach(function(t,a){u[a]=t});var i;return e&&e.body!=null?typeof e.body=="string"?i=Promise.resolve(e.body):i=new Response(e.body).text():o instanceof Request&&d!=="GET"&&d!=="HEAD"?i=o.text():i=Promise.resolve(void 0),i.then(function(t){var a={url:r,method:d,headers:u};return t!==void 0&&(a.body=t),s("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(a)})}).then(function(t){return t.ok?t.json():t.json().then(function(a){throw new Error(a.error||"Fetch proxy error: "+t.status)})}).then(function(t){var a;if(t.bodyEncoding==="base64"){for(var f=atob(t.body),p=new Uint8Array(f.length),c=0;c<f.length;c++)p[c]=f.charCodeAt(c);a=p.buffer}else a=t.body;return new Response(a,{status:t.status,statusText:t.statusText,headers:t.headers})})}}}(),function(){if(!window.__yaarAppProtocolInstalled){window.__yaarAppProtocolInstalled=!0,window.yaar=window.yaar||{};var s=null;window.yaar.app={register:function(o){s=o,window.parent.postMessage({type:"yaar:app-ready",appId:o.appId},"*")},sendInteraction:function(o){window.parent.postMessage({type:"yaar:app-interaction",content:typeof o=="string"?o:JSON.stringify(o)},"*")}},window.addEventListener("message",function(o){if(!(!o.data||!o.data.type)){var e=o.data,r=e.requestId;if(e.type==="yaar:app-manifest-request"){if(!s){window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:null,error:"No app registered"},"*");return}var n={appId:s.appId,name:s.name,state:{},commands:{}};if(s.state)for(var d in s.state){var u=s.state[d];n.state[d]={description:u.description},u.schema&&(n.state[d].schema=u.schema)}if(s.commands)for(var d in s.commands){var i=s.commands[d];n.commands[d]={description:i.description},i.params&&(n.commands[d].params=i.params),i.returns&&(n.commands[d].returns=i.returns)}window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:n},"*");return}if(e.type==="yaar:app-query-request"){if(!s||!s.state||!s.state[e.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:"Unknown state key: "+e.stateKey},"*");return}try{var t=s.state[e.stateKey].handler();t&&typeof t.then=="function"?t.then(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:a},"*")}).catch(function(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}):window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(a)},"*")}return}if(e.type==="yaar:app-command-request"){if(!s||!s.commands||!s.commands[e.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:"Unknown command: "+e.command},"*");return}try{var t=s.commands[e.command].handler(e.params);t&&typeof t.then=="function"?t.then(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:f},"*")}).catch(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(f)},"*")}):window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:t},"*")}catch(a){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(a)},"*")}return}}})}}();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var a="",i=[],v=null,u=null,m=window.yaar,l=m?.storage,g=m?.app;function c(e){let t=e.replace(/\/$/,"").split("/");return t[t.length-1]||e}function x(e){return e==null?"":e<1024?`${e} B`:e<1024*1024?`${(e/1024).toFixed(1)} KB`:`${(e/(1024*1024)).toFixed(1)} MB`}function h(e,t){if(t)return"\u{1F4C1}";let r=e.split(".").pop()?.toLowerCase()||"";return{pdf:"\u{1F4C4}",txt:"\u{1F4DD}",md:"\u{1F4DD}",json:"{}",csv:"\u{1F4CA}",html:"\u{1F310}",xml:"\u{1F310}",png:"\u{1F5BC}\uFE0F",jpg:"\u{1F5BC}\uFE0F",jpeg:"\u{1F5BC}\uFE0F",gif:"\u{1F5BC}\uFE0F",svg:"\u{1F5BC}\uFE0F",webp:"\u{1F5BC}\uFE0F",mp3:"\u{1F3B5}",wav:"\u{1F3B5}",mp4:"\u{1F3A5}",webm:"\u{1F3A5}",zip:"\u{1F4E6}",tar:"\u{1F4E6}",gz:"\u{1F4E6}",js:"\u{1F7E8}",ts:"\u{1F535}",py:"\u{1F40D}"}[r]||"\u{1F4C4}"}function k(e){let t=e.split(".").pop()?.toLowerCase()||"";return["txt","md","json","csv","html","xml","js","ts","py","css","yaml","yml","toml","log","sh","bat","env"].includes(t)}function C(e){let t=e.split(".").pop()?.toLowerCase()||"";return["png","jpg","jpeg","gif","svg","webp"].includes(t)}function E(e){return e.includes(".")&&e.split(".").pop()?.toLowerCase()||""}function F(e){if(!g?.sendInteraction)return;let t=c(e.path),r=E(t);g.sendInteraction({event:"open_file_request",source:"storage",path:e.path,name:t,extension:r,isDirectory:e.isDirectory}),p.textContent=`Requested agent open: ${t}`}var B=document.getElementById("app")||document.body;B.innerHTML=`
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface-hover: #1a2744;
+    --border: #2a3a5c;
+    --text: #e0e0e0;
+    --text-dim: #8899aa;
+    --accent: #4fc3f7;
+    --accent-dim: #29688a;
+    --danger: #ef5350;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .breadcrumb button {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .breadcrumb button:hover { background: var(--surface-hover); }
+  .breadcrumb button:last-child { color: var(--text); cursor: default; }
+  .breadcrumb .sep { color: var(--text-dim); font-size: 11px; }
+  .toolbar-btn {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .toolbar-btn:hover { border-color: var(--accent-dim); }
+
+  /* Main content */
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* File list */
+  .file-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    min-width: 0;
+  }
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+  }
+  .file-row:hover { background: var(--surface-hover); }
+  .file-row.selected { background: var(--accent-dim); }
+  .file-icon { width: 24px; text-align: center; font-size: 16px; flex-shrink: 0; }
+  .file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .file-name.dir { color: var(--accent); }
+  .file-size { color: var(--text-dim); font-size: 12px; flex-shrink: 0; width: 70px; text-align: right; }
+  .file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .file-row:hover .file-actions { opacity: 1; }
+  .file-actions button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: var(--text-dim);
+  }
+  .file-actions button:hover { background: var(--border); color: var(--text); }
+  .file-actions button.danger:hover { color: var(--danger); }
+
+  /* Empty state */
+  .empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 40px;
+  }
+
+  /* Preview panel */
+  .preview {
+    width: 320px;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .preview-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .preview-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+  }
+  .preview-close:hover { color: var(--text); }
+  .preview-body {
+    flex: 1;
+    overflow: auto;
+    padding: 12px;
+  }
+  .preview-body pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0;
+  }
+  .preview-body img {
+    max-width: 100%;
+    border-radius: 4px;
+  }
+  .preview-meta {
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* Status bar */
+  .statusbar {
+    padding: 4px 12px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+</style>
+
+<div class="toolbar">
+  <div class="breadcrumb" id="breadcrumb"></div>
+  <button class="toolbar-btn" id="btn-refresh" title="Refresh">\u21BB</button>
+</div>
+<div class="main">
+  <div class="file-list" id="file-list"></div>
+  <div class="preview" id="preview" style="display:none">
+    <div class="preview-header">
+      <span id="preview-title">Preview</span>
+      <button class="preview-close" id="preview-close">\u2715</button>
+    </div>
+    <div class="preview-body" id="preview-body"></div>
+    <div class="preview-meta" id="preview-meta"></div>
+  </div>
+</div>
+<div class="statusbar" id="statusbar">Ready</div>
+`;var b=document.getElementById("breadcrumb"),o=document.getElementById("file-list"),D=document.getElementById("preview"),L=document.getElementById("preview-title"),d=document.getElementById("preview-body"),z=document.getElementById("preview-meta"),p=document.getElementById("statusbar");document.getElementById("btn-refresh").onclick=()=>s(a);document.getElementById("preview-close").onclick=y;async function s(e){a=e,v=null,u=null,y(),S(),o.innerHTML="",p.textContent="Loading...";try{i=await l.list(e),i.sort((n,f)=>n.isDirectory!==f.isDirectory?n.isDirectory?-1:1:c(n.path).localeCompare(c(f.path))),$();let t=i.filter(n=>n.isDirectory).length,r=i.length-t;p.textContent=`${r} file${r!==1?"s":""}, ${t} folder${t!==1?"s":""}`}catch{o.innerHTML='<div class="empty">Failed to load directory</div>',p.textContent="Error loading directory"}}function S(){let e=a?a.split("/").filter(Boolean):[],t='<button data-path="">storage://</button>',r="";for(let n=0;n<e.length;n++)r+=(r?"/":"")+e[n],t+='<span class="sep">/</span>',t+=`<button data-path="${r}">${e[n]}</button>`;b.innerHTML=t,b.querySelectorAll("button").forEach(n=>{n.addEventListener("click",()=>{let f=n.getAttribute("data-path")||"";s(f)})})}function $(){if(i.length===0){o.innerHTML='<div class="empty">This folder is empty</div>';return}o.innerHTML="";for(let e of i){let t=c(e.path),r=document.createElement("div");r.className="file-row",r.dataset.path=e.path,r.innerHTML=`
+      <span class="file-icon">${h(t,e.isDirectory)}</span>
+      <span class="file-name${e.isDirectory?" dir":""}">${t}</span>
+      <span class="file-size">${e.isDirectory?"":x(e.size)}</span>
+      <span class="file-actions">
+        ${e.isDirectory?"":'<button class="act-open" title="Open in new tab">\u21D7</button>'}
+        <button class="act-delete danger" title="Delete">\u{1F5D1}</button>
+      </span>
+    `,r.addEventListener("click",n=>{n.target.closest(".file-actions")||(e.isDirectory?s(e.path):w(e))}),r.addEventListener("dblclick",n=>{n.target.closest(".file-actions")||e.isDirectory||F(e)}),r.querySelector(".act-open")?.addEventListener("click",()=>{window.open(l.url(e.path),"_blank")}),r.querySelector(".act-delete")?.addEventListener("click",async()=>{if(confirm(`Delete "${t}"?`))try{await l.remove(e.path),s(a)}catch{p.textContent=`Failed to delete ${t}`}}),o.appendChild(r)}}async function w(e){let t=c(e.path);if(v=e.path,u=null,o.querySelectorAll(".file-row").forEach(r=>{r.classList.toggle("selected",r.dataset.path===e.path)}),D.style.display="flex",L.textContent=t,d.innerHTML='<span style="color:var(--text-dim)">Loading...</span>',z.textContent=x(e.size),C(t)){d.innerHTML=`<img src="${l.url(e.path)}" alt="${t}" />`;return}if(k(t)){try{let r=await l.read(e.path,{as:"text"});u=r;let n=r.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");d.innerHTML=`<pre>${n}</pre>`}catch{d.innerHTML='<span style="color:var(--text-dim)">Unable to preview</span>'}return}d.innerHTML=`
+    <div style="text-align:center;padding:20px">
+      <div style="font-size:32px;margin-bottom:8px">${h(t,!1)}</div>
+      <div style="color:var(--text-dim);margin-bottom:12px">No preview available</div>
+      <button class="toolbar-btn" id="open-external">Open in browser</button>
+    </div>
+  `,document.getElementById("open-external")?.addEventListener("click",()=>{window.open(l.url(e.path),"_blank")})}function y(){v=null,u=null,D.style.display="none",o.querySelectorAll(".file-row.selected").forEach(e=>e.classList.remove("selected"))}g&&g.register({appId:"storage",name:"Storage Browser",state:{"current-path":{description:"Current directory path being viewed",handler:()=>a},"directory-listing":{description:"Files and folders in the current directory",handler:()=>i.map(e=>({path:e.path,name:c(e.path),isDirectory:e.isDirectory,size:e.size}))},"selected-file":{description:"Currently selected file path (null if none)",handler:()=>v},"file-preview":{description:"Text content of the currently previewed file (null if not text)",handler:()=>u}},commands:{navigate:{description:"Navigate to a directory path",params:{type:"object",properties:{path:{type:"string",description:"Directory path to navigate to"}},required:["path"]},handler:e=>(s(String(e.path)),{success:!0,path:e.path})},"select-file":{description:"Select and preview a file",params:{type:"object",properties:{path:{type:"string",description:"File path to select"}},required:["path"]},handler:e=>{let t=i.find(r=>r.path===e.path);return!t||t.isDirectory?{success:!1,error:"File not found"}:(w(t),{success:!0})}},refresh:{description:"Refresh the current directory listing",params:{type:"object",properties:{}},handler:()=>(s(a),{success:!0})}}});s("");
+
+</script>
+</body>
+</html>

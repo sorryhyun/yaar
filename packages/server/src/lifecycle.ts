@@ -103,6 +103,14 @@ export function startListening(server: Server): void {
 export async function shutdown(server: Server, wss: WebSocketServer): Promise<void> {
   console.log('\nShutting down...');
 
+  // Close browser sessions
+  try {
+    const { getBrowserPool } = await import('./lib/browser/index.js');
+    await getBrowserPool().shutdown();
+  } catch {
+    // Browser module not available — nothing to clean up
+  }
+
   await getWarmPool().cleanup();
 
   wss.close(() => {

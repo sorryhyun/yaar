@@ -69,6 +69,32 @@ export async function handleFileRoutes(
   res: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  // Serve browser screenshot
+  // URL format: /api/browser/{sessionId}/screenshot
+  const browserScreenshotMatch = url.pathname.match(
+    /^\/api\/browser\/([a-zA-Z0-9_-]+)\/screenshot$/,
+  );
+  if (browserScreenshotMatch && req.method === 'GET') {
+    const sessionId = decodeURIComponent(browserScreenshotMatch[1]);
+    try {
+      const { getBrowserPool } = await import('../../lib/browser/index.js');
+      const session = getBrowserPool().getSession(sessionId);
+      if (!session || !session.lastScreenshot) {
+        sendError(res, 'Browser session not found or no screenshot available', 404);
+        return true;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'image/jpeg',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Content-Length': session.lastScreenshot.length.toString(),
+      });
+      res.end(session.lastScreenshot);
+    } catch {
+      sendError(res, 'Browser not available', 404);
+    }
+    return true;
+  }
+
   // Render PDF page as image
   // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
   const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);

@@ -1,0 +1,6 @@
+{
+  "name": "Browser",
+  "icon": "🌐",
+  "hidden": true,
+  "appProtocol": true
+}
