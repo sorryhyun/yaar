@@ -14,5 +14,6 @@ export { createInteractionsSlice } from './interactionsSlice';
 export { createQueuedActionsSlice } from './queuedActionsSlice';
 export { createWindowsSlice } from './windowsSlice';
 export { createDrawingSlice } from './drawingSlice';
+export { createImageAttachSlice } from './imageAttachSlice';
 export { createCliSlice } from './cliSlice';
 export { createMonitorSlice } from './monitorSlice';

@@ -245,6 +245,19 @@ export interface DrawingSliceActions {
 
 export type DrawingSlice = DrawingSliceState & DrawingSliceActions;
 
+export interface ImageAttachSliceState {
+  attachedImages: string[];
+}
+
+export interface ImageAttachSliceActions {
+  addAttachedImages: (images: string[]) => void;
+  removeAttachedImage: (index: number) => void;
+  clearAttachedImages: () => void;
+  consumeAttachedImages: () => string[];
+}
+
+export type ImageAttachSlice = ImageAttachSliceState & ImageAttachSliceActions;
+
 export interface CliSliceState {
   cliMode: boolean;
   cliHistory: Record<string, CliEntry[]>;
@@ -299,6 +312,7 @@ export type DesktopStore = WindowsSlice &
   InteractionsSlice &
   QueuedActionsSlice &
   DrawingSlice &
+  ImageAttachSlice &
   CliSlice &
   MonitorSlice & {
     appsVersion: number;

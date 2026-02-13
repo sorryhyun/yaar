@@ -34,6 +34,7 @@ import {
   createInteractionsSlice,
   createQueuedActionsSlice,
   createDrawingSlice,
+  createImageAttachSlice,
   createCliSlice,
   createMonitorSlice,
 } from './slices';
@@ -326,6 +327,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createInteractionsSlice(...a),
     ...createQueuedActionsSlice(...a),
     ...createDrawingSlice(...a),
+    ...createImageAttachSlice(...a),
     ...createCliSlice(...a),
     ...createMonitorSlice(...a),
 
@@ -427,6 +429,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingAppInteractions = [];
         state.selectedWindowIds = [];
         state.appsVersion = 0;
+        state.attachedImages = [];
         state.cliMode = false;
         state.cliHistory = {};
         state.cliStreaming = {};

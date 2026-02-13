@@ -8,7 +8,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { sendError, sendJson } from '../utils.js';
-import { extractDomain, isDomainAllowed } from '../../mcp/domains.js';
+import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../mcp/domains.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 const TIMEOUT_MS = 30_000;
@@ -57,7 +58,13 @@ export async function handleProxyRoutes(
   }
 
   // Parse request body
-  let body: { url?: string; method?: string; headers?: Record<string, string>; body?: string };
+  let body: {
+    url?: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+    sessionId?: string;
+  };
   try {
     const raw = await collectJsonBody(req, MAX_UPLOAD_SIZE);
     body = JSON.parse(raw);
@@ -92,15 +99,35 @@ export async function handleProxyRoutes(
     return true;
   }
 
-  // Check domain allowlist
+  // Check domain allowlist — show permission dialog if sessionId is available
   const domain = extractDomain(targetUrl);
   if (!(await isDomainAllowed(domain))) {
-    sendError(
-      res,
-      `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`,
-      403,
+    const sessionId = body.sessionId;
+    if (!sessionId) {
+      sendError(
+        res,
+        `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`,
+        403,
+      );
+      return true;
+    }
+
+    // Show permission dialog to the user via WebSocket
+    const confirmed = await actionEmitter.showPermissionDialogToSession(
+      sessionId,
+      'Allow Domain Access',
+      `An app wants to make HTTP requests to "${domain}".\n\nDo you want to allow this domain?`,
+      'http_domain',
+      domain,
     );
-    return true;
+
+    if (!confirmed) {
+      sendError(res, `User denied access to domain "${domain}".`, 403);
+      return true;
+    }
+
+    // User approved — add domain to allowlist
+    await addAllowedDomain(domain);
   }
 
   // Make the proxied request

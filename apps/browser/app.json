@@ -1,6 +1,7 @@
 {
+  "icon": "🎮",
   "name": "Browser",
-  "icon": "🌐",
+  "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
   "hidden": true,
   "appProtocol": true
 }

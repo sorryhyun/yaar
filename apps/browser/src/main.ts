@@ -6,10 +6,26 @@
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing app root');
 
-// Extract sessionId from iframe URL query params (validate format)
+// Extract query params
 const params = new URLSearchParams(window.location.search);
+
+// sessionId (validate format)
 const rawSessionId = params.get('sessionId') || '';
 const sessionId = /^[a-zA-Z0-9_-]+$/.test(rawSessionId) ? rawSessionId : '';
+
+// optional initial url (for direct app open like ?url=https://...)
+const rawInitialUrl = params.get('url') || '';
+let initialUrl = 'about:blank';
+if (rawInitialUrl) {
+  try {
+    const parsed = new URL(rawInitialUrl);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      initialUrl = parsed.toString();
+    }
+  } catch {
+    // ignore invalid url and keep about:blank
+  }
+}
 
 root.innerHTML = `
   <style>
@@ -137,7 +153,7 @@ const els = {
   screenshot: document.getElementById('screenshot') as HTMLImageElement,
 };
 
-let currentUrl = 'about:blank';
+let currentUrl = initialUrl;
 
 function updateUrlBar(url: string, title?: string) {
   currentUrl = url;
@@ -161,6 +177,9 @@ function updateUrlBar(url: string, title?: string) {
     els.lock.className = 'lock insecure';
   }
 }
+
+// reflect initial url from query params in the chrome
+updateUrlBar(initialUrl);
 
 function refreshScreenshot() {
   const ts = Date.now();

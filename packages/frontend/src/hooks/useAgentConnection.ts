@@ -61,6 +61,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     consumeAppProtocolReady,
     consumePendingAppInteractions,
     consumeDrawing,
+    consumeAttachedImages,
     registerWindowAgent,
     updateWindowAgentStatus,
     setRestorePrompt,
@@ -224,20 +225,28 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const sendMessage = useCallback(
     (content: string) => {
       const drawing = consumeDrawing();
+      const images = consumeAttachedImages();
       const messageId = generateMessageId();
       const monitorId = useDesktopStore.getState().activeMonitorId;
       addCliEntry({ type: 'user', content, monitorId });
+
+      const interactions: Array<{ type: 'draw'; timestamp: number; imageData: string }> = [];
+      if (drawing) {
+        interactions.push({ type: 'draw', timestamp: Date.now(), imageData: drawing });
+      }
+      for (const img of images) {
+        interactions.push({ type: 'draw', timestamp: Date.now(), imageData: img });
+      }
+
       send({
         type: 'USER_MESSAGE',
         messageId,
         content,
         monitorId,
-        interactions: drawing
-          ? [{ type: 'draw' as const, timestamp: Date.now(), imageData: drawing }]
-          : undefined,
+        interactions: interactions.length > 0 ? interactions : undefined,
       });
     },
-    [send, consumeDrawing, addCliEntry],
+    [send, consumeDrawing, consumeAttachedImages, addCliEntry],
   );
 
   const sendWindowMessage = useCallback(

@@ -402,6 +402,62 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Show a permission dialog targeted at a specific session via BroadcastCenter.
+   *
+   * Unlike showPermissionDialog() which broadcasts through the EventEmitter
+   * (reaching all agent sessions), this sends the APPROVAL_REQUEST directly
+   * to a session's WebSocket connections. Used by the /api/fetch proxy route
+   * where there's no agent context.
+   */
+  async showPermissionDialogToSession(
+    sessionId: string,
+    title: string,
+    message: string,
+    toolName: string,
+    context?: string,
+    confirmText: string = 'Allow',
+    cancelText: string = 'Deny',
+    timeoutMs: number = 60000,
+  ): Promise<boolean> {
+    // Check for saved permission first
+    const savedDecision = await checkPermission(toolName, context);
+    if (savedDecision === 'allow') return true;
+    if (savedDecision === 'deny') return false;
+
+    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
+
+    const permissionOptions: PermissionOptions = {
+      showRememberChoice: true,
+      toolName,
+      context,
+    };
+
+    const dialogPromise = new Promise<boolean>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingDialogs.delete(dialogId);
+        resolve(false); // Timeout — treat as deny
+      }, timeoutMs);
+
+      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions });
+    });
+
+    // Send APPROVAL_REQUEST directly to the session via BroadcastCenter
+    const { getBroadcastCenter } = await import('../session/broadcast-center.js');
+    getBroadcastCenter().publishToSession(sessionId, {
+      type: 'APPROVAL_REQUEST',
+      dialogId,
+      title,
+      message,
+      confirmText,
+      cancelText,
+      permissionOptions,
+      agentId: 'system',
+    });
+
+    return dialogPromise;
+  }
+
+  /**
    * Subscribe to action events.
    */
   onAction(callback: (event: ActionEvent) => void): () => void {

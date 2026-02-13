@@ -241,6 +241,14 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
 
   var realFetch = window.fetch.bind(window);
 
+  // Extract sessionId from URL params for domain permission dialogs
+  var sessionId = '';
+  try {
+    var sp = new URLSearchParams(location.search);
+    var raw = sp.get('sessionId') || '';
+    if (/^[a-zA-Z0-9_-]+$/.test(raw)) sessionId = raw;
+  } catch(e) {}
+
   window.fetch = function(input, init) {
     var url;
     if (input instanceof Request) {
@@ -293,6 +301,7 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
     return bodyPromise.then(function(bodyStr) {
       var payload = { url: url, method: method, headers: headers };
       if (bodyStr !== undefined) payload.body = bodyStr;
+      if (sessionId) payload.sessionId = sessionId;
 
       return realFetch('/api/fetch', {
         method: 'POST',

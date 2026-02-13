@@ -11,10 +11,27 @@ import { SettingsModal } from './SettingsModal';
 import { Taskbar } from './Taskbar';
 import styles from '@/styles/ui/CommandPalette.module.css';
 
+function readFilesAsDataUrls(files: File[]): Promise<string[]> {
+  return Promise.all(
+    files
+      .filter((f) => f.type.startsWith('image/'))
+      .map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          }),
+      ),
+  );
+}
+
 export function CommandPalette() {
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
   const { isConnected, sendMessage, interrupt, reset } = useAgentConnection();
@@ -33,6 +50,10 @@ export function CommandPalette() {
   const pencilMode = useDesktopStore((state) => state.pencilMode);
   const setPencilMode = useDesktopStore((state) => state.setPencilMode);
   const togglePencilMode = useDesktopStore((state) => state.togglePencilMode);
+  const attachedImages = useDesktopStore((state) => state.attachedImages);
+  const addAttachedImages = useDesktopStore((state) => state.addAttachedImages);
+  const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
+  const clearAttachedImages = useDesktopStore((state) => state.clearAttachedImages);
 
   // Close settings popover on outside click
   useEffect(() => {
@@ -51,16 +72,63 @@ export function CommandPalette() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [settingsOpen]);
 
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData.items;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      const dataUrls = await readFilesAsDataUrls(imageFiles);
+      addAttachedImages(dataUrls);
+    },
+    [addAttachedImages],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((_e: React.DragEvent) => {
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      const dataUrls = await readFilesAsDataUrls(files);
+      addAttachedImages(dataUrls);
+    },
+    [addAttachedImages],
+  );
+
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
-    // Allow sending if there's text OR a drawing attached
-    if ((!trimmed && !hasDrawing) || !isConnected) return;
+    // Allow sending if there's text OR a drawing/image attached
+    if ((!trimmed && !hasDrawing && attachedImages.length === 0) || !isConnected) return;
 
     // Auto-exit pencil mode on send
     if (pencilMode) setPencilMode(false);
     sendMessage(trimmed);
     setInput('');
-  }, [input, isConnected, sendMessage, hasDrawing, pencilMode, setPencilMode]);
+  }, [
+    input,
+    isConnected,
+    sendMessage,
+    hasDrawing,
+    attachedImages.length,
+    pencilMode,
+    setPencilMode,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -112,6 +180,27 @@ export function CommandPalette() {
             >
               &times;
             </button>
+          </div>
+        )}
+        {attachedImages.length > 0 && (
+          <div className={styles.imageAttachStrip}>
+            {attachedImages.map((src, i) => (
+              <div key={i} className={styles.imageThumbWrapper}>
+                <img src={src} className={styles.imageThumb} alt={`Attached ${i + 1}`} />
+                <button
+                  className={styles.imageThumbRemove}
+                  onClick={() => removeAttachedImage(i)}
+                  title="Remove image"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+            {attachedImages.length > 1 && (
+              <button className={styles.clearAllImages} onClick={clearAttachedImages}>
+                Clear all
+              </button>
+            )}
           </div>
         )}
         <div className={styles.inputRow}>
@@ -247,12 +336,19 @@ export function CommandPalette() {
             </button>
           </div>
 
-          <div className={styles.inputWrapper}>
+          <div
+            className={styles.inputWrapper}
+            data-dragover={isDragOver}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <textarea
               className={styles.input}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={() => setIsExpanded(true)}
               placeholder={
                 !isConnected
@@ -267,7 +363,9 @@ export function CommandPalette() {
             <button
               className={styles.sendButton}
               onClick={handleSubmit}
-              disabled={!isConnected || (!input.trim() && !hasDrawing)}
+              disabled={
+                !isConnected || (!input.trim() && !hasDrawing && attachedImages.length === 0)
+              }
             >
               Send
             </button>
