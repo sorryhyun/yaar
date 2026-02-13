@@ -165,15 +165,21 @@ export class AgentSession {
 
     this.toolActionBridge = new ToolActionBridge(
       {
-        get currentRole() { return connection.currentRole; },
-        get monitorId() { return connection.currentMonitorId; },
+        get currentRole() {
+          return connection.currentRole;
+        },
+        get monitorId() {
+          return connection.currentMonitorId;
+        },
       },
       this.sendEvent.bind(this),
       this.getFilterAgentId.bind(this),
       () => this.sessionLogger,
       (action) => this.recordedActions.push(action),
     );
-    this.unsubscribeAction = actionEmitter.onAction(this.toolActionBridge.handleToolAction.bind(this.toolActionBridge));
+    this.unsubscribeAction = actionEmitter.onAction(
+      this.toolActionBridge.handleToolAction.bind(this.toolActionBridge),
+    );
   }
 
   getConnectionId(): ConnectionId {
@@ -246,10 +252,8 @@ export class AgentSession {
     });
 
     // Extract images from draw interactions for vision API
-    const images = interactions
-      ?.filter(i => i.type === 'draw' && i.imageData)
-      .map(i => i.imageData!)
-      ?? [];
+    const images =
+      interactions?.filter((i) => i.type === 'draw' && i.imageData).map((i) => i.imageData!) ?? [];
     const fullContent = content;
 
     // Log user message with role identifier and source
@@ -319,14 +323,24 @@ export class AgentSession {
         options.monitorId,
       );
 
-      console.log(`[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`);
-      await agentContext.run({ agentId: stableAgentId, connectionId: this.connectionId, sessionId: this.liveSessionId, monitorId: options.monitorId }, async () => {
-        console.log(`[AgentSession] ${role} entered agentContext.run`);
-        for await (const message of this.provider!.query(fullContent, transportOptions)) {
-          if (!this.running) break;
-          await mapper.map(message);
-        }
-      });
+      console.log(
+        `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
+      );
+      await agentContext.run(
+        {
+          agentId: stableAgentId,
+          connectionId: this.connectionId,
+          sessionId: this.liveSessionId,
+          monitorId: options.monitorId,
+        },
+        async () => {
+          console.log(`[AgentSession] ${role} entered agentContext.run`);
+          for await (const message of this.provider!.query(fullContent, transportOptions)) {
+            if (!this.running) break;
+            await mapper.map(message);
+          }
+        },
+      );
     } catch (err) {
       console.error(`[AgentSession] ${role} error:`, err);
       await this.sendEvent({

@@ -128,10 +128,14 @@ export function formatResponse(result: CurlResult): string {
   }
 
   // For error responses, strip HTML to avoid wasting tokens on full pages
-  const isHtml = result.headers['content-type']?.includes('text/html') || body.trimStart().startsWith('<!DOCTYPE') || body.trimStart().startsWith('<html');
+  const isHtml =
+    result.headers['content-type']?.includes('text/html') ||
+    body.trimStart().startsWith('<!DOCTYPE') ||
+    body.trimStart().startsWith('<html');
   if (isHtml) {
     // Extract text content from HTML, collapse whitespace
-    const text = body.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    const text = body
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')

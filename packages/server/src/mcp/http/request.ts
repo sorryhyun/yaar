@@ -21,10 +21,7 @@ export function registerRequestTools(server: McpServer): void {
           .record(z.string(), z.string())
           .optional()
           .describe('Optional HTTP headers as key-value pairs'),
-        followRedirects: z
-          .boolean()
-          .optional()
-          .describe('Follow redirects (default: true)'),
+        followRedirects: z.boolean().optional().describe('Follow redirects (default: true)'),
       },
     },
     async (args) => {
@@ -36,7 +33,7 @@ export function registerRequestTools(server: McpServer): void {
 
       if (!(await isDomainAllowed(domain))) {
         return ok(
-          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`
+          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
         );
       }
 
@@ -70,7 +67,7 @@ export function registerRequestTools(server: McpServer): void {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return ok(`Error: ${message}`);
       }
-    }
+    },
   );
 
   // http_post
@@ -93,12 +90,9 @@ export function registerRequestTools(server: McpServer): void {
           .enum(['json', 'form', 'text'])
           .optional()
           .describe(
-            'Content type: json (application/json), form (application/x-www-form-urlencoded), or text (text/plain). Defaults to json.'
+            'Content type: json (application/json), form (application/x-www-form-urlencoded), or text (text/plain). Defaults to json.',
           ),
-        followRedirects: z
-          .boolean()
-          .optional()
-          .describe('Follow redirects (default: true)'),
+        followRedirects: z.boolean().optional().describe('Follow redirects (default: true)'),
       },
     },
     async (args) => {
@@ -110,7 +104,7 @@ export function registerRequestTools(server: McpServer): void {
 
       if (!(await isDomainAllowed(domain))) {
         return ok(
-          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`
+          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
         );
       }
 
@@ -139,23 +133,19 @@ export function registerRequestTools(server: McpServer): void {
           switch (contentType) {
             case 'json':
               curlArgs.push('-H', 'Content-Type: application/json');
-              requestBody =
-                typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
+              requestBody = typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
               break;
             case 'form':
               curlArgs.push('-H', 'Content-Type: application/x-www-form-urlencoded');
               if (typeof args.body === 'object') {
-                requestBody = new URLSearchParams(
-                  args.body as Record<string, string>
-                ).toString();
+                requestBody = new URLSearchParams(args.body as Record<string, string>).toString();
               } else {
                 requestBody = args.body;
               }
               break;
             case 'text':
               curlArgs.push('-H', 'Content-Type: text/plain');
-              requestBody =
-                typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
+              requestBody = typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
               break;
           }
 
@@ -177,6 +167,6 @@ export function registerRequestTools(server: McpServer): void {
         const message = error instanceof Error ? error.message : 'Unknown error';
         return ok(`Error: ${message}`);
       }
-    }
+    },
   );
 }

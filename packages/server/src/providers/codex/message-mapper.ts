@@ -36,10 +36,7 @@ function mcpToolName(server?: string, tool?: string): string {
  * @param params - The notification parameters
  * @returns A StreamMessage or null if the notification should be skipped
  */
-export function mapNotification(
-  method: string,
-  params: unknown
-): StreamMessage | null {
+export function mapNotification(method: string, params: unknown): StreamMessage | null {
   switch (method) {
     // ========================================================================
     // Turn lifecycle events
@@ -122,7 +119,9 @@ export function mapNotification(
             toolInput: { command: item.command },
           };
         default:
-          console.debug(`[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`);
+          console.debug(
+            `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
+          );
           return null;
       }
     }
@@ -151,7 +150,9 @@ export function mapNotification(
             content: formatCommandResult(item),
           };
         default:
-          console.debug(`[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`);
+          console.debug(
+            `[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
+          );
           return null;
       }
     }

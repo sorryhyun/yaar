@@ -19,19 +19,21 @@ import { ok } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
-const colsInner = z.union([
-  z.array(z.number().min(0)).min(1),
-  z.coerce.number().int().min(1),
-]);
+const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
 // Handle stringified JSON from AI (e.g., "[7,3]" instead of [7,3])
 const colsSchema = z.union([
   colsInner,
-  z.string().transform((s, ctx) => {
-    try { return JSON.parse(s); } catch {
-      ctx.addIssue({ code: 'custom', message: 'Invalid JSON' });
-      return z.NEVER;
-    }
-  }).pipe(colsInner),
+  z
+    .string()
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        ctx.addIssue({ code: 'custom', message: 'Invalid JSON' });
+        return z.NEVER;
+      }
+    })
+    .pipe(colsInner),
 ]);
 
 export { gapEnum, colsSchema };
@@ -79,7 +81,7 @@ export function registerCreateTools(server: McpServer): void {
 
         if (feedback && !feedback.success) {
           return ok(
-            `Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding.`
+            `Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding.`,
           );
         }
 
@@ -88,7 +90,7 @@ export function registerCreateTools(server: McpServer): void {
 
       actionEmitter.emitAction(osAction);
       return ok(`Created window "${args.windowId}"`);
-    }
+    },
   );
 
   // create_component_window - for interactive UI components
@@ -100,10 +102,21 @@ export function registerCreateTools(server: McpServer): void {
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        jsonfile: z.string().optional().describe('Path to a .yaarcomponent.json file (relative to apps/). If provided, components/cols/gap are loaded from the file.'),
-        components: z.array(componentSchema).optional().describe('Flat array of UI components (required if jsonfile is not provided)'),
-        cols: colsSchema.optional()
-          .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
+        jsonfile: z
+          .string()
+          .optional()
+          .describe(
+            'Path to a .yaarcomponent.json file (relative to apps/). If provided, components/cols/gap are loaded from the file.',
+          ),
+        components: z
+          .array(componentSchema)
+          .optional()
+          .describe('Flat array of UI components (required if jsonfile is not provided)'),
+        cols: colsSchema
+          .optional()
+          .describe(
+            'Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1',
+          ),
         gap: gapEnum.optional().describe('Spacing between components (default: md)'),
         x: z.number().optional().describe('X position (default: 100)'),
         y: z.number().optional().describe('Y position (default: 100)'),
@@ -121,7 +134,9 @@ export function registerCreateTools(server: McpServer): void {
           return ok('Error: jsonfile must end with .yaarcomponent.json');
         }
         if (filePath.includes('..') || filePath.startsWith('/')) {
-          return ok('Error: Invalid jsonfile path. Use relative paths without ".." or leading "/".');
+          return ok(
+            'Error: Invalid jsonfile path. Use relative paths without ".." or leading "/".',
+          );
         }
 
         const fullPath = join(PROJECT_ROOT, 'apps', filePath);
@@ -166,6 +181,6 @@ export function registerCreateTools(server: McpServer): void {
 
       actionEmitter.emitAction(osAction);
       return ok(`Created component window "${args.windowId}"`);
-    }
+    },
   );
 }

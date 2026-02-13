@@ -79,7 +79,8 @@ export class StreamToEventMapper {
         for (const hook of hooks) {
           if (hook.action.type === 'os_action') {
             const actions = Array.isArray(hook.action.payload)
-              ? hook.action.payload : [hook.action.payload];
+              ? hook.action.payload
+              : [hook.action.payload];
             for (const action of actions) {
               actionEmitter.emitAction(action);
             }

@@ -83,7 +83,8 @@ export function getContextRestoreMessages(
 
   for (const windowId of sortedOldWindowIds) {
     const timestamp = windowLastTimestamp.get(windowId)!;
-    const summary = summaryTextByWindow[windowId] ?? `Older window branch ${windowId} omitted during restore.`;
+    const summary =
+      summaryTextByWindow[windowId] ?? `Older window branch ${windowId} omitted during restore.`;
     result.push({
       role: 'assistant',
       content: `[window_summary:${windowId}] ${summary}`,

@@ -1,5 +1,5 @@
 // Public API for the store
-export { useDesktopStore, handleAppProtocolRequest } from './desktop'
+export { useDesktopStore, handleAppProtocolRequest } from './desktop';
 
 // Selectors
 export {
@@ -13,7 +13,7 @@ export {
   selectWindowAgents,
   selectWindowAgent,
   selectQueuedActionsCount,
-} from './selectors'
+} from './selectors';
 
 // Types (for consumers that need them)
-export type { DesktopStore } from './types'
+export type { DesktopStore } from './types';

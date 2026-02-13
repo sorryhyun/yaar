@@ -1,0 +1,7 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+*.md
+packages/server/src/lib/bundled-types/
+storage/
+config/

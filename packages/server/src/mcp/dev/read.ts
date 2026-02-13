@@ -19,7 +19,7 @@ async function listFiles(dir: string, base: string): Promise<string[]> {
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await listFiles(full, base));
+      files.push(...(await listFiles(full, base)));
     } else {
       files.push(relative(base, full));
     }
@@ -35,7 +35,10 @@ export function registerReadTools(server: McpServer): void {
         'Read a file from a sandbox directory. If path is omitted, lists all files in the sandbox.',
       inputSchema: {
         sandboxId: z.string().describe('Sandbox ID'),
-        path: z.string().optional().describe('Relative path in sandbox (e.g., "src/main.ts"). Omit to list all files.'),
+        path: z
+          .string()
+          .optional()
+          .describe('Relative path in sandbox (e.g., "src/main.ts"). Omit to list all files.'),
       },
     },
     async (args) => {
@@ -80,6 +83,6 @@ export function registerReadTools(server: McpServer): void {
       } catch {
         return ok(`Error: File not found: ${path}`);
       }
-    }
+    },
   );
 }

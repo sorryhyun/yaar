@@ -111,8 +111,8 @@ describe('Sandbox', () => {
 
     it('times out on slow async operations', async () => {
       const result = await executeJs(
-        'await new Promise(resolve => {})',  // never resolves
-        { timeout: 300 }
+        'await new Promise(resolve => {})', // never resolves
+        { timeout: 300 },
       );
       expect(result.success).toBe(false);
       expect(result.error).toContain('timed out');
@@ -150,7 +150,7 @@ describe('Sandbox', () => {
     it('fetch rejects disallowed domains', async () => {
       const result = await executeCode(
         'try { await fetch("https://evil.com/x"); return "should not reach"; } catch(e) { return e.message; }',
-        { allowedDomains: ['example.com'] }
+        { allowedDomains: ['example.com'] },
       );
       expect(result.success).toBe(true);
       expect(result.result).toContain('evil.com');
@@ -160,20 +160,23 @@ describe('Sandbox', () => {
     it('fetch rejects invalid URLs', async () => {
       const result = await executeCode(
         'try { await fetch("not-a-url"); return "should not reach"; } catch(e) { return e.message; }',
-        { allowedDomains: ['example.com'] }
+        { allowedDomains: ['example.com'] },
       );
       expect(result.success).toBe(true);
       expect(result.result).toContain('Invalid URL');
     });
 
     it('Headers, Request, Response are available', async () => {
-      const result = await executeCode(`
+      const result = await executeCode(
+        `
         return {
           headers: typeof Headers,
           request: typeof Request,
           response: typeof Response,
         }
-      `, { allowedDomains: [] });
+      `,
+        { allowedDomains: [] },
+      );
       expect(result.success).toBe(true);
       const value = JSON.parse(result.result!);
       expect(value.headers).toBe('function');
@@ -183,10 +186,13 @@ describe('Sandbox', () => {
 
     it('fetch allows requests to allowed domains', async () => {
       // Use httpbin for a real HTTP test
-      const result = await executeCode(`
+      const result = await executeCode(
+        `
         const res = await fetch("https://httpbin.org/get");
         return res.status;
-      `, { allowedDomains: ['httpbin.org'], timeout: 10000 });
+      `,
+        { allowedDomains: ['httpbin.org'], timeout: 10000 },
+      );
       expect(result.success).toBe(true);
       expect(result.result).toBe('200');
     }, 15000);

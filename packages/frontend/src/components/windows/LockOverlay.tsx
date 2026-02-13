@@ -1,16 +1,21 @@
 /**
  * LockOverlay - Displays over locked windows with animated gear.
  */
-import styles from '@/styles/windows/LockOverlay.module.css'
+import styles from '@/styles/windows/LockOverlay.module.css';
 
 interface LockOverlayProps {
-  queuedCount?: number
+  queuedCount?: number;
 }
 
 export function LockOverlay({ queuedCount = 0 }: LockOverlayProps) {
   return (
     <div className={styles.overlay}>
-      <svg className={styles.gear} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg
+        className={styles.gear}
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         <path
           d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
           stroke="currentColor"
@@ -27,9 +32,7 @@ export function LockOverlay({ queuedCount = 0 }: LockOverlayProps) {
         />
       </svg>
       <span className={styles.label}>Working...</span>
-      {queuedCount > 0 && (
-        <span className={styles.queueBadge}>{queuedCount} queued</span>
-      )}
+      {queuedCount > 0 && <span className={styles.queueBadge}>{queuedCount} queued</span>}
     </div>
-  )
+  );
 }

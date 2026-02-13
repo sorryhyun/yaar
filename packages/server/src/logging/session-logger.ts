@@ -43,10 +43,7 @@ export async function createSession(provider: string): Promise<SessionInfo> {
     },
   };
 
-  await writeFile(
-    join(directory, 'metadata.json'),
-    JSON.stringify(metadata, null, 2)
-  );
+  await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata, null, 2));
 
   // Create main messages log
   await writeFile(join(directory, 'messages.jsonl'), '');
@@ -73,7 +70,7 @@ export class SessionLogger {
   async registerAgent(
     agentId: string,
     parentAgentId: string | null,
-    windowId?: string
+    windowId?: string,
   ): Promise<void> {
     if (this.sessionInfo.metadata.agents[agentId]) {
       return; // Already registered
@@ -90,10 +87,7 @@ export class SessionLogger {
 
     // Create agent-specific JSONL file (empty, entries appended later)
     const agentFilename = agentId.replace(/[^a-zA-Z0-9-_]/g, '_');
-    await writeFile(
-      join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`),
-      ''
-    );
+    await writeFile(join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`), '');
 
     // Update metadata
     await this.saveMetadata();
@@ -105,16 +99,22 @@ export class SessionLogger {
   private async appendEntry(
     type: string,
     agentId: string | undefined,
-    fields: Record<string, unknown>
+    fields: Record<string, unknown>,
   ): Promise<void> {
     const agent = agentId ?? 'main-monitor-0';
     const parentAgentId = this.sessionInfo.metadata.agents[agent]?.parentAgentId ?? null;
-    const entry = { type, timestamp: new Date().toISOString(), agentId: agent, parentAgentId, ...fields };
+    const entry = {
+      type,
+      timestamp: new Date().toISOString(),
+      agentId: agent,
+      parentAgentId,
+      ...fields,
+    };
 
     // Append to global messages log
     await appendFile(
       join(this.sessionInfo.directory, 'messages.jsonl'),
-      JSON.stringify(entry) + '\n'
+      JSON.stringify(entry) + '\n',
     );
 
     // Append to per-agent JSONL
@@ -122,7 +122,7 @@ export class SessionLogger {
     try {
       await appendFile(
         join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`),
-        JSON.stringify(entry) + '\n'
+        JSON.stringify(entry) + '\n',
       );
     } catch {
       // Agent file might not exist yet
@@ -145,11 +145,19 @@ export class SessionLogger {
     return path.join(' → ');
   }
 
-  async logUserMessage(content: string, agentId: string | undefined, source?: ContextSource): Promise<void> {
+  async logUserMessage(
+    content: string,
+    agentId: string | undefined,
+    source?: ContextSource,
+  ): Promise<void> {
     await this.appendEntry('user', agentId, { content, ...(source ? { source } : {}) });
   }
 
-  async logAssistantMessage(content: string, agentId: string | undefined, source?: ContextSource): Promise<void> {
+  async logAssistantMessage(
+    content: string,
+    agentId: string | undefined,
+    source?: ContextSource,
+  ): Promise<void> {
     await this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
   }
 
@@ -157,11 +165,21 @@ export class SessionLogger {
     await this.appendEntry('thinking', agentId, { content });
   }
 
-  async logToolUse(toolName: string, toolInput: unknown, toolUseId: string | undefined, agentId?: string): Promise<void> {
+  async logToolUse(
+    toolName: string,
+    toolInput: unknown,
+    toolUseId: string | undefined,
+    agentId?: string,
+  ): Promise<void> {
     await this.appendEntry('tool_use', agentId, { toolName, toolInput, toolUseId });
   }
 
-  async logToolResult(toolName: string, content: string | undefined, toolUseId: string | undefined, agentId?: string): Promise<void> {
+  async logToolResult(
+    toolName: string,
+    content: string | undefined,
+    toolUseId: string | undefined,
+    agentId?: string,
+  ): Promise<void> {
     await this.appendEntry('tool_result', agentId, { toolName, content, toolUseId });
   }
 
@@ -203,7 +221,7 @@ export class SessionLogger {
   private async saveMetadata(): Promise<void> {
     await writeFile(
       join(this.sessionInfo.directory, 'metadata.json'),
-      JSON.stringify(this.sessionInfo.metadata, null, 2)
+      JSON.stringify(this.sessionInfo.metadata, null, 2),
     );
   }
 }

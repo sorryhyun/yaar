@@ -38,7 +38,12 @@ export function toDisplayName(appId: string): string {
  * - Component apps (.yaarcomponent.json) → create_component(jsonfile)
  * - Both → shows both options
  */
-function generateLaunchSection(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = []): string {
+function generateLaunchSection(
+  appId: string,
+  appName: string,
+  hasCompiledApp: boolean,
+  componentFiles: string[] = [],
+): string {
   const parts: string[] = ['## Launch'];
 
   if (hasCompiledApp) {
@@ -56,7 +61,9 @@ create({
   if (componentFiles.length > 0) {
     for (const f of componentFiles) {
       const windowName = f.replace('.yaarcomponent.json', '');
-      parts.push(`\`create_component(jsonfile="${appId}/${f}", windowId="${appId}-${windowName}", title="${appName}")\``);
+      parts.push(
+        `\`create_component(jsonfile="${appId}/${f}", windowId="${appId}-${windowName}", title="${appName}")\``,
+      );
     }
   }
 
@@ -68,7 +75,14 @@ create({
  * If customSkill is provided, uses it as the base and appends launch/source sections.
  * Otherwise generates a default template.
  */
-export function generateSkillMd(appId: string, appName: string, hasCompiledApp: boolean, componentFiles: string[] = [], customSkill?: string, hasAppProtocol?: boolean): string {
+export function generateSkillMd(
+  appId: string,
+  appName: string,
+  hasCompiledApp: boolean,
+  componentFiles: string[] = [],
+  customSkill?: string,
+  hasAppProtocol?: boolean,
+): string {
   const launchSection = generateLaunchSection(appId, appName, hasCompiledApp, componentFiles);
   let md: string;
 
@@ -129,7 +143,9 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     const indexHtml = await readFile(join(appPath, 'index.html'), 'utf-8');
     hasCompiledApp = true;
     hasAppProtocol = indexHtml.includes('.app.register');
-  } catch { /* no compiled app */ }
+  } catch {
+    /* no compiled app */
+  }
 
   const componentFiles: string[] = [];
   try {
@@ -137,15 +153,26 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     for (const f of files) {
       if (f.endsWith('.yaarcomponent.json')) componentFiles.push(f);
     }
-  } catch { /* readdir failure */ }
+  } catch {
+    /* readdir failure */
+  }
 
   // Read display name from app.json
   let displayName = toDisplayName(appId);
   try {
     const meta = JSON.parse(await readFile(join(appPath, 'app.json'), 'utf-8'));
     if (meta.name) displayName = meta.name;
-  } catch { /* no app.json */ }
+  } catch {
+    /* no app.json */
+  }
 
-  const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, customContent, hasAppProtocol);
+  const skillContent = generateSkillMd(
+    appId,
+    displayName,
+    hasCompiledApp,
+    componentFiles,
+    customContent,
+    hasAppProtocol,
+  );
   await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 }

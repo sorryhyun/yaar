@@ -24,11 +24,15 @@ export function registerDispatchTools(server: McpServer): void {
         objective: z
           .string()
           .optional()
-          .describe('Brief instruction for the task agent (it has full conversation context via fork).'),
+          .describe(
+            'Brief instruction for the task agent (it has full conversation context via fork).',
+          ),
         profile: z
           .enum(['default', 'web', 'code', 'app'])
           .optional()
-          .describe('Agent profile: default=full tools, web=HTTP+display, code=sandbox+display, app=apps+HTTP+display.'),
+          .describe(
+            'Agent profile: default=full tools, web=HTTP+display, code=sandbox+display, app=apps+HTTP+display.',
+          ),
         hint: z
           .string()
           .optional()

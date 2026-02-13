@@ -2,62 +2,59 @@
  * NotificationCenter - Displays persistent notifications.
  * Supports optional auto-dismiss via `duration` field.
  */
-import { useEffect, useRef } from 'react'
-import { useDesktopStore, selectNotifications } from '@/store'
-import { useShallow } from 'zustand/react/shallow'
-import styles from '@/styles/ui/NotificationCenter.module.css'
+import { useEffect, useRef } from 'react';
+import { useDesktopStore, selectNotifications } from '@/store';
+import { useShallow } from 'zustand/react/shallow';
+import styles from '@/styles/ui/NotificationCenter.module.css';
 
 export function NotificationCenter() {
-  const notifications = useDesktopStore(useShallow(selectNotifications))
-  const dismissNotification = useDesktopStore(s => s.dismissNotification)
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const notifications = useDesktopStore(useShallow(selectNotifications));
+  const dismissNotification = useDesktopStore((s) => s.dismissNotification);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Auto-dismiss all notifications (default 8s if no duration specified)
-  const DEFAULT_DURATION = 8000
+  const DEFAULT_DURATION = 8000;
   useEffect(() => {
     for (const notif of notifications) {
       if (!timersRef.current.has(notif.id)) {
         const timer = setTimeout(() => {
-          dismissNotification(notif.id)
-          timersRef.current.delete(notif.id)
-        }, notif.duration || DEFAULT_DURATION)
-        timersRef.current.set(notif.id, timer)
+          dismissNotification(notif.id);
+          timersRef.current.delete(notif.id);
+        }, notif.duration || DEFAULT_DURATION);
+        timersRef.current.set(notif.id, timer);
       }
     }
 
     // Clean up timers for removed notifications
-    const currentIds = new Set(notifications.map(n => n.id))
+    const currentIds = new Set(notifications.map((n) => n.id));
     for (const [id, timer] of timersRef.current) {
       if (!currentIds.has(id)) {
-        clearTimeout(timer)
-        timersRef.current.delete(id)
+        clearTimeout(timer);
+        timersRef.current.delete(id);
       }
     }
-  }, [notifications, dismissNotification])
+  }, [notifications, dismissNotification]);
 
   // Cleanup all timers on unmount
   useEffect(() => {
-    const timers = timersRef.current
+    const timers = timersRef.current;
     return () => {
       for (const timer of timers.values()) {
-        clearTimeout(timer)
+        clearTimeout(timer);
       }
-      timers.clear()
-    }
-  }, [])
+      timers.clear();
+    };
+  }, []);
 
-  if (notifications.length === 0) return null
+  if (notifications.length === 0) return null;
 
   return (
     <div className={styles.container}>
-      {notifications.map(notif => (
+      {notifications.map((notif) => (
         <div key={notif.id} className={styles.notification}>
           <div className={styles.header}>
             <span className={styles.title}>{notif.title}</span>
-            <button
-              className={styles.dismiss}
-              onClick={() => dismissNotification(notif.id)}
-            >
+            <button className={styles.dismiss} onClick={() => dismissNotification(notif.id)}>
               ×
             </button>
           </div>
@@ -65,5 +62,5 @@ export function NotificationCenter() {
         </div>
       ))}
     </div>
-  )
+  );
 }

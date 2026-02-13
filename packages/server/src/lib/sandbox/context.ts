@@ -93,7 +93,9 @@ function createRestrictedFetch(allowedDomains: string[]): typeof fetch | undefin
     }
     if (!domainSet.has(hostname)) {
       return Promise.reject(
-        new Error(`Domain "${hostname}" is not in the allowed domains list. Allowed: ${allowedDomains.join(', ')}`)
+        new Error(
+          `Domain "${hostname}" is not in the allowed domains list. Allowed: ${allowedDomains.join(', ')}`,
+        ),
       );
     }
     return fetch(input, init);
@@ -104,7 +106,10 @@ function createRestrictedFetch(allowedDomains: string[]): typeof fetch | undefin
  * Safe globals whitelist for the sandbox.
  * These are frozen copies of built-in objects that don't provide system access.
  */
-export function createSafeGlobals(capturedConsole: CapturedConsole, allowedDomains: string[] = []): Record<string, unknown> {
+export function createSafeGlobals(
+  capturedConsole: CapturedConsole,
+  allowedDomains: string[] = [],
+): Record<string, unknown> {
   return {
     // Console (captured)
     console: Object.freeze({
@@ -232,7 +237,10 @@ export function createSafeGlobals(capturedConsole: CapturedConsole, allowedDomai
 /**
  * Create a sandboxed vm context with safe globals.
  */
-export function createSandboxContext(capturedConsole: CapturedConsole, allowedDomains: string[] = []): vm.Context {
+export function createSandboxContext(
+  capturedConsole: CapturedConsole,
+  allowedDomains: string[] = [],
+): vm.Context {
   const globals = createSafeGlobals(capturedConsole, allowedDomains);
   const context = vm.createContext(globals, {
     name: 'sandbox',

@@ -33,7 +33,7 @@ export function registerNotificationTools(server: McpServer): void {
 
       actionEmitter.emitAction(osAction);
       return ok(`Notification "${args.title}" shown`);
-    }
+    },
   );
 
   // dismiss_notification
@@ -53,6 +53,6 @@ export function registerNotificationTools(server: McpServer): void {
 
       actionEmitter.emitAction(osAction);
       return ok(`Notification ${args.id} dismissed`);
-    }
+    },
   );
 }

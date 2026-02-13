@@ -9,7 +9,13 @@ import { join } from 'path';
 import { ensureStorageDir } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
-import { listSessions, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from './logging/index.js';
+import {
+  listSessions,
+  readSessionMessages,
+  parseSessionMessages,
+  getWindowRestoreActions,
+  getContextRestoreMessages,
+} from './logging/index.js';
 import { PORT, PROJECT_ROOT, IS_BUNDLED_EXE } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/live-session.js';
@@ -39,7 +45,9 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   const warmPoolReady = await initWarmPool();
   if (warmPoolReady) {
     const stats = getWarmPool().getStats();
-    console.log(`Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`);
+    console.log(
+      `Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`,
+    );
   }
 
   // Restore window state from the most recent previous session
@@ -58,17 +66,23 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
         const restoreActions = getWindowRestoreActions(messages);
         if (restoreActions.length > 0) {
           options.restoreActions = restoreActions;
-          console.log(`Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`);
+          console.log(
+            `Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`,
+          );
         }
         const contextMessages = getContextRestoreMessages(messages);
         if (contextMessages.length > 0) {
           options.contextMessages = contextMessages;
-          console.log(`Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`);
+          console.log(
+            `Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`,
+          );
         }
       }
       if (lastSession.metadata?.threadIds) {
         options.savedThreadIds = lastSession.metadata.threadIds;
-        console.log(`Restored ${Object.keys(lastSession.metadata.threadIds).length} thread ID(s) from session ${lastSession.sessionId}`);
+        console.log(
+          `Restored ${Object.keys(lastSession.metadata.threadIds).length} thread ID(s) from session ${lastSession.sessionId}`,
+        );
       }
     }
   } catch (err) {

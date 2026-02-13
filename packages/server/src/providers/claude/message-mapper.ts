@@ -137,7 +137,7 @@ function extractToolResult(message: unknown): StreamMessage | null {
             (item): item is { type: string; text: string } =>
               typeof item === 'object' &&
               item !== null &&
-              (item as Record<string, unknown>).type === 'text'
+              (item as Record<string, unknown>).type === 'text',
           )
           .map((item) => item.text)
           .join('');
@@ -145,7 +145,8 @@ function extractToolResult(message: unknown): StreamMessage | null {
 
       if (resultText) {
         // Look up tool name from prior content_block_start event
-        const toolName = (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
+        const toolName =
+          (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
         if (toolResult.tool_use_id) toolNameById.delete(toolResult.tool_use_id);
         return {
           type: 'tool_result',

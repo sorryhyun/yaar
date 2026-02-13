@@ -1,2 +1,2 @@
-export { WindowFrame } from './WindowFrame'
-export { MemoizedContentRenderer } from './ContentRenderer'
+export { WindowFrame } from './WindowFrame';
+export { MemoizedContentRenderer } from './ContentRenderer';

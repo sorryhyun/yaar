@@ -64,7 +64,8 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
             case 'insertAt':
               if (typeof currentData === 'string' && typeof action.operation.data === 'string') {
                 const pos = action.operation.position ?? 0;
-                newData = currentData.slice(0, pos) + action.operation.data + currentData.slice(pos);
+                newData =
+                  currentData.slice(0, pos) + action.operation.data + currentData.slice(pos);
               }
               break;
           }

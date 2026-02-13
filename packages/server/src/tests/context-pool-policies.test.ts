@@ -49,8 +49,17 @@ describe('ReloadCachePolicy', () => {
   it('generates friendly labels', () => {
     // Pass a minimal mock cache — only generateCacheLabel is tested here
     const policy = new ReloadCachePolicy({ findMatches: () => [], record: () => {} } as any);
-    expect(policy.generateCacheLabel({ type: 'main', messageId: '1', content: 'app: moltbook' })).toBe('Open moltbook app');
-    expect(policy.generateCacheLabel({ type: 'window', windowId: 'w', messageId: '2', content: 'click button "Save" now' })).toBe('Click "Save"');
+    expect(
+      policy.generateCacheLabel({ type: 'main', messageId: '1', content: 'app: moltbook' }),
+    ).toBe('Open moltbook app');
+    expect(
+      policy.generateCacheLabel({
+        type: 'window',
+        windowId: 'w',
+        messageId: '2',
+        content: 'click button "Save" now',
+      }),
+    ).toBe('Click "Save"');
   });
 });
 

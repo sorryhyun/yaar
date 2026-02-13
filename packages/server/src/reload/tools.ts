@@ -13,7 +13,11 @@ import { getAgentId } from '../agents/session.js';
 import type { ReloadCache } from './cache.js';
 import type { CacheEntry } from './types.js';
 
-export function registerReloadTools(server: McpServer, getCache: () => ReloadCache, getWindowState: () => WindowStateRegistry): void {
+export function registerReloadTools(
+  server: McpServer,
+  getCache: () => ReloadCache,
+  getWindowState: () => WindowStateRegistry,
+): void {
   // reload_cached - replay a cached action sequence
   server.registerTool(
     'reload_cached',
@@ -49,10 +53,7 @@ export function registerReloadTools(server: McpServer, getCache: () => ReloadCac
         for (const action of entry.actions) {
           // Substitute current agentId for lock/unlock actions
           let replayAction = action;
-          if (
-            (action.type === 'window.lock' || action.type === 'window.unlock') &&
-            agentId
-          ) {
+          if ((action.type === 'window.lock' || action.type === 'window.unlock') && agentId) {
             replayAction = { ...action, agentId };
           }
 
@@ -78,9 +79,11 @@ export function registerReloadTools(server: McpServer, getCache: () => ReloadCac
         return ok(`Replayed ${entry.actions.length} actions from cache "${entry.label}".`);
       } catch (err) {
         cache.markFailed(entry.id);
-        return ok(`Cache replay failed: ${err instanceof Error ? err.message : String(err)}. Proceed manually.`);
+        return ok(
+          `Cache replay failed: ${err instanceof Error ? err.message : String(err)}. Proceed manually.`,
+        );
       }
-    }
+    },
   );
 
   // list_reload_options - list available cached sequences
@@ -100,11 +103,12 @@ export function registerReloadTools(server: McpServer, getCache: () => ReloadCac
       const lines = entries
         .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
         .slice(0, 10)
-        .map((e: CacheEntry) =>
-          `- ${e.id}: "${e.label}" (used ${e.useCount}x, ${e.actions.length} actions)`
+        .map(
+          (e: CacheEntry) =>
+            `- ${e.id}: "${e.label}" (used ${e.useCount}x, ${e.actions.length} actions)`,
         );
 
       return ok(`Cached action sequences:\n${lines.join('\n')}`);
-    }
+    },
   );
 }

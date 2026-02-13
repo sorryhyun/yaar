@@ -11,7 +11,12 @@ import { join, resolve } from 'path';
 import { execFile } from 'child_process';
 import { bundledLibraryPlugin, bundledLibraryPluginBun } from './plugins.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
-import { IFRAME_CAPTURE_HELPER_SCRIPT, IFRAME_STORAGE_SDK_SCRIPT, IFRAME_FETCH_PROXY_SCRIPT, IFRAME_APP_PROTOCOL_SCRIPT } from '@yaar/shared';
+import {
+  IFRAME_CAPTURE_HELPER_SCRIPT,
+  IFRAME_STORAGE_SDK_SCRIPT,
+  IFRAME_FETCH_PROXY_SCRIPT,
+  IFRAME_APP_PROTOCOL_SCRIPT,
+} from '@yaar/shared';
 
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
 
@@ -162,7 +167,7 @@ async function compileWithEsbuild(entryPoint: string, minify: boolean): Promise<
  */
 export async function compileTypeScript(
   sandboxPath: string,
-  options: CompileOptions = {}
+  options: CompileOptions = {},
 ): Promise<CompileResult> {
   const { minify = true, title = 'App' } = options;
   const entryPoint = join(sandboxPath, 'src', 'main.ts');
@@ -209,22 +214,16 @@ export async function compileTypeScript(
   }
 }
 
-const BUNDLED_TYPES_DIR = resolve(
-  PROJECT_ROOT, 'packages/server/src/lib/bundled-types'
-);
+const BUNDLED_TYPES_DIR = resolve(PROJECT_ROOT, 'packages/server/src/lib/bundled-types');
 
-const TSC_PATH = resolve(
-  PROJECT_ROOT, 'packages/server/node_modules/.bin/tsc'
-);
+const TSC_PATH = resolve(PROJECT_ROOT, 'packages/server/node_modules/.bin/tsc');
 
 /**
  * Run a loose TypeScript type check on a sandbox directory.
  *
  * Writes a temporary tsconfig, shells out to tsc --noEmit, then cleans up.
  */
-export async function typecheckSandbox(
-  sandboxPath: string,
-): Promise<TypecheckResult> {
+export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckResult> {
   // tsc is not available in bundled exe mode (no node_modules)
   if (IS_BUNDLED_EXE) {
     return { success: true, diagnostics: [] };
@@ -275,7 +274,7 @@ export async function typecheckSandbox(
 
     const diagnostics = output
       .split('\n')
-      .map(l => l.trim())
+      .map((l) => l.trim())
       .filter(Boolean);
 
     return { success: false, diagnostics };

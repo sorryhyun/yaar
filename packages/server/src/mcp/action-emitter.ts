@@ -7,9 +7,19 @@
  */
 
 import { EventEmitter } from 'events';
-import type { OSAction, DialogConfirmAction, PermissionOptions, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import type {
+  OSAction,
+  DialogConfirmAction,
+  PermissionOptions,
+  AppProtocolRequest,
+  AppProtocolResponse,
+} from '@yaar/shared';
 import { getAgentId } from '../agents/session.js';
-import { checkPermission, savePermission, type PermissionDecision } from '../storage/permissions.js';
+import {
+  checkPermission,
+  savePermission,
+  type PermissionDecision,
+} from '../storage/permissions.js';
 
 /**
  * Action event data.
@@ -116,7 +126,12 @@ class ActionEmitter extends EventEmitter {
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
     const currentAgentId = agentId ?? getAgentId();
-    this.emit('action', { action, sessionId, agentId: currentAgentId, monitorId: this.currentMonitorId } as ActionEvent);
+    this.emit('action', {
+      action,
+      sessionId,
+      agentId: currentAgentId,
+      monitorId: this.currentMonitorId,
+    } as ActionEvent);
   }
 
   /**
@@ -127,7 +142,7 @@ class ActionEmitter extends EventEmitter {
   async emitActionWithFeedback(
     action: OSAction,
     timeoutMs: number = 3000,
-    sessionId?: string
+    sessionId?: string,
   ): Promise<RenderingFeedback | null> {
     const requestId = this.generateRequestId();
     // Get current agent ID from context and include in action
@@ -145,7 +160,13 @@ class ActionEmitter extends EventEmitter {
     });
 
     // Emit action with request ID, agentId from context, and monitorId
-    this.emit('action', { action: actionWithAgent, requestId, sessionId, agentId, monitorId: this.currentMonitorId } as ActionEvent);
+    this.emit('action', {
+      action: actionWithAgent,
+      requestId,
+      sessionId,
+      agentId,
+      monitorId: this.currentMonitorId,
+    } as ActionEvent);
 
     return feedbackPromise;
   }
@@ -173,7 +194,7 @@ class ActionEmitter extends EventEmitter {
     message: string,
     confirmText: string = 'Yes',
     cancelText: string = 'No',
-    timeoutMs: number = 60000 // 1 minute default timeout
+    timeoutMs: number = 60000, // 1 minute default timeout
   ): Promise<boolean> {
     const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
@@ -196,7 +217,11 @@ class ActionEmitter extends EventEmitter {
       cancelText,
     };
 
-    this.emit('action', { action: action as OSAction, sessionId: undefined, agentId } as ActionEvent);
+    this.emit('action', {
+      action: action as OSAction,
+      sessionId: undefined,
+      agentId,
+    } as ActionEvent);
 
     return dialogPromise;
   }
@@ -215,7 +240,7 @@ class ActionEmitter extends EventEmitter {
     context?: string,
     confirmText: string = 'Allow',
     cancelText: string = 'Deny',
-    timeoutMs: number = 60000
+    timeoutMs: number = 60000,
   ): Promise<boolean> {
     // Check for saved permission first
     const savedDecision = await checkPermission(toolName, context);
@@ -255,7 +280,11 @@ class ActionEmitter extends EventEmitter {
       permissionOptions,
     };
 
-    this.emit('action', { action: action as OSAction, sessionId: undefined, agentId } as ActionEvent);
+    this.emit('action', {
+      action: action as OSAction,
+      sessionId: undefined,
+      agentId,
+    } as ActionEvent);
 
     return dialogPromise;
   }
@@ -339,7 +368,7 @@ class ActionEmitter extends EventEmitter {
   async emitAppProtocolRequest(
     windowId: string,
     request: AppProtocolRequest,
-    timeoutMs: number = 5000
+    timeoutMs: number = 5000,
   ): Promise<AppProtocolResponse | null> {
     const requestId = this.generateRequestId();
 

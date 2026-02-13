@@ -1,5 +1,5 @@
-import { DesktopSurface } from './components/desktop'
+import { DesktopSurface } from './components/desktop';
 
 export default function App() {
-  return <DesktopSurface />
+  return <DesktopSurface />;
 }

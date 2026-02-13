@@ -20,7 +20,7 @@ export interface AppInfo {
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
   hasCredentials: boolean;
-  isCompiled?: boolean;  // Has index.html (TypeScript compiled app)
+  isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   fileAssociations?: FileAssociation[];
 }
@@ -98,10 +98,12 @@ export async function listApps(): Promise<AppInfo[]> {
       }
 
       // Convert kebab-case or snake_case to Title Case (fallback)
-      const name = displayName ?? appId
-        .split(/[-_]/)
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+      const name =
+        displayName ??
+        appId
+          .split(/[-_]/)
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
 
       apps.push({
         id: appId,

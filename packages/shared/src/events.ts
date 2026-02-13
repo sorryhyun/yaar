@@ -8,12 +8,22 @@ import type { AppProtocolRequest, AppProtocolResponse } from './app-protocol.js'
 // ============ Client → Server Events ============
 
 export interface UserInteraction {
-  type: 'window.close' | 'window.focus' | 'window.move' | 'window.resize' | 'window.minimize' | 'window.maximize' | 'toast.dismiss' | 'notification.dismiss' | 'icon.click' | 'draw';
+  type:
+    | 'window.close'
+    | 'window.focus'
+    | 'window.move'
+    | 'window.resize'
+    | 'window.minimize'
+    | 'window.maximize'
+    | 'toast.dismiss'
+    | 'notification.dismiss'
+    | 'icon.click'
+    | 'draw';
   timestamp: number;
   windowId?: string;
   windowTitle?: string;
   details?: string;
-  imageData?: string;  // Base64 PNG for drawings
+  imageData?: string; // Base64 PNG for drawings
   bounds?: { x: number; y: number; w: number; h: number };
 }
 

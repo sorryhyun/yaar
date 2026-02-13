@@ -186,12 +186,18 @@ class ProviderWarmPool {
     const provider = this.pool.shift();
     if (provider) {
       const sessionId = provider.getSessionId?.() ?? 'no-session';
-      console.log(`[WarmPool] Acquired warm provider (session: ${sessionId}), pool size: ${this.pool.length}`);
+      console.log(
+        `[WarmPool] Acquired warm provider (session: ${sessionId}), pool size: ${this.pool.length}`,
+      );
 
       // Replenish in background for Claude only.
       // Codex providers share one AppServer and are cheap to create on demand,
       // so background replenish just adds race conditions with reset.
-      if (this.config.autoReplenish && this.preferredProvider && this.preferredProvider !== 'codex') {
+      if (
+        this.config.autoReplenish &&
+        this.preferredProvider &&
+        this.preferredProvider !== 'codex'
+      ) {
         this.replenishBackground();
       }
 
@@ -220,7 +226,9 @@ class ProviderWarmPool {
         if (this.pool.length < this.config.poolSize) {
           this.pool.push(provider);
           const sessionId = provider.getSessionId?.() ?? 'no-session';
-          console.log(`[WarmPool] Replenished pool (session: ${sessionId}), size: ${this.pool.length}`);
+          console.log(
+            `[WarmPool] Replenished pool (session: ${sessionId}), size: ${this.pool.length}`,
+          );
         } else {
           provider.dispose();
         }

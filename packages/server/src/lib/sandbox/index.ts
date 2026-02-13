@@ -5,7 +5,12 @@
  */
 
 import vm from 'node:vm';
-import { createCapturedConsole, createSandboxContext, formatLogs, type LogEntry } from './context.js';
+import {
+  createCapturedConsole,
+  createSandboxContext,
+  formatLogs,
+  type LogEntry,
+} from './context.js';
 import { compileTypeScript, wrapCodeForExecution } from './transform.js';
 
 export type { LogEntry } from './context.js';
@@ -39,7 +44,10 @@ const MAX_TIMEOUT = 30000;
 /**
  * Execute JavaScript or TypeScript code in a sandboxed environment.
  */
-export async function executeCode(code: string, options: ExecuteOptions = {}): Promise<ExecuteResult> {
+export async function executeCode(
+  code: string,
+  options: ExecuteOptions = {},
+): Promise<ExecuteResult> {
   const startTime = performance.now();
   const timeout = Math.min(options.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
 
@@ -114,7 +122,10 @@ export async function executeCode(code: string, options: ExecuteOptions = {}): P
     let errorMessage: string;
 
     if (err instanceof Error) {
-      if (err.message.includes('Script execution timed out') || err.message.includes('Async execution timed out')) {
+      if (
+        err.message.includes('Script execution timed out') ||
+        err.message.includes('Async execution timed out')
+      ) {
         errorMessage = `Execution timed out after ${timeout}ms`;
       } else {
         // Include stack trace for better debugging
@@ -137,13 +148,19 @@ export async function executeCode(code: string, options: ExecuteOptions = {}): P
 /**
  * Execute JavaScript code in a sandboxed environment.
  */
-export function executeJs(code: string, options: Omit<ExecuteOptions, 'typescript'> = {}): Promise<ExecuteResult> {
+export function executeJs(
+  code: string,
+  options: Omit<ExecuteOptions, 'typescript'> = {},
+): Promise<ExecuteResult> {
   return executeCode(code, { ...options, typescript: false });
 }
 
 /**
  * Execute TypeScript code in a sandboxed environment.
  */
-export function executeTs(code: string, options: Omit<ExecuteOptions, 'typescript'> = {}): Promise<ExecuteResult> {
+export function executeTs(
+  code: string,
+  options: Omit<ExecuteOptions, 'typescript'> = {},
+): Promise<ExecuteResult> {
   return executeCode(code, { ...options, typescript: true });
 }

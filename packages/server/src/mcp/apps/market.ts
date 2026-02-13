@@ -23,7 +23,8 @@ export function registerMarketTools(server: McpServer): void {
   server.registerTool(
     'market_list',
     {
-      description: 'List all apps available in the YAAR marketplace. Shows name, icon, description, version, and author for each app.',
+      description:
+        'List all apps available in the YAAR marketplace. Shows name, icon, description, version, and author for each app.',
     },
     async () => {
       const res = await fetch(`${MARKET_URL}/api/apps`);
@@ -31,27 +32,41 @@ export function registerMarketTools(server: McpServer): void {
         return ok(`Error: Failed to fetch marketplace (${res.status} ${res.statusText})`);
       }
 
-      const data = await res.json() as { apps: Array<{ id: string; name: string; icon: string; description: string; version: string; author: string }> };
+      const data = (await res.json()) as {
+        apps: Array<{
+          id: string;
+          name: string;
+          icon: string;
+          description: string;
+          version: string;
+          author: string;
+        }>;
+      };
 
       if (!data.apps || data.apps.length === 0) {
         return ok('No apps available in the marketplace.');
       }
 
-      const lines = data.apps.map((app) =>
-        `- ${app.icon} **${app.name}** (${app.id}) v${app.version}\n  ${app.description} — by ${app.author}`
+      const lines = data.apps.map(
+        (app) =>
+          `- ${app.icon} **${app.name}** (${app.id}) v${app.version}\n  ${app.description} — by ${app.author}`,
       );
 
       return ok(`Marketplace apps:\n${lines.join('\n')}`);
-    }
+    },
   );
 
   // Install app from marketplace
   server.registerTool(
     'market_get',
     {
-      description: 'Download and install an app from the YAAR marketplace into the local apps/ directory. Overwrites if already installed.',
+      description:
+        'Download and install an app from the YAAR marketplace into the local apps/ directory. Overwrites if already installed.',
       inputSchema: {
-        appId: z.string().regex(/^[a-z][a-z0-9-]*$/, 'Invalid app ID format').describe('The app ID to install from the marketplace'),
+        appId: z
+          .string()
+          .regex(/^[a-z][a-z0-9-]*$/, 'Invalid app ID format')
+          .describe('The app ID to install from the marketplace'),
       },
     },
     async (args) => {
@@ -92,6 +107,6 @@ export function registerMarketTools(server: McpServer): void {
       actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
       return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
-    }
+    },
   );
 }

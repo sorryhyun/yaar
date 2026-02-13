@@ -7,12 +7,17 @@
  * This store processes it and updates the state, causing React to render
  * the new window. The AI literally controls what appears on screen.
  */
-import { create } from 'zustand'
-import { immer } from 'zustand/middleware/immer'
-import type { DesktopStore } from './types'
-import type { OSAction, WindowCaptureAction, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared'
-import { toWindowKey } from './helpers'
-import html2canvas from 'html2canvas'
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import type { DesktopStore } from './types';
+import type {
+  OSAction,
+  WindowCaptureAction,
+  AppProtocolRequest,
+  AppProtocolResponse,
+} from '@yaar/shared';
+import { toWindowKey } from './helpers';
+import html2canvas from 'html2canvas';
 
 // Import all slice creators
 import {
@@ -31,26 +36,29 @@ import {
   createDrawingSlice,
   createCliSlice,
   createMonitorSlice,
-} from './slices'
+} from './slices';
 
 // Import pure mutation functions for batched action processing
-import { applyWindowAction } from './slices/windowsSlice'
-import { applyNotificationAction } from './slices/notificationsSlice'
-import { applyToastAction } from './slices/toastsSlice'
-import { applyDialogAction } from './slices/dialogsSlice'
+import { applyWindowAction } from './slices/windowsSlice';
+import { applyNotificationAction } from './slices/notificationsSlice';
+import { applyToastAction } from './slices/toastsSlice';
+import { applyDialogAction } from './slices/dialogsSlice';
 
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
  * Returns a base64 PNG data URL or null if the iframe doesn't respond.
  */
-export function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000): Promise<string | null> {
+export function tryIframeSelfCapture(
+  iframe: HTMLIFrameElement,
+  timeoutMs = 2000,
+): Promise<string | null> {
   return new Promise((resolve) => {
-    const requestId = `capture-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const requestId = `capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const timer = setTimeout(() => {
-      window.removeEventListener('message', handler)
-      resolve(null)
-    }, timeoutMs)
+      window.removeEventListener('message', handler);
+      resolve(null);
+    }, timeoutMs);
 
     function handler(e: MessageEvent) {
       if (
@@ -58,15 +66,15 @@ export function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000
         e.data.requestId === requestId &&
         e.source === iframe.contentWindow
       ) {
-        clearTimeout(timer)
-        window.removeEventListener('message', handler)
-        resolve(e.data.imageData ?? null)
+        clearTimeout(timer);
+        window.removeEventListener('message', handler);
+        resolve(e.data.imageData ?? null);
       }
     }
 
-    window.addEventListener('message', handler)
-    iframe.contentWindow?.postMessage({ type: 'yaar:capture-request', requestId }, '*')
-  })
+    window.addEventListener('message', handler);
+    iframe.contentWindow?.postMessage({ type: 'yaar:capture-request', requestId }, '*');
+  });
 }
 
 /**
@@ -79,7 +87,7 @@ export function tryIframeSelfCapture(iframe: HTMLIFrameElement, timeoutMs = 2000
  */
 async function captureWindow(windowId: string, requestId: string) {
   try {
-    const el = document.querySelector(`[data-window-id="${windowId}"]`) as HTMLElement | null
+    const el = document.querySelector(`[data-window-id="${windowId}"]`) as HTMLElement | null;
     if (!el) {
       useDesktopStore.getState().addRenderingFeedback({
         requestId,
@@ -87,30 +95,30 @@ async function captureWindow(windowId: string, requestId: string) {
         renderer: 'capture',
         success: false,
         error: `Window element not found in DOM`,
-      })
-      return
+      });
+      return;
     }
 
     // If the window contains an iframe, try capture strategies in order
-    const iframe = el.querySelector('iframe') as HTMLIFrameElement | null
+    const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
     if (iframe?.contentWindow) {
       // Tier 1: iframe self-capture (captures canvas/svg elements inside)
-      const iframeData = await tryIframeSelfCapture(iframe)
+      const iframeData = await tryIframeSelfCapture(iframe);
       if (iframeData) {
-        const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '')
+        const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '');
         useDesktopStore.getState().addRenderingFeedback({
           requestId,
           windowId,
           renderer: 'capture',
           success: true,
           imageData: base64,
-        })
-        return
+        });
+        return;
       }
 
       // Tier 2: html2canvas on iframe's content document (same-origin only)
       try {
-        const doc = iframe.contentDocument
+        const doc = iframe.contentDocument;
         if (doc?.documentElement) {
           const canvas = await html2canvas(doc.documentElement, {
             useCORS: true,
@@ -118,17 +126,17 @@ async function captureWindow(windowId: string, requestId: string) {
             scale: 1,
             width: iframe.clientWidth || undefined,
             height: iframe.clientHeight || undefined,
-          })
-          const dataUrl = canvas.toDataURL('image/webp', 0.9)
-          const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '')
+          });
+          const dataUrl = canvas.toDataURL('image/webp', 0.9);
+          const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
           useDesktopStore.getState().addRenderingFeedback({
             requestId,
             windowId,
             renderer: 'capture',
             success: true,
             imageData: base64,
-          })
-          return
+          });
+          return;
         }
       } catch {
         // Cross-origin or html2canvas failure — fall through to Tier 3
@@ -140,10 +148,10 @@ async function captureWindow(windowId: string, requestId: string) {
       useCORS: true,
       logging: false,
       scale: 1,
-    })
+    });
 
-    const dataUrl = canvas.toDataURL('image/webp', 0.9)
-    const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '')
+    const dataUrl = canvas.toDataURL('image/webp', 0.9);
+    const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
 
     useDesktopStore.getState().addRenderingFeedback({
       requestId,
@@ -151,7 +159,7 @@ async function captureWindow(windowId: string, requestId: string) {
       renderer: 'capture',
       success: true,
       imageData: base64,
-    })
+    });
   } catch (error) {
     useDesktopStore.getState().addRenderingFeedback({
       requestId,
@@ -159,7 +167,7 @@ async function captureWindow(windowId: string, requestId: string) {
       renderer: 'capture',
       success: false,
       error: error instanceof Error ? error.message : 'Capture failed',
-    })
+    });
   }
 }
 
@@ -167,72 +175,90 @@ async function captureWindow(windowId: string, requestId: string) {
  * Handle an App Protocol request by forwarding it to the target iframe via postMessage,
  * then collecting the response and pushing it as pending feedback.
  */
-function handleAppProtocolRequest(requestId: string, windowId: string, request: AppProtocolRequest) {
-  const state = useDesktopStore.getState()
-  const monitorId = state.activeMonitorId ?? 'monitor-0'
-  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId)
+function handleAppProtocolRequest(
+  requestId: string,
+  windowId: string,
+  request: AppProtocolRequest,
+) {
+  const state = useDesktopStore.getState();
+  const monitorId = state.activeMonitorId ?? 'monitor-0';
+  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
 
-  const el = document.querySelector(`[data-window-id="${key}"]`) as HTMLElement | null
+  const el = document.querySelector(`[data-window-id="${key}"]`) as HTMLElement | null;
   if (!el) {
     useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId, windowId, response: { kind: request.kind, error: 'Window element not found' } as AppProtocolResponse
-    })
-    return
+      requestId,
+      windowId,
+      response: { kind: request.kind, error: 'Window element not found' } as AppProtocolResponse,
+    });
+    return;
   }
 
-  const iframe = el.querySelector('iframe') as HTMLIFrameElement | null
+  const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
   if (!iframe?.contentWindow) {
     useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId, windowId, response: { kind: request.kind, error: 'No iframe found in window' } as AppProtocolResponse
-    })
-    return
+      requestId,
+      windowId,
+      response: { kind: request.kind, error: 'No iframe found in window' } as AppProtocolResponse,
+    });
+    return;
   }
 
   // Build postMessage based on request kind
-  let msg: Record<string, unknown>
+  let msg: Record<string, unknown>;
   if (request.kind === 'manifest') {
-    msg = { type: 'yaar:app-manifest-request', requestId }
+    msg = { type: 'yaar:app-manifest-request', requestId };
   } else if (request.kind === 'query') {
-    msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey }
+    msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey };
   } else {
-    msg = { type: 'yaar:app-command-request', requestId, command: request.command, params: request.params }
+    msg = {
+      type: 'yaar:app-command-request',
+      requestId,
+      command: request.command,
+      params: request.params,
+    };
   }
 
   // Listen for response with timeout
   const timeoutId = setTimeout(() => {
-    window.removeEventListener('message', handler)
+    window.removeEventListener('message', handler);
     useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId, windowId, response: { kind: request.kind, error: 'Timeout waiting for app response' } as AppProtocolResponse
-    })
-  }, 5000)
+      requestId,
+      windowId,
+      response: {
+        kind: request.kind,
+        error: 'Timeout waiting for app response',
+      } as AppProtocolResponse,
+    });
+  }, 5000);
 
   function handler(e: MessageEvent) {
-    if (!e.data?.requestId || e.data.requestId !== requestId) return
-    const type = e.data.type as string
-    if (!type?.startsWith('yaar:app-')) return
+    if (!e.data?.requestId || e.data.requestId !== requestId) return;
+    const type = e.data.type as string;
+    if (!type?.startsWith('yaar:app-')) return;
 
-    clearTimeout(timeoutId)
-    window.removeEventListener('message', handler)
+    clearTimeout(timeoutId);
+    window.removeEventListener('message', handler);
 
-    let response: AppProtocolResponse
+    let response: AppProtocolResponse;
     if (type === 'yaar:app-manifest-response') {
-      response = { kind: 'manifest', manifest: e.data.manifest, error: e.data.error }
+      response = { kind: 'manifest', manifest: e.data.manifest, error: e.data.error };
     } else if (type === 'yaar:app-query-response') {
-      response = { kind: 'query', data: e.data.data, error: e.data.error }
+      response = { kind: 'query', data: e.data.data, error: e.data.error };
     } else if (type === 'yaar:app-command-response') {
-      response = { kind: 'command', result: e.data.result, error: e.data.error }
+      response = { kind: 'command', result: e.data.result, error: e.data.error };
     } else {
-      return
+      return;
     }
 
-    useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response })
+    useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response });
   }
 
-  window.addEventListener('message', handler)
-  iframe.contentWindow.postMessage(msg, '*')
+  window.addEventListener('message', handler);
+  iframe.contentWindow.postMessage(msg, '*');
 }
 
-export { handleAppProtocolRequest }
+export { handleAppProtocolRequest };
 
 /**
  * Listen for `yaar:app-ready` postMessages from iframes that register with the App Protocol.
@@ -243,46 +269,46 @@ export { handleAppProtocolRequest }
  */
 function initAppProtocolListeners() {
   window.addEventListener('message', (e: MessageEvent) => {
-    if (!e.data?.type) return
+    if (!e.data?.type) return;
 
     if (e.data.type === 'yaar:app-ready') {
       // Find the iframe whose contentWindow matches the message source
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
       for (const iframe of iframes) {
         if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
-          const windowId = windowEl?.dataset.windowId
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
+          const windowId = windowEl?.dataset.windowId;
           if (windowId) {
-            useDesktopStore.getState().addAppProtocolReady(windowId)
+            useDesktopStore.getState().addAppProtocolReady(windowId);
           }
-          break
+          break;
         }
       }
-      return
+      return;
     }
 
     if (e.data.type === 'yaar:app-interaction') {
-      const content = e.data.content
-      if (typeof content !== 'string' || !content) return
+      const content = e.data.content;
+      if (typeof content !== 'string' || !content) return;
 
       // Find the iframe whose contentWindow matches the message source
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe')
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
       for (const iframe of iframes) {
         if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]')
-          const windowId = windowEl?.dataset.windowId
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
+          const windowId = windowEl?.dataset.windowId;
           if (windowId) {
-            useDesktopStore.getState().addPendingAppInteraction({ windowId, content })
+            useDesktopStore.getState().addPendingAppInteraction({ windowId, content });
           }
-          break
+          break;
         }
       }
     }
-  })
+  });
 }
 
 // Initialize the listeners immediately
-initAppProtocolListeners()
+initAppProtocolListeners();
 
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
@@ -306,108 +332,110 @@ export const useDesktopStore = create<DesktopStore>()(
     // Desktop-level state
     appsVersion: 0,
     bumpAppsVersion: () => {
-      const [set] = a
-      set((state) => { state.appsVersion += 1 })
+      const [set] = a;
+      set((state) => {
+        state.appsVersion += 1;
+      });
     },
 
     // Action router - routes OS actions to appropriate slice handlers
     applyAction: (action: OSAction) => {
-      const store = useDesktopStore.getState()
+      const store = useDesktopStore.getState();
 
       // Log to activity log
-      store.addToActivityLog(action)
+      store.addToActivityLog(action);
 
       // Route to appropriate slice handler based on action type prefix
-      const actionType = action.type
+      const actionType = action.type;
 
       if (actionType === 'window.capture') {
         // Handle capture async (outside Immer)
-        const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string }
+        const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string };
         if (requestId) {
           // Resolve scoped key: server sends raw windowId, store uses monitorId-scoped keys
-          const state = useDesktopStore.getState()
-          const actionMonitorId = (action as { monitorId?: string }).monitorId
-          const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0'
-          const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId)
-          captureWindow(key, requestId)
+          const state = useDesktopStore.getState();
+          const actionMonitorId = (action as { monitorId?: string }).monitorId;
+          const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
+          const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
+          captureWindow(key, requestId);
         }
-        return
+        return;
       }
 
       if (actionType.startsWith('window.')) {
-        store.handleWindowAction(action)
+        store.handleWindowAction(action);
       } else if (actionType.startsWith('notification.')) {
-        store.handleNotificationAction(action)
+        store.handleNotificationAction(action);
       } else if (actionType.startsWith('toast.')) {
-        store.handleToastAction(action)
+        store.handleToastAction(action);
       } else if (actionType.startsWith('dialog.')) {
-        store.handleDialogAction(action)
+        store.handleDialogAction(action);
       } else if (actionType === 'desktop.refreshApps') {
-        store.bumpAppsVersion()
+        store.bumpAppsVersion();
       }
     },
 
     applyActions: (actions: OSAction[]) => {
       // Partition into sync (batchable) and async (must run outside Immer) actions
-      const syncActions: OSAction[] = []
-      const asyncActions: OSAction[] = []
+      const syncActions: OSAction[] = [];
+      const asyncActions: OSAction[] = [];
       for (const action of actions) {
-        if (action.type === 'window.capture') asyncActions.push(action)
-        else syncActions.push(action)
+        if (action.type === 'window.capture') asyncActions.push(action);
+        else syncActions.push(action);
       }
 
       // Batch all sync actions into a single Immer transaction → 1 re-render
       if (syncActions.length > 0) {
-        const [set] = a
+        const [set] = a;
         set((state) => {
           for (const action of syncActions) {
-            state.activityLog.push(action)
-            const t = action.type
-            if (t.startsWith('window.')) applyWindowAction(state as DesktopStore, action)
-            else if (t.startsWith('notification.')) applyNotificationAction(state, action)
-            else if (t.startsWith('toast.')) applyToastAction(state, action)
-            else if (t.startsWith('dialog.')) applyDialogAction(state, action)
-            else if (t === 'desktop.refreshApps') state.appsVersion += 1
+            state.activityLog.push(action);
+            const t = action.type;
+            if (t.startsWith('window.')) applyWindowAction(state as DesktopStore, action);
+            else if (t.startsWith('notification.')) applyNotificationAction(state, action);
+            else if (t.startsWith('toast.')) applyToastAction(state, action);
+            else if (t.startsWith('dialog.')) applyDialogAction(state, action);
+            else if (t === 'desktop.refreshApps') state.appsVersion += 1;
           }
-        })
+        });
       }
 
       // Handle async actions individually (e.g. window.capture needs DOM access)
       for (const action of asyncActions) {
-        useDesktopStore.getState().applyAction(action)
+        useDesktopStore.getState().applyAction(action);
       }
     },
 
     resetDesktop: () => {
-      const [set] = a
+      const [set] = a;
       set((state) => {
-        state.windows = {}
-        state.zOrder = []
-        state.focusedWindowId = null
-        state.notifications = {}
-        state.toasts = {}
-        state.dialogs = {}
-        state.activeAgents = {}
-        state.windowAgents = {}
-        state.queuedActions = {}
-        state.pendingInteractions = []
-        state.activityLog = []
-        state.debugLog = []
-        state.pendingFeedback = []
-        state.pendingAppProtocolResponses = []
-        state.pendingAppProtocolReady = []
-        state.pendingAppInteractions = []
-        state.selectedWindowIds = []
-        state.appsVersion = 0
-        state.cliMode = false
-        state.cliHistory = {}
-        state.cliStreaming = {}
-        state.monitors = [{ id: 'monitor-0', label: 'Monitor 1', createdAt: Date.now() }]
-        state.activeMonitorId = 'monitor-0'
-      })
+        state.windows = {};
+        state.zOrder = [];
+        state.focusedWindowId = null;
+        state.notifications = {};
+        state.toasts = {};
+        state.dialogs = {};
+        state.activeAgents = {};
+        state.windowAgents = {};
+        state.queuedActions = {};
+        state.pendingInteractions = [];
+        state.activityLog = [];
+        state.debugLog = [];
+        state.pendingFeedback = [];
+        state.pendingAppProtocolResponses = [];
+        state.pendingAppProtocolReady = [];
+        state.pendingAppInteractions = [];
+        state.selectedWindowIds = [];
+        state.appsVersion = 0;
+        state.cliMode = false;
+        state.cliHistory = {};
+        state.cliStreaming = {};
+        state.monitors = [{ id: 'monitor-0', label: 'Monitor 1', createdAt: Date.now() }];
+        state.activeMonitorId = 'monitor-0';
+      });
     },
-  }))
-)
+  })),
+);
 
 // Re-export selectors for backward compatibility
 export {
@@ -420,4 +448,4 @@ export {
   selectWindowAgents,
   selectWindowAgent,
   selectQueuedActionsCount,
-} from './selectors'
+} from './selectors';

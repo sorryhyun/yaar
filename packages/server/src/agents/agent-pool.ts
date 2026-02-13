@@ -99,7 +99,10 @@ export class AgentPool {
   /**
    * Create a main agent for the given monitor with the given provider.
    */
-  async createMainAgent(monitorId = 'monitor-0', preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
+  async createMainAgent(
+    monitorId = 'monitor-0',
+    preWarmedProvider?: AITransport,
+  ): Promise<PooledAgent | null> {
     const agent = await this.createAgentCore(preWarmedProvider);
     if (agent) {
       this.mainAgents.set(monitorId, agent);

@@ -6,7 +6,12 @@ import { createServer, type Server } from 'http';
 import { handleMcpRequest, MCP_SERVERS, type McpServerName } from '../mcp/server.js';
 import { PORT } from '../config.js';
 import { sendJson } from './utils.js';
-import { handleApiRoutes, handleFileRoutes, handleProxyRoutes, handleStaticRoutes } from './routes/index.js';
+import {
+  handleApiRoutes,
+  handleFileRoutes,
+  handleProxyRoutes,
+  handleStaticRoutes,
+} from './routes/index.js';
 
 export function createHttpServer(): Server {
   return createServer(async (req, res) => {

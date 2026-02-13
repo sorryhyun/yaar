@@ -63,7 +63,12 @@ export class ClaudeSessionProvider extends BaseTransport {
   /**
    * Get SDK options for queries.
    */
-  private getSDKOptions(resumeSession?: string, systemPrompt?: string, agentId?: string, allowedTools?: string[]): SDKOptions {
+  private getSDKOptions(
+    resumeSession?: string,
+    systemPrompt?: string,
+    agentId?: string,
+    allowedTools?: string[],
+  ): SDKOptions {
     const mcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${getMcpToken()}`,
     };
@@ -88,7 +93,7 @@ export class ClaudeSessionProvider extends BaseTransport {
             url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
             headers: mcpHeaders,
           },
-        ])
+        ]),
       ),
       includePartialMessages: true,
       permissionMode: 'bypassPermissions',
@@ -170,13 +175,14 @@ export class ClaudeSessionProvider extends BaseTransport {
   async steer(content: string): Promise<boolean> {
     if (!this.currentQuery) return false;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await this.currentQuery.streamInput((async function* (): AsyncGenerator<any> {
-        yield {
-          type: 'user',
-          message: { role: 'user', content },
-        };
-      })());
+      await this.currentQuery.streamInput(
+        (async function* (): AsyncGenerator<any> {
+          yield {
+            type: 'user',
+            message: { role: 'user', content },
+          };
+        })(),
+      );
       return true;
     } catch (err) {
       console.warn('[claude] streamInput failed:', err);
@@ -184,14 +190,13 @@ export class ClaudeSessionProvider extends BaseTransport {
     }
   }
 
-  async *query(
-    prompt: string,
-    options: TransportOptions
-  ): AsyncIterable<StreamMessage> {
+  async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     // Determine which session to resume
     // Priority: options.sessionId > this.sessionId (warmed up)
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
-    console.log(`[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`);
+    console.log(
+      `[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`,
+    );
 
     // Build user message content: multimodal (with images) or text-only
     // Always use async generator for streaming input mode (enables mid-turn steering via streamInput)
@@ -199,7 +204,9 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     console.log(`[ClaudeSessionProvider] options.images: ${options.images?.length ?? 0} images`);
     if (options.images && options.images.length > 0) {
-      console.log(`[ClaudeSessionProvider] First image prefix: ${options.images[0].slice(0, 50)}...`);
+      console.log(
+        `[ClaudeSessionProvider] First image prefix: ${options.images[0].slice(0, 50)}...`,
+      );
 
       // Build multimodal content blocks
       const contentBlocks: ContentBlock[] = [];
@@ -208,7 +215,9 @@ export class ClaudeSessionProvider extends BaseTransport {
       for (const dataUrl of options.images) {
         const parsed = parseDataUrl(dataUrl);
         if (parsed) {
-          console.log(`[ClaudeSessionProvider] Adding image block: ${parsed.mediaType}, data length: ${parsed.data.length}`);
+          console.log(
+            `[ClaudeSessionProvider] Adding image block: ${parsed.mediaType}, data length: ${parsed.data.length}`,
+          );
           contentBlocks.push({
             type: 'image',
             source: {
@@ -218,7 +227,9 @@ export class ClaudeSessionProvider extends BaseTransport {
             },
           });
         } else {
-          console.warn(`[ClaudeSessionProvider] Failed to parse data URL: ${dataUrl.slice(0, 100)}...`);
+          console.warn(
+            `[ClaudeSessionProvider] Failed to parse data URL: ${dataUrl.slice(0, 100)}...`,
+          );
         }
       }
 
@@ -228,7 +239,9 @@ export class ClaudeSessionProvider extends BaseTransport {
         text: prompt,
       });
 
-      console.log(`[ClaudeSessionProvider] Using multimodal prompt with ${contentBlocks.length} content blocks`);
+      console.log(
+        `[ClaudeSessionProvider] Using multimodal prompt with ${contentBlocks.length} content blocks`,
+      );
       messageContent = contentBlocks;
     }
 
@@ -240,7 +253,12 @@ export class ClaudeSessionProvider extends BaseTransport {
       };
     })();
 
-    const sdkOptions = this.getSDKOptions(resumeSession, options.systemPrompt, options.agentId, options.allowedTools);
+    const sdkOptions = this.getSDKOptions(
+      resumeSession,
+      options.systemPrompt,
+      options.agentId,
+      options.allowedTools,
+    );
 
     // Override model if specified
     if (options.model) {

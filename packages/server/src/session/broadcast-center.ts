@@ -48,7 +48,9 @@ export class BroadcastCenter {
     const entry = this.connections.get(connectionId);
     if (entry) {
       entry.subscribedMonitors.add(monitorId);
-      console.log(`[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`);
+      console.log(
+        `[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`,
+      );
     }
   }
 

@@ -26,10 +26,7 @@ export abstract class BaseTransport implements AITransport {
    * Execute a query and yield streaming messages.
    * Subclasses must implement this to communicate with their AI provider.
    */
-  abstract query(
-    prompt: string,
-    options: TransportOptions
-  ): AsyncIterable<StreamMessage>;
+  abstract query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage>;
 
   /**
    * Create a new AbortController for a query.

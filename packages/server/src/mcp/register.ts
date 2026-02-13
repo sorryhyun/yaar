@@ -136,5 +136,5 @@ export function getToolNames(): string[] {
     'mcp__apps__market_list',
     'mcp__apps__market_get',
   ];
-  return APP_DEV_ENABLED ? all : all.filter(n => !APP_DEV_TOOLS.includes(n));
+  return APP_DEV_ENABLED ? all : all.filter((n) => !APP_DEV_TOOLS.includes(n));
 }

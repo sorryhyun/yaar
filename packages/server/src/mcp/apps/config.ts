@@ -72,10 +72,7 @@ async function migrateCredentials(appId: string): Promise<boolean> {
   }
 
   // Try legacy locations in order: storage/credentials/ first, then apps/{appId}/
-  const legacyPaths = [
-    getLegacyStorageCredentialsPath(appId),
-    getOldCredentialsPath(appId),
-  ];
+  const legacyPaths = [getLegacyStorageCredentialsPath(appId), getOldCredentialsPath(appId)];
 
   for (const oldPath of legacyPaths) {
     try {
@@ -108,7 +105,7 @@ async function migrateCredentials(appId: string): Promise<boolean> {
  */
 export async function readAppConfig(
   appId: string,
-  filename: string = 'credentials.json'
+  filename: string = 'credentials.json',
 ): Promise<{ success: boolean; content?: unknown; error?: string }> {
   try {
     // Prevent directory traversal
@@ -154,7 +151,7 @@ export async function readAppConfig(
 export async function writeAppConfig(
   appId: string,
   filename: string,
-  content: unknown
+  content: unknown,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Prevent directory traversal

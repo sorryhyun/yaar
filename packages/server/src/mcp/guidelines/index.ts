@@ -31,7 +31,8 @@ export function registerGuidelineTools(server: McpServer): void {
     {
       description: `Load reference documentation for a topic. Available: ${topicList}`,
       inputSchema: {
-        topic: z.enum(Object.keys(TOPICS) as [string, ...string[]])
+        topic: z
+          .enum(Object.keys(TOPICS) as [string, ...string[]])
           .describe(`Topic name: ${topicList}`),
       },
     },
@@ -44,13 +45,15 @@ export function registerGuidelineTools(server: McpServer): void {
       try {
         let content = await readFile(join(__dirname, filename), 'utf-8');
         if (content.includes('{{BUNDLED_LIBRARIES}}')) {
-          const libs = getAvailableBundledLibraries().map(l => `\`@bundled/${l}\``).join(', ');
+          const libs = getAvailableBundledLibraries()
+            .map((l) => `\`@bundled/${l}\``)
+            .join(', ');
           content = content.replace('{{BUNDLED_LIBRARIES}}', libs);
         }
         return ok(content);
       } catch {
         return ok(`Error: Could not load guideline for "${args.topic}".`);
       }
-    }
+    },
   );
 }

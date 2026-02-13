@@ -1,5 +1,8 @@
 import { ContextTape } from '../agents/context.js';
-import { getContextRestoreMessages, type ContextRestorePolicy } from '../logging/context-restore.js';
+import {
+  getContextRestoreMessages,
+  type ContextRestorePolicy,
+} from '../logging/context-restore.js';
 import { parseSessionMessages } from '../logging/session-reader.js';
 
 function makeSessionJsonl(): string {
@@ -56,7 +59,6 @@ function makeSessionJsonl(): string {
 }
 
 describe('context restore pipeline', () => {
-
   it('infers window source from legacy agentId when source metadata is missing', () => {
     const legacyJsonl = [
       JSON.stringify({
@@ -104,7 +106,9 @@ describe('context restore pipeline', () => {
 
     const restored = getContextRestoreMessages(messages, policy);
     expect(restored).toHaveLength(4);
-    expect(restored.some((m) => typeof m.source === 'object' && m.source.window === 'w2')).toBe(false);
+    expect(restored.some((m) => typeof m.source === 'object' && m.source.window === 'w2')).toBe(
+      false,
+    );
   });
 
   it('supports branch summarization for old windows', () => {

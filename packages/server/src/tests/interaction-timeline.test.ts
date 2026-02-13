@@ -60,7 +60,13 @@ describe('InteractionTimeline', () => {
   it('format produces timeline XML with AI interactions', () => {
     const t = new InteractionTimeline();
     t.pushAI('window-win1', 'task', [
-      { type: 'window.create', windowId: 'cal-win', title: 'Calendar', bounds: { x: 0, y: 0, w: 600, h: 400 }, content: { renderer: 'component', data: '' } },
+      {
+        type: 'window.create',
+        windowId: 'cal-win',
+        title: 'Calendar',
+        bounds: { x: 0, y: 0, w: 600, h: 400 },
+        content: { renderer: 'component', data: '' },
+      },
     ]);
     const output = t.format();
     expect(output).toContain('<interaction:AI agent="window-win1">');

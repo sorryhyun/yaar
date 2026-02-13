@@ -12,15 +12,7 @@ const sizeEnum = z.enum(['sm', 'md', 'lg']);
 
 // ============ Component Types (leaf only) ============
 
-const componentTypes = [
-  'button',
-  'input',
-  'select',
-  'text',
-  'badge',
-  'progress',
-  'image',
-] as const;
+const componentTypes = ['button', 'input', 'select', 'text', 'badge', 'progress', 'image'] as const;
 
 // ============ Base Fields ============
 
@@ -31,7 +23,10 @@ const componentTypes = [
 const baseFields = {
   // === Form field props (input, select) ===
   name: z.string().optional().describe('input, select: Required field name in form data'),
-  formId: z.string().optional().describe('input, select: Form ID to associate with (referenced by button submitForm)'),
+  formId: z
+    .string()
+    .optional()
+    .describe('input, select: Form ID to associate with (referenced by button submitForm)'),
   placeholder: z.string().optional().describe('input, select: Placeholder text'),
   defaultValue: z.string().optional().describe('input, select: Initial value'),
   disabled: z.boolean().optional().describe('button, input, select: Disabled state'),
@@ -58,7 +53,7 @@ const baseFields = {
         'input: text|email|password|number|url, ' +
         'text: body|heading|subheading|caption|code, ' +
         'badge: default|success|warning|error|info, ' +
-        'progress: default|success|warning|error'
+        'progress: default|success|warning|error',
     ),
 
   // === Size ===
@@ -101,28 +96,32 @@ export const componentSchema = z.object({
 
 // ============ Layout Schema ============
 
-const colsInner = z.union([
-  z.array(z.number().min(0)).min(1),
-  z.coerce.number().int().min(1),
-]);
+const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
 // Handle stringified JSON from AI (e.g., "[7,3]" instead of [7,3])
 const colsSchema = z.union([
   colsInner,
-  z.string().transform((s, ctx) => {
-    try { return JSON.parse(s); } catch {
-      ctx.addIssue({ code: 'custom', message: 'Invalid JSON' });
-      return z.NEVER;
-    }
-  }).pipe(colsInner),
+  z
+    .string()
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        ctx.addIssue({ code: 'custom', message: 'Invalid JSON' });
+        return z.NEVER;
+      }
+    })
+    .pipe(colsInner),
 ]);
 
 /** Component layout — flat array of components with grid layout */
 export const componentLayoutSchema = z.object({
   components: z.array(componentSchema),
-  cols: colsSchema.optional()
-    .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
-  gap: gapEnum.optional()
-    .describe('Spacing between components (default: md)'),
+  cols: colsSchema
+    .optional()
+    .describe(
+      'Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1',
+    ),
+  gap: gapEnum.optional().describe('Spacing between components (default: md)'),
 });
 
 // ============ Display Content Schema ============

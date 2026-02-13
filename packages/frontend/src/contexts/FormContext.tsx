@@ -4,74 +4,73 @@
  * Forms collect data locally without sending to the AI until a button
  * with submitForm is clicked.
  */
-import { createContext, useContext, useCallback, useRef, useEffect, useMemo } from 'react'
+import { createContext, useContext, useCallback, useRef, useEffect, useMemo } from 'react';
 
-export type FormValue = string | number | boolean
+export type FormValue = string | number | boolean;
 
 export interface FormContextType {
   /**
    * Register a form with the context.
    */
-  registerForm: (formId: string) => void
+  registerForm: (formId: string) => void;
 
   /**
    * Unregister a form when it unmounts.
    */
-  unregisterForm: (formId: string) => void
+  unregisterForm: (formId: string) => void;
 
   /**
    * Set a field value in a form.
    */
-  setFieldValue: (formId: string, fieldName: string, value: FormValue) => void
+  setFieldValue: (formId: string, fieldName: string, value: FormValue) => void;
 
   /**
    * Get all field values for a form.
    */
-  getFormData: (formId: string) => Record<string, FormValue> | undefined
+  getFormData: (formId: string) => Record<string, FormValue> | undefined;
 }
 
-const FormContext = createContext<FormContextType | null>(null)
+const FormContext = createContext<FormContextType | null>(null);
 
 export function FormProvider({ children }: { children: React.ReactNode }) {
   // Use ref to avoid re-renders when form data changes
-  const formsRef = useRef<Map<string, Record<string, FormValue>>>(new Map())
+  const formsRef = useRef<Map<string, Record<string, FormValue>>>(new Map());
 
   const registerForm = useCallback((formId: string) => {
     if (!formsRef.current.has(formId)) {
-      formsRef.current.set(formId, {})
+      formsRef.current.set(formId, {});
     }
-  }, [])
+  }, []);
 
   const unregisterForm = useCallback((formId: string) => {
-    formsRef.current.delete(formId)
-  }, [])
+    formsRef.current.delete(formId);
+  }, []);
 
   const setFieldValue = useCallback((formId: string, fieldName: string, value: FormValue) => {
-    const formData = formsRef.current.get(formId) ?? {}
+    const formData = formsRef.current.get(formId) ?? {};
     // Always create a new object to avoid mutating frozen objects (Immer can freeze objects)
-    formsRef.current.set(formId, { ...formData, [fieldName]: value })
-  }, [])
+    formsRef.current.set(formId, { ...formData, [fieldName]: value });
+  }, []);
 
   const getFormData = useCallback((formId: string) => {
-    return formsRef.current.get(formId)
-  }, [])
+    return formsRef.current.get(formId);
+  }, []);
 
-  const value = useMemo<FormContextType>(() => ({
-    registerForm,
-    unregisterForm,
-    setFieldValue,
-    getFormData,
-  }), [registerForm, unregisterForm, setFieldValue, getFormData])
+  const value = useMemo<FormContextType>(
+    () => ({
+      registerForm,
+      unregisterForm,
+      setFieldValue,
+      getFormData,
+    }),
+    [registerForm, unregisterForm, setFieldValue, getFormData],
+  );
 
-  return (
-    <FormContext.Provider value={value}>
-      {children}
-    </FormContext.Provider>
-  )
+  return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
 
 export function useFormContext(): FormContextType | null {
-  return useContext(FormContext)
+  return useContext(FormContext);
 }
 
 /**
@@ -80,27 +79,34 @@ export function useFormContext(): FormContextType | null {
  * @param fieldName - The name of the field (used as key in form data)
  * @param initialValue - The initial value for the field (defaults to empty string)
  */
-export function useFormField(formId: string | undefined, fieldName: string, initialValue: FormValue = '') {
-  const formContext = useFormContext()
+export function useFormField(
+  formId: string | undefined,
+  fieldName: string,
+  initialValue: FormValue = '',
+) {
+  const formContext = useFormContext();
 
   // Use ref to avoid re-running the initial-value effect when formContext reference changes
-  const formContextRef = useRef(formContext)
-  formContextRef.current = formContext
+  const formContextRef = useRef(formContext);
+  formContextRef.current = formContext;
 
-  const setValue = useCallback((value: FormValue) => {
-    if (formId && formContext) {
-      formContext.setFieldValue(formId, fieldName, value)
-    }
-  }, [formId, fieldName, formContext])
+  const setValue = useCallback(
+    (value: FormValue) => {
+      if (formId && formContext) {
+        formContext.setFieldValue(formId, fieldName, value);
+      }
+    },
+    [formId, fieldName, formContext],
+  );
 
   // Register field with initial value on mount using useEffect.
   // This handles React Strict Mode correctly - the effect runs after mount
   // and re-runs if the component is remounted (after form data was cleared).
   useEffect(() => {
     if (formId && formContextRef.current) {
-      formContextRef.current.setFieldValue(formId, fieldName, initialValue)
+      formContextRef.current.setFieldValue(formId, fieldName, initialValue);
     }
-  }, [formId, fieldName, initialValue])
+  }, [formId, fieldName, initialValue]);
 
-  return { setValue }
+  return { setValue };
 }

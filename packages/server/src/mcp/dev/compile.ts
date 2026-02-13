@@ -19,7 +19,10 @@ export function registerCompileTools(server: McpServer): void {
         'Compile TypeScript from a sandbox to a bundled HTML file. Entry point is src/main.ts. Returns a preview URL for viewing the app.',
       inputSchema: {
         sandbox: z.string().describe('Sandbox ID to compile'),
-        entry: z.string().optional().describe('Entry file (default: src/main.ts) - not yet supported'),
+        entry: z
+          .string()
+          .optional()
+          .describe('Entry file (default: src/main.ts) - not yet supported'),
         title: z.string().optional().describe('App title for HTML page (default: "App")'),
       },
     },
@@ -49,12 +52,18 @@ export function registerCompileTools(server: McpServer): void {
 
       const previewUrl = `/api/sandbox/${sandboxId}/dist/index.html`;
 
-      return ok(JSON.stringify({
-        success: true,
-        previewUrl,
-        message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
-      }, null, 2));
-    }
+      return ok(
+        JSON.stringify(
+          {
+            success: true,
+            previewUrl,
+            message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
+          },
+          null,
+          2,
+        ),
+      );
+    },
   );
 
   // compile_component - Write a .yaarcomponent.json file to sandbox
@@ -65,9 +74,18 @@ export function registerCompileTools(server: McpServer): void {
         'Create a .yaarcomponent.json file in a sandbox. This lets you define reusable component window layouts that get deployed alongside the app. After deploy, the AI can load them via create_component(jsonfile="{appId}/{filename}").',
       inputSchema: {
         sandboxId: z.string().describe('Sandbox ID to write the component file into'),
-        filename: z.string().describe('Filename (e.g., "dashboard.yaarcomponent.json"). Must end with .yaarcomponent.json.'),
-        components: z.array(z.record(z.string(), z.unknown())).describe('Flat array of UI components (same format as create_component)'),
-        cols: z.union([z.array(z.number()), z.number()]).optional().describe('Column layout'),
+        filename: z
+          .string()
+          .describe(
+            'Filename (e.g., "dashboard.yaarcomponent.json"). Must end with .yaarcomponent.json.',
+          ),
+        components: z
+          .array(z.record(z.string(), z.unknown()))
+          .describe('Flat array of UI components (same format as create_component)'),
+        cols: z
+          .union([z.array(z.number()), z.number()])
+          .optional()
+          .describe('Column layout'),
         gap: z.enum(['none', 'sm', 'md', 'lg']).optional().describe('Spacing between components'),
       },
     },
@@ -103,16 +121,22 @@ export function registerCompileTools(server: McpServer): void {
         await mkdir(sandboxPath, { recursive: true });
         await writeFile(fullPath, JSON.stringify(result.data, null, 2), 'utf-8');
 
-        return ok(JSON.stringify({
-          sandboxId,
-          filename,
-          message: `Component file written to sandbox/${sandboxId}/${filename}. It will be deployed alongside the app.`,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              sandboxId,
+              filename,
+              message: `Component file written to sandbox/${sandboxId}/${filename}. It will be deployed alongside the app.`,
+            },
+            null,
+            2,
+          ),
+        );
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error: ${error}`);
       }
-    }
+    },
   );
 
   // typecheck - Run TypeScript type checking on sandbox code
@@ -147,6 +171,6 @@ export function registerCompileTools(server: McpServer): void {
       }
 
       return ok(`Type check found errors:\n${result.diagnostics.join('\n')}`);
-    }
+    },
   );
 }

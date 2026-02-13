@@ -61,8 +61,12 @@ describe('AgentPool.cleanup() interrupt-before-dispose', () => {
     const callOrder: string[] = [];
 
     const mockSession = {
-      interrupt: vi.fn(async () => { callOrder.push('interrupt'); }),
-      cleanup: vi.fn(async () => { callOrder.push('cleanup'); }),
+      interrupt: vi.fn(async () => {
+        callOrder.push('interrupt');
+      }),
+      cleanup: vi.fn(async () => {
+        callOrder.push('cleanup');
+      }),
       isRunning: vi.fn(() => false),
     };
 
@@ -92,7 +96,9 @@ describe('ContextPool inflight tracking', () => {
     let inflightCount = 0;
     let inflightResolve: (() => void) | null = null;
 
-    function inflightEnter() { inflightCount++; }
+    function inflightEnter() {
+      inflightCount++;
+    }
     function inflightExit() {
       inflightCount--;
       if (inflightCount <= 0 && inflightResolve) {
@@ -102,7 +108,9 @@ describe('ContextPool inflight tracking', () => {
     }
     function awaitInflight(): Promise<void> {
       if (inflightCount <= 0) return Promise.resolve();
-      return new Promise<void>((resolve) => { inflightResolve = resolve; });
+      return new Promise<void>((resolve) => {
+        inflightResolve = resolve;
+      });
     }
 
     // Start two inflight tasks
@@ -112,7 +120,9 @@ describe('ContextPool inflight tracking', () => {
 
     // Start waiting
     let resolved = false;
-    const waitPromise = awaitInflight().then(() => { resolved = true; });
+    const waitPromise = awaitInflight().then(() => {
+      resolved = true;
+    });
 
     // Exit one — shouldn't resolve yet
     inflightExit();
@@ -131,7 +141,9 @@ describe('ContextPool inflight tracking', () => {
     const inflightCount = 0;
     function awaitInflight(): Promise<void> {
       if (inflightCount <= 0) return Promise.resolve();
-      return new Promise<void>(() => { /* never resolves */ });
+      return new Promise<void>(() => {
+        /* never resolves */
+      });
     }
 
     // Should resolve immediately
@@ -212,7 +224,9 @@ describe('Reset integration: interrupt → await inflight → dispose', () => {
     let inflightCount = 0;
     let inflightResolve: (() => void) | null = null;
 
-    function inflightEnter() { inflightCount++; }
+    function inflightEnter() {
+      inflightCount++;
+    }
     function inflightExit() {
       inflightCount--;
       if (inflightCount <= 0 && inflightResolve) {
@@ -222,7 +236,9 @@ describe('Reset integration: interrupt → await inflight → dispose', () => {
     }
     function awaitInflight(): Promise<void> {
       if (inflightCount <= 0) return Promise.resolve();
-      return new Promise<void>((resolve) => { inflightResolve = resolve; });
+      return new Promise<void>((resolve) => {
+        inflightResolve = resolve;
+      });
     }
 
     // Simulate a long-running inflight task
@@ -267,11 +283,7 @@ describe('Main agent routing logic', () => {
     routeMainTask('msg-2'); // main is busy → goes to ephemeral
     routeMainTask('msg-3'); // main still busy → goes to ephemeral
 
-    expect(routeLog).toEqual([
-      'main:msg-1',
-      'ephemeral:msg-2',
-      'ephemeral:msg-3',
-    ]);
+    expect(routeLog).toEqual(['main:msg-1', 'ephemeral:msg-2', 'ephemeral:msg-3']);
   });
 
   it('main agent becomes available after task completes', () => {
@@ -367,7 +379,13 @@ describe('Timeline injection into main prompt', () => {
 
     // Simulate ephemeral agent pushing to timeline
     timeline.pushAI('ephemeral-1', 'app: Calendar', [
-      { type: 'window.create', windowId: 'cal', title: 'Cal', bounds: { x: 0, y: 0, w: 600, h: 400 }, content: { renderer: 'component', data: '' } },
+      {
+        type: 'window.create',
+        windowId: 'cal',
+        title: 'Cal',
+        bounds: { x: 0, y: 0, w: 600, h: 400 },
+        content: { renderer: 'component', data: '' },
+      },
     ]);
 
     // Simulate window agent pushing to timeline

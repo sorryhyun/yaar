@@ -10,7 +10,10 @@ import { registerLifecycleTools } from './lifecycle.js';
 import { registerNotificationTools } from './notification.js';
 import { registerAppProtocolTools } from './app-protocol.js';
 
-export function registerWindowTools(server: McpServer, getWindowState: () => WindowStateRegistry): void {
+export function registerWindowTools(
+  server: McpServer,
+  getWindowState: () => WindowStateRegistry,
+): void {
   registerCreateTools(server);
   registerUpdateTools(server, getWindowState);
   registerLifecycleTools(server, getWindowState);

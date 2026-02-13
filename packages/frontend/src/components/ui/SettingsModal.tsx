@@ -1,8 +1,8 @@
 /**
  * SettingsModal - Modal for user preferences (name, language).
  */
-import { useDesktopStore } from '@/store'
-import styles from '@/styles/ui/SettingsModal.module.css'
+import { useDesktopStore } from '@/store';
+import styles from '@/styles/ui/SettingsModal.module.css';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -13,20 +13,20 @@ const LANGUAGES = [
   { code: 'fr', label: 'Français' },
   { code: 'de', label: 'Deutsch' },
   { code: 'pt', label: 'Português' },
-]
+];
 
 export function SettingsModal() {
-  const toggleSettingsModal = useDesktopStore((s) => s.toggleSettingsModal)
-  const userName = useDesktopStore((s) => s.userName)
-  const language = useDesktopStore((s) => s.language)
-  const setUserName = useDesktopStore((s) => s.setUserName)
-  const setLanguage = useDesktopStore((s) => s.setLanguage)
+  const toggleSettingsModal = useDesktopStore((s) => s.toggleSettingsModal);
+  const userName = useDesktopStore((s) => s.userName);
+  const language = useDesktopStore((s) => s.language);
+  const setUserName = useDesktopStore((s) => s.setUserName);
+  const setLanguage = useDesktopStore((s) => s.setLanguage);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      toggleSettingsModal()
+      toggleSettingsModal();
     }
-  }
+  };
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
@@ -65,5 +65,5 @@ export function SettingsModal() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
 /**
  * Feedback slice - manages rendering feedback for the server.
  */
-import type { SliceCreator, FeedbackSlice } from '../types'
+import type { SliceCreator, FeedbackSlice } from '../types';
 
 export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingFeedback: [],
@@ -9,63 +9,68 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingAppProtocolReady: [],
   pendingAppInteractions: [],
 
-  addRenderingFeedback: (feedback) => set((state) => {
-    state.pendingFeedback.push(feedback)
-  }),
+  addRenderingFeedback: (feedback) =>
+    set((state) => {
+      state.pendingFeedback.push(feedback);
+    }),
 
-  addPendingFeedback: (feedback) => set((state) => {
-    state.pendingFeedback.push(feedback)
-  }),
+  addPendingFeedback: (feedback) =>
+    set((state) => {
+      state.pendingFeedback.push(feedback);
+    }),
 
   consumePendingFeedback: () => {
-    const feedback = get().pendingFeedback
+    const feedback = get().pendingFeedback;
     if (feedback.length > 0) {
       set((state) => {
-        state.pendingFeedback = []
-      })
+        state.pendingFeedback = [];
+      });
     }
-    return feedback
+    return feedback;
   },
 
-  addPendingAppProtocolResponse: (item) => set((state) => {
-    state.pendingAppProtocolResponses.push(item)
-  }),
+  addPendingAppProtocolResponse: (item) =>
+    set((state) => {
+      state.pendingAppProtocolResponses.push(item);
+    }),
 
   consumePendingAppProtocolResponses: () => {
-    const items = get().pendingAppProtocolResponses
+    const items = get().pendingAppProtocolResponses;
     if (items.length > 0) {
       set((state) => {
-        state.pendingAppProtocolResponses = []
-      })
+        state.pendingAppProtocolResponses = [];
+      });
     }
-    return items
+    return items;
   },
 
-  addAppProtocolReady: (windowId) => set((state) => {
-    state.pendingAppProtocolReady.push(windowId)
-  }),
+  addAppProtocolReady: (windowId) =>
+    set((state) => {
+      state.pendingAppProtocolReady.push(windowId);
+    }),
 
   consumeAppProtocolReady: () => {
-    const items = get().pendingAppProtocolReady
+    const items = get().pendingAppProtocolReady;
     if (items.length > 0) {
       set((state) => {
-        state.pendingAppProtocolReady = []
-      })
+        state.pendingAppProtocolReady = [];
+      });
     }
-    return items
+    return items;
   },
 
-  addPendingAppInteraction: (item) => set((state) => {
-    state.pendingAppInteractions.push(item)
-  }),
+  addPendingAppInteraction: (item) =>
+    set((state) => {
+      state.pendingAppInteractions.push(item);
+    }),
 
   consumePendingAppInteractions: () => {
-    const items = get().pendingAppInteractions
+    const items = get().pendingAppInteractions;
     if (items.length > 0) {
       set((state) => {
-        state.pendingAppInteractions = []
-      })
+        state.pendingAppInteractions = [];
+      });
     }
-    return items
+    return items;
   },
-})
+});

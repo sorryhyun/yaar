@@ -65,7 +65,9 @@ async function compileWithEsbuild(code: string): Promise<CompileResult> {
     };
   } catch (err) {
     if (err instanceof Error && 'errors' in err) {
-      const esbuildErr = err as { errors: Array<{ text: string; location?: { line: number; column: number } }> };
+      const esbuildErr = err as {
+        errors: Array<{ text: string; location?: { line: number; column: number } }>;
+      };
       const errors = esbuildErr.errors.map((e) => {
         if (e.location) {
           return `Line ${e.location.line}:${e.location.column}: ${e.text}`;

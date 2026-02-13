@@ -66,10 +66,7 @@ const DEV_TOOLS = [
   'mcp__dev__write_json',
 ];
 
-const INFO_TOOLS = [
-  'mcp__system__get_info',
-  'mcp__system__guideline',
-];
+const INFO_TOOLS = ['mcp__system__get_info', 'mcp__system__guideline'];
 
 // ── Task agent system prompt ────────────────────────────────────────
 
@@ -128,25 +125,14 @@ const profiles: Record<string, AgentProfile> = {
     id: 'web',
     description: 'HTTP requests + display (API calls, web scraping)',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: [
-      'WebSearch',
-      ...INFO_TOOLS,
-      ...HTTP_TOOLS,
-      ...WINDOW_TOOLS,
-      ...STORAGE_TOOLS,
-    ],
+    allowedTools: ['WebSearch', ...INFO_TOOLS, ...HTTP_TOOLS, ...WINDOW_TOOLS, ...STORAGE_TOOLS],
   },
 
   code: {
     id: 'code',
     description: 'JavaScript sandbox + display',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: [
-      ...INFO_TOOLS,
-      'mcp__system__run_js',
-      ...WINDOW_TOOLS,
-      ...STORAGE_TOOLS,
-    ],
+    allowedTools: [...INFO_TOOLS, 'mcp__system__run_js', ...WINDOW_TOOLS, ...STORAGE_TOOLS],
   },
 
   app: {
@@ -204,3 +190,4 @@ export const ORCHESTRATOR_PROFILE: AgentProfile = {
     'mcp__system__remove_config',
   ],
 };
+// test

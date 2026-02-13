@@ -16,14 +16,17 @@ export class ContextAssemblyPolicy {
   /**
    * Build main agent prompt, draining and injecting timeline from parallel agents and user interactions.
    */
-  buildMainPrompt(content: string, options: {
-    interactions?: UserInteraction[];
-    openWindows: string;
-    reloadPrefix: string;
-    timeline?: InteractionTimeline;
-  }): MainPromptContext {
+  buildMainPrompt(
+    content: string,
+    options: {
+      interactions?: UserInteraction[];
+      openWindows: string;
+      reloadPrefix: string;
+      timeline?: InteractionTimeline;
+    },
+  ): MainPromptContext {
     // Add drawing as timeline entry if present
-    const hasDrawing = options.interactions?.some(i => i.type === 'draw' && i.imageData);
+    const hasDrawing = options.interactions?.some((i) => i.type === 'draw' && i.imageData);
 
     // Format timeline (includes both user interactions and AI callbacks)
     let timelinePrefix = options.timeline?.format() ?? '';
@@ -47,10 +50,13 @@ export class ContextAssemblyPolicy {
    * Build prompt for window agent interactions (subsequent turns, session continuity).
    * No contextPrefix — window agents maintain their own provider session.
    */
-  buildWindowPrompt(content: string, options: {
-    openWindows: string;
-    reloadPrefix: string;
-  }): string {
+  buildWindowPrompt(
+    content: string,
+    options: {
+      openWindows: string;
+      reloadPrefix: string;
+    },
+  ): string {
     return options.openWindows + options.reloadPrefix + content;
   }
 
@@ -67,9 +73,11 @@ export class ContextAssemblyPolicy {
     const recent = mainMessages.slice(-maxTurns * 2);
     if (recent.length === 0) return '';
 
-    const formatted = recent.map((m) => {
-      return `<${m.role}>${m.content}</${m.role}>`;
-    }).join('\n\n');
+    const formatted = recent
+      .map((m) => {
+        return `<${m.role}>${m.content}</${m.role}>`;
+      })
+      .join('\n\n');
 
     return `<recent_conversation>\n${formatted}\n</recent_conversation>\n\n`;
   }

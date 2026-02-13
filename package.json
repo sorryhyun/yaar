@@ -23,14 +23,36 @@
     "build:exe:bundle": "node scripts/build-exe-bundle.js --provider claude --target windows && node scripts/build-exe-bundle.js --provider codex --target windows && node scripts/build-exe-bundle.js --provider claude --target windows --mode dev && node scripts/build-exe-bundle.js --provider codex --target windows --mode dev",
     "build:exe:bundle:linux": "node scripts/build-exe-bundle.js --provider claude --target linux && node scripts/build-exe-bundle.js --provider codex --target linux && node scripts/build-exe-bundle.js --provider claude --target linux --mode dev && node scripts/build-exe-bundle.js --provider codex --target linux --mode dev",
     "build:exe:bundle:macos": "node scripts/build-exe-bundle.js --provider claude --target macos && node scripts/build-exe-bundle.js --provider codex --target macos && node scripts/build-exe-bundle.js --provider claude --target macos --mode dev && node scripts/build-exe-bundle.js --provider codex --target macos --mode dev",
-    "build:exe:assets": "node scripts/copy-exe-assets.js"
+    "build:exe:assets": "node scripts/copy-exe-assets.js",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=24",
     "pnpm": ">=10"
   },
+  "lint-staged": {
+    "packages/server/src/**/*.{ts,js}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "packages/frontend/src/**/*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "packages/shared/src/**/*.{ts,js}": [
+      "prettier --write"
+    ],
+    "*.{json,yaml,yml,css}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "node-poppler-win32": "1.0.2",
+    "prettier": "^3.8.1",
     "xlsx": "^0.18.5"
   }
 }

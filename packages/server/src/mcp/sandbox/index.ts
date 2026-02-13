@@ -62,7 +62,6 @@ export function registerSandboxTools(server: McpServer): void {
       const allowedDomains = await readAllowedDomains();
       const result = await executeJs(args.code, { timeout: args.timeout, allowedDomains });
       return ok(formatResult(result));
-    }
+    },
   );
-
 }

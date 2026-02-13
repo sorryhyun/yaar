@@ -1,19 +1,19 @@
 /**
  * TableRenderer - Renders tabular data.
  */
-import { memo } from 'react'
-import styles from '@/styles/windows/renderers.module.css'
+import { memo } from 'react';
+import styles from '@/styles/windows/renderers.module.css';
 
 interface TableRendererProps {
   data: {
-    headers: string[]
-    rows: string[][]
-  }
+    headers: string[];
+    rows: string[][];
+  };
 }
 
 function TableRenderer({ data }: TableRendererProps) {
   if (!data.headers || !data.rows) {
-    return <div>Invalid table data</div>
+    return <div>Invalid table data</div>;
   }
 
   return (
@@ -35,7 +35,7 @@ function TableRenderer({ data }: TableRendererProps) {
         ))}
       </tbody>
     </table>
-  )
+  );
 }
 
-export const MemoizedTableRenderer = memo(TableRenderer)
+export const MemoizedTableRenderer = memo(TableRenderer);

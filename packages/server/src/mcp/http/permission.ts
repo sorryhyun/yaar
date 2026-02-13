@@ -35,9 +35,9 @@ export function registerPermissionTools(server: McpServer): void {
         'Allow Domain Access',
         `The AI wants to make HTTP requests to "${args.domain}".${reasonText}\n\nDo you want to allow this domain?`,
         'http_domain', // toolName for permission storage
-        args.domain,   // context - the specific domain
+        args.domain, // context - the specific domain
         'Allow',
-        'Deny'
+        'Deny',
       );
 
       if (confirmed) {
@@ -50,6 +50,6 @@ export function registerPermissionTools(server: McpServer): void {
       } else {
         return ok(`User denied access to domain "${args.domain}".`);
       }
-    }
+    },
   );
 }

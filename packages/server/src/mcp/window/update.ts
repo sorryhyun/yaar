@@ -16,7 +16,10 @@ import type { WindowStateRegistry } from '../window-state.js';
 import { ok } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
 
-export function registerUpdateTools(server: McpServer, getWindowState: () => WindowStateRegistry): void {
+export function registerUpdateTools(
+  server: McpServer,
+  getWindowState: () => WindowStateRegistry,
+): void {
   // update_window - for display content (markdown, html, text, iframe)
   server.registerTool(
     'update',
@@ -36,7 +39,9 @@ export function registerUpdateTools(server: McpServer, getWindowState: () => Win
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(`Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`);
+        return ok(
+          `Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        );
       }
 
       const content = args.content as DisplayContent | undefined;
@@ -75,15 +80,19 @@ export function registerUpdateTools(server: McpServer, getWindowState: () => Win
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return ok(`Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`);
+        return ok(
+          `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
+        );
       }
 
       if (feedback?.locked) {
-        return ok(`Updated window "${args.windowId}". Window is currently locked - use unlock when done.`);
+        return ok(
+          `Updated window "${args.windowId}". Window is currently locked - use unlock when done.`,
+        );
       }
 
       return ok(`Updated window "${args.windowId}" (${args.operation})`);
-    }
+    },
   );
 
   // update_component_window - replace component layout
@@ -94,14 +103,19 @@ export function registerUpdateTools(server: McpServer, getWindowState: () => Win
       inputSchema: {
         windowId: z.string().describe('ID of the component window to update'),
         components: z.array(componentSchema).describe('New flat array of UI components'),
-        cols: colsSchema.optional()
-          .describe('Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1'),
+        cols: colsSchema
+          .optional()
+          .describe(
+            'Columns: number for equal cols (e.g. 2), array for ratio (e.g. [8,2] = 80/20 split). Default: 1',
+          ),
         gap: gapEnum.optional().describe('Spacing between components (default: md)'),
       },
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(`Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`);
+        return ok(
+          `Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        );
       }
 
       const layoutData: ComponentLayout = {
@@ -120,16 +134,18 @@ export function registerUpdateTools(server: McpServer, getWindowState: () => Win
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return ok(`Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`);
+        return ok(
+          `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
+        );
       }
 
       if (feedback?.locked) {
         return ok(
-          `Updated component window "${args.windowId}". Window is currently locked - use unlock when done.`
+          `Updated component window "${args.windowId}". Window is currently locked - use unlock when done.`,
         );
       }
 
       return ok(`Updated component window "${args.windowId}"`);
-    }
+    },
   );
 }

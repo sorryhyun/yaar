@@ -212,7 +212,12 @@ export type DialogAction = DialogConfirmAction;
 
 export type DesktopAction = DesktopRefreshAppsAction;
 
-export type OSAction = WindowAction | NotificationAction | ToastAction | DialogAction | DesktopAction;
+export type OSAction =
+  | WindowAction
+  | NotificationAction
+  | ToastAction
+  | DialogAction
+  | DesktopAction;
 
 // ============ Type Guards ============
 
@@ -244,23 +249,34 @@ export interface IframeContentData {
   sandbox?: string;
 }
 
-const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
 
 export function isTableContentData(value: unknown): value is TableContentData {
-  if (!value || typeof value !== 'object') return false
-  const data = value as { headers?: unknown; rows?: unknown }
-  return isStringArray(data.headers) && Array.isArray(data.rows) && data.rows.every((row) => isStringArray(row))
+  if (!value || typeof value !== 'object') return false;
+  const data = value as { headers?: unknown; rows?: unknown };
+  return (
+    isStringArray(data.headers) &&
+    Array.isArray(data.rows) &&
+    data.rows.every((row) => isStringArray(row))
+  );
 }
 
 export function isIframeContentData(value: unknown): value is string | IframeContentData {
-  if (typeof value === 'string') return true
-  if (!value || typeof value !== 'object') return false
-  const data = value as { url?: unknown; sandbox?: unknown }
-  return typeof data.url === 'string' && (data.sandbox === undefined || typeof data.sandbox === 'string')
+  if (typeof value === 'string') return true;
+  if (!value || typeof value !== 'object') return false;
+  const data = value as { url?: unknown; sandbox?: unknown };
+  return (
+    typeof data.url === 'string' && (data.sandbox === undefined || typeof data.sandbox === 'string')
+  );
 }
 
 export function isComponentLayout(value: unknown): value is ComponentLayout {
-  return typeof value === 'object' && value !== null && Array.isArray((value as Record<string, unknown>).components)
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as Record<string, unknown>).components)
+  );
 }
 
 export function isWindowContentData(renderer: string, value: unknown): boolean {
@@ -268,32 +284,37 @@ export function isWindowContentData(renderer: string, value: unknown): boolean {
     case 'markdown':
     case 'html':
     case 'text':
-      return typeof value === 'string'
+      return typeof value === 'string';
     case 'table':
-      return isTableContentData(value)
+      return isTableContentData(value);
     case 'component':
-      return isComponentLayout(value)
+      return isComponentLayout(value);
     case 'iframe':
-      return isIframeContentData(value)
+      return isIframeContentData(value);
     default:
-      return value !== undefined
+      return value !== undefined;
   }
 }
 
-export function isContentUpdateOperationValid(renderer: string, operation: ContentUpdateOperation): boolean {
+export function isContentUpdateOperationValid(
+  renderer: string,
+  operation: ContentUpdateOperation,
+): boolean {
   switch (operation.op) {
     case 'append':
     case 'prepend':
-      return ['markdown', 'html', 'text'].includes(renderer) && typeof operation.data === 'string'
+      return ['markdown', 'html', 'text'].includes(renderer) && typeof operation.data === 'string';
     case 'insertAt':
-      return ['markdown', 'html', 'text'].includes(renderer)
-        && typeof operation.data === 'string'
-        && Number.isFinite(operation.position)
+      return (
+        ['markdown', 'html', 'text'].includes(renderer) &&
+        typeof operation.data === 'string' &&
+        Number.isFinite(operation.position)
+      );
     case 'replace':
-      return isWindowContentData(renderer, operation.data)
+      return isWindowContentData(renderer, operation.data);
     case 'clear':
-      return true
+      return true;
     default:
-      return false
+      return false;
   }
 }

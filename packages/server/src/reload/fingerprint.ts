@@ -30,7 +30,7 @@ export function normalizeContent(text: string): string {
  * Compute word-level n-grams from normalized text.
  */
 export function computeNgrams(text: string, n: number = 2): string[] {
-  const words = text.split(' ').filter(w => w.length > 0);
+  const words = text.split(' ').filter((w) => w.length > 0);
   if (words.length < n) return words.length > 0 ? [words.join(' ')] : [];
 
   const ngrams: string[] = [];
@@ -72,7 +72,7 @@ export function computeContentHash(text: string): string {
  */
 export function computeWindowStateHash(windows: WindowState[]): string {
   const sorted = windows
-    .map(w => `${w.id}:${w.content.renderer}`)
+    .map((w) => `${w.id}:${w.content.renderer}`)
     .sort()
     .join('|');
   return createHash('sha256').update(sorted).digest('hex').slice(0, 16);

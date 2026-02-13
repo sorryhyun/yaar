@@ -29,12 +29,20 @@ export function registerDeployTools(server: McpServer): void {
         icon: z.string().optional().describe('Emoji icon'),
         keepSource: z.boolean().optional().describe('Include src/ in deployed app'),
         skill: z.string().optional().describe('Custom SKILL.md content (## Launch auto-appended)'),
-        appProtocol: z.boolean().optional().describe('App Protocol support (auto-detected if omitted)'),
-        fileAssociations: z.array(z.object({
-          extensions: z.array(z.string()),
-          command: z.string(),
-          paramKey: z.string(),
-        })).optional().describe('File types this app can open'),
+        appProtocol: z
+          .boolean()
+          .optional()
+          .describe('App Protocol support (auto-detected if omitted)'),
+        fileAssociations: z
+          .array(
+            z.object({
+              extensions: z.array(z.string()),
+              command: z.string(),
+              paramKey: z.string(),
+            }),
+          )
+          .optional()
+          .describe('File types this app can open'),
       },
     },
     async (args) => {
@@ -56,7 +64,9 @@ export function registerDeployTools(server: McpServer): void {
 
       // Validate app ID (lowercase, hyphens allowed, no special chars)
       if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-        return ok('Error: Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.');
+        return ok(
+          'Error: Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.',
+        );
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
@@ -98,7 +108,9 @@ export function registerDeployTools(server: McpServer): void {
       }
 
       if (!hasCompiledApp && componentFiles.length === 0) {
-        return ok('Error: Nothing to deploy. Run compile first or create component files with compile_component.');
+        return ok(
+          'Error: Nothing to deploy. Run compile first or create component files with compile_component.',
+        );
       }
 
       const displayName = name ?? toDisplayName(appId);
@@ -139,7 +151,14 @@ export function registerDeployTools(server: McpServer): void {
         }
 
         // Generate SKILL.md
-        const skillContent = generateSkillMd(appId, displayName, hasCompiledApp, componentFiles, skill, hasAppProtocol);
+        const skillContent = generateSkillMd(
+          appId,
+          displayName,
+          hasCompiledApp,
+          componentFiles,
+          skill,
+          hasAppProtocol,
+        );
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
         // Write app metadata (icon, etc.)
@@ -154,18 +173,24 @@ export function registerDeployTools(server: McpServer): void {
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
-        return ok(JSON.stringify({
-          success: true,
-          appId,
-          name: displayName,
-          icon,
-          message: `App "${displayName}" deployed! It will appear on the desktop.`,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              success: true,
+              appId,
+              name: displayName,
+              icon,
+              message: `App "${displayName}" deployed! It will appear on the desktop.`,
+            },
+            null,
+            2,
+          ),
+        );
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error deploying app: ${error}`);
       }
-    }
+    },
   );
 
   // clone - Clone deployed app source into a sandbox for editing
@@ -173,7 +198,7 @@ export function registerDeployTools(server: McpServer): void {
     'clone',
     {
       description:
-        'Clone an existing deployed app\'s source into a sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy back to the SAME appId to update the app in-place.',
+        "Clone an existing deployed app's source into a sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy back to the SAME appId to update the app in-place.",
       inputSchema: {
         appId: z.string().describe('The app ID to clone (folder name in apps/)'),
       },
@@ -193,7 +218,9 @@ export function registerDeployTools(server: McpServer): void {
       try {
         await stat(appSrcPath);
       } catch {
-        return ok(`Error: No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`);
+        return ok(
+          `Error: No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`,
+        );
       }
 
       const sandboxId = generateSandboxId();
@@ -209,17 +236,23 @@ export function registerDeployTools(server: McpServer): void {
           .filter((f) => !f.includes('node_modules'))
           .map((f) => `src/${f}`);
 
-        return ok(JSON.stringify({
-          sandboxId,
-          appId,
-          files: fileList,
-          message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              sandboxId,
+              appId,
+              files: fileList,
+              message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
+            },
+            null,
+            2,
+          ),
+        );
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error cloning app: ${error}`);
       }
-    }
+    },
   );
 
   // write_json - Write a JSON file directly to a deployed app
@@ -272,15 +305,21 @@ export function registerDeployTools(server: McpServer): void {
           await regenerateSkillMd(appId, appPath);
         }
 
-        return ok(JSON.stringify({
-          appId,
-          filename,
-          message: `Written ${filename} to apps/${appId}/`,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              appId,
+              filename,
+              message: `Written ${filename} to apps/${appId}/`,
+            },
+            null,
+            2,
+          ),
+        );
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error: ${error}`);
       }
-    }
+    },
   );
 }

@@ -75,11 +75,7 @@ export class ContextTape {
    * Get messages from the context tape with optional filtering.
    */
   getMessages(options?: GetMessagesOptions): ContextMessage[] {
-    const {
-      includeWindows = true,
-      windowIds,
-      excludeWindowIds,
-    } = options ?? {};
+    const { includeWindows = true, windowIds, excludeWindowIds } = options ?? {};
 
     return this.messages.filter((msg) => {
       // Check if this is a window message
@@ -165,12 +161,12 @@ export class ContextTape {
       return '';
     }
 
-    const formatted = filtered.map((m) => {
-      const tag = typeof m.source === 'object'
-        ? `${m.role}:${m.source.window}`
-        : m.role;
-      return `<${tag}>${m.content}</${tag}>`;
-    }).join('\n\n');
+    const formatted = filtered
+      .map((m) => {
+        const tag = typeof m.source === 'object' ? `${m.role}:${m.source.window}` : m.role;
+        return `<${tag}>${m.content}</${tag}>`;
+      })
+      .join('\n\n');
 
     return `<previous_conversation>\n${formatted}\n</previous_conversation>\n\n`;
   }

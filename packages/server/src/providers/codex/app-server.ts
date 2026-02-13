@@ -132,7 +132,7 @@ export class AppServer {
         capabilities: {
           experimentalApi: true,
         },
-      }
+      },
     );
   }
 
@@ -166,11 +166,7 @@ export class AppServer {
       clientOptions.requestTimeout = this.config.requestTimeout;
     }
 
-    this.client = new JsonRpcClient(
-      this.process.stdin!,
-      this.process.stdout!,
-      clientOptions
-    );
+    this.client = new JsonRpcClient(this.process.stdin!, this.process.stdout!, clientOptions);
 
     // Forward notifications
     this.client.on('notification', (method: string, params: unknown) => {
@@ -316,15 +312,14 @@ export class AppServer {
   /**
    * Start a new thread.
    */
-  async threadStart(params: Omit<ThreadStartParams, 'experimentalRawEvents'> = {}): Promise<ThreadStartResponse> {
+  async threadStart(
+    params: Omit<ThreadStartParams, 'experimentalRawEvents'> = {},
+  ): Promise<ThreadStartResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
     const fullParams: ThreadStartParams = { experimentalRawEvents: false, ...params };
-    return this.client.request<ThreadStartParams, ThreadStartResponse>(
-      'thread/start',
-      fullParams
-    );
+    return this.client.request<ThreadStartParams, ThreadStartResponse>('thread/start', fullParams);
   }
 
   /**
@@ -365,7 +360,10 @@ export class AppServer {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<TurnInterruptParams, TurnInterruptResponse>('turn/interrupt', params);
+    return this.client.request<TurnInterruptParams, TurnInterruptResponse>(
+      'turn/interrupt',
+      params,
+    );
   }
 
   /**
@@ -376,10 +374,7 @@ export class AppServer {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<ThreadForkParams, ThreadForkResponse>(
-      'thread/fork',
-      params
-    );
+    return this.client.request<ThreadForkParams, ThreadForkResponse>('thread/fork', params);
   }
 
   // ============================================================================
@@ -417,7 +412,10 @@ export class AppServer {
   // ============================================================================
 
   on(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  on(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
+  on(
+    event: 'server_request',
+    listener: (id: number, method: string, params: unknown) => void,
+  ): this;
   on(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -427,7 +425,9 @@ export class AppServer {
         this.notificationListeners.push(listener as (method: string, params: unknown) => void);
         break;
       case 'server_request':
-        this.serverRequestListeners.push(listener as (id: number, method: string, params: unknown) => void);
+        this.serverRequestListeners.push(
+          listener as (id: number, method: string, params: unknown) => void,
+        );
         break;
       case 'exit':
         this.exitListeners.push(listener as (code: number | null, signal: string | null) => void);
@@ -440,7 +440,10 @@ export class AppServer {
   }
 
   off(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  off(event: 'server_request', listener: (id: number, method: string, params: unknown) => void): this;
+  off(
+    event: 'server_request',
+    listener: (id: number, method: string, params: unknown) => void,
+  ): this;
   off(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
   off(event: 'error', listener: (error: Error) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

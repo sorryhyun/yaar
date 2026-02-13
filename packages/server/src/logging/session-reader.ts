@@ -45,8 +45,8 @@ export async function listSessions(): Promise<SessionInfo[]> {
   }
 
   // Sort by creation date, newest first
-  sessions.sort((a, b) =>
-    new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime()
+  sessions.sort(
+    (a, b) => new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime(),
   );
 
   return sessions;
@@ -105,7 +105,9 @@ export async function readSessionTranscript(sessionId: string): Promise<string |
         lines.push(`## ${msg.agentId} (${ts})\n\n${msg.content ?? ''}\n`);
         break;
       case 'tool_use':
-        lines.push(`### Tool: ${msg.toolName} (${ts})\n\n\`\`\`json\n${JSON.stringify(msg.toolInput, null, 2)}\n\`\`\`\n`);
+        lines.push(
+          `### Tool: ${msg.toolName} (${ts})\n\n\`\`\`json\n${JSON.stringify(msg.toolInput, null, 2)}\n\`\`\`\n`,
+        );
         break;
       case 'tool_result':
         lines.push(`### Result: ${msg.toolName} (${ts})\n\n${msg.content ?? ''}\n`);

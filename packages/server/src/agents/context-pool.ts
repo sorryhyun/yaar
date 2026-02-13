@@ -83,7 +83,9 @@ export class ContextPool {
     this.timeline = new InteractionTimeline();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
-      console.log(`[ContextPool] Restored ${restoredContext.length} context messages from previous session`);
+      console.log(
+        `[ContextPool] Restored ${restoredContext.length} context messages from previous session`,
+      );
     }
     this.agentPool = new AgentPool(sessionId);
   }
@@ -238,7 +240,9 @@ export class ContextPool {
     // Main agent busy → try to steer the active turn (Codex mid-turn injection)
     const steered = await this.agentPool.steerMainAgent(monitorId, task.content);
     if (steered) {
-      console.log(`[ContextPool] Steered active turn for ${monitorId} with message ${task.messageId}`);
+      console.log(
+        `[ContextPool] Steered active turn for ${monitorId} with message ${task.messageId}`,
+      );
       this.contextAssembly.appendUserMessage(this.contextTape, task.content, 'main');
       const agent = this.agentPool.getMainAgent(monitorId)!;
       await this.sendEvent({
@@ -267,7 +271,9 @@ export class ContextPool {
     }
 
     const position = queue.enqueue(task);
-    console.log(`[ContextPool] Queued main task ${task.messageId} for ${monitorId}, queue size: ${position}`);
+    console.log(
+      `[ContextPool] Queued main task ${task.messageId} for ${monitorId}, queue size: ${position}`,
+    );
 
     await this.sendEvent({
       type: 'MESSAGE_QUEUED',
@@ -292,13 +298,19 @@ export class ContextPool {
       agentId: mainRole,
     });
 
-    console.log(`[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id} (monitor: ${monitorId})`);
+    console.log(
+      `[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id} (monitor: ${monitorId})`,
+    );
 
     // Build prompt with callback injection
     const windowSnapshot = this.windowState.listWindows();
-    const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
+    const openWindowsContext = this.contextAssembly.formatOpenWindows(
+      windowSnapshot.map((w) => w.id),
+    );
     const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
-    const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
+    const reloadPrefix = this.reloadPolicy.formatReloadOptions(
+      this.reloadPolicy.findMatches(fp, 3),
+    );
     const mainContext = this.contextAssembly.buildMainPrompt(task.content, {
       interactions: task.interactions,
       openWindows: openWindowsContext,
@@ -351,13 +363,19 @@ export class ContextPool {
       agentId: ephemeralRole,
     });
 
-    console.log(`[ContextPool] Processing main task ${task.messageId} with ephemeral agent ${agent.id}`);
+    console.log(
+      `[ContextPool] Processing main task ${task.messageId} with ephemeral agent ${agent.id}`,
+    );
 
     // Ephemeral agents get open windows + reload options + content, but NO callback prefix and NO conversation history
     const windowSnapshot = this.windowState.listWindows();
-    const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
+    const openWindowsContext = this.contextAssembly.formatOpenWindows(
+      windowSnapshot.map((w) => w.id),
+    );
     const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
-    const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
+    const reloadPrefix = this.reloadPolicy.formatReloadOptions(
+      this.reloadPolicy.findMatches(fp, 3),
+    );
     const prompt = openWindowsContext + reloadPrefix + task.content;
 
     // Record user message to tape
@@ -468,7 +486,7 @@ export class ContextPool {
       return {
         status: 'completed',
         summary,
-        actions: actions.map(a => this.summarizeAction(a)),
+        actions: actions.map((a) => this.summarizeAction(a)),
       };
     } catch (err) {
       return {
@@ -485,16 +503,26 @@ export class ContextPool {
 
   private formatActionSummary(actions: OSAction[]): string {
     if (actions.length === 0) return 'No actions taken.';
-    return actions.map(a => {
-      switch (a.type) {
-        case 'window.create': return `Created window "${a.windowId}"`;
-        case 'window.close': return `Closed window "${a.windowId}"`;
-        case 'window.setContent': return `Updated window "${a.windowId}"`;
-        case 'window.setTitle': return `Set title of "${a.windowId}"`;
-        case 'notification.show': return `Showed notification "${a.title}"`;
-        default: return `Action: ${a.type}`;
-      }
-    }).join('. ') + '.';
+    return (
+      actions
+        .map((a) => {
+          switch (a.type) {
+            case 'window.create':
+              return `Created window "${a.windowId}"`;
+            case 'window.close':
+              return `Closed window "${a.windowId}"`;
+            case 'window.setContent':
+              return `Updated window "${a.windowId}"`;
+            case 'window.setTitle':
+              return `Set title of "${a.windowId}"`;
+            case 'notification.show':
+              return `Showed notification "${a.title}"`;
+            default:
+              return `Action: ${a.type}`;
+          }
+        })
+        .join('. ') + '.'
+    );
   }
 
   private summarizeAction(action: OSAction): { type: string; windowId?: string; title?: string } {
@@ -519,12 +547,16 @@ export class ContextPool {
     const agentKey = groupId ?? windowId;
     const processingKey = task.actionId ?? agentKey;
     const isParallel = !!task.actionId;
-    console.log(`[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (agentKey: ${agentKey}, key: ${processingKey}, parallel: ${isParallel})`);
+    console.log(
+      `[ContextPool] handleWindowTask: ${task.messageId} for ${windowId} (agentKey: ${agentKey}, key: ${processingKey}, parallel: ${isParallel})`,
+    );
 
     // Queue if this key is already busy (skip for parallel actions)
     if (!isParallel && this.windowQueuePolicy.isProcessing(processingKey)) {
       const queueSize = this.windowQueuePolicy.enqueue(processingKey, task);
-      console.log(`[ContextPool] Queued task ${task.messageId} for ${processingKey}, queue size: ${queueSize}`);
+      console.log(
+        `[ContextPool] Queued task ${task.messageId} for ${processingKey}, queue size: ${queueSize}`,
+      );
 
       await this.sendEvent({
         type: 'MESSAGE_QUEUED',
@@ -536,9 +568,7 @@ export class ContextPool {
 
     this.windowQueuePolicy.setProcessing(processingKey, true);
 
-    const agentRole = isParallel
-      ? `window-${windowId}/${task.actionId}`
-      : `window-${windowId}`;
+    const agentRole = isParallel ? `window-${windowId}/${task.actionId}` : `window-${windowId}`;
 
     try {
       // Get or create persistent window agent — keyed by agentKey (groupId or windowId)
@@ -557,9 +587,15 @@ export class ContextPool {
       agent.currentRole = agentRole;
       agent.lastUsed = Date.now();
 
-      console.log(`[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`);
+      console.log(
+        `[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`,
+      );
 
-      await this.sharedLogger?.registerAgent(agentRole, `main-${task.monitorId ?? 'monitor-0'}`, windowId);
+      await this.sharedLogger?.registerAgent(
+        agentRole,
+        `main-${task.monitorId ?? 'monitor-0'}`,
+        windowId,
+      );
       await this.sendWindowStatus(windowId, agentRole, 'assigned');
 
       await this.sendEvent({
@@ -573,8 +609,12 @@ export class ContextPool {
       // Compute fingerprint and check for reload matches
       const windowSnapshot = this.windowState.listWindows();
       const fp = this.reloadPolicy.buildFingerprint(task, windowSnapshot);
-      const reloadPrefix = this.reloadPolicy.formatReloadOptions(this.reloadPolicy.findMatches(fp, 3));
-      const openWindowsContext = this.contextAssembly.formatOpenWindows(windowSnapshot.map(w => w.id));
+      const reloadPrefix = this.reloadPolicy.formatReloadOptions(
+        this.reloadPolicy.findMatches(fp, 3),
+      );
+      const openWindowsContext = this.contextAssembly.formatOpenWindows(
+        windowSnapshot.map((w) => w.id),
+      );
       const source: ContextSource = { window: windowId };
 
       // Record user message immediately
@@ -590,10 +630,12 @@ export class ContextPool {
       if (!resumeSessionId && agent.session.getRawSessionId() === null) {
         // First interaction: include recent main conversation context
         const recentContext = this.contextAssembly.buildWindowInitialContext(this.contextTape);
-        prompt = recentContext + this.contextAssembly.buildWindowPrompt(task.content, {
-          openWindows: openWindowsContext,
-          reloadPrefix,
-        });
+        prompt =
+          recentContext +
+          this.contextAssembly.buildWindowPrompt(task.content, {
+            openWindows: openWindowsContext,
+            reloadPrefix,
+          });
       } else {
         // Subsequent interaction: session continuity, no extra context
         prompt = this.contextAssembly.buildWindowPrompt(task.content, {
@@ -624,7 +666,9 @@ export class ContextPool {
       for (const action of recordedActions) {
         if (action.type === 'window.create') {
           this.windowConnectionPolicy.connectWindow(windowId, action.windowId);
-          console.log(`[ContextPool] Connected child window ${action.windowId} to parent ${windowId} (group: ${this.windowConnectionPolicy.getGroupId(windowId)})`);
+          console.log(
+            `[ContextPool] Connected child window ${action.windowId} to parent ${windowId} (group: ${this.windowConnectionPolicy.getGroupId(windowId)})`,
+          );
         }
       }
 
@@ -642,7 +686,9 @@ export class ContextPool {
   private async processWindowQueue(windowId: string): Promise<void> {
     const next = this.windowQueuePolicy.dequeue(windowId);
     if (next) {
-      console.log(`[ContextPool] Processing queued task ${next.task.messageId} for window ${windowId}`);
+      console.log(
+        `[ContextPool] Processing queued task ${next.task.messageId} for window ${windowId}`,
+      );
       await this.handleWindowTask(next.task);
     }
   }
@@ -727,7 +773,8 @@ export class ContextPool {
     this.resetting = true;
 
     // 1. Clear queues so no new tasks start from dequeue
-    this.mainQueues.forEach(q => q.clear()); this.mainQueues.clear();
+    this.mainQueues.forEach((q) => q.clear());
+    this.mainQueues.clear();
     this.windowQueuePolicy.clear();
 
     // 2. Reject blocked limiter waiters so they unblock and exit
@@ -862,7 +909,8 @@ export class ContextPool {
 
   async cleanup(): Promise<void> {
     this.resetting = true;
-    this.mainQueues.forEach(q => q.clear()); this.mainQueues.clear();
+    this.mainQueues.forEach((q) => q.clear());
+    this.mainQueues.clear();
     this.windowQueuePolicy.clear();
     getAgentLimiter().clearWaiting(new Error('Pool cleaning up'));
     await this.agentPool.interruptAll();

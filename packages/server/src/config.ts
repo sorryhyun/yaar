@@ -14,7 +14,8 @@ export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BU
 // Detect if running as a dev-mode executable (bundled but without embedded libs)
 // __YAAR_DEV_MODE is injected at compile time for yaar-dev-* builds
 declare const __YAAR_DEV_MODE: boolean | undefined;
-export const IS_DEV_EXE = IS_BUNDLED_EXE && typeof __YAAR_DEV_MODE !== 'undefined' && __YAAR_DEV_MODE;
+export const IS_DEV_EXE =
+  IS_BUNDLED_EXE && typeof __YAAR_DEV_MODE !== 'undefined' && __YAAR_DEV_MODE;
 
 /** True when app-dev tools should be available (dev source or dev exe). */
 export const APP_DEV_ENABLED = !IS_BUNDLED_EXE || IS_DEV_EXE;
@@ -131,8 +132,8 @@ export function getCodexBin(): string {
 
 /** MCP server namespaces to expose to the Codex app-server. */
 const CODEX_MCP_NAMESPACES = APP_DEV_ENABLED
-  ? ['system', 'window', 'storage', 'apps', 'dev'] as const
-  : ['system', 'window', 'storage', 'apps'] as const;
+  ? (['system', 'window', 'storage', 'apps', 'dev'] as const)
+  : (['system', 'window', 'storage', 'apps'] as const);
 
 /**
  * Build the CLI args for `codex app-server`.
@@ -148,17 +149,23 @@ export function getCodexAppServerArgs(): string[] {
   // Configure YAAR MCP servers
   for (const ns of CODEX_MCP_NAMESPACES) {
     args.push(
-      '-c', `mcp_servers.${ns}.url=http://127.0.0.1:${PORT}/mcp/${ns}`,
-      '-c', `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
+      '-c',
+      `mcp_servers.${ns}.url=http://127.0.0.1:${PORT}/mcp/${ns}`,
+      '-c',
+      `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
     );
   }
 
   // Model behavior
   args.push(
-    '-c', 'model_reasoning_effort = "medium"',
-    '-c', 'model_personality = "none"',
-    '-c', 'sandbox_mode = "danger-full-access"',
-    '-c', 'approval_policy = "on-request"',
+    '-c',
+    'model_reasoning_effort = "medium"',
+    '-c',
+    'model_personality = "none"',
+    '-c',
+    'sandbox_mode = "danger-full-access"',
+    '-c',
+    'approval_policy = "on-request"',
   );
 
   return args;

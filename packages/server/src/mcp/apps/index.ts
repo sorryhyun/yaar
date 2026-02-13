@@ -13,7 +13,8 @@ export function registerAppsTools(server: McpServer): void {
   server.registerTool(
     'list',
     {
-      description: 'List all available apps in the local directory "apps/". Returns app ID, name, and whether it has SKILL.md and credentials.',
+      description:
+        'List all available apps in the local directory "apps/". Returns app ID, name, and whether it has SKILL.md and credentials.',
     },
     async () => {
       const apps = await listApps();
@@ -31,7 +32,7 @@ export function registerAppsTools(server: McpServer): void {
         let line = `- ${app.name} (${app.id})${flagStr}`;
         if (app.fileAssociations?.length) {
           const assocParts = app.fileAssociations.map(
-            (fa) => `${fa.extensions.join(', ')} → ${fa.command}(${fa.paramKey})`
+            (fa) => `${fa.extensions.join(', ')} → ${fa.command}(${fa.paramKey})`,
           );
           line += `\n  Opens: ${assocParts.join('; ')}`;
         }
@@ -39,7 +40,7 @@ export function registerAppsTools(server: McpServer): void {
       });
 
       return ok(`Available apps:\n${lines.join('\n')}`);
-    }
+    },
   );
 
   // apps_load_skill - Load SKILL.md for an app
@@ -56,18 +57,21 @@ export function registerAppsTools(server: McpServer): void {
       const skill = await loadAppSkill(args.appId);
 
       if (skill === null) {
-        return ok(`Error: No SKILL.md found for app "${args.appId}". Use list to see available apps.`);
+        return ok(
+          `Error: No SKILL.md found for app "${args.appId}". Use list to see available apps.`,
+        );
       }
 
       return ok(skill);
-    }
+    },
   );
 
   // apps_read_config - Read app config file
   server.registerTool(
     'read_config',
     {
-      description: 'Read a configuration file from an app. For credentials.json, reads from config/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
+      description:
+        'Read a configuration file from an app. For credentials.json, reads from config/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
       inputSchema: {
         appId: z.string().describe('The app ID (folder name in apps/)'),
         filename: z.string().optional().describe('Config filename (default: credentials.json)'),
@@ -85,18 +89,21 @@ export function registerAppsTools(server: McpServer): void {
         return ok(JSON.stringify(result.content, null, 2));
       }
       return ok(String(result.content));
-    }
+    },
   );
 
   // apps_write_config - Write app config file
   server.registerTool(
     'write_config',
     {
-      description: 'Write a configuration file for an app. For credentials.json, writes to config/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
+      description:
+        'Write a configuration file for an app. For credentials.json, writes to config/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
       inputSchema: {
         appId: z.string().describe('The app ID (folder name in apps/)'),
         filename: z.string().describe('Config filename (e.g., credentials.json)'),
-        content: z.record(z.string(), z.any()).describe('Content to write (will be JSON stringified)'),
+        content: z
+          .record(z.string(), z.any())
+          .describe('Content to write (will be JSON stringified)'),
       },
     },
     async (args) => {
@@ -107,6 +114,6 @@ export function registerAppsTools(server: McpServer): void {
       }
 
       return ok(`Successfully wrote ${args.filename} for app "${args.appId}".`);
-    }
+    },
   );
 }

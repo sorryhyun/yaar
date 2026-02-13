@@ -23,7 +23,9 @@ function getEmbeddedAssets(): Map<string, string> {
   if (embeddedAssets) return embeddedAssets;
   embeddedAssets = new Map();
 
-  const frontend = (globalThis as any).__YAAR_EMBEDDED_FRONTEND as Record<string, string> | undefined;
+  const frontend = (globalThis as any).__YAAR_EMBEDDED_FRONTEND as
+    | Record<string, string>
+    | undefined;
   if (frontend) {
     for (const [urlPath, filePath] of Object.entries(frontend)) {
       embeddedAssets.set(urlPath, filePath);
@@ -34,7 +36,11 @@ function getEmbeddedAssets(): Map<string, string> {
   return embeddedAssets;
 }
 
-async function serveEmbeddedAsset(res: ServerResponse, filePath: string, urlPath: string): Promise<void> {
+async function serveEmbeddedAsset(
+  res: ServerResponse,
+  filePath: string,
+  urlPath: string,
+): Promise<void> {
   const ext = extname(urlPath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
   // Bun.file() reads from the embedded /$bunfs/ path
@@ -46,7 +52,11 @@ async function serveEmbeddedAsset(res: ServerResponse, filePath: string, urlPath
 
 // ── Main handler ─────────────────────────────────────────────────────
 
-export async function handleStaticRoutes(_req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+export async function handleStaticRoutes(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
   // Try embedded assets first when bundled
   if (IS_BUNDLED_EXE) {
     const assets = getEmbeddedAssets();

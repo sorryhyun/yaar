@@ -8,10 +8,7 @@ export const ok = (text: string) => ({
 });
 
 /** Create a result with text and images */
-export const okWithImages = (
-  text: string,
-  images: Array<{ data: string; mimeType: string }>
-) => ({
+export const okWithImages = (text: string, images: Array<{ data: string; mimeType: string }>) => ({
   content: [
     { type: 'text' as const, text },
     ...images.map((img) => ({

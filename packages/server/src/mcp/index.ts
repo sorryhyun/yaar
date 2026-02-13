@@ -3,7 +3,13 @@
  */
 
 // Server
-export { initMcpServer, handleMcpRequest, getMcpToken, MCP_SERVERS, type McpServerName } from './server.js';
+export {
+  initMcpServer,
+  handleMcpRequest,
+  getMcpToken,
+  MCP_SERVERS,
+  type McpServerName,
+} from './server.js';
 
 // Tool registration
 export { registerAllTools, getToolNames } from './register.js';
@@ -19,11 +25,7 @@ export { registerAppDevTools } from './dev/index.js';
 export { registerSandboxTools } from './sandbox/index.js';
 
 // Action emitter
-export {
-  actionEmitter,
-  type ActionEvent,
-  type RenderingFeedback,
-} from './action-emitter.js';
+export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';
 
 // Window state
 export { WindowStateRegistry, type WindowState } from './window-state.js';

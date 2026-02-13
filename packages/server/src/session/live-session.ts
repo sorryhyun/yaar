@@ -81,7 +81,11 @@ export class LiveSession {
     });
 
     // Subscribe to app protocol requests from tools
-    this.appProtocolListener = (data: { requestId: string; windowId: string; request: AppProtocolRequest }) => {
+    this.appProtocolListener = (data: {
+      requestId: string;
+      windowId: string;
+      request: AppProtocolRequest;
+    }) => {
       this.broadcast({
         type: 'APP_PROTOCOL_REQUEST',
         requestId: data.requestId,
@@ -96,12 +100,16 @@ export class LiveSession {
 
   addConnection(connectionId: ConnectionId, ws: WebSocket): void {
     this.connections.set(connectionId, ws);
-    console.log(`[LiveSession ${this.sessionId}] Connection added: ${connectionId} (total: ${this.connections.size})`);
+    console.log(
+      `[LiveSession ${this.sessionId}] Connection added: ${connectionId} (total: ${this.connections.size})`,
+    );
   }
 
   removeConnection(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
-    console.log(`[LiveSession ${this.sessionId}] Connection removed: ${connectionId} (total: ${this.connections.size})`);
+    console.log(
+      `[LiveSession ${this.sessionId}] Connection removed: ${connectionId} (total: ${this.connections.size})`,
+    );
   }
 
   hasConnections(): boolean {
@@ -200,7 +208,12 @@ export class LiveSession {
    */
   async routeMessage(event: ClientEvent, connectionId: ConnectionId): Promise<void> {
     // Lazy initialize on first message that needs the pool
-    if (!this.initialized && (event.type === 'USER_MESSAGE' || event.type === 'WINDOW_MESSAGE' || event.type === 'COMPONENT_ACTION')) {
+    if (
+      !this.initialized &&
+      (event.type === 'USER_MESSAGE' ||
+        event.type === 'WINDOW_MESSAGE' ||
+        event.type === 'COMPONENT_ACTION')
+    ) {
       const success = await this.ensureInitialized();
       if (!success) {
         console.error(`[LiveSession ${this.sessionId}] Failed to initialize pool`);
@@ -214,7 +227,9 @@ export class LiveSession {
         // Auto-create monitor agent if needed (max 4 monitors)
         if (monitorId !== 'monitor-0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
           if (this.pool.getMainAgentCount() >= 4) {
-            console.warn(`[LiveSession ${this.sessionId}] Monitor limit reached (4), ignoring ${monitorId}`);
+            console.warn(
+              `[LiveSession ${this.sessionId}] Monitor limit reached (4), ignoring ${monitorId}`,
+            );
             break;
           }
           await this.pool.createMonitorAgent(monitorId);
@@ -255,7 +270,8 @@ export class LiveSession {
 
         await this.pool?.handleTask({
           type: 'window',
-          messageId: event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          messageId:
+            event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           windowId: event.windowId,
           content,
           actionId: event.actionId,
@@ -289,16 +305,18 @@ export class LiveSession {
         break;
 
       case 'RENDERING_FEEDBACK':
-        this.pool?.getPrimaryAgent()?.handleRenderingFeedback(
-          event.requestId,
-          event.windowId,
-          event.renderer,
-          event.success,
-          event.error,
-          event.url,
-          event.locked,
-          event.imageData,
-        );
+        this.pool
+          ?.getPrimaryAgent()
+          ?.handleRenderingFeedback(
+            event.requestId,
+            event.windowId,
+            event.renderer,
+            event.success,
+            event.error,
+            event.url,
+            event.locked,
+            event.imageData,
+          );
         break;
 
       case 'DIALOG_FEEDBACK':
@@ -326,7 +344,9 @@ export class LiveSession {
 
       case 'TOAST_ACTION':
         this.reloadCache.markFailed(event.eventId);
-        console.log(`[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`);
+        console.log(
+          `[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`,
+        );
         break;
 
       case 'USER_INTERACTION': {
@@ -338,15 +358,28 @@ export class LiveSession {
           switch (interaction.type) {
             case 'window.close':
               if (interaction.windowId) {
-                this.windowState.handleAction({ type: 'window.close', windowId: interaction.windowId });
+                this.windowState.handleAction({
+                  type: 'window.close',
+                  windowId: interaction.windowId,
+                });
               }
               break;
             case 'window.move':
             case 'window.resize':
               if (interaction.windowId && interaction.bounds) {
                 const b = interaction.bounds;
-                const moveAction = { type: 'window.move' as const, windowId: interaction.windowId, x: b.x, y: b.y };
-                const resizeAction = { type: 'window.resize' as const, windowId: interaction.windowId, w: b.w, h: b.h };
+                const moveAction = {
+                  type: 'window.move' as const,
+                  windowId: interaction.windowId,
+                  x: b.x,
+                  y: b.y,
+                };
+                const resizeAction = {
+                  type: 'window.resize' as const,
+                  windowId: interaction.windowId,
+                  w: b.w,
+                  h: b.h,
+                };
                 this.windowState.handleAction(moveAction);
                 this.windowState.handleAction(resizeAction);
                 await logger?.logAction(moveAction);
@@ -376,7 +409,9 @@ export class LiveSession {
     const commands = this.windowState.getAppCommands(windowId);
     if (commands.length === 0) return;
 
-    console.log(`[LiveSession ${this.sessionId}] Replaying ${commands.length} app commands to window ${windowId}`);
+    console.log(
+      `[LiveSession ${this.sessionId}] Replaying ${commands.length} app commands to window ${windowId}`,
+    );
     for (let i = 0; i < commands.length; i++) {
       this.broadcast({
         type: 'APP_PROTOCOL_REQUEST',

@@ -4,11 +4,11 @@
  * Note: For production, use a proper markdown library like
  * react-markdown or marked. This is a simplified version.
  */
-import { memo, useMemo } from 'react'
-import styles from '@/styles/base/typography.module.css'
+import { memo, useMemo } from 'react';
+import styles from '@/styles/base/typography.module.css';
 
 interface MarkdownRendererProps {
-  data: string
+  data: string;
 }
 
 function MarkdownRenderer({ data }: MarkdownRendererProps) {
@@ -32,17 +32,12 @@ function MarkdownRenderer({ data }: MarkdownRendererProps) {
       // Inline code
       .replace(/`(.*?)`/g, '<code>$1</code>')
       // Line breaks
-      .replace(/\n/g, '<br>')
+      .replace(/\n/g, '<br>');
 
-    return result
-  }, [data])
+    return result;
+  }, [data]);
 
-  return (
-    <div
-      className={styles.markdown}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  )
+  return <div className={styles.markdown} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-export const MemoizedMarkdownRenderer = memo(MarkdownRenderer)
+export const MemoizedMarkdownRenderer = memo(MarkdownRenderer);

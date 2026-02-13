@@ -1,47 +1,47 @@
 /**
  * RestorePromptBanner - Banner prompting user to restore previous session.
  */
-import { useState, useCallback } from 'react'
-import { useDesktopStore } from '@/store'
-import type { OSAction } from '@yaar/shared'
-import styles from '@/styles/ui/RestorePromptBanner.module.css'
+import { useState, useCallback } from 'react';
+import { useDesktopStore } from '@/store';
+import type { OSAction } from '@yaar/shared';
+import styles from '@/styles/ui/RestorePromptBanner.module.css';
 
 export function RestorePromptBanner() {
-  const restorePrompt = useDesktopStore((state) => state.restorePrompt)
-  const dismissRestorePrompt = useDesktopStore((state) => state.dismissRestorePrompt)
-  const applyActions = useDesktopStore((state) => state.applyActions)
-  const [restoring, setRestoring] = useState(false)
+  const restorePrompt = useDesktopStore((state) => state.restorePrompt);
+  const dismissRestorePrompt = useDesktopStore((state) => state.dismissRestorePrompt);
+  const applyActions = useDesktopStore((state) => state.applyActions);
+  const [restoring, setRestoring] = useState(false);
 
   const handleRestore = useCallback(async () => {
-    if (!restorePrompt) return
+    if (!restorePrompt) return;
 
     try {
-      setRestoring(true)
+      setRestoring(true);
       const response = await fetch(`/api/sessions/${restorePrompt.sessionId}/restore`, {
-        method: 'POST'
-      })
+        method: 'POST',
+      });
       if (!response.ok) {
-        throw new Error('Failed to restore session')
+        throw new Error('Failed to restore session');
       }
-      const data = await response.json()
+      const data = await response.json();
       if (data.actions && Array.isArray(data.actions)) {
-        applyActions(data.actions as OSAction[])
+        applyActions(data.actions as OSAction[]);
       }
-      dismissRestorePrompt()
+      dismissRestorePrompt();
     } catch (err) {
-      console.error('Failed to restore session:', err)
-      dismissRestorePrompt()
+      console.error('Failed to restore session:', err);
+      dismissRestorePrompt();
     } finally {
-      setRestoring(false)
+      setRestoring(false);
     }
-  }, [restorePrompt, applyActions, dismissRestorePrompt])
+  }, [restorePrompt, applyActions, dismissRestorePrompt]);
 
-  if (!restorePrompt) return null
+  if (!restorePrompt) return null;
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
 
   return (
     <div className={styles.banner}>
@@ -49,11 +49,7 @@ export function RestorePromptBanner() {
         Restore your previous session from {formatDate(restorePrompt.sessionDate)}?
       </span>
       <div className={styles.actions}>
-        <button
-          className={styles.restoreButton}
-          onClick={handleRestore}
-          disabled={restoring}
-        >
+        <button className={styles.restoreButton} onClick={handleRestore} disabled={restoring}>
           {restoring ? 'Restoring...' : 'Restore'}
         </button>
         <button
@@ -65,5 +61,5 @@ export function RestorePromptBanner() {
         </button>
       </div>
     </div>
-  )
+  );
 }

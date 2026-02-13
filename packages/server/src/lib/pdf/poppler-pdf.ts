@@ -46,7 +46,11 @@ export interface PdfPageImage {
 /**
  * Convert all pages of a PDF to PNG images.
  */
-export async function pdfToImages(pdfPath: string, scale: number = 1.5, maxPages?: number): Promise<PdfPageImage[]> {
+export async function pdfToImages(
+  pdfPath: string,
+  scale: number = 1.5,
+  maxPages?: number,
+): Promise<PdfPageImage[]> {
   const poppler = getPoppler();
   const images: PdfPageImage[] = [];
 
@@ -74,7 +78,7 @@ export async function pdfToImages(pdfPath: string, scale: number = 1.5, maxPages
     // Read all generated PNG files
     const files = await readdir(tempDir);
     const pngFiles = files
-      .filter(f => f.endsWith('.png'))
+      .filter((f) => f.endsWith('.png'))
       .sort((a, b) => {
         // Extract page number from filename (e.g., "page-1.png")
         const numA = parseInt(a.match(/-(\d+)\.png$/)?.[1] || '0', 10);
@@ -105,7 +109,7 @@ export async function pdfToImages(pdfPath: string, scale: number = 1.5, maxPages
 export async function renderPdfPage(
   pdfPath: string,
   pageNumber: number,
-  scale: number = 1.5
+  scale: number = 1.5,
 ): Promise<Buffer> {
   const poppler = getPoppler();
 
@@ -127,7 +131,7 @@ export async function renderPdfPage(
 
     // Read the generated PNG file
     const files = await readdir(tempDir);
-    const pngFile = files.find(f => f.endsWith('.png'));
+    const pngFile = files.find((f) => f.endsWith('.png'));
 
     if (!pngFile) {
       throw new Error(`Failed to render page ${pageNumber}`);

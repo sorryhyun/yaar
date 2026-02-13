@@ -18,7 +18,10 @@ import type { AppServer } from './app-server.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import type { CommandExecutionRequestApprovalParams, FileChangeRequestApprovalParams } from './types.js';
+import type {
+  CommandExecutionRequestApprovalParams,
+  FileChangeRequestApprovalParams,
+} from './types.js';
 
 /**
  * Session state for a thread.
@@ -97,10 +100,7 @@ export class CodexProvider extends BaseTransport {
     }
   }
 
-  async *query(
-    prompt: string,
-    options: TransportOptions
-  ): AsyncIterable<StreamMessage> {
+  async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     this.createAbortController();
 
     try {
@@ -143,11 +143,7 @@ export class CodexProvider extends BaseTransport {
         }
 
         // Check for turn completion
-        if (
-          method === 'turn/completed' ||
-          method === 'turn/failed' ||
-          method === 'error'
-        ) {
+        if (method === 'turn/completed' || method === 'turn/failed' || method === 'error') {
           if (this.resolveMessage) {
             this.resolveMessage(true);
             this.resolveMessage = null;
@@ -169,11 +165,8 @@ export class CodexProvider extends BaseTransport {
       try {
         // Build input array with text and optional images (UserInput union from generated types)
         const input: Array<
-          | { type: 'text'; text: string; text_elements: never[] }
-          | { type: 'image'; url: string }
-        > = [
-          { type: 'text', text: prompt, text_elements: [] },
-        ];
+          { type: 'text'; text: string; text_elements: never[] } | { type: 'image'; url: string }
+        > = [{ type: 'text', text: prompt, text_elements: [] }];
 
         // Add images as separate input objects (WebP from frontend capture)
         if (options.images && options.images.length > 0) {
@@ -285,7 +278,7 @@ export class CodexProvider extends BaseTransport {
     appServer: AppServer,
     id: number,
     method: string,
-    params: unknown
+    params: unknown,
   ): Promise<void> {
     switch (method) {
       case 'item/commandExecution/requestApproval': {
@@ -297,7 +290,10 @@ export class CodexProvider extends BaseTransport {
           : `Codex wants to run:\n\n\`${description}\``;
 
         const approved = await actionEmitter.showPermissionDialog(
-          title, message, 'codex_command', p.command ?? undefined,
+          title,
+          message,
+          'codex_command',
+          p.command ?? undefined,
         );
         appServer.respond(id, {
           decision: approved ? 'accept' : 'decline',
@@ -313,7 +309,10 @@ export class CodexProvider extends BaseTransport {
           : `Codex wants to modify files${p.grantRoot ? ` under ${p.grantRoot}` : ''}`;
 
         const approved = await actionEmitter.showPermissionDialog(
-          title, message, 'codex_file_change', p.grantRoot ?? undefined,
+          title,
+          message,
+          'codex_file_change',
+          p.grantRoot ?? undefined,
         );
         appServer.respond(id, {
           decision: approved ? 'accept' : 'decline',
@@ -389,8 +388,7 @@ export class CodexProvider extends BaseTransport {
 
     // Case 3: Need new thread (no session or system prompt changed)
     const needsNewThread =
-      !this.currentSession ||
-      this.currentSession.systemPrompt !== options.systemPrompt;
+      !this.currentSession || this.currentSession.systemPrompt !== options.systemPrompt;
 
     if (needsNewThread) {
       const result = await this.appServer!.threadStart({
@@ -406,5 +404,4 @@ export class CodexProvider extends BaseTransport {
     // Case 4: Reuse existing thread (same system prompt, continuing conversation)
     return false;
   }
-
 }

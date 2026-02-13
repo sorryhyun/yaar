@@ -50,7 +50,11 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
   claude: async () => {
     const { ClaudeSessionProvider } = await import('./claude/index.js');
     const p = new ClaudeSessionProvider();
-    try { return await p.isAvailable(); } finally { await p.dispose(); }
+    try {
+      return await p.isAvailable();
+    } finally {
+      await p.dispose();
+    }
   },
   codex: async () => {
     // Check CLI + auth without needing an AppServer

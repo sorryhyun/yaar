@@ -17,21 +17,21 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
  * These libraries are installed as devDependencies and bundled into apps.
  */
 export const BUNDLED_LIBRARIES: Record<string, string> = {
-  'uuid': 'uuid',
-  'lodash': 'lodash-es',
+  uuid: 'uuid',
+  lodash: 'lodash-es',
   'date-fns': 'date-fns',
-  'clsx': 'clsx',
-  'anime': 'animejs',
-  'konva': 'konva',
-  'three': 'three',
+  clsx: 'clsx',
+  anime: 'animejs',
+  konva: 'konva',
+  three: 'three',
   'cannon-es': 'cannon-es',
-  'xlsx': 'xlsx',
+  xlsx: 'xlsx',
   'chart.js': 'chart.js',
-  'd3': 'd3',
+  d3: 'd3',
   'matter-js': 'matter-js',
-  'tone': 'tone',
+  tone: 'tone',
   'pixi.js': 'pixi.js',
-  'p5': 'p5',
+  p5: 'p5',
 };
 
 /**
@@ -56,9 +56,11 @@ export function bundledLibraryPlugin(): Plugin {
         if (!actualModule) {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           return {
-            errors: [{
-              text: `Unknown bundled library: "${libName}". Available: ${available}`,
-            }],
+            errors: [
+              {
+                text: `Unknown bundled library: "${libName}". Available: ${available}`,
+              },
+            ],
           };
         }
 
@@ -108,7 +110,9 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
         const BunApi = (globalThis as any).Bun;
 
         // Strategy 1: embedded libs (production exe)
-        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as Record<string, string> | undefined;
+        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
+          | Record<string, string>
+          | undefined;
         if (embeddedLibs?.[libName]) {
           const contents = await BunApi.file(embeddedLibs[libName]).text();
           return { contents, loader: 'js' };
@@ -125,8 +129,8 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
         throw new Error(
           `Bundled library "${libName}" not found. ` +
-          `Looked for embedded lib and disk file at ${diskPath}. ` +
-          `Run "pnpm build:exe:libs" to generate bundled-libs/.`
+            `Looked for embedded lib and disk file at ${diskPath}. ` +
+            `Run "pnpm build:exe:libs" to generate bundled-libs/.`,
         );
       });
     },

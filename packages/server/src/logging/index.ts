@@ -18,7 +18,12 @@ export async function ensureSessionsDir(): Promise<void> {
 // Re-exports
 export type { AgentInfo, SessionMetadata, SessionInfo, ParsedMessage } from './types.js';
 export { createSession, SessionLogger } from './session-logger.js';
-export { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages } from './session-reader.js';
+export {
+  listSessions,
+  readSessionTranscript,
+  readSessionMessages,
+  parseSessionMessages,
+} from './session-reader.js';
 export { getWindowRestoreActions } from './window-restore.js';
 export { getContextRestoreMessages, FULL_RESTORE_POLICY } from './context-restore.js';
 export type { ContextRestorePolicy } from './context-restore.js';

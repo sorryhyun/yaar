@@ -39,7 +39,11 @@ export class InteractionTimeline {
       }
 
       // Move/resize implies focus — remove preceding focus on the same window
-      if ((verb === 'move' || verb === 'resize') && last.type === 'user' && last.content === `focus:${windowId}`) {
+      if (
+        (verb === 'move' || verb === 'resize') &&
+        last.type === 'user' &&
+        last.content === `focus:${windowId}`
+      ) {
         this.entries.pop();
       }
     }
@@ -71,7 +75,7 @@ export class InteractionTimeline {
   format(): string {
     if (this.entries.length === 0) return '';
 
-    const lines = this.entries.map(e => {
+    const lines = this.entries.map((e) => {
       if (e.type === 'user') {
         return `<interaction:user>${e.content}</interaction:user>`;
       }
@@ -116,7 +120,9 @@ export class InteractionTimeline {
     for (const action of actions) {
       switch (action.type) {
         case 'window.create':
-          parts.push(`Created window "${action.windowId}" (${action.content?.renderer ?? 'unknown'}).`);
+          parts.push(
+            `Created window "${action.windowId}" (${action.content?.renderer ?? 'unknown'}).`,
+          );
           break;
         case 'window.close':
           parts.push(`Closed window "${action.windowId}".`);
@@ -128,7 +134,9 @@ export class InteractionTimeline {
           parts.push(`Updated content of "${action.windowId}".`);
           break;
         case 'window.updateContent':
-          parts.push(`Modified content of "${action.windowId}" (${(action.operation as { op: string }).op}).`);
+          parts.push(
+            `Modified content of "${action.windowId}" (${(action.operation as { op: string }).op}).`,
+          );
           break;
         case 'notification.show':
           parts.push(`Showed notification: "${action.title}".`);

@@ -13,9 +13,12 @@ import { IS_BUNDLED_EXE, IS_DEV_EXE } from '../config.js';
 
 function getPlatformName(): string {
   switch (platform()) {
-    case 'win32': return 'Windows';
-    case 'darwin': return 'macOS';
-    default: return 'Linux';
+    case 'win32':
+      return 'Windows';
+    case 'darwin':
+      return 'macOS';
+    default:
+      return 'Linux';
   }
 }
 
@@ -29,21 +32,18 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     storageList('').catch(() => ({ success: false as const, error: 'unavailable' })),
   ]);
 
-  const lines = [
-    `- Platform: ${getPlatformName()}`,
-    `- Provider: ${getProviderName(provider)}`,
-  ];
+  const lines = [`- Platform: ${getPlatformName()}`, `- Provider: ${getProviderName(provider)}`];
 
   if (IS_BUNDLED_EXE) {
     lines.push(`- Mode: Standalone executable${IS_DEV_EXE ? ' (dev)' : ''}`);
   }
 
   if (apps.length > 0) {
-    lines.push(`- Installed apps: ${apps.map(a => a.id).join(', ')}`);
+    lines.push(`- Installed apps: ${apps.map((a) => a.id).join(', ')}`);
   }
 
   if (storage.success && storage.entries && storage.entries.length > 0) {
-    const names = storage.entries.map(e => e.path).join(', ');
+    const names = storage.entries.map((e) => e.path).join(', ');
     lines.push(`- Storage: ${names}`);
   } else {
     lines.push('- Storage: empty');

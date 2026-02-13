@@ -5,7 +5,12 @@
  * for list_windows and view_window tools.
  */
 
-import type { OSAction, ContentUpdateOperation, WindowState, AppProtocolRequest } from '@yaar/shared';
+import type {
+  OSAction,
+  ContentUpdateOperation,
+  WindowState,
+  AppProtocolRequest,
+} from '@yaar/shared';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
@@ -86,7 +91,8 @@ export class WindowStateRegistry {
               break;
             case 'insertAt': {
               const pos = operation.position;
-              win.content.data = currentData.slice(0, pos) + (operation.data as string) + currentData.slice(pos);
+              win.content.data =
+                currentData.slice(0, pos) + (operation.data as string) + currentData.slice(pos);
               break;
             }
             case 'clear':
@@ -192,4 +198,3 @@ export class WindowStateRegistry {
     }
   }
 }
-

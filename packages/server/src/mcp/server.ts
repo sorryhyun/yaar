@@ -51,10 +51,7 @@ export async function initMcpServer(): Promise<void> {
   const servers: Record<McpServerName, McpServer> = {} as Record<McpServerName, McpServer>;
 
   for (const name of MCP_SERVERS) {
-    const server = new McpServer(
-      { name, version: '1.0.0' },
-      { capabilities: { tools: {} } }
-    );
+    const server = new McpServer({ name, version: '1.0.0' }, { capabilities: { tools: {} } });
     servers[name] = server;
   }
 
@@ -75,7 +72,9 @@ export async function initMcpServer(): Promise<void> {
     });
   }
 
-  console.log(`[MCP] HTTP servers initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`);
+  console.log(
+    `[MCP] HTTP servers initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
+  );
 }
 
 /**
@@ -85,7 +84,7 @@ export async function initMcpServer(): Promise<void> {
 export async function handleMcpRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  serverName: McpServerName
+  serverName: McpServerName,
 ): Promise<void> {
   if (!mcpToken) {
     res.writeHead(503, { 'Content-Type': 'application/json' });

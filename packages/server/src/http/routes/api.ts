@@ -4,14 +4,25 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
-import { listSessions, readSessionTranscript, readSessionMessages, parseSessionMessages, getWindowRestoreActions, getContextRestoreMessages } from '../../logging/index.js';
+import {
+  listSessions,
+  readSessionTranscript,
+  readSessionMessages,
+  parseSessionMessages,
+  getWindowRestoreActions,
+  getContextRestoreMessages,
+} from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 
-export async function handleApiRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+export async function handleApiRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
   // Health check
   if (url.pathname === '/health' && req.method === 'GET') {
     sendJson(res, { status: 'ok' });

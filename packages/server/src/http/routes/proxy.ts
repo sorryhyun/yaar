@@ -47,7 +47,11 @@ function collectJsonBody(req: IncomingMessage, maxSize: number): Promise<string>
   });
 }
 
-export async function handleProxyRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+export async function handleProxyRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
   if (url.pathname !== '/api/fetch' || req.method !== 'POST') {
     return false;
   }
@@ -83,15 +87,19 @@ export async function handleProxyRoutes(req: IncomingMessage, res: ServerRespons
   }
 
   // Block internal/private network access (SSRF protection)
-  if (INTERNAL_HOSTNAME_PATTERNS.some(p => p.test(parsed.hostname))) {
+  if (INTERNAL_HOSTNAME_PATTERNS.some((p) => p.test(parsed.hostname))) {
     sendError(res, 'Access to internal networks is not allowed', 403);
     return true;
   }
 
   // Check domain allowlist
   const domain = extractDomain(targetUrl);
-  if (!await isDomainAllowed(domain)) {
-    sendError(res, `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`, 403);
+  if (!(await isDomainAllowed(domain))) {
+    sendError(
+      res,
+      `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`,
+      403,
+    );
     return true;
   }
 
@@ -150,11 +158,14 @@ export async function handleProxyRoutes(req: IncomingMessage, res: ServerRespons
 
     // Collect response headers
     const responseHeaders: Record<string, string> = {};
-    response.headers.forEach((v, k) => { responseHeaders[k] = v; });
+    response.headers.forEach((v, k) => {
+      responseHeaders[k] = v;
+    });
 
     // Determine if response is text or binary
     const responseContentType = response.headers.get('content-type') || '';
-    const isText = responseContentType.includes('text/') ||
+    const isText =
+      responseContentType.includes('text/') ||
       responseContentType.includes('json') ||
       responseContentType.includes('xml') ||
       responseContentType.includes('javascript') ||

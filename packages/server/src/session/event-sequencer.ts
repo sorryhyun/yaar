@@ -52,9 +52,7 @@ export class EventSequencer {
     if (this.count === 0) return [];
 
     // Find the oldest seq in the ring
-    const oldestIdx = this.count < this.capacity
-      ? 0
-      : this.head; // when full, head points to oldest
+    const oldestIdx = this.count < this.capacity ? 0 : this.head; // when full, head points to oldest
     const oldestEntry = this.ring[oldestIdx];
     if (!oldestEntry) return [];
 

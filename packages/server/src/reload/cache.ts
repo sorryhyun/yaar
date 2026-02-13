@@ -61,7 +61,7 @@ export class ReloadCache {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.saveToDisk().catch(err => {
+      this.saveToDisk().catch((err) => {
         console.error('[ReloadCache] Failed to save:', err);
       });
     }, SAVE_DEBOUNCE_MS);
@@ -85,7 +85,7 @@ export class ReloadCache {
     fingerprint: Fingerprint,
     actions: OSAction[],
     label: string,
-    opts?: { requiredWindowIds?: string[] }
+    opts?: { requiredWindowIds?: string[] },
   ): CacheEntry {
     const fingerprintKey = `${fingerprint.contentHash}:${fingerprint.windowStateHash}`;
     const existing = this.exactMap.get(fingerprintKey);
@@ -122,7 +122,9 @@ export class ReloadCache {
     this.evict();
     this.scheduleSave();
 
-    console.log(`[ReloadCache] Recorded new entry "${label}" (${entry.id}), total: ${this.entries.length}`);
+    console.log(
+      `[ReloadCache] Recorded new entry "${label}" (${entry.id}), total: ${this.entries.length}`,
+    );
     return entry;
   }
 
@@ -167,7 +169,7 @@ export class ReloadCache {
    * Get an entry by ID.
    */
   getEntry(id: string): CacheEntry | undefined {
-    return this.entries.find(e => e.id === id);
+    return this.entries.find((e) => e.id === id);
   }
 
   /**
@@ -203,9 +205,7 @@ export class ReloadCache {
    * Invalidate entries that depend on a specific window.
    */
   invalidateForWindow(windowId: string): void {
-    const toRemove = this.entries.filter(
-      e => e.requiredWindowIds?.includes(windowId)
-    );
+    const toRemove = this.entries.filter((e) => e.requiredWindowIds?.includes(windowId));
     for (const entry of toRemove) {
       this.removeEntry(entry.id);
       console.log(`[ReloadCache] Invalidated entry "${entry.label}" (window ${windowId} closed)`);
@@ -219,7 +219,7 @@ export class ReloadCache {
     const now = Date.now();
 
     // Remove expired entries
-    this.entries = this.entries.filter(entry => {
+    this.entries = this.entries.filter((entry) => {
       if (now - entry.lastUsedAt > MAX_AGE_MS) {
         this.exactMap.delete(entry.fingerprintKey);
         return false;
@@ -238,7 +238,7 @@ export class ReloadCache {
   }
 
   private removeEntry(id: string): void {
-    const idx = this.entries.findIndex(e => e.id === id);
+    const idx = this.entries.findIndex((e) => e.id === id);
     if (idx !== -1) {
       const entry = this.entries[idx];
       this.exactMap.delete(entry.fingerprintKey);

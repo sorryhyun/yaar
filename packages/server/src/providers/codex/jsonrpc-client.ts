@@ -59,7 +59,7 @@ export class JsonRpcClient extends EventEmitter {
   constructor(
     private readonly stdin: Writable,
     private readonly stdout: Readable,
-    options: JsonRpcClientOptions = {}
+    options: JsonRpcClientOptions = {},
   ) {
     super();
     this.requestTimeout = options.requestTimeout ?? 30000;
@@ -69,10 +69,7 @@ export class JsonRpcClient extends EventEmitter {
   /**
    * Send a JSON-RPC request and wait for the response.
    */
-  async request<TParams, TResult>(
-    method: string,
-    params?: TParams
-  ): Promise<TResult> {
+  async request<TParams, TResult>(method: string, params?: TParams): Promise<TResult> {
     if (this.closed) {
       throw new Error('JsonRpcClient is closed');
     }
@@ -246,7 +243,7 @@ export class JsonRpcClient extends EventEmitter {
       if ('error' in message) {
         const errorResponse = message as JsonRpcErrorResponse;
         pending.reject(
-          new Error(`${errorResponse.error.message} (code: ${errorResponse.error.code})`)
+          new Error(`${errorResponse.error.message} (code: ${errorResponse.error.code})`),
         );
       } else {
         const response = message as JsonRpcResponse;

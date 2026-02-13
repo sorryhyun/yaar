@@ -18,7 +18,7 @@ export class ReloadCachePolicy {
   formatReloadOptions(matches: CacheMatch[]): string {
     if (matches.length === 0) return '';
 
-    const options = matches.map(m => ({
+    const options = matches.map((m) => ({
       cacheId: m.entry.id,
       label: m.entry.label,
       similarity: parseFloat(m.similarity.toFixed(2)),

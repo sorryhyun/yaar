@@ -72,19 +72,21 @@ export function createWebSocketServer(
     // Execute launch hooks for fresh sessions (not reconnections)
     if (!requestedSessionId && !session.launchHooksExecuted) {
       session.launchHooksExecuted = true;
-      getHooksByEvent('launch').then(async (hooks) => {
-        for (const hook of hooks) {
-          if (hook.action.type === 'interaction') {
-            const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-            await session.routeMessage(
-              { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
-              connectionId,
-            );
+      getHooksByEvent('launch')
+        .then(async (hooks) => {
+          for (const hook of hooks) {
+            if (hook.action.type === 'interaction') {
+              const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+              await session.routeMessage(
+                { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
+                connectionId,
+              );
+            }
           }
-        }
-      }).catch((err) => {
-        console.error('Failed to execute launch hooks:', err);
-      });
+        })
+        .catch((err) => {
+          console.error('Failed to execute launch hooks:', err);
+        });
     }
 
     // Message handler

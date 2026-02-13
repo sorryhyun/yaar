@@ -20,7 +20,10 @@ export function registerWriteTools(server: McpServer): void {
       inputSchema: {
         path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
         content: z.string().describe('TypeScript source code'),
-        sandboxId: z.string().optional().describe('Sandbox ID. If omitted, creates a new sandbox with timestamp ID.'),
+        sandboxId: z
+          .string()
+          .optional()
+          .describe('Sandbox ID. If omitted, creates a new sandbox with timestamp ID.'),
       },
     },
     async (args) => {
@@ -33,7 +36,9 @@ export function registerWriteTools(server: McpServer): void {
 
       // Validate sandbox ID if provided (must be numeric timestamp)
       if (providedId && !/^\d+$/.test(providedId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp (from clone or a previous write_ts call). Do not use app names as sandbox IDs.');
+        return ok(
+          'Error: Invalid sandbox ID. Must be a numeric timestamp (from clone or a previous write_ts call). Do not use app names as sandbox IDs.',
+        );
       }
 
       // Create or use existing sandbox
@@ -54,16 +59,22 @@ export function registerWriteTools(server: McpServer): void {
         // Write the file
         await writeFile(fullPath, content, 'utf-8');
 
-        return ok(JSON.stringify({
-          sandboxId,
-          path,
-          message: `File written to sandbox/${sandboxId}/${path}`,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              sandboxId,
+              path,
+              message: `File written to sandbox/${sandboxId}/${path}`,
+            },
+            null,
+            2,
+          ),
+        );
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         return ok(`Error: ${error}`);
       }
-    }
+    },
   );
 
   // apply_diff_ts - Apply search-and-replace edit to a sandbox file
@@ -110,24 +121,34 @@ export function registerWriteTools(server: McpServer): void {
 
       // Check old_string exists
       if (!content.includes(old_string)) {
-        return ok('Error: old_string not found in file. Make sure it matches exactly (including whitespace).');
+        return ok(
+          'Error: old_string not found in file. Make sure it matches exactly (including whitespace).',
+        );
       }
 
       // Check uniqueness
       const count = content.split(old_string).length - 1;
       if (count > 1) {
-        return ok(`Error: old_string found ${count} times. Provide more surrounding context to make it unique.`);
+        return ok(
+          `Error: old_string found ${count} times. Provide more surrounding context to make it unique.`,
+        );
       }
 
       // Apply replacement
       const newContent = content.replace(old_string, new_string);
       await writeFile(fullPath, newContent, 'utf-8');
 
-      return ok(JSON.stringify({
-        sandboxId,
-        path,
-        message: `Applied edit to sandbox/${sandboxId}/${path}`,
-      }, null, 2));
-    }
+      return ok(
+        JSON.stringify(
+          {
+            sandboxId,
+            path,
+            message: `Applied edit to sandbox/${sandboxId}/${path}`,
+          },
+          null,
+          2,
+        ),
+      );
+    },
   );
 }

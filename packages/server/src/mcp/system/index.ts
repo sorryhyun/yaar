@@ -27,14 +27,15 @@ export function registerSystemTools(server: McpServer): void {
       };
 
       return ok(JSON.stringify(info, null, 2));
-    }
+    },
   );
 
   // get_env_var
   server.registerTool(
     'get_env_var',
     {
-      description: 'Get the value of a safe environment variable. Only allows reading non-sensitive variables.',
+      description:
+        'Get the value of a safe environment variable. Only allows reading non-sensitive variables.',
       inputSchema: {
         name: z.string().describe('Name of the environment variable to read'),
       },
@@ -64,7 +65,7 @@ export function registerSystemTools(server: McpServer): void {
       }
 
       return ok(value);
-    }
+    },
   );
 
   // memorize
@@ -74,9 +75,7 @@ export function registerSystemTools(server: McpServer): void {
       description:
         'Save a sentence or note to persistent memory. These notes are automatically included in your system prompt across sessions.',
       inputSchema: {
-        content: z
-          .string()
-          .describe('A sentence or note to remember across sessions'),
+        content: z.string().describe('A sentence or note to remember across sessions'),
       },
     },
     async (args) => {
@@ -88,7 +87,7 @@ export function registerSystemTools(server: McpServer): void {
         return ok(`Error saving memory: ${result.error}`);
       }
       return ok(`Memorized: "${args.content}"`);
-    }
+    },
   );
 
   // set_config — register a hook
@@ -98,19 +97,32 @@ export function registerSystemTools(server: McpServer): void {
       description:
         'Register an automated hook that fires on a desktop event. Supports "launch" (session start) and "tool_use" (when the AI calls a tool) events.',
       inputSchema: {
-        event: z
-          .enum(['launch', 'tool_use'])
-          .describe('The event that triggers this hook'),
-        filter: z.object({
-          toolName: z.union([z.string(), z.array(z.string())]).describe('Tool name(s) to match (e.g., "apps:clone")'),
-        }).optional().describe('Filter for tool_use hooks — which tools trigger this hook'),
-        action: z.object({
-          type: z.enum(['interaction', 'os_action']).describe('Action type: "interaction" injects a user message, "os_action" emits OS Actions'),
-          payload: z.union([z.string(), z.record(z.string(), z.unknown()), z.array(z.record(z.string(), z.unknown()))]).describe('String for interaction, object or array for os_action'),
-        }).describe('What happens when the hook fires'),
-        label: z
-          .string()
-          .describe('Human-readable description shown in permission dialog'),
+        event: z.enum(['launch', 'tool_use']).describe('The event that triggers this hook'),
+        filter: z
+          .object({
+            toolName: z
+              .union([z.string(), z.array(z.string())])
+              .describe('Tool name(s) to match (e.g., "apps:clone")'),
+          })
+          .optional()
+          .describe('Filter for tool_use hooks — which tools trigger this hook'),
+        action: z
+          .object({
+            type: z
+              .enum(['interaction', 'os_action'])
+              .describe(
+                'Action type: "interaction" injects a user message, "os_action" emits OS Actions',
+              ),
+            payload: z
+              .union([
+                z.string(),
+                z.record(z.string(), z.unknown()),
+                z.array(z.record(z.string(), z.unknown())),
+              ])
+              .describe('String for interaction, object or array for os_action'),
+          })
+          .describe('What happens when the hook fires'),
+        label: z.string().describe('Human-readable description shown in permission dialog'),
       },
     },
     async (args) => {
@@ -127,34 +139,29 @@ export function registerSystemTools(server: McpServer): void {
 
       const hook = await addHook(args.event, args.action as any, args.label, args.filter);
       return ok(`Hook registered: "${hook.label}" (${hook.id})`);
-    }
+    },
   );
 
   // get_config — read hooks
   server.registerTool(
     'get_config',
     {
-      description:
-        'Read current configuration. Returns registered hooks.',
+      description: 'Read current configuration. Returns registered hooks.',
       inputSchema: {
-        section: z
-          .enum(['hooks'])
-          .optional()
-          .describe('Config section to read (default: all)'),
+        section: z.enum(['hooks']).optional().describe('Config section to read (default: all)'),
       },
     },
     async () => {
       const hooks = await loadHooks();
       return ok(JSON.stringify({ hooks }, null, 2));
-    }
+    },
   );
 
   // remove_config — delete a hook
   server.registerTool(
     'remove_config',
     {
-      description:
-        'Remove a registered hook by its ID.',
+      description: 'Remove a registered hook by its ID.',
       inputSchema: {
         hookId: z.string().describe('The hook ID to remove (e.g., "hook-1")'),
       },
@@ -176,6 +183,6 @@ export function registerSystemTools(server: McpServer): void {
         return ok(`Hook "${args.hookId}" not found.`);
       }
       return ok(`Hook "${args.hookId}" removed.`);
-    }
+    },
   );
 }

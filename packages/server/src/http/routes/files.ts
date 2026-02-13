@@ -15,7 +15,13 @@ import { storageWrite, storageDelete, storageList } from '../../storage/storage-
 const gzipAsync = promisify(gzip);
 
 /** Content types eligible for gzip compression. */
-const COMPRESSIBLE = new Set(['text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json']);
+const COMPRESSIBLE = new Set([
+  'text/html',
+  'text/css',
+  'text/javascript',
+  'application/javascript',
+  'application/json',
+]);
 
 /** Gzip-compress a buffer if the client accepts it and the content type is compressible. */
 async function maybeGzip(
@@ -58,7 +64,11 @@ function collectBody(req: IncomingMessage, res: ServerResponse, maxSize: number)
   });
 }
 
-export async function handleFileRoutes(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
+export async function handleFileRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
   // Render PDF page as image
   // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
   const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);

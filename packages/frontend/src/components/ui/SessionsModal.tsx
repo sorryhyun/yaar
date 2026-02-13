@@ -1,142 +1,148 @@
 /**
  * SessionsModal - Modal for viewing and recovering previous sessions.
  */
-import { useState, useEffect, useCallback } from 'react'
-import { useDesktopStore } from '@/store'
-import type { OSAction } from '@yaar/shared'
-import styles from '@/styles/ui/SessionsModal.module.css'
+import { useState, useEffect, useCallback } from 'react';
+import { useDesktopStore } from '@/store';
+import type { OSAction } from '@yaar/shared';
+import styles from '@/styles/ui/SessionsModal.module.css';
 
 interface SessionInfo {
-  sessionId: string
+  sessionId: string;
   metadata: {
-    createdAt: string
-    provider: string
-    lastActivity: string
-  }
+    createdAt: string;
+    provider: string;
+    lastActivity: string;
+  };
 }
 
 export function SessionsModal() {
-  const [sessions, setSessions] = useState<SessionInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
-  const [transcript, setTranscript] = useState<string | null>(null)
-  const [loadingTranscript, setLoadingTranscript] = useState(false)
-  const [restoring, setRestoring] = useState<string | null>(null)
-  const [exporting, setExporting] = useState<string | null>(null)
-  const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal)
-  const applyActions = useDesktopStore((state) => state.applyActions)
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [loadingTranscript, setLoadingTranscript] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal);
+  const applyActions = useDesktopStore((state) => state.applyActions);
 
   useEffect(() => {
-    fetchSessions()
-  }, [])
+    fetchSessions();
+  }, []);
 
   const fetchSessions = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      const response = await fetch('/api/sessions')
+      setLoading(true);
+      setError(null);
+      const response = await fetch('/api/sessions');
       if (!response.ok) {
-        throw new Error('Failed to fetch sessions')
+        throw new Error('Failed to fetch sessions');
       }
-      const data = await response.json()
-      setSessions(data.sessions)
+      const data = await response.json();
+      setSessions(data.sessions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions')
+      setError(err instanceof Error ? err.message : 'Failed to load sessions');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const handleViewSession = useCallback(async (sessionId: string) => {
-    if (selectedSession === sessionId) {
-      setSelectedSession(null)
-      setTranscript(null)
-      return
-    }
+  const handleViewSession = useCallback(
+    async (sessionId: string) => {
+      if (selectedSession === sessionId) {
+        setSelectedSession(null);
+        setTranscript(null);
+        return;
+      }
 
-    try {
-      setLoadingTranscript(true)
-      setSelectedSession(sessionId)
-      const response = await fetch(`/api/sessions/${sessionId}/transcript`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch transcript')
+      try {
+        setLoadingTranscript(true);
+        setSelectedSession(sessionId);
+        const response = await fetch(`/api/sessions/${sessionId}/transcript`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch transcript');
+        }
+        const data = await response.json();
+        setTranscript(data.transcript);
+      } catch {
+        setTranscript('Failed to load transcript');
+      } finally {
+        setLoadingTranscript(false);
       }
-      const data = await response.json()
-      setTranscript(data.transcript)
-    } catch {
-      setTranscript('Failed to load transcript')
-    } finally {
-      setLoadingTranscript(false)
-    }
-  }, [selectedSession])
+    },
+    [selectedSession],
+  );
 
-  const handleRestoreSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    try {
-      setRestoring(sessionId)
-      const response = await fetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' })
-      if (!response.ok) {
-        throw new Error('Failed to restore session')
+  const handleRestoreSession = useCallback(
+    async (sessionId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        setRestoring(sessionId);
+        const response = await fetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' });
+        if (!response.ok) {
+          throw new Error('Failed to restore session');
+        }
+        const data = await response.json();
+        if (data.actions && Array.isArray(data.actions)) {
+          applyActions(data.actions as OSAction[]);
+        }
+        toggleSessionsModal();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to restore session');
+      } finally {
+        setRestoring(null);
       }
-      const data = await response.json()
-      if (data.actions && Array.isArray(data.actions)) {
-        applyActions(data.actions as OSAction[])
-      }
-      toggleSessionsModal()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore session')
-    } finally {
-      setRestoring(null)
-    }
-  }, [applyActions, toggleSessionsModal])
+    },
+    [applyActions, toggleSessionsModal],
+  );
 
   const handleExportSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
+    e.stopPropagation();
     try {
-      setExporting(sessionId)
+      setExporting(sessionId);
       // Fetch both transcript and messages
       const [transcriptRes, messagesRes] = await Promise.all([
         fetch(`/api/sessions/${sessionId}/transcript`),
-        fetch(`/api/sessions/${sessionId}/messages`)
-      ])
+        fetch(`/api/sessions/${sessionId}/messages`),
+      ]);
 
-      const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null
-      const messagesData = messagesRes.ok ? await messagesRes.json() : null
+      const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null;
+      const messagesData = messagesRes.ok ? await messagesRes.json() : null;
 
       const exportData = {
         sessionId,
         exportedAt: new Date().toISOString(),
         transcript: transcriptData?.transcript || null,
-        messages: messagesData?.messages || null
-      }
+        messages: messagesData?.messages || null,
+      };
 
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `session-${sessionId}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `session-${sessionId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export session')
+      setError(err instanceof Error ? err.message : 'Failed to export session');
     } finally {
-      setExporting(null)
+      setExporting(null);
     }
-  }, [])
+  }, []);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      toggleSessionsModal()
+      toggleSessionsModal();
     }
-  }
+  };
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick}>
@@ -168,9 +174,7 @@ export function SessionsModal() {
                       <span className={styles.provider}>{session.metadata.provider}</span>
                     </div>
                     <div className={styles.sessionMeta}>
-                      <span className={styles.date}>
-                        {formatDate(session.metadata.createdAt)}
-                      </span>
+                      <span className={styles.date}>{formatDate(session.metadata.createdAt)}</span>
                       <button
                         className={styles.actionButton}
                         onClick={(e) => handleRestoreSession(session.sessionId, e)}
@@ -207,5 +211,5 @@ export function SessionsModal() {
         </div>
       </div>
     </div>
-  )
+  );
 }
