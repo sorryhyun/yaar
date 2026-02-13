@@ -65,6 +65,42 @@ const imgUrl = yaar.storage.url('photos/cat.png');
 | `appProtocol` | auto-detected | Set explicitly if auto-detection (scanning HTML for `.app.register`) isn't reliable |
 | `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
 
+## Runtime Constraints
+
+Compiled apps run in a **browser iframe sandbox**. They are subject to these hard constraints:
+
+- **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
+- **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
+- **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
+- **Browser `fetch()` only** — Apps can make HTTP requests, but they are subject to CORS restrictions. Many APIs will block direct browser requests.
+- **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
+- **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
+
+## Anti-Patterns
+
+Common mistakes to avoid when building apps:
+
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `apps_write_config`.
+- **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
+- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
+- **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
+
+### Right Pattern for External Service Integration
+
+```
+Option A: API-based app (preferred for API wrappers)
+  apps/github/SKILL.md → describes GitHub API, auth flow
+  User provides PAT → stored via apps_write_config
+  AI calls GitHub API via http_get/http_post → renders in windows
+
+Option B: Compiled app + AI-mediated API (for rich UI)
+  Compiled iframe app handles UI/display only
+  AI agent handles external API calls via MCP tools
+  App Protocol bridges the two:
+    app_query → display data from AI to app
+    app_command → user actions from app to AI
+```
+
 ## App Protocol
 
 To make a deployed app controllable by the agent — so it can read app state and send commands — define an App Protocol. Without it, the app is a static iframe the agent cannot interact with after creation.

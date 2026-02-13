@@ -143,6 +143,42 @@ import anime from '@bundled/anime';
 - 타임아웃: 100ms ~ 30,000ms (기본 5,000ms)
 - fetch 허용 도메인: `config/curl_allowed_domains.yaml`에서 관리
 
+## 런타임 제약 사항
+
+컴파일된 앱은 **브라우저 iframe 샌드박스**에서 실행됩니다. 다음과 같은 하드 제약이 있습니다:
+
+- **Node.js API 없음** — `fs`, `process`, `child_process`, `net` 등을 사용할 수 없습니다. 브라우저 환경입니다.
+- **서버 프로세스 없음** — 앱은 포트를 열거나 서버를 실행할 수 없습니다.
+- **OAuth 플로우 불가** — OAuth code-for-token 교환에는 서버 측 `client_secret`이 필요합니다. iframe 앱에서는 안전하게 수행할 수 없으므로, API 기반 앱 패턴을 사용하세요 (아래 참조).
+- **브라우저 `fetch()`만 가능** — HTTP 요청은 가능하지만 CORS 제한을 받습니다. 많은 API가 직접적인 브라우저 요청을 차단합니다.
+- **localStorage/IndexedDB 사용 금지** — `window.yaar.storage`를 사용하세요 (서버 측 저장, 세션 간 유지).
+- **자체 완결형** — 앱은 외부 서버, localhost 서비스, iframe 외부 인프라에 의존해서는 안 됩니다.
+
+## 안티패턴
+
+앱 개발 시 피해야 할 일반적인 실수:
+
+- **OAuth 클라이언트를 컴파일된 앱으로 만들지 마세요** — OAuth에는 서버 측 `client_secret` 토큰 교환이 필요합니다. 대신, 사용자가 개인 액세스 토큰(PAT)을 제공하고 `apps_write_config`로 저장하는 API 기반 앱(SKILL.md만)을 만드세요.
+- **외부 서버가 실행 중이라고 가정하지 마세요** — `localhost:3000`이나 다른 포트에 백엔드가 없습니다. 앱은 완전히 자체 완결형이어야 합니다.
+- **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `http_get`/`http_post` MCP 도구로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
+- **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
+
+### 외부 서비스 연동의 올바른 패턴
+
+```
+옵션 A: API 기반 앱 (API 래퍼에 적합)
+  apps/github/SKILL.md → GitHub API, 인증 흐름 기술
+  사용자가 PAT 제공 → apps_write_config로 저장
+  AI가 http_get/http_post로 GitHub API 호출 → 윈도우에 렌더링
+
+옵션 B: 컴파일된 앱 + AI 매개 API (풍부한 UI용)
+  컴파일된 iframe 앱은 UI/표시만 담당
+  AI 에이전트가 MCP 도구로 외부 API 호출 처리
+  App Protocol이 둘을 연결:
+    app_query → AI에서 앱으로 표시 데이터
+    app_command → 앱에서 AI로 사용자 액션
+```
+
 ## 앱 유형
 
 ### 컴파일된 앱
@@ -403,6 +439,42 @@ import anime from '@bundled/anime';
 
 - Timeout: 100ms–30,000ms (default 5,000ms)
 - Allowed fetch domains: managed in `config/curl_allowed_domains.yaml`
+
+## Runtime Constraints
+
+Compiled apps run in a **browser iframe sandbox**. They are subject to these hard constraints:
+
+- **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
+- **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
+- **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
+- **Browser `fetch()` only** — Apps can make HTTP requests, but they are subject to CORS restrictions. Many APIs will block direct browser requests.
+- **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
+- **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
+
+## Anti-Patterns
+
+Common mistakes to avoid when building apps:
+
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `apps_write_config`.
+- **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
+- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
+- **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
+
+### Right Pattern for External Service Integration
+
+```
+Option A: API-based app (preferred for API wrappers)
+  apps/github/SKILL.md → describes GitHub API, auth flow
+  User provides PAT → stored via apps_write_config
+  AI calls GitHub API via http_get/http_post → renders in windows
+
+Option B: Compiled app + AI-mediated API (for rich UI)
+  Compiled iframe app handles UI/display only
+  AI agent handles external API calls via MCP tools
+  App Protocol bridges the two:
+    app_query → display data from AI to app
+    app_command → user actions from app to AI
+```
 
 ## App Types
 

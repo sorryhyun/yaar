@@ -146,6 +146,9 @@ export function getCodexAppServerArgs(): string[] {
   args.push('-c', 'features.shell_tool=false');
   args.push('-c', 'features.apply_patch_freeform=false');
 
+  // Enable native collaboration/subagent system for task delegation
+  args.push('-c', 'features.collaboration_modes=true');
+
   // Configure YAAR MCP servers
   for (const ns of CODEX_MCP_NAMESPACES) {
     args.push(

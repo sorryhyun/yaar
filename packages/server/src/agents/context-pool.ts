@@ -12,6 +12,7 @@ import { ContextTape, type ContextMessage, type ContextSource } from './context.
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
+import type { ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import { getBroadcastCenter } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
@@ -62,6 +63,7 @@ export class ContextPool {
   private windowConnectionPolicy = new WindowConnectionPolicy();
   private logSessionId: string | null = null;
   private savedThreadIds?: Record<string, string>;
+  private providerType: ProviderType | null = null;
 
   // Inflight task tracking for clean reset/cleanup
   private resetting = false;
@@ -103,6 +105,7 @@ export class ContextPool {
       return false;
     }
 
+    this.providerType = provider.providerType;
     const sessionInfo = await createSession(provider.name);
     this.sharedLogger = new SessionLogger(sessionInfo);
     this.logSessionId = sessionInfo.sessionId;
@@ -331,7 +334,7 @@ export class ContextPool {
       canonicalAgent: canonicalMain,
       resumeSessionId,
       monitorId,
-      allowedTools: ORCHESTRATOR_PROFILE.allowedTools,
+      allowedTools: this.providerType === 'codex' ? undefined : ORCHESTRATOR_PROFILE.allowedTools,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
           this.contextAssembly.appendAssistantMessage(this.contextTape, content, 'main');
