@@ -116,7 +116,13 @@ export class BrowserPool {
       const chrome = await this.getChrome();
 
       // Create a new tab via Chrome's HTTP debugging API
-      const resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`);
+      // Newer Chrome versions require PUT for /json/new; fall back to GET for older ones.
+      let resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, {
+        method: 'PUT',
+      });
+      if (!resp.ok) {
+        resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`);
+      }
       const target = (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
 
       const session = await BrowserSession.create(id, target.webSocketDebuggerUrl);
