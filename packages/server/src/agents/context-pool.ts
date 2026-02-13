@@ -25,6 +25,7 @@ import { WindowQueuePolicy } from './context-pool-policies/window-queue-policy.j
 import { ContextAssemblyPolicy } from './context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from './context-pool-policies/reload-cache-policy.js';
 import { WindowConnectionPolicy } from './context-pool-policies/window-connection-policy.js';
+import { MonitorBudgetPolicy } from './context-pool-policies/monitor-budget-policy.js';
 import { getProfile, ORCHESTRATOR_PROFILE } from './profiles.js';
 
 const MAX_QUEUE_SIZE = 10;
@@ -61,6 +62,7 @@ export class ContextPool {
   private contextAssembly = new ContextAssemblyPolicy();
   private reloadPolicy: ReloadCachePolicy;
   private windowConnectionPolicy = new WindowConnectionPolicy();
+  private budgetPolicy = new MonitorBudgetPolicy();
   private logSessionId: string | null = null;
   private savedThreadIds?: Record<string, string>;
   private providerType: ProviderType | null = null;
@@ -234,6 +236,17 @@ export class ContextPool {
   private async queueMainTask(task: Task): Promise<void> {
     const monitorId = task.monitorId ?? 'monitor-0';
 
+    // Acquire budget slot for background monitors (blocks until available)
+    await this.budgetPolicy.acquireTaskSlot(monitorId);
+
+    try {
+      await this.queueMainTaskInner(task, monitorId);
+    } finally {
+      this.budgetPolicy.releaseTaskSlot(monitorId);
+    }
+  }
+
+  private async queueMainTaskInner(task: Task, monitorId: string): Promise<void> {
     if (!this.agentPool.isMainAgentBusy(monitorId)) {
       // Main agent idle → process directly
       await this.processMainTask(this.agentPool.getMainAgent(monitorId)!, task);
@@ -286,6 +299,13 @@ export class ContextPool {
   }
 
   /**
+   * Record an OS action against a monitor's budget.
+   */
+  recordMonitorAction(monitorId: string): void {
+    this.budgetPolicy.recordAction(monitorId);
+  }
+
+  /**
    * Process a main task on the main agent (provider session continuity).
    * Drains callback queue before processing.
    */
@@ -294,6 +314,9 @@ export class ContextPool {
     const mainRole = `main-${monitorId}-${task.messageId}`;
     agent.currentRole = mainRole;
     agent.lastUsed = Date.now();
+
+    // Set output tracking callback for budget policy
+    agent.session.setOutputCallback((bytes) => this.budgetPolicy.recordOutput(monitorId, bytes));
 
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
@@ -346,6 +369,7 @@ export class ContextPool {
     const recordedActions = agent.session.getRecordedActions();
     this.reloadPolicy.maybeRecord(task, fp, recordedActions);
 
+    agent.session.setOutputCallback(null);
     agent.currentRole = null;
     await this.processMainQueue(monitorId);
   }
@@ -359,6 +383,9 @@ export class ContextPool {
     const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
     agent.currentRole = ephemeralRole;
     agent.lastUsed = Date.now();
+
+    // Set output tracking callback for budget policy
+    agent.session.setOutputCallback((bytes) => this.budgetPolicy.recordOutput(monitorId, bytes));
 
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
@@ -404,6 +431,7 @@ export class ContextPool {
 
       this.timeline.pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
     } finally {
+      agent.session.setOutputCallback(null);
       agent.currentRole = null;
       await this.agentPool.disposeEphemeral(agent);
     }
@@ -780,8 +808,9 @@ export class ContextPool {
     this.mainQueues.clear();
     this.windowQueuePolicy.clear();
 
-    // 2. Reject blocked limiter waiters so they unblock and exit
+    // 2. Reject blocked limiter/budget waiters so they unblock and exit
     getAgentLimiter().clearWaiting(new Error('Pool resetting'));
+    this.budgetPolicy.clearWaiting(new Error('Pool resetting'));
 
     // 3. Interrupt running queries so handleMessage loops exit
     try {
@@ -830,6 +859,7 @@ export class ContextPool {
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
     this.windowState.clear();
+    this.budgetPolicy.clear();
     this.savedThreadIds = undefined;
 
     // 9. Re-create a fresh main agent
@@ -876,6 +906,7 @@ export class ContextPool {
     windowAgents: number;
     ephemeralAgents: number;
     taskAgents: number;
+    monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
   } {
     const poolStats = this.agentPool.getStats();
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
@@ -885,6 +916,7 @@ export class ContextPool {
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
       timelineSize: this.timeline.size,
+      monitorBudget: this.budgetPolicy.getStats(),
     };
   }
 
@@ -916,6 +948,7 @@ export class ContextPool {
     this.mainQueues.clear();
     this.windowQueuePolicy.clear();
     getAgentLimiter().clearWaiting(new Error('Pool cleaning up'));
+    this.budgetPolicy.clear();
     await this.agentPool.interruptAll();
     await this.awaitInflight();
     await this.agentPool.cleanup();

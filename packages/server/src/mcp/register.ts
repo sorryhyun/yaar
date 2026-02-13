@@ -18,21 +18,23 @@ import { registerSandboxTools } from './sandbox/index.js';
 import { registerGuidelineTools } from './guidelines/index.js';
 import { registerReloadTools } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
-import { WindowStateRegistry } from './window-state.js';
-import { ReloadCache } from '../reload/cache.js';
+import type { WindowStateRegistry } from './window-state.js';
+import type { ReloadCache } from '../reload/cache.js';
 import { APP_DEV_ENABLED } from '../config.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
  */
 export function registerAllTools(servers: Record<McpServerName, McpServer>): void {
-  const getWindowState = () => {
+  const getWindowState = (): WindowStateRegistry => {
     const session = getSessionHub().getDefault();
-    return session?.windowState ?? new WindowStateRegistry();
+    if (!session) throw new Error('No active session — connect via WebSocket first.');
+    return session.windowState;
   };
-  const getReloadCache = () => {
+  const getReloadCache = (): ReloadCache => {
     const session = getSessionHub().getDefault();
-    return session?.reloadCache ?? new ReloadCache('/dev/null');
+    if (!session) throw new Error('No active session — connect via WebSocket first.');
+    return session.reloadCache;
   };
 
   registerSystemTools(servers.system);

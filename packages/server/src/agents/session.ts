@@ -108,11 +108,13 @@ export class AgentSession {
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
   private instanceId: string;
-  private hasSentFirstMessage = false;
+  private hasWarmSession = false;
+  private hasProcessedFirstUserTurn = false;
   private currentMessageId: string | null = null;
   private currentRole: string | null = null;
   private recordedActions: OSAction[] = [];
   private currentMonitorId: string | undefined;
+  private onOutput: ((bytes: number) => void) | null = null;
 
   private providerLifecycle: ProviderLifecycleManager;
   private toolActionBridge: ToolActionBridge;
@@ -147,11 +149,17 @@ export class AgentSession {
         set sessionId(value: string | null) {
           connection.sessionId = value;
         },
-        get hasSentFirstMessage() {
-          return connection.hasSentFirstMessage;
+        get hasWarmSession() {
+          return connection.hasWarmSession;
         },
-        set hasSentFirstMessage(value: boolean) {
-          connection.hasSentFirstMessage = value;
+        set hasWarmSession(value: boolean) {
+          connection.hasWarmSession = value;
+        },
+        get hasProcessedFirstUserTurn() {
+          return connection.hasProcessedFirstUserTurn;
+        },
+        set hasProcessedFirstUserTurn(value: boolean) {
+          connection.hasProcessedFirstUserTurn = value;
         },
         get sessionLogger() {
           return connection.sessionLogger;
@@ -221,6 +229,10 @@ export class AgentSession {
     return this.instanceId;
   }
 
+  setOutputCallback(cb: ((bytes: number) => void) | null): void {
+    this.onOutput = cb;
+  }
+
   async initialize(preWarmedProvider?: AITransport): Promise<boolean> {
     return this.providerLifecycle.initialize(preWarmedProvider);
   }
@@ -268,10 +280,10 @@ export class AgentSession {
       let resumeThread = false;
       if (options.forkSession && options.parentSessionId) {
         sessionIdToUse = options.parentSessionId;
-      } else if (options.resumeSessionId && !this.hasSentFirstMessage) {
+      } else if (options.resumeSessionId && !this.hasProcessedFirstUserTurn) {
         sessionIdToUse = options.resumeSessionId;
         resumeThread = true;
-      } else if (this.hasSentFirstMessage && this.sessionId) {
+      } else if ((this.hasWarmSession || this.hasProcessedFirstUserTurn) && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
 
@@ -290,7 +302,7 @@ export class AgentSession {
         agentId: stableAgentId,
         allowedTools: options.allowedTools,
       };
-      this.hasSentFirstMessage = true;
+      this.hasProcessedFirstUserTurn = true;
 
       const streamState = {
         responseText: '',
@@ -321,6 +333,7 @@ export class AgentSession {
           }
         },
         options.monitorId,
+        this.onOutput ?? undefined,
       );
 
       console.log(

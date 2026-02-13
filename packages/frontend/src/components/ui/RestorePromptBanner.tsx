@@ -10,6 +10,7 @@ export function RestorePromptBanner() {
   const restorePrompt = useDesktopStore((state) => state.restorePrompt);
   const dismissRestorePrompt = useDesktopStore((state) => state.dismissRestorePrompt);
   const applyActions = useDesktopStore((state) => state.applyActions);
+  const resetDesktop = useDesktopStore((state) => state.resetDesktop);
   const [restoring, setRestoring] = useState(false);
 
   const handleRestore = useCallback(async () => {
@@ -25,6 +26,7 @@ export function RestorePromptBanner() {
       }
       const data = await response.json();
       if (data.actions && Array.isArray(data.actions)) {
+        resetDesktop();
         applyActions(data.actions as OSAction[]);
       }
       dismissRestorePrompt();
@@ -34,7 +36,7 @@ export function RestorePromptBanner() {
     } finally {
       setRestoring(false);
     }
-  }, [restorePrompt, applyActions, dismissRestorePrompt]);
+  }, [restorePrompt, applyActions, resetDesktop, dismissRestorePrompt]);
 
   if (!restorePrompt) return null;
 

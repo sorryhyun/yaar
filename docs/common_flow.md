@@ -21,12 +21,14 @@ This document describes how YAAR manages concurrent AI agents through unified po
 │  │  │  │ Main(1/mon)│  │  history by │  │ AI events,       │  │  │  │
 │  │  │  │ Ephemeral* │  │  source)    │  │ drained on main  │  │  │  │
 │  │  │  │ Window*    │  │             │  │ agent's turn)    │  │  │  │
+│  │  │  │ Task*      │  │             │  │                  │  │  │  │
 │  │  │  └────────────┘  └─────────────┘  └──────────────────┘  │  │  │
 │  │  │                                                          │  │  │
 │  │  │  ┌──────────────────────────────────────────────────┐    │  │  │
 │  │  │  │ Policies                                         │    │  │  │
 │  │  │  │ MainQueue(per monitor) · WindowQueue ·           │    │  │  │
 │  │  │  │ ContextAssembly · ReloadCache · WindowConnection │    │  │  │
+│  │  │  │ MonitorBudget                                    │    │  │  │
 │  │  │  └──────────────────────────────────────────────────┘    │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────────────────┘  │
@@ -37,18 +39,18 @@ This document describes how YAAR manages concurrent AI agents through unified po
 
 ### 1. Main Agent
 
-The single persistent agent handling the main conversation flow. Maintains provider session continuity across messages.
+The persistent agent handling the main conversation flow per monitor. Maintains provider session continuity across messages.
 
-- **Role**: `main-{messageId}` (set per-message)
-- **Creation**: One main agent created when ContextPool initializes (uses a pre-warmed provider)
+- **Role**: `main-{monitorId}-{messageId}` (set per-message)
+- **Creation**: One per monitor. Primary (`monitor-0`) created at pool init with a pre-warmed provider; additional monitors auto-created on demand (max 4)
 - **Session**: Resumes the same provider session across messages for full conversation history
-- **Canonical ID**: `default`
+- **Canonical ID**: `main-{monitorId}`
 
 ### 2. Ephemeral Agent
 
 A temporary agent spawned when the main agent is busy and a new main task arrives. Gets a fresh provider with no conversation history, and is disposed immediately after the task completes.
 
-- **Role**: `ephemeral-{messageId}`
+- **Role**: `ephemeral-{monitorId}-{messageId}`
 - **Creation**: On demand when main agent is busy (limited by global `AgentLimiter`)
 - **Context**: No conversation history — receives open windows + reload options + task content
 - **Lifecycle**: Created → process task → push to InteractionTimeline → disposed
@@ -63,19 +65,61 @@ A persistent agent for handling window-specific interactions (button clicks, con
 - **Grouping**: Child windows created by a window agent join the parent's group, sharing one agent
 - **Canonical ID**: `window-{agentKey}` (where agentKey = groupId or windowId)
 
+### 4. Task Agent
+
+A temporary agent created by the `dispatch_task` tool. Forks the main agent's provider session (inheriting full conversation context) and runs with a profile-specific tool subset and system prompt.
+
+- **Role**: `task-{messageId}-{timestamp}`
+- **Creation**: On `dispatch_task` tool call (limited by global `AgentLimiter`)
+- **Context**: Forks main agent's session — inherits full conversation history
+- **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
+
+## Multi-Monitor Architecture
+
+Monitors are virtual desktops within a single session. Each has its own main agent and sequential queue.
+
+- **Primary monitor** (`monitor-0`): Always exists, never throttled
+- **Background monitors** (`monitor-1`, `monitor-2`, ...): Auto-created on demand when a `USER_MESSAGE` targets a new monitorId, up to 4 total
+- **Independence**: Each monitor has its own main agent and main queue, but all monitors share the same window state, context tape, timeline, and reload cache
+- **Budget limits**: Background monitors are rate-limited by `MonitorBudgetPolicy` (concurrent tasks, actions/min, output/min). The primary monitor bypasses all limits.
+
 ## Message Flow
 
 ### User Message → Main Agent
+
+When a user message arrives, the system tries strategies in priority order:
+
+```
+USER_MESSAGE arrives for monitorId
+│
+├─ Main agent idle → processMainTask() directly
+│
+└─ Main agent busy:
+   │
+   ├─ 1. Steer → inject into active turn (Codex: turn/steer, Claude: streamInput)
+   │     Success: AI incorporates new input mid-response, MESSAGE_ACCEPTED
+   │     Fail: provider doesn't support it, or turn just ended
+   │
+   ├─ 2. Ephemeral → fresh provider, parallel response
+   │     Success: user gets a second response from a disposable agent
+   │     Fail: global agent limit reached
+   │
+   └─ 3. Queue → MainQueuePolicy.enqueue()
+         Success: MESSAGE_QUEUED, processed when main agent finishes
+         Fail: queue full (10 per monitor)
+```
+
+Full flow for direct processing:
 
 ```
 Frontend                    Server                          AI Provider
    │                          │                                  │
    │  USER_MESSAGE            │                                  │
    ├─────────────────────────>│                                  │
+   │                          │  Budget check (background only)  │
    │                          │  Main agent idle?                │
    │                          │  ├─ Yes: processMainTask()       │
-   │                          │  └─ No: createEphemeral()        │
-   │                          │       or queue if limit reached  │
+   │                          │  └─ No: steer / ephemeral / queue│
    │                          │                                  │
    │  MESSAGE_ACCEPTED        │  Build prompt:                   │
    │<─────────────────────────│  timeline + openWindows +        │
@@ -160,6 +204,7 @@ A chronological timeline interleaving user-originated events and AI agent action
 User closes window → pushUser({ type: 'window.close', windowId: '...' })
 Window agent runs  → pushAI(role, task, actions, windowId)
 Ephemeral agent    → pushAI(role, task, actions)
+Task agent runs    → pushAI(role, task, actions)
 
 Main agent's turn  → timeline.format() → drain()
   Produces:
@@ -172,7 +217,7 @@ Main agent's turn  → timeline.format() → drain()
 ## Policies
 
 ### MainQueuePolicy
-FIFO queue (max 10) for main tasks when the main agent is busy and no ephemeral agent can be created. Mutual exclusion ensures the queue is drained sequentially.
+FIFO queue (max 10) per monitor for main tasks when the main agent is busy and no ephemeral agent can be created. Mutual exclusion ensures the queue is drained sequentially.
 
 ### WindowQueuePolicy
 Per-window queues. Tasks for the same window are serialized (one active at a time). Tasks for different windows run in parallel. Parallel button actions (`actionId`) bypass the queue.
@@ -189,6 +234,12 @@ Fingerprint-based caching of action sequences. After each task, the actions are 
 ### WindowConnectionPolicy
 Tracks window groups. When a window agent creates a child window, the child joins the parent's group. All windows in a group share one agent. The group's agent is only disposed when the last window closes.
 
+### MonitorBudgetPolicy
+Per-monitor rate limiting for background monitors. Three budget dimensions:
+1. **Concurrent task semaphore** (default: 2) — max background monitors running queries simultaneously. Primary monitor bypasses.
+2. **Action rate limit** (default: 100 actions/min) — sliding 60-second window per monitor.
+3. **Output rate limit** (default: 1MB/min) — sliding 60-second window per monitor.
+
 ## AgentPool Lifecycle
 
 ```
@@ -196,8 +247,9 @@ Tracks window groups. When a window agent creates a child window, the child join
 │                         AgentPool                             │
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
-│   │ Main Agent (persistent, first created)                  │  │
-│   │ - Created once at pool initialization                  │  │
+│   │ Main Agents (persistent, one per monitor)              │  │
+│   │ - Primary (monitor-0) created at pool init             │  │
+│   │ - Additional monitors auto-created on demand (max 4)   │  │
 │   │ - Provider session continuity across messages          │  │
 │   │ - Recreated on pool reset                              │  │
 │   └────────────────────────────────────────────────────────┘  │
@@ -215,6 +267,14 @@ Tracks window groups. When a window agent creates a child window, the child join
 │   │ - Keyed by agentKey (groupId for grouped, windowId     │  │
 │   │   for standalone)                                      │  │
 │   │ - Disposed when last window in group closes            │  │
+│   └────────────────────────────────────────────────────────┘  │
+│                                                               │
+│   ┌────────────────────────────────────────────────────────┐  │
+│   │ Task Agents (temporary, forked context)                │  │
+│   │ - Created via dispatch_task tool                       │  │
+│   │ - Forks main agent's provider session                  │  │
+│   │ - Profile-specific tools and system prompt             │  │
+│   │ - Disposed immediately after task                      │  │
 │   └────────────────────────────────────────────────────────┘  │
 │                                                               │
 │   Global limit: AgentLimiter (default: 10 concurrent agents)  │
@@ -270,7 +330,7 @@ Tracks window groups. When a window agent creates a child window, the child join
 
 | Event | Description |
 |-------|-------------|
-| `USER_MESSAGE` | Main input → ContextPool main queue (sequential) |
+| `USER_MESSAGE` | Main input → ContextPool main queue (sequential per monitor) |
 | `WINDOW_MESSAGE` | Context menu "Send to window" → Window agent |
 | `COMPONENT_ACTION` | Button click with optional formData, componentPath → Window agent |
 | `INTERRUPT` | Stop all agents |
@@ -327,13 +387,13 @@ Each log entry includes `agentId` for filtering:
 | `session/live-session.ts` | LiveSession + SessionHub — session lifecycle, multi-connection |
 | `session/event-sequencer.ts` | EventSequencer — monotonic seq for event replay |
 | `agents/context-pool.ts` | ContextPool — unified task orchestration |
-| `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, and window agents |
+| `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, window, and task agents |
 | `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |
 | `agents/context.ts` | ContextTape — hierarchical message history |
 | `agents/interaction-timeline.ts` | InteractionTimeline — user + AI event chronicle |
 | `agents/limiter.ts` | AgentLimiter — global semaphore for agent limit |
 | `agents/session-policies/` | StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge |
-| `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection |
+| `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection, MonitorBudget |
 | `providers/factory.ts` | Provider auto-detection and creation |
 | `providers/warm-pool.ts` | Pre-initialized providers for fast first response |
 | `websocket/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
@@ -355,12 +415,12 @@ User types "Hello"          User clicks Save in Window A
        ▼                              ▼
 ┌──────────────┐              ┌──────────────┐
 │ Main Agent   │              │ Window Agent │
-│              │              │ (group-A)    │
-│ Processing   │              │              │
-│ "Hello" with │              │ First turn:  │
-│ full session │              │ ContextTape  │
-│ history      │              │ initial ctx  │
+│ (monitor-0)  │              │ (group-A)    │
 │              │              │              │
+│ Processing   │              │ First turn:  │
+│ "Hello" with │              │ ContextTape  │
+│ full session │              │ initial ctx  │
+│ history      │              │              │
 │              │              │ Processing   │
 │              │              │ Save action  │
 └──────┬───────┘              └──────┬───────┘

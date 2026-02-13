@@ -74,10 +74,14 @@ export class LiveSession {
       this.windowState.restoreFromActions(options.restoreActions);
     }
 
-    // Subscribe to action emitter for window state tracking.
+    // Subscribe to action emitter for window state tracking and budget recording.
     // All actions emitted by agents in this session will be tracked.
     this.unsubscribeAction = actionEmitter.onAction((event) => {
       this.windowState.handleAction(event.action);
+      // Record action against the monitor's budget (if monitorId present)
+      if (event.monitorId && this.pool) {
+        this.pool.recordMonitorAction(event.monitorId);
+      }
     });
 
     // Subscribe to app protocol requests from tools

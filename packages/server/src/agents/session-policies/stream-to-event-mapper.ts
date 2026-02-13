@@ -23,6 +23,7 @@ export class StreamToEventMapper {
     private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void,
     private readonly onSessionId?: (sessionId: string) => Promise<void>,
     private readonly monitorId?: string,
+    private readonly onOutput?: (bytes: number) => void,
   ) {}
 
   async map(message: StreamMessage): Promise<void> {
@@ -32,6 +33,7 @@ export class StreamToEventMapper {
           await this.onSessionId(message.sessionId);
         }
         if (message.content) {
+          this.onOutput?.(message.content.length);
           this.state.responseText += message.content;
           await this.sendEvent({
             type: 'AGENT_RESPONSE',

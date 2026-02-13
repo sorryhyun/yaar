@@ -107,6 +107,17 @@ export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
 export const PORT = parseInt(process.env.PORT ?? '8000', 10);
 
+// ── Monitor budget limits ────────────────────────────────────────────
+export const MONITOR_MAX_CONCURRENT = parseInt(process.env.MONITOR_MAX_CONCURRENT ?? '2', 10);
+export const MONITOR_MAX_ACTIONS_PER_MIN = parseInt(
+  process.env.MONITOR_MAX_ACTIONS_PER_MIN ?? '30',
+  10,
+);
+export const MONITOR_MAX_OUTPUT_PER_MIN = parseInt(
+  process.env.MONITOR_MAX_OUTPUT_PER_MIN ?? '50000',
+  10,
+);
+
 /** Known codex binary filename for Windows */
 const CODEX_EXE_NAME = 'codex-x86_64-pc-windows-msvc.exe';
 

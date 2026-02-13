@@ -3,102 +3,68 @@
     {
       "id": "hook-1",
       "event": "tool_use",
-      "filter": { "toolName": "apps:clone" },
+      "filter": { "toolName": "dev:clone" },
       "action": {
         "type": "os_action",
         "payload": {
-          "type": "window.create",
-          "windowId": "dev-progress",
-          "title": "App Dev Progress",
-          "bounds": { "x": 900, "y": 20, "w": 280, "h": 120 },
-          "content": {
-            "renderer": "component",
-            "data": {
-              "components": [
-                { "type": "progress", "value": 10, "variant": "default", "label": "Cloning..." },
-                { "type": "text", "content": "Setting up project files", "variant": "caption" }
-              ],
-              "gap": "sm"
-            }
-          }
+          "type": "toast.show",
+          "id": "dev-clone",
+          "message": "Cloning project...",
+          "variant": "info"
         }
       },
-      "label": "Show progress on clone",
+      "label": "Toast on clone",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     },
     {
       "id": "hook-2",
       "event": "tool_use",
-      "filter": { "toolName": ["apps:write_ts", "apps:apply_diff_ts"] },
+      "filter": { "toolName": ["dev:write_ts", "dev:apply_diff_ts"] },
       "action": {
         "type": "os_action",
         "payload": {
-          "type": "window.setContent",
-          "windowId": "dev-progress",
-          "content": {
-            "renderer": "component",
-            "data": {
-              "components": [
-                { "type": "progress", "value": 50, "variant": "default", "label": "Writing code..." },
-                { "type": "text", "content": "Updating source files", "variant": "caption" }
-              ],
-              "gap": "sm"
-            }
-          }
+          "type": "toast.show",
+          "id": "dev-write",
+          "message": "Writing source files...",
+          "variant": "info"
         }
       },
-      "label": "Show progress on write",
+      "label": "Toast on write",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     },
     {
       "id": "hook-3",
       "event": "tool_use",
-      "filter": { "toolName": "apps:compile" },
+      "filter": { "toolName": "dev:compile" },
       "action": {
         "type": "os_action",
         "payload": {
-          "type": "window.setContent",
-          "windowId": "dev-progress",
-          "content": {
-            "renderer": "component",
-            "data": {
-              "components": [
-                { "type": "progress", "value": 80, "variant": "default", "label": "Compiling..." },
-                { "type": "text", "content": "Building application bundle", "variant": "caption" }
-              ],
-              "gap": "sm"
-            }
-          }
+          "type": "toast.show",
+          "id": "dev-compile",
+          "message": "Compiling app...",
+          "variant": "info"
         }
       },
-      "label": "Show progress on compile",
+      "label": "Toast on compile",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     },
     {
       "id": "hook-4",
       "event": "tool_use",
-      "filter": { "toolName": "apps:deploy" },
+      "filter": { "toolName": "dev:deploy" },
       "action": {
         "type": "os_action",
         "payload": {
-          "type": "window.setContent",
-          "windowId": "dev-progress",
-          "content": {
-            "renderer": "component",
-            "data": {
-              "components": [
-                { "type": "progress", "value": 100, "variant": "success", "label": "Deployed!" },
-                { "type": "text", "content": "App is live", "variant": "caption" }
-              ],
-              "gap": "sm"
-            }
-          }
+          "type": "toast.show",
+          "id": "dev-deploy",
+          "message": "App deployed!",
+          "variant": "success"
         }
       },
-      "label": "Show progress on deploy",
+      "label": "Toast on deploy",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     }

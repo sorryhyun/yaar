@@ -10,7 +10,8 @@ import type { ServerEvent } from '@yaar/shared';
 export interface ProviderLifecycleState {
   provider: AITransport | null;
   sessionId: string | null;
-  hasSentFirstMessage: boolean;
+  hasWarmSession: boolean;
+  hasProcessedFirstUserTurn: boolean;
   sessionLogger: SessionLogger | null;
 }
 
@@ -35,7 +36,7 @@ export class ProviderLifecycleManager {
       const warmSessionId = this.state.provider.getSessionId();
       if (warmSessionId) {
         this.state.sessionId = warmSessionId;
-        this.state.hasSentFirstMessage = true;
+        this.state.hasWarmSession = true;
         console.log(`[AgentSession] Using pre-warmed session: ${warmSessionId}`);
       }
     }
@@ -71,7 +72,8 @@ export class ProviderLifecycleManager {
     const newProvider = await createProvider(providerType);
     this.state.provider = newProvider;
     this.state.sessionId = null;
-    this.state.hasSentFirstMessage = false;
+    this.state.hasWarmSession = false;
+    this.state.hasProcessedFirstUserTurn = false;
 
     await this.sendEvent({
       type: 'CONNECTION_STATUS',

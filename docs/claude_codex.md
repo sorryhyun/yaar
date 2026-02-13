@@ -127,7 +127,7 @@ A dedicated JSON-RPC method that appends input to an in-flight turn:
 
 ### Server Integration
 
-Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the main agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/parallel_capability.md`](./parallel_capability.md) for the full concurrency strategy.
+Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the main agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/common_flow.md`](./common_flow.md) for the full concurrency strategy.
 
 ## Warmup
 
