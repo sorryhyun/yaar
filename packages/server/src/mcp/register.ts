@@ -94,6 +94,7 @@ export function getToolNames(): string[] {
     'mcp__system__set_config',
     'mcp__system__get_config',
     'mcp__system__remove_config',
+    'mcp__system__complete_onboarding',
     'mcp__system__guideline',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',

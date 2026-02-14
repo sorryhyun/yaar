@@ -185,4 +185,18 @@ export function registerSystemTools(server: McpServer): void {
       return ok(`Hook "${args.hookId}" removed.`);
     },
   );
+
+  // complete_onboarding
+  server.registerTool(
+    'complete_onboarding',
+    {
+      description:
+        'Mark onboarding as completed. Call this after the user has been guided through the onboarding process.',
+    },
+    async () => {
+      await configWrite('onboarding.json', JSON.stringify({ completed: true }));
+      actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+      return ok('Onboarding completed.');
+    },
+  );
 }

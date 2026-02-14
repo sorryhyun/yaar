@@ -82,6 +82,7 @@ export function DesktopSurface() {
 
   const appsVersion = useDesktopStore((s) => s.appsVersion);
   const [apps, setApps] = useState<AppInfo[]>([]);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
 
   // Fetch available apps on mount and when appsVersion changes (after deploy)
   const fetchedVersionRef = useRef(-1);
@@ -94,6 +95,7 @@ export function DesktopSurface() {
         if (response.ok) {
           const data = await response.json();
           setApps(data.apps || []);
+          setOnboardingCompleted(!!data.onboardingCompleted);
         }
       } catch (err) {
         console.error('Failed to fetch apps:', err);
@@ -331,6 +333,17 @@ export function DesktopSurface() {
 
         {/* Desktop icons */}
         <div className={styles.desktopIcons}>
+          {/* Onboarding icon (shown until onboarding is completed) */}
+          {!onboardingCompleted && (
+            <button
+              className={styles.desktopIcon}
+              onClick={() => handleAppClick('onboarding')}
+              disabled={cooldownId === 'onboarding'}
+            >
+              <span className={styles.iconImage}>🚀</span>
+              <span className={styles.iconLabel}>Start</span>
+            </button>
+          )}
           {/* Dynamic app icons (hidden apps filtered out) */}
           {apps
             .filter((a) => !a.hidden)

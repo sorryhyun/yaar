@@ -16,6 +16,7 @@ import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
+import { configRead } from '../../storage/storage-manager.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 
 export async function handleApiRoutes(
@@ -40,7 +41,17 @@ export async function handleApiRoutes(
   if (url.pathname === '/api/apps' && req.method === 'GET') {
     try {
       const apps = await listApps();
-      sendJson(res, { apps });
+      let onboardingCompleted = false;
+      try {
+        const result = await configRead('onboarding.json');
+        if (result.success && result.content) {
+          const parsed = JSON.parse(result.content);
+          onboardingCompleted = parsed.completed === true;
+        }
+      } catch {
+        // Default to false if file doesn't exist or parsing fails
+      }
+      sendJson(res, { apps, onboardingCompleted });
     } catch {
       sendError(res, 'Failed to list apps');
     }
