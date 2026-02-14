@@ -4,6 +4,7 @@
 import { useState, useCallback } from 'react';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
+import { apiFetch } from '@/lib/api';
 import styles from '@/styles/ui/RestorePromptBanner.module.css';
 
 export function RestorePromptBanner() {
@@ -18,7 +19,7 @@ export function RestorePromptBanner() {
 
     try {
       setRestoring(true);
-      const response = await fetch(`/api/sessions/${restorePrompt.sessionId}/restore`, {
+      const response = await apiFetch(`/api/sessions/${restorePrompt.sessionId}/restore`, {
         method: 'POST',
       });
       if (!response.ok) {

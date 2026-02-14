@@ -9,10 +9,10 @@ import {
   createWsManager,
   MAX_RECONNECT_ATTEMPTS,
   RECONNECT_DELAY,
-  WS_URL,
   sendEvent,
   shouldReconnect,
 } from './use-agent-connection/transport-manager';
+import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 import { dispatchServerEvent } from './use-agent-connection/server-event-dispatcher';
 import {
   generateActionId,
@@ -24,13 +24,7 @@ const wsManager = createWsManager();
 
 function buildWsUrl(): string {
   const state = useDesktopStore.getState();
-  const sessionId = state.sessionId;
-  if (sessionId) {
-    const url = new URL(WS_URL, window.location.href);
-    url.searchParams.set('sessionId', sessionId);
-    return url.toString();
-  }
-  return WS_URL;
+  return buildWsUrlFromApi(state.sessionId);
 }
 
 interface UseAgentConnectionOptions {
@@ -76,7 +70,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       if (Object.keys(currentWindows).length > 0) return;
 
       try {
-        const response = await fetch('/api/sessions');
+        const response = await apiFetch('/api/sessions');
         if (!response.ok) return;
 
         const data = await response.json();

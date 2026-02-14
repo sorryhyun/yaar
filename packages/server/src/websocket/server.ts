@@ -13,6 +13,7 @@ import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-c
 import type { ClientEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 import { getHooksByEvent } from '../mcp/system/hooks.js';
+import { checkWsAuth } from '../http/auth.js';
 
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
@@ -32,6 +33,13 @@ export function createWebSocketServer(
 
     // Parse requested session ID from query params (for reconnection)
     const url = new URL(req.url!, `http://${req.headers.host}`);
+
+    // Auth check for remote mode
+    if (!checkWsAuth(url)) {
+      ws.close(4401, 'Unauthorized');
+      return;
+    }
+
     const requestedSessionId = url.searchParams.get('sessionId');
 
     // Get or create session

@@ -15,6 +15,7 @@ import type {
   SelectComponent,
 } from '@yaar/shared';
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext';
+import { resolveAssetUrl } from '@/lib/api';
 import rendererStyles from '@/styles/windows/renderers.module.css';
 import formStyles from '@/styles/base/forms.module.css';
 import typographyStyles from '@/styles/base/typography.module.css';
@@ -267,7 +268,9 @@ function ImageRenderer({ node }: { node: ImageComponent }) {
     height: node.height,
   };
 
-  return <img className={componentStyles.image} src={node.src} alt="" style={style} />;
+  return (
+    <img className={componentStyles.image} src={resolveAssetUrl(node.src)} alt="" style={style} />
+  );
 }
 
 // ============ Form Field Renderers ============

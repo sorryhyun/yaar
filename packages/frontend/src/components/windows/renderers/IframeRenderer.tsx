@@ -9,6 +9,7 @@ import {
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
 } from '@yaar/shared';
+import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import styles from '@/styles/windows/renderers.module.css';
 
 interface IframeRendererProps {
@@ -22,18 +23,25 @@ type LoadState = 'loading' | 'loaded' | 'error';
 
 // Check if URL is same-origin (relative path or same host)
 function isSameOrigin(url: string): boolean {
-  // Relative paths are always same-origin
   if (url.startsWith('/')) return true;
   try {
     const parsed = new URL(url, window.location.origin);
-    return parsed.origin === window.location.origin;
+    if (parsed.origin === window.location.origin) return true;
+    // In remote mode, treat the backend server as same-origin
+    const conn = getRemoteConnection();
+    if (conn) {
+      const serverOrigin = new URL(conn.serverUrl).origin;
+      if (parsed.origin === serverOrigin) return true;
+    }
+    return false;
   } catch {
     return false;
   }
 }
 
 function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
-  const url = typeof data === 'string' ? data : data.url;
+  const rawUrl = typeof data === 'string' ? data : data.url;
+  const url = resolveAssetUrl(rawUrl);
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined;
   // For same-origin content (local apps), don't sandbox - it's trusted
   // For cross-origin, apply sandbox to prevent escape attacks

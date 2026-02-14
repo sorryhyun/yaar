@@ -19,6 +19,7 @@
     "@yaar/shared": "workspace:*",
     "esbuild": "^0.24.0",
     "node-poppler": "^7.2.0",
+    "qrcode-terminal": "^0.12.0",
     "ws": "^8.18.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
@@ -29,6 +30,7 @@
     "@types/matter-js": "^0.20.2",
     "@types/node": "^22.10.0",
     "@types/p5": "^1.7.7",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/three": "^0.182.0",
     "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "^8.54.0",

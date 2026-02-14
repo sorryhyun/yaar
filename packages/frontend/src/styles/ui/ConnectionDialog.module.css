@@ -1,0 +1,95 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg, #0a0a0f);
+  z-index: 9999;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+  background: var(--color-surface, #141420);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 12px;
+}
+
+.title {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text, #e0e0f0);
+}
+
+.subtitle {
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #888898);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #888898);
+}
+
+.input {
+  padding: 0.6rem 0.75rem;
+  background: var(--color-bg, #0a0a0f);
+  border: 1px solid var(--color-border, #2a2a3a);
+  border-radius: 6px;
+  color: var(--color-text, #e0e0f0);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input:focus {
+  border-color: var(--color-accent, #6366f1);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted, #555568);
+}
+
+.error {
+  padding: 0.5rem 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.button {
+  padding: 0.65rem 1rem;
+  background: var(--color-accent, #6366f1);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

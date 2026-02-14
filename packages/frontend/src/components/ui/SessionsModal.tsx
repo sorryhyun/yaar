@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
+import { apiFetch } from '@/lib/api';
 import styles from '@/styles/ui/SessionsModal.module.css';
 
 interface SessionInfo {
@@ -36,7 +37,7 @@ export function SessionsModal() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/sessions');
+      const response = await apiFetch('/api/sessions');
       if (!response.ok) {
         throw new Error('Failed to fetch sessions');
       }
@@ -60,7 +61,7 @@ export function SessionsModal() {
       try {
         setLoadingTranscript(true);
         setSelectedSession(sessionId);
-        const response = await fetch(`/api/sessions/${sessionId}/transcript`);
+        const response = await apiFetch(`/api/sessions/${sessionId}/transcript`);
         if (!response.ok) {
           throw new Error('Failed to fetch transcript');
         }
@@ -80,7 +81,7 @@ export function SessionsModal() {
       e.stopPropagation();
       try {
         setRestoring(sessionId);
-        const response = await fetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' });
+        const response = await apiFetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' });
         if (!response.ok) {
           throw new Error('Failed to restore session');
         }
@@ -105,8 +106,8 @@ export function SessionsModal() {
       setExporting(sessionId);
       // Fetch both transcript and messages
       const [transcriptRes, messagesRes] = await Promise.all([
-        fetch(`/api/sessions/${sessionId}/transcript`),
-        fetch(`/api/sessions/${sessionId}/messages`),
+        apiFetch(`/api/sessions/${sessionId}/transcript`),
+        apiFetch(`/api/sessions/${sessionId}/messages`),
       ]);
 
       const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null;

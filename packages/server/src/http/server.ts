@@ -4,8 +4,9 @@
 
 import { createServer, type Server } from 'http';
 import { handleMcpRequest, MCP_SERVERS, type McpServerName } from '../mcp/server.js';
-import { PORT } from '../config.js';
+import { PORT, IS_REMOTE } from '../config.js';
 import { sendJson } from './utils.js';
+import { checkHttpAuth } from './auth.js';
 import {
   handleApiRoutes,
   handleFileRoutes,
@@ -17,13 +18,24 @@ export function createHttpServer(): Server {
   return createServer(async (req, res) => {
     // CORS headers
     const origin = req.headers.origin;
-    const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
 
-    if (origin && allowedOrigins.includes(origin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (IS_REMOTE) {
+      // Remote mode: allow any requesting origin
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+    } else {
+      // Local mode: whitelist localhost origins
+      const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+      if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
     }
 
     // Handle preflight
@@ -34,6 +46,9 @@ export function createHttpServer(): Server {
     }
 
     const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+
+    // Auth gate (no-op when !IS_REMOTE; /health always exempt)
+    if (!checkHttpAuth(req, res, url)) return;
 
     // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/storage, /mcp/apps)
     const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);

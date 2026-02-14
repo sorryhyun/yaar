@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { useDesktopStore } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
+import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { WindowManager } from './WindowManager';
 import { ToastContainer } from '../ui/ToastContainer';
 import { NotificationCenter } from '../ui/NotificationCenter';
@@ -91,7 +92,7 @@ export function DesktopSurface() {
     fetchedVersionRef.current = appsVersion;
     async function fetchApps() {
       try {
-        const response = await fetch('/api/apps');
+        const response = await apiFetch('/api/apps');
         if (response.ok) {
           const data = await response.json();
           setApps(data.apps || []);
@@ -355,7 +356,12 @@ export function DesktopSurface() {
                 disabled={cooldownId === app.id}
               >
                 {app.iconType === 'image' ? (
-                  <img className={styles.iconImg} src={app.icon} alt={app.name} draggable={false} />
+                  <img
+                    className={styles.iconImg}
+                    src={resolveAssetUrl(app.icon!)}
+                    alt={app.name}
+                    draggable={false}
+                  />
                 ) : (
                   <span className={styles.iconImage}>{app.icon || '📦'}</span>
                 )}

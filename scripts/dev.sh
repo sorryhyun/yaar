@@ -59,7 +59,7 @@ wait_for_server() {
 
 # Start server first
 echo "Starting server..."
-PROVIDER="$PROVIDER_ARG" pnpm --filter @yaar/server dev 2>&1 &
+PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" pnpm --filter @yaar/server dev 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready

@@ -11,13 +11,13 @@ endif
 dev:
 	@./scripts/dev.sh
 
-# Run with Claude provider
+# Run with Claude provider (remote mode - accessible over network with auth)
 claude:
-	@./scripts/dev.sh claude
+	@REMOTE=1 ./scripts/dev.sh claude
 
-# Run with Codex provider
+# Run with Codex provider (remote mode - accessible over network with auth)
 codex:
-	@./scripts/dev.sh codex
+	@REMOTE=1 ./scripts/dev.sh codex
 
 # Run with Claude provider (dev mode - no MCP auth)
 claude-dev:
