@@ -35,6 +35,11 @@ export function registerDeployTools(server: McpServer): void {
           .boolean()
           .optional()
           .describe('App Protocol support (auto-detected if omitted)'),
+        version: z
+          .string()
+          .optional()
+          .describe('Semantic version (e.g., "1.0.0"). Defaults to "1.0.0"'),
+        author: z.string().optional().describe('Author name. Defaults to "YAAR"'),
         fileAssociations: z
           .array(
             z.object({
@@ -58,6 +63,8 @@ export function registerDeployTools(server: McpServer): void {
         keepSource = true,
         skill,
         appProtocol: explicitAppProtocol,
+        version = '1.0.0',
+        author = 'YAAR',
         fileAssociations,
       } = args;
 
@@ -175,6 +182,17 @@ export function registerDeployTools(server: McpServer): void {
           ...(fileAssociations?.length && { fileAssociations }),
         };
         await writeFile(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2), 'utf-8');
+
+        // Write marketplace manifest
+        const manifest = {
+          id: appId,
+          name: displayName,
+          icon,
+          description: description ?? '',
+          version,
+          author,
+        };
+        await writeFile(join(appPath, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
 
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
