@@ -2,65 +2,53 @@
 
 **Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
 
-No pre-built screens. Just an **always-ready input field**. The AI creates windows, tables, forms, and visualizations dynamically based on your intent.
+User actions like button clicks, drawing, and typing are sent not to a program, but to an AI. The AI interprets the user's intent and dynamically creates windows, tables, forms, and visualizations.
 
-## How It Works
+![YAAR Desktop](./docs/image.png)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                           Frontend                              │
-│   ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│   │    Input    │    │    Canvas    │    │     Windows      │  │
-│   │    Field    │    │   (Draw)     │    │    (Rendered)    │  │
-│   └──────┬──────┘    └──────┬───────┘    └────────▲─────────┘  │
-│          │                  │                     │             │
-│          └────────┬─────────┘                     │             │
-│                   ▼                               │             │
-│            User Message                    OS Actions (JSON)    │
-│                   │                               │             │
-└───────────────────┼───────────────────────────────┼─────────────┘
-                    │          WebSocket            │
-┌───────────────────▼───────────────────────────────┼─────────────┐
-│                         Server                    │             │
-│   ┌───────────────────────────────────────────────┴──────────┐  │
-│   │                      AI Provider                         │  │
-│   │   • Interprets user intent                               │  │
-│   │   • Injects dynamic context (apps, history)              │  │
-│   │   • Emits OS Actions → Frontend renders                  │  │
-│   └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+## Basic Structure
+
+The program consists of a browser, a local server (on the user's machine), and Codex/Claude Code.
+
+All UI runs in the browser. Actions in the browser are sent to the local server, the server signals the Codex or Claude Code AI, the AI signals back to the server, and the result is sent back to the browser for display.
+
+In essence, you're having a 1:1 conversation with Codex or Claude Code, but instead of plain text, you interact through a UI.
+
+On startup, the program automatically creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** If you want to provide files, place them in these folders. Files are preserved even after the program exits.
+
 
 ## Key Features
 
 ### 1. AI Interprets and Renders
 
-The AI doesn't just respond with text — it **creates the UI**. Ask for a task list, and a window appears with checkboxes. Ask to compare data, and a table renders. You can also `Alt + Left-click drag` anywhere to sketch — the AI interprets your drawing to generate code or refine the design.
+The AI responds by **directly creating UI**. It opens "windows" or displays "messages" in the browser to respond to user actions. Users can type in the input field at the bottom center, paste images, drag and drop, click buttons on screen, right-click to send instructions to a specific window, or **Alt + left-click drag to draw** and send it to the AI. For convenience, actions like drag-selecting multiple apps or typing are not sent to the AI immediately.
 
-```
-You: "Show me today's tasks"
- AI: Creates window with interactive task list
-You: (wireframe sketch)
- AI: Interprets sketch and creates actual UI
-```
 
 ### 2. Smart Context
 
-The AI automatically picks up relevant context based on what you're doing. Click an app icon and it loads that app's skill; interact with a window and it receives the interaction context; previous results are retained in conversation history. When window content needs refreshing, a fingerprint-based cache restores it instantly without re-querying the AI.
+Most user actions are first saved as context. When you click a button or send a message, all accumulated context is included and sent to the AI. When the AI responds, **your instructions + context and the AI's response are recorded**, so when you give the same instruction later, the AI is offered the option to **reuse that response**, performing the same task much faster than before. Records are stored in `config/reload-cache/` and can be managed at any time.
+
 
 ### 3. App Development
 
-Say "make me a Tetris game" and the AI writes TypeScript, compiles it with esbuild, and deploys it to your desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox.
+Sometimes you need pre-built programs. Since essential apps like the storage folder and browser are needed, YAAR operates a separate YAAR Market website. Currently, **only a small number of apps made by me are listed, and users cannot upload, so there are no security concerns.** Tell the AI "install essential apps" and it will install browser, storage folder, spreadsheet, word processor, etc. from the market.
 
-For API-driven apps, describe the API in a `SKILL.md` file and the AI handles the rest.
+You may also want to develop apps yourself, so YAAR supports programming capabilities. Various libraries are bundled, so you can develop the apps you need and deploy them to the desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox. The development environment is strictly configured, so there are minimal security concerns even when letting the AI develop autonomously.
 
-See the [App Development Guide](./docs/app-development.md#english) for details.
+See the [App Development Guide](./docs/app-development.md) for details.
 
-### 4. Parallel Monitors and Windows
 
-Work on multiple tasks simultaneously. **Monitors** (`Ctrl+1`–`Ctrl+4`) are independent workspaces — run a long task on Monitor 1 while continuing a different conversation on Monitor 0. Each **window** has its own agent, so requests to different windows are processed in parallel. When the main agent is busy, ephemeral agents are automatically spawned for new messages.
+## Getting Started
 
-Sessions persist even after closing the browser tab; reconnect with `?sessionId=X` to restore state. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+Codex or Claude Code user authentication is required. The program cannot be used without it.
+
+For Windows users, install [Windows Codex](https://github.com/openai/codex/releases/download/rust-v0.101.0/codex-x86_64-pc-windows-msvc.exe) and download `yaar-codex.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
+
+For Windows users who want to develop apps, install `yaar-dev-codex.exe` and download `bundled-libs.zip`, then extract it to the same location as the executable. The development kit has been converted entirely to JS to avoid requiring a `Node.exe` installation.
+
+For other users, clone this repository, install Node 24 and pnpm, then run `pnpm install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
+
 
 ## Security
 
@@ -75,16 +63,6 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 - **CORS**: Only frontend dev server origins (`localhost:5173`, `localhost:3000`) are allowed.
 - **Iframe isolation**: Compiled apps run inside iframes and communicate with the server only via `postMessage`.
 
-## Quick Start
-
-**Prerequisites:** Node.js >= 24, pnpm >= 10, Claude CLI (`npm install -g @anthropic-ai/claude-code && claude login`)
-
-```bash
-pnpm install    # Install dependencies
-make dev        # Start YAAR
-```
-
-Open http://localhost:5173
 
 ## Project Structure
 

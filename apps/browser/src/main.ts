@@ -90,7 +90,7 @@ root.innerHTML = `
       position: relative;
       overflow: auto;
       background: #1a1a1a;
-      cursor: pointer;
+      cursor: default;
     }
 
     .screenshot-area img {
@@ -232,16 +232,7 @@ if (sessionId) {
   };
 }
 
-// ── User clicks on the screenshot area — signal takeover ──────────────
-
-els.screenshotArea.addEventListener('click', () => {
-  if (currentUrl === 'about:blank') return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const yaar = (window as any).yaar;
-  if (yaar?.app?.sendInteraction) {
-    yaar.app.sendInteraction({ type: 'user_takeover', url: currentUrl });
-  }
-});
+// User click signaling disabled by default.
 
 // ── Register with App Protocol (for state queries + manual commands) ──
 
