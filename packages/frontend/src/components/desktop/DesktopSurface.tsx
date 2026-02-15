@@ -82,6 +82,7 @@ export function DesktopSurface() {
   }, []);
 
   const appsVersion = useDesktopStore((s) => s.appsVersion);
+  const appBadges = useDesktopStore((s) => s.appBadges);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
 
@@ -357,17 +358,29 @@ export function DesktopSurface() {
                 className={styles.desktopIcon}
                 onClick={() => handleAppClick(app.id)}
                 disabled={cooldownId === app.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/x-yaar-app', app.id);
+                  e.dataTransfer.effectAllowed = 'link';
+                }}
               >
-                {app.iconType === 'image' ? (
-                  <img
-                    className={styles.iconImg}
-                    src={resolveAssetUrl(app.icon!)}
-                    alt={app.name}
-                    draggable={false}
-                  />
-                ) : (
-                  <span className={styles.iconImage}>{app.icon || '📦'}</span>
-                )}
+                <span className={styles.iconWrapper}>
+                  {app.iconType === 'image' ? (
+                    <img
+                      className={styles.iconImg}
+                      src={resolveAssetUrl(app.icon!)}
+                      alt={app.name}
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className={styles.iconImage}>{app.icon || '📦'}</span>
+                  )}
+                  {appBadges[app.id] > 0 && (
+                    <span className={styles.badge}>
+                      {appBadges[app.id] > 99 ? '99+' : appBadges[app.id]}
+                    </span>
+                  )}
+                </span>
                 <span className={styles.iconLabel}>{app.name}</span>
               </button>
             ))}

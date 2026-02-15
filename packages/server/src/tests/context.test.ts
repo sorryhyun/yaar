@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ContextTape } from '../agents/context.js';
 
 describe('ContextTape', () => {

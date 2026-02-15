@@ -185,7 +185,7 @@ describe('BrowserSession', () => {
     const state = await session.click('#my-button');
 
     // Evaluated JS to find element coordinates using the provided selector
-    const evalCalls = mockSend.mock.calls.filter(([m]: [string]) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(([m]) => m === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
     expect(evalCalls[0][1].expression).toContain('#my-button');
 
@@ -240,7 +240,7 @@ describe('BrowserSession', () => {
 
     const state = await session.type('#search-input', 'hello world');
 
-    const evalCalls = mockSend.mock.calls.filter(([m]: [string]) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(([m]) => m === 'Runtime.evaluate');
 
     // First evaluate: focuses and clears the input element
     expect(evalCalls[0][1].expression).toContain('#search-input');

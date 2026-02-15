@@ -18,11 +18,19 @@ export interface UserInteraction {
     | 'toast.dismiss'
     | 'notification.dismiss'
     | 'icon.click'
+    | 'icon.drag'
+    | 'selection.action'
+    | 'region.select'
     | 'draw';
   timestamp: number;
   windowId?: string;
   windowTitle?: string;
   details?: string;
+  instruction?: string; // User instruction for selection.action and region.select
+  selectedText?: string; // Selected text for selection.action
+  region?: { x: number; y: number; w: number; h: number }; // Region bounds for region.select
+  contentHint?: string; // Extracted text within region for region.select
+  sourceAppId?: string; // App ID for icon.drag
   imageData?: string; // Base64 PNG for drawings
   bounds?: { x: number; y: number; w: number; h: number };
 }
@@ -38,6 +46,9 @@ export function formatCompactInteraction(interaction: UserInteraction): string {
   if (interaction.bounds) {
     const b = interaction.bounds;
     result += ` {x:${b.x},y:${b.y},w:${b.w},h:${b.h}}`;
+  }
+  if (interaction.instruction) {
+    result += ` "${interaction.instruction}"`;
   }
   return result;
 }

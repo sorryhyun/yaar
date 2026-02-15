@@ -51,6 +51,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAllAgents,
     consumePendingFeedback,
     consumePendingInteractions,
+    consumeGestureMessages,
     consumePendingAppProtocolResponses,
     consumeAppProtocolReady,
     consumePendingAppInteractions,
@@ -410,6 +411,22 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     });
     return unsubscribe;
   }, [consumePendingInteractions, send]);
+
+  // Drain gesture messages (drag, selection, region) and send as USER_MESSAGE
+  useEffect(() => {
+    const unsubscribe = useDesktopStore.subscribe((state) => {
+      if (state.pendingGestureMessages.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+        const messages = consumeGestureMessages();
+        for (const content of messages) {
+          const messageId = generateMessageId();
+          const monitorId = useDesktopStore.getState().activeMonitorId;
+          addCliEntry({ type: 'user', content, monitorId });
+          send({ type: 'USER_MESSAGE', messageId, content, monitorId });
+        }
+      }
+    });
+    return unsubscribe;
+  }, [consumeGestureMessages, send, addCliEntry]);
 
   useEffect(() => {
     let previousWindows = useDesktopStore.getState().windows;

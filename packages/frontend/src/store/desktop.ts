@@ -349,6 +349,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createMonitorSlice(...a),
 
     // Desktop-level state
+    appBadges: {} as Record<string, number>,
     appsVersion: 0,
     bumpAppsVersion: () => {
       const [set] = a;
@@ -389,6 +390,16 @@ export const useDesktopStore = create<DesktopStore>()(
         store.handleToastAction(action);
       } else if (actionType.startsWith('dialog.')) {
         store.handleDialogAction(action);
+      } else if (actionType === 'app.badge') {
+        const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
+        const [set] = a;
+        set((state) => {
+          if (count > 0) {
+            state.appBadges[appId] = count;
+          } else {
+            delete state.appBadges[appId];
+          }
+        });
       } else if (actionType === 'desktop.refreshApps') {
         store.bumpAppsVersion();
       }
@@ -414,7 +425,11 @@ export const useDesktopStore = create<DesktopStore>()(
             else if (t.startsWith('notification.')) applyNotificationAction(state, action);
             else if (t.startsWith('toast.')) applyToastAction(state, action);
             else if (t.startsWith('dialog.')) applyDialogAction(state, action);
-            else if (t === 'desktop.refreshApps') state.appsVersion += 1;
+            else if (t === 'app.badge') {
+              const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
+              if (count > 0) state.appBadges[appId] = count;
+              else delete state.appBadges[appId];
+            } else if (t === 'desktop.refreshApps') state.appsVersion += 1;
           }
         });
       }
@@ -438,6 +453,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.windowAgents = {};
         state.queuedActions = {};
         state.pendingInteractions = [];
+        state.pendingGestureMessages = [];
         state.activityLog = [];
         state.debugLog = [];
         state.pendingFeedback = [];
@@ -445,6 +461,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingAppProtocolReady = [];
         state.pendingAppInteractions = [];
         state.selectedWindowIds = [];
+        state.appBadges = {};
         state.appsVersion = 0;
         state.attachedImages = [];
         state.cliMode = false;

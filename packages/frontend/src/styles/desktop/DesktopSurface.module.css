@@ -1,6 +1,27 @@
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-@keyframes slideDown { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
 
 .desktop {
   position: fixed;
@@ -11,7 +32,7 @@
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.desktop[data-cli-mode="true"] {
+.desktop[data-cli-mode='true'] {
   transform: translateX(70vw);
   pointer-events: none;
 }
@@ -40,17 +61,17 @@
   background: #666;
 }
 
-.statusDot[data-status="connected"] {
+.statusDot[data-status='connected'] {
   background: #4ade80;
   box-shadow: 0 0 8px #4ade80;
 }
 
-.statusDot[data-status="connecting"] {
+.statusDot[data-status='connecting'] {
   background: #fbbf24;
   animation: pulse 1s infinite;
 }
 
-.statusDot[data-status="error"] {
+.statusDot[data-status='error'] {
   background: #f87171;
 }
 
@@ -255,6 +276,29 @@
   height: 48px;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.iconWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
 }
 
 .iconLabel {

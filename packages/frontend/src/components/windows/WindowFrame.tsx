@@ -4,6 +4,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store';
 import { tryIframeSelfCapture } from '@/store/desktop';
+import { getRawWindowId } from '@/store/helpers';
 import { useComponentAction } from '@/contexts/ComponentActionContext';
 import type { WindowModel } from '@/types/state';
 import { MemoizedContentRenderer } from './ContentRenderer';
@@ -100,6 +101,122 @@ async function exportContent(content: WindowModel['content'], title: string, win
   triggerDownload(blob, filename);
 }
 
+/**
+ * Extract visible text content from DOM elements that fall within a given viewport rect.
+ */
+function extractTextInRegion(
+  container: HTMLElement,
+  rect: { x: number; y: number; w: number; h: number },
+): string {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const rects = range.getClientRects();
+    for (const r of rects) {
+      // Check intersection
+      if (
+        r.right > rect.x &&
+        r.left < rect.x + rect.w &&
+        r.bottom > rect.y &&
+        r.top < rect.y + rect.h
+      ) {
+        const text = node.textContent?.trim();
+        if (text) parts.push(text);
+        break;
+      }
+    }
+  }
+  return parts.join(' ').slice(0, 2000); // Limit length
+}
+
+/**
+ * Floating input that appears on right-click with selected text or after region select.
+ * User types an instruction for the AI to execute on the selection.
+ */
+function SelectionActionInput({
+  x,
+  y,
+  selectedText,
+  windowId,
+  windowTitle,
+  isRegion,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  selectedText: string;
+  windowId: string;
+  windowTitle: string;
+  isRegion: boolean;
+  onClose: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    const handleClickOutside = (e: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    // Delay to avoid immediate close from the right-click event
+    const timer = setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 50);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
+
+  const handleSubmit = useCallback(
+    (instruction: string) => {
+      if (!instruction.trim()) return;
+      const rawId = getRawWindowId(windowId);
+      const tag = isRegion && !selectedText ? 'region_select' : 'selection';
+      const textPart = selectedText ? `\n  selected_text: "${selectedText.slice(0, 1000)}"` : '';
+      useDesktopStore
+        .getState()
+        .queueGestureMessage(
+          `<user_interaction:${tag}>\n  instruction: "${instruction}"${textPart}\n  source: window "${windowTitle}" (id: ${rawId})\n</user_interaction:${tag}>`,
+        );
+      onClose();
+    },
+    [windowId, windowTitle, selectedText, isRegion, onClose],
+  );
+
+  // Position the input near the cursor but keep it within viewport
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    left: Math.min(x, globalThis.innerWidth - 320),
+    top: Math.min(y + 4, globalThis.innerHeight - 40),
+    zIndex: 99999,
+  };
+
+  return (
+    <div className={styles.selectionActionInput} style={style}>
+      <input
+        ref={inputRef}
+        type="text"
+        className={styles.selectionInput}
+        placeholder={
+          selectedText ? 'What to do with selection...' : 'What to do with this region...'
+        }
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            handleSubmit((e.target as HTMLInputElement).value);
+          } else if (e.key === 'Escape') {
+            onClose();
+          }
+          e.stopPropagation();
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
 interface WindowFrameProps {
   window: WindowModel;
   zIndex: number;
@@ -156,6 +273,53 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     [],
   );
 
+  // Drag-over state for app icon drop target
+  const [isDragOver, setIsDragOver] = useState(false);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/x-yaar-app')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'link';
+      setIsDragOver(true);
+    }
+  }, []);
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      setIsDragOver(false);
+      const appId = e.dataTransfer.getData('application/x-yaar-app');
+      if (!appId) return;
+      e.preventDefault();
+      const rawId = getRawWindowId(window.id);
+      useDesktopStore
+        .getState()
+        .queueGestureMessage(
+          `<user_interaction:drag>app "${appId}" dragged onto window "${window.title}" (id: ${rawId})</user_interaction:drag>`,
+        );
+    },
+    [window.id, window.title],
+  );
+
+  // Selection action input state
+  const [selectionAction, setSelectionAction] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
+
+  // Region select state (right-click drag)
+  const [regionRect, setRegionRect] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const regionStart = useRef<{ x: number; y: number } | null>(null);
+  const regionActive = useRef(false);
+  const regionListeners = useRef<{
+    move: (e: MouseEvent) => void;
+    up: (e: MouseEvent) => void;
+  } | null>(null);
+
   const frameRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -172,6 +336,11 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         document.removeEventListener('mouseup', up);
       }
       listenersRef.current = [];
+      if (regionListeners.current) {
+        document.removeEventListener('mousemove', regionListeners.current.move);
+        document.removeEventListener('mouseup', regionListeners.current.up);
+        regionListeners.current = null;
+      }
     };
   }, []);
 
@@ -353,8 +522,12 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       data-selected={isSelected}
       data-dragging={isDragging}
       data-resizing={isResizing}
+      data-drag-over={isDragOver}
       data-agent-active={windowAgent?.status === 'active'}
       onMouseDown={handleMouseDown}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Title bar */}
       <div
@@ -432,8 +605,83 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       <div
         className={styles.content}
         onContextMenu={(e) => {
+          // If right-drag region is active, suppress context menu
+          if (regionActive.current) {
+            e.preventDefault();
+            return;
+          }
+          // If there's a text selection, show the selection action input
+          const selectedText = globalThis.getSelection()?.toString().trim();
+          if (selectedText) {
+            e.preventDefault();
+            setSelectionAction({ x: e.clientX, y: e.clientY, text: selectedText });
+            return;
+          }
           e.preventDefault();
           showContextMenu(e.clientX, e.clientY, window.id);
+        }}
+        onMouseDown={(e) => {
+          // Right-click drag for region selection
+          if (e.button === 2) {
+            const contentEl = e.currentTarget;
+            const contentRect = contentEl.getBoundingClientRect();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            regionStart.current = { x: startX, y: startY };
+            regionActive.current = false;
+
+            const DRAG_THRESHOLD = 5;
+
+            const handleMouseMove = (ev: MouseEvent) => {
+              const dx = ev.clientX - startX;
+              const dy = ev.clientY - startY;
+              if (
+                !regionActive.current &&
+                Math.abs(dx) < DRAG_THRESHOLD &&
+                Math.abs(dy) < DRAG_THRESHOLD
+              )
+                return;
+              regionActive.current = true;
+
+              setRegionRect({
+                x: Math.min(startX, ev.clientX) - contentRect.left,
+                y: Math.min(startY, ev.clientY) - contentRect.top,
+                w: Math.abs(dx),
+                h: Math.abs(dy),
+              });
+            };
+
+            const handleMouseUp = (ev: MouseEvent) => {
+              document.removeEventListener('mousemove', handleMouseMove);
+              document.removeEventListener('mouseup', handleMouseUp);
+              regionListeners.current = null;
+
+              if (regionActive.current) {
+                const hint = extractTextInRegion(contentEl, {
+                  x: Math.min(startX, ev.clientX),
+                  y: Math.min(startY, ev.clientY),
+                  w: Math.abs(ev.clientX - startX),
+                  h: Math.abs(ev.clientY - startY),
+                });
+                setRegionRect(null);
+                setSelectionAction({
+                  x: ev.clientX,
+                  y: ev.clientY,
+                  text: hint || '',
+                });
+              }
+              regionActive.current = false;
+            };
+
+            // Clean up previous listeners
+            if (regionListeners.current) {
+              document.removeEventListener('mousemove', regionListeners.current.move);
+              document.removeEventListener('mouseup', regionListeners.current.up);
+            }
+            regionListeners.current = { move: handleMouseMove, up: handleMouseUp };
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+          }
         }}
       >
         <MemoizedContentRenderer
@@ -447,6 +695,29 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
         {!isFocused && window.content.renderer === 'iframe' && (
           <div className={styles.iframeFocusOverlay} />
+        )}
+        {isDragOver && <div className={styles.dropOverlay} />}
+        {regionRect && (
+          <div
+            className={styles.regionRect}
+            style={{
+              left: regionRect.x,
+              top: regionRect.y,
+              width: regionRect.w,
+              height: regionRect.h,
+            }}
+          />
+        )}
+        {selectionAction && (
+          <SelectionActionInput
+            x={selectionAction.x}
+            y={selectionAction.y}
+            selectedText={selectionAction.text}
+            windowId={window.id}
+            windowTitle={window.title}
+            isRegion={!selectionAction.text && regionRect === null}
+            onClose={() => setSelectionAction(null)}
+          />
         )}
       </div>
 

@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { loadHooks, addHook, removeHook, getHooksByEvent } from '../mcp/system/hooks.js';

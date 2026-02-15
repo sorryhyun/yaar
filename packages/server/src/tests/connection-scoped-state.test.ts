@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { WindowStateRegistry } from '../mcp/window-state.js';
 import { ReloadCache } from '../reload/cache.js';
 import type { Fingerprint } from '../reload/types.js';

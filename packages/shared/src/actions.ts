@@ -180,6 +180,14 @@ export interface DialogConfirmAction {
   permissionOptions?: PermissionOptions;
 }
 
+// ============ App Actions ============
+
+export interface AppBadgeAction {
+  type: 'app.badge';
+  appId: string;
+  count: number;
+}
+
 // ============ Desktop Actions ============
 
 export interface DesktopRefreshAppsAction {
@@ -210,6 +218,8 @@ export type ToastAction = ToastShowAction | ToastDismissAction;
 
 export type DialogAction = DialogConfirmAction;
 
+export type AppAction = AppBadgeAction;
+
 export type DesktopAction = DesktopRefreshAppsAction;
 
 export type OSAction =
@@ -217,6 +227,7 @@ export type OSAction =
   | NotificationAction
   | ToastAction
   | DialogAction
+  | AppAction
   | DesktopAction;
 
 // ============ Type Guards ============
@@ -235,6 +246,10 @@ export function isToastAction(action: OSAction): action is ToastAction {
 
 export function isDialogAction(action: OSAction): action is DialogAction {
   return action.type.startsWith('dialog.');
+}
+
+export function isAppAction(action: OSAction): action is AppAction {
+  return action.type.startsWith('app.');
 }
 
 // ============ Runtime Validation Helpers ============

@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentLimiter } from '../agents/limiter.js';
 
 describe('AgentLimiter', () => {

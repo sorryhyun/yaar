@@ -210,10 +210,13 @@ export type FeedbackSlice = FeedbackSliceState & FeedbackSliceActions;
 
 export interface InteractionsSliceState {
   pendingInteractions: UserInteraction[];
+  pendingGestureMessages: string[];
 }
 
 export interface InteractionsSliceActions {
   consumePendingInteractions: () => UserInteraction[];
+  queueGestureMessage: (content: string) => void;
+  consumeGestureMessages: () => string[];
 }
 
 export type InteractionsSlice = InteractionsSliceState & InteractionsSliceActions;
@@ -316,6 +319,7 @@ export type DesktopStore = WindowsSlice &
   ImageAttachSlice &
   CliSlice &
   MonitorSlice & {
+    appBadges: Record<string, number>;
     appsVersion: number;
     bumpAppsVersion: () => void;
     applyAction: (action: OSAction) => void;

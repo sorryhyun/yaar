@@ -7,15 +7,19 @@ import { z } from 'zod';
 import { ok, error } from '../utils.js';
 import { listApps, loadAppSkill } from './discovery.js';
 import { readAppConfig, writeAppConfig } from './config.js';
+import { registerBadgeTool } from './badge.js';
 
 export const APPS_TOOL_NAMES = [
   'mcp__apps__list',
   'mcp__apps__load_skill',
   'mcp__apps__read_config',
   'mcp__apps__write_config',
+  'mcp__apps__set_app_badge',
 ] as const;
 
 export function registerAppsTools(server: McpServer): void {
+  registerBadgeTool(server);
+
   // apps_list - List available apps
   server.registerTool(
     'list',

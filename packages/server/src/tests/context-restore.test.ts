@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { ContextTape } from '../agents/context.js';
 import {
   getContextRestoreMessages,

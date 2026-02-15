@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { executeJs, executeTs, executeCode } from '../lib/sandbox/index.js';
 
 describe('Sandbox', () => {

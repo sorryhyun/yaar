@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BroadcastCenter } from '../session/broadcast-center.js';
 import type { ServerEvent } from '@yaar/shared';
 
