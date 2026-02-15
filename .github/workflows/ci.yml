@@ -29,11 +29,5 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test shared
-        run: pnpm --filter @yaar/shared vitest run
-
-      - name: Test server
-        run: pnpm --filter @yaar/server vitest run
-
-      - name: Test frontend
-        run: pnpm --filter @yaar/frontend vitest run
+      - name: Test
+        run: pnpm -r test
