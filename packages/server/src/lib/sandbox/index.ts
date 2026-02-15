@@ -22,6 +22,8 @@ export interface ExecuteOptions {
   typescript?: boolean;
   /** Allowed domains for fetch (empty = fetch disabled) */
   allowedDomains?: string[];
+  /** When true, allow fetch to any domain (bypass allowlist) */
+  allowAllDomains?: boolean;
 }
 
 export interface ExecuteResult {
@@ -72,7 +74,11 @@ export async function executeCode(
 
   // Create sandboxed context
   const capturedConsole = createCapturedConsole();
-  const context = createSandboxContext(capturedConsole, options.allowedDomains ?? []);
+  const context = createSandboxContext(
+    capturedConsole,
+    options.allowedDomains ?? [],
+    options.allowAllDomains ?? false,
+  );
 
   try {
     // Create and run the script

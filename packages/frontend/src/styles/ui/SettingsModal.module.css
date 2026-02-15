@@ -109,3 +109,65 @@
 .select:focus {
   border-color: rgba(137, 180, 250, 0.5);
 }
+
+.divider {
+  height: 1px;
+  background: var(--color-surface);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  gap: var(--space-3);
+}
+
+.toggleLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.toggle {
+  appearance: none;
+  width: 40px;
+  height: 22px;
+  background: var(--color-surface);
+  border-radius: 11px;
+  border: var(--border-subtle);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--color-muted);
+  border-radius: 50%;
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.toggle:checked {
+  background: var(--color-accent, #89b4fa);
+  border-color: transparent;
+}
+
+.toggle:checked::after {
+  transform: translateX(18px);
+  background: #fff;
+}

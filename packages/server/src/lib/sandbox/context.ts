@@ -76,9 +76,14 @@ export function formatLogs(logs: LogEntry[]): string {
 
 /**
  * Create a fetch function restricted to the given domain allowlist.
- * Returns undefined if no domains are allowed (fetch disabled).
+ * Returns undefined if no domains are allowed (fetch disabled) and allowAll is false.
+ * When allowAll is true, all domains are permitted.
  */
-function createRestrictedFetch(allowedDomains: string[]): typeof fetch | undefined {
+function createRestrictedFetch(
+  allowedDomains: string[],
+  allowAll = false,
+): typeof fetch | undefined {
+  if (allowAll) return fetch;
   if (allowedDomains.length === 0) return undefined;
 
   const domainSet = new Set(allowedDomains);
@@ -109,6 +114,7 @@ function createRestrictedFetch(allowedDomains: string[]): typeof fetch | undefin
 export function createSafeGlobals(
   capturedConsole: CapturedConsole,
   allowedDomains: string[] = [],
+  allowAllDomains = false,
 ): Record<string, unknown> {
   return {
     // Console (captured)
@@ -204,7 +210,7 @@ export function createSafeGlobals(
     BigUint64Array,
 
     // HTTP (fetch + supporting types — fetch is restricted to allowed domains)
-    fetch: createRestrictedFetch(allowedDomains),
+    fetch: createRestrictedFetch(allowedDomains, allowAllDomains),
     Headers,
     Request,
     Response,
@@ -240,8 +246,9 @@ export function createSafeGlobals(
 export function createSandboxContext(
   capturedConsole: CapturedConsole,
   allowedDomains: string[] = [],
+  allowAllDomains = false,
 ): vm.Context {
-  const globals = createSafeGlobals(capturedConsole, allowedDomains);
+  const globals = createSafeGlobals(capturedConsole, allowedDomains, allowAllDomains);
   const context = vm.createContext(globals, {
     name: 'sandbox',
     codeGeneration: {

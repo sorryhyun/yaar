@@ -10,7 +10,7 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var x=`
+var B=`
 :root {
   --bg: #0f172a;
   --panel: #111827;
@@ -57,6 +57,16 @@ html, body {
   font-weight: 700;
 }
 
+.doc-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#doc-title {
+  min-width: 220px;
+}
+
 .brand-badge {
   width: 26px;
   height: 26px;
@@ -91,7 +101,7 @@ html, body {
   padding-right: 0;
 }
 
-button, select {
+button, select, input {
   border: 1px solid #4b5563;
   background: #111827;
   color: #f3f4f6;
@@ -101,7 +111,7 @@ button, select {
   cursor: pointer;
 }
 
-button:hover, select:hover {
+button:hover, select:hover, input:hover {
   border-color: #9ca3af;
 }
 
@@ -162,15 +172,52 @@ button.primary {
   font-size: 12px;
 }
 
+#app.focus-mode .topbar,
+#app.focus-mode .toolbar,
+#app.focus-mode .statusbar {
+  display: none;
+}
+
+#app.focus-mode .editor-wrap {
+  padding: 12px;
+}
+
 .muted {
   color: var(--muted);
 }
-`;var p="word-lite-document-v1";function f(t,e=500){let o=null;return(...l)=>{o&&window.clearTimeout(o),o=window.setTimeout(()=>t(...l),e)}}function u(t){let e=t.trim();return{words:e?e.split(/\s+/).length:0,chars:t.length}}function m(t,e,o){let l=new Blob([e],{type:o}),g=URL.createObjectURL(l),c=document.createElement("a");c.href=g,c.download=t,c.click(),URL.revokeObjectURL(g)}function b(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}var L=document.getElementById("app")||document.body;L.innerHTML=`
-  <style>${x}</style>
+`;var E="word-lite-document-v2",k="word-lite-document-v1";function P(t,e=500){let n=null;return(...r)=>{n&&window.clearTimeout(n),n=window.setTimeout(()=>t(...r),e)}}function D(t){let e=t.trim();return{words:e?e.split(/\s+/).length:0,chars:t.length}}function C(t,e){let n=URL.createObjectURL(e),r=document.createElement("a");r.href=n,r.download=t,r.click(),URL.revokeObjectURL(n)}function M(t,e,n){C(t,new Blob([e],{type:n}))}function L(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}function F(t){let e=t.trim().toLowerCase();return e&&e.replace(/[^a-z0-9\s-_]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-").slice(0,60)||"document"}var A=new TextEncoder;function $(t){return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}function R(t){let e=t.reduce((i,u)=>i+u.length,0),n=new Uint8Array(e),r=0;for(let i of t)n.set(i,r),r+=i.length;return n}function K(){let t=new Uint32Array(256);for(let e=0;e<256;e++){let n=e;for(let r=0;r<8;r++)n=n&1?3988292384^n>>>1:n>>>1;t[e]=n>>>0}return t}var N=K();function Y(t){let e=4294967295;for(let n=0;n<t.length;n++)e=N[(e^t[n])&255]^e>>>8;return(e^4294967295)>>>0}function q(t=new Date){let e=Math.max(1980,t.getFullYear()),n=t.getMonth()+1,r=t.getDate(),i=t.getHours(),u=t.getMinutes(),x=Math.floor(t.getSeconds()/2),c=e-1980<<9|n<<5|r,g=i<<11|u<<5|x;return{date:c,time:g}}function V(t){let e=[],n=[],r=q(new Date),i=0;for(let g of t){let h=A.encode(g.name),f=typeof g.data=="string"?A.encode(g.data):g.data,I=Y(f),U=new Uint8Array(30+h.length),l=new DataView(U.buffer);l.setUint32(0,67324752,!0),l.setUint16(4,20,!0),l.setUint16(6,0,!0),l.setUint16(8,0,!0),l.setUint16(10,r.time,!0),l.setUint16(12,r.date,!0),l.setUint32(14,I,!0),l.setUint32(18,f.length,!0),l.setUint32(22,f.length,!0),l.setUint16(26,h.length,!0),l.setUint16(28,0,!0),U.set(h,30);let T=new Uint8Array(46+h.length),s=new DataView(T.buffer);s.setUint32(0,33639248,!0),s.setUint16(4,20,!0),s.setUint16(6,20,!0),s.setUint16(8,0,!0),s.setUint16(10,0,!0),s.setUint16(12,r.time,!0),s.setUint16(14,r.date,!0),s.setUint32(16,I,!0),s.setUint32(20,f.length,!0),s.setUint32(24,f.length,!0),s.setUint16(28,h.length,!0),s.setUint16(30,0,!0),s.setUint16(32,0,!0),s.setUint16(34,0,!0),s.setUint16(36,0,!0),s.setUint32(38,0,!0),s.setUint32(42,i,!0),T.set(h,46),e.push(U,f),n.push(T),i+=U.length+f.length}let u=R(n),x=new Uint8Array(22),c=new DataView(x.buffer);return c.setUint32(0,101010256,!0),c.setUint16(4,0,!0),c.setUint16(6,0,!0),c.setUint16(8,t.length,!0),c.setUint16(10,t.length,!0),c.setUint32(12,u.length,!0),c.setUint32(16,i,!0),c.setUint16(20,0,!0),R([...e,u,x])}function O(t,e){let r=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+  <w:body>
+    ${(e||"").replace(/\r\n/g,`
+`).split(`
+`).map(g=>`<w:p><w:r><w:t xml:space="preserve">${$(g)}</w:t></w:r></w:p>`).join("")||"<w:p />"}
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840" />
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+      <w:cols w:space="708"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`,i=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,u=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,x=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${$(t||"Untitled Document")}</dc:title>
+</cp:coreProperties>`,c=V([{name:"[Content_Types].xml",data:i},{name:"_rels/.rels",data:u},{name:"docProps/core.xml",data:x},{name:"word/document.xml",data:r}]);return new Blob([c],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})}var H=document.getElementById("app")||document.body;H.innerHTML=`
+  <style>${B}</style>
   <div class="app-shell">
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
-      <div class="muted">Simple document editor</div>
+      <div class="doc-meta">
+        <label for="doc-title" class="muted">Title</label>
+        <input id="doc-title" type="text" placeholder="Untitled Document" maxlength="100" />
+      </div>
     </div>
 
     <div class="toolbar">
@@ -211,6 +258,8 @@ button.primary {
         <button id="btn-save" class="primary">Save</button>
         <button id="btn-export-txt">.txt</button>
         <button id="btn-export-html">.html</button>
+        <button id="btn-export-docx">.docx</button>
+        <button id="btn-focus">Focus</button>
       </div>
     </div>
 
@@ -224,8 +273,8 @@ button.primary {
       <span id="save-state">Not saved</span>
     </div>
   </div>
-`;var n=document.getElementById("editor"),s=document.getElementById("file-input"),w=document.getElementById("stats"),r=document.getElementById("save-state"),h=document.getElementById("format-block"),d=(t,e)=>{n.focus(),document.execCommand(t,!1,e),a()},a=()=>{let{words:t,chars:e}=u(n.innerText||"");w.textContent=`${t} words \u2022 ${e} chars`},i=()=>{localStorage.setItem(p,n.innerHTML),r.textContent=`Saved at ${b()}`},k=f(()=>{i()},550),E=()=>{let t=localStorage.getItem(p);t?(n.innerHTML=t,r.textContent="Loaded saved draft"):(n.innerHTML="<h1>Untitled Document</h1><p></p>",r.textContent="New document"),a()};for(let t of Array.from(document.querySelectorAll("button[data-cmd]")))t.addEventListener("click",()=>{let e=t.dataset.cmd;d(e)});h.addEventListener("change",()=>{d("formatBlock",h.value)});document.getElementById("btn-link")?.addEventListener("click",()=>{let t=prompt("Enter URL (https://...)");t&&d("createLink",t)});document.getElementById("btn-new")?.addEventListener("click",()=>{confirm("Start a new blank document?")&&(n.innerHTML="<p></p>",a(),r.textContent="Unsaved new document",n.focus())});document.getElementById("btn-open")?.addEventListener("click",()=>{s.value="",s.click()});document.getElementById("btn-save")?.addEventListener("click",()=>{i()});document.getElementById("btn-export-txt")?.addEventListener("click",()=>{m("document.txt",n.innerText||"","text/plain;charset=utf-8")});document.getElementById("btn-export-html")?.addEventListener("click",()=>{let t=`<!doctype html><html><head><meta charset="utf-8"><title>Document</title></head><body>${n.innerHTML}</body></html>`;m("document.html",t,"text/html;charset=utf-8")});s.addEventListener("change",async()=>{let t=s.files?.[0];if(!t)return;let e=await t.text();if(/\.html?$/i.test(t.name))n.innerHTML=e;else{let o=e.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");n.innerHTML=`<p>${o}</p>`}a(),r.textContent=`Opened ${t.name}`,i()});n.addEventListener("input",()=>{a(),r.textContent="Editing\u2026",k()});n.addEventListener("keyup",a);var T=t=>{if(t)try{let e=new URL(t,window.location.href);if(!["http:","https:","mailto:","tel:"].includes(e.protocol)){alert(`Unsupported link protocol: ${e.protocol}`);return}window.open(e.href,"_blank","noopener,noreferrer")}catch{alert("Invalid URL")}};n.addEventListener("click",t=>{let o=t.target?.closest("a");o&&(t.preventDefault(),T(o.getAttribute("href")))});document.addEventListener("keydown",t=>{if(!t.ctrlKey&&!t.metaKey)return;let e=t.key.toLowerCase();e==="s"?(t.preventDefault(),i()):e==="b"?(t.preventDefault(),d("bold")):e==="i"?(t.preventDefault(),d("italic")):e==="u"&&(t.preventDefault(),d("underline"))});E();n.focus();var v=window.yaar?.app;function y(t){let e=t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");n.innerHTML=`<p>${e}</p>`,a()}v&&v.register({appId:"word-lite",name:"Word Lite",state:{html:{description:"Current document HTML content",handler:()=>n.innerHTML},text:{description:"Current document plain text content",handler:()=>n.innerText||""},stats:{description:"Current text stats as { words, chars }",handler:()=>u(n.innerText||"")},saveState:{description:"Current save status label",handler:()=>r.textContent||""}},commands:{setHtml:{description:"Replace document with HTML. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:t=>(n.innerHTML=t.html||"<p></p>",a(),r.textContent="Updated via app protocol",i(),{ok:!0})},setText:{description:"Replace document with plain text. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:t=>(y(t.text||""),r.textContent="Updated via app protocol",i(),{ok:!0})},appendText:{description:"Append plain text to the document. Params: { text: string, newline?: boolean }",params:{type:"object",properties:{text:{type:"string"},newline:{type:"boolean"}},required:["text"]},handler:t=>{let e=n.innerText||"",o=t.newline===!1?`${e}${t.text}`:`${e}${e?`
-`:""}${t.text}`;return y(o),r.textContent="Updated via app protocol",i(),{ok:!0}}},newDocument:{description:"Clear current document to a blank paragraph. Params: {}",params:{type:"object",properties:{}},handler:()=>(n.innerHTML="<p></p>",a(),r.textContent="Unsaved new document",{ok:!0})},saveDraft:{description:"Save current document to local draft storage. Params: {}",params:{type:"object",properties:{}},handler:()=>(i(),{ok:!0,savedAt:b()})}}});
+`;var o=document.getElementById("editor"),v=document.getElementById("file-input"),W=document.getElementById("stats"),a=document.getElementById("save-state"),j=document.getElementById("format-block"),d=document.getElementById("doc-title"),b=!1,y=()=>(d.value||"").trim()||"Untitled Document",S=()=>F(y()),w=(t,e)=>{o.focus(),document.execCommand(t,!1,e),m()},m=()=>{let{words:t,chars:e}=D(o.innerText||""),n=t===0?0:Math.max(1,Math.ceil(t/200));W.textContent=`${t} words \u2022 ${e} chars \u2022 ${n} min read`},p=()=>{let t={html:o.innerHTML,title:y(),savedAt:Date.now()};localStorage.setItem(E,JSON.stringify(t)),a.textContent=`Saved at ${L()}`},G=P(()=>{p()},550),X=()=>{let t=localStorage.getItem(E);if(t){try{let e=JSON.parse(t);o.innerHTML=e.html||"<h1>Untitled Document</h1><p></p>",d.value=e.title||"Untitled Document"}catch{o.innerHTML=t,d.value="Untitled Document"}a.textContent="Loaded saved draft"}else{let e=localStorage.getItem(k);e?(o.innerHTML=e,d.value="Untitled Document",a.textContent="Loaded saved draft",p(),localStorage.removeItem(k)):(o.innerHTML="<h1>Untitled Document</h1><p></p>",d.value="Untitled Document",a.textContent="New document")}m()};for(let t of Array.from(document.querySelectorAll("button[data-cmd]")))t.addEventListener("click",()=>{let e=t.dataset.cmd;w(e)});j.addEventListener("change",()=>{w("formatBlock",j.value)});document.getElementById("btn-link")?.addEventListener("click",()=>{let t=prompt("Enter URL (https://...)");t&&w("createLink",t)});document.getElementById("btn-new")?.addEventListener("click",()=>{confirm("Start a new blank document?")&&(o.innerHTML="<p></p>",d.value="Untitled Document",m(),a.textContent="Unsaved new document",o.focus())});document.getElementById("btn-open")?.addEventListener("click",()=>{v.value="",v.click()});document.getElementById("btn-save")?.addEventListener("click",()=>{p()});document.getElementById("btn-focus")?.addEventListener("click",()=>{b=!b,H.classList.toggle("focus-mode",b),a.textContent=b?"Focus mode enabled":"Focus mode disabled"});document.getElementById("btn-export-txt")?.addEventListener("click",()=>{M(`${S()}.txt`,o.innerText||"","text/plain;charset=utf-8")});document.getElementById("btn-export-html")?.addEventListener("click",()=>{let e=`<!doctype html><html><head><meta charset="utf-8"><title>${y()}</title></head><body>${o.innerHTML}</body></html>`;M(`${S()}.html`,e,"text/html;charset=utf-8")});document.getElementById("btn-export-docx")?.addEventListener("click",()=>{let t=O(y(),o.innerText||"");C(`${S()}.docx`,t),a.textContent=`Exported .docx at ${L()}`});v.addEventListener("change",async()=>{let t=v.files?.[0];if(!t)return;let e=await t.text();if(/\.html?$/i.test(t.name))o.innerHTML=e;else{let n=e.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");o.innerHTML=`<p>${n}</p>`}d.value=t.name.replace(/\.[^/.]+$/,"")||"Untitled Document",m(),a.textContent=`Opened ${t.name}`,p()});o.addEventListener("input",()=>{m(),a.textContent="Editing\u2026",G()});d.addEventListener("input",()=>{a.textContent="Editing title\u2026",G()});o.addEventListener("keyup",m);var J=t=>{if(t)try{let e=new URL(t,window.location.href);if(!["http:","https:","mailto:","tel:"].includes(e.protocol)){alert(`Unsupported link protocol: ${e.protocol}`);return}window.open(e.href,"_blank","noopener,noreferrer")}catch{alert("Invalid URL")}};o.addEventListener("click",t=>{let n=t.target?.closest("a");n&&(t.preventDefault(),J(n.getAttribute("href")))});document.addEventListener("keydown",t=>{if(t.key==="Escape"&&b){b=!1,H.classList.remove("focus-mode"),a.textContent="Focus mode disabled";return}if(!t.ctrlKey&&!t.metaKey)return;let e=t.key.toLowerCase();e==="s"?(t.preventDefault(),p()):e==="b"?(t.preventDefault(),w("bold")):e==="i"?(t.preventDefault(),w("italic")):e==="u"?(t.preventDefault(),w("underline")):e==="o"?(t.preventDefault(),v.value="",v.click()):e==="n"&&(t.preventDefault(),o.innerHTML="<p></p>",d.value="Untitled Document",m(),a.textContent="Unsaved new document",o.focus())});X();o.focus();var z=window.yaar?.app;function _(t){let e=t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");o.innerHTML=`<p>${e}</p>`,m()}z&&z.register({appId:"word-lite",name:"Word Lite",state:{html:{description:"Current document HTML content",handler:()=>o.innerHTML},text:{description:"Current document plain text content",handler:()=>o.innerText||""},stats:{description:"Current text stats as { words, chars }",handler:()=>D(o.innerText||"")},title:{description:"Current document title",handler:()=>y()},saveState:{description:"Current save status label",handler:()=>a.textContent||""}},commands:{setHtml:{description:"Replace document with HTML. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:t=>(o.innerHTML=t.html||"<p></p>",m(),a.textContent="Updated via app protocol",p(),{ok:!0})},setTitle:{description:"Update document title. Params: { title: string }",params:{type:"object",properties:{title:{type:"string"}},required:["title"]},handler:t=>(d.value=(t.title||"").trim()||"Untitled Document",a.textContent="Updated via app protocol",p(),{ok:!0})},setText:{description:"Replace document with plain text. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:t=>(_(t.text||""),a.textContent="Updated via app protocol",p(),{ok:!0})},appendText:{description:"Append plain text to the document. Params: { text: string, newline?: boolean }",params:{type:"object",properties:{text:{type:"string"},newline:{type:"boolean"}},required:["text"]},handler:t=>{let e=o.innerText||"",n=t.newline===!1?`${e}${t.text}`:`${e}${e?`
+`:""}${t.text}`;return _(n),a.textContent="Updated via app protocol",p(),{ok:!0}}},newDocument:{description:"Clear current document to a blank paragraph. Params: {}",params:{type:"object",properties:{}},handler:()=>(o.innerHTML="<p></p>",d.value="Untitled Document",m(),a.textContent="Unsaved new document",{ok:!0})},saveDraft:{description:"Save current document to local draft storage. Params: {}",params:{type:"object",properties:{}},handler:()=>(p(),{ok:!0,savedAt:L()})}}});
 
 </script>
 </body>

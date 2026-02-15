@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
 import { executeJs } from '../../lib/sandbox/index.js';
-import { readAllowedDomains } from '../domains.js';
+import { readAllowedDomains, isAllDomainsAllowed } from '../domains.js';
 
 const DEFAULT_TIMEOUT = 5000;
 const MAX_TIMEOUT = 30000;
@@ -61,8 +61,15 @@ export function registerSandboxTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const allowedDomains = await readAllowedDomains();
-      const result = await executeJs(args.code, { timeout: args.timeout, allowedDomains });
+      const [allowedDomains, allowAllDomains] = await Promise.all([
+        readAllowedDomains(),
+        isAllDomainsAllowed(),
+      ]);
+      const result = await executeJs(args.code, {
+        timeout: args.timeout,
+        allowedDomains,
+        allowAllDomains,
+      });
       return ok(formatResult(result));
     },
   );

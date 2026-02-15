@@ -1,5 +1,15 @@
 import { styles } from './styles';
-import { STORAGE_KEY, countTextStats, debounce, downloadFile, nowLabel } from './utils';
+import {
+  LEGACY_STORAGE_KEY,
+  STORAGE_KEY,
+  countTextStats,
+  createDocxBlob,
+  debounce,
+  downloadBlob,
+  downloadFile,
+  nowLabel,
+  sanitizeFilename,
+} from './utils';
 
 const app = document.getElementById('app') || document.body;
 
@@ -8,7 +18,10 @@ app.innerHTML = `
   <div class="app-shell">
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
-      <div class="muted">Simple document editor</div>
+      <div class="doc-meta">
+        <label for="doc-title" class="muted">Title</label>
+        <input id="doc-title" type="text" placeholder="Untitled Document" maxlength="100" />
+      </div>
     </div>
 
     <div class="toolbar">
@@ -49,6 +62,8 @@ app.innerHTML = `
         <button id="btn-save" class="primary">Save</button>
         <button id="btn-export-txt">.txt</button>
         <button id="btn-export-html">.html</button>
+        <button id="btn-export-docx">.docx</button>
+        <button id="btn-focus">Focus</button>
       </div>
     </div>
 
@@ -69,6 +84,12 @@ const fileInput = document.getElementById('file-input') as HTMLInputElement;
 const statsEl = document.getElementById('stats') as HTMLSpanElement;
 const saveState = document.getElementById('save-state') as HTMLSpanElement;
 const formatBlock = document.getElementById('format-block') as HTMLSelectElement;
+const docTitle = document.getElementById('doc-title') as HTMLInputElement;
+
+let isFocusMode = false;
+
+const getTitle = () => (docTitle.value || '').trim() || 'Untitled Document';
+const exportBaseName = () => sanitizeFilename(getTitle());
 
 const exec = (cmd: string, value?: string) => {
   editor.focus();
@@ -78,11 +99,17 @@ const exec = (cmd: string, value?: string) => {
 
 const refreshStats = () => {
   const { words, chars } = countTextStats(editor.innerText || '');
-  statsEl.textContent = `${words} words • ${chars} chars`;
+  const readMins = words === 0 ? 0 : Math.max(1, Math.ceil(words / 200));
+  statsEl.textContent = `${words} words • ${chars} chars • ${readMins} min read`;
 };
 
 const saveDoc = () => {
-  localStorage.setItem(STORAGE_KEY, editor.innerHTML);
+  const payload = {
+    html: editor.innerHTML,
+    title: getTitle(),
+    savedAt: Date.now(),
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   saveState.textContent = `Saved at ${nowLabel()}`;
 };
 
@@ -93,11 +120,28 @@ const autoSave = debounce(() => {
 const loadDoc = () => {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
-    editor.innerHTML = stored;
+    try {
+      const parsed = JSON.parse(stored) as { html?: string; title?: string };
+      editor.innerHTML = parsed.html || '<h1>Untitled Document</h1><p></p>';
+      docTitle.value = parsed.title || 'Untitled Document';
+    } catch {
+      editor.innerHTML = stored;
+      docTitle.value = 'Untitled Document';
+    }
     saveState.textContent = 'Loaded saved draft';
   } else {
-    editor.innerHTML = '<h1>Untitled Document</h1><p></p>';
-    saveState.textContent = 'New document';
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      editor.innerHTML = legacy;
+      docTitle.value = 'Untitled Document';
+      saveState.textContent = 'Loaded saved draft';
+      saveDoc();
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    } else {
+      editor.innerHTML = '<h1>Untitled Document</h1><p></p>';
+      docTitle.value = 'Untitled Document';
+      saveState.textContent = 'New document';
+    }
   }
   refreshStats();
 };
@@ -123,6 +167,7 @@ document.getElementById('btn-new')?.addEventListener('click', () => {
   const ok = confirm('Start a new blank document?');
   if (!ok) return;
   editor.innerHTML = '<p></p>';
+  docTitle.value = 'Untitled Document';
   refreshStats();
   saveState.textContent = 'Unsaved new document';
   editor.focus();
@@ -137,13 +182,26 @@ document.getElementById('btn-save')?.addEventListener('click', () => {
   saveDoc();
 });
 
+document.getElementById('btn-focus')?.addEventListener('click', () => {
+  isFocusMode = !isFocusMode;
+  app.classList.toggle('focus-mode', isFocusMode);
+  saveState.textContent = isFocusMode ? 'Focus mode enabled' : 'Focus mode disabled';
+});
+
 document.getElementById('btn-export-txt')?.addEventListener('click', () => {
-  downloadFile('document.txt', editor.innerText || '', 'text/plain;charset=utf-8');
+  downloadFile(`${exportBaseName()}.txt`, editor.innerText || '', 'text/plain;charset=utf-8');
 });
 
 document.getElementById('btn-export-html')?.addEventListener('click', () => {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Document</title></head><body>${editor.innerHTML}</body></html>`;
-  downloadFile('document.html', html, 'text/html;charset=utf-8');
+  const title = getTitle();
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
+  downloadFile(`${exportBaseName()}.html`, html, 'text/html;charset=utf-8');
+});
+
+document.getElementById('btn-export-docx')?.addEventListener('click', () => {
+  const blob = createDocxBlob(getTitle(), editor.innerText || '');
+  downloadBlob(`${exportBaseName()}.docx`, blob);
+  saveState.textContent = `Exported .docx at ${nowLabel()}`;
 });
 
 fileInput.addEventListener('change', async () => {
@@ -160,6 +218,7 @@ fileInput.addEventListener('change', async () => {
       .replace(/\n/g, '<br>');
     editor.innerHTML = `<p>${escaped}</p>`;
   }
+  docTitle.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
   refreshStats();
   saveState.textContent = `Opened ${file.name}`;
   saveDoc();
@@ -168,6 +227,11 @@ fileInput.addEventListener('change', async () => {
 editor.addEventListener('input', () => {
   refreshStats();
   saveState.textContent = 'Editing…';
+  autoSave();
+});
+
+docTitle.addEventListener('input', () => {
+  saveState.textContent = 'Editing title…';
   autoSave();
 });
 
@@ -198,6 +262,13 @@ editor.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isFocusMode) {
+    isFocusMode = false;
+    app.classList.remove('focus-mode');
+    saveState.textContent = 'Focus mode disabled';
+    return;
+  }
+
   if (!e.ctrlKey && !e.metaKey) return;
   const key = e.key.toLowerCase();
   if (key === 's') {
@@ -212,6 +283,17 @@ document.addEventListener('keydown', (e) => {
   } else if (key === 'u') {
     e.preventDefault();
     exec('underline');
+  } else if (key === 'o') {
+    e.preventDefault();
+    fileInput.value = '';
+    fileInput.click();
+  } else if (key === 'n') {
+    e.preventDefault();
+    editor.innerHTML = '<p></p>';
+    docTitle.value = 'Untitled Document';
+    refreshStats();
+    saveState.textContent = 'Unsaved new document';
+    editor.focus();
   }
 });
 
@@ -249,6 +331,10 @@ if (appApi) {
         description: 'Current text stats as { words, chars }',
         handler: () => countTextStats(editor.innerText || ''),
       },
+      title: {
+        description: 'Current document title',
+        handler: () => getTitle(),
+      },
       saveState: {
         description: 'Current save status label',
         handler: () => saveState.textContent || '',
@@ -265,6 +351,20 @@ if (appApi) {
         handler: (p: { html: string }) => {
           editor.innerHTML = p.html || '<p></p>';
           refreshStats();
+          saveState.textContent = 'Updated via app protocol';
+          saveDoc();
+          return { ok: true };
+        },
+      },
+      setTitle: {
+        description: 'Update document title. Params: { title: string }',
+        params: {
+          type: 'object',
+          properties: { title: { type: 'string' } },
+          required: ['title'],
+        },
+        handler: (p: { title: string }) => {
+          docTitle.value = (p.title || '').trim() || 'Untitled Document';
           saveState.textContent = 'Updated via app protocol';
           saveDoc();
           return { ok: true };
@@ -308,6 +408,7 @@ if (appApi) {
         params: { type: 'object', properties: {} },
         handler: () => {
           editor.innerHTML = '<p></p>';
+          docTitle.value = 'Untitled Document';
           refreshStats();
           saveState.textContent = 'Unsaved new document';
           return { ok: true };

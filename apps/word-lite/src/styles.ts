@@ -45,6 +45,16 @@ html, body {
   font-weight: 700;
 }
 
+.doc-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#doc-title {
+  min-width: 220px;
+}
+
 .brand-badge {
   width: 26px;
   height: 26px;
@@ -79,7 +89,7 @@ html, body {
   padding-right: 0;
 }
 
-button, select {
+button, select, input {
   border: 1px solid #4b5563;
   background: #111827;
   color: #f3f4f6;
@@ -89,7 +99,7 @@ button, select {
   cursor: pointer;
 }
 
-button:hover, select:hover {
+button:hover, select:hover, input:hover {
   border-color: #9ca3af;
 }
 
@@ -148,6 +158,16 @@ button.primary {
   border-top: 1px solid #374151;
   color: #d1d5db;
   font-size: 12px;
+}
+
+#app.focus-mode .topbar,
+#app.focus-mode .toolbar,
+#app.focus-mode .statusbar {
+  display: none;
+}
+
+#app.focus-mode .editor-wrap {
+  padding: 12px;
 }
 
 .muted {

@@ -1,6 +1,7 @@
 /**
- * SettingsModal - Modal for user preferences (name, language).
+ * SettingsModal - Modal for user preferences (name, language, domain settings).
  */
+import { useCallback, useEffect, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import styles from '@/styles/ui/SettingsModal.module.css';
 
@@ -21,6 +22,29 @@ export function SettingsModal() {
   const language = useDesktopStore((s) => s.language);
   const setUserName = useDesktopStore((s) => s.setUserName);
   const setLanguage = useDesktopStore((s) => s.setLanguage);
+
+  const [allowAllDomains, setAllowAllDomains] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/domains')
+      .then((r) => r.json())
+      .then((data: { allowAllDomains: boolean }) => {
+        setAllowAllDomains(data.allowAllDomains);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleAllowAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.checked;
+    setAllowAllDomains(value);
+    fetch('/api/domains', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowAllDomains: value }),
+    }).catch(() => {
+      setAllowAllDomains(!value);
+    });
+  }, []);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -61,6 +85,21 @@ export function SettingsModal() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <label className={styles.toggleRow}>
+              <span className={styles.toggleLabel}>
+                <span className={styles.label}>Allow all domains</span>
+                <span className={styles.subtitle}>Skips per-domain approval for HTTP requests</span>
+              </span>
+              <input
+                type="checkbox"
+                className={styles.toggle}
+                checked={allowAllDomains}
+                onChange={handleToggleAllowAll}
+              />
+            </label>
           </div>
         </div>
       </div>

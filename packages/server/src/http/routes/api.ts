@@ -18,6 +18,7 @@ import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
 import { readSettings, updateSettings } from '../../storage/settings.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
+import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
 
 export async function handleApiRoutes(
   req: IncomingMessage,
@@ -157,6 +158,53 @@ export async function handleApiRoutes(
       sendJson(res, { actions: restoreActions, contextMessages });
     } catch {
       sendError(res, 'Failed to restore session');
+    }
+    return true;
+  }
+
+  // Get domain settings
+  if (url.pathname === '/api/domains' && req.method === 'GET') {
+    try {
+      const [allowAllDomains, domains] = await Promise.all([
+        isAllDomainsAllowed(),
+        readAllowedDomains(),
+      ]);
+      sendJson(res, { allowAllDomains, domains });
+    } catch {
+      sendError(res, 'Failed to read domain settings');
+    }
+    return true;
+  }
+
+  // Update domain settings
+  if (url.pathname === '/api/domains' && req.method === 'PATCH') {
+    try {
+      const bodyChunks: Buffer[] = [];
+      for await (const chunk of req) {
+        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
+      if (!body) {
+        sendError(res, 'Empty body', 400);
+        return true;
+      }
+      let partial: { allowAllDomains?: boolean };
+      try {
+        partial = JSON.parse(body);
+      } catch {
+        sendError(res, 'Invalid JSON', 400);
+        return true;
+      }
+      if (typeof partial.allowAllDomains === 'boolean') {
+        await setAllowAllDomains(partial.allowAllDomains);
+      }
+      const [allowAllDomains, domains] = await Promise.all([
+        isAllDomainsAllowed(),
+        readAllowedDomains(),
+      ]);
+      sendJson(res, { allowAllDomains, domains });
+    } catch {
+      sendError(res, 'Failed to update domain settings');
     }
     return true;
   }
