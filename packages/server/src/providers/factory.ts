@@ -58,7 +58,7 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
   },
   codex: async () => {
     // Check CLI + auth without needing an AppServer
-    // Use getCodexBin() to find the binary (supports bundled exe mode)
+    // Passive check only — must NOT block with login (called by GET /api/providers)
     try {
       const { execSync } = await import('child_process');
       const { getCodexBin } = await import('../config.js');
@@ -66,17 +66,8 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
     } catch {
       return false;
     }
-    if (process.env.OPENAI_API_KEY) return true;
-    try {
-      const os = await import('os');
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const authPath = path.join(os.homedir(), '.codex', 'auth.json');
-      await fs.access(authPath);
-      return true;
-    } catch {
-      return false;
-    }
+    const { hasCodexAuth } = await import('./codex/auth.js');
+    return hasCodexAuth();
   },
 };
 

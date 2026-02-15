@@ -8,7 +8,8 @@
 import { platform } from 'os';
 import type { ProviderType } from './types.js';
 import { listApps } from '../mcp/apps/discovery.js';
-import { storageList, configRead } from '../storage/storage-manager.js';
+import { storageList } from '../storage/storage-manager.js';
+import { readSettings, getLanguageLabel } from '../storage/settings.js';
 import { IS_BUNDLED_EXE, IS_DEV_EXE } from '../config.js';
 
 function getPlatformName(): string {
@@ -27,13 +28,14 @@ function getProviderName(provider: ProviderType): string {
 }
 
 export async function buildEnvironmentSection(provider: ProviderType): Promise<string> {
-  const [apps, storage, onboardingResult] = await Promise.all([
+  const [apps, storage, settings] = await Promise.all([
     listApps().catch(() => []),
     storageList('').catch(() => ({ success: false as const, error: 'unavailable' })),
-    configRead('onboarding.json').catch(() => ({ success: false as const, error: 'unavailable' })),
+    readSettings(),
   ]);
 
   const lines = [`- Platform: ${getPlatformName()}`, `- Provider: ${getProviderName(provider)}`];
+  lines.push(`- Language: ${getLanguageLabel(settings.language)} (${settings.language})`);
 
   if (IS_BUNDLED_EXE) {
     lines.push(`- Mode: Standalone executable${IS_DEV_EXE ? ' (dev)' : ''}`);
@@ -62,26 +64,17 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push(`- System apps:\n${systemLines.join('\n')}`);
   }
 
-  let onboardingCompleted = false;
-  try {
-    if (onboardingResult.success && onboardingResult.content) {
-      const parsed = JSON.parse(onboardingResult.content);
-      onboardingCompleted = parsed.completed === true;
-    }
-  } catch {
-    // Default to false if parsing fails
-  }
-
   let result = `\n\n## Environment\n${lines.join('\n')}`;
 
-  if (!onboardingCompleted) {
+  if (!settings.onboardingCompleted) {
     result += `\n\n## Onboarding
 
-This is a new user who hasn't been onboarded yet. When the user first connects:
-1. Welcome them warmly to YAAR
-2. Briefly explain what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
-3. Show them how to browse the app marketplace using the \`market_list\` tool, and help them install interesting apps
-4. Once they seem comfortable, call \`complete_onboarding\` to finish the onboarding process
+The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<user_interaction:click>app: onboarding</user_interaction:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
+1. Welcoming them to YAAR
+2. Briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
+3. Asking their preferred language and calling \`set_config\` with section "settings" to set it if not English
+4. Showing them the app marketplace using the \`market_list\` tool, and helping them install interesting apps
+5. Calling \`set_config\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
 
 Keep the tone friendly and concise. Don't overwhelm them with too much information at once.`;
   }

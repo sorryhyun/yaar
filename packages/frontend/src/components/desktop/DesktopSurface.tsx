@@ -97,6 +97,9 @@ export function DesktopSurface() {
           const data = await response.json();
           setApps(data.apps || []);
           setOnboardingCompleted(!!data.onboardingCompleted);
+          if (data.language && data.language !== useDesktopStore.getState().language) {
+            useDesktopStore.getState().applyServerLanguage(data.language);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch apps:', err);

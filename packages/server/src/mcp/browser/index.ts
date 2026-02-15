@@ -58,7 +58,7 @@ function updateWindowTitle(session: BrowserSession, title: string): void {
 
 /**
  * Register browser automation tools on the given MCP server.
- * Silently skips if Playwright is not installed.
+ * Silently skips if Chrome/Edge is not found.
  */
 export async function registerBrowserTools(server: McpServer): Promise<void> {
   const pool = getBrowserPool();

@@ -6,6 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
+import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
 import { actionEmitter } from '../action-emitter.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';
 
@@ -90,14 +91,19 @@ export function registerSystemTools(server: McpServer): void {
     },
   );
 
-  // set_config — register a hook
+  // set_config — unified config setter for hooks and settings
   server.registerTool(
     'set_config',
     {
       description:
-        'Register an automated hook that fires on a desktop event. Supports "launch" (session start) and "tool_use" (when the AI calls a tool) events.',
+        'Update configuration. Use section "hooks" to register automated hooks, or "settings" to update user settings (language, onboarding status).',
       inputSchema: {
-        event: z.enum(['launch', 'tool_use']).describe('The event that triggers this hook'),
+        section: z.enum(['hooks', 'settings']).describe('Config section to update'),
+        // Hook fields (required when section is "hooks")
+        event: z
+          .enum(['launch', 'tool_use'])
+          .optional()
+          .describe('(hooks) The event that triggers this hook'),
         filter: z
           .object({
             toolName: z
@@ -105,7 +111,7 @@ export function registerSystemTools(server: McpServer): void {
               .describe('Tool name(s) to match (e.g., "apps:clone")'),
           })
           .optional()
-          .describe('Filter for tool_use hooks — which tools trigger this hook'),
+          .describe('(hooks) Filter for tool_use hooks — which tools trigger this hook'),
         action: z
           .object({
             type: z
@@ -121,11 +127,39 @@ export function registerSystemTools(server: McpServer): void {
               ])
               .describe('String for interaction, object or array for os_action'),
           })
-          .describe('What happens when the hook fires'),
-        label: z.string().describe('Human-readable description shown in permission dialog'),
+          .optional()
+          .describe('(hooks) What happens when the hook fires'),
+        label: z
+          .string()
+          .optional()
+          .describe('(hooks) Human-readable description shown in permission dialog'),
+        // Settings fields (used when section is "settings")
+        language: z
+          .enum(LANGUAGE_CODES as unknown as [string, ...string[]])
+          .optional()
+          .describe('(settings) Language code (e.g., "en", "ko", "ja")'),
+        onboardingCompleted: z
+          .boolean()
+          .optional()
+          .describe('(settings) Mark onboarding as completed'),
       },
     },
     async (args) => {
+      if (args.section === 'settings') {
+        const partial: Record<string, unknown> = {};
+        if (args.language !== undefined) partial.language = args.language;
+        if (args.onboardingCompleted !== undefined)
+          partial.onboardingCompleted = args.onboardingCompleted;
+        const settings = await updateSettings(partial as any);
+        actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+        return ok(JSON.stringify(settings, null, 2));
+      }
+
+      // section === 'hooks'
+      if (!args.event || !args.action || !args.label) {
+        return ok('Error: hooks section requires event, action, and label fields.');
+      }
+
       const approved = await actionEmitter.showPermissionDialog(
         'Add Hook',
         `The AI wants to add a hook: **${args.label}** (${args.event}). Allow?`,
@@ -142,18 +176,29 @@ export function registerSystemTools(server: McpServer): void {
     },
   );
 
-  // get_config — read hooks
+  // get_config — read hooks and/or settings
   server.registerTool(
     'get_config',
     {
-      description: 'Read current configuration. Returns registered hooks.',
+      description: 'Read current configuration. Returns hooks, settings, or both.',
       inputSchema: {
-        section: z.enum(['hooks']).optional().describe('Config section to read (default: all)'),
+        section: z
+          .enum(['hooks', 'settings'])
+          .optional()
+          .describe('Config section to read (default: all)'),
       },
     },
-    async () => {
-      const hooks = await loadHooks();
-      return ok(JSON.stringify({ hooks }, null, 2));
+    async (args) => {
+      if (args.section === 'hooks') {
+        const hooks = await loadHooks();
+        return ok(JSON.stringify({ hooks }, null, 2));
+      }
+      if (args.section === 'settings') {
+        const settings = await readSettings();
+        return ok(JSON.stringify({ settings }, null, 2));
+      }
+      const [hooks, settings] = await Promise.all([loadHooks(), readSettings()]);
+      return ok(JSON.stringify({ hooks, settings }, null, 2));
     },
   );
 
@@ -183,20 +228,6 @@ export function registerSystemTools(server: McpServer): void {
         return ok(`Hook "${args.hookId}" not found.`);
       }
       return ok(`Hook "${args.hookId}" removed.`);
-    },
-  );
-
-  // complete_onboarding
-  server.registerTool(
-    'complete_onboarding',
-    {
-      description:
-        'Mark onboarding as completed. Call this after the user has been guided through the onboarding process.',
-    },
-    async () => {
-      await configWrite('onboarding.json', JSON.stringify({ completed: true }));
-      actionEmitter.emitAction({ type: 'desktop.refreshApps' });
-      return ok('Onboarding completed.');
     },
   );
 }

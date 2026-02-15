@@ -33,19 +33,6 @@ Based on codebase audit conducted 2026-02-14. Scoped to the four objectives from
 
 ### 버그/이슈
 
-#### P0 (Must Fix)
-
-**1.1 postMessage source 미검증 (스푸핑 위험)**
-- 위치: `packages/frontend/src/store/desktop.ts` `handleAppProtocolRequest()`
-- 문제: 응답 메시지의 `e.source`가 요청을 보낸 iframe의 `contentWindow`인지 확인하지 않음
-- 다른 iframe이나 스크립트가 응답을 스푸핑할 수 있음
-- 수정: `e.source === iframe.contentWindow` 검증 추가
-
-**1.2 응답 구조 미검증**
-- 위치: 같은 파일, 라인 244-253
-- 문제: `e.data.manifest`, `e.data.data`, `e.data.result` 존재 여부를 확인하지 않고 사용
-- 수정: 필드 존재 여부 가드 추가, 실패 시 에러 로깅
-
 #### P1 (Should Fix)
 
 **1.3 cross-origin iframe 무시 로깅**
@@ -80,13 +67,6 @@ Based on codebase audit conducted 2026-02-14. Scoped to the four objectives from
 8개 MCP 도구 (open, click, type, press, scroll, screenshot, extract, close) 완전 구현. CDP 기반. SSE 라이브 스크린샷 스트리밍. 크로스 플랫폼 Chrome/Edge 감지. 세션 풀링 (max 3, 5분 idle timeout). **테스트 0개.**
 
 ### 버그/이슈
-
-#### P0
-
-**2.1 SSE 에러 무한 재시도**
-- 위치: `apps/browser/src/main.ts` 라인 229-231
-- 문제: `EventSource.onerror`가 에러를 무시. 백엔드 세션 삭제 후에도 몇 초마다 재시도. 유저에게 피드백 없음
-- 수정: 에러 카운터 추가, N회 실패 시 재연결 중단 + UI에 상태 표시
 
 #### P1
 
@@ -126,26 +106,6 @@ Session → Monitor (최대 4개) → Window 구조. 모니터별 main agent + �
 
 ### 버그/이슈
 
-#### P0
-
-**3.1 윈도우 ID 스코핑 불일치 (충돌 위험)**
-- 위치: Frontend `windowsSlice.ts` vs Server `window-state.ts`
-- 문제: 프론트엔드는 `toWindowKey(monitorId, rawId)` (예: `monitor-0/win-storage`)로 스코핑하지만, 서버의 `WindowStateRegistry`는 raw ID만 사용
-- 두 모니터에서 동일 ID의 윈도우 생성 시 서버 레지스트리에서 충돌/덮어쓰기 발생
-- `list_windows` MCP 도구가 잘못된 상태 반환
-- 수정: 서버 WindowStateRegistry에 monitorId 인식 추가, 또는 윈도우 ID에 모니터 접두사 강제
-
-**3.2 모니터 삭제 시 main agent 누수**
-- 위치: `context-pool.ts` — `createMonitorAgent()` 있으나 `removeMonitorAgent()` 없음
-- 문제: 모니터 삭제 시 프론트엔드는 윈도우를 닫지만, 해당 모니터의 main agent는 `agentPool.mainAgents`에 남아 limiter 슬롯 점유
-- 반복적 생성/삭제 시 limiter 고갈
-- 수정: `REMOVE_MONITOR` 이벤트 추가, 서버에서 main agent + 큐 정리
-
-**3.3 모니터 버짓 정책 미적용**
-- 위치: `monitor-budget-policy.ts` + `context-pool.ts`
-- 문제: `MonitorBudgetPolicy`의 액션 레이트 제한과 출력 레이트 제한이 구현되어 있으나, 실제 태스크 처리 중 한 번도 체크되지 않음. `recordAction()`과 `recordOutput()`은 호출되지만 `checkActionBudget()`과 `checkOutputBudget()`은 호출 안 됨
-- 수정: `processMainTask()`와 `processEphemeralTask()`에서 액션/출력 전 버짓 체크 추가
-
 #### P1
 
 **3.4 모니터 구독 타이밍 문제**
@@ -180,24 +140,6 @@ Session → Monitor (최대 4개) → Window 구조. 모니터별 main agent + �
 ContextTape 기반 계층적 메시지 관리. 4종 에이전트 (Main, Ephemeral, Window, Task). MainQueuePolicy와 WindowQueuePolicy로 동시성 관리. 부분적 테스트 존재 (context-pool-policies.test.ts 등).
 
 ### 버그/이슈
-
-#### P0
-
-**4.1 ContextTape 무한 성장 (메모리 누수)**
-- 위치: `context.ts` — `ContextTape.messages`
-- 문제: 메시지에 크기 제한 없음. 장시간 세션에서 메모리가 무한 증가
-- 수정: 슬라이딩 윈도우 또는 최대 크기 제한 + 오래된 윈도우 메시지 프루닝
-
-**4.2 Ephemeral/Task 에이전트 정리 실패 시 limiter 슬롯 누수**
-- 위치: `agent-pool.ts` 라인 135-137 (`disposeEphemeral`)
-- 문제: `agent.session.cleanup()`이 throw하면 `limiter.release()`가 호출되지 않음. 슬롯이 영구 점유
-- 수정: try/finally로 감싸기
-
-**4.3 리셋 타임아웃 5초 — 너무 짧음**
-- 위치: `context-pool.ts` 라인 826
-- 문제: inflight 태스크 대기 타임아웃이 5초. 유저 인터랙션 대기 중인 윈도우 에이전트는 쉽게 초과
-- 리셋이 에이전트 실행 중 진행되면 상태 손상
-- 수정: 30초로 증가 또는 설정 가능하게
 
 #### P1
 
@@ -265,15 +207,6 @@ ContextTape 기반 계층적 메시지 관리. 4종 에이전트 (Main, Ephemera
 
 | ID | 항목 | 우선순위 | 난이도 |
 |----|------|----------|--------|
-| 3.1 | 윈도우 ID 스코핑 불일치 | P0 | 높음 |
-| 4.1 | ContextTape 무한 성장 | P0 | 중간 |
-| 3.2 | 모니터 삭제 시 agent 누수 | P0 | 중간 |
-| 4.2 | Agent dispose 시 limiter 누수 | P0 | 낮음 |
-| 1.1 | App Protocol postMessage source 미검증 | P0 | 낮음 |
-| 1.2 | App Protocol 응답 구조 미검증 | P0 | 낮음 |
-| 2.1 | Browser SSE 무한 재시도 | P0 | 낮음 |
-| 3.3 | 모니터 버짓 정책 미적용 | P0 | 중간 |
-| 4.3 | 리셋 타임아웃 5초 | P0 | 낮음 |
 | 3.4 | 모니터 구독 타이밍 | P1 | 중간 |
 | 3.5 | 리셋 시 다중 모니터 미처리 | P1 | 중간 |
 | 4.4 | 버짓 대기자 무한 대기 | P1 | 낮음 |

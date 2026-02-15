@@ -171,6 +171,7 @@ export interface SettingsSliceState {
 export interface SettingsSliceActions {
   setUserName: (name: string) => void;
   setLanguage: (lang: string) => void;
+  applyServerLanguage: (lang: string) => void;
 }
 
 export type SettingsSlice = SettingsSliceState & SettingsSliceActions;

@@ -78,6 +78,9 @@ export class AppServer {
   private isShuttingDown = false;
   private readonly config: AppServerConfig;
 
+  // Auth errors detected from stderr
+  private authErrors: Set<string> = new Set();
+
   // Turn serialization: only one turn runs at a time on a single app-server
   private turnQueue: Array<{ resolve: () => void }> = [];
   private turnActive = false;
@@ -189,11 +192,22 @@ export class AppServer {
       }
     });
 
-    // Log stderr for debugging
+    // Log stderr for debugging and detect auth errors
     this.process.stderr?.on('data', (data: Buffer) => {
       const message = data.toString().trim();
       if (message) {
         console.error(`[codex app-server stderr] ${message}`);
+
+        // Detect auth failure patterns
+        const lower = message.toLowerCase();
+        if (
+          lower.includes('failed to refresh token') ||
+          lower.includes('401 unauthorized') ||
+          (lower.includes('authentication') &&
+            (lower.includes('failed') || lower.includes('expired')))
+        ) {
+          this.authErrors.add(message);
+        }
       }
     });
 
@@ -289,6 +303,20 @@ export class AppServer {
    */
   getCapabilities(): InitializeResponse | null {
     return this.initializeResult;
+  }
+
+  /**
+   * Check if auth errors were detected from stderr.
+   */
+  hasAuthError(): boolean {
+    return this.authErrors.size > 0;
+  }
+
+  /**
+   * Get all auth error messages detected from stderr.
+   */
+  getAuthErrors(): string[] {
+    return [...this.authErrors];
   }
 
   /**

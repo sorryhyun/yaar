@@ -94,7 +94,6 @@ export function getToolNames(): string[] {
     'mcp__system__set_config',
     'mcp__system__get_config',
     'mcp__system__remove_config',
-    'mcp__system__complete_onboarding',
     'mcp__system__guideline',
     'mcp__system__request_allowing_domain',
     'mcp__system__http_get',
@@ -144,7 +143,7 @@ export function getToolNames(): string[] {
     // Market tools
     'mcp__apps__market_list',
     'mcp__apps__market_get',
-    // Browser tools (conditional — only if Playwright is available)
+    // Browser tools (conditional — only if Chrome/Edge is available)
     ...getBrowserToolNames(),
   ];
   return APP_DEV_ENABLED ? all : all.filter((n) => !APP_DEV_TOOLS.includes(n));

@@ -53,6 +53,7 @@
     "lint-staged": "^16.2.7",
     "node-poppler-win32": "1.0.2",
     "prettier": "^3.8.1",
+    "vitest": "^4.0.18",
     "xlsx": "^0.18.5"
   }
 }

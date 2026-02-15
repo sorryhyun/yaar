@@ -82,22 +82,9 @@ export class CodexProvider extends BaseTransport {
     const cliAvailable = await this.isCliAvailable(getCodexBin());
     if (!cliAvailable) return false;
 
-    // Check for authentication: either API key or OAuth (auth.json)
-    if (process.env.OPENAI_API_KEY) {
-      return true;
-    }
-
-    // Check for OAuth authentication via ~/.codex/auth.json
-    try {
-      const os = await import('os');
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const authPath = path.join(os.homedir(), '.codex', 'auth.json');
-      await fs.access(authPath);
-      return true;
-    } catch {
-      return false;
-    }
+    // Check auth, auto-run `codex login` if missing (safe during startup — no connections yet)
+    const { ensureCodexAuth } = await import('./auth.js');
+    return ensureCodexAuth(getCodexBin());
   }
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {

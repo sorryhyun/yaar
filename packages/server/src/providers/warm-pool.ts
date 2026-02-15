@@ -10,6 +10,7 @@
 
 import type { AITransport, ProviderType } from './types.js';
 import { AppServer } from './codex/app-server.js';
+import { getCodexBin } from '../config.js';
 
 /**
  * Configuration for the warm pool.
@@ -151,6 +152,9 @@ class ProviderWarmPool {
   /**
    * Ensure the shared Codex AppServer is created and running.
    * WarmPool is the sole owner of this process.
+   *
+   * After starting, waits briefly and checks stderr for auth errors.
+   * If detected: stops AppServer, invalidates stale auth, triggers re-login, restarts.
    */
   private async ensureCodexAppServer(): Promise<void> {
     if (this.sharedCodexAppServer?.isRunning) {
@@ -170,6 +174,37 @@ class ProviderWarmPool {
     });
 
     await this.sharedCodexAppServer.start();
+
+    // Wait briefly for stderr auth errors to surface
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    if (this.sharedCodexAppServer.hasAuthError()) {
+      const errors = this.sharedCodexAppServer.getAuthErrors();
+      console.warn('[WarmPool] Auth errors detected from AppServer:', errors);
+
+      // Stop the broken AppServer
+      await this.sharedCodexAppServer.stop();
+      this.sharedCodexAppServer = null;
+
+      // Invalidate stale auth and trigger re-login
+      const { invalidateCodexAuth, attemptCodexLogin } = await import('./codex/index.js');
+      invalidateCodexAuth();
+
+      const codexBin = getCodexBin();
+      const loggedIn = attemptCodexLogin(codexBin);
+      if (!loggedIn) {
+        console.error('[WarmPool] Codex re-login failed, no AppServer available');
+        return;
+      }
+
+      // Restart with fresh auth
+      console.log('[WarmPool] Re-login successful, restarting Codex AppServer');
+      this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.3-codex' });
+      this.sharedCodexAppServer.on('error', (err) => {
+        console.error('[WarmPool] Codex AppServer error:', err);
+      });
+      await this.sharedCodexAppServer.start();
+    }
   }
 
   /**

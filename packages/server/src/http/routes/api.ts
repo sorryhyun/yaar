@@ -16,7 +16,7 @@ import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
-import { configRead } from '../../storage/storage-manager.js';
+import { readSettings, updateSettings } from '../../storage/settings.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 
 export async function handleApiRoutes(
@@ -40,20 +40,41 @@ export async function handleApiRoutes(
   // List available apps
   if (url.pathname === '/api/apps' && req.method === 'GET') {
     try {
-      const apps = await listApps();
-      let onboardingCompleted = false;
-      try {
-        const result = await configRead('onboarding.json');
-        if (result.success && result.content) {
-          const parsed = JSON.parse(result.content);
-          onboardingCompleted = parsed.completed === true;
-        }
-      } catch {
-        // Default to false if file doesn't exist or parsing fails
-      }
-      sendJson(res, { apps, onboardingCompleted });
+      const [apps, settings] = await Promise.all([listApps(), readSettings()]);
+      sendJson(res, {
+        apps,
+        onboardingCompleted: settings.onboardingCompleted,
+        language: settings.language,
+      });
     } catch {
       sendError(res, 'Failed to list apps');
+    }
+    return true;
+  }
+
+  // Update settings
+  if (url.pathname === '/api/settings' && req.method === 'PATCH') {
+    try {
+      const bodyChunks: Buffer[] = [];
+      for await (const chunk of req) {
+        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
+      if (!body) {
+        sendError(res, 'Empty body', 400);
+        return true;
+      }
+      let partial: Record<string, unknown>;
+      try {
+        partial = JSON.parse(body);
+      } catch {
+        sendError(res, 'Invalid JSON', 400);
+        return true;
+      }
+      const settings = await updateSettings(partial as any);
+      sendJson(res, settings);
+    } catch {
+      sendError(res, 'Failed to update settings');
     }
     return true;
   }
