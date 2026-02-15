@@ -441,13 +441,26 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
   useEffect(() => {
     let previousMonitorId = useDesktopStore.getState().activeMonitorId;
+    let previousMonitorIds = new Set(useDesktopStore.getState().monitors.map((m) => m.id));
     const unsubscribe = useDesktopStore.subscribe((state) => {
+      // Detect monitor subscription change
       if (state.activeMonitorId !== previousMonitorId) {
         previousMonitorId = state.activeMonitorId;
         if (wsManager.ws?.readyState === WebSocket.OPEN) {
           sendEvent(wsManager, { type: 'SUBSCRIBE_MONITOR', monitorId: state.activeMonitorId });
         }
       }
+
+      // Detect monitor removals and notify server
+      const currentMonitorIds = new Set(state.monitors.map((m) => m.id));
+      if (wsManager.ws?.readyState === WebSocket.OPEN) {
+        for (const id of previousMonitorIds) {
+          if (!currentMonitorIds.has(id)) {
+            sendEvent(wsManager, { type: 'REMOVE_MONITOR', monitorId: id });
+          }
+        }
+      }
+      previousMonitorIds = currentMonitorIds;
     });
     return unsubscribe;
   }, []);

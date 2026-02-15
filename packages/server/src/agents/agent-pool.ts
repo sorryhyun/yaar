@@ -132,8 +132,11 @@ export class AgentPool {
    */
   async disposeEphemeral(agent: PooledAgent): Promise<void> {
     this.ephemeralAgents.delete(agent);
-    await agent.session.cleanup();
-    getAgentLimiter().release();
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
     console.log(`[AgentPool] Ephemeral agent disposed: ${agent.instanceId}`);
   }
 
@@ -160,8 +163,11 @@ export class AgentPool {
    */
   async disposeTaskAgent(agent: PooledAgent): Promise<void> {
     this.taskAgents.delete(agent);
-    await agent.session.cleanup();
-    getAgentLimiter().release();
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
     console.log(`[AgentPool] Task agent disposed: ${agent.instanceId}`);
   }
 
@@ -202,6 +208,27 @@ export class AgentPool {
    */
   getMainAgentCount(): number {
     return this.mainAgents.size;
+  }
+
+  /**
+   * Remove and dispose the main agent for a given monitor.
+   * Releases the limiter slot. Returns true if an agent was removed.
+   */
+  async removeMainAgent(monitorId: string): Promise<boolean> {
+    const agent = this.mainAgents.get(monitorId);
+    if (!agent) return false;
+
+    this.mainAgents.delete(monitorId);
+    if (agent.session.isRunning()) {
+      await agent.session.interrupt();
+    }
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
+    console.log(`[AgentPool] Main agent removed for ${monitorId}: ${agent.instanceId}`);
+    return true;
   }
 
   // ── Window agents ──────────────────────────────────────────────────

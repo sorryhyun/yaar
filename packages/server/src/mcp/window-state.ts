@@ -3,6 +3,10 @@
  *
  * Tracks windows created via actions and provides query methods
  * for list_windows and view_window tools.
+ *
+ * Uses monitorId-scoped keys internally to prevent collision when
+ * multiple monitors create windows with the same raw ID.
+ * Key format: "monitorId/rawWindowId" (e.g., "monitor-0/win-storage").
  */
 
 import type {
@@ -14,6 +18,13 @@ import type {
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
+
+/**
+ * Build a scoped key from monitorId and rawId.
+ */
+function scopedKey(monitorId: string, rawId: string): string {
+  return `${monitorId}/${rawId}`;
+}
 
 /**
  * Window state registry for one connection/session.
@@ -31,13 +42,43 @@ export class WindowStateRegistry {
     this.onWindowCloseCallback = cb;
   }
 
-  handleAction(action: OSAction): void {
+  /**
+   * Resolve a windowId to its internal map key.
+   * Tries exact match first, then scans for a key ending with /rawId.
+   * Returns the resolved key and the stored WindowState, or undefined.
+   */
+  private resolve(windowId: string): [string, WindowState] | undefined {
+    // 1. Exact match (scoped or legacy raw key)
+    const exact = this.windows.get(windowId);
+    if (exact) return [windowId, exact];
+
+    // 2. Scan for suffix match — e.g., looking up "win-storage" matches "monitor-0/win-storage"
+    const suffix = `/${windowId}`;
+    for (const [key, state] of this.windows) {
+      if (key.endsWith(suffix)) return [key, state];
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Determine the internal key for a given action windowId + monitorId.
+   */
+  private actionKey(rawId: string, monitorId?: string): string {
+    if (monitorId) return scopedKey(monitorId, rawId);
+    // Backward compat: try to find an existing scoped key for this raw ID
+    const resolved = this.resolve(rawId);
+    return resolved ? resolved[0] : rawId;
+  }
+
+  handleAction(action: OSAction, monitorId?: string): void {
     const now = Date.now();
 
     switch (action.type) {
       case 'window.create': {
-        this.windows.set(action.windowId, {
-          id: action.windowId,
+        const key = monitorId ? scopedKey(monitorId, action.windowId) : action.windowId;
+        this.windows.set(key, {
+          id: key,
           title: action.title,
           bounds: { ...action.bounds },
           content: { ...action.content },
@@ -49,14 +90,16 @@ export class WindowStateRegistry {
       }
 
       case 'window.close': {
-        this.windows.delete(action.windowId);
-        this.appCommands.delete(action.windowId);
-        this.onWindowCloseCallback?.(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        this.windows.delete(key);
+        this.appCommands.delete(key);
+        this.onWindowCloseCallback?.(key);
         break;
       }
 
       case 'window.setTitle': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.title = action.title;
           win.updatedAt = now;
@@ -65,7 +108,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.setContent': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.content = { ...action.content };
           win.updatedAt = now;
@@ -74,7 +118,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.updateContent': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           const currentData = (win.content.data as string) ?? '';
           const operation = action.operation as ContentUpdateOperation;
@@ -109,7 +154,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.move': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.bounds.x = action.x;
           win.bounds.y = action.y;
@@ -119,7 +165,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.resize': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.bounds.w = action.w;
           win.bounds.h = action.h;
@@ -129,7 +176,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.lock': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.locked = true;
           win.lockedBy = action.agentId;
@@ -139,7 +187,8 @@ export class WindowStateRegistry {
       }
 
       case 'window.unlock': {
-        const win = this.windows.get(action.windowId);
+        const key = this.actionKey(action.windowId, monitorId);
+        const win = this.windows.get(key);
         if (win) {
           win.locked = false;
           win.lockedBy = undefined;
@@ -155,32 +204,37 @@ export class WindowStateRegistry {
   }
 
   getWindow(windowId: string): WindowState | undefined {
-    return this.windows.get(windowId);
+    const resolved = this.resolve(windowId);
+    return resolved ? resolved[1] : undefined;
   }
 
   recordAppCommand(windowId: string, request: AppProtocolRequest): void {
-    let commands = this.appCommands.get(windowId);
+    const resolved = this.resolve(windowId);
+    const key = resolved ? resolved[0] : windowId;
+    let commands = this.appCommands.get(key);
     if (!commands) {
       commands = [];
-      this.appCommands.set(windowId, commands);
+      this.appCommands.set(key, commands);
     }
     commands.push(request);
   }
 
   getAppCommands(windowId: string): AppProtocolRequest[] {
-    return this.appCommands.get(windowId) ?? [];
+    const resolved = this.resolve(windowId);
+    const key = resolved ? resolved[0] : windowId;
+    return this.appCommands.get(key) ?? [];
   }
 
   setAppProtocol(windowId: string): void {
-    const win = this.windows.get(windowId);
-    if (win) {
-      win.appProtocol = true;
-      win.updatedAt = Date.now();
+    const resolved = this.resolve(windowId);
+    if (resolved) {
+      resolved[1].appProtocol = true;
+      resolved[1].updatedAt = Date.now();
     }
   }
 
   hasWindow(windowId: string): boolean {
-    return this.windows.has(windowId);
+    return this.resolve(windowId) !== undefined;
   }
 
   clear(): void {

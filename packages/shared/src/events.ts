@@ -133,6 +133,11 @@ export interface SubscribeMonitorEvent {
   monitorId: string;
 }
 
+export interface RemoveMonitorEvent {
+  type: 'REMOVE_MONITOR';
+  monitorId: string;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -147,7 +152,8 @@ export type ClientEvent =
   | UserInteractionEvent
   | AppProtocolResponseEvent
   | AppProtocolReadyEvent
-  | SubscribeMonitorEvent;
+  | SubscribeMonitorEvent
+  | RemoveMonitorEvent;
 
 // ============ Server → Client Events ============
 
