@@ -76,6 +76,27 @@ root.innerHTML = `
       font-family: inherit;
     }
 
+    .url-bar .reload-btn {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border: 1px solid #4b4b4b;
+      border-radius: 999px;
+      background: #3a3a3a;
+      color: #ddd;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .url-bar .reload-btn:hover {
+      background: #4a4a4a;
+    }
+
+    .url-bar .reload-btn:active {
+      transform: scale(0.97);
+    }
+
     .url-bar .title-text {
       font-size: 11px;
       color: #888;
@@ -134,6 +155,7 @@ root.innerHTML = `
     <div class="url-bar">
       <span id="lock" class="lock">🔒</span>
       <input id="url-text" class="url-text" readonly value="about:blank" />
+      <button id="reload-btn" class="reload-btn" title="Reload" aria-label="Reload">↻</button>
       <span id="title-text" class="title-text"></span>
     </div>
     <div id="screenshot-area" class="screenshot-area">
@@ -147,6 +169,7 @@ root.innerHTML = `
 const els = {
   lock: document.getElementById('lock') as HTMLSpanElement,
   urlText: document.getElementById('url-text') as HTMLInputElement,
+  reloadBtn: document.getElementById('reload-btn') as HTMLButtonElement,
   titleText: document.getElementById('title-text') as HTMLSpanElement,
   screenshotArea: document.getElementById('screenshot-area') as HTMLDivElement,
   loadingBar: document.getElementById('loading-bar') as HTMLDivElement,
@@ -198,6 +221,15 @@ function refreshScreenshot() {
   };
   els.screenshot.src = src;
 }
+
+els.reloadBtn.addEventListener('click', () => {
+  const yaar = (window as any).yaar;
+  if (yaar?.app?.sendInteraction) {
+    yaar.app.sendInteraction('User clicked reload — sync display with current page');
+  } else {
+    refreshScreenshot(); // fallback if app protocol not ready
+  }
+});
 
 function clearDisplay() {
   els.screenshot.style.display = 'none';
@@ -273,16 +305,24 @@ if (yaar?.app?.register) {
     },
     commands: {
       refresh: {
-        description: 'Refresh screenshot and update URL bar',
-        handler: (p: { url?: string; title?: string }) => {
-          if (p.url) updateUrlBar(p.url, p.title);
+        description: 'Refresh screenshot and optionally update URL bar',
+        params: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+            title: { type: 'string' },
+          },
+        },
+        handler: (p?: { url?: string; title?: string }) => {
+          if (p?.url) updateUrlBar(p.url, p.title);
           refreshScreenshot();
-          return { ok: true };
+          return { ok: true, currentUrl };
         },
       },
       clear: {
         description: 'Clear the browser display',
-        handler: () => {
+        params: { type: 'object', properties: {} },
+        handler: async () => {
           clearDisplay();
           return { ok: true };
         },

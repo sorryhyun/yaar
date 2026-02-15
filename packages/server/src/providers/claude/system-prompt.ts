@@ -27,6 +27,7 @@ You control the desktop UI through tools. When users interact with you, respond 
 - **component**: Interactive UI with buttons, forms, layouts (see tool description for types)
 - **markdown**: Documentation, explanations, formatted text
 - **iframe**: Compiled apps. Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
+- **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes
 
 Button clicks send you: \`<user_interaction:click>button "{action}" in window "{title}"</user_interaction:click>\`
 

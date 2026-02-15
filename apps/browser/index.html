@@ -10,7 +10,7 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var h=document.getElementById("app");if(!h)throw new Error("Missing app root");var u=new URLSearchParams(window.location.search),i=u.get("sessionId")||"",a=/^[a-zA-Z0-9_-]+$/.test(i)?i:"",c=u.get("url")||"",l="about:blank";if(c)try{let t=new URL(c);(t.protocol==="http:"||t.protocol==="https:")&&(l=t.toString())}catch{}h.innerHTML=`
+var g=document.getElementById("app");if(!g)throw new Error("Missing app root");var y=new URLSearchParams(window.location.search),d=y.get("sessionId")||"",s=/^[a-zA-Z0-9_-]+$/.test(d)?d:"",p=y.get("url")||"",i="about:blank";if(p)try{let t=new URL(p);(t.protocol==="http:"||t.protocol==="https:")&&(i=t.toString())}catch{}g.innerHTML=`
   <style>
     :root { color-scheme: dark; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -56,6 +56,27 @@ var h=document.getElementById("app");if(!h)throw new Error("Missing app root");v
       text-overflow: ellipsis;
       pointer-events: none;
       font-family: inherit;
+    }
+
+    .url-bar .reload-btn {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border: 1px solid #4b4b4b;
+      border-radius: 999px;
+      background: #3a3a3a;
+      color: #ddd;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .url-bar .reload-btn:hover {
+      background: #4a4a4a;
+    }
+
+    .url-bar .reload-btn:active {
+      transform: scale(0.97);
     }
 
     .url-bar .title-text {
@@ -116,6 +137,7 @@ var h=document.getElementById("app");if(!h)throw new Error("Missing app root");v
     <div class="url-bar">
       <span id="lock" class="lock">\u{1F512}</span>
       <input id="url-text" class="url-text" readonly value="about:blank" />
+      <button id="reload-btn" class="reload-btn" title="Reload" aria-label="Reload">\u21BB</button>
       <span id="title-text" class="title-text"></span>
     </div>
     <div id="screenshot-area" class="screenshot-area">
@@ -124,7 +146,7 @@ var h=document.getElementById("app");if(!h)throw new Error("Missing app root");v
       <img id="screenshot" style="display:none" alt="Browser screenshot" />
     </div>
   </div>
-`;var e={lock:document.getElementById("lock"),urlText:document.getElementById("url-text"),titleText:document.getElementById("title-text"),screenshotArea:document.getElementById("screenshot-area"),loadingBar:document.getElementById("loading-bar"),placeholder:document.getElementById("placeholder"),screenshot:document.getElementById("screenshot")},g=l,d=-1;function s(t,o){g=t,e.urlText.value=t,o&&(e.titleText.textContent=o);try{new URL(t).protocol==="https:"?(e.lock.textContent="\u{1F512}",e.lock.className="lock"):(e.lock.textContent="\u{1F513}",e.lock.className="lock insecure")}catch{e.lock.textContent="\u{1F513}",e.lock.className="lock insecure"}}s(l);function m(){let t=Date.now(),o=`/api/browser/${a}/screenshot?t=${t}`;e.loadingBar.classList.add("active"),e.screenshot.onload=()=>{e.placeholder.style.display="none",e.screenshot.style.display="block",e.loadingBar.classList.remove("active")},e.screenshot.onerror=()=>{e.loadingBar.classList.remove("active")},e.screenshot.src=o}function y(){e.screenshot.style.display="none",e.placeholder.style.display="flex",e.placeholder.textContent="Browser closed.",s("about:blank"),e.titleText.textContent=""}if(a){let o=0,n=new EventSource(`/api/browser/${a}/events`);n.onmessage=f=>{o>0&&(e.placeholder.style.display="none"),o=0;try{let r=JSON.parse(f.data);if(r.version<=d)return;d=r.version,r.url&&s(r.url,r.title),m()}catch{}},n.onerror=()=>{o++,o===1&&(e.placeholder.textContent="Reconnecting...",e.placeholder.style.display="flex"),o>=5&&(n.close(),e.placeholder.textContent="Connection lost. Session may have ended.",e.placeholder.style.display="flex",e.screenshot.style.display="none")}}var p=window.yaar;p?.app?.register&&p.app.register({appId:"browser",name:"Browser",state:{manifest:{description:"App capabilities",handler:()=>({state:["currentUrl"],commands:["refresh","clear"]})},currentUrl:{description:"Currently displayed URL",handler:()=>g}},commands:{refresh:{description:"Refresh screenshot and update URL bar",handler:t=>(t.url&&s(t.url,t.title),m(),{ok:!0})},clear:{description:"Clear the browser display",handler:()=>(y(),{ok:!0})}}});
+`;var e={lock:document.getElementById("lock"),urlText:document.getElementById("url-text"),reloadBtn:document.getElementById("reload-btn"),titleText:document.getElementById("title-text"),screenshotArea:document.getElementById("screenshot-area"),loadingBar:document.getElementById("loading-bar"),placeholder:document.getElementById("placeholder"),screenshot:document.getElementById("screenshot")},l=i,h=-1;function n(t,r){l=t,e.urlText.value=t,r&&(e.titleText.textContent=r);try{new URL(t).protocol==="https:"?(e.lock.textContent="\u{1F512}",e.lock.className="lock"):(e.lock.textContent="\u{1F513}",e.lock.className="lock insecure")}catch{e.lock.textContent="\u{1F513}",e.lock.className="lock insecure"}}n(i);function c(){let t=Date.now(),r=`/api/browser/${s}/screenshot?t=${t}`;e.loadingBar.classList.add("active"),e.screenshot.onload=()=>{e.placeholder.style.display="none",e.screenshot.style.display="block",e.loadingBar.classList.remove("active")},e.screenshot.onerror=()=>{e.loadingBar.classList.remove("active")},e.screenshot.src=r}e.reloadBtn.addEventListener("click",()=>{let t=window.yaar;t?.app?.sendInteraction?t.app.sendInteraction("User clicked reload \u2014 sync display with current page"):c()});function m(){e.screenshot.style.display="none",e.placeholder.style.display="flex",e.placeholder.textContent="Browser closed.",n("about:blank"),e.titleText.textContent=""}if(s){let r=0,a=new EventSource(`/api/browser/${s}/events`);a.onmessage=b=>{r>0&&(e.placeholder.style.display="none"),r=0;try{let o=JSON.parse(b.data);if(o.version<=h)return;h=o.version,o.url&&n(o.url,o.title),c()}catch{}},a.onerror=()=>{r++,r===1&&(e.placeholder.textContent="Reconnecting...",e.placeholder.style.display="flex"),r>=5&&(a.close(),e.placeholder.textContent="Connection lost. Session may have ended.",e.placeholder.style.display="flex",e.screenshot.style.display="none")}}var u=window.yaar;u?.app?.register&&u.app.register({appId:"browser",name:"Browser",state:{manifest:{description:"App capabilities",handler:()=>({state:["currentUrl"],commands:["refresh","clear"]})},currentUrl:{description:"Currently displayed URL",handler:()=>l}},commands:{refresh:{description:"Refresh screenshot and optionally update URL bar",params:{type:"object",properties:{url:{type:"string"},title:{type:"string"}}},handler:t=>(t?.url&&n(t.url,t.title),c(),{ok:!0,currentUrl:l})},clear:{description:"Clear the browser display",params:{type:"object",properties:{}},handler:async()=>(m(),{ok:!0})}}});
 
 </script>
 </body>

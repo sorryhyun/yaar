@@ -12,8 +12,8 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcClient, type JsonRpcClientOptions } from './jsonrpc-client.js';
-import { getMcpToken } from '../../mcp/index.js';
-import { getCodexBin, getCodexAppServerArgs } from '../../config.js';
+import { getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
+import { getCodexBin, getCodexAppServerArgs, APP_DEV_ENABLED } from '../../config.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
@@ -143,7 +143,8 @@ export class AppServer {
    * Spawn the app-server process.
    */
   private async spawnProcess(): Promise<void> {
-    const args = getCodexAppServerArgs();
+    const namespaces = APP_DEV_ENABLED ? MCP_SERVERS : MCP_SERVERS.filter((ns) => ns !== 'dev');
+    const args = getCodexAppServerArgs(namespaces);
 
     // Add model if specified
     if (this.config.model) {

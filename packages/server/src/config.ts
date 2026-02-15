@@ -143,16 +143,11 @@ export function getCodexBin(): string {
 
 // ── Codex app-server configuration ────────────────────────────────────
 
-/** MCP server namespaces to expose to the Codex app-server. */
-const CODEX_MCP_NAMESPACES = APP_DEV_ENABLED
-  ? (['system', 'window', 'storage', 'apps', 'dev'] as const)
-  : (['system', 'window', 'storage', 'apps'] as const);
-
 /**
  * Build the CLI args for `codex app-server`.
  * Separates config from process management so it's easy to review/change.
  */
-export function getCodexAppServerArgs(): string[] {
+export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[] {
   const args = ['app-server'];
 
   // Disable shell tool and apply_patch (apps use clone-revise-compile-deploy flow)
@@ -163,7 +158,7 @@ export function getCodexAppServerArgs(): string[] {
   args.push('-c', 'features.collaboration_modes=true');
 
   // Configure YAAR MCP servers
-  for (const ns of CODEX_MCP_NAMESPACES) {
+  for (const ns of mcpNamespaces) {
     args.push(
       '-c',
       `mcp_servers.${ns}.url=http://127.0.0.1:${PORT}/mcp/${ns}`,
