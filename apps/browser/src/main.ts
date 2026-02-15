@@ -206,9 +206,9 @@ function updateUrlBar(url: string, title?: string) {
 // reflect initial url from query params in the chrome
 updateUrlBar(initialUrl);
 
-function refreshScreenshot() {
+function refreshScreenshot(fresh = false) {
   const ts = Date.now();
-  const src = `/api/browser/${sessionId}/screenshot?t=${ts}`;
+  const src = `/api/browser/${sessionId}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`;
   els.loadingBar.classList.add('active');
 
   els.screenshot.onload = () => {
@@ -223,12 +223,7 @@ function refreshScreenshot() {
 }
 
 els.reloadBtn.addEventListener('click', () => {
-  const yaar = (window as any).yaar;
-  if (yaar?.app?.sendInteraction) {
-    yaar.app.sendInteraction('User clicked reload — sync display with current page');
-  } else {
-    refreshScreenshot(); // fallback if app protocol not ready
-  }
+  refreshScreenshot(true);
 });
 
 function clearDisplay() {

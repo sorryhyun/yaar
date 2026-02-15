@@ -79,16 +79,22 @@ export async function handleFileRoutes(
     try {
       const { getBrowserPool } = await import('../../lib/browser/index.js');
       const session = getBrowserPool().getSession(sessionId);
-      if (!session || !session.lastScreenshot) {
-        sendError(res, 'Browser session not found or no screenshot available', 404);
+      if (!session) {
+        sendError(res, 'Browser session not found', 404);
+        return true;
+      }
+      const fresh = url.searchParams.has('fresh');
+      const buf = fresh ? await session.screenshot() : session.lastScreenshot;
+      if (!buf) {
+        sendError(res, 'No screenshot available', 404);
         return true;
       }
       res.writeHead(200, {
         'Content-Type': 'image/jpeg',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Content-Length': session.lastScreenshot.length.toString(),
+        'Content-Length': buf.length.toString(),
       });
-      res.end(session.lastScreenshot);
+      res.end(buf);
     } catch {
       sendError(res, 'Browser not available', 404);
     }

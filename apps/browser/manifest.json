@@ -3,6 +3,6 @@
   "name": "Browser",
   "icon": "🌐",
   "description": "Visible browser automation tool showing live screenshots via Chrome DevTools Protocol.",
-  "version": "1.0.2",
+  "version": "1.0.0",
   "author": "YAAR"
 }
