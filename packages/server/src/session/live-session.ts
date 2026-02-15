@@ -77,7 +77,7 @@ export class LiveSession {
     // Subscribe to action emitter for window state tracking and budget recording.
     // All actions emitted by agents in this session will be tracked.
     this.unsubscribeAction = actionEmitter.onAction((event) => {
-      this.windowState.handleAction(event.action);
+      this.windowState.handleAction(event.action, event.monitorId);
       // Record action against the monitor's budget (if monitorId present)
       if (event.monitorId && this.pool) {
         this.pool.recordMonitorAction(event.monitorId);
@@ -399,6 +399,17 @@ export class LiveSession {
 
       case 'SUBSCRIBE_MONITOR':
         getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
+        break;
+
+      case 'REMOVE_MONITOR':
+        if (this.pool) {
+          this.pool.removeMonitorAgent(event.monitorId).catch((err) => {
+            console.error(
+              `[LiveSession ${this.sessionId}] Failed to remove monitor agent for ${event.monitorId}:`,
+              err,
+            );
+          });
+        }
         break;
     }
   }

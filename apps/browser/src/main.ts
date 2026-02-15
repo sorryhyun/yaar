@@ -210,9 +210,13 @@ function clearDisplay() {
 // ── SSE subscription for live updates ─────────────────────────────────
 
 if (sessionId) {
+  const MAX_SSE_ERRORS = 5;
+  let sseErrorCount = 0;
   const evtSource = new EventSource(`/api/browser/${sessionId}/events`);
 
   evtSource.onmessage = (e) => {
+    // Reset error counter on successful message
+    sseErrorCount = 0;
     try {
       const data = JSON.parse(e.data) as { url: string; title: string; version: number };
       // Skip if we've already processed this version
@@ -227,8 +231,13 @@ if (sessionId) {
   };
 
   evtSource.onerror = () => {
-    // EventSource auto-reconnects; if the session is gone the 404 will
-    // stop reconnection attempts after a few tries.
+    sseErrorCount++;
+    if (sseErrorCount >= MAX_SSE_ERRORS) {
+      evtSource.close();
+      els.placeholder.textContent = 'Connection lost. Session may have ended.';
+      els.placeholder.style.display = 'flex';
+      els.screenshot.style.display = 'none';
+    }
   };
 }
 

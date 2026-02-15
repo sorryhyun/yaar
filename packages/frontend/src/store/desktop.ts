@@ -238,15 +238,32 @@ function handleAppProtocolRequest(
     const type = e.data.type as string;
     if (!type?.startsWith('yaar:app-')) return;
 
+    // Validate that the response came from the expected iframe
+    if (e.source !== iframe!.contentWindow) {
+      console.warn(
+        `[AppProtocol] Ignoring response for ${requestId}: source mismatch (possible spoofing)`,
+      );
+      return;
+    }
+
     clearTimeout(timeoutId);
     window.removeEventListener('message', handler);
 
     let response: AppProtocolResponse;
     if (type === 'yaar:app-manifest-response') {
+      if (e.data.manifest == null && e.data.error == null) {
+        console.warn(`[AppProtocol] Manifest response missing both manifest and error fields`);
+      }
       response = { kind: 'manifest', manifest: e.data.manifest, error: e.data.error };
     } else if (type === 'yaar:app-query-response') {
+      if (e.data.data === undefined && e.data.error == null) {
+        console.warn(`[AppProtocol] Query response missing both data and error fields`);
+      }
       response = { kind: 'query', data: e.data.data, error: e.data.error };
     } else if (type === 'yaar:app-command-response') {
+      if (e.data.result === undefined && e.data.error == null) {
+        console.warn(`[AppProtocol] Command response missing both result and error fields`);
+      }
       response = { kind: 'command', result: e.data.result, error: e.data.error };
     } else {
       return;

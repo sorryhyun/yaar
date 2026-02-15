@@ -49,18 +49,27 @@ export interface FormatOptions {
 }
 
 /**
+ * Maximum number of main messages before pruning.
+ * Window messages are pruned on window close, so only main messages accumulate unbounded.
+ */
+const MAX_MAIN_MESSAGES = 200;
+
+/**
  * ContextTape manages the hierarchical conversation history.
  *
  * Messages are stored with their source (main or window) and can be:
  * - Retrieved with optional filtering
  * - Pruned by window (manual operation)
  * - Formatted for prompt injection
+ *
+ * A sliding window limits main-source messages to prevent unbounded memory growth.
  */
 export class ContextTape {
   private messages: ContextMessage[] = [];
 
   /**
    * Append a message to the context tape.
+   * Automatically prunes oldest main messages when the limit is exceeded.
    */
   append(role: 'user' | 'assistant', content: string, source: ContextSource): void {
     this.messages.push({
@@ -69,6 +78,27 @@ export class ContextTape {
       timestamp: new Date().toISOString(),
       source,
     });
+
+    this.pruneIfNeeded();
+  }
+
+  /**
+   * Prune oldest main messages when the tape exceeds the limit.
+   * Preserves window messages (they are pruned separately on window close).
+   */
+  private pruneIfNeeded(): void {
+    const mainMessages = this.messages.filter((m) => m.source === 'main');
+    if (mainMessages.length <= MAX_MAIN_MESSAGES) return;
+
+    // Remove the oldest main messages to bring count back to the limit.
+    // We keep the most recent half to preserve context continuity.
+    const keepCount = Math.floor(MAX_MAIN_MESSAGES / 2);
+    const mainToRemove = new Set(mainMessages.slice(0, mainMessages.length - keepCount));
+    const before = this.messages.length;
+    this.messages = this.messages.filter((m) => !mainToRemove.has(m));
+    console.log(
+      `[ContextTape] Pruned ${before - this.messages.length} oldest main messages (${this.messages.length} remaining)`,
+    );
   }
 
   /**

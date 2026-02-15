@@ -184,6 +184,25 @@ export class ContextPool {
     return this.agentPool.getMainAgentCount();
   }
 
+  /**
+   * Remove a monitor's main agent and clean up associated resources.
+   * Called when a monitor is deleted from the frontend.
+   */
+  async removeMonitorAgent(monitorId: string): Promise<void> {
+    // Remove the main queue for this monitor
+    const queue = this.mainQueues.get(monitorId);
+    if (queue) {
+      queue.clear();
+      this.mainQueues.delete(monitorId);
+    }
+
+    // Dispose the main agent and release limiter slot
+    const removed = await this.agentPool.removeMainAgent(monitorId);
+    if (removed) {
+      console.log(`[ContextPool] Removed monitor agent for ${monitorId}`);
+    }
+  }
+
   // ── Inflight tracking ────────────────────────────────────────────────
 
   private inflightEnter(): void {
@@ -300,9 +319,21 @@ export class ContextPool {
 
   /**
    * Record an OS action against a monitor's budget.
+   * Interrupts the monitor's agent if the action budget is exceeded.
    */
   recordMonitorAction(monitorId: string): void {
     this.budgetPolicy.recordAction(monitorId);
+    if (!this.budgetPolicy.checkActionBudget(monitorId)) {
+      console.warn(
+        `[ContextPool] Monitor ${monitorId} exceeded action budget — interrupting agent`,
+      );
+      const agent = this.agentPool.getMainAgent(monitorId);
+      if (agent?.session.isRunning()) {
+        agent.session.interrupt().catch((err) => {
+          console.error(`[ContextPool] Failed to interrupt agent for ${monitorId}:`, err);
+        });
+      }
+    }
   }
 
   /**
@@ -315,8 +346,18 @@ export class ContextPool {
     agent.currentRole = mainRole;
     agent.lastUsed = Date.now();
 
-    // Set output tracking callback for budget policy
-    agent.session.setOutputCallback((bytes) => this.budgetPolicy.recordOutput(monitorId, bytes));
+    // Set output tracking callback for budget policy with output budget enforcement
+    agent.session.setOutputCallback((bytes) => {
+      this.budgetPolicy.recordOutput(monitorId, bytes);
+      if (!this.budgetPolicy.checkOutputBudget(monitorId)) {
+        console.warn(
+          `[ContextPool] Monitor ${monitorId} exceeded output budget — interrupting agent`,
+        );
+        agent.session.interrupt().catch((err) => {
+          console.error(`[ContextPool] Failed to interrupt agent for ${monitorId}:`, err);
+        });
+      }
+    });
 
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
@@ -384,8 +425,18 @@ export class ContextPool {
     agent.currentRole = ephemeralRole;
     agent.lastUsed = Date.now();
 
-    // Set output tracking callback for budget policy
-    agent.session.setOutputCallback((bytes) => this.budgetPolicy.recordOutput(monitorId, bytes));
+    // Set output tracking callback for budget policy with output budget enforcement
+    agent.session.setOutputCallback((bytes) => {
+      this.budgetPolicy.recordOutput(monitorId, bytes);
+      if (!this.budgetPolicy.checkOutputBudget(monitorId)) {
+        console.warn(
+          `[ContextPool] Monitor ${monitorId} exceeded output budget — interrupting ephemeral agent`,
+        );
+        agent.session.interrupt().catch((err) => {
+          console.error(`[ContextPool] Failed to interrupt ephemeral agent for ${monitorId}:`, err);
+        });
+      }
+    });
 
     await this.sendEvent({
       type: 'MESSAGE_ACCEPTED',
@@ -823,7 +874,7 @@ export class ContextPool {
     try {
       await Promise.race([
         this.awaitInflight(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+        new Promise<void>((resolve) => setTimeout(resolve, 30_000)),
       ]);
     } catch (err) {
       console.error('[ContextPool] Reset: awaitInflight failed:', err);
