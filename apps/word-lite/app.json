@@ -1,4 +1,5 @@
 {
   "icon": "📝",
-  "name": "Word Lite"
+  "name": "Word Lite",
+  "description": "Simple rich text document editor with local draft save/open/export and app protocol support"
 }

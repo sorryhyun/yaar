@@ -7,9 +7,11 @@ import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import {
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
+  IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
+import { useDesktopStore } from '@/store';
 import styles from '@/styles/windows/renderers.module.css';
 
 interface IframeRendererProps {
@@ -41,8 +43,25 @@ function isSameOrigin(url: string): boolean {
 
 function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
   const rawUrl = typeof data === 'string' ? data : data.url;
-  const url = resolveAssetUrl(rawUrl);
+  const resolved = resolveAssetUrl(rawUrl);
+  const sessionId = useDesktopStore((s) => s.sessionId);
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined;
+
+  // Append sessionId to same-origin iframe URLs so the fetch proxy script
+  // can pass it to /api/fetch for domain permission dialogs
+  const url = (() => {
+    if (!sessionId || !isSameOrigin(resolved)) return resolved;
+    try {
+      const u = new URL(resolved, window.location.origin);
+      if (!u.searchParams.has('sessionId')) {
+        u.searchParams.set('sessionId', sessionId);
+      }
+      // Return pathname + search to keep it relative
+      return u.pathname + u.search;
+    } catch {
+      return resolved;
+    }
+  })();
   // For same-origin content (local apps), don't sandbox - it's trusted
   // For cross-origin, apply sandbox to prevent escape attacks
   // allow-same-origin: lets the site access its own localStorage/cookies (required by most sites)
@@ -139,6 +158,12 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
             storageScript.setAttribute('data-yaar-storage', '1');
             storageScript.textContent = IFRAME_STORAGE_SDK_SCRIPT;
             doc.head.appendChild(storageScript);
+          }
+          if (doc && !doc.querySelector('script[data-yaar-fetch-proxy]')) {
+            const fetchProxyScript = doc.createElement('script');
+            fetchProxyScript.setAttribute('data-yaar-fetch-proxy', '1');
+            fetchProxyScript.textContent = IFRAME_FETCH_PROXY_SCRIPT;
+            doc.head.appendChild(fetchProxyScript);
           }
           if (doc && !doc.querySelector('script[data-yaar-app-protocol]')) {
             const appProtocolScript = doc.createElement('script');

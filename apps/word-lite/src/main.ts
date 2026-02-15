@@ -173,6 +173,30 @@ editor.addEventListener('input', () => {
 
 editor.addEventListener('keyup', refreshStats);
 
+const tryOpenLink = (rawHref: string | null) => {
+  if (!rawHref) return;
+  try {
+    const parsed = new URL(rawHref, window.location.href);
+    const allowed = ['http:', 'https:', 'mailto:', 'tel:'];
+    if (!allowed.includes(parsed.protocol)) {
+      alert(`Unsupported link protocol: ${parsed.protocol}`);
+      return;
+    }
+    window.open(parsed.href, '_blank', 'noopener,noreferrer');
+  } catch {
+    alert('Invalid URL');
+  }
+};
+
+editor.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement | null;
+  const linkEl = target?.closest('a') as HTMLAnchorElement | null;
+  if (!linkEl) return;
+
+  e.preventDefault();
+  tryOpenLink(linkEl.getAttribute('href'));
+});
+
 document.addEventListener('keydown', (e) => {
   if (!e.ctrlKey && !e.metaKey) return;
   const key = e.key.toLowerCase();

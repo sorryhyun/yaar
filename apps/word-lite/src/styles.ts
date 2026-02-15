@@ -117,6 +117,21 @@ button.primary {
   outline: none;
   line-height: 1.5;
   font-size: 16px;
+  cursor: text;
+}
+
+.page a,
+.page a:link,
+.page a:visited,
+.page a:hover,
+.page a:active,
+.page a:focus,
+.page a * {
+  cursor: pointer !important;
+}
+
+.page a:hover {
+  text-decoration: underline;
 }
 
 .page:empty:before {

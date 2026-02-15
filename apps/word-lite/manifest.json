@@ -1,0 +1,8 @@
+{
+  "id": "word-lite",
+  "name": "Word Lite",
+  "icon": "📝",
+  "description": "Simple rich text document editor with local draft save/open/export and app protocol support",
+  "version": "1.0.2",
+  "author": "YAAR"
+}
