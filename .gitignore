@@ -44,8 +44,7 @@ apps/*/credentials.json
 # Sandbox (temporary app development)
 /sandbox/
 
-# Codex generated types (regenerate with: make codex-types)
-packages/server/src/providers/codex/generated/
+# Codex generated types — checked in for CI; regenerate with: make codex-types
 
 # Claude Code
 .claude/*
