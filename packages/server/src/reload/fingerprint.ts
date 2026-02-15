@@ -7,7 +7,7 @@
 
 import { createHash } from 'crypto';
 import type { WindowState } from '@yaar/shared';
-import type { Task } from '../agents/context-pool.js';
+import type { Task } from '../agents/pool-context.js';
 import type { Fingerprint } from './types.js';
 
 /**

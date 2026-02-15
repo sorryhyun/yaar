@@ -2,7 +2,7 @@ import { computeFingerprint } from '../../reload/index.js';
 import type { ReloadCache } from '../../reload/cache.js';
 import type { CacheMatch, Fingerprint } from '../../reload/types.js';
 import type { WindowState, OSAction } from '@yaar/shared';
-import type { Task } from '../context-pool.js';
+import type { Task } from '../pool-context.js';
 
 export class ReloadCachePolicy {
   constructor(private readonly cache: ReloadCache) {}
