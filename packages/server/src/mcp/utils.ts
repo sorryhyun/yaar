@@ -7,6 +7,12 @@ export const ok = (text: string) => ({
   content: [{ type: 'text' as const, text }],
 });
 
+/** Create an error text result (sets isError: true) */
+export const error = (text: string) => ({
+  content: [{ type: 'text' as const, text }],
+  isError: true,
+});
+
 /** Create a result with text and images */
 export const okWithImages = (text: string, images: Array<{ data: string; mimeType: string }>) => ({
   content: [

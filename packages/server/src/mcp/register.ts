@@ -6,22 +6,22 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServerName } from './server.js';
-import { registerSystemTools } from './system/index.js';
-import { registerDispatchTools } from './system/dispatch.js';
-import { registerWindowTools } from './window/index.js';
-import { registerStorageTools } from './storage/index.js';
-import { registerAppsTools } from './apps/index.js';
-import { registerMarketTools } from './apps/market.js';
-import { registerHttpTools } from './http/index.js';
-import { registerAppDevTools } from './dev/index.js';
-import { registerSandboxTools } from './sandbox/index.js';
-import { registerGuidelineTools } from './guidelines/index.js';
-import { registerReloadTools } from '../reload/tools.js';
+import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+import { registerDispatchTools, DISPATCH_TOOL_NAMES } from './system/dispatch.js';
+import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
+import { registerStorageTools, STORAGE_TOOL_NAMES } from './storage/index.js';
+import { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
+import { registerMarketTools, MARKET_TOOL_NAMES } from './apps/market.js';
+import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
+import { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
+import { registerSandboxTools, SANDBOX_TOOL_NAMES } from './sandbox/index.js';
+import { registerGuidelineTools, GUIDELINE_TOOL_NAMES } from './guidelines/index.js';
+import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { APP_DEV_ENABLED } from '../config.js';
-import { registerBrowserTools, getBrowserToolNames } from './browser/index.js';
+import { registerBrowserTools, BROWSER_TOOL_NAMES } from './browser/index.js';
 
 /**
  * Register all YAAR tools on their respective MCP servers.
@@ -53,7 +53,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerReloadTools(servers.system, getReloadCache, getWindowState);
 
   // Browser tools (conditional — only if Chrome/Edge is available)
-  registerBrowserTools(servers.system).catch(() => {
+  registerBrowserTools(servers.browser).catch(() => {
     // Chrome not found — browser tools unavailable
   });
 }
@@ -68,83 +68,24 @@ export function formatToolDisplay(raw: string): string {
   return raw;
 }
 
-const APP_DEV_TOOLS = [
-  'mcp__dev__read_ts',
-  'mcp__dev__write_ts',
-  'mcp__dev__apply_diff_ts',
-  'mcp__dev__compile',
-  'mcp__dev__compile_component',
-  'mcp__dev__typecheck',
-  'mcp__dev__deploy',
-  'mcp__dev__clone',
-  'mcp__dev__write_json',
-];
-
 /**
  * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
-  const all = [
-    // Built-in Claude tools
+  const all: string[] = [
     'WebSearch',
-    // System tools
-    'mcp__system__get_info',
-    'mcp__system__get_env_var',
-    'mcp__system__memorize',
-    'mcp__system__set_config',
-    'mcp__system__get_config',
-    'mcp__system__remove_config',
-    'mcp__system__guideline',
-    'mcp__system__request_allowing_domain',
-    'mcp__system__http_get',
-    'mcp__system__http_post',
-    // Dispatch
-    'mcp__system__dispatch_task',
-    // Sandbox tools
-    'mcp__system__run_js',
-    // Window tools
-    'mcp__window__create',
-    'mcp__window__create_component',
-    'mcp__window__update',
-    'mcp__window__update_component',
-    'mcp__window__close',
-    'mcp__window__lock',
-    'mcp__window__unlock',
-    'mcp__window__list',
-    'mcp__window__view',
-    'mcp__window__show_notification',
-    'mcp__window__dismiss_notification',
-    // App protocol tools
-    'mcp__window__app_query',
-    'mcp__window__app_command',
-    // Storage tools
-    'mcp__storage__read',
-    'mcp__storage__write',
-    'mcp__storage__list',
-    'mcp__storage__delete',
-    // Apps tools
-    'mcp__apps__list',
-    'mcp__apps__load_skill',
-    'mcp__apps__read_config',
-    'mcp__apps__write_config',
-    // App development tools (dev namespace)
-    'mcp__dev__read_ts',
-    'mcp__dev__write_ts',
-    'mcp__dev__apply_diff_ts',
-    'mcp__dev__compile',
-    'mcp__dev__compile_component',
-    'mcp__dev__typecheck',
-    'mcp__dev__deploy',
-    'mcp__dev__clone',
-    'mcp__dev__write_json',
-    // Reload cache tools
-    'mcp__system__reload_cached',
-    'mcp__system__list_reload_options',
-    // Market tools
-    'mcp__apps__market_list',
-    'mcp__apps__market_get',
-    // Browser tools (conditional — only if Chrome/Edge is available)
-    ...getBrowserToolNames(),
+    ...SYSTEM_TOOL_NAMES,
+    ...DISPATCH_TOOL_NAMES,
+    ...GUIDELINE_TOOL_NAMES,
+    ...HTTP_TOOL_NAMES,
+    ...SANDBOX_TOOL_NAMES,
+    ...WINDOW_TOOL_NAMES,
+    ...STORAGE_TOOL_NAMES,
+    ...APPS_TOOL_NAMES,
+    ...MARKET_TOOL_NAMES,
+    ...DEV_TOOL_NAMES,
+    ...RELOAD_TOOL_NAMES,
+    ...BROWSER_TOOL_NAMES,
   ];
-  return APP_DEV_ENABLED ? all : all.filter((n) => !APP_DEV_TOOLS.includes(n));
+  return APP_DEV_ENABLED ? all : all.filter((n) => !DEV_TOOL_NAMES.includes(n as any));
 }

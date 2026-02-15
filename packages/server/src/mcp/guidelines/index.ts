@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';
 import { APP_DEV_ENABLED } from '../../config.js';
 
@@ -22,6 +22,8 @@ const ALL_TOPICS: Record<string, string> = {
 const TOPICS: Record<string, string> = APP_DEV_ENABLED
   ? ALL_TOPICS
   : Object.fromEntries(Object.entries(ALL_TOPICS).filter(([k]) => k !== 'app_dev'));
+
+export const GUIDELINE_TOOL_NAMES = ['mcp__system__guideline'] as const;
 
 export function registerGuidelineTools(server: McpServer): void {
   const topicList = Object.keys(TOPICS).join(', ');
@@ -39,7 +41,7 @@ export function registerGuidelineTools(server: McpServer): void {
     async (args) => {
       const filename = TOPICS[args.topic];
       if (!filename) {
-        return ok(`Unknown topic "${args.topic}". Available: ${topicList}`);
+        return error(`Unknown topic "${args.topic}". Available: ${topicList}`);
       }
 
       try {
@@ -52,7 +54,7 @@ export function registerGuidelineTools(server: McpServer): void {
         }
         return ok(content);
       } catch {
-        return ok(`Error: Could not load guideline for "${args.topic}".`);
+        return error(`Could not load guideline for "${args.topic}".`);
       }
     },
   );

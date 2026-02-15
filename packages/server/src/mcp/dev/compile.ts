@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { writeFile, mkdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
 import { componentLayoutSchema } from '@yaar/shared';
 
@@ -31,7 +31,7 @@ export function registerCompileTools(server: McpServer): void {
 
       // Validate sandbox ID (must be numeric timestamp)
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
@@ -40,14 +40,14 @@ export function registerCompileTools(server: McpServer): void {
       try {
         await stat(sandboxPath);
       } catch {
-        return ok(`Error: Sandbox "${sandboxId}" not found.`);
+        return error(`Sandbox "${sandboxId}" not found.`);
       }
 
       // Compile
       const result = await compileTypeScript(sandboxPath, { title });
 
       if (!result.success) {
-        return ok(`Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`);
+        return error(`Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`);
       }
 
       const previewUrl = `/api/sandbox/${sandboxId}/dist/index.html`;
@@ -93,13 +93,13 @@ export function registerCompileTools(server: McpServer): void {
       const { sandboxId, filename } = args;
 
       if (!filename.endsWith('.yaarcomponent.json')) {
-        return ok('Error: Filename must end with .yaarcomponent.json');
+        return error('Filename must end with .yaarcomponent.json');
       }
       if (filename.includes('/') || filename.includes('..')) {
-        return ok('Error: Filename must not contain path separators.');
+        return error('Filename must not contain path separators.');
       }
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       const layout = {
@@ -111,7 +111,7 @@ export function registerCompileTools(server: McpServer): void {
       // Validate against component layout schema
       const result = componentLayoutSchema.safeParse(layout);
       if (!result.success) {
-        return ok(`Error: Invalid component layout: ${result.error.message}`);
+        return error(`Invalid component layout: ${result.error.message}`);
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
@@ -133,8 +133,8 @@ export function registerCompileTools(server: McpServer): void {
           ),
         );
       } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error';
-        return ok(`Error: ${error}`);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        return error(msg);
       }
     },
   );
@@ -153,7 +153,7 @@ export function registerCompileTools(server: McpServer): void {
       const { sandbox: sandboxId } = args;
 
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
@@ -161,7 +161,7 @@ export function registerCompileTools(server: McpServer): void {
       try {
         await stat(sandboxPath);
       } catch {
-        return ok(`Error: Sandbox "${sandboxId}" not found.`);
+        return error(`Sandbox "${sandboxId}" not found.`);
       }
 
       const result = await typecheckSandbox(sandboxPath);
@@ -170,7 +170,7 @@ export function registerCompileTools(server: McpServer): void {
         return ok('Type check passed — no errors found.');
       }
 
-      return ok(`Type check found errors:\n${result.diagnostics.join('\n')}`);
+      return error(`Type check found errors:\n${result.diagnostics.join('\n')}`);
     },
   );
 }

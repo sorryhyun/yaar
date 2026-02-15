@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { readFile, readdir, stat } from 'fs/promises';
 import { join, relative } from 'path';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { isValidPath } from './helpers.js';
 
@@ -46,7 +46,7 @@ export function registerReadTools(server: McpServer): void {
 
       // Validate sandbox ID
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
@@ -57,17 +57,17 @@ export function registerReadTools(server: McpServer): void {
           const files = await listFiles(sandboxPath, sandboxPath);
           return ok(JSON.stringify({ sandboxId, files }, null, 2));
         } catch {
-          return ok(`Error: Sandbox not found: ${sandboxId}`);
+          return error(`Sandbox not found: ${sandboxId}`);
         }
       }
 
       // Validate path
       if (path.includes('..') || path.startsWith('/')) {
-        return ok('Error: Invalid path. Use relative paths without ".." or leading "/".');
+        return error('Invalid path. Use relative paths without ".." or leading "/".');
       }
 
       if (!isValidPath(sandboxPath, path)) {
-        return ok('Error: Path escapes sandbox directory.');
+        return error('Path escapes sandbox directory.');
       }
 
       const fullPath = join(sandboxPath, path);
@@ -81,7 +81,7 @@ export function registerReadTools(server: McpServer): void {
         const content = await readFile(fullPath, 'utf-8');
         return ok(content);
       } catch {
-        return ok(`Error: File not found: ${path}`);
+        return error(`File not found: ${path}`);
       }
     },
   );

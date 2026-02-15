@@ -60,7 +60,21 @@ export class MonitorBudgetPolicy {
       return;
     }
     await new Promise<void>((resolve, reject) => {
-      this.waiters.push({ resolve, reject });
+      const timeout = setTimeout(() => {
+        const idx = this.waiters.findIndex((w) => w.resolve === resolve);
+        if (idx !== -1) this.waiters.splice(idx, 1);
+        reject(new Error(`Budget acquisition timed out after 30s for monitor ${monitorId}`));
+      }, 30_000);
+      this.waiters.push({
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        reject: (err: Error) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+      });
     });
     this.runningCount++;
   }

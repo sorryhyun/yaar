@@ -13,7 +13,7 @@ import {
 } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
 
 export function registerUpdateTools(
@@ -39,8 +39,8 @@ export function registerUpdateTools(
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(
-          `Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        return error(
+          `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
         );
       }
 
@@ -61,7 +61,7 @@ export function registerUpdateTools(
           break;
         case 'insertAt':
           if (args.position === undefined) {
-            return ok('Error: position is required for insertAt operation');
+            return error('position is required for insertAt operation');
           }
           operation = { op: 'insertAt', position: args.position, data };
           break;
@@ -80,7 +80,7 @@ export function registerUpdateTools(
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return ok(
+        return error(
           `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
         );
       }
@@ -113,8 +113,8 @@ export function registerUpdateTools(
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(
-          `Error: Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        return error(
+          `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
         );
       }
 
@@ -134,7 +134,7 @@ export function registerUpdateTools(
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return ok(
+        return error(
           `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
         );
       }

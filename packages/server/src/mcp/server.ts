@@ -13,7 +13,7 @@ import { registerAllTools } from './register.js';
 import { runWithAgentId } from '../agents/session.js';
 
 /** MCP server categories. */
-export const MCP_SERVERS = ['system', 'window', 'storage', 'apps', 'dev'] as const;
+export const MCP_SERVERS = ['system', 'window', 'storage', 'apps', 'dev', 'browser'] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
 interface McpServerEntry {
@@ -41,7 +41,7 @@ export function getMcpToken(): string {
 }
 
 /**
- * Initialize all 4 MCP servers with their respective tools.
+ * Initialize all MCP servers with their respective tools.
  */
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session

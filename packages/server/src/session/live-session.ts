@@ -455,6 +455,10 @@ export class LiveSession {
       this.appProtocolListener = null;
     }
 
+    // Force-clear any pending requests/dialogs/app-requests for this session
+    // so awaiting tools unblock immediately instead of waiting for timeouts.
+    actionEmitter.clearPendingForSession(this.sessionId);
+
     if (this.pool) {
       await this.pool.cleanup();
       this.pool = null;

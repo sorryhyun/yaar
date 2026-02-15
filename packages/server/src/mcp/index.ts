@@ -14,15 +14,15 @@ export {
 // Tool registration
 export { registerAllTools, getToolNames } from './register.js';
 
-// Domain tool registrations
-export { registerSystemTools } from './system/index.js';
-export { registerWindowTools } from './window/index.js';
-export { registerStorageTools } from './storage/index.js';
-export { registerAppsTools } from './apps/index.js';
-export { registerMarketTools } from './apps/market.js';
-export { registerHttpTools } from './http/index.js';
-export { registerAppDevTools } from './dev/index.js';
-export { registerSandboxTools } from './sandbox/index.js';
+// Domain tool registrations + tool name exports
+export { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+export { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
+export { registerStorageTools, STORAGE_TOOL_NAMES } from './storage/index.js';
+export { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
+export { registerMarketTools, MARKET_TOOL_NAMES } from './apps/market.js';
+export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
+export { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
+export { registerSandboxTools, SANDBOX_TOOL_NAMES } from './sandbox/index.js';
 
 // Action emitter
 export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';
@@ -31,4 +31,4 @@ export { actionEmitter, type ActionEvent, type RenderingFeedback } from './actio
 export { WindowStateRegistry, type WindowState } from './window-state.js';
 
 // Utils
-export { ok, okWithImages } from './utils.js';
+export { ok, okWithImages, error } from './utils.js';

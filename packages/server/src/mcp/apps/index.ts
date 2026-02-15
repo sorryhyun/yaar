@@ -4,9 +4,16 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { listApps, loadAppSkill } from './discovery.js';
 import { readAppConfig, writeAppConfig } from './config.js';
+
+export const APPS_TOOL_NAMES = [
+  'mcp__apps__list',
+  'mcp__apps__load_skill',
+  'mcp__apps__read_config',
+  'mcp__apps__write_config',
+] as const;
 
 export function registerAppsTools(server: McpServer): void {
   // apps_list - List available apps
@@ -59,9 +66,7 @@ export function registerAppsTools(server: McpServer): void {
       const skill = await loadAppSkill(args.appId);
 
       if (skill === null) {
-        return ok(
-          `Error: No SKILL.md found for app "${args.appId}". Use list to see available apps.`,
-        );
+        return error(`No SKILL.md found for app "${args.appId}". Use list to see available apps.`);
       }
 
       return ok(skill);
@@ -83,7 +88,7 @@ export function registerAppsTools(server: McpServer): void {
       const result = await readAppConfig(args.appId, args.filename);
 
       if (!result.success) {
-        return ok(`Error: ${result.error}`);
+        return error(result.error!);
       }
 
       // Format content based on type
@@ -112,7 +117,7 @@ export function registerAppsTools(server: McpServer): void {
       const result = await writeAppConfig(args.appId, args.filename, args.content);
 
       if (!result.success) {
-        return ok(`Error: ${result.error}`);
+        return error(result.error!);
       }
 
       return ok(`Successfully wrote ${args.filename} for app "${args.appId}".`);

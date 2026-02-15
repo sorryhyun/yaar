@@ -156,18 +156,28 @@ export class BrowserSession extends EventEmitter {
     const findByText = `function(txt) {
       var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       var node;
+      var candidates = [];
       while (node = walker.nextNode()) {
         if (node.textContent && node.textContent.trim().includes(txt)) {
           var el = node.parentElement;
-          if (el) {
-            if (el.scrollIntoViewIfNeeded) el.scrollIntoViewIfNeeded();
-            else el.scrollIntoView({block:'center'});
-            var rect = el.getBoundingClientRect();
-            return {x: rect.x + rect.width/2, y: rect.y + rect.height/2};
-          }
+          if (!el) continue;
+          var tag = el.tagName.toLowerCase();
+          if (tag !== 'body' && tag !== 'html' && el.offsetParent === null) continue;
+          var rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          candidates.push({el: el, area: rect.width * rect.height});
         }
       }
-      return null;
+      if (candidates.length === 0) return null;
+      var best = candidates[0];
+      for (var i = 1; i < candidates.length; i++) {
+        if (candidates[i].area < best.area) best = candidates[i];
+      }
+      var chosen = best.el;
+      if (chosen.scrollIntoViewIfNeeded) chosen.scrollIntoViewIfNeeded();
+      else chosen.scrollIntoView({block:'center'});
+      var r = chosen.getBoundingClientRect();
+      return {x: r.x + r.width/2, y: r.y + r.height/2};
     }`;
 
     const fn = selector ? findBySelector : findByText;

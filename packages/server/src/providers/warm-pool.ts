@@ -175,6 +175,15 @@ class ProviderWarmPool {
 
     await this.sharedCodexAppServer.start();
 
+    // Listen for unexpected exit so next ensureCodexAppServer() call restarts it
+    this.sharedCodexAppServer.on('exit', (code, signal) => {
+      if (!this.sharedCodexAppServer?.isRunning) {
+        console.warn(
+          `[WarmPool] Codex AppServer exited unexpectedly (code: ${code}, signal: ${signal}). Will restart on next provider creation.`,
+        );
+      }
+    });
+
     // Wait briefly for stderr auth errors to surface
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -202,6 +211,13 @@ class ProviderWarmPool {
       this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.3-codex' });
       this.sharedCodexAppServer.on('error', (err) => {
         console.error('[WarmPool] Codex AppServer error:', err);
+      });
+      this.sharedCodexAppServer.on('exit', (code, signal) => {
+        if (!this.sharedCodexAppServer?.isRunning) {
+          console.warn(
+            `[WarmPool] Codex AppServer exited unexpectedly (code: ${code}, signal: ${signal}). Will restart on next provider creation.`,
+          );
+        }
       });
       await this.sharedCodexAppServer.start();
     }

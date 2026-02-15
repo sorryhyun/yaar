@@ -16,7 +16,7 @@ import { actionEmitter } from '../action-emitter.js';
 import { getAgentId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/live-session.js';
 import { isDomainAllowed, extractDomain } from '../domains.js';
-import { ok, okWithImages } from '../utils.js';
+import { ok, okWithImages, error } from '../utils.js';
 
 function getSessionId(): string {
   // Prefer agent-specific ID (Claude sets X-Agent-Id header), fall back to LiveSession ID
@@ -30,7 +30,7 @@ function getSessionId(): string {
 function getSession(): BrowserSession {
   const id = getSessionId();
   const session = getBrowserPool().getSession(id);
-  if (!session) throw new Error('No browser session open. Use browser_open first.');
+  if (!session) throw new Error('No browser session open. Use browser:open first.');
   return session;
 }
 
@@ -69,10 +69,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     return;
   }
 
-  // ── browser_open ────────────────────────────────────────────────────
+  // ── open ────────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_open',
+    'open',
     {
       description:
         'Open a URL in a visible browser. Creates a browser window on the desktop. Returns page title, URL, and text content.',
@@ -82,10 +82,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
     async (args) => {
       const domain = extractDomain(args.url);
-      if (!domain) return ok('Error: Invalid URL');
+      if (!domain) return error('Invalid URL');
 
       if (!(await isDomainAllowed(domain))) {
-        return ok(`Error: Domain "${domain}" not allowed. Use request_allowing_domain first.`);
+        return error(`Domain "${domain}" not allowed. Use request_allowing_domain first.`);
       }
 
       const sessionId = getSessionId();
@@ -126,10 +126,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_click ───────────────────────────────────────────────────
+  // ── click ──────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_click',
+    'click',
     {
       description:
         'Click an element on the page by CSS selector or visible text. Returns updated page state.',
@@ -143,7 +143,7 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
     async (args) => {
       if (!args.selector && !args.text) {
-        return ok('Error: Provide either "selector" or "text" to identify the element to click.');
+        return error('Provide either "selector" or "text" to identify the element to click.');
       }
       const session = getSession();
       const state = await session.click(args.selector, args.text);
@@ -151,10 +151,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_type ────────────────────────────────────────────────────
+  // ── type ───────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_type',
+    'type',
     {
       description: 'Type text into an input field identified by CSS selector.',
       inputSchema: {
@@ -169,10 +169,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_press ───────────────────────────────────────────────────
+  // ── press ──────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_press',
+    'press',
     {
       description:
         'Press a keyboard key (Enter, Tab, Escape, ArrowDown, etc.). Returns updated page state.',
@@ -187,10 +187,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_scroll ──────────────────────────────────────────────────
+  // ── scroll ─────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_scroll',
+    'scroll',
     {
       description: 'Scroll the page up or down. Returns updated page state.',
       inputSchema: {
@@ -204,10 +204,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_screenshot ──────────────────────────────────────────────
+  // ── screenshot ─────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_screenshot',
+    'screenshot',
     {
       description:
         'Get the current page screenshot as an image. Use when you need to visually inspect the page layout.',
@@ -222,10 +222,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_extract ─────────────────────────────────────────────────
+  // ── extract ────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_extract',
+    'extract',
     {
       description:
         'Extract structured content from the page: full text, links, and form fields. Optionally scope to a CSS selector.',
@@ -271,10 +271,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
-  // ── browser_close ───────────────────────────────────────────────────
+  // ── close ──────────────────────────────────────────────────────────
 
   server.registerTool(
-    'browser_close',
+    'close',
     {
       description: 'Close the browser session and its window. Frees resources.',
       inputSchema: {},
@@ -298,18 +298,20 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
   );
 }
 
+export const BROWSER_TOOL_NAMES = [
+  'mcp__browser__open',
+  'mcp__browser__click',
+  'mcp__browser__type',
+  'mcp__browser__press',
+  'mcp__browser__scroll',
+  'mcp__browser__screenshot',
+  'mcp__browser__extract',
+  'mcp__browser__close',
+] as const;
+
 /**
  * Get the tool names registered by this module.
  */
 export function getBrowserToolNames(): string[] {
-  return [
-    'mcp__system__browser_open',
-    'mcp__system__browser_click',
-    'mcp__system__browser_type',
-    'mcp__system__browser_press',
-    'mcp__system__browser_scroll',
-    'mcp__system__browser_screenshot',
-    'mcp__system__browser_extract',
-    'mcp__system__browser_close',
-  ];
+  return [...BROWSER_TOOL_NAMES];
 }

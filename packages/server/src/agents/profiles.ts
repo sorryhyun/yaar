@@ -6,6 +6,15 @@
  */
 
 import { APP_DEV_ENABLED } from '../config.js';
+import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
+import { STORAGE_TOOL_NAMES } from '../mcp/storage/index.js';
+import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
+import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
+import { MARKET_TOOL_NAMES } from '../mcp/apps/market.js';
+import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
+import { GUIDELINE_TOOL_NAMES } from '../mcp/guidelines/index.js';
+import { SANDBOX_TOOL_NAMES } from '../mcp/sandbox/index.js';
+import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 
 export interface AgentProfile {
   id: string;
@@ -14,59 +23,10 @@ export interface AgentProfile {
   allowedTools: string[];
 }
 
-// ── Shared tool sets ────────────────────────────────────────────────
+// ── Composite tool sets (for profile readability) ─────────────────
 
-const WINDOW_TOOLS = [
-  'mcp__window__create',
-  'mcp__window__create_component',
-  'mcp__window__update',
-  'mcp__window__update_component',
-  'mcp__window__close',
-  'mcp__window__lock',
-  'mcp__window__unlock',
-  'mcp__window__list',
-  'mcp__window__view',
-  'mcp__window__show_notification',
-  'mcp__window__dismiss_notification',
-  'mcp__window__app_query',
-  'mcp__window__app_command',
-];
-
-const STORAGE_TOOLS = [
-  'mcp__storage__read',
-  'mcp__storage__write',
-  'mcp__storage__list',
-  'mcp__storage__delete',
-];
-
-const HTTP_TOOLS = [
-  'mcp__system__http_get',
-  'mcp__system__http_post',
-  'mcp__system__request_allowing_domain',
-];
-
-const APPS_TOOLS = [
-  'mcp__apps__list',
-  'mcp__apps__load_skill',
-  'mcp__apps__read_config',
-  'mcp__apps__write_config',
-  'mcp__apps__market_list',
-  'mcp__apps__market_get',
-];
-
-const DEV_TOOLS = [
-  'mcp__dev__read_ts',
-  'mcp__dev__write_ts',
-  'mcp__dev__apply_diff_ts',
-  'mcp__dev__compile',
-  'mcp__dev__compile_component',
-  'mcp__dev__typecheck',
-  'mcp__dev__deploy',
-  'mcp__dev__clone',
-  'mcp__dev__write_json',
-];
-
-const INFO_TOOLS = ['mcp__system__get_info', 'mcp__system__guideline'];
+const INFO_TOOLS = ['mcp__system__get_info', ...GUIDELINE_TOOL_NAMES] as const;
+const APPS_ALL_TOOLS = [...APPS_TOOL_NAMES, ...MARKET_TOOL_NAMES] as const;
 
 // ── Task agent system prompt ────────────────────────────────────────
 
@@ -107,14 +67,13 @@ const profiles: Record<string, AgentProfile> = {
     allowedTools: [
       'WebSearch',
       ...INFO_TOOLS,
-      ...HTTP_TOOLS,
-      'mcp__system__run_js',
-      ...WINDOW_TOOLS,
-      ...STORAGE_TOOLS,
-      ...APPS_TOOLS,
-      'mcp__system__reload_cached',
-      'mcp__system__list_reload_options',
-      ...(APP_DEV_ENABLED ? DEV_TOOLS : []),
+      ...HTTP_TOOL_NAMES,
+      ...SANDBOX_TOOL_NAMES,
+      ...WINDOW_TOOL_NAMES,
+      ...STORAGE_TOOL_NAMES,
+      ...APPS_ALL_TOOLS,
+      ...RELOAD_TOOL_NAMES,
+      ...(APP_DEV_ENABLED ? DEV_TOOL_NAMES : []),
     ],
   },
 
@@ -122,14 +81,25 @@ const profiles: Record<string, AgentProfile> = {
     id: 'web',
     description: 'HTTP requests + display (API calls, web scraping)',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: ['WebSearch', ...INFO_TOOLS, ...HTTP_TOOLS, ...WINDOW_TOOLS, ...STORAGE_TOOLS],
+    allowedTools: [
+      'WebSearch',
+      ...INFO_TOOLS,
+      ...HTTP_TOOL_NAMES,
+      ...WINDOW_TOOL_NAMES,
+      ...STORAGE_TOOL_NAMES,
+    ],
   },
 
   code: {
     id: 'code',
     description: 'JavaScript sandbox + display',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: [...INFO_TOOLS, 'mcp__system__run_js', ...WINDOW_TOOLS, ...STORAGE_TOOLS],
+    allowedTools: [
+      ...INFO_TOOLS,
+      ...SANDBOX_TOOL_NAMES,
+      ...WINDOW_TOOL_NAMES,
+      ...STORAGE_TOOL_NAMES,
+    ],
   },
 
   app: {
@@ -139,11 +109,11 @@ const profiles: Record<string, AgentProfile> = {
     allowedTools: [
       'WebSearch',
       ...INFO_TOOLS,
-      ...HTTP_TOOLS,
-      ...APPS_TOOLS,
-      ...WINDOW_TOOLS,
-      ...STORAGE_TOOLS,
-      ...(APP_DEV_ENABLED ? DEV_TOOLS : []),
+      ...HTTP_TOOL_NAMES,
+      ...APPS_ALL_TOOLS,
+      ...WINDOW_TOOL_NAMES,
+      ...STORAGE_TOOL_NAMES,
+      ...(APP_DEV_ENABLED ? DEV_TOOL_NAMES : []),
     ],
   },
 };
@@ -175,16 +145,14 @@ export const ORCHESTRATOR_PROFILE: AgentProfile = {
     'mcp__window__dismiss_notification',
     // Memory + info
     'mcp__system__memorize',
-    'mcp__system__guideline',
+    ...GUIDELINE_TOOL_NAMES,
     'mcp__system__get_info',
     'mcp__system__get_env_var',
     // Cache replay
-    'mcp__system__reload_cached',
-    'mcp__system__list_reload_options',
+    ...RELOAD_TOOL_NAMES,
     // Config hooks
     'mcp__system__set_config',
     'mcp__system__get_config',
     'mcp__system__remove_config',
   ],
 };
-// test

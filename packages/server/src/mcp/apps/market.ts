@@ -10,9 +10,11 @@ import { mkdir, writeFile } from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { unlink } from 'fs/promises';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
 import { PROJECT_ROOT } from '../../config.js';
+
+export const MARKET_TOOL_NAMES = ['mcp__apps__market_list', 'mcp__apps__market_get'] as const;
 
 const execFileAsync = promisify(execFile);
 
@@ -29,7 +31,7 @@ export function registerMarketTools(server: McpServer): void {
     async () => {
       const res = await fetch(`${MARKET_URL}/api/apps`);
       if (!res.ok) {
-        return ok(`Error: Failed to fetch marketplace (${res.status} ${res.statusText})`);
+        return error(`Failed to fetch marketplace (${res.status} ${res.statusText})`);
       }
 
       const data = (await res.json()) as {
@@ -79,9 +81,9 @@ export function registerMarketTools(server: McpServer): void {
       const res = await fetch(`${MARKET_URL}/api/apps/${appId}/download`);
       if (!res.ok) {
         if (res.status === 404) {
-          return ok(`Error: App "${appId}" not found in the marketplace.`);
+          return error(`App "${appId}" not found in the marketplace.`);
         }
-        return ok(`Error: Failed to download app (${res.status} ${res.statusText})`);
+        return error(`Failed to download app (${res.status} ${res.statusText})`);
       }
 
       // Write to temp file
@@ -98,7 +100,7 @@ export function registerMarketTools(server: McpServer): void {
         await execFileAsync('tar', ['xzf', tmpFile, '--strip-components=1', '-C', appDir]);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        return ok(`Error: Failed to extract app archive: ${msg}`);
+        return error(`Failed to extract app archive: ${msg}`);
       } finally {
         await unlink(tmpFile).catch(() => {});
       }

@@ -7,9 +7,11 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { getSessionHub } from '../../session/live-session.js';
 import { getMonitorId } from '../../agents/session.js';
+
+export const DISPATCH_TOOL_NAMES = ['mcp__system__dispatch_task'] as const;
 
 export function registerDispatchTools(server: McpServer): void {
   server.registerTool(
@@ -43,7 +45,7 @@ export function registerDispatchTools(server: McpServer): void {
       const session = getSessionHub().getDefault();
       const pool = session?.getPool();
       if (!pool) {
-        return ok('Error: No active session.');
+        return error('No active session.');
       }
 
       const monitorId = getMonitorId() ?? 'monitor-0';

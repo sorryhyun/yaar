@@ -18,8 +18,13 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
   // Resolve an action's windowId to the correct store key.
   const resolveKey = (rawId: string): string => {
     if (state.windows[rawId]) return rawId;
-    const monId =
-      (action as { monitorId?: string }).monitorId ?? state.activeMonitorId ?? 'monitor-0';
+    const actionMonitorId = (action as { monitorId?: string }).monitorId;
+    if (!actionMonitorId) {
+      console.warn(
+        `[windowsSlice] OS action "${action.type}" missing monitorId, falling back to activeMonitorId="${state.activeMonitorId}"`,
+      );
+    }
+    const monId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
     return toWindowKey(monId, rawId);
   };
 

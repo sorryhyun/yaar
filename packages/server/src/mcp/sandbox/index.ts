@@ -41,6 +41,8 @@ function formatResult(result: Awaited<ReturnType<typeof executeJs>>): string {
   return parts.join('\n');
 }
 
+export const SANDBOX_TOOL_NAMES = ['mcp__system__run_js'] as const;
+
 export function registerSandboxTools(server: McpServer): void {
   // run_js
   server.registerTool(

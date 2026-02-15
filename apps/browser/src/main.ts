@@ -216,6 +216,9 @@ if (sessionId) {
 
   evtSource.onmessage = (e) => {
     // Reset error counter on successful message
+    if (sseErrorCount > 0) {
+      els.placeholder.style.display = 'none';
+    }
     sseErrorCount = 0;
     try {
       const data = JSON.parse(e.data) as { url: string; title: string; version: number };
@@ -232,6 +235,10 @@ if (sessionId) {
 
   evtSource.onerror = () => {
     sseErrorCount++;
+    if (sseErrorCount === 1) {
+      els.placeholder.textContent = 'Reconnecting...';
+      els.placeholder.style.display = 'flex';
+    }
     if (sseErrorCount >= MAX_SSE_ERRORS) {
       evtSource.close();
       els.placeholder.textContent = 'Connection lost. Session may have ended.';

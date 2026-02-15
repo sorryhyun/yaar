@@ -171,8 +171,12 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
             appProtocolScript.textContent = IFRAME_APP_PROTOCOL_SCRIPT;
             doc.head.appendChild(appProtocolScript);
           }
-        } catch {
+        } catch (e) {
           // Cross-origin — can't inject, capture helper must be baked in
+          console.warn(
+            `[IframeRenderer] Cross-origin iframe, cannot inject scripts: url=${url}`,
+            e,
+          );
         }
       }
 

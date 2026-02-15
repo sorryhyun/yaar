@@ -1,7 +1,8 @@
 {
-  "icon": "🎮",
+  "id": "browser",
   "name": "Browser",
+  "icon": "🎮",
   "description": "Visible browser automation tool showing live screenshots via Chrome DevTools Protocol.",
-  "hidden": true,
-  "appProtocol": true
+  "version": "1.0.0",
+  "author": "YAAR"
 }

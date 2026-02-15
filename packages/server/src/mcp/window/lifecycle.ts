@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { OSAction } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
-import { ok, okWithImages } from '../utils.js';
+import { ok, okWithImages, error } from '../utils.js';
 
 export function registerLifecycleTools(
   server: McpServer,
@@ -24,7 +24,7 @@ export function registerLifecycleTools(
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(`Window "${args.windowId}" does not exist or was already closed.`);
+        return error(`Window "${args.windowId}" does not exist or was already closed.`);
       }
 
       const osAction: OSAction = {
@@ -35,7 +35,7 @@ export function registerLifecycleTools(
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return ok(`Failed to close window "${args.windowId}": ${feedback.error}`);
+        return error(`Failed to close window "${args.windowId}": ${feedback.error}`);
       }
 
       return ok(`Closed window "${args.windowId}"`);
@@ -55,8 +55,8 @@ export function registerLifecycleTools(
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(
-          `Error: Window "${args.windowId}" does not exist. Cannot lock a non-existent window.`,
+        return error(
+          `Window "${args.windowId}" does not exist. Cannot lock a non-existent window.`,
         );
       }
 
@@ -88,8 +88,8 @@ export function registerLifecycleTools(
     },
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
-        return ok(
-          `Error: Window "${args.windowId}" does not exist. Cannot unlock a non-existent window.`,
+        return error(
+          `Window "${args.windowId}" does not exist. Cannot unlock a non-existent window.`,
         );
       }
 
@@ -151,7 +151,7 @@ export function registerLifecycleTools(
       const win = getWindowState().getWindow(args.windowId);
 
       if (!win) {
-        return ok(`Window "${args.windowId}" not found. Use list to see available windows.`);
+        return error(`Window "${args.windowId}" not found. Use list to see available windows.`);
       }
 
       const windowInfo = {

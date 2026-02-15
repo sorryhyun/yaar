@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
@@ -70,13 +70,13 @@ export function registerDeployTools(server: McpServer): void {
 
       // Validate sandbox ID
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       // Validate app ID (lowercase, hyphens allowed, no special chars)
       if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-        return ok(
-          'Error: Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.',
+        return error(
+          'Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.',
         );
       }
 
@@ -87,7 +87,7 @@ export function registerDeployTools(server: McpServer): void {
       try {
         await stat(sandboxPath);
       } catch {
-        return ok(`Error: Sandbox "${sandboxId}" not found.`);
+        return error(`Sandbox "${sandboxId}" not found.`);
       }
 
       // Check for compiled output (index.html) or component files
@@ -119,8 +119,8 @@ export function registerDeployTools(server: McpServer): void {
       }
 
       if (!hasCompiledApp && componentFiles.length === 0) {
-        return ok(
-          'Error: Nothing to deploy. Run compile first or create component files with compile_component.',
+        return error(
+          'Nothing to deploy. Run compile first or create component files with compile_component.',
         );
       }
 
@@ -211,8 +211,8 @@ export function registerDeployTools(server: McpServer): void {
           ),
         );
       } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error';
-        return ok(`Error deploying app: ${error}`);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        return error(`Failed to deploy app: ${msg}`);
       }
     },
   );
@@ -232,7 +232,7 @@ export function registerDeployTools(server: McpServer): void {
 
       // Validate app ID
       if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-        return ok('Error: Invalid app ID.');
+        return error('Invalid app ID.');
       }
 
       const appPath = join(APPS_DIR, appId);
@@ -242,8 +242,8 @@ export function registerDeployTools(server: McpServer): void {
       try {
         await stat(appSrcPath);
       } catch {
-        return ok(
-          `Error: No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`,
+        return error(
+          `No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`,
         );
       }
 
@@ -273,8 +273,8 @@ export function registerDeployTools(server: McpServer): void {
           ),
         );
       } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error';
-        return ok(`Error cloning app: ${error}`);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        return error(`Failed to clone app: ${msg}`);
       }
     },
   );
@@ -296,12 +296,12 @@ export function registerDeployTools(server: McpServer): void {
 
       // Validate app ID
       if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-        return ok('Error: Invalid app ID.');
+        return error('Invalid app ID.');
       }
 
       // Validate filename
       if (filename.includes('/') || filename.includes('..')) {
-        return ok('Error: Filename must not contain path separators.');
+        return error('Filename must not contain path separators.');
       }
 
       const appPath = join(APPS_DIR, appId);
@@ -310,14 +310,14 @@ export function registerDeployTools(server: McpServer): void {
       try {
         await stat(appPath);
       } catch {
-        return ok(`Error: App "${appId}" not found. Deploy it first.`);
+        return error(`App "${appId}" not found. Deploy it first.`);
       }
 
       // Validate against component schema if it's a component file
       if (filename.endsWith('.yaarcomponent.json')) {
         const result = componentLayoutSchema.safeParse(content);
         if (!result.success) {
-          return ok(`Error: Invalid component layout: ${result.error.message}`);
+          return error(`Invalid component layout: ${result.error.message}`);
         }
       }
 
@@ -341,8 +341,8 @@ export function registerDeployTools(server: McpServer): void {
           ),
         );
       } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error';
-        return ok(`Error: ${error}`);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        return error(msg);
       }
     },
   );

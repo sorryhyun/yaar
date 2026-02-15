@@ -14,7 +14,7 @@ import type {
   AppProtocolRequest,
   AppProtocolResponse,
 } from '@yaar/shared';
-import { getAgentId } from '../agents/session.js';
+import { getAgentId, getSessionId } from '../agents/session.js';
 import {
   checkPermission,
   savePermission,
@@ -61,6 +61,7 @@ export interface DialogFeedback {
 interface PendingRequest {
   resolve: (feedback: RenderingFeedback | null) => void;
   timeoutId: NodeJS.Timeout;
+  sessionId?: string;
 }
 
 /**
@@ -70,6 +71,7 @@ interface PendingDialog {
   resolve: (confirmed: boolean) => void;
   timeoutId: NodeJS.Timeout;
   permissionOptions?: PermissionOptions;
+  sessionId?: string;
 }
 
 /**
@@ -86,6 +88,7 @@ export interface AppProtocolRequestData {
 interface PendingAppRequest {
   resolve: (response: AppProtocolResponse) => void;
   timeoutId: NodeJS.Timeout;
+  sessionId?: string;
 }
 
 /**
@@ -150,13 +153,14 @@ class ActionEmitter extends EventEmitter {
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
     // Create promise that resolves when feedback is received or timeout
+    const currentSessionId = sessionId ?? getSessionId();
     const feedbackPromise = new Promise<RenderingFeedback | null>((resolve) => {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         resolve(null); // Timeout - no feedback received
       }, timeoutMs);
 
-      this.pendingRequests.set(requestId, { resolve, timeoutId });
+      this.pendingRequests.set(requestId, { resolve, timeoutId, sessionId: currentSessionId });
     });
 
     // Emit action with request ID, agentId from context, and monitorId
@@ -198,6 +202,7 @@ class ActionEmitter extends EventEmitter {
   ): Promise<boolean> {
     const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
+    const currentSessionId = getSessionId();
 
     const dialogPromise = new Promise<boolean>((resolve) => {
       const timeoutId = setTimeout(() => {
@@ -205,7 +210,7 @@ class ActionEmitter extends EventEmitter {
         resolve(false); // Timeout - treat as cancel
       }, timeoutMs);
 
-      this.pendingDialogs.set(dialogId, { resolve, timeoutId });
+      this.pendingDialogs.set(dialogId, { resolve, timeoutId, sessionId: currentSessionId });
     });
 
     const action: DialogConfirmAction = {
@@ -254,6 +259,7 @@ class ActionEmitter extends EventEmitter {
     // Show dialog with permission options
     const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
+    const currentSessionId = getSessionId();
 
     const permissionOptions: PermissionOptions = {
       showRememberChoice: true,
@@ -267,7 +273,12 @@ class ActionEmitter extends EventEmitter {
         resolve(false); // Timeout - treat as deny
       }, timeoutMs);
 
-      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions });
+      this.pendingDialogs.set(dialogId, {
+        resolve,
+        timeoutId,
+        permissionOptions,
+        sessionId: currentSessionId,
+      });
     });
 
     const action: DialogConfirmAction = {
@@ -371,6 +382,7 @@ class ActionEmitter extends EventEmitter {
     timeoutMs: number = 5000,
   ): Promise<AppProtocolResponse | null> {
     const requestId = this.generateRequestId();
+    const currentSessionId = getSessionId();
 
     const responsePromise = new Promise<AppProtocolResponse | null>((resolve) => {
       const timeoutId = setTimeout(() => {
@@ -378,7 +390,7 @@ class ActionEmitter extends EventEmitter {
         resolve(null);
       }, timeoutMs);
 
-      this.pendingAppRequests.set(requestId, { resolve, timeoutId });
+      this.pendingAppRequests.set(requestId, { resolve, timeoutId, sessionId: currentSessionId });
     });
 
     this.emit('app-protocol', { requestId, windowId, request });
@@ -438,7 +450,7 @@ class ActionEmitter extends EventEmitter {
         resolve(false); // Timeout — treat as deny
       }, timeoutMs);
 
-      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions });
+      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions, sessionId });
     });
 
     // Send APPROVAL_REQUEST directly to the session via BroadcastCenter
@@ -455,6 +467,37 @@ class ActionEmitter extends EventEmitter {
     });
 
     return dialogPromise;
+  }
+
+  /**
+   * Force-clear all pending requests, dialogs, and app protocol requests
+   * belonging to a session. Rejects promises so awaiting tools unblock
+   * immediately instead of waiting for their individual timeouts.
+   */
+  clearPendingForSession(sessionId: string): void {
+    for (const [id, pending] of this.pendingRequests) {
+      if (pending.sessionId === sessionId) {
+        clearTimeout(pending.timeoutId);
+        this.pendingRequests.delete(id);
+        pending.resolve(null);
+      }
+    }
+
+    for (const [id, pending] of this.pendingDialogs) {
+      if (pending.sessionId === sessionId) {
+        clearTimeout(pending.timeoutId);
+        this.pendingDialogs.delete(id);
+        pending.resolve(false);
+      }
+    }
+
+    for (const [id, pending] of this.pendingAppRequests) {
+      if (pending.sessionId === sessionId) {
+        clearTimeout(pending.timeoutId);
+        this.pendingAppRequests.delete(id);
+        pending.resolve(null as unknown as AppProtocolResponse);
+      }
+    }
   }
 
   /**

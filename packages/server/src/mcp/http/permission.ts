@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
 import { addAllowedDomain, isDomainAllowed } from '../domains.js';
 
@@ -45,10 +45,10 @@ export function registerPermissionTools(server: McpServer): void {
         if (success) {
           return ok(`Domain "${args.domain}" has been added to the allowed list.`);
         } else {
-          return ok(`Failed to add domain "${args.domain}" to the allowed list.`);
+          return error(`Failed to add domain "${args.domain}" to the allowed list.`);
         }
       } else {
-        return ok(`User denied access to domain "${args.domain}".`);
+        return error(`User denied access to domain "${args.domain}".`);
       }
     },
   );

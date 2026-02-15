@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { extractDomain, isDomainAllowed } from '../domains.js';
 import { executeCurl, formatResponse, CHROME_USER_AGENT } from './curl.js';
 
@@ -28,12 +28,12 @@ export function registerRequestTools(server: McpServer): void {
       // Check domain allowlist
       const domain = extractDomain(args.url);
       if (!domain) {
-        return ok('Error: Invalid URL');
+        return error('Invalid URL');
       }
 
       if (!(await isDomainAllowed(domain))) {
-        return ok(
-          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
+        return error(
+          `Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
         );
       }
 
@@ -63,9 +63,9 @@ export function registerRequestTools(server: McpServer): void {
 
         const result = await executeCurl(curlArgs);
         return ok(formatResponse(result));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return ok(`Error: ${message}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return error(message);
       }
     },
   );
@@ -99,12 +99,12 @@ export function registerRequestTools(server: McpServer): void {
       // Check domain allowlist
       const domain = extractDomain(args.url);
       if (!domain) {
-        return ok('Error: Invalid URL');
+        return error('Invalid URL');
       }
 
       if (!(await isDomainAllowed(domain))) {
-        return ok(
-          `Error: Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
+        return error(
+          `Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
         );
       }
 
@@ -163,9 +163,9 @@ export function registerRequestTools(server: McpServer): void {
 
         const result = await executeCurl(curlArgs);
         return ok(formatResponse(result));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return ok(`Error: ${message}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return error(message);
       }
     },
   );

@@ -8,6 +8,12 @@ export interface MainPromptContext {
 }
 
 export class ContextAssemblyPolicy {
+  private readonly windowInitialMaxTurns: number;
+
+  constructor(windowInitialMaxTurns = 5) {
+    this.windowInitialMaxTurns = windowInitialMaxTurns;
+  }
+
   formatOpenWindows(windowIds: string[]): string {
     if (windowIds.length === 0) return '';
     return `<open_windows>${windowIds.join(', ')}</open_windows>\n\n`;
@@ -65,7 +71,10 @@ export class ContextAssemblyPolicy {
    * Includes the last N main conversation turns so the window agent has context
    * about what the user and main agent have been discussing.
    */
-  buildWindowInitialContext(tape: ContextTape, maxTurns: number = 3): string {
+  buildWindowInitialContext(
+    tape: ContextTape,
+    maxTurns: number = this.windowInitialMaxTurns,
+  ): string {
     const mainMessages = tape.getMessages({ includeWindows: false });
     if (mainMessages.length === 0) return '';
 

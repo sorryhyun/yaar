@@ -13,6 +13,11 @@ import { getAgentId } from '../agents/session.js';
 import type { ReloadCache } from './cache.js';
 import type { CacheEntry } from './types.js';
 
+export const RELOAD_TOOL_NAMES = [
+  'mcp__system__reload_cached',
+  'mcp__system__list_reload_options',
+] as const;
+
 export function registerReloadTools(
   server: McpServer,
   getCache: () => ReloadCache,

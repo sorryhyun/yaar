@@ -4,11 +4,20 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
 import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
 import { actionEmitter } from '../action-emitter.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';
+
+export const SYSTEM_TOOL_NAMES = [
+  'mcp__system__get_info',
+  'mcp__system__get_env_var',
+  'mcp__system__memorize',
+  'mcp__system__set_config',
+  'mcp__system__get_config',
+  'mcp__system__remove_config',
+] as const;
 
 export function registerSystemTools(server: McpServer): void {
   // get_system_info
@@ -56,13 +65,13 @@ export function registerSystemTools(server: McpServer): void {
       const isSensitive = sensitivePatterns.some((pattern) => pattern.test(args.name));
 
       if (isSensitive) {
-        return ok(`Error: Cannot read sensitive environment variable "${args.name}"`);
+        return error(`Cannot read sensitive environment variable "${args.name}"`);
       }
 
       const value = process.env[args.name];
 
       if (value === undefined) {
-        return ok(`Environment variable "${args.name}" is not set`);
+        return error(`Environment variable "${args.name}" is not set`);
       }
 
       return ok(value);
@@ -85,7 +94,7 @@ export function registerSystemTools(server: McpServer): void {
       const updated = current ? current.trimEnd() + '\n' + args.content : args.content;
       const result = await configWrite('memory.md', updated + '\n');
       if (!result.success) {
-        return ok(`Error saving memory: ${result.error}`);
+        return error(`Failed to save memory: ${result.error}`);
       }
       return ok(`Memorized: "${args.content}"`);
     },
@@ -157,7 +166,7 @@ export function registerSystemTools(server: McpServer): void {
 
       // section === 'hooks'
       if (!args.event || !args.action || !args.label) {
-        return ok('Error: hooks section requires event, action, and label fields.');
+        return error('hooks section requires event, action, and label fields.');
       }
 
       const approved = await actionEmitter.showPermissionDialog(
@@ -168,7 +177,7 @@ export function registerSystemTools(server: McpServer): void {
       );
 
       if (!approved) {
-        return ok('Permission denied — hook was not added.');
+        return error('Permission denied — hook was not added.');
       }
 
       const hook = await addHook(args.event, args.action as any, args.label, args.filter);
@@ -225,7 +234,7 @@ export function registerSystemTools(server: McpServer): void {
 
       const removed = await removeHook(args.hookId);
       if (!removed) {
-        return ok(`Hook "${args.hookId}" not found.`);
+        return error(`Hook "${args.hookId}" not found.`);
       }
       return ok(`Hook "${args.hookId}" removed.`);
     },

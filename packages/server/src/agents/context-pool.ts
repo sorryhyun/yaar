@@ -854,6 +854,19 @@ export class ContextPool {
     if (this.resetting) return;
     this.resetting = true;
 
+    // Save active monitor IDs before clearing so we can recreate agents for all of them
+    const activeMonitorIds = [...this.mainQueues.keys()];
+    // Also include monitors that have agents but no queue yet
+    for (const monitorId of this.agentPool.getMainAgentMonitorIds()) {
+      if (!activeMonitorIds.includes(monitorId)) {
+        activeMonitorIds.push(monitorId);
+      }
+    }
+    // Ensure at least monitor-0 is present
+    if (!activeMonitorIds.includes('monitor-0')) {
+      activeMonitorIds.push('monitor-0');
+    }
+
     // 1. Clear queues so no new tasks start from dequeue
     this.mainQueues.forEach((q) => q.clear());
     this.mainQueues.clear();
@@ -913,24 +926,33 @@ export class ContextPool {
     this.budgetPolicy.clear();
     this.savedThreadIds = undefined;
 
-    // 9. Re-create a fresh main agent
-    const provider = await acquireWarmProvider();
-    if (provider) {
-      const agent = await this.agentPool.createMainAgent('monitor-0', provider);
-      if (agent) {
-        await this.sendEvent({
-          type: 'CONNECTION_STATUS',
-          status: 'connected',
-          provider: provider.name,
-          sessionId: this.logSessionId ?? undefined,
-        });
+    // 9. Re-create fresh main agents for ALL previously active monitors
+    for (const monitorId of activeMonitorIds) {
+      const provider = await acquireWarmProvider();
+      if (provider) {
+        const agent = await this.agentPool.createMainAgent(monitorId, provider);
+        if (agent) {
+          if (monitorId === 'monitor-0') {
+            await this.sendEvent({
+              type: 'CONNECTION_STATUS',
+              status: 'connected',
+              provider: provider.name,
+              sessionId: this.logSessionId ?? undefined,
+            });
+          }
+        } else {
+          await provider.dispose();
+          console.warn(`[ContextPool] Reset: failed to recreate agent for ${monitorId}`);
+        }
       } else {
-        await provider.dispose();
+        console.warn(`[ContextPool] Reset: no provider available for ${monitorId}`);
       }
     }
 
     this.resetting = false;
-    console.log(`[ContextPool] Reset complete: fresh agent, cleared all state`);
+    console.log(
+      `[ContextPool] Reset complete: recreated ${activeMonitorIds.length} monitor agent(s), cleared all state`,
+    );
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {

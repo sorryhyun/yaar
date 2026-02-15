@@ -5,7 +5,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { storageRead, storageWrite, storageList, storageDelete } from '../../storage/index.js';
-import { ok, okWithImages } from '../utils.js';
+import { ok, okWithImages, error } from '../utils.js';
+
+export const STORAGE_TOOL_NAMES = [
+  'mcp__storage__read',
+  'mcp__storage__write',
+  'mcp__storage__list',
+  'mcp__storage__delete',
+] as const;
 
 export function registerStorageTools(server: McpServer): void {
   // storage_read
@@ -21,7 +28,7 @@ export function registerStorageTools(server: McpServer): void {
     async (args) => {
       const result = await storageRead(args.path);
       if (!result.success) {
-        return ok(`Error: ${result.error}`);
+        return error(result.error!);
       }
 
       if (result.images && result.images.length > 0) {
@@ -48,7 +55,8 @@ export function registerStorageTools(server: McpServer): void {
     },
     async (args) => {
       const result = await storageWrite(args.path, args.content);
-      return ok(result.success ? `Written to ${args.path}` : `Error: ${result.error}`);
+      if (!result.success) return error(result.error!);
+      return ok(`Written to ${args.path}`);
     }
   );
 
@@ -63,7 +71,7 @@ export function registerStorageTools(server: McpServer): void {
     },
     async (args) => {
       const result = await storageList(args.path || '');
-      if (!result.success) return ok(`Error: ${result.error}`);
+      if (!result.success) return error(result.error!);
       const text =
         result.entries!.length === 0
           ? 'Directory is empty'
@@ -83,7 +91,8 @@ export function registerStorageTools(server: McpServer): void {
     },
     async (args) => {
       const result = await storageDelete(args.path);
-      return ok(result.success ? `Deleted ${args.path}` : `Error: ${result.error}`);
+      if (!result.success) return error(result.error!);
+      return ok(`Deleted ${args.path}`);
     }
   );
 }

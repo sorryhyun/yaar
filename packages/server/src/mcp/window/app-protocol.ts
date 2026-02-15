@@ -10,7 +10,7 @@ import type { AppProtocolRequest } from '@yaar/shared';
 import { z } from 'zod';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 
 export function registerAppProtocolTools(
   server: McpServer,
@@ -33,15 +33,15 @@ export function registerAppProtocolTools(
     },
     async (args) => {
       const win = getWindowState().getWindow(args.windowId);
-      if (!win) return ok(`Window "${args.windowId}" not found.`);
+      if (!win) return error(`Window "${args.windowId}" not found.`);
       if (win.content.renderer !== 'iframe')
-        return ok(`Window "${args.windowId}" is not an iframe app.`);
+        return error(`Window "${args.windowId}" is not an iframe app.`);
 
       // Wait for the app to register with the App Protocol before querying
       if (!win.appProtocol) {
         const ready = await actionEmitter.waitForAppReady(args.windowId, 5000);
         if (!ready)
-          return ok(
+          return error(
             'App did not register with the App Protocol (timeout). The iframe app may not call window.yaar.app.register().',
           );
       }
@@ -53,11 +53,11 @@ export function registerAppProtocolTools(
           5000,
         );
         if (!response)
-          return ok(
+          return error(
             'App did not respond to manifest request (timeout). The app may not support the App Protocol.',
           );
-        if (response.kind !== 'manifest') return ok('Unexpected response kind.');
-        if (response.error) return ok(`Error: ${response.error}`);
+        if (response.kind !== 'manifest') return error('Unexpected response kind.');
+        if (response.error) return error(response.error);
         return ok(JSON.stringify(response.manifest, null, 2));
       }
 
@@ -66,9 +66,9 @@ export function registerAppProtocolTools(
         { kind: 'query', stateKey: args.stateKey },
         5000,
       );
-      if (!response) return ok('App did not respond (timeout).');
-      if (response.kind !== 'query') return ok('Unexpected response kind.');
-      if (response.error) return ok(`Error: ${response.error}`);
+      if (!response) return error('App did not respond (timeout).');
+      if (response.kind !== 'query') return error('Unexpected response kind.');
+      if (response.error) return error(response.error);
       return ok(JSON.stringify(response.data, null, 2));
     },
   );
@@ -92,15 +92,15 @@ export function registerAppProtocolTools(
     },
     async (args) => {
       const win = getWindowState().getWindow(args.windowId);
-      if (!win) return ok(`Window "${args.windowId}" not found.`);
+      if (!win) return error(`Window "${args.windowId}" not found.`);
       if (win.content.renderer !== 'iframe')
-        return ok(`Window "${args.windowId}" is not an iframe app.`);
+        return error(`Window "${args.windowId}" is not an iframe app.`);
 
       // Wait for the app to register with the App Protocol before sending commands
       if (!win.appProtocol) {
         const ready = await actionEmitter.waitForAppReady(args.windowId, 5000);
         if (!ready)
-          return ok(
+          return error(
             'App did not register with the App Protocol (timeout). The iframe app may not call window.yaar.app.register().',
           );
       }
@@ -111,9 +111,9 @@ export function registerAppProtocolTools(
         params: args.params,
       };
       const response = await actionEmitter.emitAppProtocolRequest(args.windowId, request, 5000);
-      if (!response) return ok('App did not respond (timeout).');
-      if (response.kind !== 'command') return ok('Unexpected response kind.');
-      if (response.error) return ok(`Error: ${response.error}`);
+      if (!response) return error('App did not respond (timeout).');
+      if (response.kind !== 'command') return error('Unexpected response kind.');
+      if (response.error) return error(response.error);
       getWindowState().recordAppCommand(args.windowId, request);
       return ok(JSON.stringify(response.result, null, 2));
     },

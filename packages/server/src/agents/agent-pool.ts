@@ -211,6 +211,13 @@ export class AgentPool {
   }
 
   /**
+   * Return the monitor IDs that have main agents.
+   */
+  getMainAgentMonitorIds(): string[] {
+    return [...this.mainAgents.keys()];
+  }
+
+  /**
    * Remove and dispose the main agent for a given monitor.
    * Releases the limiter slot. Returns true if an agent was removed.
    */

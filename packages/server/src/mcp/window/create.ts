@@ -15,7 +15,7 @@ import {
   componentLayoutSchema,
 } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
@@ -80,8 +80,8 @@ export function registerCreateTools(server: McpServer): void {
         const feedback = await actionEmitter.emitActionWithFeedback(osAction, 2000);
 
         if (feedback && !feedback.success) {
-          return ok(
-            `Created window "${args.windowId}" but iframe embedding failed: ${feedback.error}. The site likely blocks embedding.`,
+          return error(
+            `Failed to embed iframe in window "${args.windowId}": ${feedback.error}. The site likely blocks embedding.`,
           );
         }
 
@@ -131,12 +131,10 @@ export function registerCreateTools(server: McpServer): void {
         // Load from .yaarcomponent.json file
         const filePath = args.jsonfile as string;
         if (!filePath.endsWith('.yaarcomponent.json')) {
-          return ok('Error: jsonfile must end with .yaarcomponent.json');
+          return error('jsonfile must end with .yaarcomponent.json');
         }
         if (filePath.includes('..') || filePath.startsWith('/')) {
-          return ok(
-            'Error: Invalid jsonfile path. Use relative paths without ".." or leading "/".',
-          );
+          return error('Invalid jsonfile path. Use relative paths without ".." or leading "/".');
         }
 
         const fullPath = join(PROJECT_ROOT, 'apps', filePath);
@@ -145,12 +143,12 @@ export function registerCreateTools(server: McpServer): void {
           const parsed = JSON.parse(raw);
           const result = componentLayoutSchema.safeParse(parsed);
           if (!result.success) {
-            return ok(`Error: Invalid .yaarcomponent.json: ${result.error.message}`);
+            return error(`Invalid .yaarcomponent.json: ${result.error.message}`);
           }
           layoutData = result.data;
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Unknown error';
-          return ok(`Error reading jsonfile: ${msg}`);
+          return error(`Error reading jsonfile: ${msg}`);
         }
       } else if (args.components) {
         // Inline components
@@ -160,7 +158,7 @@ export function registerCreateTools(server: McpServer): void {
           gap: args.gap as ComponentLayout['gap'],
         };
       } else {
-        return ok('Error: Provide either jsonfile or components.');
+        return error('Provide either jsonfile or components.');
       }
 
       const osAction: OSAction = {

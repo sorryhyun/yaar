@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { isValidPath, generateSandboxId } from './helpers.js';
 
@@ -31,13 +31,13 @@ export function registerWriteTools(server: McpServer): void {
 
       // Validate path
       if (path.includes('..') || path.startsWith('/')) {
-        return ok('Error: Invalid path. Use relative paths without ".." or leading "/".');
+        return error('Invalid path. Use relative paths without ".." or leading "/".');
       }
 
       // Validate sandbox ID if provided (must be numeric timestamp)
       if (providedId && !/^\d+$/.test(providedId)) {
-        return ok(
-          'Error: Invalid sandbox ID. Must be a numeric timestamp (from clone or a previous write_ts call). Do not use app names as sandbox IDs.',
+        return error(
+          'Invalid sandbox ID. Must be a numeric timestamp (from clone or a previous write_ts call). Do not use app names as sandbox IDs.',
         );
       }
 
@@ -47,7 +47,7 @@ export function registerWriteTools(server: McpServer): void {
 
       // Validate the full path is within sandbox
       if (!isValidPath(sandboxPath, path)) {
-        return ok('Error: Path escapes sandbox directory.');
+        return error('Path escapes sandbox directory.');
       }
 
       const fullPath = join(sandboxPath, path);
@@ -71,8 +71,8 @@ export function registerWriteTools(server: McpServer): void {
           ),
         );
       } catch (err) {
-        const error = err instanceof Error ? err.message : 'Unknown error';
-        return ok(`Error: ${error}`);
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        return error(msg);
       }
     },
   );
@@ -95,18 +95,18 @@ export function registerWriteTools(server: McpServer): void {
 
       // Validate path
       if (path.includes('..') || path.startsWith('/')) {
-        return ok('Error: Invalid path. Use relative paths without ".." or leading "/".');
+        return error('Invalid path. Use relative paths without ".." or leading "/".');
       }
 
       // Validate sandbox ID
       if (!/^\d+$/.test(sandboxId)) {
-        return ok('Error: Invalid sandbox ID. Must be a numeric timestamp.');
+        return error('Invalid sandbox ID. Must be a numeric timestamp.');
       }
 
       const sandboxPath = getSandboxPath(sandboxId);
 
       if (!isValidPath(sandboxPath, path)) {
-        return ok('Error: Path escapes sandbox directory.');
+        return error('Path escapes sandbox directory.');
       }
 
       const fullPath = join(sandboxPath, path);
@@ -116,21 +116,21 @@ export function registerWriteTools(server: McpServer): void {
       try {
         content = await readFile(fullPath, 'utf-8');
       } catch {
-        return ok(`Error: File not found: ${path}`);
+        return error(`File not found: ${path}`);
       }
 
       // Check old_string exists
       if (!content.includes(old_string)) {
-        return ok(
-          'Error: old_string not found in file. Make sure it matches exactly (including whitespace).',
+        return error(
+          'old_string not found in file. Make sure it matches exactly (including whitespace).',
         );
       }
 
       // Check uniqueness
       const count = content.split(old_string).length - 1;
       if (count > 1) {
-        return ok(
-          `Error: old_string found ${count} times. Provide more surrounding context to make it unique.`,
+        return error(
+          `old_string found ${count} times. Provide more surrounding context to make it unique.`,
         );
       }
 
