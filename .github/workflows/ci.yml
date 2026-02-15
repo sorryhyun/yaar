@@ -23,6 +23,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build shared
+        run: pnpm --filter @yaar/shared build
+
       - name: Typecheck
         run: pnpm typecheck
 
