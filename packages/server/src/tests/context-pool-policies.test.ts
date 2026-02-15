@@ -172,9 +172,8 @@ describe('WindowConnectionPolicy', () => {
 
     const result = policy.handleClose('A');
     expect(result.shouldDisposeAgent).toBe(false);
-    expect(result.newRoot).toBeDefined();
-    // New root should be one of B or C
-    expect(['B', 'C']).toContain(result.newRoot);
+    // Deterministic: lexicographically first surviving window becomes root
+    expect(result.newRoot).toBe('B');
 
     // The promoted root is now the group root
     expect(policy.getRoot('B')).toBe(result.newRoot);

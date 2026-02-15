@@ -98,8 +98,8 @@ export class WindowConnectionPolicy {
     // Group still has windows — agent survives
     let newRoot: string | undefined;
     if (group.root === windowId) {
-      // Root closed — promote an arbitrary surviving window
-      newRoot = group.windows.values().next().value!;
+      // Root closed — promote the lexicographically first surviving window (deterministic)
+      newRoot = [...group.windows].sort()[0];
       group.root = newRoot;
     }
 

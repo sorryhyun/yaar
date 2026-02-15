@@ -34,12 +34,8 @@ export class ContextAssemblyPolicy {
     // Add drawing as timeline entry if present
     const hasDrawing = options.interactions?.some((i) => i.type === 'draw' && i.imageData);
 
-    // Format timeline (includes both user interactions and AI callbacks)
-    let timelinePrefix = options.timeline?.format() ?? '';
-    // Drain the timeline after formatting
-    if (options.timeline && options.timeline.size > 0) {
-      options.timeline.drain();
-    }
+    // Atomically format and drain the timeline (prevents race between format and drain)
+    let timelinePrefix = options.timeline?.drainAndFormat() ?? '';
 
     // Add drawing annotation after timeline
     if (hasDrawing) {

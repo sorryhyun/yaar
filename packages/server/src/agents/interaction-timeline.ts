@@ -87,6 +87,26 @@ export class InteractionTimeline {
   }
 
   /**
+   * Atomically format and drain all entries.
+   * Returns the formatted string and clears the timeline in one step,
+   * preventing race conditions where entries could be added between format() and drain().
+   */
+  drainAndFormat(): string {
+    if (this.entries.length === 0) return '';
+
+    const lines = this.entries.map((e) => {
+      if (e.type === 'user') {
+        return `<interaction:user>${e.content}</interaction:user>`;
+      }
+      const agentAttr = e.agent ? ` agent="${e.agent}"` : '';
+      return `<interaction:AI${agentAttr}>${e.content}</interaction:AI>`;
+    });
+
+    this.entries = [];
+    return `<timeline>\n${lines.join('\n')}\n</timeline>\n\n`;
+  }
+
+  /**
    * Drain all entries, returning them and clearing the timeline.
    */
   drain(): TimelineEntry[] {
