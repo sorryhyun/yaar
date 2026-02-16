@@ -1,19 +1,5 @@
-type DockItem = { id: string; label: string; icon: string };
-
-const defaultItems: DockItem[] = [
-  { id: 'word-lite', label: 'Word', icon: '📝' },
-  { id: 'excel-lite', label: 'Excel', icon: '📊' },
-  { id: 'browser', label: 'Browser', icon: '🌐' },
-  { id: 'storage', label: 'Storage', icon: '🗂️' },
-  { id: 'recent-papers', label: 'Papers', icon: '📄' },
-  { id: 'slides-lite', label: 'Slides', icon: '📽️' },
-];
-
-let items = [...defaultItems];
-let activeAppId: string | null = null;
-
 const root = document.createElement('div');
-root.id = 'dock-root';
+root.id = 'dock-clock-root';
 document.body.appendChild(root);
 
 const style = document.createElement('style');
@@ -22,71 +8,85 @@ style.textContent = `
     color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
   body {
     margin: 0;
-    background: #0a0b0d;
     color: #eef1f6;
   }
-  #dock-root {
+  #dock-clock-root {
+    height: 100vh;
     display: flex;
-    gap: 8px;
-    padding: 8px;
     align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
+    user-select: none;
+    padding: 12px;
+    box-sizing: border-box;
   }
-  .dock-btn {
-    border: 1px solid #2b313b;
-    background: #141821;
-    color: inherit;
-    border-radius: 12px;
-    padding: 8px 10px;
-    min-width: 76px;
+  .panel {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    transition: border-color .12s ease, transform .12s ease;
+    gap: 6px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: rgba(10, 12, 16, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
-  .dock-btn:hover {
-    border-color: #4b5563;
-    transform: translateY(-1px);
-  }
-  .dock-btn.active {
-    border-color: #22c55e;
-    box-shadow: 0 0 0 1px #22c55e33 inset;
-  }
-  .icon {
-    font-size: 20px;
+  .time {
+    font-size: 38px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     line-height: 1;
   }
-  .label {
-    font-size: 12px;
+  .date {
+    font-size: 14px;
+    color: #c2cad6;
+    line-height: 1.2;
   }
 `;
 document.head.appendChild(style);
 
-function render() {
-  root.innerHTML = '';
-  for (const item of items) {
-    const btn = document.createElement('button');
-    btn.className = `dock-btn${item.id === activeAppId ? ' active' : ''}`;
-    btn.setAttribute('type', 'button');
-    btn.innerHTML = `<span class="icon">${item.icon}</span><span class="label">${item.label}</span>`;
+const panelEl = document.createElement('div');
+panelEl.className = 'panel';
 
-    btn.addEventListener('click', () => {
-      activeAppId = item.id;
-      render();
-      const msg = `<user_interaction:click>app: ${item.id}</user_interaction:click>`;
-      (window as any).yaar?.app?.sendInteraction?.(msg);
-    });
+const timeEl = document.createElement('div');
+timeEl.className = 'time';
+const dateEl = document.createElement('div');
+dateEl.className = 'date';
+panelEl.appendChild(timeEl);
+panelEl.appendChild(dateEl);
+root.appendChild(panelEl);
 
-    root.appendChild(btn);
-  }
+let lastIso = '';
+
+function renderNow() {
+  const now = new Date();
+  lastIso = now.toISOString();
+  const timeText = now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const dateText = now.toLocaleDateString([], {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  });
+
+  timeEl.textContent = timeText;
+  dateEl.textContent = dateText;
 }
 
-render();
+renderNow();
+setInterval(renderNow, 1000);
 
 const appApi = (window as any).yaar?.app;
 if (appApi) {
@@ -94,55 +94,25 @@ if (appApi) {
     appId: 'dock',
     name: 'Dock',
     state: {
-      items: {
-        description: 'Dock items currently displayed',
-        handler: () => [...items],
+      nowIso: {
+        description: 'Current time in ISO format',
+        handler: () => lastIso,
       },
-      activeAppId: {
-        description: 'Most recently launched app id from dock',
-        handler: () => activeAppId,
+      display: {
+        description: 'Current displayed date/time text',
+        handler: () => ({
+          time: timeEl.textContent || '',
+          date: dateEl.textContent || '',
+        }),
       },
     },
     commands: {
-      setItems: {
-        description: 'Replace dock items. Params: { items: {id,label,icon}[] }',
-        params: {
-          type: 'object',
-          properties: {
-            items: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  label: { type: 'string' },
-                  icon: { type: 'string' },
-                },
-                required: ['id', 'label', 'icon'],
-              },
-            },
-          },
-          required: ['items'],
-        },
-        handler: (p: { items: DockItem[] }) => {
-          items = [...(p.items || [])];
-          render();
-          return { ok: true, count: items.length };
-        },
-      },
-      setActiveApp: {
-        description: 'Mark one app as active. Params: { appId: string | null }',
-        params: {
-          type: 'object',
-          properties: {
-            appId: { type: ['string', 'null'] },
-          },
-          required: ['appId'],
-        },
-        handler: (p: { appId: string | null }) => {
-          activeAppId = p.appId;
-          render();
-          return { ok: true };
+      refreshNow: {
+        description: 'Force immediate clock refresh. Params: {}',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          renderNow();
+          return { ok: true, nowIso: lastIso };
         },
       },
     },

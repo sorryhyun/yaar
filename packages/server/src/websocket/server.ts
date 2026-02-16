@@ -12,7 +12,6 @@ import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import type { ClientEvent, OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
-import { getHooksByEvent } from '../mcp/system/hooks.js';
 import { checkWsAuth } from '../http/auth.js';
 
 export interface WebSocketServerOptions {
@@ -78,29 +77,10 @@ export function createWebSocketServer(
     }
 
     // Execute launch hooks for fresh sessions (not reconnections)
-    if (!requestedSessionId && !session.launchHooksExecuted) {
-      session.launchHooksExecuted = true;
-      getHooksByEvent('launch')
-        .then(async (hooks) => {
-          for (const hook of hooks) {
-            if (hook.action.type === 'interaction') {
-              const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-              await session.routeMessage(
-                { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
-                connectionId,
-              );
-            } else if (hook.action.type === 'os_action') {
-              const action = hook.action.payload as OSAction;
-              if (action.type.startsWith('window.')) {
-                session.windowState.handleAction(action);
-              }
-              session.broadcast({ type: 'ACTIONS', actions: [action] });
-            }
-          }
-        })
-        .catch((err) => {
-          console.error('Failed to execute launch hooks:', err);
-        });
+    if (!requestedSessionId) {
+      session.executeLaunchHooks(connectionId).catch((err) => {
+        console.error('Failed to execute launch hooks:', err);
+      });
     }
 
     // Message handler

@@ -27,6 +27,7 @@ import type { WebSocket } from 'ws';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
+import { getHooksByEvent } from '../mcp/system/hooks.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -169,6 +170,38 @@ export class LiveSession {
     }));
   }
 
+  // ── Launch hooks ──────────────────────────────────────────────────
+
+  /**
+   * Execute launch hooks (e.g., opening dock on startup).
+   * Called on fresh session connect and after reset.
+   */
+  async executeLaunchHooks(connectionId: ConnectionId): Promise<void> {
+    if (this.launchHooksExecuted) return;
+    this.launchHooksExecuted = true;
+
+    try {
+      const hooks = await getHooksByEvent('launch');
+      for (const hook of hooks) {
+        if (hook.action.type === 'interaction') {
+          const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          await this.routeMessage(
+            { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
+            connectionId,
+          );
+        } else if (hook.action.type === 'os_action') {
+          const action = hook.action.payload as OSAction;
+          if (action.type.startsWith('window.')) {
+            this.windowState.handleAction(action);
+          }
+          this.broadcast({ type: 'ACTIONS', actions: [action] });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to execute launch hooks:', err);
+    }
+  }
+
   // ── Pool lifecycle ──────────────────────────────────────────────────
 
   private async ensureInitialized(): Promise<boolean> {
@@ -302,6 +335,9 @@ export class LiveSession {
           this.savedThreadIds = undefined;
           await getWarmPool().resetCodexProviders();
         }
+        // Re-execute launch hooks (e.g., reopen dock)
+        this.launchHooksExecuted = false;
+        await this.executeLaunchHooks(connectionId);
         break;
 
       case 'INTERRUPT_AGENT':

@@ -50,6 +50,13 @@ export function registerDeployTools(server: McpServer): void {
           )
           .optional()
           .describe('File types this app can open'),
+        variant: z.enum(['standard', 'widget', 'panel']).optional().describe('Window variant type'),
+        dockEdge: z.enum(['top', 'bottom']).optional().describe('Dock edge position'),
+        frameless: z.boolean().optional().describe('Frameless window (no title bar)'),
+        windowStyle: z
+          .record(z.string(), z.union([z.string(), z.number()]))
+          .optional()
+          .describe('Custom CSS properties for the window'),
       },
     },
     async (args) => {
@@ -58,14 +65,18 @@ export function registerDeployTools(server: McpServer): void {
         appId,
         name,
         description,
-        icon = '🎮',
+        icon,
         hidden,
         keepSource = true,
         skill,
         appProtocol: explicitAppProtocol,
-        version = '1.0.0',
-        author = 'YAAR',
+        version,
+        author,
         fileAssociations,
+        variant,
+        dockEdge,
+        frameless,
+        windowStyle,
       } = args;
 
       // Validate sandbox ID
@@ -124,7 +135,22 @@ export function registerDeployTools(server: McpServer): void {
         );
       }
 
-      const displayName = name ?? toDisplayName(appId);
+      // Read existing app.json and manifest.json for merging (preserves fields not in deploy args)
+      let existingMeta: Record<string, unknown> = {};
+      let existingManifest: Record<string, unknown> = {};
+      try {
+        existingMeta = JSON.parse(await readFile(join(appPath, 'app.json'), 'utf-8'));
+      } catch {
+        // New app
+      }
+      try {
+        existingManifest = JSON.parse(await readFile(join(appPath, 'manifest.json'), 'utf-8'));
+      } catch {
+        // New app
+      }
+
+      const resolvedIcon = icon ?? (existingMeta.icon as string | undefined) ?? '🎮';
+      const displayName = name ?? (existingMeta.name as string | undefined) ?? toDisplayName(appId);
 
       try {
         // Clean existing app content before deploying (remove stale files)
@@ -172,27 +198,59 @@ export function registerDeployTools(server: McpServer): void {
         );
         await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
 
-        // Write app metadata (icon, etc.)
-        const metadata = {
-          icon,
-          name: displayName,
-          ...(description && { description }),
-          ...(hidden && { hidden: true }),
-          ...(hasAppProtocol && { appProtocol: true }),
-          ...(fileAssociations?.length && { fileAssociations }),
-        };
-        await writeFile(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2), 'utf-8');
+        // Merge app metadata: preserve existing fields, override only what was explicitly provided
+        const metadata: Record<string, unknown> = { ...existingMeta };
+        metadata.icon = resolvedIcon;
+        metadata.name = displayName;
+        if (description !== undefined) metadata.description = description;
+        if (hidden !== undefined) {
+          if (hidden) metadata.hidden = true;
+          else delete metadata.hidden;
+        }
+        if (explicitAppProtocol !== undefined) {
+          if (explicitAppProtocol) metadata.appProtocol = true;
+          else delete metadata.appProtocol;
+        } else if (hasAppProtocol) {
+          metadata.appProtocol = true;
+        }
+        if (fileAssociations !== undefined) {
+          if (fileAssociations.length > 0) metadata.fileAssociations = fileAssociations;
+          else delete metadata.fileAssociations;
+        }
+        if (variant !== undefined) {
+          if (variant !== 'standard') metadata.variant = variant;
+          else delete metadata.variant;
+        }
+        if (dockEdge !== undefined) metadata.dockEdge = dockEdge;
+        if (frameless !== undefined) {
+          if (frameless) metadata.frameless = true;
+          else delete metadata.frameless;
+        }
+        if (windowStyle !== undefined) metadata.windowStyle = windowStyle;
+        await writeFile(
+          join(appPath, 'app.json'),
+          JSON.stringify(metadata, null, 2) + '\n',
+          'utf-8',
+        );
 
-        // Write marketplace manifest
-        const manifest = {
+        // Merge marketplace manifest: preserve existing fields, override only what was provided
+        const manifest: Record<string, unknown> = {
+          ...existingManifest,
           id: appId,
           name: displayName,
-          icon,
-          description: description ?? '',
-          version,
-          author,
+          icon: resolvedIcon,
         };
-        await writeFile(join(appPath, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8');
+        if (description !== undefined) manifest.description = description;
+        else if (!manifest.description) manifest.description = '';
+        if (version !== undefined) manifest.version = version;
+        else if (!manifest.version) manifest.version = '1.0.0';
+        if (author !== undefined) manifest.author = author;
+        else if (!manifest.author) manifest.author = 'YAAR';
+        await writeFile(
+          join(appPath, 'manifest.json'),
+          JSON.stringify(manifest, null, 2) + '\n',
+          'utf-8',
+        );
 
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
@@ -203,7 +261,7 @@ export function registerDeployTools(server: McpServer): void {
               success: true,
               appId,
               name: displayName,
-              icon,
+              icon: resolvedIcon,
               message: `App "${displayName}" deployed! It will appear on the desktop.`,
             },
             null,

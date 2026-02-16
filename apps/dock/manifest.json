@@ -2,7 +2,7 @@
   "id": "dock",
   "name": "Dock",
   "icon": "🧰",
-  "description": "System dock for launching core YAAR apps.",
-  "version": "1.0.0",
+  "description": "System dock with transparent glass-style clock",
+  "version": "1.0.1",
   "author": "YAAR"
 }

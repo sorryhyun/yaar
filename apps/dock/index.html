@@ -3,61 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dock</title>
+<title>Dock Preview</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
 <script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=!0;function o(r,e){window.parent.postMessage({type:"yaar:capture-response",requestId:r,imageData:e},"*")}function s(r,e){for(var t=r.querySelectorAll("*"),d=e.querySelectorAll("*"),c=0;c<t.length&&c<d.length;c++){var u=window.getComputedStyle(t[c]);d[c].setAttribute("style",u.cssText)}var n=window.getComputedStyle(r);e.setAttribute("style",n.cssText)}function a(r,e,t,d){var c=new Blob([r],{type:"image/svg+xml;charset=utf-8"}),u=URL.createObjectURL(c),n=new Image;n.onload=function(){var f=document.createElement("canvas");f.width=e,f.height=t;var i=f.getContext("2d");i.drawImage(n,0,0,e,t),URL.revokeObjectURL(u),d(f.toDataURL("image/png"))},n.onerror=function(){URL.revokeObjectURL(u),d(null)},n.src=u}window.addEventListener("message",function(r){if(!(!r.data||r.data.type!=="yaar:capture-request")){var e=r.data.requestId,t=null;try{var d=document.querySelectorAll("canvas");if(d.length>0){for(var c=null,u=0,n=0;n<d.length;n++){var f=d[n].width*d[n].height;f>u&&(u=f,c=d[n])}c&&(t=c.toDataURL("image/png"))}if(t){o(e,t);return}var i=document.querySelectorAll("svg");if(i.length>0){for(var c=null,u=0,n=0;n<i.length;n++){var l=i[n].getBoundingClientRect(),f=l.width*l.height;f>u&&(u=f,c=i[n])}if(c){var y=new XMLSerializer,w=y.serializeToString(c),l=c.getBoundingClientRect();a(w,l.width||300,l.height||150,function(j){o(e,j)});return}}var p=document.body;if(p){var g=Math.min(p.scrollWidth,window.innerWidth)||window.innerWidth||800,m=Math.min(p.scrollHeight,window.innerHeight)||window.innerHeight||600,h=p.cloneNode(!0);s(p,h);for(var v=h.querySelectorAll("script,iframe"),n=0;n<v.length;n++)v[n].remove();var q="http://www.w3.org/1999/xhtml",I="http://www.w3.org/2000/svg",b=new XMLSerializer().serializeToString(h),w='<svg xmlns="'+I+'" width="'+g+'" height="'+m+'"><foreignObject width="100%" height="100%"><body xmlns="'+q+'" style="margin:0;padding:0;">'+b+"</body></foreignObject></svg>";a(w,g,m,function(S){o(e,S)});return}}catch{}o(e,null)}})})(),function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=!0;function o(s){return s.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{},window.yaar.storage={async save(s,a){var r;typeof a=="string"?r=a:a instanceof Blob?r=await a.arrayBuffer():a instanceof ArrayBuffer?r=a:a instanceof Uint8Array?r=a.buffer.slice(a.byteOffset,a.byteOffset+a.byteLength):r=String(a);var e=await fetch("/api/storage/"+o(s),{method:"POST",body:r});if(!e.ok){var t=await e.json().catch(function(){return{error:e.statusText}});throw new Error(t.error||"Save failed")}return e.json()},async read(s,a){var r=a&&a.as||"auto",e=await fetch("/api/storage/"+o(s));if(!e.ok){var t=await e.json().catch(function(){return{error:e.statusText}});throw new Error(t.error||"Read failed")}if(r==="blob")return e.blob();if(r==="arraybuffer")return e.arrayBuffer();if(r==="json")return e.json();if(r==="text")return e.text();var d=e.headers.get("content-type")||"";return d.includes("json")?e.json():d.startsWith("text/")?e.text():e.blob()},async list(s){var a=s?o(s):"",r=await fetch("/api/storage/"+a+"?list=true");if(!r.ok){var e=await r.json().catch(function(){return{error:r.statusText}});throw new Error(e.error||"List failed")}return r.json()},async remove(s){var a=await fetch("/api/storage/"+o(s),{method:"DELETE"});if(!a.ok){var r=await a.json().catch(function(){return{error:a.statusText}});throw new Error(r.error||"Delete failed")}return a.json()},url:function(s){return"/api/storage/"+o(s)}}}(),function(){if(!window.__yaarFetchProxyInstalled){window.__yaarFetchProxyInstalled=!0;var o=window.fetch.bind(window),s="";try{var a=new URLSearchParams(location.search),r=a.get("sessionId")||"";/^[a-zA-Z0-9_-]+$/.test(r)&&(s=r)}catch{}window.fetch=function(e,t){var d;if(e instanceof Request?d=e.url:d=String(e),d.startsWith("/")||d.startsWith("./")||d.startsWith("../"))return o(e,t);try{var c=new URL(d,location.origin);if(c.origin===location.origin)return o(e,t)}catch{return o(e,t)}var u=t&&t.method||(e instanceof Request?e.method:"GET"),n={};t&&t.headers?t.headers instanceof Headers?t.headers.forEach(function(i,l){n[l]=i}):Array.isArray(t.headers)?t.headers.forEach(function(i){n[i[0]]=i[1]}):n=Object.assign({},t.headers):e instanceof Request&&e.headers.forEach(function(i,l){n[l]=i});var f;return t&&t.body!=null?typeof t.body=="string"?f=Promise.resolve(t.body):f=new Response(t.body).text():e instanceof Request&&u!=="GET"&&u!=="HEAD"?f=e.text():f=Promise.resolve(void 0),f.then(function(i){var l={url:d,method:u,headers:n};return i!==void 0&&(l.body=i),s&&(l.sessionId=s),o("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(l)})}).then(function(i){return i.ok?i.json():i.json().then(function(l){throw new Error(l.error||"Fetch proxy error: "+i.status)})}).then(function(i){var l;if(i.bodyEncoding==="base64"){for(var y=atob(i.body),w=new Uint8Array(y.length),p=0;p<y.length;p++)w[p]=y.charCodeAt(p);l=w.buffer}else l=i.body;return new Response(l,{status:i.status,statusText:i.statusText,headers:i.headers})})}}}(),function(){if(!window.__yaarAppProtocolInstalled){window.__yaarAppProtocolInstalled=!0,window.yaar=window.yaar||{};var o=null;window.yaar.app={register:function(s){o=s,window.parent.postMessage({type:"yaar:app-ready",appId:s.appId},"*")},sendInteraction:function(s){window.parent.postMessage({type:"yaar:app-interaction",content:typeof s=="string"?s:JSON.stringify(s)},"*")}},window.addEventListener("message",function(s){if(!(!s.data||!s.data.type)){var a=s.data,r=a.requestId;if(a.type==="yaar:app-manifest-request"){if(!o){window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:null,error:"No app registered"},"*");return}var e={appId:o.appId,name:o.name,state:{},commands:{}};if(o.state)for(var t in o.state){var d=o.state[t];e.state[t]={description:d.description},d.schema&&(e.state[t].schema=d.schema)}if(o.commands)for(var t in o.commands){var c=o.commands[t];e.commands[t]={description:c.description},c.params&&(e.commands[t].params=c.params),c.returns&&(e.commands[t].returns=c.returns)}window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:e},"*");return}if(a.type==="yaar:app-query-request"){if(!o||!o.state||!o.state[a.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:"Unknown state key: "+a.stateKey},"*");return}try{var u=o.state[a.stateKey].handler();u&&typeof u.then=="function"?u.then(function(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:n},"*")}).catch(function(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(n)},"*")}):window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:u},"*")}catch(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(n)},"*")}return}if(a.type==="yaar:app-command-request"){if(!o||!o.commands||!o.commands[a.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:"Unknown command: "+a.command},"*");return}try{var u=o.commands[a.command].handler(a.params);u&&typeof u.then=="function"?u.then(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:f},"*")}).catch(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(f)},"*")}):window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:u},"*")}catch(n){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(n)},"*")}return}}})}}();</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
-var d=[{id:"word-lite",label:"Word",icon:"\u{1F4DD}"},{id:"excel-lite",label:"Excel",icon:"\u{1F4CA}"},{id:"browser",label:"Browser",icon:"\u{1F310}"},{id:"storage",label:"Storage",icon:"\u{1F5C2}\uFE0F"},{id:"recent-papers",label:"Papers",icon:"\u{1F4C4}"},{id:"slides-lite",label:"Slides",icon:"\u{1F4FD}\uFE0F"}],i=[...d],n=null,r=document.createElement("div");r.id="dock-root";document.body.appendChild(r);var s=document.createElement("style");s.textContent=`
+var a=document.createElement("div");a.id="dock-clock-root";document.body.appendChild(a);var s=document.createElement("style");s.textContent=`
   :root {
     color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
   body {
     margin: 0;
-    background: #0a0b0d;
     color: #eef1f6;
   }
-  #dock-root {
+  #dock-clock-root {
+    height: 100vh;
     display: flex;
-    gap: 8px;
-    padding: 8px;
     align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
+    user-select: none;
+    padding: 12px;
+    box-sizing: border-box;
   }
-  .dock-btn {
-    border: 1px solid #2b313b;
-    background: #141821;
-    color: inherit;
-    border-radius: 12px;
-    padding: 8px 10px;
-    min-width: 76px;
+  .panel {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    transition: border-color .12s ease, transform .12s ease;
+    gap: 6px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: rgba(10, 12, 16, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
-  .dock-btn:hover {
-    border-color: #4b5563;
-    transform: translateY(-1px);
-  }
-  .dock-btn.active {
-    border-color: #22c55e;
-    box-shadow: 0 0 0 1px #22c55e33 inset;
-  }
-  .icon {
-    font-size: 20px;
+  .time {
+    font-size: 38px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
     line-height: 1;
   }
-  .label {
-    font-size: 12px;
+  .date {
+    font-size: 14px;
+    color: #c2cad6;
+    line-height: 1.2;
   }
-`;document.head.appendChild(s);function o(){r.innerHTML="";for(let e of i){let t=document.createElement("button");t.className=`dock-btn${e.id===n?" active":""}`,t.setAttribute("type","button"),t.innerHTML=`<span class="icon">${e.icon}</span><span class="label">${e.label}</span>`,t.addEventListener("click",()=>{n=e.id,o();let c=`<user_interaction:click>app: ${e.id}</user_interaction:click>`;window.yaar?.app?.sendInteraction?.(c)}),r.appendChild(t)}}o();var a=window.yaar?.app;a&&a.register({appId:"dock",name:"Dock",state:{items:{description:"Dock items currently displayed",handler:()=>[...i]},activeAppId:{description:"Most recently launched app id from dock",handler:()=>n}},commands:{setItems:{description:"Replace dock items. Params: { items: {id,label,icon}[] }",params:{type:"object",properties:{items:{type:"array",items:{type:"object",properties:{id:{type:"string"},label:{type:"string"},icon:{type:"string"}},required:["id","label","icon"]}}},required:["items"]},handler:e=>(i=[...e.items||[]],o(),{ok:!0,count:i.length})},setActiveApp:{description:"Mark one app as active. Params: { appId: string | null }",params:{type:"object",properties:{appId:{type:["string","null"]}},required:["appId"]},handler:e=>(n=e.appId,o(),{ok:!0})}}});
+`;document.head.appendChild(s);var e=document.createElement("div");e.className="panel";var t=document.createElement("div");t.className="time";var o=document.createElement("div");o.className="date";e.appendChild(t);e.appendChild(o);a.appendChild(e);var i="";function r(){let n=new Date;i=n.toISOString();let c=n.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),l=n.toLocaleDateString([],{weekday:"short",year:"numeric",month:"short",day:"2-digit"});t.textContent=c,o.textContent=l}r();setInterval(r,1e3);var d=window.yaar?.app;d&&d.register({appId:"dock",name:"Dock",state:{nowIso:{description:"Current time in ISO format",handler:()=>i},display:{description:"Current displayed date/time text",handler:()=>({time:t.textContent||"",date:o.textContent||""})}},commands:{refreshNow:{description:"Force immediate clock refresh. Params: {}",params:{type:"object",properties:{}},handler:()=>(r(),{ok:!0,nowIso:i})}}});
 
 </script>
 </body>

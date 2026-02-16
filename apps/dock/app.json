@@ -1,7 +1,7 @@
 {
   "icon": "🧰",
   "name": "Dock",
-  "description": "System dock for launching core YAAR apps.",
+  "description": "System dock with transparent glass-style clock",
   "hidden": true,
   "appProtocol": true,
   "frameless": true,

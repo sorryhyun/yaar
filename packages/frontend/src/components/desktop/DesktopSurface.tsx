@@ -371,6 +371,11 @@ export function DesktopSurface() {
                 key={app.id}
                 className={styles.desktopIcon}
                 onClick={() => handleAppClick(app.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  showContextMenu(e.clientX, e.clientY);
+                }}
                 disabled={cooldownId === app.id}
                 draggable
                 onDragStart={(e) => {

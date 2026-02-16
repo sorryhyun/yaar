@@ -1,0 +1,122 @@
+{
+  "hooks": [
+    {
+      "id": "hook-1",
+      "event": "tool_use",
+      "filter": {
+        "toolName": "dev:clone"
+      },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "toast.show",
+          "id": "dev-clone",
+          "message": "Cloning project...",
+          "variant": "info"
+        }
+      },
+      "label": "Toast on clone",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-2",
+      "event": "tool_use",
+      "filter": {
+        "toolName": ["dev:write_ts", "dev:apply_diff_ts"]
+      },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "toast.show",
+          "id": "dev-write",
+          "message": "Writing source files...",
+          "variant": "info"
+        }
+      },
+      "label": "Toast on write",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-3",
+      "event": "tool_use",
+      "filter": {
+        "toolName": "dev:compile"
+      },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "toast.show",
+          "id": "dev-compile",
+          "message": "Compiling app...",
+          "variant": "info"
+        }
+      },
+      "label": "Toast on compile",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-4",
+      "event": "tool_use",
+      "filter": {
+        "toolName": "dev:deploy"
+      },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "toast.show",
+          "id": "dev-deploy",
+          "message": "App deployed!",
+          "variant": "success"
+        }
+      },
+      "label": "Toast on deploy",
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "hook-6",
+      "event": "tool_use",
+      "filter": {
+        "toolName": "web_search"
+      },
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "toast.show",
+          "id": "web-search",
+          "message": "Running web search...",
+          "variant": "info"
+        }
+      },
+      "label": "Toast on web search",
+      "enabled": true,
+      "createdAt": "2026-02-15T07:20:39.284Z"
+    },
+    {
+      "id": "hook-7",
+      "event": "launch",
+      "action": {
+        "type": "os_action",
+        "payload": {
+          "type": "window.create",
+          "windowId": "dock",
+          "title": "Dock",
+          "bounds": { "x": 0, "y": 0, "w": 300, "h": 48 },
+          "content": {
+            "renderer": "iframe",
+            "data": "/api/apps/dock/static/index.html"
+          },
+          "frameless": true,
+          "windowStyle": { "position": "fixed", "top": 0, "right": 0 }
+        }
+      },
+      "label": "Open Dock on startup",
+      "enabled": true,
+      "createdAt": "2026-02-16T04:41:46.506Z"
+    }
+  ],
+  "idCounter": 7
+}
