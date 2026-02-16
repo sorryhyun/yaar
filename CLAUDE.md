@@ -29,6 +29,8 @@ pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
 make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
+pnpm format                      # Format all files with Prettier
+pnpm format:check                # Check formatting without writing
 
 # Run individual packages
 make server                                  # Start server only
@@ -52,6 +54,7 @@ pnpm build:exe:bundle:macos      # Build macOS executable
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
+- `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/remote_mode.md`
 
 ## Monorepo Structure
 
@@ -112,7 +115,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
-See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences.
+See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences. See `docs/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/remote_mode.md` for network access.
 
 ### Server Subsystems
 
@@ -142,6 +145,8 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server → polls `/health` until ready → starts frontend
 - Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
 - Git branch: uses `master` (not `main`)
+- **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
+- **CI** (`.github/workflows/ci.yml`): install → build shared → typecheck → test (runs on push/PR to master)
 
 ## Code Style
 
@@ -150,6 +155,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
 - Server imports use `.js` extensions (ESM requirement for Node.js)
 - ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
+- Prettier: semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
 
 ## Apps System
 
