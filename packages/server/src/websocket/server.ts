@@ -89,6 +89,12 @@ export function createWebSocketServer(
                 { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
                 connectionId,
               );
+            } else if (hook.action.type === 'os_action') {
+              const action = hook.action.payload as OSAction;
+              if (action.type.startsWith('window.')) {
+                session.windowState.handleAction(action);
+              }
+              session.broadcast({ type: 'ACTIONS', actions: [action] });
             }
           }
         })

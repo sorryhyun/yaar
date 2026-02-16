@@ -231,6 +231,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
   const variant = window.variant ?? 'standard';
   const isWidget = variant === 'widget';
   const isPanel = variant === 'panel';
+  const isFrameless = !!window.frameless;
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
@@ -554,7 +555,15 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
 
   // Determine position/size (handle maximized state and variants)
   let style: React.CSSProperties;
-  if (isPanel) {
+  if (window.windowStyle) {
+    // Custom CSS positioning from app.json windowStyle
+    style = {
+      width: window.bounds.w,
+      height: window.bounds.h,
+      zIndex: isPanel ? 9000 : zIndex + 100,
+      ...window.windowStyle,
+    };
+  } else if (isPanel) {
     const edge = window.dockEdge ?? 'bottom';
     style = {
       position: 'fixed',
@@ -597,6 +606,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       style={style}
       data-window-id={window.id}
       data-variant={variant}
+      data-frameless={isFrameless || undefined}
       data-focused={isFocused}
       data-selected={isSelected}
       data-dragging={isDragging}
@@ -620,8 +630,8 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         </button>
       )}
 
-      {/* Title bar — standard variant only */}
-      {!isWidget && !isPanel && (
+      {/* Title bar — standard variant only (hidden for frameless) */}
+      {!isWidget && !isPanel && !isFrameless && (
         <div
           className={styles.titleBar}
           onMouseDown={handleDragStart}
@@ -820,6 +830,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       {/* Resize edges and corners */}
       {!window.maximized &&
         !isPanel &&
+        !isFrameless &&
         (isWidget ? (
           /* Widget: SE corner handle only */
           <div className={styles.resizeSE} onMouseDown={(e) => handleResizeStart('se', e)} />

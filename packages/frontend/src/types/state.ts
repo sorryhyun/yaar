@@ -17,6 +17,8 @@ export interface WindowModel {
   monitorId?: string; // Which monitor this window belongs to
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
 }
 
 export interface CliEntry {

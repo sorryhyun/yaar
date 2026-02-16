@@ -162,6 +162,10 @@ export class LiveSession {
       title: win.title,
       bounds: { ...win.bounds },
       content: { ...win.content },
+      ...(win.variant ? { variant: win.variant } : {}),
+      ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
+      ...(win.frameless ? { frameless: win.frameless } : {}),
+      ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
     }));
   }
 

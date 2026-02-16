@@ -1,0 +1,8 @@
+{
+  "id": "dock",
+  "name": "Dock",
+  "icon": "🧰",
+  "description": "System dock for launching core YAAR apps.",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

@@ -85,6 +85,8 @@ export class WindowStateRegistry {
           locked: false,
           variant: action.variant,
           dockEdge: action.dockEdge,
+          frameless: action.frameless,
+          windowStyle: action.windowStyle,
           createdAt: now,
           updatedAt: now,
         });

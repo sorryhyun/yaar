@@ -343,6 +343,25 @@
   padding: var(--space-3);
 }
 
+/* ============ Frameless ============ */
+.frame[data-frameless='true'] {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+}
+
+.frame[data-frameless='true'][data-focused='true'],
+.frame[data-frameless='true'][data-selected='true'],
+.frame[data-frameless='true'][data-agent-active='true'] {
+  box-shadow: none;
+}
+
+.frame[data-frameless='true'] .content {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* ============ Panel variant ============ */
 .frame[data-variant='panel'] {
   border-radius: 0;

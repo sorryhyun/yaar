@@ -85,6 +85,8 @@ export function registerCreateTools(server: McpServer): void {
         },
         ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
         ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
+        ...(appMeta?.frameless ? { frameless: true } : {}),
+        ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
       };
 
       if (renderer === 'iframe') {
@@ -195,6 +197,8 @@ export function registerCreateTools(server: McpServer): void {
         },
         ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
         ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
+        ...(appMeta?.frameless ? { frameless: true } : {}),
+        ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
       };
 
       actionEmitter.emitAction(osAction);

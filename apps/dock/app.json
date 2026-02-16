@@ -1,0 +1,13 @@
+{
+  "icon": "🧰",
+  "name": "Dock",
+  "description": "System dock for launching core YAAR apps.",
+  "hidden": true,
+  "appProtocol": true,
+  "frameless": true,
+  "windowStyle": {
+    "position": "fixed",
+    "top": 0,
+    "right": 0
+  }
+}

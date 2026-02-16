@@ -57,6 +57,8 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         monitorId,
         variant,
         dockEdge: action.dockEdge,
+        frameless: action.frameless,
+        windowStyle: action.windowStyle,
       };
       state.windows[key] = window;
       state.zOrder = state.zOrder.filter((id) => id !== key);

@@ -36,6 +36,8 @@ export interface WindowState {
   appProtocol?: boolean;
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
   createdAt: number;
   updatedAt: number;
 }
@@ -49,6 +51,8 @@ export interface WindowCreateAction {
   requestId?: string; // For tracking iframe load feedback
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
 }
 
 export interface WindowCloseAction {

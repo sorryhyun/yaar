@@ -30,6 +30,8 @@ export interface AppInfo {
   fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
 }
 
 /**
@@ -77,6 +79,8 @@ export async function listApps(): Promise<AppInfo[]> {
       let fileAssociations: FileAssociation[] | undefined;
       let variant: WindowVariantType | undefined;
       let dockEdge: DockEdgeType | undefined;
+      let frameless: boolean | undefined;
+      let windowStyle: Record<string, string | number> | undefined;
       try {
         const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
         const meta = JSON.parse(metaContent);
@@ -89,6 +93,9 @@ export async function listApps(): Promise<AppInfo[]> {
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
         if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
         if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
+        if (meta.frameless === true) frameless = true;
+        if (meta.windowStyle && typeof meta.windowStyle === 'object')
+          windowStyle = meta.windowStyle;
       } catch {
         // No metadata or invalid JSON
       }
@@ -134,6 +141,8 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(fileAssociations && { fileAssociations }),
         ...(variant && { variant }),
         ...(dockEdge && { dockEdge }),
+        ...(frameless && { frameless }),
+        ...(windowStyle && { windowStyle }),
       });
     }
 
@@ -149,13 +158,26 @@ export async function listApps(): Promise<AppInfo[]> {
  */
 export async function getAppMeta(
   appId: string,
-): Promise<{ variant?: WindowVariantType; dockEdge?: DockEdgeType } | null> {
+): Promise<{
+  variant?: WindowVariantType;
+  dockEdge?: DockEdgeType;
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
+} | null> {
   try {
     const metaContent = await readFile(join(APPS_DIR, appId, 'app.json'), 'utf-8');
     const meta = JSON.parse(metaContent);
-    const result: { variant?: WindowVariantType; dockEdge?: DockEdgeType } = {};
+    const result: {
+      variant?: WindowVariantType;
+      dockEdge?: DockEdgeType;
+      frameless?: boolean;
+      windowStyle?: Record<string, string | number>;
+    } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
+    if (meta.frameless === true) result.frameless = true;
+    if (meta.windowStyle && typeof meta.windowStyle === 'object')
+      result.windowStyle = meta.windowStyle;
     return Object.keys(result).length > 0 ? result : null;
   } catch {
     return null;
