@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMTP Mailer</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=!0;function o(r,e){window.parent.postMessage({type:"yaar:capture-response",requestId:r,imageData:e},"*")}function s(r,e){for(var t=r.querySelectorAll("*"),d=e.querySelectorAll("*"),c=0;c<t.length&&c<d.length;c++){var u=window.getComputedStyle(t[c]);d[c].setAttribute("style",u.cssText)}var n=window.getComputedStyle(r);e.setAttribute("style",n.cssText)}function a(r,e,t,d){var c=new Blob([r],{type:"image/svg+xml;charset=utf-8"}),u=URL.createObjectURL(c),n=new Image;n.onload=function(){var f=document.createElement("canvas");f.width=e,f.height=t;var i=f.getContext("2d");i.drawImage(n,0,0,e,t),URL.revokeObjectURL(u),d(f.toDataURL("image/png"))},n.onerror=function(){URL.revokeObjectURL(u),d(null)},n.src=u}window.addEventListener("message",function(r){if(!(!r.data||r.data.type!=="yaar:capture-request")){var e=r.data.requestId,t=null;try{var d=document.querySelectorAll("canvas");if(d.length>0){for(var c=null,u=0,n=0;n<d.length;n++){var f=d[n].width*d[n].height;f>u&&(u=f,c=d[n])}c&&(t=c.toDataURL("image/png"))}if(t){o(e,t);return}var i=document.querySelectorAll("svg");if(i.length>0){for(var c=null,u=0,n=0;n<i.length;n++){var l=i[n].getBoundingClientRect(),f=l.width*l.height;f>u&&(u=f,c=i[n])}if(c){var y=new XMLSerializer,w=y.serializeToString(c),l=c.getBoundingClientRect();a(w,l.width||300,l.height||150,function(j){o(e,j)});return}}var p=document.body;if(p){var g=Math.min(p.scrollWidth,window.innerWidth)||window.innerWidth||800,m=Math.min(p.scrollHeight,window.innerHeight)||window.innerHeight||600,h=p.cloneNode(!0);s(p,h);for(var v=h.querySelectorAll("script,iframe"),n=0;n<v.length;n++)v[n].remove();var q="http://www.w3.org/1999/xhtml",I="http://www.w3.org/2000/svg",b=new XMLSerializer().serializeToString(h),w='<svg xmlns="'+I+'" width="'+g+'" height="'+m+'"><foreignObject width="100%" height="100%"><body xmlns="'+q+'" style="margin:0;padding:0;">'+b+"</body></foreignObject></svg>";a(w,g,m,function(S){o(e,S)});return}}catch{}o(e,null)}})})(),function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=!0;function o(s){return s.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{},window.yaar.storage={async save(s,a){var r;typeof a=="string"?r=a:a instanceof Blob?r=await a.arrayBuffer():a instanceof ArrayBuffer?r=a:a instanceof Uint8Array?r=a.buffer.slice(a.byteOffset,a.byteOffset+a.byteLength):r=String(a);var e=await fetch("/api/storage/"+o(s),{method:"POST",body:r});if(!e.ok){var t=await e.json().catch(function(){return{error:e.statusText}});throw new Error(t.error||"Save failed")}return e.json()},async read(s,a){var r=a&&a.as||"auto",e=await fetch("/api/storage/"+o(s));if(!e.ok){var t=await e.json().catch(function(){return{error:e.statusText}});throw new Error(t.error||"Read failed")}if(r==="blob")return e.blob();if(r==="arraybuffer")return e.arrayBuffer();if(r==="json")return e.json();if(r==="text")return e.text();var d=e.headers.get("content-type")||"";return d.includes("json")?e.json():d.startsWith("text/")?e.text():e.blob()},async list(s){var a=s?o(s):"",r=await fetch("/api/storage/"+a+"?list=true");if(!r.ok){var e=await r.json().catch(function(){return{error:r.statusText}});throw new Error(e.error||"List failed")}return r.json()},async remove(s){var a=await fetch("/api/storage/"+o(s),{method:"DELETE"});if(!a.ok){var r=await a.json().catch(function(){return{error:a.statusText}});throw new Error(r.error||"Delete failed")}return a.json()},url:function(s){return"/api/storage/"+o(s)}}}(),function(){if(!window.__yaarFetchProxyInstalled){window.__yaarFetchProxyInstalled=!0;var o=window.fetch.bind(window),s="";try{var a=new URLSearchParams(location.search),r=a.get("sessionId")||"";/^[a-zA-Z0-9_-]+$/.test(r)&&(s=r)}catch{}window.fetch=function(e,t){var d;if(e instanceof Request?d=e.url:d=String(e),d.startsWith("/")||d.startsWith("./")||d.startsWith("../"))return o(e,t);try{var c=new URL(d,location.origin);if(c.origin===location.origin)return o(e,t)}catch{return o(e,t)}var u=t&&t.method||(e instanceof Request?e.method:"GET"),n={};t&&t.headers?t.headers instanceof Headers?t.headers.forEach(function(i,l){n[l]=i}):Array.isArray(t.headers)?t.headers.forEach(function(i){n[i[0]]=i[1]}):n=Object.assign({},t.headers):e instanceof Request&&e.headers.forEach(function(i,l){n[l]=i});var f;return t&&t.body!=null?typeof t.body=="string"?f=Promise.resolve(t.body):f=new Response(t.body).text():e instanceof Request&&u!=="GET"&&u!=="HEAD"?f=e.text():f=Promise.resolve(void 0),f.then(function(i){var l={url:d,method:u,headers:n};return i!==void 0&&(l.body=i),s&&(l.sessionId=s),o("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(l)})}).then(function(i){return i.ok?i.json():i.json().then(function(l){throw new Error(l.error||"Fetch proxy error: "+i.status)})}).then(function(i){var l;if(i.bodyEncoding==="base64"){for(var y=atob(i.body),w=new Uint8Array(y.length),p=0;p<y.length;p++)w[p]=y.charCodeAt(p);l=w.buffer}else l=i.body;return new Response(l,{status:i.status,statusText:i.statusText,headers:i.headers})})}}}(),function(){if(!window.__yaarAppProtocolInstalled){window.__yaarAppProtocolInstalled=!0,window.yaar=window.yaar||{};var o=null;window.yaar.app={register:function(s){o=s,window.parent.postMessage({type:"yaar:app-ready",appId:s.appId},"*")},sendInteraction:function(s){window.parent.postMessage({type:"yaar:app-interaction",content:typeof s=="string"?s:JSON.stringify(s)},"*")}},window.addEventListener("message",function(s){if(!(!s.data||!s.data.type)){var a=s.data,r=a.requestId;if(a.type==="yaar:app-manifest-request"){if(!o){window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:null,error:"No app registered"},"*");return}var e={appId:o.appId,name:o.name,state:{},commands:{}};if(o.state)for(var t in o.state){var d=o.state[t];e.state[t]={description:d.description},d.schema&&(e.state[t].schema=d.schema)}if(o.commands)for(var t in o.commands){var c=o.commands[t];e.commands[t]={description:c.description},c.params&&(e.commands[t].params=c.params),c.returns&&(e.commands[t].returns=c.returns)}window.parent.postMessage({type:"yaar:app-manifest-response",requestId:r,manifest:e},"*");return}if(a.type==="yaar:app-query-request"){if(!o||!o.state||!o.state[a.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:"Unknown state key: "+a.stateKey},"*");return}try{var u=o.state[a.stateKey].handler();u&&typeof u.then=="function"?u.then(function(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:n},"*")}).catch(function(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(n)},"*")}):window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:u},"*")}catch(n){window.parent.postMessage({type:"yaar:app-query-response",requestId:r,data:null,error:String(n)},"*")}return}if(a.type==="yaar:app-command-request"){if(!o||!o.commands||!o.commands[a.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:"Unknown command: "+a.command},"*");return}try{var u=o.commands[a.command].handler(a.params);u&&typeof u.then=="function"?u.then(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:f},"*")}).catch(function(f){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(f)},"*")}):window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:u},"*")}catch(n){window.parent.postMessage({type:"yaar:app-command-response",requestId:r,result:null,error:String(n)},"*")}return}}})}}();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var i="smtp-mailer/draft.json",a=document.createElement("div");a.style.fontFamily="Inter, system-ui, sans-serif";a.style.padding="16px";a.style.maxWidth="920px";a.style.margin="0 auto";a.innerHTML=`
+  <h2 style="margin:0 0 8px">SMTP Mailer</h2>
+  <p style="margin:0 0 16px;color:#666">Compose email with SMTP or Google API.</p>
+
+  <section style="border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:12px">
+    <h3 style="margin:0 0 10px;font-size:15px">Provider</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="providerSelect" style="padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff">
+        <option value="smtp">SMTP</option>
+        <option value="google">Google API</option>
+      </select>
+      <span id="providerStatus" style="font-size:12px;color:#666">Using SMTP mode</span>
+    </div>
+  </section>
+
+  <section id="smtpSection" style="border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:12px">
+    <h3 style="margin:0 0 10px;font-size:15px">SMTP Profile</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555">
+        Host
+        <input id="smtpHost" value="smtp.gmail.com" style="padding:8px;border:1px solid #ccc;border-radius:8px" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555">
+        Port
+        <input id="smtpPort" value="465" style="padding:8px;border:1px solid #ccc;border-radius:8px" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555">
+        Username
+        <input id="smtpUser" value="standingbehindnv@gmail.com" style="padding:8px;border:1px solid #ccc;border-radius:8px" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555">
+        App Password
+        <input id="smtpPass" type="password" placeholder="xxxx xxxx xxxx xxxx" style="padding:8px;border:1px solid #ccc;border-radius:8px" />
+      </label>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="saveProfile" style="padding:8px 12px;border-radius:8px;border:1px solid #0a7;background:#0a7;color:#fff">Save SMTP Profile</button>
+      <span id="profileStatus" style="font-size:12px;color:#666;align-self:center"></span>
+    </div>
+  </section>
+
+  <section id="googleSection" style="display:none;border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:12px;background:#fcfcff">
+    <h3 style="margin:0 0 10px;font-size:15px">Google Auth</h3>
+    <p style="margin:0 0 8px;color:#666;font-size:12px">Authenticate in browser, then token is saved by agent.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <button id="authenticateGoogle" style="padding:8px 12px;border-radius:8px;border:1px solid #2563eb;background:#2563eb;color:#fff">Authenticate Google</button>
+      <button id="requestAuthLink" style="padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff">Get Manual Auth Link</button>
+    </div>
+
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555;margin-bottom:8px">
+      Auth Link (manual fallback)
+      <input id="googleAuthLink" readonly placeholder="Click 'Get Manual Auth Link'" style="padding:8px;border:1px solid #ccc;border-radius:8px;background:#f8f8f8" />
+    </label>
+
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555">
+        Paste authorization code
+        <input id="googleAuthCode" placeholder="4/0AfJohX..." style="padding:8px;border:1px solid #ccc;border-radius:8px" />
+      </label>
+      <button id="submitGoogleCode" style="padding:8px 12px;border-radius:8px;border:1px solid #0a7;background:#0a7;color:#fff;height:36px">Submit Code</button>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <span id="googleStatus" style="font-size:12px;color:#666">Not connected</span>
+    </div>
+  </section>
+
+  <section style="border:1px solid #ddd;border-radius:10px;padding:12px">
+    <h3 style="margin:0 0 10px;font-size:15px">Compose</h3>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <input id="to" placeholder="To" style="padding:10px;border:1px solid #ccc;border-radius:8px" />
+      <input id="subject" placeholder="Subject" style="padding:10px;border:1px solid #ccc;border-radius:8px" />
+      <textarea id="body" placeholder="Write your email..." rows="10" style="padding:10px;border:1px solid #ccc;border-radius:8px;resize:vertical"></textarea>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="saveDraft" style="padding:8px 12px;border-radius:8px;border:1px solid #ccc;background:#fff">Save Draft</button>
+      <button id="send" style="padding:8px 12px;border-radius:8px;border:1px solid #2563eb;background:#2563eb;color:#fff">Send Email</button>
+      <span id="sendStatus" style="font-size:12px;color:#666;align-self:center"></span>
+    </div>
+  </section>
+`;document.body.style.margin="0";document.body.style.background="#fafafa";document.body.appendChild(a);var e=t=>document.getElementById(t);function r(){return e("providerSelect").value||"smtp"}function s(t){let o=t==="smtp";e("smtpSection").style.display=o?"block":"none",e("googleSection").style.display=o?"none":"block",e("providerStatus").textContent=o?"Using SMTP mode":"Using Google API mode"}async function u(){try{let t=await window.yaar.storage.read(i,{as:"json"});t&&(e("to").value=t.to||"",e("subject").value=t.subject||"",e("body").value=t.body||"")}catch{}}async function p(){let t={to:e("to").value.trim(),subject:e("subject").value,body:e("body").value};await window.yaar.storage.save(i,JSON.stringify(t,null,2)),e("sendStatus").textContent=`Draft saved at ${new Date().toLocaleTimeString()}`}function d(){return{smtpHost:e("smtpHost").value.trim(),smtpPort:Number(e("smtpPort").value||"465"),secure:Number(e("smtpPort").value||"465")===465,username:e("smtpUser").value.trim(),appPassword:e("smtpPass").value}}function l(){return{to:e("to").value.trim(),subject:e("subject").value,body:e("body").value}}e("providerSelect").addEventListener("change",()=>{let t=r();s(t),window.yaar?.app?.sendInteraction({event:"mail_provider_changed",payload:{provider:t}})});e("saveDraft").addEventListener("click",async()=>{await p()});e("saveProfile").addEventListener("click",()=>{let t=d();window.yaar?.app?.sendInteraction({event:"smtp_profile_save_requested",payload:t}),e("profileStatus").textContent="Save requested to agent"});e("authenticateGoogle").addEventListener("click",()=>{window.yaar?.app?.sendInteraction({event:"google_authenticate_requested",payload:{mode:"agent_browser"}}),e("googleStatus").textContent="Opening auth flow in browser..."});e("requestAuthLink").addEventListener("click",()=>{window.yaar?.app?.sendInteraction({event:"google_auth_link_requested",payload:{mode:"manual"}}),e("googleStatus").textContent="Auth link requested from agent..."});e("submitGoogleCode").addEventListener("click",()=>{let t=e("googleAuthCode").value.trim();if(!t){e("googleStatus").textContent="Please paste an authorization code first.";return}window.yaar?.app?.sendInteraction({event:"google_auth_code_submitted",payload:{code:t}}),e("googleStatus").textContent="Code submitted to agent for token exchange..."});e("send").addEventListener("click",async()=>{let t=l();await p();let o=window.yaar?.app;if(r()==="google"){o?.sendInteraction({event:"gmail_send_requested",payload:{draft:t}}),e("sendStatus").textContent="Google send requested to agent";return}o?.sendInteraction({event:"smtp_send_requested",payload:{profile:d(),draft:t}}),e("sendStatus").textContent="SMTP send requested to agent"});var n=window.yaar?.app;n&&n.register({appId:"smtp-mailer",name:"SMTP Mailer",state:{provider:{description:"Current send provider",handler:()=>({provider:r()})},compose:{description:"Current compose fields",handler:()=>l()},smtpProfile:{description:"Current SMTP profile form values",handler:()=>({smtpHost:e("smtpHost").value,smtpPort:Number(e("smtpPort").value||"465"),username:e("smtpUser").value,hasPassword:!!e("smtpPass").value})},googleAuth:{description:"Current Google auth UI state",handler:()=>({authLink:e("googleAuthLink").value,hasAuthCode:!!e("googleAuthCode").value.trim(),status:e("googleStatus").textContent||""})}},commands:{hydrateProfile:{description:"Fill SMTP profile fields from saved config",params:{type:"object",properties:{smtpHost:{type:"string"},smtpPort:{type:"number"},username:{type:"string"}},required:[]},handler:t=>(t.smtpHost&&(e("smtpHost").value=t.smtpHost),t.smtpPort&&(e("smtpPort").value=String(t.smtpPort)),t.username&&(e("smtpUser").value=t.username),{ok:!0})},setProvider:{description:"Set active provider in UI",params:{type:"object",properties:{provider:{type:"string",enum:["smtp","google"]}},required:["provider"]},handler:t=>(e("providerSelect").value=t.provider,s(t.provider),{ok:!0})},setGoogleAuthLink:{description:"Set manual Google auth link in UI",params:{type:"object",properties:{url:{type:"string"}},required:["url"]},handler:t=>(e("googleAuthLink").value=t.url,{ok:!0})},setGoogleStatus:{description:"Set Google auth status text",params:{type:"object",properties:{status:{type:"string"}},required:["status"]},handler:t=>(e("googleStatus").textContent=t.status,{ok:!0})},setStatus:{description:"Set status text for profile/send actions",params:{type:"object",properties:{profileStatus:{type:"string"},sendStatus:{type:"string"},providerStatus:{type:"string"}},required:[]},handler:t=>(typeof t.profileStatus=="string"&&(e("profileStatus").textContent=t.profileStatus),typeof t.sendStatus=="string"&&(e("sendStatus").textContent=t.sendStatus),typeof t.providerStatus=="string"&&(e("providerStatus").textContent=t.providerStatus),{ok:!0})}}});s("smtp");u();
+
+</script>
+</body>
+</html>

@@ -285,8 +285,10 @@ export async function handleFileRoutes(
   }
 
   // Serve app static files (for deployed apps)
-  // URL format: /api/apps/{appId}/static/{path}
-  const appStaticMatch = url.pathname.match(/^\/api\/apps\/([a-z][a-z0-9-]*)\/static\/(.+)$/);
+  // URL format: /api/apps/{appId}/static/{path} (also accepts /dist/ as alias)
+  const appStaticMatch = url.pathname.match(
+    /^\/api\/apps\/([a-z][a-z0-9-]*)\/(?:static|dist)\/(.+)$/,
+  );
   if (appStaticMatch && req.method === 'GET') {
     const appId = appStaticMatch[1];
     const filePath = decodeURIComponent(appStaticMatch[2]);
