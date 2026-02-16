@@ -265,6 +265,11 @@
   pointer-events: none;
 }
 
+.desktopIconSelected {
+  background: rgba(0, 120, 215, 0.35);
+  outline: 1.5px solid rgba(0, 120, 215, 0.8);
+}
+
 .iconImage {
   font-size: 48px;
   line-height: 1;

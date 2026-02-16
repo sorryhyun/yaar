@@ -5,7 +5,6 @@ document.body.appendChild(root);
 const style = document.createElement('style');
 style.textContent = `
   :root {
-    color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   }
   html, body {
@@ -20,19 +19,20 @@ style.textContent = `
   #dock-clock-root {
     height: 100vh;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-end;
     user-select: none;
-    padding: 12px;
+    padding: 0 8px;
     box-sizing: border-box;
   }
   .panel {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 16px;
-    border-radius: 14px;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0;
+    border-radius: 10px;
     background: rgba(10, 12, 16, 0.45);
     border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
@@ -40,15 +40,21 @@ style.textContent = `
     -webkit-backdrop-filter: blur(10px);
   }
   .time {
-    font-size: 38px;
+    font-size: 24px;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.1px;
     line-height: 1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    font-variant-numeric: tabular-nums;
   }
   .date {
-    font-size: 14px;
-    color: #c2cad6;
-    line-height: 1.2;
+    font-size: 16px;
+    font-weight: 600;
+    color: #d4dbe6;
+    line-height: 1;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 `;
 document.head.appendChild(style);
@@ -63,6 +69,30 @@ dateEl.className = 'date';
 panelEl.appendChild(timeEl);
 panelEl.appendChild(dateEl);
 root.appendChild(panelEl);
+
+const appearance = {
+  showPanel: false,
+  panelOpacity: 0.45,
+  panelBlurPx: 10,
+};
+
+function applyAppearance() {
+  panelEl.style.background = appearance.showPanel
+    ? `rgba(10, 12, 16, ${appearance.panelOpacity})`
+    : 'transparent';
+  panelEl.style.border = appearance.showPanel
+    ? '1px solid rgba(255, 255, 255, 0.12)'
+    : '1px solid transparent';
+  panelEl.style.boxShadow = appearance.showPanel
+    ? '0 6px 30px rgba(0, 0, 0, 0.35)'
+    : 'none';
+  panelEl.style.backdropFilter = appearance.showPanel
+    ? `blur(${appearance.panelBlurPx}px)`
+    : 'none';
+  (panelEl.style as any).webkitBackdropFilter = appearance.showPanel
+    ? `blur(${appearance.panelBlurPx}px)`
+    : 'none';
+}
 
 let lastIso = '';
 
@@ -85,6 +115,7 @@ function renderNow() {
   dateEl.textContent = dateText;
 }
 
+applyAppearance();
 renderNow();
 setInterval(renderNow, 1000);
 
@@ -105,6 +136,10 @@ if (appApi) {
           date: dateEl.textContent || '',
         }),
       },
+      appearance: {
+        description: 'Current dock appearance settings',
+        handler: () => ({ ...appearance }),
+      },
     },
     commands: {
       refreshNow: {
@@ -113,6 +148,35 @@ if (appApi) {
         handler: () => {
           renderNow();
           return { ok: true, nowIso: lastIso };
+        },
+      },
+      setAppearance: {
+        description:
+          'Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0-1), panelBlurPx?: number (0-40) }',
+        params: {
+          type: 'object',
+          properties: {
+            showPanel: { type: 'boolean' },
+            panelOpacity: { type: 'number', minimum: 0, maximum: 1 },
+            panelBlurPx: { type: 'number', minimum: 0, maximum: 40 },
+          },
+        },
+        handler: (params: {
+          showPanel?: boolean;
+          panelOpacity?: number;
+          panelBlurPx?: number;
+        }) => {
+          if (typeof params?.showPanel === 'boolean') {
+            appearance.showPanel = params.showPanel;
+          }
+          if (typeof params?.panelOpacity === 'number') {
+            appearance.panelOpacity = Math.max(0, Math.min(1, params.panelOpacity));
+          }
+          if (typeof params?.panelBlurPx === 'number') {
+            appearance.panelBlurPx = Math.max(0, Math.min(40, params.panelBlurPx));
+          }
+          applyAppearance();
+          return { ok: true, appearance: { ...appearance } };
         },
       },
     },

@@ -89,6 +89,7 @@ export function DesktopSurface() {
   const appBadges = useDesktopStore((s) => s.appBadges);
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
+  const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
   // Fetch available apps on mount and when appsVersion changes (after deploy)
   const fetchedVersionRef = useRef(-1);
@@ -142,6 +143,7 @@ export function DesktopSurface() {
       if (e.target === e.currentTarget) {
         useDesktopStore.setState({ focusedWindowId: null });
         setSelectedWindows([]);
+        setSelectedAppIds(new Set());
       }
       // Always close context menu on background click
       hideContextMenu();
@@ -234,6 +236,23 @@ export function DesktopSurface() {
           }
         }
         setSelectedWindows(ids);
+
+        // Compute which app icons intersect
+        const appIds = new Set<string>();
+        document.querySelectorAll<HTMLElement>('[data-app-id]').forEach((el) => {
+          const b = el.getBoundingClientRect();
+          if (
+            !(
+              rect.x > b.right ||
+              rect.x + rect.w < b.left ||
+              rect.y > b.bottom ||
+              rect.y + rect.h < b.top
+            )
+          ) {
+            appIds.add(el.dataset.appId!);
+          }
+        });
+        setSelectedAppIds(appIds);
       };
 
       const handleMouseUp = () => {
@@ -369,7 +388,8 @@ export function DesktopSurface() {
             .map((app) => (
               <button
                 key={app.id}
-                className={styles.desktopIcon}
+                className={`${styles.desktopIcon}${selectedAppIds.has(app.id) ? ` ${styles.desktopIconSelected}` : ''}`}
+                data-app-id={app.id}
                 onClick={() => handleAppClick(app.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
