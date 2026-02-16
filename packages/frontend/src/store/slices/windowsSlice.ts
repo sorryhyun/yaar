@@ -6,7 +6,7 @@
  * This prevents collisions when multiple monitors create windows with the same ID.
  */
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types';
-import type { OSAction } from '@yaar/shared';
+import type { OSAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
 
@@ -30,15 +30,16 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
 
   switch (action.type) {
     case 'window.create': {
-      const actionMonitorId = (action as { monitorId?: string }).monitorId;
+      const createAction = action as WindowCreateAction;
+      const actionMonitorId = (createAction as { monitorId?: string }).monitorId;
       const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
-      const key = toWindowKey(monitorId, action.windowId);
-      const variant = action.variant;
+      const key = toWindowKey(monitorId, createAction.windowId);
+      const variant = createAction.variant;
       const TITLEBAR_H = 36;
       const TASKBAR_H = 36;
       const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : 1280;
       const vh = typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : 720;
-      const b = { ...action.bounds };
+      const b = { ...createAction.bounds };
       const isStandard = !variant || variant === 'standard';
       // Skip titlebar offset for widget/panel (no titlebar)
       const yOffset = isStandard ? TITLEBAR_H : 0;
@@ -48,17 +49,17 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       b.h = Math.min(b.h, vh - TASKBAR_H - b.y);
       const window: WindowModel = {
         id: key,
-        title: action.title,
+        title: createAction.title,
         bounds: b,
-        content: { ...action.content },
-        minimized: false,
+        content: { ...createAction.content },
+        minimized: createAction.minimized ?? false,
         maximized: false,
-        requestId: action.requestId,
+        requestId: createAction.requestId,
         monitorId,
         variant,
-        dockEdge: action.dockEdge,
-        frameless: action.frameless,
-        windowStyle: action.windowStyle,
+        dockEdge: createAction.dockEdge,
+        frameless: createAction.frameless,
+        windowStyle: createAction.windowStyle,
       };
       state.windows[key] = window;
       state.zOrder = state.zOrder.filter((id) => id !== key);
@@ -79,8 +80,8 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         // Standard: push to top
         state.zOrder.push(key);
       }
-      // Only steal focus for standard windows
-      if (isStandard) {
+      // Only steal focus for non-minimized standard windows
+      if (isStandard && !createAction.minimized) {
         state.focusedWindowId = key;
       }
       break;

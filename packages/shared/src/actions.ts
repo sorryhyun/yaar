@@ -38,6 +38,7 @@ export interface WindowState {
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  minimized?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -53,6 +54,7 @@ export interface WindowCreateAction {
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  minimized?: boolean;
 }
 
 export interface WindowCloseAction {

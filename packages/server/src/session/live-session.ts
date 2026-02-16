@@ -167,6 +167,7 @@ export class LiveSession {
       ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
       ...(win.frameless ? { frameless: win.frameless } : {}),
       ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
+      ...(win.minimized ? { minimized: win.minimized } : {}),
     }));
   }
 

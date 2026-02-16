@@ -59,6 +59,10 @@ export function registerCreateTools(server: McpServer): void {
           .string()
           .optional()
           .describe('App ID — auto-applies window variant and metadata from app.json'),
+        minimized: z
+          .boolean()
+          .optional()
+          .describe('Create window in minimized state (taskbar only)'),
       },
     },
     async (args) => {
@@ -87,6 +91,7 @@ export function registerCreateTools(server: McpServer): void {
         ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
         ...(appMeta?.frameless ? { frameless: true } : {}),
         ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+        ...(args.minimized ? { minimized: true } : {}),
       };
 
       if (renderer === 'iframe') {
@@ -139,6 +144,10 @@ export function registerCreateTools(server: McpServer): void {
           .string()
           .optional()
           .describe('App ID — auto-applies window variant and metadata from app.json'),
+        minimized: z
+          .boolean()
+          .optional()
+          .describe('Create window in minimized state (taskbar only)'),
       },
     },
     async (args) => {
@@ -199,6 +208,7 @@ export function registerCreateTools(server: McpServer): void {
         ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
         ...(appMeta?.frameless ? { frameless: true } : {}),
         ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+        ...(args.minimized ? { minimized: true } : {}),
       };
 
       actionEmitter.emitAction(osAction);

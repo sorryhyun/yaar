@@ -87,6 +87,7 @@ export class WindowStateRegistry {
           dockEdge: action.dockEdge,
           frameless: action.frameless,
           windowStyle: action.windowStyle,
+          minimized: action.minimized,
           createdAt: now,
           updatedAt: now,
         });
