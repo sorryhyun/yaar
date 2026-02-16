@@ -1,0 +1,8 @@
+{
+  "id": "image-viewer",
+  "name": "Image Viewer",
+  "icon": "🖼️",
+  "description": "View images from storage or files with grid/single layouts and fit-to-window single view.",
+  "version": "1.0.1",
+  "author": "YAAR"
+}
