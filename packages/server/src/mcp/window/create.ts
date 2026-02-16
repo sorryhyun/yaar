@@ -18,6 +18,7 @@ import {
 import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
+import { getAppMeta } from '../apps/discovery.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
@@ -54,22 +55,19 @@ export function registerCreateTools(server: McpServer): void {
         y: z.number().optional().describe('Y position (default: 100)'),
         width: z.number().optional().describe('Width (default: 500)'),
         height: z.number().optional().describe('Height (default: 400)'),
-        variant: z
-          .enum(['standard', 'widget', 'panel'])
+        appId: z
+          .string()
           .optional()
-          .describe(
-            'Window style: standard (default), widget (chromeless desktop widget), panel (docked bar)',
-          ),
-        dockEdge: z
-          .enum(['top', 'bottom'])
-          .optional()
-          .describe('Dock edge for panel variant (default: bottom)'),
+          .describe('App ID — auto-applies window variant and metadata from app.json'),
       },
     },
     async (args) => {
       const content = args.content as DisplayContent;
       const renderer = content.renderer;
       const data = content.content;
+
+      // Look up variant/dockEdge from app.json if appId is provided
+      const appMeta = args.appId ? await getAppMeta(args.appId as string) : null;
 
       const osAction: OSAction = {
         type: 'window.create',
@@ -85,8 +83,8 @@ export function registerCreateTools(server: McpServer): void {
           renderer,
           data,
         },
-        ...(args.variant ? { variant: args.variant as WindowVariant } : {}),
-        ...(args.dockEdge ? { dockEdge: args.dockEdge as 'top' | 'bottom' } : {}),
+        ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
+        ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
       };
 
       if (renderer === 'iframe') {
@@ -135,16 +133,10 @@ export function registerCreateTools(server: McpServer): void {
         y: z.number().optional().describe('Y position (default: 100)'),
         width: z.number().optional().describe('Width (default: 500)'),
         height: z.number().optional().describe('Height (default: 400)'),
-        variant: z
-          .enum(['standard', 'widget', 'panel'])
+        appId: z
+          .string()
           .optional()
-          .describe(
-            'Window style: standard (default), widget (chromeless desktop widget), panel (docked bar)',
-          ),
-        dockEdge: z
-          .enum(['top', 'bottom'])
-          .optional()
-          .describe('Dock edge for panel variant (default: bottom)'),
+          .describe('App ID — auto-applies window variant and metadata from app.json'),
       },
     },
     async (args) => {
@@ -184,6 +176,9 @@ export function registerCreateTools(server: McpServer): void {
         return error('Provide either jsonfile or components.');
       }
 
+      // Look up variant/dockEdge from app.json if appId is provided
+      const appMeta = args.appId ? await getAppMeta(args.appId as string) : null;
+
       const osAction: OSAction = {
         type: 'window.create',
         windowId: args.windowId,
@@ -198,8 +193,8 @@ export function registerCreateTools(server: McpServer): void {
           renderer: 'component',
           data: layoutData,
         },
-        ...(args.variant ? { variant: args.variant as WindowVariant } : {}),
-        ...(args.dockEdge ? { dockEdge: args.dockEdge as 'top' | 'bottom' } : {}),
+        ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
+        ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
       };
 
       actionEmitter.emitAction(osAction);

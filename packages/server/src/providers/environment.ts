@@ -59,6 +59,9 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     const systemLines = hiddenApps.map((a) => {
       let line = `  - **${a.name}**: ${a.description || a.id}`;
       if (a.isCompiled) line += ` (iframe: /api/apps/${a.id}/static/index.html)`;
+      if (a.variant && a.variant !== 'standard') {
+        line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
+      }
       return line;
     });
     lines.push(`- System apps:\n${systemLines.join('\n')}`);

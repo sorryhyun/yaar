@@ -20,6 +20,10 @@ vi.mock('../config.js', () => ({
   PROJECT_ROOT: '/mock/project',
 }));
 
+vi.mock('../mcp/apps/discovery.js', () => ({
+  getAppMeta: vi.fn().mockResolvedValue(null),
+}));
+
 // Import after mocks are set up
 import { registerCreateTools } from '../mcp/window/create.js';
 

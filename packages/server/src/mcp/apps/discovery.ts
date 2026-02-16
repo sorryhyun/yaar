@@ -13,6 +13,9 @@ const APPS_DIR = join(PROJECT_ROOT, 'apps');
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
 
+export type WindowVariantType = 'standard' | 'widget' | 'panel';
+export type DockEdgeType = 'top' | 'bottom';
+
 export interface AppInfo {
   id: string;
   name: string;
@@ -25,6 +28,8 @@ export interface AppInfo {
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   fileAssociations?: FileAssociation[];
+  variant?: WindowVariantType;
+  dockEdge?: DockEdgeType;
 }
 
 /**
@@ -70,6 +75,8 @@ export async function listApps(): Promise<AppInfo[]> {
       let hidden: boolean | undefined;
       let appProtocol: boolean | undefined;
       let fileAssociations: FileAssociation[] | undefined;
+      let variant: WindowVariantType | undefined;
+      let dockEdge: DockEdgeType | undefined;
       try {
         const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
         const meta = JSON.parse(metaContent);
@@ -80,6 +87,8 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.hidden) hidden = true;
         if (meta.appProtocol) appProtocol = true;
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
+        if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
+        if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
       } catch {
         // No metadata or invalid JSON
       }
@@ -123,6 +132,8 @@ export async function listApps(): Promise<AppInfo[]> {
         isCompiled,
         ...(appProtocol && { appProtocol }),
         ...(fileAssociations && { fileAssociations }),
+        ...(variant && { variant }),
+        ...(dockEdge && { dockEdge }),
       });
     }
 
@@ -130,6 +141,24 @@ export async function listApps(): Promise<AppInfo[]> {
   } catch {
     // apps/ directory doesn't exist
     return [];
+  }
+}
+
+/**
+ * Get window metadata (variant, dockEdge) for a single app from its app.json.
+ */
+export async function getAppMeta(
+  appId: string,
+): Promise<{ variant?: WindowVariantType; dockEdge?: DockEdgeType } | null> {
+  try {
+    const metaContent = await readFile(join(APPS_DIR, appId, 'app.json'), 'utf-8');
+    const meta = JSON.parse(metaContent);
+    const result: { variant?: WindowVariantType; dockEdge?: DockEdgeType } = {};
+    if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
+    if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
+    return Object.keys(result).length > 0 ? result : null;
+  } catch {
+    return null;
   }
 }
 
