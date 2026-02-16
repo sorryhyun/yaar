@@ -3,7 +3,11 @@
  */
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store';
-import { tryIframeSelfCapture } from '@/store/desktop';
+import {
+  tryIframeSelfCapture,
+  getIframeDragSource,
+  consumeIframeDragSource,
+} from '@/store/desktop';
 import { getRawWindowId } from '@/store/helpers';
 import { useComponentAction } from '@/contexts/ComponentActionContext';
 import type { WindowModel } from '@/types/state';
@@ -224,6 +228,9 @@ interface WindowFrameProps {
 }
 
 function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
+  const variant = window.variant ?? 'standard';
+  const isWidget = variant === 'widget';
+  const isPanel = variant === 'panel';
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
@@ -273,28 +280,58 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     [],
   );
 
-  // Drag-over state for app icon drop target
+  // Drag-over state for app icon / iframe text drop target
   const [isDragOver, setIsDragOver] = useState(false);
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('application/x-yaar-app')) {
+    if (e.dataTransfer.types.includes('application/x-yaar-app') || getIframeDragSource()) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'link';
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-yaar-app')
+        ? 'link'
+        : 'copy';
       setIsDragOver(true);
     }
   }, []);
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      // Focus the window when text is dragged over it from an iframe
+      if (getIframeDragSource()) {
+        e.preventDefault();
+        userFocusWindow(window.id);
+      }
+    },
+    [userFocusWindow, window.id],
+  );
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       setIsDragOver(false);
+
+      // App icon drop
       const appId = e.dataTransfer.getData('application/x-yaar-app');
-      if (!appId) return;
-      e.preventDefault();
-      const rawId = getRawWindowId(window.id);
-      useDesktopStore
-        .getState()
-        .queueGestureMessage(
-          `<user_interaction:drag>app "${appId}" dragged onto window "${window.title}" (id: ${rawId})</user_interaction:drag>`,
+      if (appId) {
+        e.preventDefault();
+        const rawId = getRawWindowId(window.id);
+        useDesktopStore
+          .getState()
+          .queueGestureMessage(
+            `<user_interaction:drag>app "${appId}" dragged onto window "${window.title}" (id: ${rawId})</user_interaction:drag>`,
+          );
+        return;
+      }
+
+      // Iframe text drag → drop onto this window
+      const dragSource = consumeIframeDragSource();
+      if (dragSource) {
+        e.preventDefault();
+        const store = useDesktopStore.getState();
+        const sourceWin = store.windows[dragSource.windowId];
+        const sourceTitle = sourceWin?.title ?? dragSource.windowId;
+        const sourceRawId = getRawWindowId(dragSource.windowId);
+        const targetRawId = getRawWindowId(window.id);
+        store.queueGestureMessage(
+          `<user_interaction:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</user_interaction:select>\n<user_interaction:drag>\n  target: window "${window.title}" (id: ${targetRawId})\n</user_interaction:drag>`,
         );
+      }
     },
     [window.id, window.title],
   );
@@ -349,10 +386,11 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     userFocusWindow(window.id);
   }, [userFocusWindow, window.id]);
 
-  // Handle title bar drag
+  // Handle title bar drag (also used for widget body drag)
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest(`.${styles.controls}`)) return;
+      if ((e.target as HTMLElement).closest(`.${styles.widgetClose}`)) return;
 
       e.preventDefault();
       setIsDragging(true);
@@ -364,6 +402,8 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
 
       const TITLEBAR_H = 36;
       const TASKBAR_H = 36;
+      const winVariant = window.variant;
+      const yClamp = !winVariant || winVariant === 'standard' ? TITLEBAR_H : 0;
 
       const handleMouseMove = (e: MouseEvent) => {
         const vw = globalThis.innerWidth;
@@ -375,7 +415,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         // Keep title bar reachable: at least 100px of width visible horizontally
         newX = Math.max(-(window.bounds.w - 100), Math.min(newX, vw - 100));
         // Top: can't go above viewport; Bottom: title bar must stay above taskbar
-        newY = Math.max(0, Math.min(newY, vh - TASKBAR_H - TITLEBAR_H));
+        newY = Math.max(0, Math.min(newY, vh - TASKBAR_H - yClamp));
 
         userMoveWindow(window.id, newX, newY);
       };
@@ -394,7 +434,24 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [window.id, window.bounds.x, window.bounds.y, userMoveWindow, queueBoundsUpdate],
+    [
+      window.id,
+      window.bounds.x,
+      window.bounds.y,
+      window.bounds.w,
+      window.variant,
+      userMoveWindow,
+      queueBoundsUpdate,
+    ],
+  );
+
+  // Widget drag: combines focus + drag on frame mousedown
+  const handleWidgetDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      userFocusWindow(window.id);
+      handleDragStart(e);
+    },
+    [userFocusWindow, window.id, handleDragStart],
   );
 
   // Handle resize from any edge/corner
@@ -495,22 +552,43 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     [window.id, window.bounds, userResizeWindow, queueBoundsUpdate],
   );
 
-  // Determine position/size (handle maximized state)
-  const style: React.CSSProperties = window.maximized
-    ? {
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: zIndex + 100,
-      }
-    : {
-        top: window.bounds.y,
-        left: window.bounds.x,
-        width: window.bounds.w,
-        height: window.bounds.h,
-        zIndex: zIndex + 100,
-      };
+  // Determine position/size (handle maximized state and variants)
+  let style: React.CSSProperties;
+  if (isPanel) {
+    const edge = window.dockEdge ?? 'bottom';
+    style = {
+      position: 'fixed',
+      left: 0,
+      width: '100%',
+      height: window.bounds.h,
+      zIndex: 9000,
+      ...(edge === 'top' ? { top: 0 } : { bottom: 0 }),
+    };
+  } else if (window.maximized) {
+    style = {
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      zIndex: zIndex + 100,
+    };
+  } else if (isWidget) {
+    style = {
+      top: window.bounds.y,
+      left: window.bounds.x,
+      width: window.bounds.w,
+      height: window.bounds.h,
+      zIndex, // No +100 offset — keeps widgets below standard windows
+    };
+  } else {
+    style = {
+      top: window.bounds.y,
+      left: window.bounds.x,
+      width: window.bounds.w,
+      height: window.bounds.h,
+      zIndex: zIndex + 100,
+    };
+  }
 
   return (
     <div
@@ -518,88 +596,106 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       className={styles.frame}
       style={style}
       data-window-id={window.id}
+      data-variant={variant}
       data-focused={isFocused}
       data-selected={isSelected}
       data-dragging={isDragging}
       data-resizing={isResizing}
       data-drag-over={isDragOver}
       data-agent-active={windowAgent?.status === 'active'}
-      onMouseDown={handleMouseDown}
+      onMouseDown={isWidget ? handleWidgetDragStart : handleMouseDown}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Title bar */}
-      <div
-        className={styles.titleBar}
-        onMouseDown={handleDragStart}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          showContextMenu(e.clientX, e.clientY, window.id);
-        }}
-      >
-        <div className={styles.titleSection}>
-          <div className={styles.title}>{window.title}</div>
-          {window.locked && (
-            <div className={styles.lockBadge} title={`Locked by: ${window.lockedBy || 'unknown'}`}>
-              <span className={styles.lockIcon}>🔒</span>
-            </div>
-          )}
-          {windowAgent && (
-            <div
-              className={styles.agentBadge}
-              data-status={windowAgent.status}
-              title={`Pool agent: ${windowAgent.agentId} (${windowAgent.status})`}
+      {/* Widget close button (appears on hover) */}
+      {isWidget && (
+        <button
+          className={styles.widgetClose}
+          onClick={() => userCloseWindow(window.id)}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          ×
+        </button>
+      )}
+
+      {/* Title bar — standard variant only */}
+      {!isWidget && !isPanel && (
+        <div
+          className={styles.titleBar}
+          onMouseDown={handleDragStart}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, window.id);
+          }}
+        >
+          <div className={styles.titleSection}>
+            <div className={styles.title}>{window.title}</div>
+            {window.locked && (
+              <div
+                className={styles.lockBadge}
+                title={`Locked by: ${window.lockedBy || 'unknown'}`}
+              >
+                <span className={styles.lockIcon}>🔒</span>
+              </div>
+            )}
+            {windowAgent && (
+              <div
+                className={styles.agentBadge}
+                data-status={windowAgent.status}
+                title={`Pool agent: ${windowAgent.agentId} (${windowAgent.status})`}
+              >
+                <span className={styles.agentIcon}>
+                  {windowAgent.status === 'active' ? '⚡' : '💤'}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className={styles.controls}>
+            <button
+              className={styles.controlBtn}
+              data-action="export"
+              title="Export content"
+              onClick={() => exportContent(window.content, window.title, window.id)}
             >
-              <span className={styles.agentIcon}>
-                {windowAgent.status === 'active' ? '⚡' : '💤'}
-              </span>
-            </div>
-          )}
+              ↑
+            </button>
+            <button
+              className={styles.controlBtn}
+              data-action="minimize"
+              onClick={() => {
+                useDesktopStore.getState().applyAction({
+                  type: 'window.minimize',
+                  windowId: window.id,
+                });
+              }}
+            >
+              −
+            </button>
+            <button
+              className={styles.controlBtn}
+              data-action="maximize"
+              onClick={() => {
+                useDesktopStore.getState().applyAction({
+                  type: window.maximized ? 'window.restore' : 'window.maximize',
+                  windowId: window.id,
+                });
+              }}
+            >
+              □
+            </button>
+            <button
+              className={styles.controlBtn}
+              data-action="close"
+              onClick={() => userCloseWindow(window.id)}
+            >
+              ×
+            </button>
+          </div>
         </div>
-        <div className={styles.controls}>
-          <button
-            className={styles.controlBtn}
-            data-action="export"
-            title="Export content"
-            onClick={() => exportContent(window.content, window.title, window.id)}
-          >
-            ↑
-          </button>
-          <button
-            className={styles.controlBtn}
-            data-action="minimize"
-            onClick={() => {
-              useDesktopStore.getState().applyAction({
-                type: 'window.minimize',
-                windowId: window.id,
-              });
-            }}
-          >
-            −
-          </button>
-          <button
-            className={styles.controlBtn}
-            data-action="maximize"
-            onClick={() => {
-              useDesktopStore.getState().applyAction({
-                type: window.maximized ? 'window.restore' : 'window.maximize',
-                windowId: window.id,
-              });
-            }}
-          >
-            □
-          </button>
-          <button
-            className={styles.controlBtn}
-            data-action="close"
-            onClick={() => userCloseWindow(window.id)}
-          >
-            ×
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Content area */}
       <div
@@ -722,18 +818,23 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       </div>
 
       {/* Resize edges and corners */}
-      {!window.maximized && (
-        <>
-          <div className={styles.resizeN} onMouseDown={(e) => handleResizeStart('n', e)} />
-          <div className={styles.resizeS} onMouseDown={(e) => handleResizeStart('s', e)} />
-          <div className={styles.resizeW} onMouseDown={(e) => handleResizeStart('w', e)} />
-          <div className={styles.resizeE} onMouseDown={(e) => handleResizeStart('e', e)} />
-          <div className={styles.resizeNW} onMouseDown={(e) => handleResizeStart('nw', e)} />
-          <div className={styles.resizeNE} onMouseDown={(e) => handleResizeStart('ne', e)} />
-          <div className={styles.resizeSW} onMouseDown={(e) => handleResizeStart('sw', e)} />
+      {!window.maximized &&
+        !isPanel &&
+        (isWidget ? (
+          /* Widget: SE corner handle only */
           <div className={styles.resizeSE} onMouseDown={(e) => handleResizeStart('se', e)} />
-        </>
-      )}
+        ) : (
+          <>
+            <div className={styles.resizeN} onMouseDown={(e) => handleResizeStart('n', e)} />
+            <div className={styles.resizeS} onMouseDown={(e) => handleResizeStart('s', e)} />
+            <div className={styles.resizeW} onMouseDown={(e) => handleResizeStart('w', e)} />
+            <div className={styles.resizeE} onMouseDown={(e) => handleResizeStart('e', e)} />
+            <div className={styles.resizeNW} onMouseDown={(e) => handleResizeStart('nw', e)} />
+            <div className={styles.resizeNE} onMouseDown={(e) => handleResizeStart('ne', e)} />
+            <div className={styles.resizeSW} onMouseDown={(e) => handleResizeStart('sw', e)} />
+            <div className={styles.resizeSE} onMouseDown={(e) => handleResizeStart('se', e)} />
+          </>
+        ))}
     </div>
   );
 }

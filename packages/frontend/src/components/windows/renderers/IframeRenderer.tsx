@@ -9,6 +9,7 @@ import {
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
+  IFRAME_CONTEXTMENU_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import { useDesktopStore } from '@/store';
@@ -170,6 +171,12 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
             appProtocolScript.setAttribute('data-yaar-app-protocol', '1');
             appProtocolScript.textContent = IFRAME_APP_PROTOCOL_SCRIPT;
             doc.head.appendChild(appProtocolScript);
+          }
+          if (doc && !doc.querySelector('script[data-yaar-contextmenu]')) {
+            const contextMenuScript = doc.createElement('script');
+            contextMenuScript.setAttribute('data-yaar-contextmenu', '1');
+            contextMenuScript.textContent = IFRAME_CONTEXTMENU_SCRIPT;
+            doc.head.appendChild(contextMenuScript);
           }
         } catch (e) {
           // Cross-origin — can't inject, capture helper must be baked in

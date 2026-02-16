@@ -291,3 +291,68 @@
 .selectionInput::placeholder {
   color: var(--color-muted);
 }
+
+/* ============ Widget variant ============ */
+.frame[data-variant='widget'] {
+  background: rgba(30, 30, 46, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.frame[data-variant='widget'][data-focused='true'] {
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.widgetClose {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--color-subtext-muted);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+  z-index: 10;
+}
+
+.frame[data-variant='widget']:hover .widgetClose {
+  opacity: 1;
+}
+
+.widgetClose:hover {
+  background: var(--color-red);
+  color: var(--color-base);
+}
+
+/* Widget content has no padding by default for clean look */
+.frame[data-variant='widget'] .content {
+  padding: var(--space-3);
+}
+
+/* ============ Panel variant ============ */
+.frame[data-variant='panel'] {
+  border-radius: 0;
+  background: rgba(24, 24, 37, 0.92);
+  backdrop-filter: blur(16px);
+  border: none;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+}
+
+.frame[data-variant='panel'] .content {
+  padding: var(--space-2) var(--space-4);
+  overflow: hidden;
+}

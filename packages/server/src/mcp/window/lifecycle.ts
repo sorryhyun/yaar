@@ -127,6 +127,8 @@ export function registerLifecycleTools(
         locked: win.locked,
         lockedBy: win.lockedBy,
         ...(win.appProtocol ? { appProtocol: true } : {}),
+        ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
+        ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
       }));
 
       return ok(JSON.stringify(windowList, null, 2));
@@ -163,6 +165,8 @@ export function registerLifecycleTools(
         size: { width: win.bounds.w, height: win.bounds.h },
         locked: win.locked,
         lockedBy: win.lockedBy,
+        ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
+        ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
       };
 
       if (args.includeImage) {

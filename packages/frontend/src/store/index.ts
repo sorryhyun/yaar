@@ -6,6 +6,8 @@ export {
   selectWindowsInOrder,
   selectVisibleWindows,
   selectMinimizedWindows,
+  selectWidgetWindows,
+  selectPanelWindows,
   selectToasts,
   selectNotifications,
   selectDialogs,

@@ -7,11 +7,13 @@
  * - Contains all windows
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useDesktopStore } from '@/store';
+import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { WindowManager } from './WindowManager';
+import { WindowFrame } from '../windows/WindowFrame';
+import { useShallow } from 'zustand/react/shallow';
 import { ToastContainer } from '../ui/ToastContainer';
 import { NotificationCenter } from '../ui/NotificationCenter';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -46,6 +48,8 @@ export function DesktopSurface() {
   const toggleAgentPanel = useDesktopStore((s) => s.toggleAgentPanel);
   const windows = useDesktopStore((s) => s.windows);
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
+  const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
+  const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
   const {
@@ -253,6 +257,10 @@ export function DesktopSurface() {
     [setSelectedWindows],
   );
 
+  const panelTopH = panelWindows.find((w) => w.dockEdge === 'top')?.bounds.h ?? 0;
+  const panelBottomH =
+    panelWindows.find((w) => (w.dockEdge ?? 'bottom') === 'bottom')?.bounds.h ?? 0;
+
   return (
     <>
       {/* CLI panel (behind desktop, slides in from left) */}
@@ -261,6 +269,12 @@ export function DesktopSurface() {
       <div
         className={styles.desktop}
         data-cli-mode={cliMode}
+        style={
+          {
+            '--panel-top-h': `${panelTopH}px`,
+            '--panel-bottom-h': `${panelBottomH}px`,
+          } as React.CSSProperties
+        }
         onClick={handleBackgroundClick}
         onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleDesktopMouseDown}
@@ -402,6 +416,14 @@ export function DesktopSurface() {
         {/* Window container */}
         <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>
           <WindowManager />
+          {panelWindows.map((window) => (
+            <WindowFrame
+              key={window.id}
+              window={window}
+              zIndex={9000}
+              isFocused={window.id === focusedWindowId}
+            />
+          ))}
         </QueueAwareComponentActionProvider>
 
         {/* Notification center (top-right) */}

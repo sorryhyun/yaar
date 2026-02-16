@@ -321,8 +321,65 @@ function initAppProtocolListeners() {
           break;
         }
       }
+      return;
+    }
+
+    if (e.data.type === 'yaar:click') {
+      useDesktopStore.getState().hideContextMenu();
+      return;
+    }
+
+    if (e.data.type === 'yaar:contextmenu') {
+      // Find the iframe whose contentWindow matches the message source
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
+      for (const iframe of iframes) {
+        if (iframe.contentWindow === e.source) {
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
+          const windowId = windowEl?.dataset.windowId;
+          if (windowId) {
+            // Convert iframe-local coordinates to parent viewport coordinates
+            const rect = iframe.getBoundingClientRect();
+            const x = rect.left + (e.data.clientX ?? 0);
+            const y = rect.top + (e.data.clientY ?? 0);
+            useDesktopStore.getState().showContextMenu(x, y, windowId);
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    if (e.data.type === 'yaar:drag-start') {
+      const text = String(e.data.text ?? '').trim();
+      if (!text) return;
+      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
+      for (const iframe of iframes) {
+        if (iframe.contentWindow === e.source) {
+          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
+          const windowId = windowEl?.dataset.windowId;
+          if (windowId) {
+            _iframeDragSource = { windowId, text };
+          }
+          break;
+        }
+      }
     }
   });
+}
+
+/** Tracks in-flight text drag from an iframe. */
+let _iframeDragSource: { windowId: string; text: string } | null = null;
+
+/** Check if an iframe text drag is in progress. */
+export function getIframeDragSource() {
+  return _iframeDragSource;
+}
+
+/** Consume (read + clear) the iframe drag source. */
+export function consumeIframeDragSource() {
+  const src = _iframeDragSource;
+  _iframeDragSource = null;
+  return src;
 }
 
 // Initialize the listeners immediately

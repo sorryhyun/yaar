@@ -9,6 +9,8 @@ import type { ComponentLayout } from './components.js';
 
 // ============ Window Actions ============
 
+export type WindowVariant = 'standard' | 'widget' | 'panel';
+
 export interface WindowBounds {
   x: number;
   y: number;
@@ -32,6 +34,8 @@ export interface WindowState {
   locked: boolean;
   lockedBy?: string;
   appProtocol?: boolean;
+  variant?: WindowVariant;
+  dockEdge?: 'top' | 'bottom';
   createdAt: number;
   updatedAt: number;
 }
@@ -43,6 +47,8 @@ export interface WindowCreateAction {
   bounds: WindowBounds;
   content: WindowContent;
   requestId?: string; // For tracking iframe load feedback
+  variant?: WindowVariant;
+  dockEdge?: 'top' | 'bottom';
 }
 
 export interface WindowCloseAction {

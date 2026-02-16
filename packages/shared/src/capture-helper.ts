@@ -334,3 +334,53 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
   };
 })();
 `;
+
+/**
+ * Inline JS interaction helper for iframe apps.
+ *
+ * Handles interactions inside same-origin iframes:
+ * 1. Context menu — prevents browser default, posts `yaar:contextmenu`
+ * 2. Left click — posts `yaar:click` so parent can dismiss context menu
+ * 3. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
+ */
+export const IFRAME_CONTEXTMENU_SCRIPT = `
+(function() {
+  if (window.__yaarContextMenuInstalled) return;
+  window.__yaarContextMenuInstalled = true;
+
+  // Left click — notify parent so it can dismiss context menu, etc.
+  document.addEventListener('click', function() {
+    window.parent.postMessage({ type: 'yaar:click' }, '*');
+  });
+
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    var selectedText = '';
+    try {
+      selectedText = (window.getSelection() || '').toString().trim();
+    } catch(ex) {}
+    window.parent.postMessage({
+      type: 'yaar:contextmenu',
+      clientX: e.clientX,
+      clientY: e.clientY,
+      selectedText: selectedText
+    }, '*');
+  });
+
+  // Text drag: when user drags selected text, notify parent so it can
+  // track the drag across windows and handle the drop.
+  document.addEventListener('dragstart', function(e) {
+    var selectedText = '';
+    try {
+      selectedText = (window.getSelection() || '').toString().trim();
+    } catch(ex) {}
+    if (!selectedText) return;
+    // Set data so parent can detect this as a text drag
+    try { e.dataTransfer.setData('application/x-yaar-text', selectedText); } catch(ex) {}
+    window.parent.postMessage({
+      type: 'yaar:drag-start',
+      text: selectedText
+    }, '*');
+  });
+})();
+`;

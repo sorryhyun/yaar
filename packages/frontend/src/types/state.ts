@@ -1,7 +1,7 @@
 /**
  * Desktop state - everything that can appear on screen.
  */
-import type { WindowBounds, WindowContent, OSAction } from '@yaar/shared';
+import type { WindowBounds, WindowContent, WindowVariant, OSAction } from '@yaar/shared';
 
 export interface WindowModel {
   id: string;
@@ -15,6 +15,8 @@ export interface WindowModel {
   lockedBy?: string; // Agent ID that holds the lock
   requestId?: string; // For tracking iframe feedback
   monitorId?: string; // Which monitor this window belongs to
+  variant?: WindowVariant;
+  dockEdge?: 'top' | 'bottom';
 }
 
 export interface CliEntry {

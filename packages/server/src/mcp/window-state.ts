@@ -83,6 +83,8 @@ export class WindowStateRegistry {
           bounds: { ...action.bounds },
           content: { ...action.content },
           locked: false,
+          variant: action.variant,
+          dockEdge: action.dockEdge,
           createdAt: now,
           updatedAt: now,
         });

@@ -33,13 +33,17 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const actionMonitorId = (action as { monitorId?: string }).monitorId;
       const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
       const key = toWindowKey(monitorId, action.windowId);
+      const variant = action.variant;
       const TITLEBAR_H = 36;
       const TASKBAR_H = 36;
       const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : 1280;
       const vh = typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : 720;
       const b = { ...action.bounds };
+      const isStandard = !variant || variant === 'standard';
+      // Skip titlebar offset for widget/panel (no titlebar)
+      const yOffset = isStandard ? TITLEBAR_H : 0;
       b.x = Math.max(0, Math.min(b.x, vw - 100));
-      b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_H - TITLEBAR_H));
+      b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_H - yOffset));
       b.w = Math.min(b.w, vw - b.x);
       b.h = Math.min(b.h, vh - TASKBAR_H - b.y);
       const window: WindowModel = {
@@ -51,11 +55,32 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         maximized: false,
         requestId: action.requestId,
         monitorId,
+        variant,
+        dockEdge: action.dockEdge,
       };
       state.windows[key] = window;
       state.zOrder = state.zOrder.filter((id) => id !== key);
-      state.zOrder.push(key);
-      state.focusedWindowId = key;
+      if (variant === 'panel') {
+        // Panel: exclude from zOrder entirely (rendered separately in fixed position)
+      } else if (variant === 'widget') {
+        // Widget: insert before the first non-widget window (stays below standard windows)
+        const firstStandardIdx = state.zOrder.findIndex((id) => {
+          const w = state.windows[id];
+          return !w?.variant || w.variant === 'standard';
+        });
+        if (firstStandardIdx === -1) {
+          state.zOrder.push(key);
+        } else {
+          state.zOrder.splice(firstStandardIdx, 0, key);
+        }
+      } else {
+        // Standard: push to top
+        state.zOrder.push(key);
+      }
+      // Only steal focus for standard windows
+      if (isStandard) {
+        state.focusedWindowId = key;
+      }
       break;
     }
 
@@ -87,19 +112,41 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
 
     case 'window.focus': {
       const key = resolveKey(action.windowId);
-      if (state.windows[key]) {
-        state.zOrder = state.zOrder.filter((id) => id !== key);
-        state.zOrder.push(key);
+      const win = state.windows[key];
+      if (win) {
+        const v = win.variant;
+        if (v === 'panel') {
+          // Panel: no-op for z-order (stays fixed)
+        } else if (v === 'widget') {
+          // Widget: move to top of widget layer (before first standard window)
+          state.zOrder = state.zOrder.filter((id) => id !== key);
+          const firstStandardIdx = state.zOrder.findIndex((id) => {
+            const w = state.windows[id];
+            return !w?.variant || w.variant === 'standard';
+          });
+          if (firstStandardIdx === -1) {
+            state.zOrder.push(key);
+          } else {
+            state.zOrder.splice(firstStandardIdx, 0, key);
+          }
+        } else {
+          // Standard: move to top
+          state.zOrder = state.zOrder.filter((id) => id !== key);
+          state.zOrder.push(key);
+        }
         state.focusedWindowId = key;
-        state.windows[key].minimized = false;
+        win.minimized = false;
       }
       break;
     }
 
     case 'window.minimize': {
       const key = resolveKey(action.windowId);
-      if (state.windows[key]) {
-        state.windows[key].minimized = true;
+      const win = state.windows[key];
+      if (win) {
+        // Widget/panel: no-op (can't be minimized)
+        if (win.variant === 'widget' || win.variant === 'panel') break;
+        win.minimized = true;
         if (state.focusedWindowId === key) {
           const visible = state.zOrder.filter((id) => !state.windows[id]?.minimized);
           state.focusedWindowId = visible[visible.length - 1] ?? null;
@@ -303,8 +350,26 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
     set((state) => {
       const win = state.windows[windowId];
       if (win) {
-        state.zOrder = state.zOrder.filter((id) => id !== windowId);
-        state.zOrder.push(windowId);
+        const v = win.variant;
+        if (v === 'panel') {
+          // Panel: no-op for z-order (stays fixed)
+        } else if (v === 'widget') {
+          // Widget: move to top of widget layer (before first standard window)
+          state.zOrder = state.zOrder.filter((id) => id !== windowId);
+          const firstStandardIdx = state.zOrder.findIndex((id) => {
+            const w = state.windows[id];
+            return !w?.variant || w.variant === 'standard';
+          });
+          if (firstStandardIdx === -1) {
+            state.zOrder.push(windowId);
+          } else {
+            state.zOrder.splice(firstStandardIdx, 0, windowId);
+          }
+        } else {
+          // Standard: move to top
+          state.zOrder = state.zOrder.filter((id) => id !== windowId);
+          state.zOrder.push(windowId);
+        }
         state.focusedWindowId = windowId;
         win.minimized = false;
         (state as DesktopStore).pendingInteractions.push({

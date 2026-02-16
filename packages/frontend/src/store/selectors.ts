@@ -13,17 +13,21 @@ let _visibleCache: {
   result: WindowModel[];
 } = { windows: {}, monitorId: '', result: [] };
 /**
- * Returns visible (non-minimized) windows on the active monitor in stable
- * insertion order.  Z-order is intentionally NOT used here so that changing
- * focus only updates CSS z-index values without reordering DOM nodes — which
- * would cause browsers to reload iframes (e.g. YouTube videos restart).
+ * Returns visible (non-minimized) standard windows on the active monitor in
+ * stable insertion order.  Z-order is intentionally NOT used here so that
+ * changing focus only updates CSS z-index values without reordering DOM
+ * nodes — which would cause browsers to reload iframes (e.g. YouTube videos
+ * restart).
  */
 export const selectVisibleWindows = (state: DesktopStore): WindowModel[] => {
   if (state.windows === _visibleCache.windows && state.activeMonitorId === _visibleCache.monitorId)
     return _visibleCache.result;
   const result = Object.values(state.windows).filter(
     (w): w is WindowModel =>
-      w != null && !w.minimized && (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      w != null &&
+      !w.minimized &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
   );
   _visibleCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
   return result;
@@ -32,8 +36,46 @@ export const selectVisibleWindows = (state: DesktopStore): WindowModel[] => {
 export const selectMinimizedWindows = (state: DesktopStore) =>
   Object.values(state.windows).filter(
     (w): w is WindowModel =>
-      w != null && w.minimized && (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      w != null &&
+      w.minimized &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
   );
+
+let _widgetCache: {
+  windows: Record<string, WindowModel>;
+  monitorId: string;
+  result: WindowModel[];
+} = { windows: {}, monitorId: '', result: [] };
+export const selectWidgetWindows = (state: DesktopStore): WindowModel[] => {
+  if (state.windows === _widgetCache.windows && state.activeMonitorId === _widgetCache.monitorId)
+    return _widgetCache.result;
+  const result = Object.values(state.windows).filter(
+    (w): w is WindowModel =>
+      w != null &&
+      !w.minimized &&
+      w.variant === 'widget' &&
+      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+  );
+  _widgetCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
+  return result;
+};
+
+let _panelCache: {
+  windows: Record<string, WindowModel>;
+  monitorId: string;
+  result: WindowModel[];
+} = { windows: {}, monitorId: '', result: [] };
+export const selectPanelWindows = (state: DesktopStore): WindowModel[] => {
+  if (state.windows === _panelCache.windows && state.activeMonitorId === _panelCache.monitorId)
+    return _panelCache.result;
+  const result = Object.values(state.windows).filter(
+    (w): w is WindowModel =>
+      w != null && w.variant === 'panel' && (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+  );
+  _panelCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
+  return result;
+};
 
 export const selectToasts = (state: DesktopStore) => Object.values(state.toasts);
 

@@ -10,6 +10,7 @@ import {
   type OSAction,
   type DisplayContent,
   type ComponentLayout,
+  type WindowVariant,
   displayContentSchema,
   componentSchema,
   componentLayoutSchema,
@@ -53,6 +54,16 @@ export function registerCreateTools(server: McpServer): void {
         y: z.number().optional().describe('Y position (default: 100)'),
         width: z.number().optional().describe('Width (default: 500)'),
         height: z.number().optional().describe('Height (default: 400)'),
+        variant: z
+          .enum(['standard', 'widget', 'panel'])
+          .optional()
+          .describe(
+            'Window style: standard (default), widget (chromeless desktop widget), panel (docked bar)',
+          ),
+        dockEdge: z
+          .enum(['top', 'bottom'])
+          .optional()
+          .describe('Dock edge for panel variant (default: bottom)'),
       },
     },
     async (args) => {
@@ -74,6 +85,8 @@ export function registerCreateTools(server: McpServer): void {
           renderer,
           data,
         },
+        ...(args.variant ? { variant: args.variant as WindowVariant } : {}),
+        ...(args.dockEdge ? { dockEdge: args.dockEdge as 'top' | 'bottom' } : {}),
       };
 
       if (renderer === 'iframe') {
@@ -122,6 +135,16 @@ export function registerCreateTools(server: McpServer): void {
         y: z.number().optional().describe('Y position (default: 100)'),
         width: z.number().optional().describe('Width (default: 500)'),
         height: z.number().optional().describe('Height (default: 400)'),
+        variant: z
+          .enum(['standard', 'widget', 'panel'])
+          .optional()
+          .describe(
+            'Window style: standard (default), widget (chromeless desktop widget), panel (docked bar)',
+          ),
+        dockEdge: z
+          .enum(['top', 'bottom'])
+          .optional()
+          .describe('Dock edge for panel variant (default: bottom)'),
       },
     },
     async (args) => {
@@ -175,6 +198,8 @@ export function registerCreateTools(server: McpServer): void {
           renderer: 'component',
           data: layoutData,
         },
+        ...(args.variant ? { variant: args.variant as WindowVariant } : {}),
+        ...(args.dockEdge ? { dockEdge: args.dockEdge as 'top' | 'bottom' } : {}),
       };
 
       actionEmitter.emitAction(osAction);

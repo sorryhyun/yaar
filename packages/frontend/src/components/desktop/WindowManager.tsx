@@ -1,12 +1,14 @@
 /**
  * WindowManager - Renders all windows in z-order.
+ * Renders widget windows first (lower layer), then standard windows.
  */
 import { useMemo } from 'react';
-import { useDesktopStore, selectVisibleWindows } from '@/store';
+import { useDesktopStore, selectVisibleWindows, selectWidgetWindows } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { WindowFrame } from '../windows/WindowFrame';
 
 export function WindowManager() {
+  const widgets = useDesktopStore(useShallow(selectWidgetWindows));
   const windows = useDesktopStore(useShallow(selectVisibleWindows));
   const zOrder = useDesktopStore((s) => s.zOrder);
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
@@ -20,6 +22,14 @@ export function WindowManager() {
 
   return (
     <>
+      {widgets.map((window) => (
+        <WindowFrame
+          key={window.id}
+          window={window}
+          zIndex={zIndexMap.get(window.id) ?? 0}
+          isFocused={window.id === focusedWindowId}
+        />
+      ))}
       {windows.map((window) => (
         <WindowFrame
           key={window.id}
