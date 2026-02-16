@@ -578,7 +578,7 @@ if (appApi) {
         },
       },
       createPost: {
-        description: "Create a post with PoW. Params: { nickname: string, title: string, content: string }",
+        description: "Create a post with PoW in background. Params: { nickname: string, title: string, content: string }",
         params: {
           type: "object",
           properties: {
@@ -589,18 +589,28 @@ if (appApi) {
           required: ["nickname", "title", "content"],
         },
         handler: async (p: { nickname: string; title: string; content: string }) => {
-          const post = await createPost(p);
-          state.posts.unshift(post);
-          state.selectedPostId = post.id;
-          state.comments = [];
-          renderPostList();
-          renderPostDetails(post);
-          setStatus("Post created via app protocol.");
-          return { ok: true, post };
+          const jobId = `post-${Date.now().toString(36)}`;
+          setStatus(`Queued createPost (${jobId})...`);
+
+          void (async () => {
+            try {
+              const post = await createPost(p);
+              state.posts.unshift(post);
+              state.selectedPostId = post.id;
+              state.comments = [];
+              renderPostList();
+              renderPostDetails(post);
+              setStatus(`Post created via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatus(`Create post failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, jobId };
         },
       },
       createComment: {
-        description: "Create comment with PoW. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
+        description: "Create comment with PoW in background. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
         params: {
           type: "object",
           properties: {
@@ -614,20 +624,31 @@ if (appApi) {
         handler: async (p: { postId?: string; nickname: string; content: string; parent_id?: string }) => {
           const postId = p.postId ?? state.selectedPostId;
           if (!postId) throw new Error("No postId provided and no post selected");
-          const comment = await createComment(postId, {
-            nickname: p.nickname,
-            content: p.content,
-            parent_id: p.parent_id,
-          });
-          if (state.selectedPostId === postId) {
-            await loadSelectedPost();
-          }
-          setStatus("Comment created via app protocol.");
-          return { ok: true, postId, comment };
+
+          const jobId = `comment-${Date.now().toString(36)}`;
+          setStatus(`Queued createComment (${jobId})...`);
+
+          void (async () => {
+            try {
+              await createComment(postId, {
+                nickname: p.nickname,
+                content: p.content,
+                parent_id: p.parent_id,
+              });
+              if (state.selectedPostId === postId) {
+                await loadSelectedPost();
+              }
+              setStatus(`Comment created via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatus(`Create comment failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, postId, jobId };
         },
       },
       vote: {
-        description: "Vote selected or target post. Params: { type: 'up'|'down', postId?: string }",
+        description: "Vote selected or target post in background. Params: { type: 'up'|'down', postId?: string }",
         params: {
           type: "object",
           properties: {
@@ -639,9 +660,21 @@ if (appApi) {
         handler: async (p: { type: "up" | "down"; postId?: string }) => {
           const postId = p.postId ?? state.selectedPostId;
           if (!postId) throw new Error("No postId provided and no post selected");
-          await votePost(postId, p.type);
-          if (state.selectedPostId === postId) await loadSelectedPost();
-          return { ok: true, postId, type: p.type };
+
+          const jobId = `vote-${Date.now().toString(36)}`;
+          setStatus(`Queued vote (${jobId})...`);
+
+          void (async () => {
+            try {
+              await votePost(postId, p.type);
+              if (state.selectedPostId === postId) await loadSelectedPost();
+              setStatus(`Vote completed via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatus(`Vote failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, postId, type: p.type, jobId };
         },
       },
       setFilter: {

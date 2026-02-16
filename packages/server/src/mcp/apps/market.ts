@@ -6,15 +6,20 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, writeFile, rm } from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { unlink } from 'fs/promises';
 import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
 import { PROJECT_ROOT } from '../../config.js';
+import { getConfigDir } from '../../storage/storage-manager.js';
 
-export const MARKET_TOOL_NAMES = ['mcp__apps__market_list', 'mcp__apps__market_get'] as const;
+export const MARKET_TOOL_NAMES = [
+  'mcp__apps__market_list',
+  'mcp__apps__market_get',
+  'mcp__apps__market_delete',
+] as const;
 
 const execFileAsync = promisify(execFile);
 
@@ -109,6 +114,41 @@ export function registerMarketTools(server: McpServer): void {
       actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
       return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
+    },
+  );
+
+  // Delete (uninstall) an app
+  server.registerTool(
+    'market_delete',
+    {
+      description:
+        'Delete an installed app. Removes the app folder from apps/ and its credentials from config/credentials/.',
+      inputSchema: {
+        appId: z
+          .string()
+          .regex(/^[a-z][a-z0-9-]*$/, 'Invalid app ID format')
+          .describe('The app ID to delete'),
+      },
+    },
+    async (args) => {
+      const { appId } = args;
+      const appDir = join(PROJECT_ROOT, 'apps', appId);
+
+      if (!existsSync(appDir)) {
+        return error(`App "${appId}" is not installed.`);
+      }
+
+      // Remove the app directory
+      await rm(appDir, { recursive: true, force: true });
+
+      // Remove credentials if they exist
+      const credPath = join(getConfigDir(), 'credentials', `${appId}.json`);
+      await unlink(credPath).catch(() => {});
+
+      // Refresh desktop apps
+      actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+
+      return ok(`Deleted app "${appId}" successfully.`);
     },
   );
 }

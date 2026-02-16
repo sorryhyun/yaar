@@ -4,7 +4,6 @@
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
-import { DebugPanel } from './DebugPanel';
 import { RecentActionsPanel } from './RecentActionsPanel';
 import { SessionsModal } from './SessionsModal';
 import { SettingsModal } from './SettingsModal';
@@ -35,8 +34,6 @@ export function CommandPalette() {
   const settingsRef = useRef<HTMLDivElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
   const { isConnected, sendMessage, interrupt, reset } = useAgentConnection();
-  const debugPanelOpen = useDesktopStore((state) => state.debugPanelOpen);
-  const toggleDebugPanel = useDesktopStore((state) => state.toggleDebugPanel);
   const recentActionsPanelOpen = useDesktopStore((state) => state.recentActionsPanelOpen);
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel);
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen);
@@ -50,6 +47,8 @@ export function CommandPalette() {
   const pencilMode = useDesktopStore((state) => state.pencilMode);
   const setPencilMode = useDesktopStore((state) => state.setPencilMode);
   const togglePencilMode = useDesktopStore((state) => state.togglePencilMode);
+  const cliMode = useDesktopStore((state) => state.cliMode);
+  const toggleCliMode = useDesktopStore((state) => state.toggleCliMode);
   const attachedImages = useDesktopStore((state) => state.attachedImages);
   const addAttachedImages = useDesktopStore((state) => state.addAttachedImages);
   const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
@@ -164,7 +163,6 @@ export function CommandPalette() {
 
   return (
     <>
-      {debugPanelOpen && <DebugPanel />}
       {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
       {settingsModalOpen && <SettingsModal />}
@@ -270,17 +268,6 @@ export function CommandPalette() {
                   >
                     Actions
                   </button>
-                  <div className={styles.settingsDivider} />
-                  <button
-                    className={styles.settingsItem}
-                    onClick={() => {
-                      toggleDebugPanel();
-                      setSettingsOpen(false);
-                    }}
-                    data-active={debugPanelOpen}
-                  >
-                    Debug
-                  </button>
                 </div>
               )}
             </div>
@@ -327,6 +314,35 @@ export function CommandPalette() {
               >
                 <path
                   d="M14.167 2.5C14.3856 2.28141 14.6454 2.10753 14.9314 1.98775C15.2173 1.86797 15.5238 1.80469 15.8337 1.80141C16.1435 1.79813 16.4513 1.85491 16.7398 1.96858C17.0283 2.08225 17.2917 2.25055 17.5149 2.46381C17.7382 2.67707 17.917 2.9311 18.0398 3.21256C18.1627 3.49403 18.2275 3.79715 18.2302 4.10408C18.233 4.41102 18.1738 4.71528 18.0559 4.99897C17.938 5.28267 17.764 5.53993 17.5437 5.755L6.25036 17.0833L1.66699 18.3333L2.91699 13.75L14.167 2.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              className={styles.terminalButton}
+              onClick={toggleCliMode}
+              title={cliMode ? 'Exit terminal (Alt+Tab)' : 'Terminal view (Alt+Tab)'}
+              data-active={cliMode}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M2.5 15H8.33333"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M2.5 5L7.5 10L2.5 15"
                   stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"

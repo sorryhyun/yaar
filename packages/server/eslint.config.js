@@ -23,6 +23,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**', 'src/providers/codex/generated/**'],
   }
 )

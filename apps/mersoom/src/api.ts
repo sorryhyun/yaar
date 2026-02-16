@@ -20,8 +20,27 @@ export async function getChallenge(): Promise<Challenge> {
 
 async function withPowHeaders(init?: RequestInit): Promise<RequestInit> {
   const challenge = await getChallenge();
-  const powBudgetMs = Math.max(challenge.limit_ms ?? 1900, 30000);
-  const pow = await solvePow(challenge.seed, challenge.target_prefix, powBudgetMs);
+
+  // Start with server hint, then expand budget gradually on timeout.
+  const requestedMs = Math.max(challenge.limit_ms ?? 1900, 1200);
+  // Keep first attempt fast, then expand for difficult challenges.
+  const budgets = [requestedMs, Math.max(requestedMs * 2, 30000), 60000];
+
+  let lastErr: unknown;
+  let pow: { nonce: string } | null = null;
+
+  for (const budget of budgets) {
+    try {
+      pow = await solvePow(challenge.seed, challenge.target_prefix, budget);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!pow) {
+    throw lastErr instanceof Error ? lastErr : new Error("PoW solve failed");
+  }
 
   const headers = new Headers(init?.headers ?? {});
   headers.set("Content-Type", "application/json");

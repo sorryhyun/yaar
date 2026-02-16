@@ -26,6 +26,8 @@ import type {
   CollabCloseEndEvent,
   CollabResumeBeginEvent,
   CollabResumeEndEvent,
+  WebSearchBeginEvent,
+  WebSearchEndEvent,
 } from './types.js';
 
 /** Extract the mcpToolCall variant from ThreadItem */
@@ -388,6 +390,31 @@ function mapEventMsg(event: EventMsg): StreamMessage | null {
         toolName: 'collab:resumeAgent',
         toolUseId: e.call_id,
         content: `status: ${formatAgentStatus(e.status)}`,
+      };
+    }
+    case 'web_search_begin': {
+      const e = event as WebSearchBeginEvent & { type: string };
+      return {
+        type: 'tool_use',
+        toolName: 'web_search',
+        toolUseId: e.call_id,
+      };
+    }
+    case 'web_search_end': {
+      const e = event as WebSearchEndEvent & { type: string };
+      const actionDesc =
+        e.action?.type === 'search'
+          ? (e.action.queries ?? [e.action.query]).filter(Boolean).join(', ')
+          : e.action?.type === 'open_page'
+            ? `open: ${e.action.url ?? ''}`
+            : e.action?.type === 'find_in_page'
+              ? `find "${e.action.pattern ?? ''}" in ${e.action.url ?? ''}`
+              : '';
+      return {
+        type: 'tool_result',
+        toolName: 'web_search',
+        toolUseId: e.call_id,
+        content: actionDesc ? `${e.query} → ${actionDesc}` : e.query,
       };
     }
     case 'task_complete':

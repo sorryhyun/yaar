@@ -76,6 +76,8 @@ export type { CollabCloseBeginEvent } from './generated/CollabCloseBeginEvent.js
 export type { CollabCloseEndEvent } from './generated/CollabCloseEndEvent.js';
 export type { CollabResumeBeginEvent } from './generated/CollabResumeBeginEvent.js';
 export type { CollabResumeEndEvent } from './generated/CollabResumeEndEvent.js';
+export type { WebSearchBeginEvent } from './generated/WebSearchBeginEvent.js';
+export type { WebSearchEndEvent } from './generated/WebSearchEndEvent.js';
 
 // ============================================================================
 // Manual types (not yet in generated schema)

@@ -172,8 +172,8 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  background: var(--color-base);
-  border: var(--border-subtle);
+  background: rgba(235, 160, 172, 0.08);
+  border: 1px solid rgba(235, 160, 172, 0.2);
   border-radius: var(--radius-lg);
   color: var(--color-muted);
   cursor: pointer;
@@ -182,8 +182,9 @@
 }
 
 .resetButton:hover {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.08);
+  color: rgb(235, 160, 172);
+  background: rgba(235, 160, 172, 0.15);
+  border-color: rgba(235, 160, 172, 0.4);
 }
 
 /* Pencil draw button */
@@ -211,6 +212,33 @@
   color: var(--color-peach);
   border-color: var(--color-peach);
   background: rgba(250, 179, 135, 0.12);
+}
+
+/* Terminal CLI button */
+.terminalButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-lg);
+}
+
+.terminalButton:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.terminalButton[data-active='true'] {
+  color: var(--color-green);
+  border-color: var(--color-green);
+  background: rgba(166, 227, 161, 0.12);
 }
 
 @keyframes spin {

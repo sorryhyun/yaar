@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Prebundle libraries
+        run: pnpm build:exe:libs
+
+      - name: Build Windows executables
+        run: pnpm build:exe:bundle
+
+      - name: Download Codex CLI (Windows)
+        run: |
+          gh release download --repo openai/codex \
+            --pattern 'codex-x86_64-pc-windows-msvc.exe' \
+            --dir dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux executables
+        run: |
+          pnpm build:exe:bundle:linux
+          cd dist
+          for f in yaar-claude yaar-codex yaar-dev-claude yaar-dev-codex; do
+            mv "$f" "${f}-linux"
+          done
+
+      - name: Build macOS executables
+        run: |
+          pnpm build:exe:bundle:macos
+          cd dist
+          for f in yaar-claude yaar-codex yaar-dev-claude yaar-dev-codex; do
+            mv "$f" "${f}-macos"
+          done
+
+      - name: Create release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            dist/yaar-claude.exe \
+            dist/yaar-codex.exe \
+            dist/yaar-dev-claude.exe \
+            dist/yaar-dev-codex.exe \
+            dist/codex-x86_64-pc-windows-msvc.exe \
+            dist/yaar-claude-linux \
+            dist/yaar-codex-linux \
+            dist/yaar-dev-claude-linux \
+            dist/yaar-dev-codex-linux \
+            dist/yaar-claude-macos \
+            dist/yaar-codex-macos \
+            dist/yaar-dev-claude-macos \
+            dist/yaar-dev-codex-macos \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

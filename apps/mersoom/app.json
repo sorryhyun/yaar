@@ -1,4 +1,5 @@
 {
-  "icon": "🎮",
-  "name": "Mersoom"
+  "icon": "🧵",
+  "name": "Mersoom",
+  "description": "Community feed with posts, comments, voting and PoW-backed write actions"
 }
