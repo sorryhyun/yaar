@@ -21,6 +21,7 @@ type ApiPayload = {
 };
 
 const STORAGE_DOMAIN_KEY = 'market_apps.domain';
+const DEFAULT_MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
 
 function normalizeDomain(input?: string | null) {
   const value = (input || '').trim();
@@ -32,7 +33,7 @@ function getInitialDomain() {
   const fromQuery = new URLSearchParams(window.location.search).get('domain');
   const fromGlobal = (window as any).__MARKET_APPS_DOMAIN__ as string | undefined;
   const fromStorage = localStorage.getItem(STORAGE_DOMAIN_KEY);
-  return normalizeDomain(fromQuery || fromGlobal || fromStorage || '');
+  return normalizeDomain(fromQuery || fromGlobal || fromStorage || DEFAULT_MARKET_DOMAIN);
 }
 
 const root = document.createElement('div');
@@ -118,7 +119,7 @@ async function refreshData() {
   render();
 
   try {
-    const marketPayload = await apiGet<ApiPayload>('/api/apps');
+    const marketPayload = await apiGet<ApiPayload>('/api/apps/');
     marketApps = parseMarket(marketPayload);
 
     try {
