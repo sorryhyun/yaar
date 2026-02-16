@@ -22,6 +22,7 @@ import { WindowContextMenu } from '../ui/WindowContextMenu';
 import { CursorSpinner } from '../ui/CursorSpinner';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
 import { CliPanel } from '../ui/CliPanel';
+import { resolveWallpaper, resolveAccent, resolveIconSize } from '@/constants/appearance';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** App info from /api/apps endpoint */
@@ -52,6 +53,9 @@ export function DesktopSurface() {
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
+  const wallpaper = useDesktopStore((s) => s.wallpaper);
+  const accentColor = useDesktopStore((s) => s.accentColor);
+  const iconSize = useDesktopStore((s) => s.iconSize);
   const {
     sendMessage,
     sendWindowMessage,
@@ -134,6 +138,15 @@ export function DesktopSurface() {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [switchMonitor]);
+
+  // Apply accent color to :root CSS vars
+  useEffect(() => {
+    const preset = resolveAccent(accentColor);
+    if (preset) {
+      document.documentElement.style.setProperty('--color-blue', preset.color);
+      document.documentElement.style.setProperty('--color-blue-hover', preset.hover);
+    }
+  }, [accentColor]);
 
   const agentList = Object.values(activeAgents);
 
@@ -292,6 +305,10 @@ export function DesktopSurface() {
           {
             '--panel-top-h': `${panelTopH}px`,
             '--panel-bottom-h': `${panelBottomH}px`,
+            background: resolveWallpaper(wallpaper),
+            '--icon-size': `${resolveIconSize(iconSize).iconPx}px`,
+            '--icon-label-max-width': `${resolveIconSize(iconSize).labelMaxWidth}px`,
+            '--icon-grid-gap': `${resolveIconSize(iconSize).gridGap}px`,
           } as React.CSSProperties
         }
         onClick={handleBackgroundClick}

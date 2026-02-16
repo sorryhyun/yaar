@@ -166,12 +166,18 @@ export type UiSlice = UiSliceState & UiSliceActions;
 export interface SettingsSliceState {
   userName: string;
   language: string;
+  wallpaper: string;
+  accentColor: string;
+  iconSize: 'small' | 'medium' | 'large';
 }
 
 export interface SettingsSliceActions {
   setUserName: (name: string) => void;
   setLanguage: (lang: string) => void;
   applyServerLanguage: (lang: string) => void;
+  setWallpaper: (value: string) => void;
+  setAccentColor: (key: string) => void;
+  setIconSize: (size: 'small' | 'medium' | 'large') => void;
 }
 
 export type SettingsSlice = SettingsSliceState & SettingsSliceActions;

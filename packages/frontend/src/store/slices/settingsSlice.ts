@@ -4,10 +4,19 @@
  */
 import type { SliceCreator, SettingsSlice } from '../types';
 import { apiFetch } from '@/lib/api';
+import type { IconSizeKey } from '@/constants/appearance';
 
 const STORAGE_KEY = 'yaar-settings';
 
-function loadSettings(): { userName: string; language: string } {
+interface PersistedSettings {
+  userName: string;
+  language: string;
+  wallpaper: string;
+  accentColor: string;
+  iconSize: IconSizeKey;
+}
+
+function loadSettings(): PersistedSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -15,15 +24,24 @@ function loadSettings(): { userName: string; language: string } {
       return {
         userName: parsed.userName ?? '',
         language: parsed.language ?? 'en',
+        wallpaper: parsed.wallpaper ?? 'dark-blue',
+        accentColor: parsed.accentColor ?? 'blue',
+        iconSize: parsed.iconSize ?? 'medium',
       };
     }
   } catch {
     /* ignore */
   }
-  return { userName: '', language: 'en' };
+  return {
+    userName: '',
+    language: 'en',
+    wallpaper: 'dark-blue',
+    accentColor: 'blue',
+    iconSize: 'medium',
+  };
 }
 
-function saveSettings(settings: { userName: string; language: string }) {
+function saveSettings(settings: PersistedSettings) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
@@ -31,24 +49,45 @@ function saveSettings(settings: { userName: string; language: string }) {
   }
 }
 
+function getAllSettings(
+  get: () => {
+    userName: string;
+    language: string;
+    wallpaper: string;
+    accentColor: string;
+    iconSize: IconSizeKey;
+  },
+): PersistedSettings {
+  const s = get();
+  return {
+    userName: s.userName,
+    language: s.language,
+    wallpaper: s.wallpaper,
+    accentColor: s.accentColor,
+    iconSize: s.iconSize,
+  };
+}
+
 const initial = loadSettings();
 
 export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   userName: initial.userName,
   language: initial.language,
+  wallpaper: initial.wallpaper,
+  accentColor: initial.accentColor,
+  iconSize: initial.iconSize,
 
   setUserName: (name) =>
     set((state) => {
       state.userName = name;
-      saveSettings({ userName: name, language: get().language });
+      saveSettings({ ...getAllSettings(get), userName: name });
     }),
 
   setLanguage: (lang) => {
     set((state) => {
       state.language = lang;
-      saveSettings({ userName: get().userName, language: lang });
+      saveSettings({ ...getAllSettings(get), language: lang });
     });
-    // Fire-and-forget sync to server so the AI knows the language
     apiFetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -59,6 +98,24 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   applyServerLanguage: (lang) =>
     set((state) => {
       state.language = lang;
-      saveSettings({ userName: get().userName, language: lang });
+      saveSettings({ ...getAllSettings(get), language: lang });
+    }),
+
+  setWallpaper: (value) =>
+    set((state) => {
+      state.wallpaper = value;
+      saveSettings({ ...getAllSettings(get), wallpaper: value });
+    }),
+
+  setAccentColor: (key) =>
+    set((state) => {
+      state.accentColor = key;
+      saveSettings({ ...getAllSettings(get), accentColor: key });
+    }),
+
+  setIconSize: (size) =>
+    set((state) => {
+      state.iconSize = size;
+      saveSettings({ ...getAllSettings(get), iconSize: size });
     }),
 });

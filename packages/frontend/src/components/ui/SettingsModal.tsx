@@ -1,8 +1,10 @@
 /**
- * SettingsModal - Modal for user preferences (name, language, domain settings).
+ * SettingsModal - Modal for user preferences (name, language, domain settings, appearance).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useDesktopStore } from '@/store';
+import { WALLPAPER_PRESETS, ACCENT_PRESETS, ICON_SIZE_PRESETS } from '@/constants/appearance';
+import type { IconSizeKey } from '@/constants/appearance';
 import styles from '@/styles/ui/SettingsModal.module.css';
 
 const LANGUAGES = [
@@ -22,8 +24,17 @@ export function SettingsModal() {
   const language = useDesktopStore((s) => s.language);
   const setUserName = useDesktopStore((s) => s.setUserName);
   const setLanguage = useDesktopStore((s) => s.setLanguage);
+  const wallpaper = useDesktopStore((s) => s.wallpaper);
+  const accentColor = useDesktopStore((s) => s.accentColor);
+  const iconSize = useDesktopStore((s) => s.iconSize);
+  const setWallpaper = useDesktopStore((s) => s.setWallpaper);
+  const setAccentColor = useDesktopStore((s) => s.setAccentColor);
+  const setIconSize = useDesktopStore((s) => s.setIconSize);
 
   const [allowAllDomains, setAllowAllDomains] = useState(false);
+  // Track whether the current wallpaper is a solid (custom) color
+  const isCustomSolid = !WALLPAPER_PRESETS.some((p) => p.key === wallpaper);
+  const [solidColor, setSolidColor] = useState(isCustomSolid ? wallpaper : '#2a2a3e');
 
   useEffect(() => {
     fetch('/api/domains')
@@ -61,7 +72,7 @@ export function SettingsModal() {
             &times;
           </button>
         </div>
-        <div className={styles.content}>
+        <div className={styles.scrollContent}>
           <div className={styles.field}>
             <label className={styles.label}>Name</label>
             <input
@@ -100,6 +111,67 @@ export function SettingsModal() {
                 onChange={handleToggleAllowAll}
               />
             </label>
+          </div>
+
+          {/* Wallpaper */}
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <span className={styles.label}>Wallpaper</span>
+            <div className={styles.swatchRow}>
+              {WALLPAPER_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  className={`${styles.wallpaperSwatch}${wallpaper === preset.key ? ` ${styles.wallpaperSwatchActive}` : ''}`}
+                  style={{ background: preset.css }}
+                  title={preset.label}
+                  onClick={() => setWallpaper(preset.key)}
+                />
+              ))}
+              <input
+                type="color"
+                className={styles.solidColorPicker}
+                value={solidColor}
+                title="Solid color"
+                onChange={(e) => {
+                  setSolidColor(e.target.value);
+                  setWallpaper(e.target.value);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Accent Color */}
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <span className={styles.label}>Accent Color</span>
+            <div className={styles.accentRow}>
+              {ACCENT_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  className={`${styles.accentDot}${accentColor === preset.key ? ` ${styles.accentDotActive}` : ''}`}
+                  style={{ background: preset.color }}
+                  title={preset.key}
+                  onClick={() => setAccentColor(preset.key)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Icon Size */}
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <span className={styles.label}>Icon Size</span>
+            <div className={styles.segmentedControl}>
+              {ICON_SIZE_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  className={`${styles.segmentButton}${iconSize === preset.key ? ` ${styles.segmentButtonActive}` : ''}`}
+                  onClick={() => setIconSize(preset.key as IconSizeKey)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
