@@ -42,9 +42,9 @@ describe('CommandPalette', () => {
   it('clicking gear button shows settings popover with config buttons', () => {
     render(<CommandPalette />);
     fireEvent.click(screen.getByTitle('Settings'));
+    expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.getByText('Sessions')).toBeInTheDocument();
     expect(screen.getByText('Actions')).toBeInTheDocument();
-    expect(screen.getByText('Debug')).toBeInTheDocument();
   });
 
   it('clicking gear button again closes settings popover', () => {
@@ -56,10 +56,9 @@ describe('CommandPalette', () => {
     expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
   });
 
-  it('Sessions/Actions/Debug buttons are not visible outside the popover', () => {
+  it('Settings/Sessions/Actions buttons are not visible outside the popover', () => {
     render(<CommandPalette />);
     expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
     expect(screen.queryByText('Actions')).not.toBeInTheDocument();
-    expect(screen.queryByText('Debug')).not.toBeInTheDocument();
   });
 });

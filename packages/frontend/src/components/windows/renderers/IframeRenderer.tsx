@@ -236,7 +236,8 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
         className={styles.iframe}
         {...(sandbox ? { sandbox } : {})}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowTransparency
+        // @ts-expect-error React doesn't recognize lowercase HTML attribute
+        allowtransparency="true"
         loading="lazy"
         title="Embedded content"
         onLoad={handleLoad}

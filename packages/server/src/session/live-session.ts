@@ -193,9 +193,9 @@ export class LiveSession {
         } else if (hook.action.type === 'os_action') {
           const action = hook.action.payload as OSAction;
           if (action.type.startsWith('window.')) {
-            this.windowState.handleAction(action);
+            this.windowState.handleAction(action, 'monitor-0');
           }
-          this.broadcast({ type: 'ACTIONS', actions: [action] });
+          this.broadcast({ type: 'ACTIONS', actions: [action], monitorId: 'monitor-0' });
         }
       }
     } catch (err) {
