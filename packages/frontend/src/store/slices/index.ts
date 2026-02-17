@@ -4,6 +4,7 @@
 export { createToastsSlice } from './toastsSlice';
 export { createNotificationsSlice } from './notificationsSlice';
 export { createDialogsSlice } from './dialogsSlice';
+export { createUserPromptsSlice } from './userPromptsSlice';
 export { createConnectionSlice } from './connectionSlice';
 export { createDebugSlice } from './debugSlice';
 export { createAgentsSlice } from './agentsSlice';

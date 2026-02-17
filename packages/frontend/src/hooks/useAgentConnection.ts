@@ -266,6 +266,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     [send],
   );
 
+  const sendUserPromptResponse = useCallback(
+    (promptId: string, selectedValues?: string[], text?: string, dismissed?: boolean) => {
+      send({ type: 'USER_PROMPT_RESPONSE', promptId, selectedValues, text, dismissed });
+    },
+    [send],
+  );
+
   const sendComponentAction = useCallback(
     (
       windowId: string,
@@ -492,6 +499,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     sendComponentAction,
     sendDialogFeedback,
     sendToastAction,
+    sendUserPromptResponse,
     interrupt,
     interruptAgent,
     setProvider,

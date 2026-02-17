@@ -394,6 +394,15 @@ export class LiveSession {
         );
         break;
 
+      case 'USER_PROMPT_RESPONSE':
+        actionEmitter.resolveUserPromptFeedback({
+          promptId: event.promptId,
+          selectedValues: event.selectedValues,
+          text: event.text,
+          dismissed: event.dismissed,
+        });
+        break;
+
       case 'USER_INTERACTION': {
         const logger = this.pool?.getSessionLogger();
 

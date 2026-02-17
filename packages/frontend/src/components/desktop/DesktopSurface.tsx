@@ -19,6 +19,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { ToastContainer } from '../ui/ToastContainer';
 import { NotificationCenter } from '../ui/NotificationCenter';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { UserPrompt } from '../ui/UserPrompt';
 import { CommandPalette } from '../ui/CommandPalette';
 import { WindowContextMenu } from '../ui/WindowContextMenu';
 import { CursorSpinner } from '../ui/CursorSpinner';
@@ -628,6 +629,7 @@ export function DesktopSurface() {
       <CommandPalette />
       <ToastContainer onToastAction={sendToastAction} />
       <ConfirmDialog />
+      <UserPrompt />
     </>
   );
 }

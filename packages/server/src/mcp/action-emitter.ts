@@ -13,6 +13,9 @@ import type {
   PermissionOptions,
   AppProtocolRequest,
   AppProtocolResponse,
+  UserPromptShowAction,
+  UserPromptOption,
+  UserPromptInputField,
 } from '@yaar/shared';
 import { getAgentId, getSessionId } from '../agents/session.js';
 import {
@@ -75,6 +78,34 @@ interface PendingDialog {
 }
 
 /**
+ * User prompt response from frontend.
+ */
+export interface UserPromptFeedback {
+  promptId: string;
+  selectedValues?: string[];
+  text?: string;
+  dismissed?: boolean;
+}
+
+/**
+ * Resolved user prompt result returned to tool handlers.
+ */
+export interface UserPromptResult {
+  selectedValues?: string[];
+  text?: string;
+  dismissed: boolean;
+}
+
+/**
+ * Pending user prompt waiting for response.
+ */
+interface PendingUserPrompt {
+  resolve: (result: UserPromptResult) => void;
+  timeoutId: NodeJS.Timeout;
+  sessionId?: string;
+}
+
+/**
  * Data emitted for an app protocol request.
  */
 export interface AppProtocolRequestData {
@@ -97,6 +128,7 @@ interface PendingAppRequest {
 class ActionEmitter extends EventEmitter {
   private pendingRequests = new Map<string, PendingRequest>();
   private pendingDialogs = new Map<string, PendingDialog>();
+  private pendingUserPrompts = new Map<string, PendingUserPrompt>();
   private pendingAppRequests = new Map<string, PendingAppRequest>();
   private readyWindows = new Set<string>();
   private requestCounter = 0;
@@ -332,6 +364,74 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Show a user prompt (ask or request) and wait for response.
+   *
+   * - Provide `options` for a selection prompt (ask).
+   * - Provide `inputField` for a text input prompt (request).
+   * - Provide both for a selection with an "Other" freeform option.
+   */
+  async showUserPrompt(opts: {
+    title: string;
+    message: string;
+    options?: UserPromptOption[];
+    multiSelect?: boolean;
+    inputField?: UserPromptInputField;
+    allowDismiss?: boolean;
+    timeoutMs?: number;
+  }): Promise<UserPromptResult> {
+    const promptId = `prompt-${Date.now()}-${++this.requestCounter}`;
+    const agentId = getAgentId();
+    const currentSessionId = getSessionId();
+    const timeoutMs = opts.timeoutMs ?? 300000; // 5 minutes default
+
+    const promptPromise = new Promise<UserPromptResult>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingUserPrompts.delete(promptId);
+        resolve({ dismissed: true }); // Timeout — treat as dismiss
+      }, timeoutMs);
+
+      this.pendingUserPrompts.set(promptId, { resolve, timeoutId, sessionId: currentSessionId });
+    });
+
+    const action: UserPromptShowAction = {
+      type: 'user.prompt.show',
+      id: promptId,
+      title: opts.title,
+      message: opts.message,
+      options: opts.options,
+      multiSelect: opts.multiSelect,
+      inputField: opts.inputField,
+      allowDismiss: opts.allowDismiss ?? true,
+    };
+
+    this.emit('action', {
+      action: action as OSAction,
+      sessionId: undefined,
+      agentId,
+    } as ActionEvent);
+
+    return promptPromise;
+  }
+
+  /**
+   * Resolve a pending user prompt with feedback from the frontend.
+   */
+  resolveUserPromptFeedback(feedback: UserPromptFeedback): boolean {
+    const pending = this.pendingUserPrompts.get(feedback.promptId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      this.pendingUserPrompts.delete(feedback.promptId);
+      pending.resolve({
+        selectedValues: feedback.selectedValues,
+        text: feedback.text,
+        dismissed: feedback.dismissed ?? false,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Notify that an iframe app has registered with the App Protocol.
    * Resolves any pending waitForAppReady() calls for this window.
    */
@@ -488,6 +588,14 @@ class ActionEmitter extends EventEmitter {
         clearTimeout(pending.timeoutId);
         this.pendingDialogs.delete(id);
         pending.resolve(false);
+      }
+    }
+
+    for (const [id, pending] of this.pendingUserPrompts) {
+      if (pending.sessionId === sessionId) {
+        clearTimeout(pending.timeoutId);
+        this.pendingUserPrompts.delete(id);
+        pending.resolve({ dismissed: true });
       }
     }
 

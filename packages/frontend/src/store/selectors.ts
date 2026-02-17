@@ -83,6 +83,8 @@ export const selectNotifications = (state: DesktopStore) => Object.values(state.
 
 export const selectDialogs = (state: DesktopStore) => Object.values(state.dialogs);
 
+export const selectUserPrompts = (state: DesktopStore) => Object.values(state.userPrompts);
+
 export const selectActiveAgents = (state: DesktopStore) => Object.values(state.activeAgents);
 
 export const selectWindowAgents = (state: DesktopStore) => state.windowAgents;
