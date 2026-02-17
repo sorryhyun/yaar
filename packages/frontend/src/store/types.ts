@@ -10,6 +10,7 @@ import type {
   NotificationModel,
   ToastModel,
   DialogModel,
+  UserPromptModel,
   ConnectionStatus,
   ContextMenuState,
   RestorePrompt,
@@ -29,6 +30,7 @@ export type {
   NotificationModel,
   ToastModel,
   DialogModel,
+  UserPromptModel,
   ConnectionStatus,
   ContextMenuState,
   RestorePrompt,
@@ -92,6 +94,17 @@ export interface DialogsSliceActions {
 }
 
 export type DialogsSlice = DialogsSliceState & DialogsSliceActions;
+
+export interface UserPromptsSliceState {
+  userPrompts: Record<string, UserPromptModel>;
+}
+
+export interface UserPromptsSliceActions {
+  handleUserPromptAction: (action: OSAction) => void;
+  dismissUserPrompt: (id: string) => void;
+}
+
+export type UserPromptsSlice = UserPromptsSliceState & UserPromptsSliceActions;
 
 export interface ConnectionSliceState {
   connectionStatus: ConnectionStatus;
@@ -313,6 +326,7 @@ export type DesktopStore = WindowsSlice &
   NotificationsSlice &
   ToastsSlice &
   DialogsSlice &
+  UserPromptsSlice &
   ConnectionSlice &
   DebugSlice &
   AgentsSlice &

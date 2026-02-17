@@ -23,6 +23,7 @@ export { registerMarketTools, MARKET_TOOL_NAMES } from './apps/market.js';
 export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
 export { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
 export { registerSandboxTools, SANDBOX_TOOL_NAMES } from './sandbox/index.js';
+export { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 
 // Action emitter
 export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';

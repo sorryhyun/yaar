@@ -66,6 +66,17 @@ export interface DialogModel {
   permissionOptions?: PermissionOptions;
 }
 
+export interface UserPromptModel {
+  id: string;
+  title: string;
+  message: string;
+  options?: { value: string; label: string; description?: string }[];
+  multiSelect?: boolean;
+  inputField?: { label?: string; placeholder?: string; type?: 'text' | 'textarea' | 'password' };
+  allowDismiss?: boolean;
+  timestamp: number;
+}
+
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface ContextMenuState {

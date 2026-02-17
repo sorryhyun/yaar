@@ -11,6 +11,7 @@ export {
   selectToasts,
   selectNotifications,
   selectDialogs,
+  selectUserPrompts,
   selectActiveAgents,
   selectWindowAgents,
   selectWindowAgent,

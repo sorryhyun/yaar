@@ -122,6 +122,14 @@ export interface ToastActionEvent {
   eventId: string;
 }
 
+export interface UserPromptResponseEvent {
+  type: 'USER_PROMPT_RESPONSE';
+  promptId: string;
+  selectedValues?: string[];
+  text?: string;
+  dismissed?: boolean;
+}
+
 export interface UserInteractionEvent {
   type: 'USER_INTERACTION';
   interactions: UserInteraction[];
@@ -160,6 +168,7 @@ export type ClientEvent =
   | ComponentActionEvent
   | DialogFeedbackEvent
   | ToastActionEvent
+  | UserPromptResponseEvent
   | UserInteractionEvent
   | AppProtocolResponseEvent
   | AppProtocolReadyEvent

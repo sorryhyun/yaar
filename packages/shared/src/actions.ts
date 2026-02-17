@@ -192,6 +192,43 @@ export interface DialogConfirmAction {
   permissionOptions?: PermissionOptions;
 }
 
+// ============ User Prompt Actions ============
+
+export interface UserPromptOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface UserPromptInputField {
+  label?: string;
+  placeholder?: string;
+  type?: 'text' | 'textarea' | 'password';
+}
+
+/**
+ * Flexible user prompt that covers both "ask" (options) and "request" (text input) use cases.
+ *
+ * - Options only → radio/checkbox selection (ask)
+ * - InputField only → text input (request)
+ * - Both → options with an "Other" freeform field
+ */
+export interface UserPromptShowAction {
+  type: 'user.prompt.show';
+  id: string;
+  title: string;
+  message: string;
+  options?: UserPromptOption[];
+  multiSelect?: boolean;
+  inputField?: UserPromptInputField;
+  allowDismiss?: boolean;
+}
+
+export interface UserPromptDismissAction {
+  type: 'user.prompt.dismiss';
+  id: string;
+}
+
 // ============ App Actions ============
 
 export interface AppBadgeAction {
@@ -256,6 +293,8 @@ export type ToastAction = ToastShowAction | ToastDismissAction;
 
 export type DialogAction = DialogConfirmAction;
 
+export type UserPromptAction = UserPromptShowAction | UserPromptDismissAction;
+
 export type AppAction = AppBadgeAction;
 
 export type DesktopAction =
@@ -269,6 +308,7 @@ export type OSAction =
   | NotificationAction
   | ToastAction
   | DialogAction
+  | UserPromptAction
   | AppAction
   | DesktopAction;
 
@@ -288,6 +328,10 @@ export function isToastAction(action: OSAction): action is ToastAction {
 
 export function isDialogAction(action: OSAction): action is DialogAction {
   return action.type.startsWith('dialog.');
+}
+
+export function isUserPromptAction(action: OSAction): action is UserPromptAction {
+  return action.type.startsWith('user.prompt.');
 }
 
 export function isAppAction(action: OSAction): action is AppAction {

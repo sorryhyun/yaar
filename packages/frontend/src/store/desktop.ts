@@ -41,6 +41,7 @@ import {
   createImageAttachSlice,
   createCliSlice,
   createMonitorSlice,
+  createUserPromptsSlice,
 } from './slices';
 
 // Import pure mutation functions for batched action processing
@@ -48,6 +49,7 @@ import { applyWindowAction } from './slices/windowsSlice';
 import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
+import { applyUserPromptAction } from './slices/userPromptsSlice';
 
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
@@ -396,6 +398,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createNotificationsSlice(...a),
     ...createToastsSlice(...a),
     ...createDialogsSlice(...a),
+    ...createUserPromptsSlice(...a),
     ...createConnectionSlice(...a),
     ...createDebugSlice(...a),
     ...createAgentsSlice(...a),
@@ -452,6 +455,8 @@ export const useDesktopStore = create<DesktopStore>()(
         store.handleToastAction(action);
       } else if (actionType.startsWith('dialog.')) {
         store.handleDialogAction(action);
+      } else if (actionType.startsWith('user.prompt.')) {
+        store.handleUserPromptAction(action);
       } else if (actionType === 'app.badge') {
         const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
         const [set] = a;
@@ -506,6 +511,7 @@ export const useDesktopStore = create<DesktopStore>()(
             else if (t.startsWith('notification.')) applyNotificationAction(state, action);
             else if (t.startsWith('toast.')) applyToastAction(state, action);
             else if (t.startsWith('dialog.')) applyDialogAction(state, action);
+            else if (t.startsWith('user.prompt.')) applyUserPromptAction(state, action);
             else if (t === 'app.badge') {
               const { appId, count } = action as import('@yaar/shared').AppBadgeAction;
               if (count > 0) state.appBadges[appId] = count;
@@ -540,6 +546,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.notifications = {};
         state.toasts = {};
         state.dialogs = {};
+        state.userPrompts = {};
         state.activeAgents = {};
         state.windowAgents = {};
         state.queuedActions = {};
@@ -573,6 +580,7 @@ export {
   selectToasts,
   selectNotifications,
   selectDialogs,
+  selectUserPrompts,
   selectActiveAgents,
   selectWindowAgents,
   selectWindowAgent,

@@ -22,6 +22,7 @@ import { getSessionHub } from '../session/live-session.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { APP_DEV_ENABLED } from '../config.js';
+import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES } from './browser/index.js';
 
 /**
@@ -49,6 +50,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerStorageTools(servers.storage);
   registerAppsTools(servers.apps);
   registerMarketTools(servers.apps);
+  registerUserTools(servers.user);
   if (APP_DEV_ENABLED) {
     registerAppDevTools(servers.dev);
   }
@@ -86,6 +88,7 @@ export function getToolNames(): string[] {
     ...STORAGE_TOOL_NAMES,
     ...APPS_TOOL_NAMES,
     ...MARKET_TOOL_NAMES,
+    ...USER_TOOL_NAMES,
     ...DEV_TOOL_NAMES,
     ...RELOAD_TOOL_NAMES,
     ...BROWSER_TOOL_NAMES,
