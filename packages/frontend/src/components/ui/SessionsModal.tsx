@@ -27,7 +27,7 @@ export function SessionsModal() {
   const [exporting, setExporting] = useState<string | null>(null);
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal);
   const applyActions = useDesktopStore((state) => state.applyActions);
-  const resetDesktop = useDesktopStore((state) => state.resetDesktop);
+  const clearDesktop = useDesktopStore((state) => state.clearDesktop);
 
   useEffect(() => {
     fetchSessions();
@@ -86,7 +86,7 @@ export function SessionsModal() {
           throw new Error('Failed to restore session');
         }
         const data = await response.json();
-        resetDesktop();
+        clearDesktop();
         if (data.actions && Array.isArray(data.actions)) {
           applyActions(data.actions as OSAction[]);
         }
@@ -97,7 +97,7 @@ export function SessionsModal() {
         setRestoring(null);
       }
     },
-    [applyActions, resetDesktop, toggleSessionsModal],
+    [applyActions, clearDesktop, toggleSessionsModal],
   );
 
   const handleExportSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {

@@ -156,7 +156,7 @@ export function CommandPalette() {
     applyAction({
       type: 'toast.show',
       id: `reset-${Date.now()}`,
-      message: 'Desktop and context reset',
+      message: 'Context reset',
       variant: 'info',
     });
   }, [reset, applyAction]);
