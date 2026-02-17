@@ -1,0 +1,60 @@
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg, #0a0a0f);
+  z-index: 99999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.overlay[data-fading='true'] {
+  animation: fadeOut 0.5s ease-in forwards;
+  pointer-events: none;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text, #e0e0f0);
+  letter-spacing: 0.05em;
+  margin-bottom: 1rem;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+}
+
+.status {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #888898);
+  animation: pulse 2s ease-in-out infinite;
+  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+}
