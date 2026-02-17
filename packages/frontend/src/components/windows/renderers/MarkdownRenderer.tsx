@@ -5,6 +5,7 @@
  * react-markdown or marked. This is a simplified version.
  */
 import { memo, useMemo } from 'react';
+import { resolveAssetUrl } from '@/lib/api';
 import styles from '@/styles/base/typography.module.css';
 
 interface MarkdownRendererProps {
@@ -19,6 +20,11 @@ function MarkdownRenderer({ data }: MarkdownRendererProps) {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
+      // Images (before headers, since ![...] could appear on its own line)
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt, src) => {
+        const url = resolveAssetUrl(src);
+        return `<img src="${url}" alt="${alt}" style="max-width:100%;border-radius:4px">`;
+      })
       // Headers
       .replace(/^### (.*$)/gm, '<h3>$1</h3>')
       .replace(/^## (.*$)/gm, '<h2>$1</h2>')

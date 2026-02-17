@@ -11,6 +11,7 @@ import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
+import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../windows/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -196,6 +197,38 @@ export function DesktopSurface() {
     [sendMessage, cooldownId, startCooldown],
   );
 
+  // Image drop on desktop background
+  const [isImageDragOver, setIsImageDragOver] = useState(false);
+  const handleDesktopDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files') && isExternalFileDrag()) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsImageDragOver(true);
+    }
+  }, []);
+  const handleDesktopDragLeave = useCallback(() => {
+    setIsImageDragOver(false);
+  }, []);
+  const handleDesktopDrop = useCallback((e: React.DragEvent) => {
+    setIsImageDragOver(false);
+    if (isExternalFileDrag() && e.dataTransfer.files.length > 0) {
+      const imageFiles = filterImageFiles(e.dataTransfer.files);
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        uploadImages(imageFiles).then((paths) => {
+          if (paths.length > 0) {
+            const imageLines = paths.map((p) => `  image: ${p}`).join('\n');
+            useDesktopStore
+              .getState()
+              .queueGestureMessage(
+                `<user_interaction:image_drop>\n${imageLines}\n</user_interaction:image_drop>`,
+              );
+          }
+        });
+      }
+    }
+  }, []);
+
   const handleDesktopMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Only start selection when clicking directly on the desktop background
@@ -311,9 +344,13 @@ export function DesktopSurface() {
             '--icon-grid-gap': `${resolveIconSize(iconSize).gridGap}px`,
           } as React.CSSProperties
         }
+        data-image-dragover={isImageDragOver || undefined}
         onClick={handleBackgroundClick}
         onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleDesktopMouseDown}
+        onDragOver={handleDesktopDragOver}
+        onDragLeave={handleDesktopDragLeave}
+        onDrop={handleDesktopDrop}
       >
         {/* Connection status indicator */}
         <div className={styles.statusBar}>

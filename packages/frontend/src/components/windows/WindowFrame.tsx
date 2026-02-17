@@ -13,6 +13,7 @@ import { useComponentAction } from '@/contexts/ComponentActionContext';
 import type { WindowModel } from '@/types/state';
 import { MemoizedContentRenderer } from './ContentRenderer';
 import { LockOverlay } from './LockOverlay';
+import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
 import styles from '@/styles/windows/WindowFrame.module.css';
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -281,11 +282,16 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     [],
   );
 
-  // Drag-over state for app icon / iframe text drop target
+  // Drag-over state for app icon / iframe text / image file drop target
   const [isDragOver, setIsDragOver] = useState(false);
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('application/x-yaar-app') || getIframeDragSource()) {
+    if (
+      e.dataTransfer.types.includes('application/x-yaar-app') ||
+      getIframeDragSource() ||
+      (e.dataTransfer.types.includes('Files') && isExternalFileDrag())
+    ) {
       e.preventDefault();
+      e.stopPropagation();
       e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-yaar-app')
         ? 'link'
         : 'copy';
@@ -332,6 +338,27 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         store.queueGestureMessage(
           `<user_interaction:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</user_interaction:select>\n<user_interaction:drag>\n  target: window "${window.title}" (id: ${targetRawId})\n</user_interaction:drag>`,
         );
+        return;
+      }
+
+      // Image file drop (only external drags from file manager, not in-page img drags)
+      if (isExternalFileDrag() && e.dataTransfer.files.length > 0) {
+        const imageFiles = filterImageFiles(e.dataTransfer.files);
+        if (imageFiles.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          const rawId = getRawWindowId(window.id);
+          uploadImages(imageFiles).then((paths) => {
+            if (paths.length > 0) {
+              const imageLines = paths.map((p) => `  image: ${p}`).join('\n');
+              useDesktopStore
+                .getState()
+                .queueGestureMessage(
+                  `<user_interaction:image_drop>\n${imageLines}\n  source: window "${window.title}" (id: ${rawId})\n</user_interaction:image_drop>`,
+                );
+            }
+          });
+        }
       }
     },
     [window.id, window.title],

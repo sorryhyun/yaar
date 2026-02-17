@@ -236,7 +236,7 @@
   border-bottom: 2px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Drop overlay when dragging app icon over window */
+/* Drop overlay when dragging app icon or image over window */
 .frame[data-drag-over='true'] {
   box-shadow:
     var(--shadow-xl),

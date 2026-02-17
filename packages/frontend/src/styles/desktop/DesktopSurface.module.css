@@ -315,6 +315,18 @@
   word-wrap: break-word;
 }
 
+/* Image drag-over visual feedback */
+.desktop[data-image-dragover='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.05);
+  pointer-events: none;
+  z-index: 1;
+  border-radius: 4px;
+}
+
 /* Rubber-band selection rectangle */
 .selectionRect {
   position: fixed;
