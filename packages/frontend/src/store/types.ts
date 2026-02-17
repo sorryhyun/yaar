@@ -346,6 +346,7 @@ export type DesktopStore = WindowsSlice &
     applyAction: (action: OSAction) => void;
     applyActions: (actions: OSAction[]) => void;
     resetDesktop: () => void;
+    clearDesktop: () => void;
   };
 
 // ============ Slice Creator Type ============

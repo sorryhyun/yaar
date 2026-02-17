@@ -540,6 +540,32 @@ export const useDesktopStore = create<DesktopStore>()(
     resetDesktop: () => {
       const [set] = a;
       set((state) => {
+        // Preserve windows, zOrder, focusedWindowId, monitors, shortcuts, appBadges
+        // Only clear agent/context/pending state
+        state.notifications = {};
+        state.toasts = {};
+        state.dialogs = {};
+        state.userPrompts = {};
+        state.activeAgents = {};
+        state.windowAgents = {};
+        state.queuedActions = {};
+        state.pendingInteractions = [];
+        state.pendingGestureMessages = [];
+        state.activityLog = [];
+        state.debugLog = [];
+        state.pendingFeedback = [];
+        state.pendingAppProtocolResponses = [];
+        state.pendingAppProtocolReady = [];
+        state.pendingAppInteractions = [];
+        state.selectedWindowIds = [];
+        state.attachedImages = [];
+        state.cliStreaming = {};
+      });
+    },
+
+    clearDesktop: () => {
+      const [set] = a;
+      set((state) => {
         state.windows = {};
         state.zOrder = [];
         state.focusedWindowId = null;
