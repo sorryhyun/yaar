@@ -17,6 +17,7 @@ import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { sendJson, sendError } from '../utils.js';
 import { readSettings, updateSettings } from '../../storage/settings.js';
+import { readShortcuts } from '../../storage/shortcuts.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
 
@@ -49,6 +50,17 @@ export async function handleApiRoutes(
       });
     } catch {
       sendError(res, 'Failed to list apps');
+    }
+    return true;
+  }
+
+  // List desktop shortcuts
+  if (url.pathname === '/api/shortcuts' && req.method === 'GET') {
+    try {
+      const shortcuts = await readShortcuts();
+      sendJson(res, { shortcuts });
+    } catch {
+      sendError(res, 'Failed to list shortcuts');
     }
     return true;
   }

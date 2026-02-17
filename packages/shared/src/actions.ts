@@ -202,8 +202,34 @@ export interface AppBadgeAction {
 
 // ============ Desktop Actions ============
 
+export interface DesktopShortcut {
+  id: string;
+  label: string;
+  icon: string;
+  iconType?: 'emoji' | 'image';
+  type: 'file' | 'url' | 'action';
+  target: string;
+  createdAt: number;
+}
+
 export interface DesktopRefreshAppsAction {
   type: 'desktop.refreshApps';
+}
+
+export interface DesktopCreateShortcutAction {
+  type: 'desktop.createShortcut';
+  shortcut: DesktopShortcut;
+}
+
+export interface DesktopRemoveShortcutAction {
+  type: 'desktop.removeShortcut';
+  shortcutId: string;
+}
+
+export interface DesktopUpdateShortcutAction {
+  type: 'desktop.updateShortcut';
+  shortcutId: string;
+  updates: Partial<Omit<DesktopShortcut, 'id' | 'createdAt'>>;
 }
 
 // ============ Union Types ============
@@ -232,7 +258,11 @@ export type DialogAction = DialogConfirmAction;
 
 export type AppAction = AppBadgeAction;
 
-export type DesktopAction = DesktopRefreshAppsAction;
+export type DesktopAction =
+  | DesktopRefreshAppsAction
+  | DesktopCreateShortcutAction
+  | DesktopRemoveShortcutAction
+  | DesktopUpdateShortcutAction;
 
 export type OSAction =
   | WindowAction

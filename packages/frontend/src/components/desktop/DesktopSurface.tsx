@@ -6,12 +6,13 @@
  * - Background styling
  * - Contains all windows
  */
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
-import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
+import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
+import type { DesktopShortcut } from '@yaar/shared';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../windows/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -92,7 +93,9 @@ export function DesktopSurface() {
 
   const appsVersion = useDesktopStore((s) => s.appsVersion);
   const appBadges = useDesktopStore((s) => s.appBadges);
+  const storeShortcuts = useDesktopStore((s) => s.shortcuts);
   const [apps, setApps] = useState<AppInfo[]>([]);
+  const [shortcuts, setShortcuts] = useState<DesktopShortcut[]>([]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
@@ -118,6 +121,30 @@ export function DesktopSurface() {
     }
     fetchApps();
   }, [appsVersion]);
+
+  // Fetch shortcuts on mount
+  useEffect(() => {
+    async function fetchShortcuts() {
+      try {
+        const response = await apiFetch('/api/shortcuts');
+        if (response.ok) {
+          const data = await response.json();
+          setShortcuts(data.shortcuts || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch shortcuts:', err);
+      }
+    }
+    fetchShortcuts();
+  }, []);
+
+  // Merge fetched shortcuts with store shortcuts (store takes precedence for real-time updates)
+  const mergedShortcuts = useMemo(() => {
+    const map = new Map<string, DesktopShortcut>();
+    for (const s of shortcuts) map.set(s.id, s);
+    for (const s of storeShortcuts) map.set(s.id, s);
+    return Array.from(map.values());
+  }, [shortcuts, storeShortcuts]);
 
   // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors
   useEffect(() => {
@@ -197,6 +224,17 @@ export function DesktopSurface() {
     [sendMessage, cooldownId, startCooldown],
   );
 
+  const handleShortcutClick = useCallback(
+    (shortcut: DesktopShortcut) => {
+      if (cooldownId === shortcut.id) return;
+      startCooldown(shortcut.id);
+      sendMessage(
+        `<user_interaction:click>shortcut: ${shortcut.id}, type: ${shortcut.type}, target: ${shortcut.target}</user_interaction:click>`,
+      );
+    },
+    [sendMessage, cooldownId, startCooldown],
+  );
+
   // Image drop on desktop background
   const [isImageDragOver, setIsImageDragOver] = useState(false);
   const handleDesktopDragOver = useCallback((e: React.DragEvent) => {
@@ -212,9 +250,12 @@ export function DesktopSurface() {
   const handleDesktopDrop = useCallback((e: React.DragEvent) => {
     setIsImageDragOver(false);
     if (isExternalFileDrag() && e.dataTransfer.files.length > 0) {
+      e.preventDefault();
       const imageFiles = filterImageFiles(e.dataTransfer.files);
+      const otherFiles = Array.from(e.dataTransfer.files).filter((f) => !imageFiles.includes(f));
+
+      // Handle image files (existing behavior)
       if (imageFiles.length > 0) {
-        e.preventDefault();
         uploadImages(imageFiles).then((paths) => {
           if (paths.length > 0) {
             const imageLines = paths.map((p) => `  image: ${p}`).join('\n');
@@ -222,6 +263,20 @@ export function DesktopSurface() {
               .getState()
               .queueGestureMessage(
                 `<user_interaction:image_drop>\n${imageLines}\n</user_interaction:image_drop>`,
+              );
+          }
+        });
+      }
+
+      // Handle non-image files — upload and notify AI
+      if (otherFiles.length > 0) {
+        uploadFiles(otherFiles).then((paths) => {
+          if (paths.length > 0) {
+            const fileLines = paths.map((p) => `  file: ${p}`).join('\n');
+            useDesktopStore
+              .getState()
+              .queueGestureMessage(
+                `<user_interaction:file_drop>\n${fileLines}\n</user_interaction:file_drop>`,
               );
           }
         });
@@ -296,6 +351,19 @@ export function DesktopSurface() {
             )
           ) {
             appIds.add(el.dataset.appId!);
+          }
+        });
+        document.querySelectorAll<HTMLElement>('[data-shortcut-id]').forEach((el) => {
+          const b = el.getBoundingClientRect();
+          if (
+            !(
+              rect.x > b.right ||
+              rect.x + rect.w < b.left ||
+              rect.y > b.bottom ||
+              rect.y + rect.h < b.top
+            )
+          ) {
+            appIds.add(el.dataset.shortcutId!);
           }
         });
         setSelectedAppIds(appIds);
@@ -477,6 +545,31 @@ export function DesktopSurface() {
                 <span className={styles.iconLabel}>{app.name}</span>
               </button>
             ))}
+          {/* Desktop shortcuts */}
+          {mergedShortcuts.map((shortcut) => (
+            <button
+              key={shortcut.id}
+              className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
+              data-shortcut-id={shortcut.id}
+              onClick={() => handleShortcutClick(shortcut)}
+              disabled={cooldownId === shortcut.id}
+            >
+              <span className={styles.iconWrapper}>
+                {shortcut.iconType === 'image' ? (
+                  <img
+                    className={styles.iconImg}
+                    src={resolveAssetUrl(shortcut.icon)}
+                    alt={shortcut.label}
+                    draggable={false}
+                  />
+                ) : (
+                  <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
+                )}
+                <span className={styles.shortcutArrow}>↗</span>
+              </span>
+              <span className={styles.iconLabel}>{shortcut.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Rubber-band selection rectangle */}

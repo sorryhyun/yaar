@@ -15,6 +15,10 @@ import type {
   WindowCaptureAction,
   AppProtocolRequest,
   AppProtocolResponse,
+  DesktopShortcut,
+  DesktopCreateShortcutAction,
+  DesktopRemoveShortcutAction,
+  DesktopUpdateShortcutAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
 import html2canvas from 'html2canvas';
@@ -408,6 +412,7 @@ export const useDesktopStore = create<DesktopStore>()(
     // Desktop-level state
     appBadges: {} as Record<string, number>,
     appsVersion: 0,
+    shortcuts: [] as DesktopShortcut[],
     bumpAppsVersion: () => {
       const [set] = a;
       set((state) => {
@@ -459,6 +464,25 @@ export const useDesktopStore = create<DesktopStore>()(
         });
       } else if (actionType === 'desktop.refreshApps') {
         store.bumpAppsVersion();
+      } else if (actionType === 'desktop.createShortcut') {
+        const { shortcut } = action as DesktopCreateShortcutAction;
+        const [set] = a;
+        set((state) => {
+          state.shortcuts.push(shortcut);
+        });
+      } else if (actionType === 'desktop.removeShortcut') {
+        const { shortcutId } = action as DesktopRemoveShortcutAction;
+        const [set] = a;
+        set((state) => {
+          state.shortcuts = state.shortcuts.filter((s) => s.id !== shortcutId);
+        });
+      } else if (actionType === 'desktop.updateShortcut') {
+        const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
+        const [set] = a;
+        set((state) => {
+          const sc = state.shortcuts.find((s) => s.id === shortcutId);
+          if (sc) Object.assign(sc, updates);
+        });
       }
     },
 
@@ -487,6 +511,16 @@ export const useDesktopStore = create<DesktopStore>()(
               if (count > 0) state.appBadges[appId] = count;
               else delete state.appBadges[appId];
             } else if (t === 'desktop.refreshApps') state.appsVersion += 1;
+            else if (t === 'desktop.createShortcut') {
+              state.shortcuts.push((action as DesktopCreateShortcutAction).shortcut);
+            } else if (t === 'desktop.removeShortcut') {
+              const sid = (action as DesktopRemoveShortcutAction).shortcutId;
+              state.shortcuts = state.shortcuts.filter((s) => s.id !== sid);
+            } else if (t === 'desktop.updateShortcut') {
+              const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
+              const sc = state.shortcuts.find((s) => s.id === shortcutId);
+              if (sc) Object.assign(sc, updates);
+            }
           }
         });
       }
@@ -520,6 +554,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.selectedWindowIds = [];
         state.appBadges = {};
         state.appsVersion = 0;
+        state.shortcuts = [];
         state.attachedImages = [];
         state.cliMode = false;
         state.cliHistory = {};

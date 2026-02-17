@@ -21,7 +21,7 @@ import type {
   CliEntry,
   Monitor,
 } from '@/types/state';
-import type { OSAction, UserInteraction, AppProtocolResponse } from '@yaar/shared';
+import type { OSAction, UserInteraction, AppProtocolResponse, DesktopShortcut } from '@yaar/shared';
 
 // Re-export for convenience
 export type {
@@ -327,6 +327,7 @@ export type DesktopStore = WindowsSlice &
   MonitorSlice & {
     appBadges: Record<string, number>;
     appsVersion: number;
+    shortcuts: DesktopShortcut[];
     bumpAppsVersion: () => void;
     applyAction: (action: OSAction) => void;
     applyActions: (actions: OSAction[]) => void;
