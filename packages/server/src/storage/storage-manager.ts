@@ -51,6 +51,35 @@ function isPdfFile(filePath: string): boolean {
   return extname(filePath).toLowerCase() === '.pdf';
 }
 
+/** Image extensions → MIME types for base64 image content blocks */
+const IMAGE_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
+
+function imageFileMime(filePath: string): string | null {
+  return IMAGE_MIME[extname(filePath).toLowerCase()] ?? null;
+}
+
+/** Extensions known to be safe to read as UTF-8 text */
+const TEXT_EXTENSIONS = new Set([
+  '.txt', '.md', '.csv', '.json', '.jsonl',
+  '.html', '.htm', '.xml', '.svg',
+  '.css', '.js', '.mjs', '.cjs', '.ts', '.mts', '.tsx', '.jsx',
+  '.yaml', '.yml', '.toml', '.ini', '.env', '.conf', '.cfg',
+  '.sh', '.bash', '.zsh', '.fish',
+  '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp',
+  '.sql', '.graphql', '.gql',
+  '.log', '.diff', '.patch',
+]);
+
+function isTextFile(filePath: string): boolean {
+  return TEXT_EXTENSIONS.has(extname(filePath).toLowerCase());
+}
+
 const MAX_PDF_PREVIEW_PAGES = 3;
 
 /**
@@ -96,7 +125,28 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
       };
     }
 
-    // Regular text file
+    // Image files — return as base64 image content
+    const mime = imageFileMime(validatedPath);
+    if (mime) {
+      const buf = await readFile(validatedPath);
+      const image: StorageImageContent = {
+        type: 'image',
+        data: buf.toString('base64'),
+        mimeType: mime,
+      };
+      return { success: true, content: `Image file (${mime})`, images: [image] };
+    }
+
+    // Reject unknown binary files — don't read as UTF-8
+    if (!isTextFile(validatedPath)) {
+      const ext = extname(validatedPath) || '(no extension)';
+      return {
+        success: true,
+        content: `Binary file (${ext}) — cannot be read as text. Use /api/storage/${filePath} to serve it directly.`,
+      };
+    }
+
+    // Text file
     const content = await readFile(validatedPath, 'utf-8');
     return { success: true, content };
   } catch (err) {

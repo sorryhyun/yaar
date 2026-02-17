@@ -32,7 +32,10 @@ export function registerStorageTools(server: McpServer): void {
       }
 
       if (result.images && result.images.length > 0) {
-        const hint = `\n\nTo display this PDF, create an iframe window with src="/api/storage/${args.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`;
+        const isPdf = result.totalPages != null;
+        const hint = isPdf
+          ? `\n\nTo display this PDF, create an iframe window with src="/api/storage/${args.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`
+          : '';
         return okWithImages(
           result.content! + hint,
           result.images.map((img) => ({ data: img.data, mimeType: img.mimeType }))

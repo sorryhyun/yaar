@@ -273,8 +273,10 @@ function formatMcpResult(item: Partial<McpToolCallItem> | undefined): string {
     const contentParts = content
       .map((block) => {
         if (typeof block === 'string') return block;
-        if (block && typeof block === 'object' && 'text' in block) {
-          return (block as { text: string }).text;
+        if (block && typeof block === 'object') {
+          if ('text' in block) return (block as { text: string }).text;
+          // Skip image blocks — don't dump base64 data into text
+          if ('type' in block && (block as { type: string }).type === 'image') return null;
         }
         return JSON.stringify(block);
       })
