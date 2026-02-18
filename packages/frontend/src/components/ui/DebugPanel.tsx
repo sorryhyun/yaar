@@ -4,30 +4,31 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useDesktopStore } from '@/store';
 import type { DebugEntry } from '@/types/state';
+import { ServerEventType, ClientEventType } from '@/types';
 import styles from '@/styles/ui/DebugPanel.module.css';
 
 function getSummary(entry: DebugEntry): string {
   const data = entry.data as Record<string, unknown>;
 
   switch (entry.type) {
-    case 'USER_MESSAGE':
+    case ClientEventType.USER_MESSAGE:
       return truncate(String(data.content || ''), 60);
-    case 'AGENT_RESPONSE':
+    case ServerEventType.AGENT_RESPONSE:
       return truncate(String(data.content || ''), 60);
-    case 'AGENT_THINKING':
+    case ServerEventType.AGENT_THINKING:
       return truncate(String(data.content || ''), 60);
-    case 'CONNECTION_STATUS':
+    case ServerEventType.CONNECTION_STATUS:
       return `${data.status}${data.provider ? ` (${data.provider})` : ''}`;
-    case 'ACTIONS': {
+    case ServerEventType.ACTIONS: {
       const actions = data.actions as Array<{ type: string }> | undefined;
       if (actions?.length) {
         return actions.map((a) => a.type).join(', ');
       }
       return 'no actions';
     }
-    case 'TOOL_PROGRESS':
+    case ServerEventType.TOOL_PROGRESS:
       return `${data.toolName}: ${data.status}`;
-    case 'ERROR':
+    case ServerEventType.ERROR:
       return truncate(String(data.error || 'Unknown error'), 60);
     default:
       return '';

@@ -5,3 +5,4 @@ pnpm-lock.yaml
 packages/server/src/lib/bundled-types/
 storage/
 config/
+packages/server/src/providers/codex/generated/

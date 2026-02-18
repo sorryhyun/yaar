@@ -29,10 +29,12 @@ src/
 │       ├── api.ts     # REST API routes (health, providers, apps, sessions, agents/stats)
 │       ├── files.ts   # File-serving routes (pdf, sandbox, app-static, storage)
 │       └── static.ts  # Frontend static serving + SPA fallback
-├── session/           # Session management (LiveSession, SessionHub, EventSequencer)
+├── session/           # Session management (LiveSession, SessionHub, BroadcastCenter)
+│   ├── live-session.ts    # LiveSession — single gateway for all server→frontend events
+│   ├── broadcast-center.ts  # BroadcastCenter — routes events to WebSocket connections
+│   └── types.ts           # SessionId type, generateSessionId()
 ├── websocket/         # WebSocket server + connection registry
-│   ├── server.ts      # createWebSocketServer() with explicit options param
-│   └── broadcast-center.ts  # BroadcastCenter — routes events to all connections in a session
+│   └── server.ts      # createWebSocketServer() with explicit options param
 ├── agents/            # Agent lifecycle, pooling, context management
 ├── providers/         # Pluggable AI backends (Claude, Codex)
 ├── mcp/               # MCP server, domain-organized tools, action emitter
@@ -74,7 +76,6 @@ SessionHub (singleton registry)
     ├── connections: Map<ConnectionId, WebSocket>   ← multi-tab support
     ├── WindowStateRegistry                         ← server-side window tracking
     ├── ReloadCache                                 ← fingerprint-based action caching
-    ├── EventSequencer                              ← monotonic seq for replay
     └── ContextPool (unified pool)
         ├── AgentPool
         │   ├── Main Agents: Map<monitorId, PooledAgent>  ← one per monitor
@@ -102,8 +103,23 @@ WebSocket → LiveSession.routeMessage()
   → AgentSession.handleMessage(content, { role, source, ... })
   → AITransport.query() [async generator]
   → Tools emit actions via actionEmitter
-  → BroadcastCenter.publishToSession()
+  → LiveSession.broadcast()
 ```
+
+### Event Delivery Rule
+
+**All server→frontend events must flow through `LiveSession.broadcast()`**, never directly through `BroadcastCenter.publishToSession()`. `LiveSession.broadcast()` handles monitor-scoped routing.
+
+For non-agent contexts (HTTP routes, proxy) where there is no `LiveSession` reference, use the `actionEmitter` EventEmitter pattern:
+1. `actionEmitter.emit('my-event', { sessionId, event })` from the source
+2. `actionEmitter.on('my-event', handler)` in the `LiveSession` constructor → `this.broadcast(event)`
+3. Clean up listener in `LiveSession.cleanup()`
+
+See `'app-protocol'` and `'approval-request'` listeners in `live-session.ts` as reference implementations. Calling `BroadcastCenter.publishToSession()` directly bypasses routing and silently fails during active agent streaming.
+
+### Event Type Constants
+
+Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` for all event type discriminants — never raw string literals.
 
 ### Key Patterns
 

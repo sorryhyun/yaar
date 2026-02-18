@@ -1,4 +1,5 @@
 import type { ServerEvent, OSAction, AppProtocolRequestEvent, AppProtocolRequest } from '@/types';
+import { ServerEventType } from '@/types';
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void;
@@ -40,11 +41,13 @@ export interface ServerEventDispatchHandlers {
 
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
   const shouldLog =
-    message.type === 'ACTIONS' ||
-    message.type === 'CONNECTION_STATUS' ||
-    message.type === 'ERROR' ||
-    (message.type === 'AGENT_RESPONSE' && (message as { isComplete?: boolean }).isComplete) ||
-    (message.type === 'TOOL_PROGRESS' && (message as { status?: string }).status !== 'running');
+    message.type === ServerEventType.ACTIONS ||
+    message.type === ServerEventType.CONNECTION_STATUS ||
+    message.type === ServerEventType.ERROR ||
+    (message.type === ServerEventType.AGENT_RESPONSE &&
+      (message as { isComplete?: boolean }).isComplete) ||
+    (message.type === ServerEventType.TOOL_PROGRESS &&
+      (message as { status?: string }).status !== 'running');
 
   if (shouldLog) {
     handlers.addDebugEntry({
@@ -55,7 +58,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
   }
 
   switch (message.type) {
-    case 'ACTIONS': {
+    case ServerEventType.ACTIONS: {
       const monitorId = (message as { monitorId?: string }).monitorId;
       const actions = monitorId
         ? message.actions.map((action) => ({ ...action, monitorId }))
@@ -74,7 +77,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       handlers.addCliEntry({ type: 'action-summary', content: summary, monitorId });
       break;
     }
-    case 'CONNECTION_STATUS':
+    case ServerEventType.CONNECTION_STATUS:
       handlers.setIsConnecting(false);
       handlers.setConnectionStatus(
         message.status === 'connected'
@@ -89,7 +92,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         handlers.checkForPreviousSession(message.sessionId);
       }
       break;
-    case 'AGENT_THINKING': {
+    case ServerEventType.AGENT_THINKING: {
       const agentId = (message as { agentId?: string }).agentId || 'default';
       const monitorId = (message as { monitorId?: string }).monitorId;
       handlers.setAgentActive(agentId, 'Thinking...');
@@ -98,7 +101,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break;
     }
-    case 'AGENT_RESPONSE': {
+    case ServerEventType.AGENT_RESPONSE: {
       const agentId = (message as { agentId?: string }).agentId || 'default';
       const isComplete = (message as { isComplete?: boolean }).isComplete;
       const monitorId = (message as { monitorId?: string }).monitorId;
@@ -111,7 +114,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break;
     }
-    case 'TOOL_PROGRESS': {
+    case ServerEventType.TOOL_PROGRESS: {
       const agentId = (message as { agentId?: string }).agentId || 'default';
       const toolName = (message as { toolName?: string }).toolName || 'tool';
       const status = (message as { status?: string }).status;
@@ -139,13 +142,13 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       });
       break;
     }
-    case 'ERROR': {
+    case ServerEventType.ERROR: {
       const monitorId = (message as { monitorId?: string }).monitorId;
       handlers.setConnectionStatus('error', message.error);
       handlers.addCliEntry({ type: 'error', content: message.error, monitorId });
       break;
     }
-    case 'WINDOW_AGENT_STATUS': {
+    case ServerEventType.WINDOW_AGENT_STATUS: {
       const { windowId, agentId, status } = message;
       if (status === 'assigned') {
         handlers.registerWindowAgent(windowId, agentId, status);
@@ -154,7 +157,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break;
     }
-    case 'APPROVAL_REQUEST': {
+    case ServerEventType.APPROVAL_REQUEST: {
       // Convert to a dialog.confirm action and route through the existing dialog system.
       // This keeps the existing ConfirmDialog UI working; can be upgraded to inline later.
       handlers.applyActions([
@@ -170,7 +173,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       ]);
       break;
     }
-    case 'APP_PROTOCOL_REQUEST': {
+    case ServerEventType.APP_PROTOCOL_REQUEST: {
       const m = message as AppProtocolRequestEvent;
       handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request);
       break;

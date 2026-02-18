@@ -5,6 +5,7 @@
  * Extracted from ContextPool to separate main task orchestration concerns.
  */
 
+import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-context.js';
 import type { PooledAgent } from './agent-pool.js';
 import { ORCHESTRATOR_PROFILE } from './profiles.js';
@@ -46,7 +47,7 @@ export class MainTaskProcessor {
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, 'main');
       const agent = this.ctx.agentPool.getMainAgent(monitorId)!;
       await this.ctx.sendEvent({
-        type: 'MESSAGE_ACCEPTED',
+        type: ServerEventType.MESSAGE_ACCEPTED,
         messageId: task.messageId,
         agentId: agent.currentRole!,
       });
@@ -64,7 +65,7 @@ export class MainTaskProcessor {
     const queue = this.ctx.getOrCreateMainQueue(monitorId);
     if (!queue.canEnqueue()) {
       await this.ctx.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
       });
       return;
@@ -76,7 +77,7 @@ export class MainTaskProcessor {
     );
 
     await this.ctx.sendEvent({
-      type: 'MESSAGE_QUEUED',
+      type: ServerEventType.MESSAGE_QUEUED,
       messageId: task.messageId,
       position,
     });
@@ -106,7 +107,7 @@ export class MainTaskProcessor {
     });
 
     await this.ctx.sendEvent({
-      type: 'MESSAGE_ACCEPTED',
+      type: ServerEventType.MESSAGE_ACCEPTED,
       messageId: task.messageId,
       agentId: mainRole,
     });
@@ -190,7 +191,7 @@ export class MainTaskProcessor {
     });
 
     await this.ctx.sendEvent({
-      type: 'MESSAGE_ACCEPTED',
+      type: ServerEventType.MESSAGE_ACCEPTED,
       messageId: task.messageId,
       agentId: ephemeralRole,
     });

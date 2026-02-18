@@ -5,6 +5,7 @@
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react';
 import { useDesktopStore, handleAppProtocolRequest } from '@/store';
 import type { ClientEvent, ServerEvent, AppProtocolRequest } from '@/types';
+import { ClientEventType } from '@/types';
 import {
   createWsManager,
   MAX_RECONNECT_ATTEMPTS,
@@ -162,7 +163,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       // Subscribe to the current monitor (default to 'monitor-0' if not yet set)
       const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? 'monitor-0';
       if (wsManager.ws?.readyState === WebSocket.OPEN) {
-        sendEvent(wsManager, { type: 'SUBSCRIBE_MONITOR', monitorId: activeMonitorId });
+        sendEvent(wsManager, {
+          type: ClientEventType.SUBSCRIBE_MONITOR,
+          monitorId: activeMonitorId,
+        });
       }
     };
 
@@ -234,7 +238,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       }
 
       send({
-        type: 'USER_MESSAGE',
+        type: ClientEventType.USER_MESSAGE,
         messageId,
         content,
         monitorId,
@@ -247,28 +251,39 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const sendWindowMessage = useCallback(
     (windowId: string, content: string) => {
       const messageId = generateMessageId();
-      send({ type: 'WINDOW_MESSAGE', messageId, windowId: getRawWindowId(windowId), content });
+      send({
+        type: ClientEventType.WINDOW_MESSAGE,
+        messageId,
+        windowId: getRawWindowId(windowId),
+        content,
+      });
     },
     [send],
   );
 
   const sendDialogFeedback = useCallback(
     (dialogId: string, confirmed: boolean, rememberChoice?: 'once' | 'always' | 'deny_always') => {
-      send({ type: 'DIALOG_FEEDBACK', dialogId, confirmed, rememberChoice });
+      send({ type: ClientEventType.DIALOG_FEEDBACK, dialogId, confirmed, rememberChoice });
     },
     [send],
   );
 
   const sendToastAction = useCallback(
     (toastId: string, eventId: string) => {
-      send({ type: 'TOAST_ACTION', toastId, eventId });
+      send({ type: ClientEventType.TOAST_ACTION, toastId, eventId });
     },
     [send],
   );
 
   const sendUserPromptResponse = useCallback(
     (promptId: string, selectedValues?: string[], text?: string, dismissed?: boolean) => {
-      send({ type: 'USER_PROMPT_RESPONSE', promptId, selectedValues, text, dismissed });
+      send({
+        type: ClientEventType.USER_PROMPT_RESPONSE,
+        promptId,
+        selectedValues,
+        text,
+        dismissed,
+      });
     },
     [send],
   );
@@ -285,7 +300,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     ) => {
       const actionId = generateActionId(parallel);
       send({
-        type: 'COMPONENT_ACTION',
+        type: ClientEventType.COMPONENT_ACTION,
         windowId: getRawWindowId(windowId),
         windowTitle,
         action,
@@ -299,24 +314,24 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   );
 
   const interrupt = useCallback(() => {
-    send({ type: 'INTERRUPT' });
+    send({ type: ClientEventType.INTERRUPT });
   }, [send]);
 
   const reset = useCallback(() => {
-    send({ type: 'RESET' });
+    send({ type: ClientEventType.RESET });
     useDesktopStore.getState().resetDesktop();
   }, [send]);
 
   const setProvider = useCallback(
     (provider: 'claude' | 'codex') => {
-      send({ type: 'SET_PROVIDER', provider });
+      send({ type: ClientEventType.SET_PROVIDER, provider });
     },
     [send],
   );
 
   const interruptAgent = useCallback(
     (agentId: string) => {
-      send({ type: 'INTERRUPT_AGENT', agentId });
+      send({ type: ClientEventType.INTERRUPT_AGENT, agentId });
     },
     [send],
   );
@@ -334,7 +349,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         const feedback = consumePendingFeedback();
         for (const item of feedback) {
           send({
-            type: 'RENDERING_FEEDBACK',
+            type: ClientEventType.RENDERING_FEEDBACK,
             requestId: item.requestId,
             windowId: getRawWindowId(item.windowId),
             renderer: item.renderer,
@@ -359,7 +374,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         const items = consumePendingAppProtocolResponses();
         for (const item of items) {
           send({
-            type: 'APP_PROTOCOL_RESPONSE',
+            type: ClientEventType.APP_PROTOCOL_RESPONSE,
             requestId: item.requestId,
             windowId: getRawWindowId(item.windowId),
             response: item.response,
@@ -376,7 +391,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         const windowIds = consumeAppProtocolReady();
         for (const windowId of windowIds) {
           send({
-            type: 'APP_PROTOCOL_READY',
+            type: ClientEventType.APP_PROTOCOL_READY,
             windowId: getRawWindowId(windowId),
           });
         }
@@ -392,7 +407,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         for (const item of items) {
           const messageId = generateMessageId();
           send({
-            type: 'WINDOW_MESSAGE',
+            type: ClientEventType.WINDOW_MESSAGE,
             messageId,
             windowId: getRawWindowId(item.windowId),
             content: `<app_interaction>${item.content}</app_interaction>`,
@@ -412,7 +427,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           const unscopedInteractions = interactions.map((i) =>
             i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i,
           );
-          send({ type: 'USER_INTERACTION', interactions: unscopedInteractions });
+          send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
         }
       }
     });
@@ -428,7 +443,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           const messageId = generateMessageId();
           const monitorId = useDesktopStore.getState().activeMonitorId;
           addCliEntry({ type: 'user', content, monitorId });
-          send({ type: 'USER_MESSAGE', messageId, content, monitorId });
+          send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
         }
       }
     });
@@ -471,7 +486,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       if (state.activeMonitorId !== previousMonitorId) {
         previousMonitorId = state.activeMonitorId;
         if (wsManager.ws?.readyState === WebSocket.OPEN) {
-          sendEvent(wsManager, { type: 'SUBSCRIBE_MONITOR', monitorId: state.activeMonitorId });
+          sendEvent(wsManager, {
+            type: ClientEventType.SUBSCRIBE_MONITOR,
+            monitorId: state.activeMonitorId,
+          });
         }
       }
 
@@ -480,7 +498,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       if (wsManager.ws?.readyState === WebSocket.OPEN) {
         for (const id of previousMonitorIds) {
           if (!currentMonitorIds.has(id)) {
-            sendEvent(wsManager, { type: 'REMOVE_MONITOR', monitorId: id });
+            sendEvent(wsManager, { type: ClientEventType.REMOVE_MONITOR, monitorId: id });
           }
         }
       }

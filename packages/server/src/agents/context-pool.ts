@@ -16,10 +16,9 @@
 import { ContextTape, type ContextMessage } from './context.js';
 import { AgentPool } from './agent-pool.js';
 import { InteractionTimeline } from './interaction-timeline.js';
-import type { ServerEvent, UserInteraction } from '@yaar/shared';
+import { ServerEventType, type ServerEvent, type UserInteraction } from '@yaar/shared';
 import type { ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
-import { getBroadcastCenter } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
@@ -69,6 +68,7 @@ export class ContextPool implements PoolContext {
   providerType: ProviderType | null = null;
 
   // ── Internal state ────────────────────────────────────────────────
+  private broadcastFn: (event: ServerEvent) => void;
   private mainQueues = new Map<string, MainQueuePolicy>();
   private resetting = false;
   private inflightCount = 0;
@@ -83,10 +83,12 @@ export class ContextPool implements PoolContext {
     sessionId: SessionId,
     windowState: WindowStateRegistry,
     reloadCache: ReloadCache,
+    broadcast: (event: ServerEvent) => void,
     restoredContext: ContextMessage[] = [],
     savedThreadIds?: Record<string, string>,
   ) {
     this.sessionId = sessionId;
+    this.broadcastFn = broadcast;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
@@ -98,7 +100,7 @@ export class ContextPool implements PoolContext {
         `[ContextPool] Restored ${restoredContext.length} context messages from previous session`,
       );
     }
-    this.agentPool = new AgentPool(sessionId);
+    this.agentPool = new AgentPool(sessionId, broadcast);
 
     // Create processors
     this.mainProcessor = new MainTaskProcessor(this);
@@ -118,7 +120,7 @@ export class ContextPool implements PoolContext {
   }
 
   async sendEvent(event: ServerEvent): Promise<void> {
-    getBroadcastCenter().publishToSession(this.sessionId, event);
+    this.broadcastFn(event);
   }
 
   // ── Initialization ─────────────────────────────────────────────────
@@ -127,7 +129,7 @@ export class ContextPool implements PoolContext {
     const provider = await acquireWarmProvider();
     if (!provider) {
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: 'No AI provider available. Install Claude CLI.',
       });
       return false;
@@ -146,7 +148,7 @@ export class ContextPool implements PoolContext {
     }
 
     await this.sendEvent({
-      type: 'CONNECTION_STATUS',
+      type: ServerEventType.CONNECTION_STATUS,
       status: 'connected',
       provider: provider.name,
       sessionId: this.logSessionId,
@@ -161,7 +163,7 @@ export class ContextPool implements PoolContext {
     const provider = await acquireWarmProvider();
     if (!provider) {
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: 'No AI provider available for new monitor.',
         monitorId,
       });
@@ -172,7 +174,7 @@ export class ContextPool implements PoolContext {
     if (!agent) {
       await provider.dispose();
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: 'Agent limit reached. Cannot create new monitor.',
         monitorId,
       });
@@ -382,7 +384,7 @@ export class ContextPool implements PoolContext {
         type: 'window.close' as const,
         windowId: win.id,
       }));
-      await this.sendEvent({ type: 'ACTIONS', actions: closeActions });
+      await this.sendEvent({ type: ServerEventType.ACTIONS, actions: closeActions });
     }
 
     // 7. Clear remaining state
@@ -429,7 +431,7 @@ export class ContextPool implements PoolContext {
         if (agent) {
           if (monitorId === 'monitor-0') {
             await this.sendEvent({
-              type: 'CONNECTION_STATUS',
+              type: ServerEventType.CONNECTION_STATUS,
               status: 'connected',
               provider: provider.name,
               sessionId: this.logSessionId ?? undefined,

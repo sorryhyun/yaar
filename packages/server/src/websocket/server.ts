@@ -10,7 +10,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { getSessionHub, type LiveSessionOptions } from '../session/live-session.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
-import type { ClientEvent, OSAction } from '@yaar/shared';
+import { ServerEventType, type ClientEvent, type OSAction } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 import { checkWsAuth } from '../http/auth.js';
 
@@ -64,7 +64,7 @@ export function createWebSocketServer(
 
     // Send connection status to this connection only
     session.sendTo(connectionId, {
-      type: 'CONNECTION_STATUS',
+      type: ServerEventType.CONNECTION_STATUS,
       status: 'connected',
       provider: getWarmPool().getPreferredProvider() ?? 'claude',
       sessionId: session.sessionId,
@@ -73,7 +73,7 @@ export function createWebSocketServer(
     // Send snapshot of current windows to new connection
     const snapshotActions = session.generateSnapshot();
     if (snapshotActions.length > 0) {
-      session.sendTo(connectionId, { type: 'ACTIONS', actions: snapshotActions });
+      session.sendTo(connectionId, { type: ServerEventType.ACTIONS, actions: snapshotActions });
     }
 
     // Execute launch hooks for fresh sessions (not reconnections)

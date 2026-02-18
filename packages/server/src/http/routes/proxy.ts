@@ -112,8 +112,7 @@ export async function handleProxyRoutes(
       const referer = req.headers.referer;
       if (referer) {
         try {
-          const sid = new URL(referer).searchParams.get('sessionId');
-          if (sid) sessionId = sid;
+          sessionId = new URL(referer).searchParams.get('sessionId') ?? undefined;
         } catch {
           /* invalid referer URL */
         }
@@ -121,8 +120,8 @@ export async function handleProxyRoutes(
     }
 
     if (!sessionId) {
-      const { getBroadcastCenter } = await import('../../session/broadcast-center.js');
-      sessionId = getBroadcastCenter().getAnySessionId();
+      const { getSessionHub } = await import('../../session/live-session.js');
+      sessionId = getSessionHub().getDefault()?.sessionId;
     }
 
     if (!sessionId) {

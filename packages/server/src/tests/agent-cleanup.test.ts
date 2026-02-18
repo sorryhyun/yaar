@@ -56,7 +56,7 @@ beforeEach(() => {
 
 describe('AgentPool limiter slot release on error', () => {
   it('disposeEphemeral releases limiter even when cleanup() throws', async () => {
-    const pool = new AgentPool('test-session' as SessionId);
+    const pool = new AgentPool('test-session' as SessionId, vi.fn());
 
     // Create an ephemeral agent (goes through createAgentCore -> limiter.tryAcquire)
     const agent = await pool.createEphemeral();
@@ -74,7 +74,7 @@ describe('AgentPool limiter slot release on error', () => {
   });
 
   it('disposeWindowAgent releases limiter even when interrupt() throws', async () => {
-    const pool = new AgentPool('test-session' as SessionId);
+    const pool = new AgentPool('test-session' as SessionId, vi.fn());
 
     // Create a window agent
     const agent = await pool.getOrCreateWindowAgent('win-1');
@@ -97,7 +97,7 @@ describe('AgentPool limiter slot release on error', () => {
   });
 
   it('pool-wide cleanup() releases all limiter slots even when individual cleanups throw', async () => {
-    const pool = new AgentPool('test-session' as SessionId);
+    const pool = new AgentPool('test-session' as SessionId, vi.fn());
 
     // Create three main agents on different monitors
     await pool.createMainAgent('monitor-0');

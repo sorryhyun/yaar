@@ -7,10 +7,15 @@
 
 import { AsyncLocalStorage } from 'async_hooks';
 import type { AITransport, TransportOptions, ProviderType } from '../providers/types.js';
-import type { ServerEvent, UserInteraction, OSAction } from '@yaar/shared';
+import {
+  ServerEventType,
+  type ServerEvent,
+  type UserInteraction,
+  type OSAction,
+} from '@yaar/shared';
 import type { SessionLogger } from '../logging/index.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
-import { getBroadcastCenter, type ConnectionId } from '../session/broadcast-center.js';
+import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
@@ -114,6 +119,7 @@ export class AgentSession {
   private recordedActions: OSAction[] = [];
   private currentMonitorId: string | undefined;
   private onOutput: ((bytes: number) => void) | null = null;
+  private broadcastFn: (event: ServerEvent) => void;
 
   private providerLifecycle: ProviderLifecycleManager;
   private toolActionBridge: ToolActionBridge;
@@ -124,9 +130,11 @@ export class AgentSession {
     sharedLogger?: SessionLogger,
     instanceId?: string,
     liveSessionId?: SessionId,
+    broadcast?: (event: ServerEvent) => void,
   ) {
     this.connectionId = connectionId;
     this.liveSessionId = liveSessionId ?? connectionId;
+    this.broadcastFn = broadcast ?? (() => {});
     this.sessionId = sessionId ?? null;
     this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.sessionLogger = sharedLogger ?? null;
@@ -250,7 +258,7 @@ export class AgentSession {
     this.recordedActions = [];
 
     await this.sendEvent({
-      type: 'AGENT_THINKING',
+      type: ServerEventType.AGENT_THINKING,
       content: '',
       agentId: role,
       monitorId: options.monitorId,
@@ -350,7 +358,7 @@ export class AgentSession {
     } catch (err) {
       console.error(`[AgentSession] ${role} error:`, err);
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -359,7 +367,7 @@ export class AgentSession {
       // so the frontend would never clear the agent from the dashboard.
       // In the normal completion case this is a harmless no-op (clearAgent is idempotent).
       await this.sendEvent({
-        type: 'AGENT_RESPONSE',
+        type: ServerEventType.AGENT_RESPONSE,
         content: '',
         isComplete: true,
         agentId: role,
@@ -415,7 +423,7 @@ export class AgentSession {
   }
 
   private async sendEvent(event: ServerEvent): Promise<void> {
-    getBroadcastCenter().publishToSession(this.liveSessionId, event);
+    this.broadcastFn(event);
   }
 
   async cleanup(): Promise<void> {

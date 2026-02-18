@@ -5,7 +5,6 @@
  * - ContextPool (agents, task routing)
  * - WindowStateRegistry (server-side window state)
  * - ReloadCache (fingerprint-based action caching)
- * - EventSequencer (monotonic seq for replay)
  *
  * Multiple WebSocket connections can join the same LiveSession.
  * The session survives individual disconnects; only destroyed when
@@ -17,12 +16,18 @@ import { ContextPool } from '../agents/context-pool.js';
 import type { ContextMessage } from '../agents/context.js';
 import { WindowStateRegistry } from '../mcp/window-state.js';
 import { ReloadCache } from '../reload/cache.js';
-import { EventSequencer } from './event-sequencer.js';
 import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
 import { getBroadcastCenter } from './broadcast-center.js';
-import type { ClientEvent, ServerEvent, OSAction, AppProtocolRequest } from '@yaar/shared';
+import {
+  ServerEventType,
+  ClientEventType,
+  type ClientEvent,
+  type ServerEvent,
+  type OSAction,
+  type AppProtocolRequest,
+} from '@yaar/shared';
 import type { WebSocket } from 'ws';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
@@ -45,7 +50,6 @@ export class LiveSession {
   private initialized = false;
   readonly windowState: WindowStateRegistry;
   readonly reloadCache: ReloadCache;
-  private sequencer: EventSequencer;
 
   // Restored state
   private restoredContext: ContextMessage[];
@@ -59,6 +63,8 @@ export class LiveSession {
   // App protocol listener for iframe communication
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private appProtocolListener: ((...args: any[]) => void) | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private approvalRequestListener: ((...args: any[]) => void) | null = null;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -68,7 +74,6 @@ export class LiveSession {
     this.windowState = new WindowStateRegistry();
     const cachePath = join(getConfigDir(), 'reload-cache', `${sessionId}.json`);
     this.reloadCache = new ReloadCache(cachePath);
-    this.sequencer = new EventSequencer();
 
     // Restore windows from previous session
     if (options.restoreActions && options.restoreActions.length > 0) {
@@ -92,13 +97,21 @@ export class LiveSession {
       request: AppProtocolRequest;
     }) => {
       this.broadcast({
-        type: 'APP_PROTOCOL_REQUEST',
+        type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: data.requestId,
         windowId: data.windowId,
         request: data.request,
       });
     };
     actionEmitter.on('app-protocol', this.appProtocolListener);
+
+    // Subscribe to approval request events from the fetch proxy
+    this.approvalRequestListener = (data: { sessionId: string; event: ServerEvent }) => {
+      if (data.sessionId === this.sessionId) {
+        this.broadcast(data.event);
+      }
+    };
+    actionEmitter.on('approval-request', this.approvalRequestListener);
   }
 
   // ── Connection management ───────────────────────────────────────────
@@ -128,17 +141,20 @@ export class LiveSession {
   // ── Event broadcasting ──────────────────────────────────────────────
 
   /**
-   * Broadcast an event to all connections in this session.
-   * Stamps with monotonic sequence number.
+   * Single gateway for all server→frontend events.
+   *
+   * Every event emitted by agents, tools, or non-agent code (proxy, hooks)
+   * MUST flow through this method. It handles monitor-scoped routing via
+   * BroadcastCenter. Direct calls to publishToSession/publishToMonitor
+   * from outside LiveSession are not allowed.
    */
   broadcast(event: ServerEvent): void {
-    const stamped = this.sequencer.stamp(event);
     const monitorId = (event as { monitorId?: string }).monitorId;
     const bc = getBroadcastCenter();
     if (monitorId) {
-      bc.publishToMonitor(this.sessionId, monitorId, stamped);
+      bc.publishToMonitor(this.sessionId, monitorId, event);
     } else {
-      bc.publishToSession(this.sessionId, stamped);
+      bc.publishToSession(this.sessionId, event);
     }
   }
 
@@ -187,7 +203,7 @@ export class LiveSession {
         if (hook.action.type === 'interaction') {
           const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           await this.routeMessage(
-            { type: 'USER_MESSAGE', content: hook.action.payload, messageId },
+            { type: ClientEventType.USER_MESSAGE, content: hook.action.payload, messageId },
             connectionId,
           );
         } else if (hook.action.type === 'os_action') {
@@ -195,7 +211,11 @@ export class LiveSession {
           if (action.type.startsWith('window.')) {
             this.windowState.handleAction(action, 'monitor-0');
           }
-          this.broadcast({ type: 'ACTIONS', actions: [action], monitorId: 'monitor-0' });
+          this.broadcast({
+            type: ServerEventType.ACTIONS,
+            actions: [action],
+            monitorId: 'monitor-0',
+          });
         }
       }
     } catch (err) {
@@ -225,6 +245,7 @@ export class LiveSession {
       this.sessionId,
       this.windowState,
       this.reloadCache,
+      this.broadcast.bind(this),
       this.restoredContext,
       this.savedThreadIds,
     );
@@ -252,9 +273,9 @@ export class LiveSession {
     // Lazy initialize on first message that needs the pool
     if (
       !this.initialized &&
-      (event.type === 'USER_MESSAGE' ||
-        event.type === 'WINDOW_MESSAGE' ||
-        event.type === 'COMPONENT_ACTION')
+      (event.type === ClientEventType.USER_MESSAGE ||
+        event.type === ClientEventType.WINDOW_MESSAGE ||
+        event.type === ClientEventType.COMPONENT_ACTION)
     ) {
       const success = await this.ensureInitialized();
       if (!success) {
@@ -264,7 +285,7 @@ export class LiveSession {
     }
 
     switch (event.type) {
-      case 'USER_MESSAGE': {
+      case ClientEventType.USER_MESSAGE: {
         const monitorId = event.monitorId ?? 'monitor-0';
         // Auto-create monitor agent if needed (max 4 monitors)
         if (monitorId !== 'monitor-0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
@@ -286,7 +307,7 @@ export class LiveSession {
         break;
       }
 
-      case 'WINDOW_MESSAGE':
+      case ClientEventType.WINDOW_MESSAGE:
         await this.pool?.handleTask({
           type: 'window',
           messageId: event.messageId,
@@ -295,7 +316,7 @@ export class LiveSession {
         });
         break;
 
-      case 'COMPONENT_ACTION': {
+      case ClientEventType.COMPONENT_ACTION: {
         const windowContext = event.windowTitle
           ? `in window "${event.windowTitle}"`
           : `in window ${event.windowId}`;
@@ -321,11 +342,11 @@ export class LiveSession {
         break;
       }
 
-      case 'INTERRUPT':
+      case ClientEventType.INTERRUPT:
         await this.pool?.interruptAll();
         break;
 
-      case 'RESET':
+      case ClientEventType.RESET:
         if (this.pool) {
           await this.pool.reset();
         } else {
@@ -341,15 +362,15 @@ export class LiveSession {
         await this.executeLaunchHooks(connectionId);
         break;
 
-      case 'INTERRUPT_AGENT':
+      case ClientEventType.INTERRUPT_AGENT:
         await this.pool?.interruptAgent(event.agentId);
         break;
 
-      case 'SET_PROVIDER':
+      case ClientEventType.SET_PROVIDER:
         await this.pool?.getPrimaryAgent()?.setProvider(event.provider);
         break;
 
-      case 'RENDERING_FEEDBACK':
+      case ClientEventType.RENDERING_FEEDBACK:
         this.pool
           ?.getPrimaryAgent()
           ?.handleRenderingFeedback(
@@ -364,7 +385,7 @@ export class LiveSession {
           );
         break;
 
-      case 'DIALOG_FEEDBACK':
+      case ClientEventType.DIALOG_FEEDBACK:
         actionEmitter.resolveDialogFeedback({
           dialogId: event.dialogId,
           confirmed: event.confirmed,
@@ -372,11 +393,11 @@ export class LiveSession {
         });
         break;
 
-      case 'APP_PROTOCOL_RESPONSE':
+      case ClientEventType.APP_PROTOCOL_RESPONSE:
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
         break;
 
-      case 'APP_PROTOCOL_READY': {
+      case ClientEventType.APP_PROTOCOL_READY: {
         const wasReady = this.windowState.getWindow(event.windowId)?.appProtocol ?? false;
         this.windowState.setAppProtocol(event.windowId);
         actionEmitter.notifyAppReady(event.windowId);
@@ -387,14 +408,14 @@ export class LiveSession {
         break;
       }
 
-      case 'TOAST_ACTION':
+      case ClientEventType.TOAST_ACTION:
         this.reloadCache.markFailed(event.eventId);
         console.log(
           `[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`,
         );
         break;
 
-      case 'USER_PROMPT_RESPONSE':
+      case ClientEventType.USER_PROMPT_RESPONSE:
         actionEmitter.resolveUserPromptFeedback({
           promptId: event.promptId,
           selectedValues: event.selectedValues,
@@ -403,7 +424,7 @@ export class LiveSession {
         });
         break;
 
-      case 'USER_INTERACTION': {
+      case ClientEventType.USER_INTERACTION: {
         const logger = this.pool?.getSessionLogger();
 
         for (const interaction of event.interactions) {
@@ -447,11 +468,11 @@ export class LiveSession {
         break;
       }
 
-      case 'SUBSCRIBE_MONITOR':
+      case ClientEventType.SUBSCRIBE_MONITOR:
         getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
         break;
 
-      case 'REMOVE_MONITOR':
+      case ClientEventType.REMOVE_MONITOR:
         if (this.pool) {
           this.pool.removeMonitorAgent(event.monitorId).catch((err) => {
             console.error(
@@ -479,7 +500,7 @@ export class LiveSession {
     );
     for (let i = 0; i < commands.length; i++) {
       this.broadcast({
-        type: 'APP_PROTOCOL_REQUEST',
+        type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: `replay-${windowId}-${Date.now()}-${i}`,
         windowId,
         request: commands[i],
@@ -503,6 +524,10 @@ export class LiveSession {
     if (this.appProtocolListener) {
       actionEmitter.off('app-protocol', this.appProtocolListener);
       this.appProtocolListener = null;
+    }
+    if (this.approvalRequestListener) {
+      actionEmitter.off('approval-request', this.approvalRequestListener);
+      this.approvalRequestListener = null;
     }
 
     // Force-clear any pending requests/dialogs/app-requests for this session

@@ -5,6 +5,7 @@
  * Extracted from ContextPool to separate window task orchestration concerns.
  */
 
+import { ServerEventType } from '@yaar/shared';
 import type { ContextSource } from './context.js';
 import type { PoolContext, Task } from './pool-context.js';
 
@@ -36,7 +37,7 @@ export class WindowTaskProcessor {
       );
 
       await this.ctx.sendEvent({
-        type: 'MESSAGE_QUEUED',
+        type: ServerEventType.MESSAGE_QUEUED,
         messageId: task.messageId,
         position: queueSize,
       });
@@ -54,7 +55,7 @@ export class WindowTaskProcessor {
         this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
         console.error(`[ContextPool] Failed to create window agent for ${agentKey}`);
         await this.ctx.sendEvent({
-          type: 'ERROR',
+          type: ServerEventType.ERROR,
           error: `Failed to create agent for window ${windowId}`,
         });
         if (!isParallel) await this.processWindowQueue(processingKey);
@@ -76,7 +77,7 @@ export class WindowTaskProcessor {
       await this.sendWindowStatus(windowId, agentRole, 'assigned');
 
       await this.ctx.sendEvent({
-        type: 'MESSAGE_ACCEPTED',
+        type: ServerEventType.MESSAGE_ACCEPTED,
         messageId: task.messageId,
         agentId: agentRole,
       });
@@ -214,7 +215,7 @@ export class WindowTaskProcessor {
   ): Promise<void> {
     this.ctx.windowAgentMap.set(windowId, agentId);
     await this.ctx.sendEvent({
-      type: 'WINDOW_AGENT_STATUS',
+      type: ServerEventType.WINDOW_AGENT_STATUS,
       windowId,
       agentId,
       status,

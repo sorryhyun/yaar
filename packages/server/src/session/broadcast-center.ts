@@ -147,19 +147,6 @@ export class BroadcastCenter {
   }
 
   /**
-   * Get any active session ID from connections.
-   * Returns the first open session found, or undefined if none.
-   */
-  getAnySessionId(): SessionId | undefined {
-    for (const [, entry] of this.connections) {
-      if (entry.ws.readyState === entry.ws.OPEN) {
-        return entry.sessionId;
-      }
-    }
-    return undefined;
-  }
-
-  /**
    * Get stats for monitoring.
    */
   getStats(): { connectionCount: number } {

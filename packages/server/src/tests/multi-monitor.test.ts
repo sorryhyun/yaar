@@ -26,12 +26,6 @@ vi.mock('../providers/factory.js', () => ({
   getWarmPool: () => ({ resetCodexProviders: vi.fn() }),
 }));
 
-vi.mock('../session/broadcast-center.js', () => ({
-  getBroadcastCenter: () => ({
-    publishToSession: vi.fn(),
-  }),
-}));
-
 vi.mock('../logging/index.js', () => {
   class MockSessionLogger {
     logUserMessage = vi.fn();
@@ -140,6 +134,7 @@ describe('Multi-monitor lifecycle', () => {
       'test-session' as SessionId,
       createMockWindowState() as any,
       createMockReloadCache() as any,
+      vi.fn(), // broadcast callback
     );
     // Initialize creates the default monitor-0 agent
     await pool.initialize();

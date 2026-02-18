@@ -5,7 +5,7 @@ import {
   getAvailableProviders,
 } from '../../providers/factory.js';
 import { createSession, SessionLogger } from '../../logging/index.js';
-import type { ServerEvent } from '@yaar/shared';
+import { ServerEventType, type ServerEvent } from '@yaar/shared';
 
 export interface ProviderLifecycleState {
   provider: AITransport | null;
@@ -25,7 +25,7 @@ export class ProviderLifecycleManager {
 
     if (!this.state.provider) {
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: 'No AI provider available. Install Claude CLI.',
       });
       return false;
@@ -37,7 +37,7 @@ export class ProviderLifecycleManager {
     }
 
     await this.sendEvent({
-      type: 'CONNECTION_STATUS',
+      type: ServerEventType.CONNECTION_STATUS,
       status: 'connected',
       provider: this.state.provider.name,
     });
@@ -49,7 +49,7 @@ export class ProviderLifecycleManager {
     const available = await getAvailableProviders();
     if (!available.includes(providerType)) {
       await this.sendEvent({
-        type: 'ERROR',
+        type: ServerEventType.ERROR,
         error: `Provider ${providerType} is not available.`,
       });
       return;
@@ -65,7 +65,7 @@ export class ProviderLifecycleManager {
     this.state.hasProcessedFirstUserTurn = false;
 
     await this.sendEvent({
-      type: 'CONNECTION_STATUS',
+      type: ServerEventType.CONNECTION_STATUS,
       status: 'connected',
       provider: newProvider.name,
     });

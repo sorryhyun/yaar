@@ -12,6 +12,7 @@
 import { AgentSession } from './session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
+import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport } from '../providers/types.js';
@@ -32,6 +33,7 @@ export class AgentPool {
   private sessionId: SessionId;
   private nextAgentId = 0;
   private logger: SessionLogger | null = null;
+  private broadcastFn: (event: ServerEvent) => void;
 
   /** Persistent main agents, keyed by monitorId. */
   private mainAgents = new Map<string, PooledAgent>();
@@ -45,8 +47,9 @@ export class AgentPool {
   /** Task agents currently in-flight (disposed after dispatch_task completes). */
   private taskAgents = new Set<PooledAgent>();
 
-  constructor(sessionId: SessionId) {
+  constructor(sessionId: SessionId, broadcast: (event: ServerEvent) => void) {
     this.sessionId = sessionId;
+    this.broadcastFn = broadcast;
   }
 
   setLogger(logger: SessionLogger): void {
@@ -75,6 +78,7 @@ export class AgentPool {
       this.logger ?? undefined,
       instanceId,
       this.sessionId, // liveSessionId for session-scoped broadcasting
+      this.broadcastFn,
     );
 
     const initialized = await session.initialize(preWarmedProvider);

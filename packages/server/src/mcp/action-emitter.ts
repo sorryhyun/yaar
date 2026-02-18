@@ -7,15 +7,16 @@
  */
 
 import { EventEmitter } from 'events';
-import type {
-  OSAction,
-  DialogConfirmAction,
-  PermissionOptions,
-  AppProtocolRequest,
-  AppProtocolResponse,
-  UserPromptShowAction,
-  UserPromptOption,
-  UserPromptInputField,
+import {
+  ServerEventType,
+  type OSAction,
+  type DialogConfirmAction,
+  type PermissionOptions,
+  type AppProtocolRequest,
+  type AppProtocolResponse,
+  type UserPromptShowAction,
+  type UserPromptOption,
+  type UserPromptInputField,
 } from '@yaar/shared';
 import { getAgentId, getSessionId } from '../agents/session.js';
 import {
@@ -266,9 +267,8 @@ class ActionEmitter extends EventEmitter {
   /**
    * Show a permission dialog with "Remember my choice" option.
    *
-   * First checks if there's a saved permission decision. If so, returns
-   * immediately with that decision. Otherwise, shows the dialog and
-   * saves the decision if the user chooses to remember it.
+   * Resolves the session ID from the current agent context and delegates
+   * to showPermissionDialogToSession() for delivery via LiveSession.broadcast().
    */
   async showPermissionDialog(
     title: string,
@@ -279,57 +279,21 @@ class ActionEmitter extends EventEmitter {
     cancelText: string = 'Deny',
     timeoutMs: number = 60000,
   ): Promise<boolean> {
-    // Check for saved permission first
-    const savedDecision = await checkPermission(toolName, context);
-    if (savedDecision === 'allow') {
-      return true;
-    }
-    if (savedDecision === 'deny') {
+    const sessionId = getSessionId();
+    if (!sessionId) {
+      console.warn('[ActionEmitter] showPermissionDialog called without agent context');
       return false;
     }
-
-    // Show dialog with permission options
-    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
-    const agentId = getAgentId();
-    const currentSessionId = getSessionId();
-
-    const permissionOptions: PermissionOptions = {
-      showRememberChoice: true,
-      toolName,
-      context,
-    };
-
-    const dialogPromise = new Promise<boolean>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingDialogs.delete(dialogId);
-        resolve(false); // Timeout - treat as deny
-      }, timeoutMs);
-
-      this.pendingDialogs.set(dialogId, {
-        resolve,
-        timeoutId,
-        permissionOptions,
-        sessionId: currentSessionId,
-      });
-    });
-
-    const action: DialogConfirmAction = {
-      type: 'dialog.confirm',
-      id: dialogId,
+    return this.showPermissionDialogToSession(
+      sessionId,
       title,
       message,
+      toolName,
+      context,
       confirmText,
       cancelText,
-      permissionOptions,
-    };
-
-    this.emit('action', {
-      action: action as OSAction,
-      sessionId: undefined,
-      agentId,
-    } as ActionEvent);
-
-    return dialogPromise;
+      timeoutMs,
+    );
   }
 
   /**
@@ -553,17 +517,20 @@ class ActionEmitter extends EventEmitter {
       this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions, sessionId });
     });
 
-    // Send APPROVAL_REQUEST directly to the session via BroadcastCenter
-    const { getBroadcastCenter } = await import('../session/broadcast-center.js');
-    getBroadcastCenter().publishToSession(sessionId, {
-      type: 'APPROVAL_REQUEST',
-      dialogId,
-      title,
-      message,
-      confirmText,
-      cancelText,
-      permissionOptions,
-      agentId: 'system',
+    // Emit through the event system so LiveSession.broadcast() handles delivery
+    // (same pattern as 'app-protocol' events — ensures seq stamping and proper routing)
+    this.emit('approval-request', {
+      sessionId,
+      event: {
+        type: ServerEventType.APPROVAL_REQUEST,
+        dialogId,
+        title,
+        message,
+        confirmText,
+        cancelText,
+        permissionOptions,
+        agentId: getAgentId() ?? 'system',
+      },
     });
 
     return dialogPromise;

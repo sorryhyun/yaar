@@ -1,5 +1,5 @@
 import type { StreamMessage } from '../../providers/types.js';
-import type { ServerEvent } from '@yaar/shared';
+import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
 import { formatToolDisplay } from '../../mcp/register.js';
@@ -45,7 +45,7 @@ export class StreamToEventMapper {
           this.onOutput?.(message.content.length);
           this.state.responseText += message.content;
           await this.sendEvent({
-            type: 'AGENT_RESPONSE',
+            type: ServerEventType.AGENT_RESPONSE,
             content: this.state.responseText,
             isComplete: false,
             agentId: this.role,
@@ -65,7 +65,7 @@ export class StreamToEventMapper {
           if (now - this.lastThinkingEmitTime >= 200) {
             this.lastThinkingEmitTime = now;
             await this.sendEvent({
-              type: 'AGENT_THINKING',
+              type: ServerEventType.AGENT_THINKING,
               content: this.state.thinkingText,
               agentId: this.role,
               monitorId: this.monitorId,
@@ -78,7 +78,7 @@ export class StreamToEventMapper {
       case 'tool_use': {
         const displayName = formatToolDisplay(message.toolName ?? 'unknown');
         await this.sendEvent({
-          type: 'TOOL_PROGRESS',
+          type: ServerEventType.TOOL_PROGRESS,
           toolName: displayName,
           status: 'running',
           toolInput: message.toolInput,
@@ -109,7 +109,7 @@ export class StreamToEventMapper {
 
       case 'tool_result':
         await this.sendEvent({
-          type: 'TOOL_PROGRESS',
+          type: ServerEventType.TOOL_PROGRESS,
           toolName: formatToolDisplay(message.toolName ?? 'tool'),
           status: 'complete',
           message: message.content,
@@ -134,7 +134,7 @@ export class StreamToEventMapper {
           this.onContextMessage?.('assistant', this.state.responseText);
         }
         await this.sendEvent({
-          type: 'AGENT_RESPONSE',
+          type: ServerEventType.AGENT_RESPONSE,
           content: this.state.responseText,
           isComplete: true,
           agentId: this.role,
@@ -145,7 +145,7 @@ export class StreamToEventMapper {
 
       case 'error':
         await this.sendEvent({
-          type: 'ERROR',
+          type: ServerEventType.ERROR,
           error: message.error ?? 'Unknown error',
           agentId: this.role,
           monitorId: this.monitorId,
@@ -154,7 +154,7 @@ export class StreamToEventMapper {
 
       default:
         await this.sendEvent({
-          type: 'ERROR',
+          type: ServerEventType.ERROR,
           error: `Unhandled stream message for provider ${this.providerName}`,
           agentId: this.role,
           monitorId: this.monitorId,
@@ -171,7 +171,7 @@ export class StreamToEventMapper {
 
     // Emit final thinking event with full accumulated text
     await this.sendEvent({
-      type: 'AGENT_THINKING',
+      type: ServerEventType.AGENT_THINKING,
       content: this.state.thinkingText,
       agentId: this.role,
       monitorId: this.monitorId,
