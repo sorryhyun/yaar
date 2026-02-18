@@ -88,7 +88,7 @@ function createRestrictedFetch(
 
   const domainSet = new Set(allowedDomains);
 
-  return (input: string | URL | Request, init?: RequestInit) => {
+  const restrictedFetch = (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     let hostname: string;
     try {
@@ -105,6 +105,7 @@ function createRestrictedFetch(
     }
     return fetch(input, init);
   };
+  return restrictedFetch as typeof fetch;
 }
 
 /**

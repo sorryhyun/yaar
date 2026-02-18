@@ -9,6 +9,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 **Prerequisites:**
 - Node.js >= 24
 - pnpm >= 10
+- Bun >= 1.1 (server runtime)
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 **SDKs:**
@@ -123,7 +124,7 @@ Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
   - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
-  - `compiler/` — esbuild bundler for sandbox apps
+  - `compiler/` — Bun bundler for sandbox apps
   - `pdf/` — PDF rendering via poppler
   - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore

@@ -1,13 +1,13 @@
 /**
- * esbuild plugins for the app compiler.
+ * Bun plugins for the app compiler.
  *
  * Provides bundled library support via @bundled/* imports.
- * In bundled exe mode, resolves from embedded pre-bundled files.
+ * In bundled exe mode, resolves from embedded or disk-based pre-bundled files.
+ * In dev mode, resolves from node_modules via Bun.resolveSync().
  */
 
-import type { Plugin } from 'esbuild';
-import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 /** Directory of this file — inside packages/server, where devDependencies are installed. */
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
@@ -35,60 +35,14 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
 };
 
 /**
- * Plugin that intercepts @bundled/* imports and resolves them to
- * actual npm modules installed as devDependencies.
+ * Bun plugin that resolves @bundled/* imports.
  *
- * This allows apps to use common utilities without npm install:
- * ```typescript
- * import { v4 as uuid } from '@bundled/uuid';
- * import anime from '@bundled/anime';
- * ```
- */
-export function bundledLibraryPlugin(): Plugin {
-  return {
-    name: 'bundled-libraries',
-    setup(build) {
-      // Intercept @bundled/* imports
-      build.onResolve({ filter: /^@bundled\// }, async (args) => {
-        const libName = args.path.replace('@bundled/', '');
-        const actualModule = BUNDLED_LIBRARIES[libName];
-
-        if (!actualModule) {
-          const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
-          return {
-            errors: [
-              {
-                text: `Unknown bundled library: "${libName}". Available: ${available}`,
-              },
-            ],
-          };
-        }
-
-        // Resolve from the server package directory where devDependencies are installed,
-        // not from the sandbox directory (which has no node_modules).
-        const result = await build.resolve(actualModule, {
-          kind: args.kind,
-          resolveDir: PLUGIN_DIR,
-        });
-
-        if (result.errors.length > 0) {
-          return { errors: result.errors };
-        }
-
-        return { path: result.path };
-      });
-    },
-  };
-}
-
-/**
- * Bun plugin that resolves @bundled/* from pre-bundled files.
- *
- * Two resolution strategies:
+ * Three resolution strategies:
  * 1. **Embedded** (production exe): Libraries embedded via `with { type: "file" }`,
  *    available as globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
  * 2. **Disk** (dev exe): Libraries read from `bundled-libs/` directory next to the exe.
  *    Requires `pnpm build:exe:libs` to have been run.
+ * 3. **node_modules** (dev non-exe): Resolves from PLUGIN_DIR via Bun.resolveSync().
  */
 export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
   return {
@@ -107,30 +61,40 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
         const libName = args.path;
-        const BunApi = (globalThis as any).Bun;
+        const actualModule = BUNDLED_LIBRARIES[libName];
 
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
-          const contents = await BunApi.file(embeddedLibs[libName]).text();
+          const contents = await Bun.file(embeddedLibs[libName]).text();
           return { contents, loader: 'js' };
         }
 
         // Strategy 2: disk libs (dev exe) — bundled-libs/ next to executable
         const exeDir = dirname(process.execPath);
         const diskPath = join(exeDir, 'bundled-libs', `${libName}.js`);
-        const file = BunApi.file(diskPath);
-        if (await file.exists()) {
-          const contents = await file.text();
+        const diskFile = Bun.file(diskPath);
+        if (await diskFile.exists()) {
+          const contents = await diskFile.text();
           return { contents, loader: 'js' };
+        }
+
+        // Strategy 3: node_modules (dev non-exe) — resolve from server package
+        try {
+          const resolved = Bun.resolveSync(actualModule!, PLUGIN_DIR);
+          const contents = await Bun.file(resolved).text();
+          return { contents, loader: 'js' };
+        } catch {
+          // fall through to error
         }
 
         throw new Error(
           `Bundled library "${libName}" not found. ` +
-            `Looked for embedded lib and disk file at ${diskPath}. ` +
-            `Run "pnpm build:exe:libs" to generate bundled-libs/.`,
+            `Looked for embedded lib, disk file at ${diskPath}, ` +
+            `and node_modules resolution from ${PLUGIN_DIR}. ` +
+            `Ensure the library is installed as a devDependency.`,
         );
       });
     },

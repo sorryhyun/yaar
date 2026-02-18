@@ -21,6 +21,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      - uses: oven-sh/setup-bun@v2
+
       - run: pnpm install --frozen-lockfile
 
       - name: Build shared

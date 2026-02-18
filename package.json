@@ -30,7 +30,8 @@
   },
   "engines": {
     "node": ">=24",
-    "pnpm": ">=10"
+    "pnpm": ">=10",
+    "bun": ">=1.1.22"
   },
   "lint-staged": {
     "packages/server/src/**/*.{ts,js}": [
@@ -49,6 +50,7 @@
     ]
   },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "node-poppler-win32": "1.0.2",
