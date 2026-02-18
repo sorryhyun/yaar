@@ -8,6 +8,15 @@
  * - has id AND method → server-initiated request → emit 'server_request'
  * - has id, no method → response to our request → resolve/reject pending
  * - no id             → notification → emit 'notification'
+ *
+ * Bun compatibility:
+ * Since Bun v1.1.22, `import WebSocket from 'ws'` returns Bun's native
+ * WebSocket (browser-style API) instead of the ws npm module. This means:
+ * - Constructor takes (url, protocols?) not (url, options)
+ * - Error events yield ErrorEvent, not Error
+ * - Message events yield MessageEvent, not raw Buffer
+ * - send() has no callback
+ * We detect Bun at runtime and adapt accordingly.
  */
 
 import WebSocket from 'ws';
@@ -18,6 +27,33 @@ import type {
   JsonRpcNotification,
   JsonRpcMessage,
 } from './types.js';
+
+/**
+ * Whether we're running in Bun (compiled exe or Bun runtime).
+ * In Bun, `import WebSocket from 'ws'` gives us native WebSocket, not the ws npm module.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const isBun = typeof (globalThis as any).Bun !== 'undefined';
+
+/** Extract a useful error message from either Error or ErrorEvent. */
+function extractError(err: unknown): Error {
+  if (err instanceof Error) return err;
+  // Bun's native WebSocket fires ErrorEvent with a .message property
+  if (err && typeof err === 'object' && 'message' in err) {
+    return new Error((err as { message: string }).message || 'WebSocket error');
+  }
+  return new Error(String(err));
+}
+
+/** Extract raw string data from either Buffer (ws) or MessageEvent (Bun). */
+function extractMessageData(data: unknown): string {
+  // Bun's native WebSocket: MessageEvent with .data property
+  if (data && typeof data === 'object' && 'data' in data) {
+    return String((data as { data: unknown }).data);
+  }
+  // Node.js ws module: Buffer or string
+  return typeof data === 'string' ? data : String(data);
+}
 
 /**
  * Options for the WebSocket JSON-RPC client.
@@ -60,12 +96,13 @@ export class JsonRpcWsClient {
     this.ws = ws;
     this.requestTimeout = options.requestTimeout ?? 30000;
 
-    ws.on('message', (data) => {
+    ws.on('message', (data: unknown) => {
       try {
-        const message = JSON.parse(data.toString()) as JsonRpcMessage;
+        const raw = extractMessageData(data);
+        const message = JSON.parse(raw) as JsonRpcMessage;
         this.handleMessage(message);
       } catch {
-        this.emitError(new Error(`Failed to parse JSON-RPC message: ${data.toString()}`));
+        this.emitError(new Error(`Failed to parse JSON-RPC message: ${extractMessageData(data)}`));
       }
     });
 
@@ -75,8 +112,8 @@ export class JsonRpcWsClient {
       for (const listener of this.closeListeners) listener();
     });
 
-    ws.on('error', (err) => {
-      this.emitError(err instanceof Error ? err : new Error(String(err)));
+    ws.on('error', (err: unknown) => {
+      this.emitError(extractError(err));
     });
   }
 
@@ -114,9 +151,11 @@ export class JsonRpcWsClient {
             }
           }, connectTimeout);
 
-          // Disable perMessageDeflate — Rust WS servers (tungstenite) may
-          // reset the connection if extension negotiation fails.
-          const ws = new WebSocket(url, { perMessageDeflate: false });
+          // In Bun, `import WebSocket from 'ws'` gives native WebSocket which
+          // doesn't support ws-specific options like perMessageDeflate.
+          // In Node.js ws module, disable perMessageDeflate to avoid extension
+          // negotiation failures with Rust WS servers (tungstenite).
+          const ws = isBun ? new WebSocket(url) : new WebSocket(url, { perMessageDeflate: false });
 
           ws.on('open', () => {
             if (!settled) {
@@ -126,19 +165,22 @@ export class JsonRpcWsClient {
             }
           });
 
-          ws.on('unexpected-response', (_req, res) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timer);
-              reject(new Error(`WebSocket upgrade rejected: HTTP ${res.statusCode}`));
-            }
-          });
+          // 'unexpected-response' is ws-module-specific, not available in Bun
+          if (!isBun) {
+            (ws as WebSocket).on('unexpected-response', (_req, res) => {
+              if (!settled) {
+                settled = true;
+                clearTimeout(timer);
+                reject(new Error(`WebSocket upgrade rejected: HTTP ${res.statusCode}`));
+              }
+            });
+          }
 
-          ws.on('error', (err) => {
+          ws.on('error', (err: unknown) => {
             if (!settled) {
               settled = true;
               clearTimeout(timer);
-              reject(err);
+              reject(extractError(err));
             }
             // Always try to close the socket to free resources
             try {
@@ -151,7 +193,7 @@ export class JsonRpcWsClient {
 
         return client;
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
+        lastError = extractError(err);
         if (attempt < maxRetries - 1) {
           await new Promise((r) => setTimeout(r, retryDelay));
         }
@@ -195,13 +237,25 @@ export class JsonRpcWsClient {
         timeoutId,
       });
 
-      this.ws.send(JSON.stringify(request), (err) => {
-        if (err) {
+      const payload = JSON.stringify(request);
+      if (isBun) {
+        // Bun's native WebSocket.send() is synchronous, no callback
+        try {
+          this.ws.send(payload);
+        } catch (err) {
           this.pendingRequests.delete(id);
           clearTimeout(timeoutId);
-          reject(err);
+          reject(extractError(err));
         }
-      });
+      } else {
+        this.ws.send(payload, (err) => {
+          if (err) {
+            this.pendingRequests.delete(id);
+            clearTimeout(timeoutId);
+            reject(err);
+          }
+        });
+      }
     });
   }
 
