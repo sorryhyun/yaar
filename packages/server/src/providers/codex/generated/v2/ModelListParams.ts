@@ -11,4 +11,8 @@ export type ModelListParams = {
    * Optional page size; defaults to a reasonable server-side value.
    */
   limit?: number | null;
+  /**
+   * When true, include models that are hidden from the default picker list.
+   */
+  includeHidden?: boolean | null;
 };

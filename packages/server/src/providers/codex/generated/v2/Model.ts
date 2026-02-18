@@ -11,6 +11,7 @@ export type Model = {
   upgrade: string | null;
   displayName: string;
   description: string;
+  hidden: boolean;
   supportedReasoningEfforts: Array<ReasoningEffortOption>;
   defaultReasoningEffort: ReasoningEffort;
   inputModalities: Array<InputModality>;

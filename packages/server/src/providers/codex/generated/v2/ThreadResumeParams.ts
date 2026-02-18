@@ -43,4 +43,9 @@ export type ThreadResumeParams = {
   baseInstructions?: string | null;
   developerInstructions?: string | null;
   personality?: Personality | null;
+  /**
+   * If true, persist additional rollout EventMsg variants required to
+   * reconstruct a richer thread history on subsequent resume/fork/read.
+   */
+  persistExtendedHistory: boolean;
 };

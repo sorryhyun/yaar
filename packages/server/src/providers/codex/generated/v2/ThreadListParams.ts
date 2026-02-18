@@ -32,4 +32,9 @@ export type ThreadListParams = {
    * If false or null, only non-archived threads are returned.
    */
   archived?: boolean | null;
+  /**
+   * Optional cwd filter; when set, only threads whose session cwd exactly
+   * matches this path are returned.
+   */
+  cwd?: string | null;
 };

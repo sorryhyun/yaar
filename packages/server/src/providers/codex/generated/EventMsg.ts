@@ -42,6 +42,7 @@ import type { McpStartupCompleteEvent } from './McpStartupCompleteEvent.js';
 import type { McpStartupUpdateEvent } from './McpStartupUpdateEvent.js';
 import type { McpToolCallBeginEvent } from './McpToolCallBeginEvent.js';
 import type { McpToolCallEndEvent } from './McpToolCallEndEvent.js';
+import type { ModelRerouteEvent } from './ModelRerouteEvent.js';
 import type { PatchApplyBeginEvent } from './PatchApplyBeginEvent.js';
 import type { PatchApplyEndEvent } from './PatchApplyEndEvent.js';
 import type { PlanDeltaEvent } from './PlanDeltaEvent.js';
@@ -77,6 +78,7 @@ import type { WebSearchEndEvent } from './WebSearchEndEvent.js';
 export type EventMsg =
   | ({ type: 'error' } & ErrorEvent)
   | ({ type: 'warning' } & WarningEvent)
+  | ({ type: 'model_reroute' } & ModelRerouteEvent)
   | ({ type: 'context_compacted' } & ContextCompactedEvent)
   | ({ type: 'thread_rolled_back' } & ThreadRolledBackEvent)
   | ({ type: 'task_started' } & TurnStartedEvent)

@@ -77,14 +77,9 @@ export class CodexProvider extends BaseTransport {
   }
 
   async isAvailable(): Promise<boolean> {
-    // Check if Codex CLI is installed (use getCodexBin() for bundled exe support)
-    const { getCodexBin } = await import('../../config.js');
-    const cliAvailable = await this.isCliAvailable(getCodexBin());
-    if (!cliAvailable) return false;
-
-    // Check auth, auto-run `codex login` if missing (safe during startup — no connections yet)
-    const { ensureCodexAuth } = await import('./auth.js');
-    return ensureCodexAuth(getCodexBin());
+    // Auth is ensured at the AppServer level in WarmPool.ensureCodexAppServer().
+    // Just check that the AppServer is running.
+    return this.appServer?.isRunning ?? false;
   }
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
@@ -229,7 +224,7 @@ export class CodexProvider extends BaseTransport {
     try {
       await this.appServer.turnSteer({
         threadId,
-        input: [{ type: 'text', text: content }],
+        input: [{ type: 'text', text: content, text_elements: [] }],
         expectedTurnId: turnId,
       });
       return true;

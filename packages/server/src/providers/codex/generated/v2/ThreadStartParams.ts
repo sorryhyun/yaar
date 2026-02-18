@@ -29,4 +29,9 @@ export type ThreadStartParams = {
    * This is for internal use only (e.g. Codex Cloud).
    */
   experimentalRawEvents: boolean;
+  /**
+   * If true, persist additional rollout EventMsg variants required to
+   * reconstruct a richer thread history on resume/fork/read.
+   */
+  persistExtendedHistory: boolean;
 };

@@ -7,6 +7,9 @@ import type { CancelLoginChatGptParams } from './CancelLoginChatGptParams.js';
 import type { ExecOneOffCommandParams } from './ExecOneOffCommandParams.js';
 import type { ForkConversationParams } from './ForkConversationParams.js';
 import type { FuzzyFileSearchParams } from './FuzzyFileSearchParams.js';
+import type { FuzzyFileSearchSessionStartParams } from './FuzzyFileSearchSessionStartParams.js';
+import type { FuzzyFileSearchSessionStopParams } from './FuzzyFileSearchSessionStopParams.js';
+import type { FuzzyFileSearchSessionUpdateParams } from './FuzzyFileSearchSessionUpdateParams.js';
 import type { GetAuthStatusParams } from './GetAuthStatusParams.js';
 import type { GetConversationSummaryParams } from './GetConversationSummaryParams.js';
 import type { GitDiffToRemoteParams } from './GitDiffToRemoteParams.js';
@@ -79,8 +82,8 @@ export type ClientRequest =
   | { method: 'thread/loaded/list'; id: RequestId; params: ThreadLoadedListParams }
   | { method: 'thread/read'; id: RequestId; params: ThreadReadParams }
   | { method: 'skills/list'; id: RequestId; params: SkillsListParams }
-  | { method: 'skills/remote/read'; id: RequestId; params: SkillsRemoteReadParams }
-  | { method: 'skills/remote/write'; id: RequestId; params: SkillsRemoteWriteParams }
+  | { method: 'skills/remote/list'; id: RequestId; params: SkillsRemoteReadParams }
+  | { method: 'skills/remote/export'; id: RequestId; params: SkillsRemoteWriteParams }
   | { method: 'app/list'; id: RequestId; params: AppsListParams }
   | { method: 'skills/config/write'; id: RequestId; params: SkillsConfigWriteParams }
   | { method: 'turn/start'; id: RequestId; params: TurnStartParams }
@@ -131,4 +134,19 @@ export type ClientRequest =
   | { method: 'getUserAgent'; id: RequestId; params: undefined }
   | { method: 'userInfo'; id: RequestId; params: undefined }
   | { method: 'fuzzyFileSearch'; id: RequestId; params: FuzzyFileSearchParams }
+  | {
+      method: 'fuzzyFileSearch/sessionStart';
+      id: RequestId;
+      params: FuzzyFileSearchSessionStartParams;
+    }
+  | {
+      method: 'fuzzyFileSearch/sessionUpdate';
+      id: RequestId;
+      params: FuzzyFileSearchSessionUpdateParams;
+    }
+  | {
+      method: 'fuzzyFileSearch/sessionStop';
+      id: RequestId;
+      params: FuzzyFileSearchSessionStopParams;
+    }
   | { method: 'execOneOffCommand'; id: RequestId; params: ExecOneOffCommandParams };

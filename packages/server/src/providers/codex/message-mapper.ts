@@ -248,8 +248,24 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       // Skip noisy codex internal events
       if (
         method.startsWith('codex/event/') ||
+        method.startsWith('fuzzyFileSearch/') ||
         method === 'thread/tokenUsage/updated' ||
-        method === 'account/rateLimits/updated'
+        method === 'thread/compacted' ||
+        method === 'account/rateLimits/updated' ||
+        method === 'account/updated' ||
+        method === 'account/login/completed' ||
+        method === 'app/list/updated' ||
+        method === 'model/rerouted' ||
+        method === 'turn/plan/updated' ||
+        method === 'turn/diff/updated' ||
+        method === 'item/fileChange/outputDelta' ||
+        method === 'item/commandExecution/outputDelta' ||
+        method === 'item/commandExecution/terminalInteraction' ||
+        method === 'item/mcpToolCall/progress' ||
+        method === 'item/reasoning/summaryTextDelta' ||
+        method === 'item/reasoning/summaryPartAdded' ||
+        method === 'item/plan/delta' ||
+        method === 'rawResponseItem/completed'
       ) {
         return null;
       }

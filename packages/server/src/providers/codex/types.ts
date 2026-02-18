@@ -39,6 +39,8 @@ export type { TurnStartParams } from './generated/v2/index.js';
 export type { TurnStartResponse } from './generated/v2/index.js';
 export type { TurnInterruptParams } from './generated/v2/index.js';
 export type { TurnInterruptResponse } from './generated/v2/index.js';
+export type { TurnSteerParams } from './generated/v2/index.js';
+export type { TurnSteerResponse } from './generated/v2/index.js';
 export type { UserInput } from './generated/v2/index.js';
 export type { Thread } from './generated/v2/index.js';
 export type { Turn } from './generated/v2/index.js';
@@ -63,6 +65,16 @@ export type { ErrorNotification } from './generated/v2/index.js';
 export type { ItemStartedNotification } from './generated/v2/index.js';
 export type { ItemCompletedNotification } from './generated/v2/index.js';
 
+// Account/Auth types (v2 API)
+export type { GetAccountParams } from './generated/v2/index.js';
+export type { GetAccountResponse } from './generated/v2/index.js';
+export type { LoginAccountParams } from './generated/v2/index.js';
+export type { LoginAccountResponse } from './generated/v2/index.js';
+export type { CancelLoginAccountParams } from './generated/v2/index.js';
+export type { CancelLoginAccountResponse } from './generated/v2/index.js';
+export type { AccountLoginCompletedNotification } from './generated/v2/index.js';
+export type { Account } from './generated/v2/index.js';
+
 // Event message (v1 events union) and collaboration/subagent event types
 export type { EventMsg } from './generated/EventMsg.js';
 export type { AgentStatus } from './generated/AgentStatus.js';
@@ -78,26 +90,6 @@ export type { CollabResumeBeginEvent } from './generated/CollabResumeBeginEvent.
 export type { CollabResumeEndEvent } from './generated/CollabResumeEndEvent.js';
 export type { WebSearchBeginEvent } from './generated/WebSearchBeginEvent.js';
 export type { WebSearchEndEvent } from './generated/WebSearchEndEvent.js';
-
-// ============================================================================
-// Manual types (not yet in generated schema)
-// ============================================================================
-
-/**
- * Parameters for turn/steer — inject additional input into an active turn.
- */
-export interface TurnSteerParams {
-  threadId: string;
-  input: Array<{ type: 'text'; text: string; text_elements?: never[] }>;
-  expectedTurnId: string;
-}
-
-/**
- * Response from turn/steer.
- */
-export interface TurnSteerResponse {
-  turnId: string;
-}
 
 // ============================================================================
 // JSON-RPC Base Types (protocol plumbing, not generated)

@@ -29,6 +29,12 @@ import type {
   ThreadForkResponse,
   InitializeParams,
   InitializeResponse,
+  GetAccountParams,
+  GetAccountResponse,
+  LoginAccountParams,
+  LoginAccountResponse,
+  CancelLoginAccountParams,
+  CancelLoginAccountResponse,
 } from './types.js';
 
 /**
@@ -77,9 +83,6 @@ export class AppServer {
   private tempDir: string | null = null;
   private isShuttingDown = false;
   private readonly config: AppServerConfig;
-
-  // Auth errors detected from stderr
-  private authErrors: Set<string> = new Set();
 
   // Turn serialization: only one turn runs at a time on a single app-server
   private turnQueue: Array<{ resolve: () => void }> = [];
@@ -193,22 +196,11 @@ export class AppServer {
       }
     });
 
-    // Log stderr for debugging and detect auth errors
+    // Log stderr for debugging
     this.process.stderr?.on('data', (data: Buffer) => {
       const message = data.toString().trim();
       if (message) {
         console.error(`[codex app-server stderr] ${message}`);
-
-        // Detect auth failure patterns
-        const lower = message.toLowerCase();
-        if (
-          lower.includes('failed to refresh token') ||
-          lower.includes('401 unauthorized') ||
-          (lower.includes('authentication') &&
-            (lower.includes('failed') || lower.includes('expired')))
-        ) {
-          this.authErrors.add(message);
-        }
       }
     });
 
@@ -307,20 +299,6 @@ export class AppServer {
   }
 
   /**
-   * Check if auth errors were detected from stderr.
-   */
-  hasAuthError(): boolean {
-    return this.authErrors.size > 0;
-  }
-
-  /**
-   * Get all auth error messages detected from stderr.
-   */
-  getAuthErrors(): string[] {
-    return [...this.authErrors];
-  }
-
-  /**
    * Send a JSON-RPC response to a server-initiated request.
    */
   respond(id: number, result: unknown): void {
@@ -342,12 +320,16 @@ export class AppServer {
    * Start a new thread.
    */
   async threadStart(
-    params: Omit<ThreadStartParams, 'experimentalRawEvents'> = {},
+    params: Omit<ThreadStartParams, 'experimentalRawEvents' | 'persistExtendedHistory'> = {},
   ): Promise<ThreadStartResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    const fullParams: ThreadStartParams = { experimentalRawEvents: false, ...params };
+    const fullParams: ThreadStartParams = {
+      experimentalRawEvents: false,
+      persistExtendedHistory: false,
+      ...params,
+    };
     return this.client.request<ThreadStartParams, ThreadStartResponse>('thread/start', fullParams);
   }
 
@@ -355,11 +337,17 @@ export class AppServer {
    * Resume an existing thread.
    * Returns the thread object so callers can validate it was properly loaded.
    */
-  async threadResume(params: ThreadResumeParams): Promise<ThreadResumeResponse> {
+  async threadResume(
+    params: Omit<ThreadResumeParams, 'persistExtendedHistory'>,
+  ): Promise<ThreadResumeResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<ThreadResumeParams, ThreadResumeResponse>('thread/resume', params);
+    const fullParams: ThreadResumeParams = { persistExtendedHistory: false, ...params };
+    return this.client.request<ThreadResumeParams, ThreadResumeResponse>(
+      'thread/resume',
+      fullParams,
+    );
   }
 
   /**
@@ -399,11 +387,54 @@ export class AppServer {
    * Fork an existing thread into a new independent thread.
    * The forked thread inherits the parent's conversation history.
    */
-  async threadFork(params: ThreadForkParams): Promise<ThreadForkResponse> {
+  async threadFork(
+    params: Omit<ThreadForkParams, 'persistExtendedHistory'>,
+  ): Promise<ThreadForkResponse> {
     if (!this.client) {
       throw new Error('AppServer is not running');
     }
-    return this.client.request<ThreadForkParams, ThreadForkResponse>('thread/fork', params);
+    const fullParams: ThreadForkParams = { persistExtendedHistory: false, ...params };
+    return this.client.request<ThreadForkParams, ThreadForkResponse>('thread/fork', fullParams);
+  }
+
+  // ============================================================================
+  // Account API
+  // ============================================================================
+
+  /**
+   * Read the current account state.
+   */
+  async accountRead(params: GetAccountParams): Promise<GetAccountResponse> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<GetAccountParams, GetAccountResponse>('account/read', params);
+  }
+
+  /**
+   * Start account login (e.g. ChatGPT OAuth).
+   */
+  async accountLoginStart(params: LoginAccountParams): Promise<LoginAccountResponse> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<LoginAccountParams, LoginAccountResponse>(
+      'account/login/start',
+      params,
+    );
+  }
+
+  /**
+   * Cancel an in-progress account login.
+   */
+  async accountLoginCancel(params: CancelLoginAccountParams): Promise<CancelLoginAccountResponse> {
+    if (!this.client) {
+      throw new Error('AppServer is not running');
+    }
+    return this.client.request<CancelLoginAccountParams, CancelLoginAccountResponse>(
+      'account/login/cancel',
+      params,
+    );
   }
 
   // ============================================================================

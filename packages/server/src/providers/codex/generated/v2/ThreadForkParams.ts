@@ -32,4 +32,9 @@ export type ThreadForkParams = {
   config?: { [key in string]?: JsonValue } | null;
   baseInstructions?: string | null;
   developerInstructions?: string | null;
+  /**
+   * If true, persist additional rollout EventMsg variants required to
+   * reconstruct a richer thread history on subsequent resume/fork/read.
+   */
+  persistExtendedHistory: boolean;
 };

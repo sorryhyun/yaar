@@ -102,7 +102,29 @@ export async function handleProxyRoutes(
   // Check domain allowlist — show permission dialog if sessionId is available
   const domain = extractDomain(targetUrl);
   if (!(await isDomainAllowed(domain))) {
-    const sessionId = body.sessionId;
+    // Try multiple sources for sessionId:
+    // 1. Request body (set by fetch proxy script)
+    // 2. Referer header (iframe URL may contain ?sessionId=)
+    // 3. Any active session from BroadcastCenter (fallback)
+    let sessionId = body.sessionId;
+
+    if (!sessionId) {
+      const referer = req.headers.referer;
+      if (referer) {
+        try {
+          const sid = new URL(referer).searchParams.get('sessionId');
+          if (sid) sessionId = sid;
+        } catch {
+          /* invalid referer URL */
+        }
+      }
+    }
+
+    if (!sessionId) {
+      const { getBroadcastCenter } = await import('../../session/broadcast-center.js');
+      sessionId = getBroadcastCenter().getAnySessionId();
+    }
+
     if (!sessionId) {
       sendError(
         res,
