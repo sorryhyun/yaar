@@ -107,37 +107,6 @@ async function exportContent(content: WindowModel['content'], title: string, win
 }
 
 /**
- * Extract visible text content from DOM elements that fall within a given viewport rect.
- */
-function extractTextInRegion(
-  container: HTMLElement,
-  rect: { x: number; y: number; w: number; h: number },
-): string {
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  const parts: string[] = [];
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    const rects = range.getClientRects();
-    for (const r of rects) {
-      // Check intersection
-      if (
-        r.right > rect.x &&
-        r.left < rect.x + rect.w &&
-        r.bottom > rect.y &&
-        r.top < rect.y + rect.h
-      ) {
-        const text = node.textContent?.trim();
-        if (text) parts.push(text);
-        break;
-      }
-    }
-  }
-  return parts.join(' ').slice(0, 2000); // Limit length
-}
-
-/**
  * Floating input that appears on right-click with selected text or after region select.
  * User types an instruction for the AI to execute on the selection.
  */
@@ -371,20 +340,6 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
     text: string;
   } | null>(null);
 
-  // Region select state (right-click drag)
-  const [regionRect, setRegionRect] = useState<{
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  } | null>(null);
-  const regionStart = useRef<{ x: number; y: number } | null>(null);
-  const regionActive = useRef(false);
-  const regionListeners = useRef<{
-    move: (e: MouseEvent) => void;
-    up: (e: MouseEvent) => void;
-  } | null>(null);
-
   const frameRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -401,11 +356,6 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         document.removeEventListener('mouseup', up);
       }
       listenersRef.current = [];
-      if (regionListeners.current) {
-        document.removeEventListener('mousemove', regionListeners.current.move);
-        document.removeEventListener('mouseup', regionListeners.current.up);
-        regionListeners.current = null;
-      }
     };
   }, []);
 
@@ -738,11 +688,6 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       <div
         className={styles.content}
         onContextMenu={(e) => {
-          // If right-drag region is active, suppress context menu
-          if (regionActive.current) {
-            e.preventDefault();
-            return;
-          }
           // If there's a text selection, show the selection action input
           const selectedText = globalThis.getSelection()?.toString().trim();
           if (selectedText) {
@@ -752,69 +697,6 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
           }
           e.preventDefault();
           showContextMenu(e.clientX, e.clientY, window.id);
-        }}
-        onMouseDown={(e) => {
-          // Right-click drag for region selection
-          if (e.button === 2) {
-            const contentEl = e.currentTarget;
-            const contentRect = contentEl.getBoundingClientRect();
-            const startX = e.clientX;
-            const startY = e.clientY;
-            regionStart.current = { x: startX, y: startY };
-            regionActive.current = false;
-
-            const DRAG_THRESHOLD = 5;
-
-            const handleMouseMove = (ev: MouseEvent) => {
-              const dx = ev.clientX - startX;
-              const dy = ev.clientY - startY;
-              if (
-                !regionActive.current &&
-                Math.abs(dx) < DRAG_THRESHOLD &&
-                Math.abs(dy) < DRAG_THRESHOLD
-              )
-                return;
-              regionActive.current = true;
-
-              setRegionRect({
-                x: Math.min(startX, ev.clientX) - contentRect.left,
-                y: Math.min(startY, ev.clientY) - contentRect.top,
-                w: Math.abs(dx),
-                h: Math.abs(dy),
-              });
-            };
-
-            const handleMouseUp = (ev: MouseEvent) => {
-              document.removeEventListener('mousemove', handleMouseMove);
-              document.removeEventListener('mouseup', handleMouseUp);
-              regionListeners.current = null;
-
-              if (regionActive.current) {
-                const hint = extractTextInRegion(contentEl, {
-                  x: Math.min(startX, ev.clientX),
-                  y: Math.min(startY, ev.clientY),
-                  w: Math.abs(ev.clientX - startX),
-                  h: Math.abs(ev.clientY - startY),
-                });
-                setRegionRect(null);
-                setSelectionAction({
-                  x: ev.clientX,
-                  y: ev.clientY,
-                  text: hint || '',
-                });
-              }
-              regionActive.current = false;
-            };
-
-            // Clean up previous listeners
-            if (regionListeners.current) {
-              document.removeEventListener('mousemove', regionListeners.current.move);
-              document.removeEventListener('mouseup', regionListeners.current.up);
-            }
-            regionListeners.current = { move: handleMouseMove, up: handleMouseUp };
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-          }
         }}
       >
         <MemoizedContentRenderer
@@ -830,17 +712,6 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
           <div className={styles.iframeFocusOverlay} />
         )}
         {isDragOver && <div className={styles.dropOverlay} />}
-        {regionRect && (
-          <div
-            className={styles.regionRect}
-            style={{
-              left: regionRect.x,
-              top: regionRect.y,
-              width: regionRect.w,
-              height: regionRect.h,
-            }}
-          />
-        )}
         {selectionAction && (
           <SelectionActionInput
             x={selectionAction.x}
@@ -848,7 +719,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
             selectedText={selectionAction.text}
             windowId={window.id}
             windowTitle={window.title}
-            isRegion={!selectionAction.text && regionRect === null}
+            isRegion={false}
             onClose={() => setSelectionAction(null)}
           />
         )}

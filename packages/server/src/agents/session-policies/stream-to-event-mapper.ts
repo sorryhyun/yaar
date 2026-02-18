@@ -13,6 +13,10 @@ export interface StreamMappingState {
 }
 
 export class StreamToEventMapper {
+  private lastThinkingEmitTime = 0;
+  private lastFlushedThinkingLength = 0;
+  private thinkingDirty = false;
+
   constructor(
     private readonly role: string,
     private readonly providerName: string,
@@ -27,6 +31,11 @@ export class StreamToEventMapper {
   ) {}
 
   async map(message: StreamMessage): Promise<void> {
+    // Flush pending thinking before processing non-thinking messages
+    if (message.type !== 'thinking') {
+      await this.flushThinking();
+    }
+
     switch (message.type) {
       case 'text':
         if (message.sessionId && this.onSessionId) {
@@ -49,13 +58,20 @@ export class StreamToEventMapper {
       case 'thinking':
         if (message.content) {
           this.state.thinkingText += message.content;
-          await this.sendEvent({
-            type: 'AGENT_THINKING',
-            content: this.state.thinkingText,
-            agentId: this.role,
-            monitorId: this.monitorId,
-          });
-          await this.logger?.logThinking(message.content, this.role);
+          this.thinkingDirty = true;
+
+          // Throttle: emit AGENT_THINKING at most once per 200ms
+          const now = Date.now();
+          if (now - this.lastThinkingEmitTime >= 200) {
+            this.lastThinkingEmitTime = now;
+            await this.sendEvent({
+              type: 'AGENT_THINKING',
+              content: this.state.thinkingText,
+              agentId: this.role,
+              monitorId: this.monitorId,
+            });
+          }
+          // Logging deferred to flushThinking() — one entry per thinking block
         }
         break;
 
@@ -144,5 +160,31 @@ export class StreamToEventMapper {
           monitorId: this.monitorId,
         });
     }
+  }
+
+  /**
+   * Flush accumulated thinking: emit final event + log once per thinking block.
+   * Called automatically when transitioning from thinking to any other message type.
+   */
+  private async flushThinking(): Promise<void> {
+    if (!this.thinkingDirty) return;
+
+    // Emit final thinking event with full accumulated text
+    await this.sendEvent({
+      type: 'AGENT_THINKING',
+      content: this.state.thinkingText,
+      agentId: this.role,
+      monitorId: this.monitorId,
+    });
+
+    // Log only the new thinking text since last flush (handles multiple thinking blocks)
+    const newText = this.state.thinkingText.slice(this.lastFlushedThinkingLength);
+    if (newText) {
+      await this.logger?.logThinking(newText, this.role);
+    }
+
+    this.lastFlushedThinkingLength = this.state.thinkingText.length;
+    this.thinkingDirty = false;
+    this.lastThinkingEmitTime = 0;
   }
 }

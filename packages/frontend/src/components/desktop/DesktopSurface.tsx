@@ -13,6 +13,7 @@ import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionCon
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import type { DesktopShortcut } from '@yaar/shared';
+import { getRawWindowId } from '@/store/helpers';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../windows/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -82,12 +83,29 @@ export function DesktopSurface() {
     up: (e: MouseEvent) => void;
   } | null>(null);
 
+  // Right-click arrow drag state
+  const [arrowDrag, setArrowDrag] = useState<{
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+  const arrowDragActive = useRef(false);
+  const arrowDragListeners = useRef<{
+    move: (e: MouseEvent) => void;
+    up: (e: MouseEvent) => void;
+  } | null>(null);
+
   // Clean up selection listeners on unmount
   useEffect(() => {
     return () => {
       if (selectionListeners.current) {
         document.removeEventListener('mousemove', selectionListeners.current.move);
         document.removeEventListener('mouseup', selectionListeners.current.up);
+      }
+      if (arrowDragListeners.current) {
+        document.removeEventListener('mousemove', arrowDragListeners.current.move);
+        document.removeEventListener('mouseup', arrowDragListeners.current.up);
       }
     };
   }, []);
@@ -285,10 +303,104 @@ export function DesktopSurface() {
     }
   }, []);
 
+  // Describe what's at a given screen point for arrow drag interactions
+  const describePointTarget = useCallback((x: number, y: number): string => {
+    const els = document.elementsFromPoint(x, y);
+    for (const el of els) {
+      if ('arrowOverlay' in ((el as HTMLElement).dataset ?? {})) continue;
+      const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
+      if (winEl) {
+        const wid = winEl.dataset.windowId!;
+        const win = useDesktopStore.getState().windows[wid];
+        const title = win?.title ?? wid;
+        return `window "${title}" (id: ${getRawWindowId(wid)})`;
+      }
+      const appEl = (el as HTMLElement).closest<HTMLElement>('[data-app-id]');
+      if (appEl) return `app "${appEl.dataset.appId}"`;
+      const shortcutEl = (el as HTMLElement).closest<HTMLElement>('[data-shortcut-id]');
+      if (shortcutEl) return `shortcut "${shortcutEl.dataset.shortcutId}"`;
+    }
+    return `desktop (${Math.round(x)}, ${Math.round(y)})`;
+  }, []);
+
+  // Right-click arrow drag handler (captures from anywhere including windows)
+  const handleArrowDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 2) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      arrowDragActive.current = false;
+
+      // Full-screen overlay to capture all mouse events during drag,
+      // preventing iframes, buttons, and text from intercepting them.
+      const overlay = document.createElement('div');
+      overlay.dataset.arrowOverlay = '';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:99997;';
+      document.body.appendChild(overlay);
+
+      const DRAG_THRESHOLD = 5;
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        if (
+          !arrowDragActive.current &&
+          Math.abs(dx) < DRAG_THRESHOLD &&
+          Math.abs(dy) < DRAG_THRESHOLD
+        )
+          return;
+        arrowDragActive.current = true;
+        setArrowDrag({ startX, startY, endX: ev.clientX, endY: ev.clientY });
+      };
+
+      const handleMouseUp = (ev: MouseEvent) => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        arrowDragListeners.current = null;
+        overlay.remove();
+
+        if (arrowDragActive.current) {
+          const from = describePointTarget(startX, startY);
+          const to = describePointTarget(ev.clientX, ev.clientY);
+          useDesktopStore
+            .getState()
+            .queueGestureMessage(
+              `<user_interaction:drag>\n  from: ${from}\n  to: ${to}\n</user_interaction:drag>`,
+            );
+          setArrowDrag(null);
+          // Suppress the context menu that would fire after right-button mouseup
+          document.addEventListener(
+            'contextmenu',
+            (cm) => {
+              cm.preventDefault();
+              cm.stopPropagation();
+            },
+            { capture: true, once: true },
+          );
+        }
+        arrowDragActive.current = false;
+      };
+
+      if (arrowDragListeners.current) {
+        document.removeEventListener('mousemove', arrowDragListeners.current.move);
+        document.removeEventListener('mouseup', arrowDragListeners.current.up);
+      }
+      arrowDragListeners.current = { move: handleMouseMove, up: handleMouseUp };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [describePointTarget],
+  );
+
   const handleDesktopMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Right-click: start arrow drag (handled separately, captures from anywhere)
+      if (e.button === 2) return;
       // Only start selection when clicking directly on the desktop background
       if (e.target !== e.currentTarget || e.button !== 0) return;
+
+      e.preventDefault(); // Prevent text selection during rubberband drag
 
       const startX = e.clientX;
       const startY = e.clientY;
@@ -298,6 +410,7 @@ export function DesktopSurface() {
       const DRAG_THRESHOLD = 5;
 
       const handleMouseMove = (e: MouseEvent) => {
+        e.preventDefault();
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
 
@@ -318,26 +431,37 @@ export function DesktopSurface() {
         };
         setSelectionRect(rect);
 
-        // Compute which visible windows intersect
-        const store = useDesktopStore.getState();
-        const ids: string[] = [];
-        for (const wid of store.zOrder) {
-          const win = store.windows[wid];
-          if (!win || win.minimized) continue;
-          const b = win.bounds;
-          // AABB intersection test
-          if (
-            !(
-              rect.x > b.x + b.w ||
-              rect.x + rect.w < b.x ||
-              rect.y > b.y + b.h ||
-              rect.y + rect.h < b.y
-            )
-          ) {
-            ids.push(wid);
+        // Sample points on a grid within the rubberband and use elementFromPoint
+        // to find only the TOPMOST window at each point (respects z-order).
+        const STEP = 20;
+        const windowIds = new Set<string>();
+        const endX = rect.x + rect.w;
+        const endY = rect.y + rect.h;
+        for (let sx = rect.x; sx <= endX; sx += STEP) {
+          for (let sy = rect.y; sy <= endY; sy += STEP) {
+            const el = document.elementFromPoint(sx, sy);
+            if (!el) continue;
+            const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
+            if (winEl && winEl.dataset.variant !== 'panel') {
+              windowIds.add(winEl.dataset.windowId!);
+            }
           }
         }
-        setSelectedWindows(ids);
+        // Always sample corners + center to catch edges the grid may skip
+        for (const [sx, sy] of [
+          [rect.x + rect.w / 2, rect.y + rect.h / 2],
+          [endX, rect.y],
+          [rect.x, endY],
+          [endX, endY],
+        ]) {
+          const el = document.elementFromPoint(sx, sy);
+          if (!el) continue;
+          const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
+          if (winEl && winEl.dataset.variant !== 'panel') {
+            windowIds.add(winEl.dataset.windowId!);
+          }
+        }
+        setSelectedWindows([...windowIds]);
 
         // Compute which app icons intersect
         const appIds = new Set<string>();
@@ -416,7 +540,10 @@ export function DesktopSurface() {
         data-image-dragover={isImageDragOver || undefined}
         onClick={handleBackgroundClick}
         onContextMenu={handleBackgroundContextMenu}
-        onMouseDown={handleDesktopMouseDown}
+        onMouseDown={(e) => {
+          handleArrowDragStart(e);
+          handleDesktopMouseDown(e);
+        }}
         onDragOver={handleDesktopDragOver}
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
@@ -625,6 +752,42 @@ export function DesktopSurface() {
       </div>
 
       {/* These must be outside .desktop to avoid transform breaking fixed positioning */}
+      {arrowDrag && (
+        <svg
+          data-arrow-overlay
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            pointerEvents: 'none',
+            zIndex: 99998,
+          }}
+        >
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="10"
+              markerHeight="7"
+              refX="10"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.85)" />
+            </marker>
+          </defs>
+          <circle cx={arrowDrag.startX} cy={arrowDrag.startY} r={4} fill="rgba(255,255,255,0.85)" />
+          <line
+            x1={arrowDrag.startX}
+            y1={arrowDrag.startY}
+            x2={arrowDrag.endX}
+            y2={arrowDrag.endY}
+            stroke="rgba(255,255,255,0.85)"
+            strokeWidth={2}
+            markerEnd="url(#arrowhead)"
+          />
+        </svg>
+      )}
       <DrawingOverlay />
       <CommandPalette />
       <ToastContainer onToastAction={sendToastAction} />
