@@ -1,0 +1,8 @@
+{
+  "id": "pdf-viewer",
+  "name": "Pdf Viewer",
+  "icon": "📜",
+  "description": "A PDF document viewer with page navigation",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

@@ -102,26 +102,38 @@ export async function handleProxyRoutes(
   // Check domain allowlist — show permission dialog if sessionId is available
   const domain = extractDomain(targetUrl);
   if (!(await isDomainAllowed(domain))) {
-    // Try multiple sources for sessionId:
-    // 1. Request body (set by fetch proxy script)
-    // 2. Referer header (iframe URL may contain ?sessionId=)
-    // 3. Any active session from BroadcastCenter (fallback)
-    let sessionId = body.sessionId;
+    // Resolve a valid LiveSession sessionId.
+    // The iframe URL may carry a stale/restored sessionId that doesn't match
+    // any current LiveSession, so we validate against the SessionHub and fall
+    // back to the default session.
+    const { getSessionHub } = await import('../../session/live-session.js');
+    const hub = getSessionHub();
 
+    let sessionId: string | undefined;
+
+    // 1. Request body (set by fetch proxy script) — validate it's a live session
+    if (body.sessionId && hub.get(body.sessionId)) {
+      sessionId = body.sessionId;
+    }
+
+    // 2. Referer header (iframe URL may contain ?sessionId=)
     if (!sessionId) {
       const referer = req.headers.referer;
       if (referer) {
         try {
-          sessionId = new URL(referer).searchParams.get('sessionId') ?? undefined;
+          const refId = new URL(referer).searchParams.get('sessionId') ?? undefined;
+          if (refId && hub.get(refId)) {
+            sessionId = refId;
+          }
         } catch {
           /* invalid referer URL */
         }
       }
     }
 
+    // 3. Default session (fallback for stale/mismatched IDs)
     if (!sessionId) {
-      const { getSessionHub } = await import('../../session/live-session.js');
-      sessionId = getSessionHub().getDefault()?.sessionId;
+      sessionId = hub.getDefault()?.sessionId;
     }
 
     if (!sessionId) {

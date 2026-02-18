@@ -95,6 +95,57 @@ async function apiPost<T>(path: string, body: object): Promise<T> {
   return res.json();
 }
 
+async function apiPostAny<T>(paths: string[], body: object): Promise<T> {
+  let lastErr: any;
+  for (const path of paths) {
+    try {
+      return await apiPost<T>(path, body);
+    } catch (err: any) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('All POST endpoints failed');
+}
+
+function hasInstalled(appId: string) {
+  return installedApps.some((a) => a.id === appId);
+}
+
+function markInstalled(app: { id: string; name: string }, installed: boolean) {
+  if (installed) {
+    if (!installedApps.some((a) => a.id === app.id)) {
+      installedApps = [...installedApps, { id: app.id, name: app.name }];
+    }
+  } else {
+    installedApps = installedApps.filter((a) => a.id !== app.id);
+  }
+
+  marketApps = marketApps.map((m) => (m.id === app.id ? { ...m, installed } : m));
+}
+
+async function hostAction(action: 'install' | 'uninstall', app: { id: string; name: string }) {
+  const yaarAny = (window as any).yaar;
+
+  if (typeof yaarAny?.os?.action === 'function') {
+    const toolName = action === 'install' ? 'apps:market_get' : 'apps:market_delete';
+    await yaarAny.os.action(toolName, { appId: app.id });
+    return 'os-action' as const;
+  }
+
+  if (typeof yaarAny?.app?.sendInteraction === 'function') {
+    yaarAny.app.sendInteraction({
+      event: 'market-apps:request',
+      action,
+      appId: app.id,
+      appName: app.name,
+      requestedAt: new Date().toISOString(),
+    });
+    return 'interaction' as const;
+  }
+
+  return null;
+}
+
 function parseMarket(payload: ApiPayload): ListedApp[] {
   return Array.isArray(payload.marketApps) ? payload.marketApps : Array.isArray(payload.apps) ? payload.apps : [];
 }
@@ -127,9 +178,10 @@ async function refreshData() {
       installedApps = parseInstalled(installedPayload);
       setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
     } catch (installedErr: any) {
-      installedApps = [];
       setStatus(`Loaded ${marketApps.length} market apps (no /api/installed endpoint)`);
     }
+
+    marketApps = marketApps.map((m) => ({ ...m, installed: m.installed || hasInstalled(m.id) }));
   } catch (err: any) {
     setStatus(`Refresh failed: ${err?.message || String(err)}`);
   } finally {
@@ -143,9 +195,27 @@ async function installApp(app: ListedApp) {
     loading = true;
     setStatus(`Installing ${app.name}…`, false);
     render();
-    await apiPost('/api/install', { appId: app.id });
+
+    const hostMode = await hostAction('install', app);
+    if (hostMode === 'os-action') {
+      markInstalled(app, true);
+      setStatus(`Installed ${app.name} via OS action`);
+      loading = false;
+      render();
+      return;
+    }
+    if (hostMode === 'interaction') {
+      setStatus(`Install request sent for ${app.name} (waiting for agent)`);
+      loading = false;
+      render();
+      return;
+    }
+
+    await apiPostAny(['/api/install', '/api/apps/install'], { appId: app.id });
+    markInstalled(app, true);
     setStatus(`Installed ${app.name}`);
-    await refreshData();
+    loading = false;
+    render();
   } catch (err: any) {
     loading = false;
     setStatus(`Install failed: ${err?.message || String(err)}`);
@@ -158,9 +228,27 @@ async function uninstallApp(app: InstalledApp) {
     loading = true;
     setStatus(`Uninstalling ${app.name}…`, false);
     render();
-    await apiPost('/api/uninstall', { appId: app.id });
+
+    const hostMode = await hostAction('uninstall', app);
+    if (hostMode === 'os-action') {
+      markInstalled(app, false);
+      setStatus(`Uninstalled ${app.name} via OS action`);
+      loading = false;
+      render();
+      return;
+    }
+    if (hostMode === 'interaction') {
+      setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
+      loading = false;
+      render();
+      return;
+    }
+
+    await apiPostAny(['/api/uninstall', '/api/apps/uninstall'], { appId: app.id });
+    markInstalled(app, false);
     setStatus(`Uninstalled ${app.name}`);
-    await refreshData();
+    loading = false;
+    render();
   } catch (err: any) {
     loading = false;
     setStatus(`Uninstall failed: ${err?.message || String(err)}`);
@@ -272,7 +360,8 @@ function render() {
     } else {
       for (const app of marketApps) {
         const subtitle = [app.description, app.version ? `v${app.version}` : '', app.author || ''].filter(Boolean).join(' • ');
-        list.appendChild(card(app.name, subtitle, app.installed ? 'Reinstall' : 'Install', () => void installApp(app), loading));
+        const installed = app.installed || hasInstalled(app.id);
+        list.appendChild(card(app.name, subtitle, installed ? 'Reinstall' : 'Install', () => void installApp(app), loading));
       }
     }
   } else {
