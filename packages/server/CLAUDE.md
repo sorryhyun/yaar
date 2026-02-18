@@ -157,7 +157,8 @@ Providers are pre-initialized at server startup for faster first connection:
 The system prompt includes a handshake protocol: "ping" → "pong"
 
 **Codex provider (`providers/codex/`):**
-- `app-server.ts` — Manages `codex app-server` child process. Performs `initialize` handshake on startup. Exposes thread/turn v2 API: `threadStart()`, `threadResume()`, `threadFork()`, `turnStart()`, `turnInterrupt()`. Turn serialization via `acquireTurn()`/`releaseTurn()` (one turn at a time per process since notifications lack thread/turn IDs).
+- `app-server.ts` — Manages `codex app-server` child process with WebSocket transport (`--listen ws://`). Spawns the process, maintains a control client for auth, and exposes `createConnection()` so each provider gets its own WS connection with `initialize` handshake.
+- `jsonrpc-ws-client.ts` — WebSocket-based JSON-RPC client. Each provider instance gets a dedicated connection, enabling parallel turns without serialization.
 - `types.ts` — Re-exports generated v2 API types (`ThreadStart`, `ThreadResume`, `ThreadFork`, `TurnStart`, `TurnInterrupt`, notification types) from `generated/v2/`. Also provides JSON-RPC base types.
 - `provider.ts` — `CodexSessionProvider` implementing `AITransport`.
 

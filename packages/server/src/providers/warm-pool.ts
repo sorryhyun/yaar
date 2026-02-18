@@ -123,7 +123,15 @@ class ProviderWarmPool {
         await this.ensureCodexAppServer();
 
         const { CodexProvider } = await import('./codex/index.js');
-        provider = new CodexProvider(this.sharedCodexAppServer!);
+        const codexProvider = new CodexProvider(this.sharedCodexAppServer!);
+        provider = codexProvider;
+
+        // Establish dedicated WS connection before availability check
+        const warmed = await codexProvider.warmup();
+        if (!warmed) {
+          await provider.dispose();
+          return null;
+        }
       }
 
       // Check availability
@@ -202,14 +210,9 @@ class ProviderWarmPool {
         `[WarmPool] Acquired warm provider (session: ${sessionId}), pool size: ${this.pool.length}`,
       );
 
-      // Replenish in background for Claude only.
-      // Codex providers share one AppServer and are cheap to create on demand,
-      // so background replenish just adds race conditions with reset.
-      if (
-        this.config.autoReplenish &&
-        this.preferredProvider &&
-        this.preferredProvider !== 'codex'
-      ) {
+      // Replenish in background — each Codex provider now has its own WS
+      // connection, so background replenish is safe for both providers.
+      if (this.config.autoReplenish && this.preferredProvider) {
         this.replenishBackground();
       }
 

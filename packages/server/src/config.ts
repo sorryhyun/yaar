@@ -143,6 +143,14 @@ export function getCodexBin(): string {
 
 // ── Codex app-server configuration ────────────────────────────────────
 
+/** Default port for the codex app-server WebSocket listener. */
+export const CODEX_WS_PORT = parseInt(process.env.CODEX_WS_PORT ?? '4510', 10);
+
+/** Get the codex app-server WebSocket port (env override or default). */
+export function getCodexWsPort(): number {
+  return CODEX_WS_PORT;
+}
+
 /**
  * Build the CLI args for `codex app-server`.
  * Separates config from process management so it's easy to review/change.

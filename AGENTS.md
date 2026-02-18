@@ -29,6 +29,8 @@ pnpm typecheck                   # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
 make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
+pnpm format                      # Format all files with Prettier
+pnpm format:check                # Check formatting without writing
 
 # Run individual packages
 make server                                  # Start server only
@@ -52,6 +54,7 @@ pnpm build:exe:bundle:macos      # Build macOS executable
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
+- `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/remote_mode.md`
 
 ## Monorepo Structure
 
@@ -102,7 +105,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
 2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own main agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
-4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over stdio. Dynamic imports keep SDK dependencies lazy.
+4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
 6. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
@@ -112,7 +115,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
 
-See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences.
+See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences. See `docs/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/remote_mode.md` for network access.
 
 ### Server Subsystems
 
@@ -142,6 +145,8 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server → polls `/health` until ready → starts frontend
 - Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
 - Git branch: uses `master` (not `main`)
+- **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
+- **CI** (`.github/workflows/ci.yml`): install → build shared → typecheck → test (runs on push/PR to master)
 
 ## Code Style
 
@@ -150,18 +155,47 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
 - Server imports use `.js` extensions (ESM requirement for Node.js)
 - ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
+- Prettier: semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
 
 ## Apps System
 
-YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically.
+YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically (unless hidden).
 
 ### How It Works
 
 1. **Frontend startup**: Calls `GET /api/apps` to list apps
-2. **Desktop renders**: Shows one icon per app folder
+2. **Desktop renders**: Shows one icon per non-hidden app folder
 3. **User clicks icon**: Sends `<user_interaction:click>app: {appId}</user_interaction:click>`
 4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
 5. **AI responds**: Uses skill instructions to help user
+
+### `app.json` Schema
+
+Each app folder can contain an `app.json` with optional metadata:
+
+```json
+{
+  "name": "My App",
+  "description": "Brief description of what the app does",
+  "icon": "📦",
+  "hidden": true,
+  "appProtocol": false,
+  "fileAssociations": []
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name (defaults to title-cased folder name) |
+| `description` | string | Brief description shown in `apps_list` output |
+| `icon` | string | Emoji icon (overridden by `icon.png` if present) |
+| `hidden` | boolean | If true, no desktop icon — AI knows about it via system prompt |
+| `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
+| `fileAssociations` | array | File extensions this app can open |
+
+### System Apps (Hidden)
+
+Apps with `"hidden": true` in `app.json` don't show a desktop icon. Instead, their `SKILL.md` is automatically injected into the AI's system prompt so the AI knows about them immediately. Use this for system capabilities (like storage) that the AI should always know about.
 
 ### Creating a New App
 
@@ -171,7 +205,8 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
    - API endpoints and authentication
    - Available actions
    - Example workflows
-3. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
+3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
+4. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
 
 ### Apps Tools (MCP)
 

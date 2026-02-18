@@ -1,24 +1,37 @@
 /**
- * Codex App-Server Provider.
+ * Codex App-Server Provider (WebSocket transport).
  *
  * Uses `codex app-server` for long-running JSON-RPC communication.
- * Thin wrapper on an externally-owned AppServer (owned by WarmPool).
+ * Each provider gets its own WebSocket connection via `appServer.createConnection()`,
+ * enabling true parallel execution — no turn serialization mutex needed.
  *
  * Architecture:
  * - One AppServer process shared across agents (owned by WarmPool)
+ * - Each provider has its own WS connection (notifications routed per-connection)
  * - Each agent gets its own thread (via thread/start or thread/fork)
- * - Turns are serialized through the AppServer's turn semaphore
- *   (notifications lack thread IDs, so only one turn runs at a time)
  * - Provider never stops the AppServer — WarmPool handles lifecycle
  */
 
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import type { AppServer } from './app-server.js';
+import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import type {
+  ThreadStartParams,
+  ThreadStartResponse,
+  ThreadResumeParams,
+  ThreadResumeResponse,
+  ThreadForkParams,
+  ThreadForkResponse,
+  TurnStartParams,
+  TurnStartResponse,
+  TurnSteerParams,
+  TurnSteerResponse,
+  TurnInterruptParams,
+  TurnInterruptResponse,
   CommandExecutionRequestApprovalParams,
   FileChangeRequestApprovalParams,
 } from './types.js';
@@ -37,10 +50,10 @@ export class CodexProvider extends BaseTransport {
   readonly systemPrompt = SYSTEM_PROMPT;
 
   private appServer: AppServer | null;
+  private client: JsonRpcWsClient | null = null;
   private currentSession: ThreadSession | null = null;
 
   // Interrupt signal: shared instance field so interrupt() can reach the active query.
-  // Safe because the turn semaphore ensures only one query runs at a time.
   private resolveMessage: ((done: boolean) => void) | null = null;
 
   // Current in-flight turn ID for interrupt support
@@ -70,30 +83,36 @@ export class CodexProvider extends BaseTransport {
   }
 
   /**
-   * No-op: AppServer is already started by WarmPool before provider creation.
+   * Establish a dedicated WebSocket connection to the app-server.
+   * Called by WarmPool during provider creation.
    */
   async warmup(): Promise<boolean> {
-    return this.appServer?.isRunning ?? false;
+    if (!this.appServer?.isRunning) return false;
+
+    try {
+      this.client = await this.appServer.createConnection();
+      return true;
+    } catch (err) {
+      console.error('[codex] Failed to establish WS connection during warmup:', err);
+      return false;
+    }
   }
 
   async isAvailable(): Promise<boolean> {
-    // Auth is ensured at the AppServer level in WarmPool.ensureCodexAppServer().
-    // Just check that the AppServer is running.
-    return this.appServer?.isRunning ?? false;
+    return (this.appServer?.isRunning ?? false) && (this.client?.isConnected ?? false);
   }
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     this.createAbortController();
 
     try {
-      if (!this.appServer?.isRunning) {
-        yield this.createErrorMessage(new Error('AppServer is not running'));
+      if (!this.appServer?.isRunning || !this.client?.isConnected) {
+        yield this.createErrorMessage(new Error('AppServer or WS connection is not available'));
         return;
       }
 
-      // Capture a local reference so dispose() nulling this.appServer
-      // doesn't crash the finally block.
-      const appServer = this.appServer;
+      // Capture local references so dispose() doesn't crash the finally block.
+      const client = this.client;
 
       // Handle thread creation: new, fork, or reuse
       const threadCreated = await this.ensureThread(options);
@@ -101,16 +120,12 @@ export class CodexProvider extends BaseTransport {
         yield { type: 'text', sessionId: this.currentSession!.threadId };
       }
 
-      // Acquire turn lock (only one turn at a time per app-server)
-      await appServer.acquireTurn();
-
       // Stamp monitorId so actions emitted during this turn carry the originating monitor
       if (options.monitorId) {
         actionEmitter.setCurrentMonitor(options.monitorId);
       }
 
       // pendingMessages is local per-query to avoid cross-talk.
-      // resolveMessage uses the instance field so interrupt() can signal it.
       const pendingMessages: StreamMessage[] = [];
       this.resolveMessage = null;
 
@@ -133,24 +148,23 @@ export class CodexProvider extends BaseTransport {
         }
       };
 
-      appServer.on('notification', notificationHandler);
+      client.on('notification', notificationHandler);
 
       // Handle server-initiated requests (approval dialogs)
       const serverRequestHandler = (id: number, method: string, params: unknown) => {
-        this.handleServerRequest(appServer, id, method, params).catch((err) => {
+        this.handleServerRequest(client, id, method, params).catch((err) => {
           console.error(`[codex] Failed to handle server request ${method}:`, err);
-          appServer.respondError(id, -32000, err instanceof Error ? err.message : 'Internal error');
+          client.respondError(id, -32000, err instanceof Error ? err.message : 'Internal error');
         });
       };
-      appServer.on('server_request', serverRequestHandler);
+      client.on('server_request', serverRequestHandler);
 
       try {
-        // Build input array with text and optional images (UserInput union from generated types)
+        // Build input array with text and optional images
         const input: Array<
           { type: 'text'; text: string; text_elements: never[] } | { type: 'image'; url: string }
         > = [{ type: 'text', text: prompt, text_elements: [] }];
 
-        // Add images as separate input objects (WebP from frontend capture)
         if (options.images && options.images.length > 0) {
           for (const imageDataUrl of options.images) {
             input.push({ type: 'image', url: imageDataUrl });
@@ -158,7 +172,7 @@ export class CodexProvider extends BaseTransport {
         }
 
         // Start the turn and capture the turn ID for interrupt support
-        const turnResult = await appServer.turnStart({
+        const turnResult = await client.request<TurnStartParams, TurnStartResponse>('turn/start', {
           threadId: this.currentSession!.threadId,
           input,
         });
@@ -168,18 +182,15 @@ export class CodexProvider extends BaseTransport {
         while (true) {
           if (this.isAborted()) break;
 
-          // Check for pending messages
           while (pendingMessages.length > 0) {
             const message = pendingMessages.shift()!;
             yield message;
 
-            // Stop yielding after complete or error
             if (message.type === 'complete' || message.type === 'error') {
               return;
             }
           }
 
-          // Wait for the next message or turn completion
           const done = await new Promise<boolean>((resolve) => {
             this.resolveMessage = resolve;
           });
@@ -189,15 +200,13 @@ export class CodexProvider extends BaseTransport {
           }
         }
       } finally {
-        appServer.off('notification', notificationHandler);
-        appServer.off('server_request', serverRequestHandler);
+        client.off('notification', notificationHandler);
+        client.off('server_request', serverRequestHandler);
         actionEmitter.clearCurrentMonitor();
         this.currentTurnId = null;
-        appServer.releaseTurn();
       }
     } catch (err) {
       if (this.isAbortError(err)) {
-        // Expected when interrupted
         return;
       }
 
@@ -206,7 +215,6 @@ export class CodexProvider extends BaseTransport {
         err instanceof Error &&
         (err.message.includes('thread') || err.message.includes('invalid'))
       ) {
-        // Invalidate the session and retry
         this.currentSession = null;
         yield* this.query(prompt, options);
         return;
@@ -219,10 +227,10 @@ export class CodexProvider extends BaseTransport {
   async steer(content: string): Promise<boolean> {
     const threadId = this.currentSession?.threadId;
     const turnId = this.currentTurnId;
-    if (!this.appServer?.isRunning || !threadId || !turnId) return false;
+    if (!this.client?.isConnected || !threadId || !turnId) return false;
 
     try {
-      await this.appServer.turnSteer({
+      await this.client.request<TurnSteerParams, TurnSteerResponse>('turn/steer', {
         threadId,
         input: [{ type: 'text', text: content, text_elements: [] }],
         expectedTurnId: turnId,
@@ -235,17 +243,20 @@ export class CodexProvider extends BaseTransport {
   }
 
   interrupt(): void {
-    // Send turn/interrupt to the Codex app-server to cancel the in-flight turn
     const threadId = this.currentSession?.threadId;
     const turnId = this.currentTurnId;
-    if (this.appServer?.isRunning && threadId && turnId) {
-      this.appServer.turnInterrupt({ threadId, turnId }).catch((err) => {
-        console.warn(`[codex] turn/interrupt failed:`, err);
-      });
+    if (this.client?.isConnected && threadId && turnId) {
+      this.client
+        .request<TurnInterruptParams, TurnInterruptResponse>('turn/interrupt', {
+          threadId,
+          turnId,
+        })
+        .catch((err) => {
+          console.warn(`[codex] turn/interrupt failed:`, err);
+        });
     }
 
     super.interrupt();
-    // Signal any pending waiters to stop
     if (this.resolveMessage) {
       this.resolveMessage(true);
       this.resolveMessage = null;
@@ -254,10 +265,9 @@ export class CodexProvider extends BaseTransport {
 
   /**
    * Handle a server-initiated JSON-RPC request (e.g. approval dialogs).
-   * The Codex turn is paused until we respond, so no notifications arrive while waiting.
    */
   private async handleServerRequest(
-    appServer: AppServer,
+    client: JsonRpcWsClient,
     id: number,
     method: string,
     params: unknown,
@@ -277,7 +287,7 @@ export class CodexProvider extends BaseTransport {
           'codex_command',
           p.command ?? undefined,
         );
-        appServer.respond(id, {
+        client.respond(id, {
           decision: approved ? 'accept' : 'decline',
         });
         break;
@@ -296,7 +306,7 @@ export class CodexProvider extends BaseTransport {
           'codex_file_change',
           p.grantRoot ?? undefined,
         );
-        appServer.respond(id, {
+        client.respond(id, {
           decision: approved ? 'accept' : 'decline',
         });
         break;
@@ -304,13 +314,18 @@ export class CodexProvider extends BaseTransport {
 
       default:
         console.warn(`[codex] Unhandled server request: ${method}`);
-        appServer.respondError(id, -32601, `Unhandled method: ${method}`);
+        client.respondError(id, -32601, `Unhandled method: ${method}`);
         break;
     }
   }
 
   async dispose(): Promise<void> {
     await super.dispose();
+    // Close own WS connection
+    if (this.client) {
+      this.client.close();
+      this.client = null;
+    }
     // Don't stop the AppServer — it's owned by WarmPool.
     this.appServer = null;
     this.currentSession = null;
@@ -324,15 +339,21 @@ export class CodexProvider extends BaseTransport {
    * Returns true if a new thread was created (caller should yield sessionId).
    */
   private async ensureThread(options: TransportOptions): Promise<boolean> {
+    const client = this.client!;
+
     // Case 1: Fork from parent session
     if (options.forkSession && options.sessionId) {
       console.log(`[codex] Forking thread from parent ${options.sessionId}`);
       try {
-        const result = await this.appServer!.threadFork({
+        const fullParams: ThreadForkParams = {
+          persistExtendedHistory: false,
           threadId: options.sessionId,
-          // Override base instructions so task agents get their profile prompt
           baseInstructions: options.systemPrompt,
-        });
+        };
+        const result = await client.request<ThreadForkParams, ThreadForkResponse>(
+          'thread/fork',
+          fullParams,
+        );
         this.currentSession = {
           threadId: result.thread.id,
           systemPrompt: options.systemPrompt,
@@ -340,7 +361,6 @@ export class CodexProvider extends BaseTransport {
         return true;
       } catch (err) {
         console.warn(`[codex] Fork failed, falling back to new thread:`, err);
-        // Fall through to create new thread
       }
     }
 
@@ -348,13 +368,16 @@ export class CodexProvider extends BaseTransport {
     if (options.resumeThread && options.sessionId) {
       console.log(`[codex] Resuming thread ${options.sessionId}`);
       try {
-        const result = await this.appServer!.threadResume({ threadId: options.sessionId });
-        // Validate the resume actually loaded conversation history.
-        // If turns is empty, the rollout data was likely missing (e.g. after process restart),
-        // so fall through to create a fresh thread instead.
+        const fullParams: ThreadResumeParams = {
+          persistExtendedHistory: false,
+          threadId: options.sessionId,
+        };
+        const result = await client.request<ThreadResumeParams, ThreadResumeResponse>(
+          'thread/resume',
+          fullParams,
+        );
         if (result.thread.turns.length === 0) {
           console.warn(`[codex] Resumed thread has no turns, starting fresh instead`);
-          // Fall through to create new thread
         } else {
           this.currentSession = {
             threadId: options.sessionId,
@@ -364,7 +387,6 @@ export class CodexProvider extends BaseTransport {
         }
       } catch (err) {
         console.warn(`[codex] Resume failed, falling back to new thread:`, err);
-        // Fall through to create new thread
       }
     }
 
@@ -373,9 +395,15 @@ export class CodexProvider extends BaseTransport {
       !this.currentSession || this.currentSession.systemPrompt !== options.systemPrompt;
 
     if (needsNewThread) {
-      const result = await this.appServer!.threadStart({
+      const fullParams: ThreadStartParams = {
+        experimentalRawEvents: false,
+        persistExtendedHistory: false,
         baseInstructions: options.systemPrompt,
-      });
+      };
+      const result = await client.request<ThreadStartParams, ThreadStartResponse>(
+        'thread/start',
+        fullParams,
+      );
       this.currentSession = {
         threadId: result.thread.id,
         systemPrompt: options.systemPrompt,

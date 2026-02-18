@@ -21,18 +21,19 @@ YAAR Server Process
 
 ```
 YAAR Server Process
-└── CodexProvider
-    └── AppServer (shared child process)
-        └── codex app-server (JSON-RPC over stdio)
-            ├── thread/start → new thread
-            ├── thread/fork  → fork from parent
-            ├── thread/resume → resume saved thread
-            └── turn/start   → run a turn
+├── AppServer (shared child process manager)
+│   └── codex app-server --listen ws://127.0.0.1:4510
+└── CodexProvider (one per agent)
+    └── Own WebSocket connection (JSON-RPC)
+        ├── thread/start → new thread
+        ├── thread/fork  → fork from parent
+        ├── thread/resume → resume saved thread
+        └── turn/start   → run a turn
 ```
 
-- **Child process**: `codex app-server` is a separate process spawned via `spawn()`
-- **Shared process**: One `AppServer` instance is shared across all providers for a connection (reference-counted)
-- **Turn semaphore**: Only one turn can run at a time per AppServer (notifications lack thread IDs, so turns must be serialized)
+- **Child process**: `codex app-server` is a separate process spawned via `spawn()` with WebSocket transport
+- **Shared process, own connections**: One `AppServer` process is shared, but each provider gets its own WebSocket connection via `appServer.createConnection()`
+- **True parallelism**: Each connection carries its own notifications/requests, so multiple turns can run simultaneously (no turn serialization needed)
 
 ## Session Management
 
@@ -84,7 +85,7 @@ await appServer.turnStart({ threadId, input: [{ type: 'text', text: prompt }] })
 | Session resume | `resume: sessionId` | `thread/resume` → `turn/start` |
 | Session fork | `forkSession: true` | `thread/fork` |
 | History storage | Server-side (Anthropic) | Server-side (OpenAI) |
-| Concurrency | Unlimited parallel queries | One turn at a time (semaphore) |
+| Concurrency | Unlimited parallel queries | Parallel via per-provider WebSocket connections |
 
 ## Mid-Turn Steering
 
@@ -151,15 +152,17 @@ The warmup is expensive but effective: it pre-loads the entire system prompt and
 
 ```
 Server startup → WarmPool.initialize()
-  → new CodexProvider()
+  → ensureCodexAppServer()
+    → spawn('codex', ['app-server', '--listen', 'ws://...', ...flags])
+    → connectControlClient() (WS connect + initialize handshake)
+    → checkAndLoginCodex() (auth via control client)
+  → new CodexProvider(appServer)
   → warmup()
-    → ensureAppServer()
-      → spawn('codex', ['app-server', ...flags])
-      → initialize() (JSON-RPC handshake)
-    → Process is running and ready for thread/start
+    → appServer.createConnection() (new WS + initialize)
+    → Provider has its own dedicated connection
 ```
 
-Codex warmup just starts the child process. Thread creation happens on first query. This is lighter but means the first query pays the thread creation cost.
+Codex warmup starts the child process and establishes a dedicated WebSocket connection for the provider. Thread creation happens on first query. This is lighter than Claude's warmup but means the first query pays the thread creation cost.
 
 ## MCP Integration
 
@@ -272,33 +275,32 @@ Maps from JSON-RPC notification methods:
 
 ### Codex
 
-- Process-level resilience: `AppServer` auto-restarts on crash (up to 3 times with 1s delay)
+- Process-level resilience: If the AppServer exits unexpectedly, `ensureCodexAppServer()` restarts it on next provider creation
 - Session recovery: If a thread becomes invalid, the session is invalidated and the query retries with a new thread
-- Turn queue draining on shutdown: blocked `acquireTurn()` callers are unblocked to fail gracefully
-- Shared process reference counting: `retain()` / `release()` prevent premature shutdown
+- Connection-level resilience: Each provider checks `client.isConnected` before queries; stale connections are detected via `isAvailable()`
 
 ## Shared Process Architecture (Codex-specific)
 
-The Codex provider uses a shared `AppServer` pattern:
+The Codex provider uses a shared `AppServer` with per-provider WebSocket connections:
 
 ```
-WarmPool
-├── Creates first CodexProvider with new AppServer
-├── Captures shared AppServer reference
-└── Creates subsequent CodexProviders sharing the same AppServer
-
-AppServer (one per connection lifecycle)
-├── refCount tracks active providers
-├── Turn semaphore ensures one turn at a time
-├── Notifications broadcast to all listeners (no thread ID tagging)
-└── Auto-restart on crash (up to 3 times)
+WarmPool (owns the AppServer singleton)
+├── AppServer (one process, WebSocket listener on port 4510)
+│   ├── Control client (WS conn for auth/account operations)
+│   └── Process lifecycle management (spawn, stop)
+├── CodexProvider (main agent, monitor-0)
+│   └── Own WS connection → own thread → own turns
+├── CodexProvider (window agent)
+│   └── Own WS connection → forked thread → own turns
+└── CodexProvider (ephemeral agent)
+    └── Own WS connection → own thread → own turns
 ```
 
 This means:
-1. **Fast provider creation**: New CodexProviders for window/ephemeral agents don't spawn a new process
+1. **Fast provider creation**: New CodexProviders get a new WS connection without spawning a new process
 2. **Thread isolation**: Each provider gets its own thread within the shared process
-3. **Turn serialization**: Only one turn runs at a time, which limits parallelism compared to Claude
-4. **Shared lifecycle**: The AppServer lives until the last provider releases it
+3. **True parallelism**: Each WS connection carries its own notifications/requests, so multiple turns can run simultaneously
+4. **Shared lifecycle**: The AppServer lives as long as WarmPool keeps it; providers just close their own connections on dispose
 
 ## Key Files
 
@@ -312,7 +314,8 @@ This means:
 | `providers/claude/message-mapper.ts` | SDK message → StreamMessage |
 | `providers/claude/system-prompt.ts` | Claude-specific system prompt |
 | `providers/codex/provider.ts` | Codex provider with thread management |
-| `providers/codex/app-server.ts` | AppServer process manager (spawn, restart, JSON-RPC) |
-| `providers/codex/jsonrpc-client.ts` | JSON-RPC client over stdio |
+| `providers/codex/app-server.ts` | AppServer process manager (spawn, WS connections, auth) |
+| `providers/codex/jsonrpc-ws-client.ts` | JSON-RPC client over WebSocket |
+| `providers/codex/jsonrpc-client.ts` | JSON-RPC client over stdio (legacy, unused) |
 | `providers/codex/message-mapper.ts` | Notification → StreamMessage |
 | `providers/codex/system-prompt.ts` | Codex-specific system prompt |

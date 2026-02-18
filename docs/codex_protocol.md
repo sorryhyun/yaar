@@ -15,13 +15,16 @@ codex login status       # Verify authentication
 ### Running App Server
 
 ```bash
-# Basic
+# Basic (stdio mode)
 codex app-server
 
+# WebSocket mode (used by YAAR — each client gets its own connection)
+codex app-server --listen ws://127.0.0.1:4510
+
 # With YAAR configuration
-codex app-server \
+codex app-server --listen ws://127.0.0.1:4510 \
   -c "features.shell_tool=false" \
-  -c "approval_policy=never" \
+  -c "approval_policy=on-request" \
   -c "model_reasoning_effort=medium" \
   -c "model_personality=none"
 
@@ -80,9 +83,11 @@ YAAR users share images — this is a dealbreaker.
 
 ## Protocol Reference
 
-### JSON-RPC Basics (over stdio)
+### JSON-RPC Basics (over WebSocket)
 
-**Initialize (required first):**
+YAAR uses WebSocket transport (`--listen ws://127.0.0.1:{port}`). Each provider gets its own WebSocket connection, enabling true parallel turns. The protocol is the same as stdio mode — one JSON object per frame (no NDJSON framing needed).
+
+**Initialize (required first — sent on each new connection):**
 
 ```json
 → {"method": "initialize", "params": {"clientInfo": {"name": "yaar", "version": "1.0.0"}}, "id": 0}
@@ -210,7 +215,7 @@ Client → Server (response):
 | `item/commandExecution/requestApproval` | Shell command approval | `accept`, `decline`, `acceptForSession`, `cancel` |
 | `item/fileChange/requestApproval` | File modification approval | `accept`, `decline`, `acceptForSession`, `cancel` |
 
-These are routed through YAAR's existing permission dialog system (`actionEmitter.showPermissionDialog()`), which supports "Remember my choice" persistence. The CodexProvider handles the request in `handleServerRequest()`, shows the dialog, and responds back via `appServer.respond()`.
+These are routed through YAAR's existing permission dialog system (`actionEmitter.showPermissionDialog()`), which supports "Remember my choice" persistence. The CodexProvider handles the request in `handleServerRequest()`, shows the dialog, and responds back via its own `client.respond()`.
 
 ---
 
@@ -263,8 +268,8 @@ YAAR is a desktop agent interface, not an IDE. Several Codex defaults work again
 
 | Feature | Config | Why Disabled |
 |---------|--------|-------------|
-| Shell tool | `features.shell_tool=false` | No approval flow yet |
-| Approval policy | `approval_policy=never` | No client-side approval UI yet |
+| Shell tool | `features.shell_tool=false` | YAAR controls execution via MCP tools |
+| Approval policy | `approval_policy=on-request` | Routed through YAAR's permission dialog |
 | Web search | (default off with shell disabled) | YAAR controls HTTP access via MCP tools |
 | View image | (default off) | YAAR handles images directly |
 | Skills | Isolated temp dir | Auto-injected prompts contaminate agent personality |
@@ -342,13 +347,15 @@ codex app-server \
 
 ### App Server Process Components
 
-From the Codex harness blog:
+From the Codex harness blog (adapted for WebSocket mode):
 
 ```
-Client ←→ stdio reader ←→ Codex message processor ←→ Thread manager ←→ Core threads
+Clients ←→ WebSocket listener ←→ Codex message processor ←→ Thread manager ←→ Core threads
 ```
 
-- **stdio reader** — Parses JSON-RPC from stdin
+- **WebSocket listener** — Accepts multiple connections, parses JSON-RPC from each
 - **Codex message processor** — Translates between JSON-RPC and Codex core operations
 - **Thread manager** — Spins up one core session per thread
 - **Core threads** — Independent Codex core instances with their own conversation state
+
+Each WebSocket connection can run its own thread/turn independently, eliminating the turn serialization bottleneck of stdio mode.

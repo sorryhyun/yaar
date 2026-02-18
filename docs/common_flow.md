@@ -343,6 +343,9 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 | `USER_INTERACTION` | Batch of user interactions (close, focus, move, resize, draw) |
 | `APP_PROTOCOL_RESPONSE` | Iframe app's response to an agent query/command |
 | `APP_PROTOCOL_READY` | Iframe app has registered with the App Protocol |
+| `USER_PROMPT_RESPONSE` | User response to a prompt request |
+| `SUBSCRIBE_MONITOR` | Subscribe to events for a specific monitor |
+| `REMOVE_MONITOR` | Remove a background monitor |
 
 ### Server → Client
 
@@ -385,7 +388,6 @@ Each log entry includes `agentId` for filtering:
 | File | Purpose |
 |------|---------|
 | `session/live-session.ts` | LiveSession + SessionHub — session lifecycle, multi-connection |
-| `session/event-sequencer.ts` | EventSequencer — monotonic seq for event replay |
 | `agents/context-pool.ts` | ContextPool — unified task orchestration |
 | `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, window, and task agents |
 | `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |
@@ -396,12 +398,12 @@ Each log entry includes `agentId` for filtering:
 | `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection, MonitorBudget |
 | `providers/factory.ts` | Provider auto-detection and creation |
 | `providers/warm-pool.ts` | Pre-initialized providers for fast first response |
-| `websocket/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
+| `session/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
 | `mcp/action-emitter.ts` | ActionEmitter — bridges MCP tools to agent sessions |
 | `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per session |
 | `mcp/domains.ts` | Domain allowlist for HTTP tools and sandbox fetch |
 | `mcp/guidelines/` | Dynamic reference docs (app_dev, sandbox, components) |
-| `mcp/app-dev/` | App development tools (write, read, diff, compile, deploy, clone) |
+| `mcp/dev/` | App development tools (write, read, compile, deploy) |
 | `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |
 
 ## Example: Concurrent Execution
