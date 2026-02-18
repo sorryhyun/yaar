@@ -87,18 +87,7 @@ export interface AITransport {
   steer?(content: string): Promise<boolean>;
 
   /**
-   * Optional: Pre-warm the provider by initializing a session.
-   * Providers that support this can be used for faster first response.
-   */
-  warmup?(): Promise<boolean>;
-
-  /**
-   * Optional: Check if the provider has been warmed up.
-   */
-  isWarmedUp?(): boolean;
-
-  /**
-   * Optional: Get the pre-warmed session ID.
+   * Optional: Get the current session/thread ID.
    */
   getSessionId?(): string | null;
 }

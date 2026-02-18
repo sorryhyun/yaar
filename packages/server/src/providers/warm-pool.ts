@@ -133,15 +133,6 @@ class ProviderWarmPool {
         return null;
       }
 
-      // Warm up if supported (Claude pre-creates session; Codex is a no-op)
-      if (provider.warmup) {
-        console.log(`[WarmPool] Warming up ${providerType} provider...`);
-        const success = await provider.warmup();
-        if (!success) {
-          console.warn(`[WarmPool] Warmup failed for ${providerType}`);
-        }
-      }
-
       return provider;
     } catch (err) {
       console.error(`[WarmPool] Failed to create ${providerType} provider:`, err);

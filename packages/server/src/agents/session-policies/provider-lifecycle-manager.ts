@@ -10,7 +10,6 @@ import type { ServerEvent } from '@yaar/shared';
 export interface ProviderLifecycleState {
   provider: AITransport | null;
   sessionId: string | null;
-  hasWarmSession: boolean;
   hasProcessedFirstUserTurn: boolean;
   sessionLogger: SessionLogger | null;
 }
@@ -30,15 +29,6 @@ export class ProviderLifecycleManager {
         error: 'No AI provider available. Install Claude CLI.',
       });
       return false;
-    }
-
-    if (!this.state.sessionId && this.state.provider.getSessionId) {
-      const warmSessionId = this.state.provider.getSessionId();
-      if (warmSessionId) {
-        this.state.sessionId = warmSessionId;
-        this.state.hasWarmSession = true;
-        console.log(`[AgentSession] Using pre-warmed session: ${warmSessionId}`);
-      }
     }
 
     if (!this.state.sessionLogger) {
@@ -72,7 +62,6 @@ export class ProviderLifecycleManager {
     const newProvider = await createProvider(providerType);
     this.state.provider = newProvider;
     this.state.sessionId = null;
-    this.state.hasWarmSession = false;
     this.state.hasProcessedFirstUserTurn = false;
 
     await this.sendEvent({

@@ -118,8 +118,6 @@ export async function handleMcpRequest(
     }
   }
 
-  console.log(`[MCP] ${req.method} ${req.url}`);
-
   // Restore agent context from X-Agent-Id header (set by Claude provider)
   const agentId = req.headers['x-agent-id'];
   if (typeof agentId === 'string') {

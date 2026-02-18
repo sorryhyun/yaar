@@ -1,8 +1,8 @@
 /**
- * Claude Session Provider with warmup support.
+ * Claude Session Provider.
  *
- * Pre-creates a session at startup by sending an init message,
- * then uses session resumption for actual user messages.
+ * Uses the Claude Agent SDK to query Claude with MCP tools.
+ * Sessions are created on first real query and resumed for subsequent ones.
  */
 
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
@@ -33,27 +33,12 @@ interface TextContentBlock {
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
 
-// Warmup message - simple ping/pong handshake (see system prompt)
-const WARMUP_MESSAGE = 'ping';
-
-/**
- * Claude provider with session warmup support.
- *
- * At startup, sends a warmup message to create a session. This:
- * 1. Establishes the MCP connection
- * 2. Loads the system prompt into context
- * 3. Gets a session ID for resumption
- *
- * Subsequent queries resume this pre-warmed session for faster response.
- */
 export class ClaudeSessionProvider extends BaseTransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
   readonly systemPrompt = SYSTEM_PROMPT;
 
   private sessionId: string | null = null;
-  private warmedUp = false;
-  private warmupPromise: Promise<boolean> | null = null;
   private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
   async isAvailable(): Promise<boolean> {
@@ -79,7 +64,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     return {
       abortController: this.createAbortController(),
       systemPrompt: systemPrompt ?? this.systemPrompt,
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: ['WebSearch'],
@@ -100,76 +85,13 @@ export class ClaudeSessionProvider extends BaseTransport {
       allowDangerouslySkipPermissions: true,
       env: {
         ...process.env,
-        MAX_MCP_OUTPUT_TOKENS: '7500',
+        MAX_MCP_OUTPUT_TOKENS: '15000',
       },
     };
   }
 
-  /**
-   * Warm up the session by sending an init message.
-   * Returns true if warmup succeeded.
-   */
-  async warmup(): Promise<boolean> {
-    if (this.warmedUp) {
-      return true;
-    }
-
-    if (this.warmupPromise) {
-      return this.warmupPromise;
-    }
-
-    this.warmupPromise = this.doWarmup();
-    const result = await this.warmupPromise;
-    this.warmupPromise = null;
-    return result;
-  }
-
-  private async doWarmup(): Promise<boolean> {
-    console.log('[ClaudeSessionProvider] Starting warmup...');
-
-    try {
-      const options = this.getSDKOptions();
-      const stream = sdkQuery({ prompt: WARMUP_MESSAGE, options });
-
-      for await (const msg of stream) {
-        // Capture session ID from first message
-        if ('session_id' in msg && msg.session_id && !this.sessionId) {
-          this.sessionId = msg.session_id;
-          console.log(`[ClaudeSessionProvider] Session created: ${this.sessionId}`);
-        }
-
-        // Wait for completion
-        if (msg.type === 'result') {
-          break;
-        }
-      }
-
-      if (this.sessionId) {
-        this.warmedUp = true;
-        console.log('[ClaudeSessionProvider] Warmup complete');
-        return true;
-      } else {
-        console.error('[ClaudeSessionProvider] Warmup failed: no session ID');
-        return false;
-      }
-    } catch (err) {
-      console.error('[ClaudeSessionProvider] Warmup error:', err);
-      return false;
-    }
-  }
-
-  /**
-   * Get the session ID if available.
-   */
   getSessionId(): string | null {
     return this.sessionId;
-  }
-
-  /**
-   * Check if the session is warmed up and ready.
-   */
-  isWarmedUp(): boolean {
-    return this.warmedUp && this.sessionId !== null;
   }
 
   async steer(content: string): Promise<boolean> {
@@ -311,7 +233,6 @@ export class ClaudeSessionProvider extends BaseTransport {
   async dispose(): Promise<void> {
     this.currentQuery = null;
     this.sessionId = null;
-    this.warmedUp = false;
     await super.dispose();
   }
 }

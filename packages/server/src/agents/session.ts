@@ -108,7 +108,6 @@ export class AgentSession {
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
   private instanceId: string;
-  private hasWarmSession = false;
   private hasProcessedFirstUserTurn = false;
   private currentMessageId: string | null = null;
   private currentRole: string | null = null;
@@ -148,12 +147,6 @@ export class AgentSession {
         },
         set sessionId(value: string | null) {
           connection.sessionId = value;
-        },
-        get hasWarmSession() {
-          return connection.hasWarmSession;
-        },
-        set hasWarmSession(value: boolean) {
-          connection.hasWarmSession = value;
         },
         get hasProcessedFirstUserTurn() {
           return connection.hasProcessedFirstUserTurn;
@@ -283,7 +276,7 @@ export class AgentSession {
       } else if (options.resumeSessionId && !this.hasProcessedFirstUserTurn) {
         sessionIdToUse = options.resumeSessionId;
         resumeThread = true;
-      } else if ((this.hasWarmSession || this.hasProcessedFirstUserTurn) && this.sessionId) {
+      } else if (this.hasProcessedFirstUserTurn && this.sessionId) {
         sessionIdToUse = this.sessionId;
       }
 

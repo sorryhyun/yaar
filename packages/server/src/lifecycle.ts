@@ -48,7 +48,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   await initMcpServer();
 
-  // Pre-warm provider pool for faster first connection
+  // Pre-warm provider pool (availability check, no network calls)
   const warmPoolReady = await initWarmPool();
   if (warmPoolReady) {
     const stats = getWarmPool().getStats();
