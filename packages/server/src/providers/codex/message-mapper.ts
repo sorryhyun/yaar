@@ -36,6 +36,9 @@ type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
 /** Extract the commandExecution variant from ThreadItem */
 type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
 
+/** Extract the webSearch variant from ThreadItem */
+type WebSearchItem = Extract<ThreadItem, { type: 'webSearch' }>;
+
 /** Format MCP tool name with server namespace: "apps:typecheck" */
 function mcpToolName(server?: string, tool?: string): string {
   if (server && tool) return `${server}:${tool}`;
@@ -132,6 +135,12 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
             toolName: 'command',
             toolInput: { command: item.command },
           };
+        case 'webSearch':
+          return {
+            type: 'tool_use',
+            toolName: 'web_search',
+            toolUseId: item.id,
+          };
         default:
           console.debug(
             `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
@@ -162,6 +171,13 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
             type: 'tool_result',
             toolName: 'command',
             content: formatCommandResult(item),
+          };
+        case 'webSearch':
+          return {
+            type: 'tool_result',
+            toolName: 'web_search',
+            toolUseId: item.id,
+            content: formatWebSearchResult(item),
           };
         default:
           console.debug(
@@ -463,6 +479,25 @@ function formatAgentStatus(status: AgentStatus): string {
   if ('completed' in status) return `completed${status.completed ? `: ${status.completed}` : ''}`;
   if ('errored' in status) return `errored: ${status.errored}`;
   return JSON.stringify(status);
+}
+
+/**
+ * Format web search result as a string (v2 camelCase fields).
+ */
+function formatWebSearchResult(item: WebSearchItem): string {
+  const action = item.action;
+  if (!action) return item.query;
+
+  const actionDesc =
+    action.type === 'search'
+      ? (action.queries ?? [action.query]).filter(Boolean).join(', ')
+      : action.type === 'openPage'
+        ? `open: ${action.url ?? ''}`
+        : action.type === 'findInPage'
+          ? `find "${action.pattern ?? ''}" in ${action.url ?? ''}`
+          : '';
+
+  return actionDesc ? `${item.query} → ${actionDesc}` : item.query;
 }
 
 /**

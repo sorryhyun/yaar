@@ -11,7 +11,7 @@ import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
 import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
 import { MARKET_TOOL_NAMES } from '../mcp/apps/market.js';
 import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
-import { GUIDELINE_TOOL_NAMES } from '../mcp/guidelines/index.js';
+import { SKILL_TOOL_NAMES } from '../mcp/skills/index.js';
 import { SANDBOX_TOOL_NAMES } from '../mcp/sandbox/index.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 
@@ -24,7 +24,7 @@ export interface AgentProfile {
 
 // ── Composite tool sets (for profile readability) ─────────────────
 
-const INFO_TOOLS = ['mcp__system__get_info', ...GUIDELINE_TOOL_NAMES] as const;
+const INFO_TOOLS = ['mcp__system__get_info', ...SKILL_TOOL_NAMES] as const;
 const APPS_ALL_TOOLS = [...APPS_TOOL_NAMES, ...MARKET_TOOL_NAMES] as const;
 
 // ── Task agent system prompt ────────────────────────────────────────
@@ -52,8 +52,8 @@ Button clicks send: \`<user_interaction:click>button "{action}" in window "{titl
 Use http_get/http_post for API calls. Domains require allowlisting.
 Use request_allowing_domain to prompt user for new domain access.
 
-## Guidelines
-Use guideline(topic) to load reference docs for unfamiliar tasks.
+## Skills
+**You MUST call skill(topic) before using related tools for the first time** (app_dev, sandbox, components).
 `;
 
 // ── Profile definitions ─────────────────────────────────────────────
@@ -144,7 +144,7 @@ export const ORCHESTRATOR_PROFILE: AgentProfile = {
     'mcp__window__dismiss_notification',
     // Memory + info
     'mcp__system__memorize',
-    ...GUIDELINE_TOOL_NAMES,
+    ...SKILL_TOOL_NAMES,
     'mcp__system__get_info',
     'mcp__system__get_env_var',
     // Cache replay

@@ -15,7 +15,16 @@ import {
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
-import { sendJson, sendError } from '../utils.js';
+import { sendJson, sendError, type EndpointMeta } from '../utils.js';
+
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
+  {
+    method: 'GET',
+    path: '/api/apps',
+    response: '`{ apps: AppInfo[] }`',
+    description: 'List all installed apps',
+  },
+];
 import { readSettings, updateSettings } from '../../storage/settings.js';
 import { readShortcuts } from '../../storage/shortcuts.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';

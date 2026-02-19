@@ -15,7 +15,7 @@ import { registerMarketTools, MARKET_TOOL_NAMES } from './apps/market.js';
 import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
 import { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
 import { registerSandboxTools, SANDBOX_TOOL_NAMES } from './sandbox/index.js';
-import { registerGuidelineTools, GUIDELINE_TOOL_NAMES } from './guidelines/index.js';
+import { registerSkillTools, SKILL_TOOL_NAMES } from './skills/index.js';
 import { registerDesktopTools, DESKTOP_TOOL_NAMES } from './desktop/index.js';
 import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
@@ -41,7 +41,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
 
   registerSystemTools(servers.system);
   registerDispatchTools(servers.system);
-  registerGuidelineTools(servers.system);
+  registerSkillTools(servers.system);
   registerDesktopTools(servers.system);
   registerHttpTools(servers.system);
   registerSandboxTools(servers.system);
@@ -77,7 +77,7 @@ export function getToolNames(): string[] {
     'WebSearch',
     ...SYSTEM_TOOL_NAMES,
     ...DISPATCH_TOOL_NAMES,
-    ...GUIDELINE_TOOL_NAMES,
+    ...SKILL_TOOL_NAMES,
     ...DESKTOP_TOOL_NAMES,
     ...HTTP_TOOL_NAMES,
     ...SANDBOX_TOOL_NAMES,

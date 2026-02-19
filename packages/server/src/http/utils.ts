@@ -5,6 +5,14 @@
 import type { ServerResponse } from 'http';
 import { normalize, join, relative } from 'path';
 
+/** Metadata for a public REST endpoint exposed to iframe apps. */
+export interface EndpointMeta {
+  method: string;
+  path: string;
+  response: string;
+  description: string;
+}
+
 export function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));

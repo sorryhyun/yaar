@@ -116,16 +116,20 @@ function hasInstalled(appId: string) {
   return installedApps.some((a) => normalizeId(a.id) === target);
 }
 
+function sameAppId(a: string, b: string) {
+  return normalizeId(a) === normalizeId(b);
+}
+
 function markInstalled(app: { id: string; name: string }, installed: boolean) {
   if (installed) {
-    if (!installedApps.some((a) => a.id === app.id)) {
+    if (!installedApps.some((a) => sameAppId(a.id, app.id))) {
       installedApps = [...installedApps, { id: app.id, name: app.name }];
     }
   } else {
-    installedApps = installedApps.filter((a) => a.id !== app.id);
+    installedApps = installedApps.filter((a) => !sameAppId(a.id, app.id));
   }
 
-  marketApps = marketApps.map((m) => (m.id === app.id ? { ...m, installed } : m));
+  marketApps = marketApps.map((m) => (sameAppId(m.id, app.id) ? { ...m, installed } : m));
 }
 
 async function hostAction(action: 'install' | 'uninstall', app: { id: string; name: string }) {
@@ -148,7 +152,7 @@ async function hostAction(action: 'install' | 'uninstall', app: { id: string; na
     return 'interaction' as const;
   }
 
-  return null;
+  throw new Error('Host install/uninstall API is unavailable.');
 }
 
 function parseMarket(payload: ApiPayload): ListedApp[] {
@@ -163,22 +167,98 @@ function parseInstalled(payload: ApiPayload): InstalledApp[] {
     : [];
 }
 
+function parseInstalledText(text: string): InstalledApp[] {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const result: InstalledApp[] = [];
+  for (const line of lines) {
+    const m = line.match(/^\s*-\s+(.+?)\s+\(([^)]+)\)/);
+    if (m) {
+      result.push({ id: m[2].trim(), name: m[1].trim() });
+    }
+  }
+  return result;
+}
+
+function coerceInstalledApp(input: any): InstalledApp | null {
+  if (!input || typeof input !== 'object') return null;
+
+  const id =
+    typeof input.id === 'string'
+      ? input.id
+      : typeof input.appId === 'string'
+      ? input.appId
+      : typeof input.slug === 'string'
+      ? input.slug
+      : typeof input.packageName === 'string'
+      ? input.packageName
+      : null;
+
+  if (!id) return null;
+
+  const name =
+    typeof input.name === 'string'
+      ? input.name
+      : typeof input.title === 'string'
+      ? input.title
+      : id;
+
+  return { id, name };
+}
+
 function parseInstalledAny(input: any): InstalledApp[] {
   if (Array.isArray(input)) {
-    return input
-      .filter((a) => a && typeof a.id === 'string')
-      .map((a) => ({ id: a.id, name: a.name || a.id }));
+    return input.map(coerceInstalledApp).filter((a): a is InstalledApp => !!a);
+  }
+
+  if (typeof input === 'string') {
+    return parseInstalledText(input);
   }
 
   if (input && typeof input === 'object') {
     const candidate =
-      Array.isArray(input.apps) ? input.apps : Array.isArray(input.installed) ? input.installed : Array.isArray(input.installedApps) ? input.installedApps : [];
+      Array.isArray(input.apps)
+        ? input.apps
+        : Array.isArray(input.installed)
+        ? input.installed
+        : Array.isArray(input.installedApps)
+        ? input.installedApps
+        : [];
 
-    return candidate
-      .filter((a: any) => a && typeof a.id === 'string')
-      .map((a: any) => ({ id: a.id, name: a.name || a.id }));
+    if (candidate.length) {
+      const parsed = candidate.map(coerceInstalledApp).filter((a): a is InstalledApp => !!a);
+      if (parsed.length) return parsed;
+    }
+
+    if (typeof (input as any).text === 'string') {
+      return parseInstalledText((input as any).text);
+    }
   }
 
+  return [];
+}
+
+async function getInstalledFromLocalApi(): Promise<InstalledApp[]> {
+  const candidates = ['/api/apps', '/api/apps/list', '/api/apps/installed', '/api/installed'];
+  for (const path of candidates) {
+    try {
+      const res = await fetch(path, { method: 'GET' });
+      if (!res.ok) continue;
+
+      const contentType = (res.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('application/json')) {
+        const payload = await res.json();
+        const parsed = parseInstalledAny(payload);
+        if (parsed.length) return parsed;
+      } else {
+        const text = await res.text();
+        const parsed = parseInstalledAny(text);
+        if (parsed.length) return parsed;
+      }
+    } catch {
+      // ignore and try next endpoint
+    }
+  }
   return [];
 }
 
@@ -197,34 +277,23 @@ async function refreshData() {
     const marketPayload = await apiGet<ApiPayload>('/api/apps/');
     marketApps = parseMarket(marketPayload);
 
-    try {
-      const installedPayload = await apiGet<ApiPayload>('/api/installed');
-      installedApps = parseInstalled(installedPayload);
-      setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
-    } catch (installedErr: any) {
-      const yaarAny = (window as any).yaar;
-      if (typeof yaarAny?.os?.action === 'function') {
-        try {
-          const localInstalled = await yaarAny.os.action('apps:list', {});
-          const parsed = parseInstalledAny(localInstalled);
-          if (parsed.length) {
-            installedApps = parsed;
-            setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps (local)`);
-          } else {
-            installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
-            setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
-          }
-        } catch {
-          installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
-          setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
-        }
-      } else {
-        installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
-        setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
+    const yaarAny = (window as any).yaar;
+    if (typeof yaarAny?.os?.action === 'function') {
+      try {
+        const localInstalled = await yaarAny.os.action('apps:list', {});
+        installedApps = parseInstalledAny(localInstalled);
+        setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps (apps:list)`);
+      } catch {
+        installedApps = [];
+        setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
       }
+    } else {
+      const localApiInstalled = await getInstalledFromLocalApi();
+      installedApps = localApiInstalled;
+      setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
     }
 
-    marketApps = marketApps.map((m) => ({ ...m, installed: m.installed || hasInstalled(m.id) }));
+    marketApps = marketApps.map((m) => ({ ...m, installed: hasInstalled(m.id) }));
   } catch (err: any) {
     setStatus(`Refresh failed: ${err?.message || String(err)}`);
   } finally {
@@ -242,21 +311,13 @@ async function installApp(app: ListedApp) {
     const hostMode = await hostAction('install', app);
     if (hostMode === 'os-action') {
       markInstalled(app, true);
-      setStatus(`Installed ${app.name} via OS action`);
-      loading = false;
-      render();
-      return;
-    }
-    if (hostMode === 'interaction') {
-      setStatus(`Install request sent for ${app.name} (waiting for agent)`);
+      setStatus(`Installed ${app.name} via apps:market_get`);
       loading = false;
       render();
       return;
     }
 
-    await apiPostAny(['/api/install', '/api/apps/install'], { appId: app.id });
-    markInstalled(app, true);
-    setStatus(`Installed ${app.name}`);
+    setStatus(`Install request sent for ${app.name} (waiting for agent)`);
     loading = false;
     render();
   } catch (err: any) {
@@ -275,21 +336,13 @@ async function uninstallApp(app: InstalledApp) {
     const hostMode = await hostAction('uninstall', app);
     if (hostMode === 'os-action') {
       markInstalled(app, false);
-      setStatus(`Uninstalled ${app.name} via OS action`);
-      loading = false;
-      render();
-      return;
-    }
-    if (hostMode === 'interaction') {
-      setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
+      setStatus(`Uninstalled ${app.name} via apps:market_delete`);
       loading = false;
       render();
       return;
     }
 
-    await apiPostAny(['/api/uninstall', '/api/apps/uninstall'], { appId: app.id });
-    markInstalled(app, false);
-    setStatus(`Uninstalled ${app.name}`);
+    setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
     loading = false;
     render();
   } catch (err: any) {

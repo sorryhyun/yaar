@@ -116,7 +116,7 @@ export function registerCreateTools(server: McpServer): void {
     'create_component',
     {
       description:
-        'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid. Use guideline("components") for layout patterns and examples.',
+        'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),

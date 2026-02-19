@@ -7,7 +7,17 @@
 
 import type { IncomingMessage, ServerResponse } from 'http';
 import { MAX_UPLOAD_SIZE } from '../../config.js';
-import { sendError, sendJson } from '../utils.js';
+import { sendError, sendJson, type EndpointMeta } from '../utils.js';
+
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
+  {
+    method: 'POST',
+    path: '/api/fetch',
+    response: 'JSON',
+    description:
+      'Proxy HTTP request (for CORS-blocked APIs). Body: `{ url, method?, headers?, body? }`',
+  },
+];
 import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../mcp/domains.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 

@@ -49,7 +49,7 @@ export function registerSandboxTools(server: McpServer): void {
     'run_js',
     {
       description:
-        'Execute JavaScript code in a sandboxed environment and return the result. Code runs in an async IIFE (await supported). Use guideline("sandbox") for available globals and restrictions.',
+        'Execute JavaScript code in a sandboxed environment and return the result. Code runs in an async IIFE (await supported).',
       inputSchema: {
         code: z.string().describe('JavaScript code to execute'),
         timeout: z

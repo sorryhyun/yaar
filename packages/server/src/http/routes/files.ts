@@ -9,7 +9,58 @@ import { gzip } from 'zlib';
 import { promisify } from 'util';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
-import { sendError, sendJson, safePath } from '../utils.js';
+import { sendError, sendJson, safePath, type EndpointMeta } from '../utils.js';
+
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
+  {
+    method: 'GET',
+    path: '/api/apps/{appId}/icon',
+    response: 'image',
+    description: 'App icon image',
+  },
+  {
+    method: 'GET',
+    path: '/api/apps/{appId}/{path}',
+    response: 'file',
+    description: 'App static files',
+  },
+  {
+    method: 'GET',
+    path: '/api/storage/{path}',
+    response: 'file',
+    description: 'Read a storage file',
+  },
+  {
+    method: 'GET',
+    path: '/api/storage/{path}?list=true',
+    response: 'JSON',
+    description: 'List directory contents',
+  },
+  {
+    method: 'POST',
+    path: '/api/storage/{path}',
+    response: 'JSON',
+    description: 'Write a storage file (body = file content)',
+  },
+  {
+    method: 'DELETE',
+    path: '/api/storage/{path}',
+    response: 'JSON',
+    description: 'Delete a storage file',
+  },
+  {
+    method: 'GET',
+    path: '/api/pdf/{path}/{page}',
+    response: 'image/png',
+    description: 'Render PDF page as PNG',
+  },
+  {
+    method: 'GET',
+    path: '/api/sandbox/{sandboxId}/{path}',
+    response: 'file',
+    description: 'Serve sandbox files',
+  },
+];
 import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
 
 const gzipAsync = promisify(gzip);

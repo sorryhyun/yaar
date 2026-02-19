@@ -16,7 +16,7 @@ export function registerWriteTools(server: McpServer): void {
     'write_ts',
     {
       description:
-        'Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided. Use guideline("app_dev") for available bundled libraries and storage API.',
+        'Write TypeScript code to a sandbox directory. Creates a new sandbox if sandboxId is not provided.',
       inputSchema: {
         path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
         content: z.string().describe('TypeScript source code'),

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { ok, error } from '../utils.js';
-import { getSandboxPath } from '../../lib/compiler/index.js';
+import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
 import { componentLayoutSchema } from '@yaar/shared';
@@ -21,8 +21,7 @@ export function registerDeployTools(server: McpServer): void {
   server.registerTool(
     'deploy',
     {
-      description:
-        'Deploy a compiled sandbox as a desktop app. Use guideline("app_dev") for deploy options reference.',
+      description: 'Deploy a sandbox as a desktop app. Auto-compiles if not already compiled.',
       inputSchema: {
         sandbox: z.string().describe('Sandbox ID to deploy'),
         appId: z.string().describe('App ID (lowercase with hyphens)'),
@@ -102,7 +101,7 @@ export function registerDeployTools(server: McpServer): void {
         return error(`Sandbox "${sandboxId}" not found.`);
       }
 
-      // Check for compiled output (index.html) or component files
+      // Check for compiled output (index.html) or auto-compile if source exists
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
       let hasCompiledApp = false;
       let hasAppProtocol = explicitAppProtocol ?? false;
@@ -110,12 +109,29 @@ export function registerDeployTools(server: McpServer): void {
       try {
         const distHtml = await readFile(distIndexPath, 'utf-8');
         hasCompiledApp = true;
-        // Auto-detect from HTML only if not explicitly set
         if (explicitAppProtocol === undefined) {
           hasAppProtocol = distHtml.includes('.app.register');
         }
       } catch {
-        // No compiled output
+        // No compiled output — auto-compile if src/main.ts exists
+        try {
+          await stat(join(sandboxPath, 'src', 'main.ts'));
+          const compileResult = await compileTypeScript(sandboxPath, {
+            title: name ?? toDisplayName(appId),
+          });
+          if (!compileResult.success) {
+            return error(
+              `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`,
+            );
+          }
+          const distHtml = await readFile(distIndexPath, 'utf-8');
+          hasCompiledApp = true;
+          if (explicitAppProtocol === undefined) {
+            hasAppProtocol = distHtml.includes('.app.register');
+          }
+        } catch {
+          // No source either — will check for component files below
+        }
       }
       // Read protocol manifest emitted by compiler (dist/protocol.json)
       try {
