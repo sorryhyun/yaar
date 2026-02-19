@@ -164,13 +164,13 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   // Model behavior
   args.push(
     '-c',
-    'model_reasoning_effort = "medium"',
+    'model_reasoning_effort=medium',
     '-c',
-    'model_personality = "none"',
+    'model_personality=none',
     '-c',
-    'sandbox_mode = "danger-full-access"',
+    'sandbox_mode=danger-full-access',
     '-c',
-    'approval_policy = "on-request"',
+    'approval_policy=on-request',
   );
 
   return args;
