@@ -55,7 +55,7 @@ describe('hooks storage', () => {
       'launch',
       {
         type: 'interaction',
-        payload: '<user_interaction:click>app: moltbook</user_interaction:click>',
+        payload: '<ui:click>app: moltbook</ui:click>',
       },
       'Open Moltbook on startup',
     );

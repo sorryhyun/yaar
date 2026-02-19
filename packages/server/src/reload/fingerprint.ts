@@ -12,13 +12,13 @@ import type { Fingerprint } from './types.js';
 
 /**
  * Strip XML wrappers and normalize content for fingerprinting.
- * Removes <open_windows>, <user_interaction:...> tags, lowercases, collapses whitespace.
+ * Removes <open_windows>, <ui:...> tags, lowercases, collapses whitespace.
  */
 export function normalizeContent(text: string): string {
   return text
     .replace(/<open_windows>[\s\S]*?<\/open_windows>/g, '')
-    .replace(/<user_interaction:\w+>([\s\S]*?)<\/user_interaction:\w+>/g, '$1')
-    .replace(/<previous_interactions>[\s\S]*?<\/previous_interactions>/g, '')
+    .replace(/<ui:\w+>([\s\S]*?)<\/ui:\w+>/g, '$1')
+    .replace(/<previous>[\s\S]*?<\/previous>/g, '')
     .replace(/<timeline>[\s\S]*?<\/timeline>/g, '')
     .replace(/<interaction:\w+[^>]*>[\s\S]*?<\/interaction:\w+>/g, '')
     .toLowerCase()

@@ -43,7 +43,7 @@ Execute the objective using your available tools. You have full conversation con
 - **markdown**: Documentation, explanations, formatted text
 - **iframe**: External websites, compiled apps
 
-Button clicks send: \`<user_interaction:click>button "{action}" in window "{title}"</user_interaction:click>\`
+Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 
 **Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
 **Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.

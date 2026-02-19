@@ -21,6 +21,7 @@ import type {
   DesktopUpdateShortcutAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
+import { iframeMessages } from '@/lib/iframeMessageRouter';
 import html2canvas from 'html2canvas';
 
 // Import all slice creators
@@ -285,91 +286,42 @@ function handleAppProtocolRequest(
 export { handleAppProtocolRequest };
 
 /**
- * Listen for `yaar:app-ready` postMessages from iframes that register with the App Protocol.
- * Resolves the iframe source to a windowId and queues an APP_PROTOCOL_READY event.
+ * Register iframe message handlers via the centralized router.
  *
- * Also listens for `yaar:app-interaction` postMessages — app-initiated events that get
- * routed to the window's agent via WINDOW_MESSAGE.
+ * Handles: yaar:app-ready, yaar:app-interaction, yaar:click,
+ * yaar:contextmenu, yaar:drag-start.
  */
-function initAppProtocolListeners() {
-  window.addEventListener('message', (e: MessageEvent) => {
-    if (!e.data?.type) return;
+function initIframeMessageHandlers() {
+  iframeMessages.on('yaar:app-ready', (ctx) => {
+    if (!ctx.source) return;
+    useDesktopStore.getState().addAppProtocolReady(ctx.source.windowId);
+  });
 
-    if (e.data.type === 'yaar:app-ready') {
-      // Find the iframe whose contentWindow matches the message source
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
-      for (const iframe of iframes) {
-        if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
-          const windowId = windowEl?.dataset.windowId;
-          if (windowId) {
-            useDesktopStore.getState().addAppProtocolReady(windowId);
-          }
-          break;
-        }
-      }
-      return;
-    }
+  iframeMessages.on('yaar:app-interaction', (ctx) => {
+    if (!ctx.source) return;
+    const content = ctx.data.content;
+    if (typeof content !== 'string' || !content) return;
+    useDesktopStore.getState().addPendingAppInteraction({
+      windowId: ctx.source.windowId,
+      content,
+    });
+  });
 
-    if (e.data.type === 'yaar:app-interaction') {
-      const content = e.data.content;
-      if (typeof content !== 'string' || !content) return;
+  iframeMessages.on('yaar:click', () => {
+    useDesktopStore.getState().hideContextMenu();
+  });
 
-      // Find the iframe whose contentWindow matches the message source
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
-      for (const iframe of iframes) {
-        if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
-          const windowId = windowEl?.dataset.windowId;
-          if (windowId) {
-            useDesktopStore.getState().addPendingAppInteraction({ windowId, content });
-          }
-          break;
-        }
-      }
-      return;
-    }
+  iframeMessages.on('yaar:contextmenu', (ctx) => {
+    if (!ctx.source) return;
+    const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
+    useDesktopStore.getState().showContextMenu(x, y, ctx.source.windowId);
+  });
 
-    if (e.data.type === 'yaar:click') {
-      useDesktopStore.getState().hideContextMenu();
-      return;
-    }
-
-    if (e.data.type === 'yaar:contextmenu') {
-      // Find the iframe whose contentWindow matches the message source
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
-      for (const iframe of iframes) {
-        if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
-          const windowId = windowEl?.dataset.windowId;
-          if (windowId) {
-            // Convert iframe-local coordinates to parent viewport coordinates
-            const rect = iframe.getBoundingClientRect();
-            const x = rect.left + (e.data.clientX ?? 0);
-            const y = rect.top + (e.data.clientY ?? 0);
-            useDesktopStore.getState().showContextMenu(x, y, windowId);
-          }
-          break;
-        }
-      }
-      return;
-    }
-
-    if (e.data.type === 'yaar:drag-start') {
-      const text = String(e.data.text ?? '').trim();
-      if (!text) return;
-      const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
-      for (const iframe of iframes) {
-        if (iframe.contentWindow === e.source) {
-          const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
-          const windowId = windowEl?.dataset.windowId;
-          if (windowId) {
-            _iframeDragSource = { windowId, text };
-          }
-          break;
-        }
-      }
-    }
+  iframeMessages.on('yaar:drag-start', (ctx) => {
+    if (!ctx.source) return;
+    const text = String(ctx.data.text ?? '').trim();
+    if (!text) return;
+    _iframeDragSource = { windowId: ctx.source.windowId, text };
   });
 }
 
@@ -389,7 +341,7 @@ export function consumeIframeDragSource() {
 }
 
 // Initialize the listeners immediately
-initAppProtocolListeners();
+initIframeMessageHandlers();
 
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({

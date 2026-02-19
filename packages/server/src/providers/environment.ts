@@ -72,7 +72,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   if (!settings.onboardingCompleted) {
     result += `\n\n## Onboarding
 
-The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<user_interaction:click>app: onboarding</user_interaction:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
+The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<ui:click>app: onboarding</ui:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
 1. Welcoming them to YAAR
 2. Briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
 3. Asking their preferred language and calling \`set_config\` with section "settings" to set it if not English

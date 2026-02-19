@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -165,7 +165,7 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
 
 1. **Frontend startup**: Calls `GET /api/apps` to list apps
 2. **Desktop renders**: Shows one icon per non-hidden app folder
-3. **User clicks icon**: Sends `<user_interaction:click>app: {appId}</user_interaction:click>`
+3. **User clicks icon**: Sends `<ui:click>app: {appId}</ui:click>`
 4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
 5. **AI responds**: Uses skill instructions to help user
 

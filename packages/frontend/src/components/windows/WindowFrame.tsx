@@ -153,7 +153,7 @@ function SelectionActionInput({
       useDesktopStore
         .getState()
         .queueGestureMessage(
-          `<user_interaction:${tag}>\n  instruction: "${instruction}"${textPart}\n  source: window "${windowTitle}" (id: ${rawId})\n</user_interaction:${tag}>`,
+          `<ui:${tag}>\n  instruction: "${instruction}"${textPart}\n  source: window "${windowTitle}" (id: ${rawId})\n</ui:${tag}>`,
         );
       onClose();
     },
@@ -290,7 +290,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         useDesktopStore
           .getState()
           .queueGestureMessage(
-            `<user_interaction:drag>app "${appId}" dragged onto window "${window.title}" (id: ${rawId})</user_interaction:drag>`,
+            `<ui:drag>app "${appId}" dragged onto window "${window.title}" (id: ${rawId})</ui:drag>`,
           );
         return;
       }
@@ -305,7 +305,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
         const sourceRawId = getRawWindowId(dragSource.windowId);
         const targetRawId = getRawWindowId(window.id);
         store.queueGestureMessage(
-          `<user_interaction:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</user_interaction:select>\n<user_interaction:drag>\n  target: window "${window.title}" (id: ${targetRawId})\n</user_interaction:drag>`,
+          `<ui:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</ui:select>\n<ui:drag>\n  target: window "${window.title}" (id: ${targetRawId})\n</ui:drag>`,
         );
         return;
       }
@@ -323,7 +323,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
               useDesktopStore
                 .getState()
                 .queueGestureMessage(
-                  `<user_interaction:image_drop>\n${imageLines}\n  source: window "${window.title}" (id: ${rawId})\n</user_interaction:image_drop>`,
+                  `<ui:image_drop>\n${imageLines}\n  source: window "${window.title}" (id: ${rawId})\n</ui:image_drop>`,
                 );
             }
           });

@@ -13,7 +13,7 @@ import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionCon
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import type { DesktopShortcut } from '@yaar/shared';
-import { getRawWindowId } from '@/store/helpers';
+import { useArrowDrag } from '@/hooks/useArrowDrag';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../windows/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -83,18 +83,7 @@ export function DesktopSurface() {
     up: (e: MouseEvent) => void;
   } | null>(null);
 
-  // Right-click arrow drag state
-  const [arrowDrag, setArrowDrag] = useState<{
-    startX: number;
-    startY: number;
-    endX: number;
-    endY: number;
-  } | null>(null);
-  const arrowDragActive = useRef(false);
-  const arrowDragListeners = useRef<{
-    move: (e: MouseEvent) => void;
-    up: (e: MouseEvent) => void;
-  } | null>(null);
+  const { arrowDrag, handleArrowDragStart } = useArrowDrag();
 
   // Clean up selection listeners on unmount
   useEffect(() => {
@@ -102,10 +91,6 @@ export function DesktopSurface() {
       if (selectionListeners.current) {
         document.removeEventListener('mousemove', selectionListeners.current.move);
         document.removeEventListener('mouseup', selectionListeners.current.up);
-      }
-      if (arrowDragListeners.current) {
-        document.removeEventListener('mousemove', arrowDragListeners.current.move);
-        document.removeEventListener('mouseup', arrowDragListeners.current.up);
       }
     };
   }, []);
@@ -238,7 +223,7 @@ export function DesktopSurface() {
     (appId: string) => {
       if (cooldownId === appId) return;
       startCooldown(appId);
-      sendMessage(`<user_interaction:click>app: ${appId}</user_interaction:click>`);
+      sendMessage(`<ui:click>app: ${appId}</ui:click>`);
     },
     [sendMessage, cooldownId, startCooldown],
   );
@@ -248,7 +233,7 @@ export function DesktopSurface() {
       if (cooldownId === shortcut.id) return;
       startCooldown(shortcut.id);
       sendMessage(
-        `<user_interaction:click>shortcut: ${shortcut.id}, type: ${shortcut.type}, target: ${shortcut.target}</user_interaction:click>`,
+        `<ui:click>shortcut: ${shortcut.id}, type: ${shortcut.type}, target: ${shortcut.target}</ui:click>`,
       );
     },
     [sendMessage, cooldownId, startCooldown],
@@ -280,9 +265,7 @@ export function DesktopSurface() {
             const imageLines = paths.map((p) => `  image: ${p}`).join('\n');
             useDesktopStore
               .getState()
-              .queueGestureMessage(
-                `<user_interaction:image_drop>\n${imageLines}\n</user_interaction:image_drop>`,
-              );
+              .queueGestureMessage(`<ui:image_drop>\n${imageLines}\n</ui:image_drop>`);
           }
         });
       }
@@ -294,104 +277,12 @@ export function DesktopSurface() {
             const fileLines = paths.map((p) => `  file: ${p}`).join('\n');
             useDesktopStore
               .getState()
-              .queueGestureMessage(
-                `<user_interaction:file_drop>\n${fileLines}\n</user_interaction:file_drop>`,
-              );
+              .queueGestureMessage(`<ui:file_drop>\n${fileLines}\n</ui:file_drop>`);
           }
         });
       }
     }
   }, []);
-
-  // Describe what's at a given screen point for arrow drag interactions
-  const describePointTarget = useCallback((x: number, y: number): string => {
-    const els = document.elementsFromPoint(x, y);
-    for (const el of els) {
-      if ('arrowOverlay' in ((el as HTMLElement).dataset ?? {})) continue;
-      const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
-      if (winEl) {
-        const wid = winEl.dataset.windowId!;
-        const win = useDesktopStore.getState().windows[wid];
-        const title = win?.title ?? wid;
-        return `window "${title}" (id: ${getRawWindowId(wid)})`;
-      }
-      const appEl = (el as HTMLElement).closest<HTMLElement>('[data-app-id]');
-      if (appEl) return `app "${appEl.dataset.appId}"`;
-      const shortcutEl = (el as HTMLElement).closest<HTMLElement>('[data-shortcut-id]');
-      if (shortcutEl) return `shortcut "${shortcutEl.dataset.shortcutId}"`;
-    }
-    return `desktop (${Math.round(x)}, ${Math.round(y)})`;
-  }, []);
-
-  // Right-click arrow drag handler (captures from anywhere including windows)
-  const handleArrowDragStart = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.button !== 2) return;
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      arrowDragActive.current = false;
-
-      // Full-screen overlay to capture all mouse events during drag,
-      // preventing iframes, buttons, and text from intercepting them.
-      const overlay = document.createElement('div');
-      overlay.dataset.arrowOverlay = '';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:99997;';
-      document.body.appendChild(overlay);
-
-      const DRAG_THRESHOLD = 5;
-
-      const handleMouseMove = (ev: MouseEvent) => {
-        const dx = ev.clientX - startX;
-        const dy = ev.clientY - startY;
-        if (
-          !arrowDragActive.current &&
-          Math.abs(dx) < DRAG_THRESHOLD &&
-          Math.abs(dy) < DRAG_THRESHOLD
-        )
-          return;
-        arrowDragActive.current = true;
-        setArrowDrag({ startX, startY, endX: ev.clientX, endY: ev.clientY });
-      };
-
-      const handleMouseUp = (ev: MouseEvent) => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        arrowDragListeners.current = null;
-        overlay.remove();
-
-        if (arrowDragActive.current) {
-          const from = describePointTarget(startX, startY);
-          const to = describePointTarget(ev.clientX, ev.clientY);
-          useDesktopStore
-            .getState()
-            .queueGestureMessage(
-              `<user_interaction:drag>\n  from: ${from}\n  to: ${to}\n</user_interaction:drag>`,
-            );
-          setArrowDrag(null);
-          // Suppress the context menu that would fire after right-button mouseup
-          document.addEventListener(
-            'contextmenu',
-            (cm) => {
-              cm.preventDefault();
-              cm.stopPropagation();
-            },
-            { capture: true, once: true },
-          );
-        }
-        arrowDragActive.current = false;
-      };
-
-      if (arrowDragListeners.current) {
-        document.removeEventListener('mousemove', arrowDragListeners.current.move);
-        document.removeEventListener('mouseup', arrowDragListeners.current.up);
-      }
-      arrowDragListeners.current = { move: handleMouseMove, up: handleMouseUp };
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [describePointTarget],
-  );
 
   const handleDesktopMouseDown = useCallback(
     (e: React.MouseEvent) => {

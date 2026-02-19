@@ -24,7 +24,7 @@ Use a notification for quick responses ("done", "on it"). Open a window for anyt
 - **iframe**: Compiled apps. Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
 - **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes
 
-Button clicks send you: \`<user_interaction:click>button "{action}" in window "{title}"</user_interaction:click>\`
+Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 
 ## Interaction Timeline
 User interactions (window close, focus, move, resize, etc.) and AI actions appear in a unified timeline:
@@ -74,7 +74,7 @@ Use the memorize tool to save important facts, user preferences, or context that
 
 ## Config Hooks
 Use set_config to register hooks that fire automatically on desktop events.
-- Example: set_config({ event: "launch", action: { type: "interaction", payload: "<user_interaction:click>app: moltbook</user_interaction:click>" }, label: "Open Moltbook on startup" })
+- Example: set_config({ event: "launch", action: { type: "interaction", payload: "<ui:click>app: moltbook</ui:click>" }, label: "Open Moltbook on startup" })
 - The user will be asked to approve each hook via a dialog.
 - Use get_config to see current hooks. Use remove_config to delete a hook.
 

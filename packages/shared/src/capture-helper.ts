@@ -348,6 +348,43 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
   if (window.__yaarContextMenuInstalled) return;
   window.__yaarContextMenuInstalled = true;
 
+  // Right-click arrow drag forwarding — the parent uses mousedown/mousemove/mouseup
+  // with button 2 to draw arrows between windows, but those events don't cross
+  // iframe boundaries. Forward them via postMessage so the parent can drive the drag.
+  var rightDragging = false;
+  var rightDragMoved = false;
+
+  document.addEventListener('mousedown', function(e) {
+    if (e.button !== 2) return;
+    rightDragging = true;
+    rightDragMoved = false;
+    window.parent.postMessage({
+      type: 'yaar:arrow-drag-start',
+      clientX: e.clientX,
+      clientY: e.clientY
+    }, '*');
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!rightDragging) return;
+    rightDragMoved = true;
+    window.parent.postMessage({
+      type: 'yaar:arrow-drag-move',
+      clientX: e.clientX,
+      clientY: e.clientY
+    }, '*');
+  });
+
+  document.addEventListener('mouseup', function(e) {
+    if (!rightDragging) return;
+    rightDragging = false;
+    window.parent.postMessage({
+      type: 'yaar:arrow-drag-end',
+      clientX: e.clientX,
+      clientY: e.clientY
+    }, '*');
+  });
+
   // Left click — notify parent so it can dismiss context menu, etc.
   document.addEventListener('click', function() {
     window.parent.postMessage({ type: 'yaar:click' }, '*');
@@ -355,6 +392,12 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
 
   document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
+    // After a right-click drag, suppress the context menu forwarding —
+    // the parent already processed the drag gesture.
+    if (rightDragMoved) {
+      rightDragMoved = false;
+      return;
+    }
     var selectedText = '';
     try {
       selectedText = (window.getSelection() || '').toString().trim();

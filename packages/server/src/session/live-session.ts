@@ -321,7 +321,7 @@ export class LiveSession {
           ? `in window "${event.windowTitle}"`
           : `in window ${event.windowId}`;
 
-        let content = `<user_interaction:click>button "${event.action}" ${windowContext}</user_interaction:click>`;
+        let content = `<ui:click>button "${event.action}" ${windowContext}</ui:click>`;
 
         if (event.componentPath && event.componentPath.length > 0) {
           content += `\nComponent path: ${event.componentPath.join(' → ')}`;
