@@ -1,0 +1,6 @@
+{
+  "name": "Self Inspection",
+  "description": "Deep diagnostic suite — tests health, App Protocol, dev pipeline, cross-app data flow, and concurrent subsystems",
+  "icon": "🔬",
+  "hidden": false
+}

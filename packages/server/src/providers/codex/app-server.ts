@@ -128,9 +128,14 @@ export class AppServer {
     }
 
     const codexBin = getCodexBin();
+    // shell: true only on Windows (needed for PATH resolution).
+    // On Linux/macOS, direct spawn ensures SIGTERM reaches the codex process
+    // instead of only reaching an intermediate /bin/sh wrapper (which caused
+    // orphaned codex processes on server restart).
+    const isWindows = process.platform === 'win32';
     this.process = spawn(codexBin, args, {
       cwd: this.tempDir ?? undefined,
-      shell: true,
+      shell: isWindows,
       stdio: ['ignore', 'ignore', 'pipe'],
       env: {
         ...process.env,

@@ -141,10 +141,28 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
     // CSP blocks happen before this, X-Frame-Options might show error page
     // Check reportedRef to avoid reporting success after an error was already reported
     if (loadState === 'loading' && !reportedRef.current) {
+      // For same-origin iframes, detect HTTP error responses (404, 500, etc.)
+      // The server returns JSON like {"error":"File not found"} for errors
+      const iframe = iframeRef.current;
+      if (iframe && isSameOrigin(url)) {
+        try {
+          const doc = iframe.contentDocument;
+          const body = doc?.body?.textContent?.trim();
+          if (body) {
+            const parsed = JSON.parse(body);
+            if (parsed && typeof parsed.error === 'string') {
+              reportError(parsed.error);
+              return;
+            }
+          }
+        } catch {
+          // Not JSON or cross-origin — continue normally
+        }
+      }
+
       setLoadState('loaded');
 
       // Inject capture helper into same-origin iframes (non-compiler-generated ones)
-      const iframe = iframeRef.current;
       if (iframe) {
         try {
           const doc = iframe.contentDocument;

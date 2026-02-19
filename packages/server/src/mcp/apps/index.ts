@@ -61,7 +61,7 @@ export function registerAppsTools(server: McpServer): void {
     'load_skill',
     {
       description:
-        'Load the SKILL.md file for a specific app. This contains instructions on how to use the app, including API endpoints, authentication, and available actions.',
+        'Load the SKILL.md file for a specific app. This contains instructions on how to use the app, including API endpoints, authentication, and available actions. If an app fails to open (e.g. iframe 404), try loading its skill — some apps are pure-skill with no static files.',
       inputSchema: {
         appId: z.string().describe('The app ID (folder name in apps/)'),
       },

@@ -98,8 +98,12 @@ export function registerCreateTools(server: McpServer): void {
         const feedback = await actionEmitter.emitActionWithFeedback(osAction, 2000);
 
         if (feedback && !feedback.success) {
+          const isNotFound = feedback.error?.toLowerCase().includes('not found');
+          const hint = isNotFound
+            ? ' If this is an app, use load_skill to learn how to use it.'
+            : ' The site likely blocks embedding.';
           return error(
-            `Failed to embed iframe in window "${args.windowId}": ${feedback.error}. The site likely blocks embedding.`,
+            `Failed to embed iframe in window "${args.windowId}": ${feedback.error}.${hint}`,
           );
         }
 
