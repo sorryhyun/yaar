@@ -35,14 +35,6 @@ jobs:
       - name: Build Windows executables
         run: pnpm build:exe:bundle
 
-      - name: Download Codex CLI (Windows)
-        run: |
-          gh release download --repo openai/codex \
-            --pattern 'codex-x86_64-pc-windows-msvc.exe' \
-            --dir dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build Linux executables
         run: |
           pnpm build:exe:bundle:linux
@@ -66,7 +58,6 @@ jobs:
             dist/yaar-codex.exe \
             dist/yaar-dev-claude.exe \
             dist/yaar-dev-codex.exe \
-            dist/codex-x86_64-pc-windows-msvc.exe \
             dist/yaar-claude-linux \
             dist/yaar-codex-linux \
             dist/yaar-dev-claude-linux \

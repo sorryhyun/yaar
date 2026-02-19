@@ -51,4 +51,3 @@ apps/*/credentials.json
 !.claude/agents/
 !.claude/settings.json
 !.claude/agent-memory/
-bundled/codex-x86_64-pc-windows-msvc.exe

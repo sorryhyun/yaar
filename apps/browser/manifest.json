@@ -1,8 +1,8 @@
 {
   "id": "browser",
   "name": "Browser",
-  "icon": "🌐",
-  "description": "Visible browser automation tool showing live screenshots via Chrome DevTools Protocol.",
+  "icon": "🎮",
+  "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
   "version": "1.0.0",
   "author": "YAAR"
 }

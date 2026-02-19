@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js_≥24-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Bun](https://img.shields.io/badge/Bun_≥1.1-F9F1E1?logo=bun&logoColor=black)](https://bun.sh/)
 [![MCP](https://img.shields.io/badge/MCP-F26922?logo=anthropic&logoColor=white)](https://modelcontextprotocol.io/)
 [![Claude Agent SDK](https://img.shields.io/badge/Claude_Agent_SDK-D97757?logo=anthropic&logoColor=white)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -58,13 +58,13 @@ AI는 **UI를 직접 생성**하여 응답합니다.
 
 Codex 혹은 Claude Code 사용자 인증이 필수입니다. 이게 없다면 본 프로그램은 사용할 수 없습니다.
 
-윈도우 유저의 경우 [윈도우 코덱스](https://github.com/openai/codex/releases/download/rust-v0.101.0/codex-x86_64-pc-windows-msvc.exe)를 설치하고, 릴리즈 탭에서 `yaar-codex.exe`를 설치해주세요. 
+윈도우 유저의 경우 [Codex CLI](https://github.com/openai/codex)를 설치한 뒤, 릴리즈 탭에서 `yaar-codex.exe`를 다운받아 실행하세요.
 
 스마트스크린 이슈가 뜰텐데 이건 제가 유료 인증을 해야하는거라 양해 부탁드립니다. 실행하면 바로 브라우저 창이 뜨는데, 먼저 '필수 앱 설치해줘' 같은 말로 시작하시면 됩니다.
 
 앱을 개발하고 싶은 윈도우 유저의 경우 `yaar-dev-codex.exe`를 설치하고 `bundled-libs.zip`을 설치해서 실행파일이 있는 곳에 파일 압축을 해제해주세요. `Node.exe` 설치를 최대한 막으려고 개발 킷을 모두 js로 변환해놨습니다.
 
-그 외 유저의 경우 본 레포지토리를 clone한 뒤 node 24, pnpm을 설치한 다음, `pnpm install` 및 `make codex-types`로 설치를 진행하면 `make dev`를 통해 실행이 가능합니다. 윈도우보다 안정된 환경에서 사용하실 수 있습니다.
+그 외 유저의 경우 본 레포지토리를 clone한 뒤 [Bun](https://bun.sh/)과 pnpm을 설치한 다음, `pnpm install` 및 `make codex-types`로 설치를 진행하면 `make dev`를 통해 실행이 가능합니다. 윈도우보다 안정된 환경에서 사용하실 수 있습니다.
 
 
 ## 보안

@@ -1,7 +1,7 @@
 {
-  "icon": "🌐",
+  "icon": "🎮",
   "name": "Browser",
-  "description": "Visible browser automation tool showing live screenshots via Chrome DevTools Protocol.",
+  "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
   "hidden": true,
   "appProtocol": true
 }

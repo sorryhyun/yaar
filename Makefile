@@ -1,11 +1,7 @@
 .PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared codex-types
 
-# Codex CLI binary (auto-detected; override with: make codex-types CODEX_BIN=./my-codex)
-ifeq ($(OS),Windows_NT)
-  CODEX_BIN ?= bundled/codex-x86_64-pc-windows-msvc.exe
-else
-  CODEX_BIN ?= codex
-endif
+# Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
+CODEX_BIN ?= codex
 
 # Run both server and frontend (auto-select provider)
 dev:

@@ -2,7 +2,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js_≥24-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Bun](https://img.shields.io/badge/Bun_≥1.1-F9F1E1?logo=bun&logoColor=black)](https://bun.sh/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![Zustand](https://img.shields.io/badge/Zustand-433E38?logo=react&logoColor=white)](https://zustand.docs.pmnd.rs/)
 [![Zod](https://img.shields.io/badge/Zod_v4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
@@ -55,11 +55,11 @@ See the [App Development Guide](./docs/app-development.md) for details.
 
 Codex or Claude Code user authentication is required. The program cannot be used without it.
 
-For Windows users, install [Windows Codex](https://github.com/openai/codex/releases/download/rust-v0.101.0/codex-x86_64-pc-windows-msvc.exe) and download `yaar-codex.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
+For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar-codex.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
 
 For Windows users who want to develop apps, install `yaar-dev-codex.exe` and download `bundled-libs.zip`, then extract it to the same location as the executable. The development kit has been converted entirely to JS to avoid requiring a `Node.exe` installation.
 
-For other users, clone this repository, install Node 24 and pnpm, then run `pnpm install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
+For other users, clone this repository, install [Bun](https://bun.sh/) and pnpm, then run `pnpm install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
 
 
 ## Security
