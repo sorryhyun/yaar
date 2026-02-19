@@ -8,10 +8,10 @@ import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
-import { extractProtocolFromHtml } from '../../lib/compiler/extract-protocol.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
 import { componentLayoutSchema } from '@yaar/shared';
+import type { AppManifest } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd, regenerateSkillMd } from './helpers.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
@@ -106,7 +106,7 @@ export function registerDeployTools(server: McpServer): void {
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
       let hasCompiledApp = false;
       let hasAppProtocol = explicitAppProtocol ?? false;
-      let extractedProtocol: ReturnType<typeof extractProtocolFromHtml> = null;
+      let extractedProtocol: Pick<AppManifest, 'state' | 'commands'> | null = null;
       try {
         const distHtml = await readFile(distIndexPath, 'utf-8');
         hasCompiledApp = true;
@@ -114,12 +114,15 @@ export function registerDeployTools(server: McpServer): void {
         if (explicitAppProtocol === undefined) {
           hasAppProtocol = distHtml.includes('.app.register');
         }
-        // Extract protocol manifest from compiled code (best-effort)
-        if (hasAppProtocol || explicitAppProtocol) {
-          extractedProtocol = extractProtocolFromHtml(distHtml);
-        }
       } catch {
         // No compiled output
+      }
+      // Read protocol manifest emitted by compiler (dist/protocol.json)
+      try {
+        const protocolJson = await readFile(join(sandboxPath, 'dist', 'protocol.json'), 'utf-8');
+        extractedProtocol = JSON.parse(protocolJson);
+      } catch {
+        // No protocol extracted — app may not use App Protocol
       }
 
       // Scan for component files early to validate we have something to deploy

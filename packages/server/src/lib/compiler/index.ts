@@ -5,10 +5,11 @@
  * Uses Bun.build() and Bun.Transpiler for compilation.
  */
 
-import { writeFile, mkdir, stat, unlink } from 'fs/promises';
+import { readFile, writeFile, mkdir, stat, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
 import { execFile } from 'child_process';
 import { bundledLibraryPluginBun } from './plugins.js';
+import { extractProtocolFromSource } from './extract-protocol.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
 import {
   IFRAME_CAPTURE_HELPER_SCRIPT,
@@ -165,6 +166,17 @@ export async function compileTypeScript(
 
     // Write to dist/index.html
     await writeFile(outputPath, htmlContent, 'utf-8');
+
+    // Extract app protocol manifest from source (best-effort)
+    try {
+      const sourceCode = await readFile(entryPoint, 'utf-8');
+      const protocol = extractProtocolFromSource(sourceCode);
+      if (protocol) {
+        await writeFile(join(distDir, 'protocol.json'), JSON.stringify(protocol, null, 2), 'utf-8');
+      }
+    } catch {
+      // Non-fatal — protocol discovery just won't be available
+    }
 
     return {
       success: true,

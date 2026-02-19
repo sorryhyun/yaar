@@ -1,261 +1,226 @@
 /**
- * Extract App Protocol manifest from compiled HTML.
+ * Extract App Protocol manifest from TypeScript source.
  *
- * Runs the bundled app script in a sandboxed VM with DOM stubs,
- * intercepts the `window.yaar.app.register()` call, and returns
- * the state/command descriptors (without handler functions).
+ * Parses the `register({...})` call in app source code using brace matching
+ * and regex extraction. Works on human-written TypeScript (not minified code).
  *
  * Best-effort: returns null if extraction fails for any reason.
  */
 
-import vm from 'node:vm';
 import type { AppManifest } from '@yaar/shared';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands'>;
 
 /**
- * Create a recursive no-op Proxy that absorbs any property access,
- * function call, or construction without throwing.
+ * Find the matching closing brace for an opening brace at `start`.
+ * Handles nested braces, string literals (single, double, template), and comments.
+ * Returns the index of the closing brace, or -1 if not found.
  */
-function createDomStub(): unknown {
-  const handler: ProxyHandler<CallableFunction> = {
-    get: (_target, prop) => {
-      // Prevent being treated as a Promise/thenable
-      if (prop === 'then') return undefined;
-      if (prop === Symbol.toPrimitive) return () => 0;
-      if (prop === Symbol.iterator) return undefined;
-      if (prop === 'length') return 0;
-      if (prop === 'toString') return () => '';
-      if (prop === 'valueOf') return () => 0;
-      return createDomStub();
-    },
-    set: () => true,
-    apply: () => createDomStub(),
-    construct: () => createDomStub() as object,
-    has: () => true,
-    deleteProperty: () => true,
-    ownKeys: () => [],
-    getOwnPropertyDescriptor: () => ({ configurable: true, enumerable: true, value: undefined }),
-  };
-  return new Proxy(function () {}, handler);
+function findMatchingBrace(source: string, start: number): number {
+  let depth = 0;
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i];
+
+    // Skip string literals
+    if (ch === "'" || ch === '"' || ch === '`') {
+      i = skipString(source, i);
+      if (i === -1) return -1;
+      continue;
+    }
+
+    // Skip line comments
+    if (ch === '/' && source[i + 1] === '/') {
+      i = source.indexOf('\n', i);
+      if (i === -1) return -1;
+      continue;
+    }
+
+    // Skip block comments
+    if (ch === '/' && source[i + 1] === '*') {
+      i = source.indexOf('*/', i + 2);
+      if (i === -1) return -1;
+      i++; // skip past '/'
+      continue;
+    }
+
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    else if (ch === '}' || ch === ')' || ch === ']') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Skip past a string literal starting at `start`. Returns index of closing quote. */
+function skipString(source: string, start: number): number {
+  const quote = source[start];
+  for (let i = start + 1; i < source.length; i++) {
+    if (source[i] === '\\') {
+      i++; // skip escaped char
+      continue;
+    }
+    if (quote === '`' && source[i] === '$' && source[i + 1] === '{') {
+      // Template literal interpolation — find matching }
+      i = findMatchingBrace(source, i + 1);
+      if (i === -1) return -1;
+      continue;
+    }
+    if (source[i] === quote) return i;
+  }
+  return -1;
 }
 
 /**
- * Extract app protocol manifest from compiled HTML content.
- * Returns null if no protocol is found or extraction fails.
+ * Extract the content of a brace-delimited block starting at `start`.
+ * `start` should point to the opening `{`.
+ * Returns the inner content (without outer braces), or null.
  */
-export function extractProtocolFromHtml(html: string): Protocol | null {
-  // Extract the app script (type="module" in body, after SDK scripts in head)
-  const match = html.match(/<script type="module">\n?([\s\S]*?)\n?<\/script>/);
-  if (!match) return null;
+function extractBlock(source: string, start: number): string | null {
+  if (source[start] !== '{') return null;
+  const end = findMatchingBrace(source, start);
+  if (end === -1) return null;
+  return source.slice(start + 1, end);
+}
 
-  // Strip ESM syntax that vm.Script can't handle
-  let script = match[1];
-  script = script.replace(/\bexport\s*\{[^}]*\}/g, '');
-  script = script.replace(/\bexport\s+default\b/g, 'var __default =');
-  // Replace import.meta references (common in bundled ESM)
-  script = script.replace(/\bimport\.meta\.url\b/g, '"about:blank"');
-  script = script.replace(/\bimport\.meta/g, '({})');
+/**
+ * Find a top-level property in an object literal body.
+ * Returns the value block content for `propName: { ... }`, or null.
+ */
+function findPropertyBlock(body: string, propName: string): string | null {
+  // Match propName followed by : and {
+  const pattern = new RegExp(`\\b${propName}\\s*:\\s*\\{`);
+  const match = body.match(pattern);
+  if (!match || match.index === undefined) return null;
+  const braceStart = body.indexOf('{', match.index + propName.length);
+  return extractBlock(body, braceStart);
+}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let captured: any = null;
-  const domStub = createDomStub();
+/**
+ * Extract a string value for a property like `description: 'some text'`.
+ */
+function extractStringProp(body: string, propName: string): string | null {
+  const pattern = new RegExp(`\\b${propName}\\s*:\\s*(['"\`])`);
+  const match = body.match(pattern);
+  if (!match || match.index === undefined) return null;
+  const quote = match[1];
+  const strStart = body.indexOf(quote, match.index + propName.length);
+  const strEnd = skipString(body, strStart);
+  if (strEnd === -1) return null;
+  return body.slice(strStart + 1, strEnd);
+}
 
-  const context = vm.createContext({
-    // Core: the register trap
-    window: new Proxy({} as Record<string, unknown>, {
-      get: (_target, prop) => {
-        if (prop === 'yaar')
-          return {
-            app: {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              register: (config: any) => {
-                captured = config;
-              },
-              sendInteraction: () => {},
-            },
-          };
-        if (prop === 'addEventListener' || prop === 'removeEventListener') return () => {};
-        if (prop === 'parent') return { postMessage: () => {} };
-        if (prop === 'location') return { href: '', origin: '', pathname: '/', search: '' };
-        if (prop === 'innerWidth') return 800;
-        if (prop === 'innerHeight') return 600;
-        if (prop === 'devicePixelRatio') return 1;
-        if (prop === 'requestAnimationFrame') return () => 0;
-        if (prop === 'cancelAnimationFrame') return () => {};
-        if (prop === 'setTimeout') return () => 0;
-        if (prop === 'clearTimeout') return () => {};
-        if (prop === 'setInterval') return () => 0;
-        if (prop === 'clearInterval') return () => {};
-        if (prop === 'getComputedStyle') return () => domStub;
-        if (prop === 'matchMedia')
-          return () => ({ matches: false, addEventListener: () => {}, addListener: () => {} });
-        return domStub;
-      },
-      set: () => true,
-      has: () => true,
-    }),
+/**
+ * Extract a JSON-like object value for a property like `params: { type: 'object', ... }`.
+ * Returns the parsed object, or null.
+ */
+function extractObjectProp(body: string, propName: string): object | null {
+  const pattern = new RegExp(`\\b${propName}\\s*:\\s*\\{`);
+  const match = body.match(pattern);
+  if (!match || match.index === undefined) return null;
+  const braceStart = body.indexOf('{', match.index + propName.length);
+  const end = findMatchingBrace(body, braceStart);
+  if (end === -1) return null;
 
-    // Browser globals (all point to stubs)
-    document: domStub,
-    self: domStub,
-    navigator: { userAgent: '', clipboard: domStub, language: 'en' },
-    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
-    sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
-    performance: { now: () => 0, mark: () => {}, measure: () => {} },
-    queueMicrotask: () => {},
-
-    // Timers (no-op, don't execute callbacks)
-    setTimeout: () => 0,
-    clearTimeout: () => {},
-    setInterval: () => 0,
-    clearInterval: () => {},
-    requestAnimationFrame: () => 0,
-    cancelAnimationFrame: () => {},
-
-    // Constructors
-    Image: class {
-      width = 0;
-      height = 0;
-    },
-    MutationObserver: class {
-      observe() {}
-      disconnect() {}
-    },
-    ResizeObserver: class {
-      observe() {}
-      disconnect() {}
-      unobserve() {}
-    },
-    IntersectionObserver: class {
-      observe() {}
-      disconnect() {}
-      unobserve() {}
-    },
-     
-    CustomEvent: class {},
-     
-    Event: class {},
-    DOMParser: class {
-      parseFromString() {
-        return domStub;
-      }
-    },
-    WebSocket: class {
-      send() {}
-      close() {}
-    },
-    AudioContext: class {
-      createOscillator() {
-        return domStub;
-      }
-      createGain() {
-        return domStub;
-      }
-    },
-     
-    Blob: class {},
-    FileReader: class {
-      readAsDataURL() {}
-    },
-
-    // JS builtins (needed since vm context doesn't inherit them)
-    console: { log: () => {}, info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
-    JSON,
-    Object,
-    Array,
-    String,
-    Number,
-    Boolean,
-    Symbol,
-    BigInt,
-    Map,
-    Set,
-    WeakMap,
-    WeakSet,
-    Promise,
-    RegExp,
-    Proxy,
-    Reflect,
-    Error,
-    TypeError,
-    RangeError,
-    ReferenceError,
-    Date,
-    Math,
-    URL,
-    URLSearchParams,
-    TextEncoder,
-    TextDecoder,
-    Headers,
-    Request,
-    Response,
-    ArrayBuffer,
-    DataView,
-    Uint8Array,
-    Int8Array,
-    Float32Array,
-    Float64Array,
-    parseInt,
-    parseFloat,
-    isNaN,
-    isFinite,
-    encodeURI,
-    decodeURI,
-    encodeURIComponent,
-    decodeURIComponent,
-    atob,
-    btoa,
-    structuredClone,
-    fetch: () => Promise.resolve(domStub),
-    crypto: {
-      randomUUID: () => '00000000-0000-0000-0000-000000000000',
-      getRandomValues: (a: unknown) => a,
-    },
-    undefined,
-    NaN,
-    Infinity,
-  });
-
+  let raw = body.slice(braceStart, end + 1);
+  // Clean up for JSON parsing: add quotes to unquoted keys, replace single quotes
   try {
-    const vmScript = new vm.Script(script, { filename: 'protocol-extract.js' });
-    vmScript.runInContext(context, { timeout: 3000 });
+    // Try direct JSON parse first
+    return JSON.parse(raw);
   } catch {
-    // Ignore — we just want whatever register() captured before the error
-  }
-
-  if (!captured) return null;
-
-  // Build protocol from captured config (strip handler functions, keep metadata)
-  const protocol: Protocol = { state: {}, commands: {} };
-
-  if (captured.state && typeof captured.state === 'object') {
-    for (const [key, val] of Object.entries(captured.state)) {
-      if (key === 'manifest') continue; // Built-in, skip
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const v = val as any;
-      if (v && typeof v.description === 'string') {
-        protocol.state[key] = { description: v.description };
-        if (v.schema) protocol.state[key].schema = v.schema;
-      }
+    // Normalize to valid JSON: quote unquoted keys, replace single quotes
+    raw = raw
+      .replace(/\/\/[^\n]*/g, '') // strip line comments
+      .replace(/,\s*([}\]])/g, '$1') // strip trailing commas
+      .replace(/(\{|,)\s*(\w+)\s*:/g, '$1"$2":') // quote unquoted keys
+      .replace(/'/g, '"'); // single → double quotes
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
     }
   }
+}
 
-  if (captured.commands && typeof captured.commands === 'object') {
-    for (const [key, val] of Object.entries(captured.commands)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const v = val as any;
-      if (v && typeof v.description === 'string') {
-        protocol.commands[key] = { description: v.description };
-        if (v.params) protocol.commands[key].params = v.params;
-        if (v.returns) protocol.commands[key].returns = v.returns;
+/**
+ * Parse top-level keys from an object body, extracting each key's block.
+ * Yields [keyName, blockContent] pairs for keys whose value is `{ ... }`.
+ */
+function* iterateTopLevelKeys(body: string): Generator<[string, string]> {
+  // Match key: { at the top level of the body
+  let pos = 0;
+  while (pos < body.length) {
+    // Skip whitespace and commas
+    const keyMatch = body.slice(pos).match(/^\s*,?\s*(\w+)\s*:\s*\{/);
+    if (!keyMatch || keyMatch.index === undefined) break;
+
+    const keyName = keyMatch[1];
+    const bracePos = pos + keyMatch.index + keyMatch[0].length - 1; // points to {
+    const blockContent = extractBlock(body, bracePos);
+    if (blockContent === null) break;
+
+    yield [keyName, blockContent];
+
+    // Move past this block
+    const endBrace = findMatchingBrace(body, bracePos);
+    pos = endBrace + 1;
+  }
+}
+
+/**
+ * Extract app protocol from TypeScript source code.
+ * Looks for `.register({...})` and extracts state/command descriptors.
+ */
+export function extractProtocolFromSource(source: string): Protocol | null {
+  try {
+    // Find the register call: .register({ or register({
+    const registerMatch = source.match(/\.register\s*\(\s*\{/);
+    if (!registerMatch || registerMatch.index === undefined) return null;
+
+    // Find the opening brace of the config object
+    const configStart = source.indexOf('{', registerMatch.index);
+    const configBody = extractBlock(source, configStart);
+    if (!configBody) return null;
+
+    // Extract state and commands sections
+    const stateBody = findPropertyBlock(configBody, 'state');
+    const commandsBody = findPropertyBlock(configBody, 'commands');
+
+    const protocol: Protocol = { state: {}, commands: {} };
+
+    // Parse state descriptors
+    if (stateBody) {
+      for (const [key, block] of iterateTopLevelKeys(stateBody)) {
+        if (key === 'manifest') continue; // Built-in, skip
+        const description = extractStringProp(block, 'description');
+        if (description) {
+          protocol.state[key] = { description };
+          const schema = extractObjectProp(block, 'schema');
+          if (schema) protocol.state[key].schema = schema;
+        }
       }
     }
-  }
 
-  if (Object.keys(protocol.state).length === 0 && Object.keys(protocol.commands).length === 0) {
+    // Parse command descriptors
+    if (commandsBody) {
+      for (const [key, block] of iterateTopLevelKeys(commandsBody)) {
+        const description = extractStringProp(block, 'description');
+        if (description) {
+          protocol.commands[key] = { description };
+          const params = extractObjectProp(block, 'params');
+          if (params) protocol.commands[key].params = params;
+          const returns = extractObjectProp(block, 'returns');
+          if (returns) protocol.commands[key].returns = returns;
+        }
+      }
+    }
+
+    if (Object.keys(protocol.state).length === 0 && Object.keys(protocol.commands).length === 0) {
+      return null;
+    }
+
+    return protocol;
+  } catch {
     return null;
   }
-
-  return protocol;
 }
