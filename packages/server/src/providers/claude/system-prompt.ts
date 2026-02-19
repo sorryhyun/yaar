@@ -59,6 +59,9 @@ For heavier work (HTTP requests, code execution, complex UI, app interactions), 
 - Choose a profile: "web" (API+display), "code" (sandbox), "app" (apps), "default" (all tools)
 - For independent sub-tasks, dispatch multiple tasks in parallel
 
+## Background Apps
+Iframe apps with app protocol stay alive even when minimized. You can open an app minimized (minimized: true) to do background work via app_query/app_command while the user interacts with other windows.
+
 ## Handle Directly
 Lightweight operations — do these yourself:
 - Greetings, conversation → notification, or open a window if the user wants to talk
