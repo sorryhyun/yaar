@@ -1,5 +1,141 @@
 {
   "icon": "🖼️",
   "name": "Image Viewer",
-  "description": "View images from storage or files with grid/single layouts and fit-to-window single view."
+  "description": "View images from storage or files with grid/single layouts and fit-to-window single view.",
+  "protocol": {
+    "state": {
+      "images": {
+        "description": "List of loaded images"
+      },
+      "selectedIds": {
+        "description": "Currently selected image IDs"
+      },
+      "layout": {
+        "description": "Current layout mode and columns"
+      }
+    },
+    "commands": {
+      "setImages": {
+        "description": "Replace images with a new set. Accepts URL/dataUrl/path+url.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "dataUrl": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": ["images"]
+        }
+      },
+      "addImages": {
+        "description": "Append multiple images in one call.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "dataUrl": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": ["images"]
+        }
+      },
+      "openStoragePaths": {
+        "description": "Load multiple storage file paths at once.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "replace": {
+              "type": "boolean"
+            }
+          },
+          "required": ["paths"]
+        }
+      },
+      "loadStorageAll": {
+        "description": "Load all image files from storage root.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "setLayout": {
+        "description": "Set viewer layout mode and columns.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["single", "grid"]
+            },
+            "columns": {
+              "type": "number"
+            }
+          },
+          "required": ["mode"]
+        }
+      },
+      "selectImages": {
+        "description": "Select images by IDs.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "required": ["ids"]
+        }
+      },
+      "clear": {
+        "description": "Clear all loaded images.",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
 }

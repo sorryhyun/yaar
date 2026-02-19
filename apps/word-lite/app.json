@@ -1,5 +1,91 @@
 {
   "icon": "📝",
   "name": "Word Lite",
-  "description": "Simple rich text editor with title-aware draft save and txt/html/docx export."
+  "description": "Simple rich text editor with title-aware draft save and txt/html/docx export.",
+  "protocol": {
+    "state": {
+      "html": {
+        "description": "Current document HTML content"
+      },
+      "text": {
+        "description": "Current document plain text content"
+      },
+      "stats": {
+        "description": "Current text stats as { words, chars }"
+      },
+      "title": {
+        "description": "Current document title"
+      },
+      "saveState": {
+        "description": "Current save status label"
+      }
+    },
+    "commands": {
+      "setHtml": {
+        "description": "Replace document with HTML. Params: { html: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "html": {
+              "type": "string"
+            }
+          },
+          "required": ["html"]
+        }
+      },
+      "setTitle": {
+        "description": "Update document title. Params: { title: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": ["title"]
+        }
+      },
+      "setText": {
+        "description": "Replace document with plain text. Params: { text: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": ["text"]
+        }
+      },
+      "appendText": {
+        "description": "Append plain text to the document. Params: { text: string, newline?: boolean }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "newline": {
+              "type": "boolean"
+            }
+          },
+          "required": ["text"]
+        }
+      },
+      "newDocument": {
+        "description": "Clear current document to a blank paragraph. Params: {}",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "saveDraft": {
+        "description": "Save current document to local draft storage. Params: {}",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
 }

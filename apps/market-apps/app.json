@@ -1,6 +1,94 @@
 {
   "icon": "🛒",
   "name": "Market Apps",
-  "description": "Browse/install marketplace apps",
-  "appProtocol": true
+  "description": "Browse and install apps from marketplace",
+  "appProtocol": true,
+  "protocol": {
+    "state": {
+      "marketApps": {
+        "description": "Current marketplace app list"
+      },
+      "installedApps": {
+        "description": "Current installed app list"
+      },
+      "status": {
+        "description": "Status line text"
+      },
+      "lastUpdated": {
+        "description": "Last updated local timestamp"
+      },
+      "domain": {
+        "description": "Configured marketplace domain"
+      },
+      "loading": {
+        "description": "Whether network request is in progress"
+      }
+    },
+    "commands": {
+      "setDomain": {
+        "description": "Set marketplace API domain (e.g. https://example.com)",
+        "params": {
+          "type": "object",
+          "properties": {
+            "domain": {
+              "type": "string"
+            },
+            "autoRefresh": {
+              "type": "boolean"
+            }
+          },
+          "required": ["domain"]
+        }
+      },
+      "refresh": {
+        "description": "Fetch data from configured domain",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "setData": {
+        "description": "Set marketplace and installed data manually",
+        "params": {
+          "type": "object",
+          "properties": {
+            "marketApps": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "installedApps": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "status": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "setStatus": {
+        "description": "Update status line",
+        "params": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": ["status"]
+        }
+      },
+      "clearData": {
+        "description": "Clear all app data",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  }
 }

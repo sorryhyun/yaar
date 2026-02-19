@@ -13,6 +13,22 @@ interface TerminalPaneProps {
   onClick: () => void;
 }
 
+const MAX_CONTENT_LEN = 200;
+
+/** Split "[label] rest" into a dimmed bracket + truncated content */
+function renderContent(content: string) {
+  const match = content.match(/^(\[[^\]]*\])\s?(.*)/s);
+  if (!match) return content;
+  const rest = match[2] || '';
+  const truncated = rest.length > MAX_CONTENT_LEN ? rest.slice(0, MAX_CONTENT_LEN) + '…' : rest;
+  return (
+    <>
+      <span className={styles.bracketLabel}>{match[1]}</span>
+      {truncated ? ' ' + truncated : ''}
+    </>
+  );
+}
+
 export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalPaneProps) {
   const history = useDesktopStore(useShallow((s) => s.cliHistory[monitorId] ?? []));
   const streaming = useDesktopStore(useShallow((s) => s.cliStreaming));
@@ -79,7 +95,7 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
         {history.map((entry) => (
           <div key={entry.id} className={`${styles.entry} ${entryClass(entry.type)}`}>
             {entry.type === 'user' && <span className={styles.userPrompt}>&gt; </span>}
-            {entry.content}
+            {renderContent(entry.content)}
           </div>
         ))}
         {streamingEntries.map((entry) => (

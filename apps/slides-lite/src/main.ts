@@ -1,7 +1,32 @@
-import anime from '@bundled/anime';
-import { formatDistanceToNow } from '@bundled/date-fns';
-import { v4 as uuid } from '@bundled/uuid';
 import { saveDeck, loadDeck } from './storage';
+
+const uuid = () =>
+  (globalThis.crypto && 'randomUUID' in globalThis.crypto)
+    ? globalThis.crypto.randomUUID()
+    : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+function formatDistanceToNow(ts: number, opts?: { addSuffix?: boolean }) {
+  const delta = Date.now() - ts;
+  const sec = Math.max(1, Math.floor(Math.abs(delta) / 1000));
+  const units: [number, string][] = [
+    [60, 'second'],
+    [60, 'minute'],
+    [24, 'hour'],
+    [30, 'day'],
+    [12, 'month'],
+    [Infinity, 'year'],
+  ];
+  let n = sec;
+  let label = 'second';
+  for (const [base, name] of units) {
+    label = name;
+    if (n < base) break;
+    n = Math.floor(n / base);
+  }
+  const txt = `${n} ${label}${n === 1 ? '' : 's'}`;
+  if (!opts?.addSuffix) return txt;
+  return delta >= 0 ? `${txt} ago` : `in ${txt}`;
+}
 import type { Deck, Slide, SlideLayout, ThemeId } from './types';
 
 const THEMES: Record<ThemeId, { name: string; bg: string; fg: string; accent: string; canvas: string }> = {
@@ -318,13 +343,13 @@ function renderCanvas(withAnimation = false) {
   if (withAnimation) {
     const slideEl = canvas.querySelector('.slide') as HTMLElement | null;
     if (slideEl) {
-      anime({
-        targets: slideEl,
-        opacity: [0, 1],
-        translateY: [16, 0],
-        duration: 260,
-        easing: 'easeOutCubic',
-      });
+      slideEl.animate(
+        [
+          { opacity: 0, transform: 'translateY(16px)' },
+          { opacity: 1, transform: 'translateY(0px)' },
+        ],
+        { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      );
     }
   }
 }
@@ -455,22 +480,22 @@ function flash(msg: string) {
   n.textContent = msg;
   n.style.cssText = 'position:fixed;top:14px;right:14px;background:#111827;color:white;padding:9px 12px;border-radius:10px;z-index:99999';
   document.body.appendChild(n);
-  anime({
-    targets: n,
-    opacity: [0, 1],
-    translateY: [-10, 0],
-    duration: 220,
-    easing: 'easeOutQuad',
-  });
+  n.animate(
+    [
+      { opacity: 0, transform: 'translateY(-10px)' },
+      { opacity: 1, transform: 'translateY(0px)' },
+    ],
+    { duration: 220, easing: 'ease-out' },
+  );
   setTimeout(() => {
-    anime({
-      targets: n,
-      opacity: [1, 0],
-      translateY: [0, -6],
-      duration: 180,
-      easing: 'easeInQuad',
-      complete: () => n.remove(),
-    });
+    const anim = n.animate(
+      [
+        { opacity: 1, transform: 'translateY(0px)' },
+        { opacity: 0, transform: 'translateY(-6px)' },
+      ],
+      { duration: 180, easing: 'ease-in' },
+    );
+    anim.onfinish = () => n.remove();
   }, 900);
 }
 
@@ -500,7 +525,13 @@ function renderPresent() {
     progress.style.width = `${((presentIndex + 1) / deck.slides.length) * 100}%`;
     const counter = wrap.querySelector('#presentCounter') as HTMLSpanElement;
     counter.textContent = `${presentIndex + 1} / ${deck.slides.length}`;
-    anime({ targets: slot.querySelector('.slide'), opacity: [0.3, 1], translateX: [10, 0], duration: 200, easing: 'easeOutCubic' });
+    (slot.querySelector('.slide') as HTMLElement | null)?.animate(
+      [
+        { opacity: 0.3, transform: 'translateX(10px)' },
+        { opacity: 1, transform: 'translateX(0px)' },
+      ],
+      { duration: 200, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
   };
 
   const close = () => {

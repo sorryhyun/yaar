@@ -2,5 +2,96 @@
   "icon": "📨",
   "name": "SMTP Mailer",
   "description": "Compose and send email with SMTP or Google API auth flow",
-  "appProtocol": true
+  "appProtocol": true,
+  "protocol": {
+    "state": {
+      "provider": {
+        "description": "Current send provider"
+      },
+      "compose": {
+        "description": "Current compose fields"
+      },
+      "smtpProfile": {
+        "description": "Current SMTP profile form values"
+      },
+      "googleAuth": {
+        "description": "Current Google auth UI state"
+      }
+    },
+    "commands": {
+      "hydrateProfile": {
+        "description": "Fill SMTP profile fields from saved config",
+        "params": {
+          "type": "object",
+          "properties": {
+            "smtpHost": {
+              "type": "string"
+            },
+            "smtpPort": {
+              "type": "number"
+            },
+            "username": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      },
+      "setProvider": {
+        "description": "Set active provider in UI",
+        "params": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["smtp", "google"]
+            }
+          },
+          "required": ["provider"]
+        }
+      },
+      "setGoogleAuthLink": {
+        "description": "Set manual Google auth link in UI",
+        "params": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": ["url"]
+        }
+      },
+      "setGoogleStatus": {
+        "description": "Set Google auth status text",
+        "params": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": ["status"]
+        }
+      },
+      "setStatus": {
+        "description": "Set status text for profile/send actions",
+        "params": {
+          "type": "object",
+          "properties": {
+            "profileStatus": {
+              "type": "string"
+            },
+            "sendStatus": {
+              "type": "string"
+            },
+            "providerStatus": {
+              "type": "string"
+            }
+          },
+          "required": []
+        }
+      }
+    }
+  }
 }

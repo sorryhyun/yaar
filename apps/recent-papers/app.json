@@ -1,4 +1,99 @@
 {
   "icon": "🎮",
-  "name": "Recent Papers"
+  "name": "Recent Papers",
+  "protocol": {
+    "state": {
+      "papers": {
+        "description": "Current filtered paper list loaded in the UI"
+      },
+      "recommendations": {
+        "description": "Current recommended papers"
+      },
+      "paperDetailsCache": {
+        "description": "Cached detailed paper data fetched by paper id"
+      }
+    },
+    "commands": {
+      "refresh": {
+        "description": "Reload papers from selected sources",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "recommendTop2Today": {
+        "description": "Ask the AI agent to recommend 2 papers from current context",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "fetchPaperDetails": {
+        "description": "Fetch detailed summary/content metadata for one Hugging Face paper by id",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["id"]
+        }
+      },
+      "fetchPaperDetailsBatch": {
+        "description": "Fetch detailed summary/content metadata for multiple Hugging Face paper ids",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["ids"]
+        }
+      },
+      "setRecommendations": {
+        "description": "Set AI-generated recommendations to display in the UI",
+        "params": {
+          "type": "object",
+          "properties": {
+            "recommendations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "upvotes": {
+                    "type": "number"
+                  },
+                  "comments": {
+                    "type": "number"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "title", "reason"]
+              }
+            }
+          },
+          "required": ["recommendations"]
+        }
+      }
+    }
+  }
 }

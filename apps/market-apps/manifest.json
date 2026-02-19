@@ -2,7 +2,7 @@
   "id": "market-apps",
   "name": "Market Apps",
   "icon": "🛒",
-  "description": "Browse/install marketplace apps",
-  "version": "1.0.4",
+  "description": "Browse and install apps from marketplace",
+  "version": "1.0.0",
   "author": "YAAR"
 }

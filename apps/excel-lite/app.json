@@ -1,4 +1,90 @@
 {
   "icon": "🎮",
-  "name": "Excel Lite"
+  "name": "Excel Lite",
+  "protocol": {
+    "state": {
+      "cells": {
+        "description": "All cell values as a { [ref]: rawValue } object (e.g., {\"A1\":\"Hello\",\"B2\":\"=A1+1\"})"
+      },
+      "styles": {
+        "description": "All cell styles as a { [ref]: CellStyle } object"
+      },
+      "selection": {
+        "description": "Current selection: { active, start, end }"
+      }
+    },
+    "commands": {
+      "setCells": {
+        "description": "Set one or more cell values. Params: { cells: { [ref]: value } }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "cells": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["cells"]
+        }
+      },
+      "setStyles": {
+        "description": "Set styles for one or more cells. Params: { styles: { [ref]: Partial<CellStyle> } }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "styles": {
+              "type": "object"
+            }
+          },
+          "required": ["styles"]
+        }
+      },
+      "selectCell": {
+        "description": "Select a cell or range. Params: { ref: string } or { start: string, end: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": "string"
+            },
+            "start": {
+              "type": "string"
+            },
+            "end": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "clearRange": {
+        "description": "Clear all cell values in a range. Params: { start: string, end: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string"
+            },
+            "end": {
+              "type": "string"
+            }
+          },
+          "required": ["start", "end"]
+        }
+      },
+      "importWorkbook": {
+        "description": "Import a full workbook JSON. Params: { data: { cells: {...}, styles?: {...} } }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object"
+            }
+          },
+          "required": ["data"]
+        }
+      }
+    }
+  }
 }

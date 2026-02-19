@@ -1,4 +1,56 @@
 {
   "icon": "🐙",
-  "name": "GitHub Manager"
+  "name": "GitHub Manager",
+  "protocol": {
+    "state": {
+      "viewer": {
+        "description": "Current authenticated viewer login"
+      },
+      "repos": {
+        "description": "Loaded repositories"
+      },
+      "selectedRepo": {
+        "description": "Currently selected repo full name"
+      },
+      "issues": {
+        "description": "Loaded issues for selected repo"
+      }
+    },
+    "commands": {
+      "refreshRepos": {
+        "description": "Load repositories from GitHub API",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "selectRepo": {
+        "description": "Select a repo by full name and load issues",
+        "params": {
+          "type": "object",
+          "properties": {
+            "fullName": {
+              "type": "string"
+            }
+          },
+          "required": ["fullName"]
+        }
+      },
+      "createIssue": {
+        "description": "Create an issue in the selected repo",
+        "params": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": ["title"]
+        }
+      }
+    }
+  }
 }

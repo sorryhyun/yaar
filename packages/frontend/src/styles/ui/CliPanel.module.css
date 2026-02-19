@@ -1,6 +1,11 @@
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* ---- Grid container ---- */
@@ -47,7 +52,7 @@
   cursor: pointer;
 }
 
-.pane[data-focused="true"] {
+.pane[data-focused='true'] {
   border-color: #22c55e;
 }
 
@@ -64,7 +69,7 @@
   pointer-events: none;
 }
 
-.pane[data-focused="true"] .paneBadge {
+.pane[data-focused='true'] .paneBadge {
   color: #22c55e;
 }
 
@@ -88,7 +93,7 @@
   text-transform: uppercase;
 }
 
-.pane[data-focused="true"] .paneLabel {
+.pane[data-focused='true'] .paneLabel {
   color: #888;
 }
 
@@ -158,6 +163,11 @@
 
 .tool {
   color: #facc15;
+}
+
+.bracketLabel {
+  color: #888;
+  font-weight: 500;
 }
 
 .error {
