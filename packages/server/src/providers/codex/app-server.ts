@@ -135,6 +135,7 @@ export class AppServer {
     const codexBin = getCodexBin();
     this.process = spawn(codexBin, args, {
       cwd: this.tempDir ?? undefined,
+      shell: true,
       stdio: ['ignore', 'ignore', 'pipe'],
       env: {
         ...process.env,
