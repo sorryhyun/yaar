@@ -73,6 +73,37 @@ export function registerAppsTools(server: McpServer): void {
         return error(`No SKILL.md found for app "${args.appId}". Use list to see available apps.`);
       }
 
+      // Append static protocol manifest if available in app.json
+      const apps = await listApps();
+      const app = apps.find((a) => a.id === args.appId);
+      if (app?.protocol) {
+        const sections: string[] = [];
+        const { state, commands } = app.protocol;
+        if (state && Object.keys(state).length) {
+          sections.push(
+            '### State\n' +
+              Object.entries(state)
+                .map(([k, v]) => `- \`${k}\` — ${v.description}`)
+                .join('\n'),
+          );
+        }
+        if (commands && Object.keys(commands).length) {
+          sections.push(
+            '### Commands\n' +
+              Object.entries(commands)
+                .map(([k, v]) => {
+                  let line = `- \`${k}\` — ${v.description}`;
+                  if (v.params) line += `\n  Params: \`${JSON.stringify(v.params)}\``;
+                  return line;
+                })
+                .join('\n'),
+          );
+        }
+        if (sections.length) {
+          return ok(skill + '\n\n## Protocol\n\n' + sections.join('\n\n'));
+        }
+      }
+
       return ok(skill);
     },
   );

@@ -50,7 +50,7 @@ Implementing `AITransport` interface:
 
 ## Conventions
 
-- **ESM imports**: Always use `.js` extensions (Node.js ESM requirement)
+- **ESM imports**: Always use `.js` extensions (ESM requirement)
 - **TypeScript strict mode**
 - All MCP tool descriptions use Zod `.describe()` for documentation
 - New providers: create `src/providers/<name>/provider.ts` + `system-prompt.ts`, add to factory

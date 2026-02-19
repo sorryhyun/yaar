@@ -1,10 +1,10 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Build standalone executable with frontend assets embedded via Bun.
  *
  * Usage:
- *   node scripts/build-exe-bundle.js --provider claude --target windows
- *   node scripts/build-exe-bundle.js --provider codex --target linux
+ *   bun scripts/build-exe-bundle.js --provider claude --target windows
+ *   bun scripts/build-exe-bundle.js --provider codex --target linux
  *
  * Generates a temporary entry point that imports all frontend dist files
  * and pre-bundled libraries using `with { type: "file" }`, which tells Bun

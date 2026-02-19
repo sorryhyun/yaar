@@ -1,12 +1,12 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Cross-platform Codex type generation script.
  *
- * Usage: node scripts/generate-codex-types.js [codex-binary]
+ * Usage: bun scripts/generate-codex-types.js [codex-binary]
  *
  * 1. Removes packages/server/src/providers/codex/generated/
  * 2. Runs `<codex-bin> app-server generate-ts`
- * 3. Post-processes imports to add .js extensions (required by nodenext)
+ * 3. Post-processes imports to add .js extensions (required by ESM)
  * 4. Fixes the ./v2 directory import to ./v2/index.js
  */
 

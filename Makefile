@@ -60,9 +60,9 @@ test-shared:
 	pnpm --filter @yaar/shared test
 
 # Regenerate Codex app-server TypeScript types
-# Post-processes imports to add .js extensions required by Node ESM (nodenext)
+# Post-processes imports to add .js extensions required by ESM resolution
 codex-types:
-	node scripts/generate-codex-types.js $(CODEX_BIN)
+	bun scripts/generate-codex-types.js $(CODEX_BIN)
 
 # Build standalone executables (yaar-{claude,codex}.exe with bundled-libs embedded)
 build-exe: codex-types

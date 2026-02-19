@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Pre-bundle @bundled/* libraries into single ESM files for exe embedding.
  *
@@ -7,7 +7,7 @@
  * via Bun's `with { type: "file" }` import mechanism.
  */
 
-import { createRequire } from 'module';
+import esbuild from 'esbuild';
 import { mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -35,10 +35,7 @@ const BUNDLED_LIBRARIES = {
   'p5': 'p5',
 };
 
-// Resolve esbuild from server's node_modules where it's a devDependency
 const resolveDir = join(rootDir, 'packages', 'server');
-const require = createRequire(join(resolveDir, 'package.json'));
-const esbuild = require('esbuild');
 
 mkdirSync(outDir, { recursive: true });
 

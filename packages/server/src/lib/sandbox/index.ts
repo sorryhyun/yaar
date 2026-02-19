@@ -1,7 +1,7 @@
 /**
  * Sandbox execution module.
  *
- * Provides safe code execution using Node.js vm module with controlled globals.
+ * Provides safe code execution using the vm module with controlled globals.
  */
 
 import vm from 'node:vm';

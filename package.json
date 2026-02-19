@@ -19,17 +19,16 @@
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
     "build:exe": "pnpm build:exe:prepare && pnpm build:exe:libs && pnpm build:exe:bundle",
     "build:exe:prepare": "pnpm -r build",
-    "build:exe:libs": "node scripts/prebundle-libs.js",
-    "build:exe:bundle": "node scripts/build-exe-bundle.js --provider claude --target windows && node scripts/build-exe-bundle.js --provider codex --target windows",
-    "build:exe:bundle:linux": "node scripts/build-exe-bundle.js --provider claude --target linux && node scripts/build-exe-bundle.js --provider codex --target linux",
-    "build:exe:bundle:macos": "node scripts/build-exe-bundle.js --provider claude --target macos && node scripts/build-exe-bundle.js --provider codex --target macos",
-    "build:exe:assets": "node scripts/copy-exe-assets.js",
+    "build:exe:libs": "bun scripts/prebundle-libs.js",
+    "build:exe:bundle": "bun scripts/build-exe-bundle.js --provider claude --target windows && bun scripts/build-exe-bundle.js --provider codex --target windows",
+    "build:exe:bundle:linux": "bun scripts/build-exe-bundle.js --provider claude --target linux && bun scripts/build-exe-bundle.js --provider codex --target linux",
+    "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --provider claude --target macos && bun scripts/build-exe-bundle.js --provider codex --target macos",
+    "build:exe:assets": "bun scripts/copy-exe-assets.js",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "prepare": "husky"
   },
   "engines": {
-    "node": ">=24",
     "pnpm": ">=10",
     "bun": ">=1.1.22"
   },

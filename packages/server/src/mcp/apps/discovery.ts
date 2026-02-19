@@ -6,7 +6,7 @@ import { readdir, readFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { PROJECT_ROOT } from '../../config.js';
 import { hasCredentials } from './config.js';
-import type { FileAssociation } from '@yaar/shared';
+import type { AppManifest, FileAssociation } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -27,6 +27,7 @@ export interface AppInfo {
   hidden?: boolean;
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
+  protocol?: Pick<AppManifest, 'state' | 'commands'>; // Static manifest for discovery
   fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
@@ -76,6 +77,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let description: string | undefined;
       let hidden: boolean | undefined;
       let appProtocol: boolean | undefined;
+      let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
       let fileAssociations: FileAssociation[] | undefined;
       let variant: WindowVariantType | undefined;
       let dockEdge: DockEdgeType | undefined;
@@ -90,6 +92,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.description) description = meta.description;
         if (meta.hidden) hidden = true;
         if (meta.appProtocol) appProtocol = true;
+        if (meta.protocol && typeof meta.protocol === 'object') protocol = meta.protocol;
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
         if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
         if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
@@ -138,6 +141,7 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(hidden && { hidden }),
         isCompiled,
         ...(appProtocol && { appProtocol }),
+        ...(protocol && { protocol }),
         ...(fileAssociations && { fileAssociations }),
         ...(variant && { variant }),
         ...(dockEdge && { dockEdge }),
@@ -156,9 +160,7 @@ export async function listApps(): Promise<AppInfo[]> {
 /**
  * Get window metadata (variant, dockEdge) for a single app from its app.json.
  */
-export async function getAppMeta(
-  appId: string,
-): Promise<{
+export async function getAppMeta(appId: string): Promise<{
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
   frameless?: boolean;

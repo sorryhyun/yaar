@@ -45,7 +45,7 @@ function createWs(url: string): WsLike {
   if (isBun) {
     return new RawWebSocket(url);
   }
-  // In Node.js, disable perMessageDeflate to avoid extension negotiation
+  // Disable perMessageDeflate to avoid extension negotiation
   // failures with Rust WS servers (tungstenite).
   return new NodeWebSocket(url, { perMessageDeflate: false });
 }

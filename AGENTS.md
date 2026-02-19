@@ -7,9 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notifications, etc.).
 
 **Prerequisites:**
-- Node.js >= 24
-- pnpm >= 10
 - Bun >= 1.1 (server runtime)
+- pnpm >= 10
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 **SDKs:**
@@ -154,7 +153,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - All packages: TypeScript strict mode, ESM (`"type": "module"`)
 - Frontend: path alias `@/` → `src/`, CSS Modules for component styles
 - Shared package: Zod v4 (use getter pattern for recursive types, not `z.lazy()`)
-- Server imports use `.js` extensions (ESM requirement for Node.js)
+- Server imports use `.js` extensions (ESM requirement)
 - ESLint: `_`-prefixed unused args allowed, `no-explicit-any` is warning-only
 - Prettier: semi, singleQuote, trailingComma all, tabWidth 2, printWidth 100
 
