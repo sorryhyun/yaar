@@ -195,9 +195,10 @@ interface WindowFrameProps {
   window: WindowModel;
   zIndex: number;
   isFocused: boolean;
+  hidden?: boolean;
 }
 
-function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
+function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProps) {
   const variant = window.variant ?? 'standard';
   const isWidget = variant === 'widget';
   const isPanel = variant === 'panel';
@@ -584,6 +585,7 @@ function WindowFrameInner({ window, zIndex, isFocused }: WindowFrameProps) {
       data-window-id={window.id}
       data-variant={variant}
       data-frameless={isFrameless || undefined}
+      data-hidden={hidden || undefined}
       data-focused={isFocused}
       data-selected={isSelected}
       data-dragging={isDragging}

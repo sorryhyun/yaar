@@ -3,13 +3,19 @@
  * Renders widget windows first (lower layer), then standard windows.
  */
 import { useMemo } from 'react';
-import { useDesktopStore, selectVisibleWindows, selectWidgetWindows } from '@/store';
+import {
+  useDesktopStore,
+  selectVisibleWindows,
+  selectWidgetWindows,
+  selectMinimizedIframeWindows,
+} from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { WindowFrame } from '../windows/WindowFrame';
 
 export function WindowManager() {
   const widgets = useDesktopStore(useShallow(selectWidgetWindows));
   const windows = useDesktopStore(useShallow(selectVisibleWindows));
+  const minimizedIframes = useDesktopStore(useShallow(selectMinimizedIframeWindows));
   const zOrder = useDesktopStore((s) => s.zOrder);
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
 
@@ -22,6 +28,9 @@ export function WindowManager() {
 
   return (
     <>
+      {minimizedIframes.map((window) => (
+        <WindowFrame key={window.id} window={window} zIndex={-1} isFocused={false} hidden />
+      ))}
       {widgets.map((window) => (
         <WindowFrame
           key={window.id}

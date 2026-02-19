@@ -42,6 +42,16 @@ export const selectMinimizedWindows = (state: DesktopStore) =>
       (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
   );
 
+export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[] =>
+  Object.values(state.windows).filter(
+    (w): w is WindowModel =>
+      w != null &&
+      w.minimized &&
+      w.content.renderer === 'iframe' &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+  );
+
 let _widgetCache: {
   windows: Record<string, WindowModel>;
   monitorId: string;

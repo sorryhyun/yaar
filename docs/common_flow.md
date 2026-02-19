@@ -209,8 +209,8 @@ Task agent runs    → pushAI(role, task, actions)
 Main agent's turn  → timeline.format() → drain()
   Produces:
   <timeline>
-  <interaction:user>close:settings-win</interaction:user>
-  <interaction:AI agent="window-main-win">Created window "chart". Updated content.</interaction:AI>
+  <ui:close>settings-win</ui:close>
+  <ai agent="window-main-win">Created window "chart". Updated content.</ai>
   </timeline>
 ```
 

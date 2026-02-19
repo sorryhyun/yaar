@@ -54,7 +54,7 @@ describe('InteractionTimeline', () => {
     const output = t.format();
     expect(output).toContain('<timeline>');
     expect(output).toContain('</timeline>');
-    expect(output).toContain('<interaction:user>close:win-settings</interaction:user>');
+    expect(output).toContain('<ui:close>win-settings</ui:close>');
   });
 
   it('format produces timeline XML with AI interactions', () => {
@@ -69,7 +69,7 @@ describe('InteractionTimeline', () => {
       },
     ]);
     const output = t.format();
-    expect(output).toContain('<interaction:AI agent="window-win1">');
+    expect(output).toContain('<ai agent="window-win1">');
     expect(output).toContain('Created window "cal-win"');
   });
 
@@ -79,9 +79,9 @@ describe('InteractionTimeline', () => {
     t.pushAI('window-win1', 'task', []);
     t.pushUser(makeInteraction({ type: 'window.focus', windowId: 'win-main' }));
     const output = t.format();
-    expect(output).toContain('<interaction:user>close:win-settings</interaction:user>');
-    expect(output).toContain('<interaction:AI agent="window-win1">');
-    expect(output).toContain('<interaction:user>focus:win-main</interaction:user>');
+    expect(output).toContain('<ui:close>win-settings</ui:close>');
+    expect(output).toContain('<ai agent="window-win1">');
+    expect(output).toContain('<ui:focus>win-main</ui:focus>');
   });
 
   it('format shows "No actions taken." for empty AI actions', () => {

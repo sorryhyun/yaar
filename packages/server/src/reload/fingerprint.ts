@@ -20,7 +20,7 @@ export function normalizeContent(text: string): string {
     .replace(/<ui:\w+>([\s\S]*?)<\/ui:\w+>/g, '$1')
     .replace(/<previous>[\s\S]*?<\/previous>/g, '')
     .replace(/<timeline>[\s\S]*?<\/timeline>/g, '')
-    .replace(/<interaction:\w+[^>]*>[\s\S]*?<\/interaction:\w+>/g, '')
+    .replace(/<ai[^>]*>[\s\S]*?<\/ai>/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();

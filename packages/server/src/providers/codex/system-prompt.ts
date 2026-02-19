@@ -30,8 +30,8 @@ Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:cl
 User interactions (window close, focus, move, resize, etc.) and AI actions appear in a unified timeline:
 \`\`\`xml
 <timeline>
-<interaction:user>close:win-settings</interaction:user>
-<interaction:AI agent="window-win1">Updated content of "win1" (append).</interaction:AI>
+<ui:close>win-settings</ui:close>
+<ai agent="window-win1">Updated content of "win1" (append).</ai>
 </timeline>
 \`\`\`
 

@@ -56,8 +56,12 @@ export class CodexProvider extends BaseTransport {
   // Interrupt signal: shared instance field so interrupt() can reach the active query.
   private resolveMessage: ((done: boolean) => void) | null = null;
 
-  // Current in-flight turn ID for interrupt support
+  // Current in-flight turn ID for interrupt/steer support
   private currentTurnId: string | null = null;
+
+  // Resolves when currentTurnId is set — allows steer() to wait for turn start
+  private turnReadyResolve: (() => void) | null = null;
+  private turnReadyPromise: Promise<void> | null = null;
 
   /**
    * Create a CodexProvider.
@@ -171,12 +175,19 @@ export class CodexProvider extends BaseTransport {
           }
         }
 
-        // Start the turn and capture the turn ID for interrupt support
+        // Prepare turn-ready promise so steer() can wait for the turn to start
+        this.turnReadyPromise = new Promise<void>((resolve) => {
+          this.turnReadyResolve = resolve;
+        });
+
+        // Start the turn and capture the turn ID for interrupt/steer support
         const turnResult = await client.request<TurnStartParams, TurnStartResponse>('turn/start', {
           threadId: this.currentSession!.threadId,
           input,
         });
         this.currentTurnId = turnResult.turn.id;
+        this.turnReadyResolve?.();
+        this.turnReadyResolve = null;
 
         // Yield messages as they arrive
         while (true) {
@@ -204,6 +215,9 @@ export class CodexProvider extends BaseTransport {
         client.off('server_request', serverRequestHandler);
         actionEmitter.clearCurrentMonitor();
         this.currentTurnId = null;
+        this.turnReadyResolve?.();
+        this.turnReadyResolve = null;
+        this.turnReadyPromise = null;
       }
     } catch (err) {
       if (this.isAbortError(err)) {
@@ -225,13 +239,23 @@ export class CodexProvider extends BaseTransport {
   }
 
   async steer(content: string): Promise<boolean> {
-    const threadId = this.currentSession?.threadId;
+    if (!this.client?.isConnected || !this.currentSession?.threadId) return false;
+
+    // Wait for the turn to start (resolves the timing race between
+    // running=true and currentTurnId being set after turn/start RPC)
+    if (!this.currentTurnId && this.turnReadyPromise) {
+      await Promise.race([
+        this.turnReadyPromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+      ]);
+    }
+
     const turnId = this.currentTurnId;
-    if (!this.client?.isConnected || !threadId || !turnId) return false;
+    if (!turnId) return false;
 
     try {
       await this.client.request<TurnSteerParams, TurnSteerResponse>('turn/steer', {
-        threadId,
+        threadId: this.currentSession.threadId,
         input: [{ type: 'text', text: content, text_elements: [] }],
         expectedTurnId: turnId,
       });
@@ -331,6 +355,9 @@ export class CodexProvider extends BaseTransport {
     this.currentSession = null;
     this.currentTurnId = null;
     this.resolveMessage = null;
+    this.turnReadyResolve?.();
+    this.turnReadyResolve = null;
+    this.turnReadyPromise = null;
   }
 
   /**

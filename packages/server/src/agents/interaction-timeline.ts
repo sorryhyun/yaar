@@ -75,13 +75,7 @@ export class InteractionTimeline {
   format(): string {
     if (this.entries.length === 0) return '';
 
-    const lines = this.entries.map((e) => {
-      if (e.type === 'user') {
-        return `<interaction:user>${e.content}</interaction:user>`;
-      }
-      const agentAttr = e.agent ? ` agent="${e.agent}"` : '';
-      return `<interaction:AI${agentAttr}>${e.content}</interaction:AI>`;
-    });
+    const lines = this.entries.map((e) => this.formatEntry(e));
 
     return `<timeline>\n${lines.join('\n')}\n</timeline>\n\n`;
   }
@@ -94,13 +88,7 @@ export class InteractionTimeline {
   drainAndFormat(): string {
     if (this.entries.length === 0) return '';
 
-    const lines = this.entries.map((e) => {
-      if (e.type === 'user') {
-        return `<interaction:user>${e.content}</interaction:user>`;
-      }
-      const agentAttr = e.agent ? ` agent="${e.agent}"` : '';
-      return `<interaction:AI${agentAttr}>${e.content}</interaction:AI>`;
-    });
+    const lines = this.entries.map((e) => this.formatEntry(e));
 
     this.entries = [];
     return `<timeline>\n${lines.join('\n')}\n</timeline>\n\n`;
@@ -127,6 +115,22 @@ export class InteractionTimeline {
    */
   clear(): void {
     this.entries = [];
+  }
+
+  /**
+   * Format a single timeline entry as XML.
+   * User entries: <ui:verb>target details</ui:verb>
+   * AI entries: <ai agent="role">summary</ai>
+   */
+  private formatEntry(e: TimelineEntry): string {
+    if (e.type === 'user') {
+      const colonIdx = e.content.indexOf(':');
+      const verb = colonIdx >= 0 ? e.content.slice(0, colonIdx) : e.content;
+      const rest = colonIdx >= 0 ? e.content.slice(colonIdx + 1) : '';
+      return `<ui:${verb}>${rest}</ui:${verb}>`;
+    }
+    const agentAttr = e.agent ? ` agent="${e.agent}"` : '';
+    return `<ai${agentAttr}>${e.content}</ai>`;
   }
 
   /**

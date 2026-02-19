@@ -20,6 +20,11 @@
   transition: box-shadow var(--transition-fast);
 }
 
+.frame[data-hidden] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .frame[data-focused='true'] {
   box-shadow:
     var(--shadow-xl),

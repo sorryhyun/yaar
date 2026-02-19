@@ -39,7 +39,7 @@ export class ContextAssemblyPolicy {
 
     // Add drawing annotation after timeline
     if (hasDrawing) {
-      timelinePrefix += '<interaction:user>draw [image attached]</interaction:user>\n\n';
+      timelinePrefix += '<ui:draw>[image attached]</ui:draw>\n\n';
     }
 
     return {

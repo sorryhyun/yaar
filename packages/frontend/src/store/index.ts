@@ -6,6 +6,7 @@ export {
   selectWindowsInOrder,
   selectVisibleWindows,
   selectMinimizedWindows,
+  selectMinimizedIframeWindows,
   selectWidgetWindows,
   selectPanelWindows,
   selectToasts,
