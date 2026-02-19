@@ -17,12 +17,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
-import {
-  getCodexBin,
-  getCodexAppServerArgs,
-  APP_DEV_ENABLED,
-  getCodexWsPort,
-} from '../../config.js';
+import { getCodexBin, getCodexAppServerArgs, getCodexWsPort } from '../../config.js';
 import type {
   InitializeParams,
   InitializeResponse,
@@ -121,7 +116,7 @@ export class AppServer {
    * Spawn the app-server process with WebSocket listener.
    */
   private async spawnProcess(): Promise<void> {
-    const namespaces = APP_DEV_ENABLED ? MCP_SERVERS : MCP_SERVERS.filter((ns) => ns !== 'dev');
+    const namespaces = MCP_SERVERS;
     const args = getCodexAppServerArgs(namespaces);
 
     // Add WebSocket listener

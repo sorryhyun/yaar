@@ -21,7 +21,6 @@ import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { getSessionHub } from '../session/live-session.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
-import { APP_DEV_ENABLED } from '../config.js';
 import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES } from './browser/index.js';
 
@@ -51,9 +50,7 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   registerAppsTools(servers.apps);
   registerMarketTools(servers.apps);
   registerUserTools(servers.user);
-  if (APP_DEV_ENABLED) {
-    registerAppDevTools(servers.dev);
-  }
+  registerAppDevTools(servers.dev);
   registerReloadTools(servers.system, getReloadCache, getWindowState);
 
   // Browser tools (conditional — only if Chrome/Edge is available)
@@ -93,5 +90,5 @@ export function getToolNames(): string[] {
     ...RELOAD_TOOL_NAMES,
     ...BROWSER_TOOL_NAMES,
   ];
-  return APP_DEV_ENABLED ? all : all.filter((n) => !DEV_TOOL_NAMES.includes(n as any));
+  return all;
 }

@@ -5,17 +5,12 @@
  * Usage:
  *   node scripts/build-exe-bundle.js --provider claude --target windows
  *   node scripts/build-exe-bundle.js --provider codex --target linux
- *   node scripts/build-exe-bundle.js --provider codex --target windows --mode dev
- *
- * Modes:
- *   prod (default) — embeds frontend + bundled-libs. Fully self-contained.
- *   dev            — embeds frontend only. Reads bundled-libs from disk at runtime.
- *                    Output name: yaar-dev-{provider}{ext}
  *
  * Generates a temporary entry point that imports all frontend dist files
- * using `with { type: "file" }`, which tells Bun to embed them as-is
- * (without parsing HTML/CSS/JS). At runtime they're accessible via
- * `Bun.embeddedFiles`.
+ * and pre-bundled libraries using `with { type: "file" }`, which tells Bun
+ * to embed them as-is (without parsing HTML/CSS/JS). At runtime they're
+ * accessible via `Bun.embeddedFiles`. The resulting executable is fully
+ * self-contained with app development support built in.
  */
 
 import { execSync } from 'child_process';
@@ -37,19 +32,11 @@ function getArg(name) {
 
 const provider = getArg('provider') ?? 'claude';
 const target = getArg('target') ?? 'linux';
-const mode = getArg('mode') ?? 'prod';
 
 if (!['claude', 'codex'].includes(provider)) {
   console.error(`Invalid provider: ${provider}. Use "claude" or "codex".`);
   process.exit(1);
 }
-
-if (!['prod', 'dev'].includes(mode)) {
-  console.error(`Invalid mode: ${mode}. Use "prod" or "dev".`);
-  process.exit(1);
-}
-
-const isDev = mode === 'dev';
 
 const bunTargets = {
   windows: 'bun-windows-x64',
@@ -64,7 +51,7 @@ if (!bunTarget) {
 }
 
 const ext = target === 'windows' ? '.exe' : '';
-const exeName = isDev ? `yaar-dev-${provider}` : `yaar-${provider}`;
+const exeName = `yaar-${provider}`;
 const outfile = join(rootDir, 'dist', `${exeName}${ext}`);
 
 // ── Collect frontend dist files ──────────────────────────────────────
@@ -93,27 +80,21 @@ try {
   process.exit(1);
 }
 
-console.log(`[${mode}] Embedding ${frontendFiles.length} frontend files into ${provider} executable...`);
+console.log(`Embedding ${frontendFiles.length} frontend files into ${provider} executable...`);
 
 // ── Collect pre-bundled library files ────────────────────────────────
 
 const bundledLibsDir = join(rootDir, 'dist', 'bundled-libs');
 let bundledLibFiles = [];
 
-if (!isDev) {
-  // Production mode: embed libraries into the executable
-  if (existsSync(bundledLibsDir)) {
-    bundledLibFiles = readdirSync(bundledLibsDir)
-      .filter(f => f.endsWith('.js'))
-      .map(f => ({ name: basename(f, '.js'), absPath: join(bundledLibsDir, f) }));
-    console.log(`Embedding ${bundledLibFiles.length} bundled libraries...`);
-  } else {
-    console.warn('Warning: dist/bundled-libs/ not found. Run "pnpm build:exe:libs" first.');
-    console.warn('Bundled exe will not be able to resolve @bundled/* imports at runtime.');
-  }
+if (existsSync(bundledLibsDir)) {
+  bundledLibFiles = readdirSync(bundledLibsDir)
+    .filter(f => f.endsWith('.js'))
+    .map(f => ({ name: basename(f, '.js'), absPath: join(bundledLibsDir, f) }));
+  console.log(`Embedding ${bundledLibFiles.length} bundled libraries...`);
 } else {
-  // Dev mode: libraries read from disk at runtime (bundled-libs/ next to exe)
-  console.log('Dev mode: bundled libraries will be read from disk (bundled-libs/ next to exe).');
+  console.warn('Warning: dist/bundled-libs/ not found. Run "pnpm build:exe:libs" first.');
+  console.warn('Bundled exe will not be able to resolve @bundled/* imports at runtime.');
 }
 
 // ── Generate temporary entry point ──────────────────────────────────
@@ -138,7 +119,7 @@ frontendFiles.forEach((absPath, i) => {
   mapEntries.push(`  ${JSON.stringify(urlPath)}: _f${i},`);
 });
 
-// Build import lines for each bundled library file (prod mode only)
+// Build import lines for each bundled library file
 const libImportLines = [];
 const libMapEntries = [];
 
@@ -179,9 +160,6 @@ writeFileSync(generatedEntry, generatedSource, 'utf-8');
 
 const entrypoint = relative(rootDir, generatedEntry);
 const defines = ['--define', '__YAAR_BUNDLED=true'];
-if (isDev) {
-  defines.push('--define', '__YAAR_DEV_MODE=true');
-}
 
 const cmd = [
   'bun', 'build',

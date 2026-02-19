@@ -10,7 +10,7 @@ import type { ProviderType } from './types.js';
 import { listApps } from '../mcp/apps/discovery.js';
 import { storageList } from '../storage/storage-manager.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';
-import { IS_BUNDLED_EXE, IS_DEV_EXE } from '../config.js';
+import { IS_BUNDLED_EXE } from '../config.js';
 
 function getPlatformName(): string {
   switch (platform()) {
@@ -38,7 +38,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   lines.push(`- Language: ${getLanguageLabel(settings.language)} (${settings.language})`);
 
   if (IS_BUNDLED_EXE) {
-    lines.push(`- Mode: Standalone executable${IS_DEV_EXE ? ' (dev)' : ''}`);
+    lines.push('- Mode: Standalone executable');
   }
 
   const visibleApps = apps.filter((a) => !a.hidden);

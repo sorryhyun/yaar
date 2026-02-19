@@ -37,12 +37,11 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
 /**
  * Bun plugin that resolves @bundled/* imports.
  *
- * Three resolution strategies:
- * 1. **Embedded** (production exe): Libraries embedded via `with { type: "file" }`,
+ * Resolution strategies (in order):
+ * 1. **Embedded** (exe): Libraries embedded via `with { type: "file" }`,
  *    available as globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
- * 2. **Disk** (dev exe): Libraries read from `bundled-libs/` directory next to the exe.
- *    Requires `pnpm build:exe:libs` to have been run.
- * 3. **node_modules** (dev non-exe): Resolves from PLUGIN_DIR via Bun.resolveSync().
+ * 2. **Disk**: Libraries read from `bundled-libs/` directory next to the exe (fallback).
+ * 3. **node_modules** (dev): Resolves from PLUGIN_DIR via Bun.resolveSync().
  */
 export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
   return {

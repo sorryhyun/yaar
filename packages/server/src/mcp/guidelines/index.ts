@@ -9,19 +9,14 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { ok, error } from '../utils.js';
 import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';
-import { APP_DEV_ENABLED } from '../../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const ALL_TOPICS: Record<string, string> = {
+const TOPICS: Record<string, string> = {
   app_dev: 'app_dev.md',
   sandbox: 'sandbox.md',
   components: 'components.md',
 };
-
-const TOPICS: Record<string, string> = APP_DEV_ENABLED
-  ? ALL_TOPICS
-  : Object.fromEntries(Object.entries(ALL_TOPICS).filter(([k]) => k !== 'app_dev'));
 
 export const GUIDELINE_TOOL_NAMES = ['mcp__system__guideline'] as const;
 

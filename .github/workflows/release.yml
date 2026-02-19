@@ -39,7 +39,7 @@ jobs:
         run: |
           pnpm build:exe:bundle:linux
           cd dist
-          for f in yaar-claude yaar-codex yaar-dev-claude yaar-dev-codex; do
+          for f in yaar-claude yaar-codex; do
             mv "$f" "${f}-linux"
           done
 
@@ -47,7 +47,7 @@ jobs:
         run: |
           pnpm build:exe:bundle:macos
           cd dist
-          for f in yaar-claude yaar-codex yaar-dev-claude yaar-dev-codex; do
+          for f in yaar-claude yaar-codex; do
             mv "$f" "${f}-macos"
           done
 
@@ -56,16 +56,10 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             dist/yaar-claude.exe \
             dist/yaar-codex.exe \
-            dist/yaar-dev-claude.exe \
-            dist/yaar-dev-codex.exe \
             dist/yaar-claude-linux \
             dist/yaar-codex-linux \
-            dist/yaar-dev-claude-linux \
-            dist/yaar-dev-codex-linux \
             dist/yaar-claude-macos \
             dist/yaar-codex-macos \
-            dist/yaar-dev-claude-macos \
-            dist/yaar-dev-codex-macos \
             --title "${{ github.ref_name }}" \
             --generate-notes
         env:

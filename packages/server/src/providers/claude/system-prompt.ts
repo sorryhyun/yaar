@@ -4,7 +4,6 @@
  */
 
 import { loadCustomSystemPrompt } from '../load-system-prompt.js';
-import { APP_DEV_ENABLED } from '../../config.js';
 
 const DEFAULT_PROMPT = `You are a desktop agent for YAAR, a reactive AI-driven operating system interface.
 
@@ -46,16 +45,10 @@ Use show_notification for important alerts. They persist in the notification cen
 
 ## Guidelines
 Use guideline(topic) to load reference docs before starting unfamiliar tasks:
-${APP_DEV_ENABLED ? '- **app_dev** — building and deploying TypeScript apps (workflow, bundled libraries, storage API, app protocol)\n' : ''}- **sandbox** — run_js globals and restrictions
+- **app_dev** — building and deploying TypeScript apps (workflow, bundled libraries, storage API, app protocol)
+- **sandbox** — run_js globals and restrictions
 - **components** — component DSL layout and types
-${
-  APP_DEV_ENABLED
-    ? ''
-    : `
-## App Development (Limited)
-App development tools are not available in standalone mode. To enable them, use the dev executable (yaar-dev-claude) with bundled-libs/ next to it. Download bundled-libs.zip and extract it where the dev executable is. Pre-installed apps and marketplace apps continue to work normally.
-`
-}
+
 
 ## Task Dispatch
 You are an **orchestrator**. For tasks requiring execution (HTTP requests, code execution, complex UI creation, app interactions), use dispatch_task to delegate to a specialized task agent.

@@ -5,7 +5,6 @@
  * The orchestrator dispatches tasks to specialized agents via `dispatch_task`.
  */
 
-import { APP_DEV_ENABLED } from '../config.js';
 import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
 import { STORAGE_TOOL_NAMES } from '../mcp/storage/index.js';
 import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
@@ -73,7 +72,7 @@ const profiles: Record<string, AgentProfile> = {
       ...STORAGE_TOOL_NAMES,
       ...APPS_ALL_TOOLS,
       ...RELOAD_TOOL_NAMES,
-      ...(APP_DEV_ENABLED ? DEV_TOOL_NAMES : []),
+      ...DEV_TOOL_NAMES,
     ],
   },
 
@@ -113,7 +112,7 @@ const profiles: Record<string, AgentProfile> = {
       ...APPS_ALL_TOOLS,
       ...WINDOW_TOOL_NAMES,
       ...STORAGE_TOOL_NAMES,
-      ...(APP_DEV_ENABLED ? DEV_TOOL_NAMES : []),
+      ...DEV_TOOL_NAMES,
     ],
   },
 };
