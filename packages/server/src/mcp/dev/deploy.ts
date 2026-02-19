@@ -8,6 +8,7 @@ import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
+import { extractProtocolFromHtml } from '../../lib/compiler/extract-protocol.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
 import { componentLayoutSchema } from '@yaar/shared';
@@ -105,12 +106,17 @@ export function registerDeployTools(server: McpServer): void {
       const distIndexPath = join(sandboxPath, 'dist', 'index.html');
       let hasCompiledApp = false;
       let hasAppProtocol = explicitAppProtocol ?? false;
+      let extractedProtocol: ReturnType<typeof extractProtocolFromHtml> = null;
       try {
         const distHtml = await readFile(distIndexPath, 'utf-8');
         hasCompiledApp = true;
         // Auto-detect from HTML only if not explicitly set
         if (explicitAppProtocol === undefined) {
           hasAppProtocol = distHtml.includes('.app.register');
+        }
+        // Extract protocol manifest from compiled code (best-effort)
+        if (hasAppProtocol || explicitAppProtocol) {
+          extractedProtocol = extractProtocolFromHtml(distHtml);
         }
       } catch {
         // No compiled output
@@ -227,6 +233,12 @@ export function registerDeployTools(server: McpServer): void {
           else delete metadata.frameless;
         }
         if (windowStyle !== undefined) metadata.windowStyle = windowStyle;
+        // Write extracted protocol manifest (or clear it if app no longer has protocol)
+        if (extractedProtocol) {
+          metadata.protocol = extractedProtocol;
+        } else if (!hasAppProtocol) {
+          delete metadata.protocol;
+        }
         await writeFile(
           join(appPath, 'app.json'),
           JSON.stringify(metadata, null, 2) + '\n',

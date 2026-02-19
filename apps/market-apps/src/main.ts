@@ -107,8 +107,13 @@ async function apiPostAny<T>(paths: string[], body: object): Promise<T> {
   throw lastErr || new Error('All POST endpoints failed');
 }
 
+function normalizeId(value: string) {
+  return (value || '').trim().toLowerCase();
+}
+
 function hasInstalled(appId: string) {
-  return installedApps.some((a) => a.id === appId);
+  const target = normalizeId(appId);
+  return installedApps.some((a) => normalizeId(a.id) === target);
 }
 
 function markInstalled(app: { id: string; name: string }, installed: boolean) {
@@ -158,6 +163,25 @@ function parseInstalled(payload: ApiPayload): InstalledApp[] {
     : [];
 }
 
+function parseInstalledAny(input: any): InstalledApp[] {
+  if (Array.isArray(input)) {
+    return input
+      .filter((a) => a && typeof a.id === 'string')
+      .map((a) => ({ id: a.id, name: a.name || a.id }));
+  }
+
+  if (input && typeof input === 'object') {
+    const candidate =
+      Array.isArray(input.apps) ? input.apps : Array.isArray(input.installed) ? input.installed : Array.isArray(input.installedApps) ? input.installedApps : [];
+
+    return candidate
+      .filter((a: any) => a && typeof a.id === 'string')
+      .map((a: any) => ({ id: a.id, name: a.name || a.id }));
+  }
+
+  return [];
+}
+
 async function refreshData() {
   if (!apiBase) {
     setStatus('No domain configured. Use App Protocol command setDomain.', true);
@@ -178,7 +202,26 @@ async function refreshData() {
       installedApps = parseInstalled(installedPayload);
       setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
     } catch (installedErr: any) {
-      setStatus(`Loaded ${marketApps.length} market apps (no /api/installed endpoint)`);
+      const yaarAny = (window as any).yaar;
+      if (typeof yaarAny?.os?.action === 'function') {
+        try {
+          const localInstalled = await yaarAny.os.action('apps:list', {});
+          const parsed = parseInstalledAny(localInstalled);
+          if (parsed.length) {
+            installedApps = parsed;
+            setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps (local)`);
+          } else {
+            installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
+            setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
+          }
+        } catch {
+          installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
+          setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
+        }
+      } else {
+        installedApps = marketApps.map((a) => ({ id: a.id, name: a.name || a.id }));
+        setStatus(`Loaded ${marketApps.length} market apps (assumed installed: no /api/installed endpoint)`);
+      }
     }
 
     marketApps = marketApps.map((m) => ({ ...m, installed: m.installed || hasInstalled(m.id) }));
@@ -361,7 +404,15 @@ function render() {
       for (const app of marketApps) {
         const subtitle = [app.description, app.version ? `v${app.version}` : '', app.author || ''].filter(Boolean).join(' • ');
         const installed = app.installed || hasInstalled(app.id);
-        list.appendChild(card(app.name, subtitle, installed ? 'Reinstall' : 'Install', () => void installApp(app), loading));
+        list.appendChild(
+          card(
+            app.name,
+            subtitle,
+            installed ? 'Installed' : 'Install',
+            () => void installApp(app),
+            loading || installed,
+          ),
+        );
       }
     }
   } else {
