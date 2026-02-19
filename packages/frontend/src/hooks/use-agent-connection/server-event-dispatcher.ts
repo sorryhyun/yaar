@@ -95,10 +95,8 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.AGENT_THINKING: {
       const agentId = (message as { agentId?: string }).agentId || 'default';
       const monitorId = (message as { monitorId?: string }).monitorId;
-      handlers.setAgentActive(agentId, 'Thinking...');
-      if (message.content) {
-        handlers.updateCliStreaming(agentId, message.content, 'thinking', monitorId);
-      }
+      handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...');
+      handlers.updateCliStreaming(agentId, message.content ?? '', 'thinking', monitorId);
       break;
     }
     case ServerEventType.AGENT_RESPONSE: {
