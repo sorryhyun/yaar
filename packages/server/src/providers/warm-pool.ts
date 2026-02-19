@@ -313,7 +313,11 @@ class ProviderWarmPool {
     this.pool = [];
     this.initialized = false;
     this.preferredProvider = null;
-    this.sharedCodexAppServer = null;
+
+    if (this.sharedCodexAppServer) {
+      await this.sharedCodexAppServer.stop();
+      this.sharedCodexAppServer = null;
+    }
   }
 }
 

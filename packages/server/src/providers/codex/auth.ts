@@ -45,8 +45,11 @@ export function invalidateCodexAuth(): void {
 function openUrl(url: string): void {
   const p = platform();
   if (p === 'win32') {
-    // Quote the URL so cmd.exe doesn't treat & as a command separator
-    spawn('cmd', ['/c', `start "" "${url}"`], { detached: true, stdio: 'ignore' }).unref();
+    // Use rundll32 to avoid cmd.exe treating & as a command separator
+    spawn('rundll32', ['url.dll,FileProtocolHandler', url], {
+      detached: true,
+      stdio: 'ignore',
+    }).unref();
   } else if (p === 'darwin') {
     spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
   } else {
