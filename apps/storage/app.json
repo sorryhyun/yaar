@@ -3,5 +3,25 @@
   "name": "Storage",
   "description": "Persistent file storage for user data, notes, and files across sessions",
   "hidden": true,
-  "appProtocol": true
+  "appProtocol": true,
+  "protocol": {
+    "state": {},
+    "commands": {
+      "navigate": {
+        "description": "Navigate to a directory path",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Directory path to navigate to"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    }
+  }
 }

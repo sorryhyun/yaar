@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DesktopSurface } from './components/desktop';
-import { ConnectionDialog } from './components/ui/ConnectionDialog';
-import { LoadingScreen } from './components/ui/LoadingScreen';
+import { ConnectionDialog } from './components/overlays/ConnectionDialog';
+import { LoadingScreen } from './components/overlays/LoadingScreen';
 import {
   parseHashConnection,
   getRemoteConnection,

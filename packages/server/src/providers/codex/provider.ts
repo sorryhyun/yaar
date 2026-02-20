@@ -124,9 +124,14 @@ export class CodexProvider extends BaseTransport {
         yield { type: 'text', sessionId: this.currentSession!.threadId };
       }
 
-      // Stamp monitorId so actions emitted during this turn carry the originating monitor
+      // Stamp monitorId and agentId so actions emitted during this turn carry the
+      // correct origin. Codex's app-server cannot send X-Agent-Id headers on MCP
+      // requests, so we set the fallback on the emitter instead.
       if (options.monitorId) {
         actionEmitter.setCurrentMonitor(options.monitorId);
+      }
+      if (options.agentId) {
+        actionEmitter.setCurrentAgent(options.agentId);
       }
 
       // pendingMessages is local per-query to avoid cross-talk.
@@ -214,6 +219,7 @@ export class CodexProvider extends BaseTransport {
         client.off('notification', notificationHandler);
         client.off('server_request', serverRequestHandler);
         actionEmitter.clearCurrentMonitor();
+        actionEmitter.clearCurrentAgent();
         this.currentTurnId = null;
         this.turnReadyResolve?.();
         this.turnReadyResolve = null;

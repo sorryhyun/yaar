@@ -134,6 +134,7 @@ class ActionEmitter extends EventEmitter {
   private readyWindows = new Set<string>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
+  private currentAgentId: string | undefined;
 
   /**
    * Set the current monitor ID for action stamping.
@@ -151,6 +152,22 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Set the current agent ID for action stamping.
+   * Called before a provider turn so emitted actions carry the correct agent ID.
+   * Used by providers (like Codex) that cannot pass X-Agent-Id headers on MCP requests.
+   */
+  setCurrentAgent(id: string): void {
+    this.currentAgentId = id;
+  }
+
+  /**
+   * Clear the current agent ID after a provider turn completes.
+   */
+  clearCurrentAgent(): void {
+    this.currentAgentId = undefined;
+  }
+
+  /**
    * Generate a unique request ID.
    */
   private generateRequestId(): string {
@@ -158,14 +175,26 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Resolve the effective agent ID from (in priority order):
+   * 1. Explicit parameter
+   * 2. AsyncLocalStorage context (set by Claude via X-Agent-Id header)
+   * 3. Fallback currentAgentId (set by Codex provider before turn)
+   */
+  private resolveAgentId(explicit?: string): string | undefined {
+    if (explicit) return explicit;
+    const contextId = getAgentId();
+    if (contextId && contextId !== 'unknown') return contextId;
+    return this.currentAgentId;
+  }
+
+  /**
    * Emit an OS Action to all listeners.
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
-    const currentAgentId = agentId ?? getAgentId();
     this.emit('action', {
       action,
       sessionId,
-      agentId: currentAgentId,
+      agentId: this.resolveAgentId(agentId),
       monitorId: this.currentMonitorId,
     } as ActionEvent);
   }
@@ -181,8 +210,8 @@ class ActionEmitter extends EventEmitter {
     sessionId?: string,
   ): Promise<RenderingFeedback | null> {
     const requestId = this.generateRequestId();
-    // Get current agent ID from context and include in action
-    const agentId = getAgentId();
+    // Get current agent ID from context (with Codex fallback) and include in action
+    const agentId = this.resolveAgentId();
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
     // Create promise that resolves when feedback is received or timeout

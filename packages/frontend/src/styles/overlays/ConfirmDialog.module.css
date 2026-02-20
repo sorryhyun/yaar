@@ -1,0 +1,101 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+}
+
+.dialog {
+  background: var(--color-base);
+  border: var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: var(--shadow-2xl);
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.message {
+  font-size: var(--text-lg);
+  color: var(--color-subtext);
+  margin-bottom: var(--space-6);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.rememberChoice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  font-size: var(--text-md);
+  color: var(--color-subtext-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rememberChoice input[type='checkbox'] {
+  width: var(--space-4);
+  height: var(--space-4);
+  accent-color: var(--color-blue);
+  cursor: pointer;
+}
+
+.rememberChoice:hover {
+  color: var(--color-text);
+}
+
+.buttons {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+.cancelButton,
+.confirmButton {
+  padding: 10px var(--space-5);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all var(--transition-fast);
+}
+
+.cancelButton {
+  background: var(--bg-overlay-medium);
+  color: var(--color-text);
+  border: var(--border-subtle);
+}
+
+.cancelButton:hover {
+  background: var(--bg-overlay-strong);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.confirmButton {
+  background: var(--color-blue);
+  color: var(--color-base);
+}
+
+.confirmButton:hover {
+  background: var(--color-lavender);
+}
+
+.cancelButton:active,
+.confirmButton:active {
+  transform: scale(0.98);
+}

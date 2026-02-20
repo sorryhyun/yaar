@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
-import { Taskbar } from '@/components/ui/Taskbar';
+import { Taskbar } from '@/components/taskbar/Taskbar';
 
 function createMinimizedWindow(id: string, title: string, renderer = 'markdown') {
   return {

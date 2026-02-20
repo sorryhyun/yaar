@@ -43,6 +43,7 @@ interface AppSDK {
 
 let currentPath = '';
 let entries: StorageEntry[] = [];
+let mountAliases: string[] = [];
 let selectedFile: string | null = null;
 let previewContent: string | null = null;
 
@@ -55,6 +56,10 @@ const appApi = yaar?.app;
 function basename(path: string): string {
   const parts = path.replace(/\/$/, '').split('/');
   return parts[parts.length - 1] || path;
+}
+
+function sanitizeAlias(alias: string): string {
+  return alias.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
 function formatSize(bytes?: number): string {
@@ -178,6 +183,50 @@ root.innerHTML = `
     white-space: nowrap;
   }
   .toolbar-btn:hover { border-color: var(--accent-dim); }
+  .toolbar-select {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    font-size: 12px;
+    height: 26px;
+    max-width: 180px;
+  }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .modal.open { display: flex; }
+  .modal-card {
+    width: min(520px, calc(100vw - 32px));
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+  .modal-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .modal-note { color: var(--text-dim); font-size: 12px; line-height: 1.4; margin-bottom: 12px; }
+  .modal-form { display: grid; gap: 10px; }
+  .modal-label { font-size: 12px; color: var(--text-dim); }
+  .modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+  .modal-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
   /* Main content */
   .main {
@@ -313,6 +362,10 @@ root.innerHTML = `
 
 <div class="toolbar">
   <div class="breadcrumb" id="breadcrumb"></div>
+  <select class="toolbar-select" id="mount-select" title="Jump to mounted folder">
+    <option value="">Mounts</option>
+  </select>
+  <button class="toolbar-btn" id="btn-mount" title="Request mount folder">Mount...</button>
   <button class="toolbar-btn" id="btn-refresh" title="Refresh">\u21BB</button>
 </div>
 <div class="main">
@@ -326,10 +379,36 @@ root.innerHTML = `
     <div class="preview-meta" id="preview-meta"></div>
   </div>
 </div>
+<div class="modal" id="mount-modal">
+  <div class="modal-card">
+    <div class="modal-title">Request Host Folder Mount</div>
+    <div class="modal-note">The app cannot mount folders directly. Submit a request and the agent will ask for permission and run the mount tool.</div>
+    <form class="modal-form" id="mount-form">
+      <label class="modal-label" for="mount-alias">Mount alias</label>
+      <input class="modal-input" id="mount-alias" name="alias" placeholder="project-files" required />
+      <label class="modal-label" for="mount-host-path">Host folder path</label>
+      <input class="modal-input" id="mount-host-path" name="hostPath" placeholder="/Users/name/projects" required />
+      <label class="modal-check" for="mount-readonly">
+        <input type="checkbox" id="mount-readonly" name="readOnly" />
+        Read-only mount
+      </label>
+      <div class="modal-actions">
+        <button class="toolbar-btn" type="button" id="mount-cancel">Cancel</button>
+        <button class="toolbar-btn" type="submit" id="mount-submit">Request Mount</button>
+      </div>
+    </form>
+  </div>
+</div>
 <div class="statusbar" id="statusbar">Ready</div>
 `;
 
 const elBreadcrumb = document.getElementById('breadcrumb')!;
+const elMountSelect = document.getElementById('mount-select') as HTMLSelectElement;
+const elMountModal = document.getElementById('mount-modal')!;
+const elMountForm = document.getElementById('mount-form') as HTMLFormElement;
+const elMountAlias = document.getElementById('mount-alias') as HTMLInputElement;
+const elMountHostPath = document.getElementById('mount-host-path') as HTMLInputElement;
+const elMountReadonly = document.getElementById('mount-readonly') as HTMLInputElement;
 const elFileList = document.getElementById('file-list')!;
 const elPreview = document.getElementById('preview')!;
 const elPreviewTitle = document.getElementById('preview-title')!;
@@ -338,7 +417,76 @@ const elPreviewMeta = document.getElementById('preview-meta')!;
 const elStatusbar = document.getElementById('statusbar')!;
 
 document.getElementById('btn-refresh')!.onclick = () => navigate(currentPath);
+document.getElementById('btn-mount')!.onclick = openMountDialog;
+document.getElementById('mount-cancel')!.onclick = closeMountDialog;
 document.getElementById('preview-close')!.onclick = closePreview;
+elMountForm.addEventListener('submit', submitMountRequest);
+elMountModal.addEventListener('click', (e) => {
+  if (e.target === elMountModal) closeMountDialog();
+});
+elMountSelect.addEventListener('change', () => {
+  if (!elMountSelect.value) return;
+  navigate(`mounts/${elMountSelect.value}`);
+  elMountSelect.value = '';
+});
+
+// ── Mount UI ───────────────────────────────────────────────────────
+
+function openMountDialog() {
+  elMountForm.reset();
+  elMountModal.classList.add('open');
+  elMountAlias.focus();
+}
+
+function closeMountDialog() {
+  elMountModal.classList.remove('open');
+}
+
+async function submitMountRequest(e: Event) {
+  e.preventDefault();
+  const alias = sanitizeAlias(elMountAlias.value);
+  const hostPath = elMountHostPath.value.trim();
+
+  if (!alias) {
+    elStatusbar.textContent = 'Mount alias is required';
+    return;
+  }
+  if (!hostPath) {
+    elStatusbar.textContent = 'Host folder path is required';
+    return;
+  }
+
+  if (!appApi?.sendInteraction) {
+    elStatusbar.textContent = 'Agent bridge unavailable: cannot send mount request';
+    return;
+  }
+
+  appApi.sendInteraction({
+    event: 'storage_mount_request',
+    source: 'storage',
+    alias,
+    hostPath,
+    readOnly: elMountReadonly.checked,
+  });
+
+  closeMountDialog();
+  elStatusbar.textContent = `Mount request sent for ${alias}`;
+}
+
+async function refreshMountAliases() {
+  try {
+    const items = await storage.list('mounts');
+    mountAliases = items.filter((entry) => entry.isDirectory).map((entry) => basename(entry.path)).sort((a, b) => a.localeCompare(b));
+  } catch {
+    mountAliases = [];
+  }
+
+  const options = ['<option value="">Mounts</option>'];
+  for (const alias of mountAliases) {
+    options.push(`<option value="${alias}">${alias}</option>`);
+  }
+  elMountSelect.innerHTML = options.join('');
+}
 
 // ── Navigation ─────────────────────────────────────────────────────
 
@@ -352,6 +500,7 @@ async function navigate(path: string) {
   elStatusbar.textContent = 'Loading...';
 
   try {
+    await refreshMountAliases();
     entries = await storage.list(path);
     // Sort: directories first, then alphabetically
     entries.sort((a, b) => {
@@ -527,6 +676,10 @@ if (appApi) {
         description: 'Currently selected file path (null if none)',
         handler: () => selectedFile,
       },
+      'mount-aliases': {
+        description: 'Mounted folders available under mounts/',
+        handler: () => [...mountAliases],
+      },
       'file-preview': {
         description: 'Text content of the currently previewed file (null if not text)',
         handler: () => previewContent,
@@ -556,6 +709,29 @@ if (appApi) {
           const entry = entries.find((e) => e.path === params.path);
           if (!entry || entry.isDirectory) return { success: false, error: 'File not found' };
           selectFile(entry);
+          return { success: true };
+        },
+      },
+      'request-mount': {
+        description: 'Send a mount request for the agent to execute with host permission',
+        params: {
+          type: 'object',
+          properties: {
+            alias: { type: 'string', description: 'Mount alias (example: project-files)' },
+            hostPath: { type: 'string', description: 'Absolute host folder path' },
+            readOnly: { type: 'boolean', description: 'Whether mount should be read-only' },
+          },
+          required: ['alias', 'hostPath'],
+        },
+        handler: (params) => {
+          if (!appApi?.sendInteraction) return { success: false, error: 'Agent bridge unavailable' };
+          appApi.sendInteraction({
+            event: 'storage_mount_request',
+            source: 'storage',
+            alias: sanitizeAlias(String(params.alias || '')),
+            hostPath: String(params.hostPath || ''),
+            readOnly: Boolean(params.readOnly),
+          });
           return { success: true };
         },
       },

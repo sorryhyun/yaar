@@ -12,7 +12,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useDesktopStore } from '@/store';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
-import styles from '@/styles/ui/DrawingOverlay.module.css';
+import styles from '@/styles/drawing/DrawingOverlay.module.css';
 
 interface Point {
   x: number;

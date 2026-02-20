@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
-import { CommandPalette } from '@/components/ui/CommandPalette';
+import { CommandPalette } from '@/components/command-palette/CommandPalette';
 
 // Mock useAgentConnection
 vi.mock('@/hooks/useAgentConnection', () => ({

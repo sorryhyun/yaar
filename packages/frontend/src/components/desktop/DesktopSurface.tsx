@@ -4,53 +4,41 @@
  * Handles:
  * - Click to deselect windows
  * - Background styling
- * - Contains all windows
+ * - Drag/drop
+ * - Rubber-band selection
+ * - Keyboard shortcuts
+ * - CSS var application
+ * - Composition of sub-components
  */
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
-import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
-import type { DesktopShortcut } from '@yaar/shared';
 import { WindowManager } from './WindowManager';
-import { WindowFrame } from '../windows/WindowFrame';
+import { WindowFrame } from '../window/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
-import { ToastContainer } from '../ui/ToastContainer';
-import { NotificationCenter } from '../ui/NotificationCenter';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { UserPrompt } from '../ui/UserPrompt';
-import { CommandPalette } from '../ui/CommandPalette';
-import { WindowContextMenu } from '../ui/WindowContextMenu';
-import { CursorSpinner } from '../ui/CursorSpinner';
+import {
+  ToastContainer,
+  NotificationCenter,
+  ConfirmDialog,
+  UserPrompt,
+  WindowContextMenu,
+  CursorSpinner,
+  CliPanel,
+} from '../overlays';
+import { CommandPalette } from '../command-palette/CommandPalette';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
-import { CliPanel } from '../ui/CliPanel';
 import { resolveWallpaper, resolveAccent, resolveIconSize } from '@/constants/appearance';
+import { DesktopStatusBar } from './DesktopStatusBar';
+import { DesktopIcons } from './DesktopIcons';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
-/** App info from /api/apps endpoint */
-interface AppInfo {
-  id: string;
-  name: string;
-  description?: string;
-  icon?: string;
-  iconType?: 'emoji' | 'image';
-  hasSkill: boolean;
-  hasCredentials: boolean;
-  hidden?: boolean;
-}
-
 export function DesktopSurface() {
-  const connectionStatus = useDesktopStore((s) => s.connectionStatus);
-  const providerType = useDesktopStore((s) => s.providerType);
   const contextMenu = useDesktopStore((s) => s.contextMenu);
   const hideContextMenu = useDesktopStore((s) => s.hideContextMenu);
   const showContextMenu = useDesktopStore((s) => s.showContextMenu);
   const windowAgents = useDesktopStore((s) => s.windowAgents);
-  const activeAgents = useDesktopStore((s) => s.activeAgents);
-  const agentPanelOpen = useDesktopStore((s) => s.agentPanelOpen);
-  const toggleAgentPanel = useDesktopStore((s) => s.toggleAgentPanel);
-  const windows = useDesktopStore((s) => s.windows);
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
@@ -92,60 +80,7 @@ export function DesktopSurface() {
     };
   }, []);
 
-  const appsVersion = useDesktopStore((s) => s.appsVersion);
-  const appBadges = useDesktopStore((s) => s.appBadges);
-  const storeShortcuts = useDesktopStore((s) => s.shortcuts);
-  const [apps, setApps] = useState<AppInfo[]>([]);
-  const [shortcuts, setShortcuts] = useState<DesktopShortcut[]>([]);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
-
-  // Fetch available apps on mount and when appsVersion changes (after deploy)
-  const fetchedVersionRef = useRef(-1);
-  useEffect(() => {
-    if (fetchedVersionRef.current === appsVersion) return;
-    fetchedVersionRef.current = appsVersion;
-    async function fetchApps() {
-      try {
-        const response = await apiFetch('/api/apps');
-        if (response.ok) {
-          const data = await response.json();
-          setApps(data.apps || []);
-          setOnboardingCompleted(!!data.onboardingCompleted);
-          if (data.language && data.language !== useDesktopStore.getState().language) {
-            useDesktopStore.getState().applyServerLanguage(data.language);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch apps:', err);
-      }
-    }
-    fetchApps();
-  }, [appsVersion]);
-
-  // Fetch shortcuts on mount
-  useEffect(() => {
-    async function fetchShortcuts() {
-      try {
-        const response = await apiFetch('/api/shortcuts');
-        if (response.ok) {
-          const data = await response.json();
-          setShortcuts(data.shortcuts || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch shortcuts:', err);
-      }
-    }
-    fetchShortcuts();
-  }, []);
-
-  // Merge fetched shortcuts with store shortcuts (store takes precedence for real-time updates)
-  const mergedShortcuts = useMemo(() => {
-    const map = new Map<string, DesktopShortcut>();
-    for (const s of shortcuts) map.set(s.id, s);
-    for (const s of storeShortcuts) map.set(s.id, s);
-    return Array.from(map.values());
-  }, [shortcuts, storeShortcuts]);
 
   // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors
   useEffect(() => {
@@ -177,8 +112,6 @@ export function DesktopSurface() {
     }
   }, [accentColor]);
 
-  const agentList = Object.values(activeAgents);
-
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent) => {
       // Only handle clicks directly on the desktop
@@ -202,42 +135,6 @@ export function DesktopSurface() {
       }
     },
     [showContextMenu],
-  );
-
-  // Double-click prevention: track which icon is in cooldown
-  const [cooldownId, setCooldownId] = useState<string | null>(null);
-  const cooldownTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const startCooldown = useCallback((id: string) => {
-    setCooldownId(id);
-    clearTimeout(cooldownTimer.current);
-    cooldownTimer.current = setTimeout(() => setCooldownId(null), 1000);
-  }, []);
-
-  useEffect(() => () => clearTimeout(cooldownTimer.current), []);
-
-  const handleAppClick = useCallback(
-    (appId: string) => {
-      if (cooldownId === appId) return;
-      startCooldown(appId);
-      sendMessage(`<ui:click>app: ${appId}</ui:click>`);
-    },
-    [sendMessage, cooldownId, startCooldown],
-  );
-
-  const handleShortcutClick = useCallback(
-    (shortcut: DesktopShortcut) => {
-      if (shortcut.osActions && shortcut.osActions.length > 0) {
-        useDesktopStore.getState().applyActions(shortcut.osActions);
-        return;
-      }
-      if (cooldownId === shortcut.id) return;
-      startCooldown(shortcut.id);
-      sendMessage(
-        `<ui:click>shortcut: ${shortcut.id}, type: ${shortcut.type}, target: ${shortcut.target}</ui:click>`,
-      );
-    },
-    [sendMessage, cooldownId, startCooldown],
   );
 
   // Image drop on desktop background
@@ -435,157 +332,13 @@ export function DesktopSurface() {
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
       >
-        {/* Connection status indicator */}
-        <div className={styles.statusBar}>
-          <span className={styles.statusDot} data-status={connectionStatus} />
-          <span className={styles.statusText}>
-            {connectionStatus === 'connected'
-              ? `Connected (${providerType || 'agent'})`
-              : connectionStatus === 'connecting'
-                ? 'Connecting...'
-                : 'Disconnected'}
-          </span>
-          {agentList.length > 0 && (
-            <>
-              <span className={styles.statusDivider} />
-              <button
-                className={styles.agentIndicatorButton}
-                onClick={toggleAgentPanel}
-                title="Click to expand agent panel"
-              >
-                {agentList.map((agent) => (
-                  <div key={agent.id} className={styles.agentIndicator}>
-                    <span className={styles.agentSpinner} />
-                    <span className={styles.agentStatus}>{agent.status}</span>
-                  </div>
-                ))}
-                <span className={styles.expandArrow} data-open={agentPanelOpen}>
-                  {agentPanelOpen ? '▲' : '▼'}
-                </span>
-              </button>
-            </>
-          )}
-        </div>
+        <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
 
-        {/* Expanded agent panel */}
-        {agentPanelOpen && agentList.length > 0 && (
-          <div className={styles.agentPanel}>
-            <div className={styles.agentPanelHeader}>
-              <span>Active Agents</span>
-              <button className={styles.stopAllButton} onClick={interrupt} title="Stop all agents">
-                Stop All
-              </button>
-            </div>
-            <div className={styles.agentPanelList}>
-              {agentList.map((agent) => {
-                // Find window associated with this agent (keyed by agentId)
-                const windowAgent = windowAgents[agent.id];
-                const windowId = windowAgent?.windowId;
-                const windowTitle = windowId ? windows[windowId]?.title : null;
-
-                return (
-                  <div key={agent.id} className={styles.agentPanelItem}>
-                    <div className={styles.agentPanelInfo}>
-                      <span className={styles.agentPanelId}>{agent.id}</span>
-                      <span className={styles.agentPanelStatus}>{agent.status}</span>
-                      {windowTitle && (
-                        <span className={styles.agentPanelWindow}>Window: {windowTitle}</span>
-                      )}
-                    </div>
-                    <button
-                      className={styles.stopAgentButton}
-                      onClick={() => interruptAgent(agent.id)}
-                      title={`Stop agent ${agent.id}`}
-                    >
-                      Stop
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Desktop icons */}
-        <div className={styles.desktopIcons}>
-          {/* Onboarding icon (shown until onboarding is completed) */}
-          {!onboardingCompleted && (
-            <button
-              className={styles.desktopIcon}
-              onClick={() => handleAppClick('onboarding')}
-              disabled={cooldownId === 'onboarding'}
-            >
-              <span className={styles.iconImage}>🚀</span>
-              <span className={styles.iconLabel}>Start</span>
-            </button>
-          )}
-          {/* Dynamic app icons (hidden apps filtered out) */}
-          {apps
-            .filter((a) => !a.hidden)
-            .map((app) => (
-              <button
-                key={app.id}
-                className={`${styles.desktopIcon}${selectedAppIds.has(app.id) ? ` ${styles.desktopIconSelected}` : ''}`}
-                data-app-id={app.id}
-                onClick={() => handleAppClick(app.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  showContextMenu(e.clientX, e.clientY);
-                }}
-                disabled={cooldownId === app.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/x-yaar-app', app.id);
-                  e.dataTransfer.effectAllowed = 'link';
-                }}
-              >
-                <span className={styles.iconWrapper}>
-                  {app.iconType === 'image' ? (
-                    <img
-                      className={styles.iconImg}
-                      src={resolveAssetUrl(app.icon!)}
-                      alt={app.name}
-                      draggable={false}
-                    />
-                  ) : (
-                    <span className={styles.iconImage}>{app.icon || '📦'}</span>
-                  )}
-                  {appBadges[app.id] > 0 && (
-                    <span className={styles.badge}>
-                      {appBadges[app.id] > 99 ? '99+' : appBadges[app.id]}
-                    </span>
-                  )}
-                </span>
-                <span className={styles.iconLabel}>{app.name}</span>
-              </button>
-            ))}
-          {/* Desktop shortcuts */}
-          {mergedShortcuts.map((shortcut) => (
-            <button
-              key={shortcut.id}
-              className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
-              data-shortcut-id={shortcut.id}
-              onClick={() => handleShortcutClick(shortcut)}
-              disabled={cooldownId === shortcut.id}
-            >
-              <span className={styles.iconWrapper}>
-                {shortcut.iconType === 'image' ? (
-                  <img
-                    className={styles.iconImg}
-                    src={resolveAssetUrl(shortcut.icon)}
-                    alt={shortcut.label}
-                    draggable={false}
-                  />
-                ) : (
-                  <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
-                )}
-                <span className={styles.shortcutArrow} />
-              </span>
-              <span className={styles.iconLabel}>{shortcut.label}</span>
-            </button>
-          ))}
-        </div>
+        <DesktopIcons
+          selectedAppIds={selectedAppIds}
+          sendMessage={sendMessage}
+          showContextMenu={showContextMenu}
+        />
 
         {/* Rubber-band selection rectangle */}
         {selectionRect && (

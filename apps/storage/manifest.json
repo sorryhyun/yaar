@@ -1,0 +1,8 @@
+{
+  "id": "storage",
+  "name": "Storage",
+  "icon": "🗂️",
+  "description": "Persistent file storage for user data, notes, and files across sessions",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

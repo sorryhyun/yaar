@@ -10,7 +10,7 @@ import {
   selectMinimizedIframeWindows,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
-import { WindowFrame } from '../windows/WindowFrame';
+import { WindowFrame } from '../window/WindowFrame';
 
 export function WindowManager() {
   const widgets = useDesktopStore(useShallow(selectWidgetWindows));

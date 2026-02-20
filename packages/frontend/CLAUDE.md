@@ -24,8 +24,10 @@ src/
 ├── components/
 │   ├── desktop/           # DesktopSurface, WindowManager
 │   ├── drawing/           # DrawingOverlay
-│   ├── ui/                # CommandPalette, NotificationCenter, DebugPanel, dialogs, etc.
-│   └── windows/           # WindowFrame, ContentRenderer, LockOverlay
+│   ├── command-palette/   # CommandPalette (primary user input)
+│   ├── taskbar/           # Taskbar (always-visible navigation)
+│   ├── overlays/          # Floating/transient layers (dialogs, toasts, panels, etc.)
+│   └── window/            # WindowFrame, ContentRenderer, LockOverlay
 │       └── renderers/     # Markdown, Table, Html, Iframe, Component, Text renderers
 ├── contexts/              # ComponentActionContext, FormContext
 ├── hooks/                 # useAgentConnection (WebSocket singleton)
@@ -86,8 +88,8 @@ src/
 
 ## Adding a New Content Renderer
 
-1. Create `src/components/windows/renderers/<Name>Renderer.tsx`
-2. Add case in `src/components/windows/ContentRenderer.tsx`
+1. Create `src/components/window/renderers/<Name>Renderer.tsx`
+2. Add case in `src/components/window/ContentRenderer.tsx`
 3. Add styles in `src/styles/renderers.module.css`
 4. Update renderer enum in `@yaar/server` tools
 
