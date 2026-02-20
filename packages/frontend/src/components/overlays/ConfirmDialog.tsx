@@ -2,6 +2,7 @@
  * ConfirmDialog - Displays confirmation dialogs from the server.
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectDialogs } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
@@ -19,6 +20,7 @@ function DialogBox({
     rememberChoice?: 'once' | 'always' | 'deny_always',
   ) => void;
 }) {
+  const { t } = useTranslation();
   const [rememberChoice, setRememberChoice] = useState(false);
   const hasPermissionOptions = dialog.permissionOptions?.showRememberChoice;
 
@@ -44,7 +46,7 @@ function DialogBox({
             checked={rememberChoice}
             onChange={(e) => setRememberChoice(e.target.checked)}
           />
-          <span>Remember my choice</span>
+          <span>{t('confirmDialog.rememberChoice')}</span>
         </label>
       )}
 

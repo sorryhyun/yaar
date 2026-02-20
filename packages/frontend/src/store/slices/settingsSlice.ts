@@ -5,6 +5,7 @@
 import type { SliceCreator, SettingsSlice } from '../types';
 import { apiFetch } from '@/lib/api';
 import type { IconSizeKey } from '@/constants/appearance';
+import i18next from 'i18next';
 
 const STORAGE_KEY = 'yaar-settings';
 
@@ -88,6 +89,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       state.language = lang;
       saveSettings({ ...getAllSettings(get), language: lang });
     });
+    i18next.changeLanguage(lang);
     apiFetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -95,11 +97,13 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     }).catch(() => {});
   },
 
-  applyServerLanguage: (lang) =>
+  applyServerLanguage: (lang) => {
     set((state) => {
       state.language = lang;
       saveSettings({ ...getAllSettings(get), language: lang });
-    }),
+    });
+    i18next.changeLanguage(lang);
+  },
 
   setWallpaper: (value) =>
     set((state) => {

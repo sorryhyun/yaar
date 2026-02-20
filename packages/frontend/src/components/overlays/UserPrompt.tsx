@@ -6,6 +6,7 @@
  * - Both can coexist in a single prompt.
  */
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectUserPrompts } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
@@ -21,6 +22,7 @@ function PromptBox({
   onSubmit: (promptId: string, selectedValues?: string[], text?: string) => void;
   onDismiss: (promptId: string) => void;
 }) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [text, setText] = useState('');
 
@@ -128,11 +130,11 @@ function PromptBox({
       <div className={styles.buttons}>
         {prompt.allowDismiss !== false && (
           <button className={styles.dismissButton} onClick={() => onDismiss(prompt.id)}>
-            Skip
+            {t('userPrompt.skip')}
           </button>
         )}
         <button className={styles.submitButton} disabled={!canSubmit} onClick={handleSubmit}>
-          Submit
+          {t('userPrompt.submit')}
         </button>
       </div>
     </div>

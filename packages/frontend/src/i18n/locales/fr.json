@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "Connexion en cours...",
+      "expanded": "Entrée pour envoyer, Shift+Entrée pour nouvelle ligne, Échap pour annuler",
+      "default": "Posez n'importe quelle question à l'agent..."
+    },
+    "send": "Envoyer",
+    "drawing": {
+      "attached": "Dessin joint",
+      "clear": "Effacer le dessin"
+    },
+    "image": {
+      "remove": "Supprimer l'image",
+      "clearAll": "Tout effacer"
+    },
+    "menu": {
+      "settings": "Paramètres",
+      "sessions": "Sessions",
+      "actions": "Actions"
+    },
+    "tooltip": {
+      "reset": "Réinitialiser les fenêtres et le contexte",
+      "pencilExit": "Quitter le dessin (Échap)",
+      "pencilEnter": "Dessiner à l'écran",
+      "terminalExit": "Quitter le terminal (Alt+Tab)",
+      "terminalEnter": "Vue terminal (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "Agent arrêté",
+      "agentsStopped": "{{count}} agents arrêtés",
+      "contextReset": "Contexte réinitialisé"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "name": {
+      "label": "Nom",
+      "placeholder": "Entrez votre nom"
+    },
+    "language": {
+      "label": "Langue"
+    },
+    "domains": {
+      "label": "Autoriser tous les domaines",
+      "description": "Ignore l'approbation par domaine pour les requêtes HTTP"
+    },
+    "wallpaper": {
+      "label": "Fond d'écran",
+      "solidColor": "Couleur unie"
+    },
+    "accentColor": {
+      "label": "Couleur d'accentuation"
+    },
+    "iconSize": {
+      "label": "Taille des icônes"
+    }
+  },
+  "connection": {
+    "title": "Connexion à YAAR",
+    "subtitle": "Aucun serveur local détecté. Entrez les détails de votre serveur distant.",
+    "serverUrl": "URL du serveur",
+    "token": "Jeton",
+    "tokenPlaceholder": "Collez le jeton depuis le terminal du serveur",
+    "connecting": "Connexion en cours...",
+    "connect": "Connecter",
+    "error": {
+      "required": "L'URL du serveur et le jeton sont obligatoires",
+      "notReachable": "Serveur inaccessible",
+      "invalidToken": "Jeton invalide",
+      "testFailed": "Échec du test de connexion",
+      "failed": "Échec de la connexion"
+    }
+  },
+  "sessions": {
+    "title": "Sessions",
+    "loading": "Chargement des sessions...",
+    "empty": "Aucune session trouvée",
+    "transcript": {
+      "loading": "Chargement de la transcription...",
+      "empty": "Aucune transcription disponible"
+    },
+    "restore": "Restaurer",
+    "restoreTitle": "Restaurer cette session",
+    "export": "Exporter",
+    "exportTitle": "Exporter cette session",
+    "error": {
+      "fetchSessions": "Échec de la récupération des sessions",
+      "loadSessions": "Échec du chargement des sessions",
+      "fetchTranscript": "Échec de la récupération de la transcription",
+      "loadTranscript": "Échec du chargement de la transcription",
+      "restore": "Échec de la restauration de la session",
+      "export": "Échec de l'exportation de la session"
+    }
+  },
+  "userPrompt": {
+    "skip": "Ignorer",
+    "submit": "Soumettre"
+  },
+  "confirmDialog": {
+    "rememberChoice": "Mémoriser mon choix"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "Chargement\u2026"
+  },
+  "window": {
+    "lockedBy": "Verrouillé par : {{agent}}",
+    "poolAgent": "Agent du pool : {{agentId}} ({{status}})",
+    "export": "Exporter le contenu"
+  },
+  "recentActions": {
+    "title": "Actions récentes ({{count}})",
+    "clear": "Effacer",
+    "empty": "Pas encore d'actions. Les actions de l'IA s'afficheront ici.",
+    "action": {
+      "window": {
+        "create": "Fenêtre créée \"{{title}}\"",
+        "close": "Fenêtre {{windowId}} fermée",
+        "focus": "Fenêtre {{windowId}} focalisée",
+        "minimize": "Fenêtre {{windowId}} réduite",
+        "maximize": "Fenêtre {{windowId}} agrandie",
+        "restore": "Fenêtre {{windowId}} restaurée",
+        "move": "Fenêtre {{windowId}} déplacée vers ({{x}}, {{y}})",
+        "resize": "Fenêtre {{windowId}} redimensionnée à {{w}}x{{h}}",
+        "setTitle": "Titre \"{{title}}\" défini sur {{windowId}}",
+        "setContent": "Contenu de {{windowId}} mis à jour",
+        "updateContent": "Contenu de {{windowId}} mis à jour ({{op}})",
+        "lock": "Fenêtre {{windowId}} verrouillée",
+        "unlock": "Fenêtre {{windowId}} déverrouillée"
+      },
+      "notification": {
+        "show": "Notification affichée \"{{title}}\"",
+        "dismiss": "Notification {{id}} ignorée"
+      },
+      "toast": {
+        "show": "Toast affiché : {{message}}",
+        "dismiss": "Toast {{id}} ignoré"
+      },
+      "dialog": {
+        "confirm": "Dialogue affiché : {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "Connecté ({{provider}})",
+    "connecting": "Connexion en cours...",
+    "disconnected": "Déconnecté",
+    "activeAgents": "Agents actifs",
+    "stopAll": "Tout arrêter",
+    "stopAgent": "Arrêter l'agent {{agentId}}",
+    "window": "Fenêtre : {{title}}",
+    "stop": "Arrêter"
+  },
+  "contextMenu": {
+    "continueWith": "Continuer avec l'agent \"{{title}}\"",
+    "in": "Dans \"{{title}}...\"",
+    "quickMessage": "Message rapide",
+    "send": "Envoyer",
+    "placeholder": {
+      "continue": "Continuez la conversation...",
+      "newAgent": "Que doit faire cet agent ?",
+      "message": "Tapez votre message..."
+    }
+  }
+}

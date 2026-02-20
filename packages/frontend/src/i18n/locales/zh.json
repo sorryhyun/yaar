@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "连接中...",
+      "expanded": "Enter 发送，Shift+Enter 换行，Esc 取消",
+      "default": "向助手提问..."
+    },
+    "send": "发送",
+    "drawing": {
+      "attached": "已附加绘图",
+      "clear": "清除绘图"
+    },
+    "image": {
+      "remove": "删除图片",
+      "clearAll": "清除全部"
+    },
+    "menu": {
+      "settings": "设置",
+      "sessions": "会话",
+      "actions": "操作"
+    },
+    "tooltip": {
+      "reset": "重置窗口和上下文",
+      "pencilExit": "退出绘图 (Esc)",
+      "pencilEnter": "在屏幕上绘图",
+      "terminalExit": "退出终端 (Alt+Tab)",
+      "terminalEnter": "终端视图 (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "助手已停止",
+      "agentsStopped": "已停止 {{count}} 个助手",
+      "contextReset": "上下文已重置"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "name": {
+      "label": "姓名",
+      "placeholder": "请输入您的姓名"
+    },
+    "language": {
+      "label": "语言"
+    },
+    "domains": {
+      "label": "允许所有域名",
+      "description": "跳过 HTTP 请求的逐域名审批"
+    },
+    "wallpaper": {
+      "label": "壁纸",
+      "solidColor": "纯色"
+    },
+    "accentColor": {
+      "label": "强调色"
+    },
+    "iconSize": {
+      "label": "图标大小"
+    }
+  },
+  "connection": {
+    "title": "连接到 YAAR",
+    "subtitle": "未检测到本地服务器。请输入远程服务器详情。",
+    "serverUrl": "服务器 URL",
+    "token": "令牌",
+    "tokenPlaceholder": "从服务器终端粘贴令牌",
+    "connecting": "连接中...",
+    "connect": "连接",
+    "error": {
+      "required": "服务器 URL 和令牌不能为空",
+      "notReachable": "服务器不可达",
+      "invalidToken": "无效的令牌",
+      "testFailed": "连接测试失败",
+      "failed": "连接失败"
+    }
+  },
+  "sessions": {
+    "title": "会话",
+    "loading": "加载会话中...",
+    "empty": "未找到会话",
+    "transcript": {
+      "loading": "加载对话记录中...",
+      "empty": "暂无对话记录"
+    },
+    "restore": "恢复",
+    "restoreTitle": "恢复此会话",
+    "export": "导出",
+    "exportTitle": "导出此会话",
+    "error": {
+      "fetchSessions": "获取会话失败",
+      "loadSessions": "加载会话失败",
+      "fetchTranscript": "获取对话记录失败",
+      "loadTranscript": "加载对话记录失败",
+      "restore": "恢复会话失败",
+      "export": "导出会话失败"
+    }
+  },
+  "userPrompt": {
+    "skip": "跳过",
+    "submit": "提交"
+  },
+  "confirmDialog": {
+    "rememberChoice": "记住我的选择"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "加载中\u2026"
+  },
+  "window": {
+    "lockedBy": "锁定者：{{agent}}",
+    "poolAgent": "池代理：{{agentId}} ({{status}})",
+    "export": "导出内容"
+  },
+  "recentActions": {
+    "title": "最近操作 ({{count}})",
+    "clear": "清除",
+    "empty": "暂无操作。AI 的操作将显示在此处。",
+    "action": {
+      "window": {
+        "create": "创建窗口 \"{{title}}\"",
+        "close": "关闭窗口 {{windowId}}",
+        "focus": "聚焦窗口 {{windowId}}",
+        "minimize": "最小化窗口 {{windowId}}",
+        "maximize": "最大化窗口 {{windowId}}",
+        "restore": "还原窗口 {{windowId}}",
+        "move": "移动窗口 {{windowId}} 至 ({{x}}, {{y}})",
+        "resize": "调整窗口 {{windowId}} 大小至 {{w}}x{{h}}",
+        "setTitle": "设置窗口 {{windowId}} 标题为 \"{{title}}\"",
+        "setContent": "更新窗口 {{windowId}} 内容",
+        "updateContent": "更新窗口 {{windowId}} 内容 ({{op}})",
+        "lock": "锁定窗口 {{windowId}}",
+        "unlock": "解锁窗口 {{windowId}}"
+      },
+      "notification": {
+        "show": "显示通知 \"{{title}}\"",
+        "dismiss": "关闭通知 {{id}}"
+      },
+      "toast": {
+        "show": "显示提示: {{message}}",
+        "dismiss": "关闭提示 {{id}}"
+      },
+      "dialog": {
+        "confirm": "显示对话框: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "已连接 ({{provider}})",
+    "connecting": "连接中...",
+    "disconnected": "已断开",
+    "activeAgents": "活跃助手",
+    "stopAll": "全部停止",
+    "stopAgent": "停止助手 {{agentId}}",
+    "window": "窗口：{{title}}",
+    "stop": "停止"
+  },
+  "contextMenu": {
+    "continueWith": "继续与 \"{{title}}\" 助手对话",
+    "in": "在 \"{{title}}...\" 中",
+    "quickMessage": "快速消息",
+    "send": "发送",
+    "placeholder": {
+      "continue": "继续对话...",
+      "newAgent": "这个助手应该做什么？",
+      "message": "输入您的消息..."
+    }
+  }
+}

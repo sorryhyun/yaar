@@ -4,6 +4,8 @@
  * Shows human-readable summaries of OS Actions with expandable details.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
 import styles from '@/styles/overlays/RecentActionsPanel.module.css';
@@ -11,53 +13,112 @@ import styles from '@/styles/overlays/RecentActionsPanel.module.css';
 /**
  * Generate a human-readable summary of an OS Action.
  */
-function getActionSummary(action: OSAction): { summary: string; category: string } {
+function getActionSummary(action: OSAction, t: TFunction): { summary: string; category: string } {
   switch (action.type) {
     case 'window.create':
-      return { summary: `Created window "${action.title}"`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.create', { title: action.title }),
+        category: 'window',
+      };
     case 'window.close':
-      return { summary: `Closed window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.close', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.focus':
-      return { summary: `Focused window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.focus', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.minimize':
-      return { summary: `Minimized window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.minimize', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.maximize':
-      return { summary: `Maximized window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.maximize', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.restore':
-      return { summary: `Restored window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.restore', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.move':
       return {
-        summary: `Moved window ${action.windowId} to (${action.x}, ${action.y})`,
+        summary: t('recentActions.action.window.move', {
+          windowId: action.windowId,
+          x: action.x,
+          y: action.y,
+        }),
         category: 'window',
       };
     case 'window.resize':
       return {
-        summary: `Resized window ${action.windowId} to ${action.w}x${action.h}`,
+        summary: t('recentActions.action.window.resize', {
+          windowId: action.windowId,
+          w: action.w,
+          h: action.h,
+        }),
         category: 'window',
       };
     case 'window.setTitle':
-      return { summary: `Set title "${action.title}" on ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.setTitle', {
+          title: action.title,
+          windowId: action.windowId,
+        }),
+        category: 'window',
+      };
     case 'window.setContent':
-      return { summary: `Updated content of ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.setContent', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.updateContent':
       return {
-        summary: `Updated content of ${action.windowId} (${action.operation.op})`,
+        summary: t('recentActions.action.window.updateContent', {
+          windowId: action.windowId,
+          op: action.operation.op,
+        }),
         category: 'window',
       };
     case 'window.lock':
-      return { summary: `Locked window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.lock', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'window.unlock':
-      return { summary: `Unlocked window ${action.windowId}`, category: 'window' };
+      return {
+        summary: t('recentActions.action.window.unlock', { windowId: action.windowId }),
+        category: 'window',
+      };
     case 'notification.show':
-      return { summary: `Showed notification "${action.title}"`, category: 'notification' };
+      return {
+        summary: t('recentActions.action.notification.show', { title: action.title }),
+        category: 'notification',
+      };
     case 'notification.dismiss':
-      return { summary: `Dismissed notification ${action.id}`, category: 'notification' };
+      return {
+        summary: t('recentActions.action.notification.dismiss', { id: action.id }),
+        category: 'notification',
+      };
     case 'toast.show':
-      return { summary: `Showed toast: ${truncate(action.message, 40)}`, category: 'toast' };
+      return {
+        summary: t('recentActions.action.toast.show', { message: truncate(action.message, 40) }),
+        category: 'toast',
+      };
     case 'toast.dismiss':
-      return { summary: `Dismissed toast ${action.id}`, category: 'toast' };
+      return {
+        summary: t('recentActions.action.toast.dismiss', { id: action.id }),
+        category: 'toast',
+      };
     case 'dialog.confirm':
-      return { summary: `Showed dialog: ${truncate(action.title, 40)}`, category: 'dialog' };
+      return {
+        summary: t('recentActions.action.dialog.confirm', { title: truncate(action.title, 40) }),
+        category: 'dialog',
+      };
     default: {
       // Handle any unknown action types
       const unknownAction = action as { type: string };
@@ -78,6 +139,7 @@ interface ActionEntry {
 }
 
 export function RecentActionsPanel() {
+  const { t } = useTranslation();
   const activityLog = useDesktopStore((state) => state.activityLog);
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel);
   const clearActivityLog = useDesktopStore((state) => state.clearActivityLog);
@@ -165,10 +227,14 @@ export function RecentActionsPanel() {
       data-dragging={isDragging}
     >
       <div className={styles.titleBar} onMouseDown={handleMouseDown}>
-        <span className={styles.title}>Recent Actions ({entries.length})</span>
+        <span className={styles.title}>{t('recentActions.title', { count: entries.length })}</span>
         <div className={styles.controls}>
-          <button className={styles.controlBtn} onClick={clearActivityLog} title="Clear log">
-            Clear
+          <button
+            className={styles.controlBtn}
+            onClick={clearActivityLog}
+            title={t('recentActions.clear')}
+          >
+            {t('recentActions.clear')}
           </button>
           <button
             className={styles.controlBtn}
@@ -182,11 +248,11 @@ export function RecentActionsPanel() {
       </div>
       <div className={styles.content}>
         {entries.length === 0 ? (
-          <div className={styles.empty}>No actions yet. The AI will show its actions here.</div>
+          <div className={styles.empty}>{t('recentActions.empty')}</div>
         ) : (
           [...entries].reverse().map((entry) => {
             const isExpanded = expandedIds.has(entry.id);
-            const { summary, category } = getActionSummary(entry.action);
+            const { summary, category } = getActionSummary(entry.action, t);
 
             return (
               <div

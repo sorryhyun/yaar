@@ -3,6 +3,7 @@
  * Allows connecting to a remote YAAR server with URL + token.
  */
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   parseHashConnection,
   getRemoteConnection,
@@ -16,6 +17,7 @@ interface ConnectionDialogProps {
 }
 
 export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
+  const { t } = useTranslation();
   const [serverUrl, setServerUrl] = useState('');
   const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,19 +47,19 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
       try {
         // Test health endpoint (no auth needed)
         const healthRes = await fetch(`${conn.serverUrl}/health`);
-        if (!healthRes.ok) throw new Error('Server not reachable');
+        if (!healthRes.ok) throw new Error(t('connection.error.notReachable'));
 
         // Test auth with providers endpoint
         const provRes = await fetch(`${conn.serverUrl}/api/providers`, {
           headers: { Authorization: `Bearer ${conn.token}` },
         });
-        if (provRes.status === 401) throw new Error('Invalid token');
-        if (!provRes.ok) throw new Error('Connection test failed');
+        if (provRes.status === 401) throw new Error(t('connection.error.invalidToken'));
+        if (!provRes.ok) throw new Error(t('connection.error.testFailed'));
 
         setRemoteConnection(conn);
         onConnected();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Connection failed');
+        setError(err instanceof Error ? err.message : t('connection.error.failed'));
       } finally {
         setTesting(false);
       }
@@ -70,7 +72,7 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
       e.preventDefault();
       const trimmedUrl = serverUrl.replace(/\/+$/, '');
       if (!trimmedUrl || !token) {
-        setError('Server URL and token are required');
+        setError(t('connection.error.required'));
         return;
       }
       testAndConnect({ serverUrl: trimmedUrl, token });
@@ -81,13 +83,11 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
   return (
     <div className={styles.backdrop}>
       <div className={styles.card}>
-        <h2 className={styles.title}>Connect to YAAR</h2>
-        <p className={styles.subtitle}>
-          No local server detected. Enter your remote server details.
-        </p>
+        <h2 className={styles.title}>{t('connection.title')}</h2>
+        <p className={styles.subtitle}>{t('connection.subtitle')}</p>
         <form className={styles.form} onSubmit={handleSubmit}>
           <label className={styles.label}>
-            Server URL
+            {t('connection.serverUrl')}
             <input
               className={styles.input}
               type="url"
@@ -98,11 +98,11 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
             />
           </label>
           <label className={styles.label}>
-            Token
+            {t('connection.token')}
             <input
               className={styles.input}
               type="text"
-              placeholder="Paste token from server terminal"
+              placeholder={t('connection.tokenPlaceholder')}
               value={token}
               onChange={(e) => setToken(e.target.value)}
               disabled={testing}
@@ -110,7 +110,7 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
           </label>
           {error && <div className={styles.error}>{error}</div>}
           <button className={styles.button} type="submit" disabled={testing}>
-            {testing ? 'Connecting...' : 'Connect'}
+            {testing ? t('connection.connecting') : t('connection.connect')}
           </button>
         </form>
       </div>

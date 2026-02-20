@@ -2,6 +2,7 @@
  * CommandPalette - Input for sending messages to the agent.
  */
 import { useState, useCallback, useRef, useEffect, KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
 import { RecentActionsPanel } from '../overlays/RecentActionsPanel';
@@ -27,6 +28,7 @@ function readFilesAsDataUrls(files: File[]): Promise<string[]> {
 }
 
 export function CommandPalette() {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -142,7 +144,10 @@ export function CommandPalette() {
           applyAction({
             type: 'toast.show',
             id: `interrupt-${Date.now()}`,
-            message: agentCount === 1 ? 'Agent stopped' : `${agentCount} agents stopped`,
+            message:
+              agentCount === 1
+                ? t('commandPalette.toast.agentStopped')
+                : t('commandPalette.toast.agentsStopped', { count: agentCount }),
             variant: 'info',
           });
         }
@@ -156,7 +161,7 @@ export function CommandPalette() {
     applyAction({
       type: 'toast.show',
       id: `reset-${Date.now()}`,
-      message: 'Context reset',
+      message: t('commandPalette.toast.contextReset'),
       variant: 'info',
     });
   }, [reset, applyAction]);
@@ -170,11 +175,11 @@ export function CommandPalette() {
         {hasDrawing && (
           <div className={styles.drawingIndicator}>
             <span className={styles.drawingIcon}>&#9998;</span>
-            <span>Drawing attached</span>
+            <span>{t('commandPalette.drawing.attached')}</span>
             <button
               className={styles.clearDrawingButton}
               onClick={clearDrawing}
-              title="Clear drawing"
+              title={t('commandPalette.drawing.clear')}
             >
               &times;
             </button>
@@ -188,7 +193,7 @@ export function CommandPalette() {
                 <button
                   className={styles.imageThumbRemove}
                   onClick={() => removeAttachedImage(i)}
-                  title="Remove image"
+                  title={t('commandPalette.image.remove')}
                 >
                   &times;
                 </button>
@@ -196,7 +201,7 @@ export function CommandPalette() {
             ))}
             {attachedImages.length > 1 && (
               <button className={styles.clearAllImages} onClick={clearAttachedImages}>
-                Clear all
+                {t('commandPalette.image.clearAll')}
               </button>
             )}
           </div>
@@ -246,7 +251,7 @@ export function CommandPalette() {
                     }}
                     data-active={settingsModalOpen}
                   >
-                    Settings
+                    {t('commandPalette.menu.settings')}
                   </button>
                   <button
                     className={styles.settingsItem}
@@ -256,7 +261,7 @@ export function CommandPalette() {
                     }}
                     data-active={sessionsModalOpen}
                   >
-                    Sessions
+                    {t('commandPalette.menu.sessions')}
                   </button>
                   <button
                     className={styles.settingsItem}
@@ -266,7 +271,7 @@ export function CommandPalette() {
                     }}
                     data-active={recentActionsPanelOpen}
                   >
-                    Actions
+                    {t('commandPalette.menu.actions')}
                   </button>
                 </div>
               )}
@@ -274,7 +279,7 @@ export function CommandPalette() {
             <button
               className={styles.resetButton}
               onClick={handleReset}
-              title="Reset windows and context"
+              title={t('commandPalette.tooltip.reset')}
             >
               <svg
                 width="16"
@@ -302,7 +307,11 @@ export function CommandPalette() {
             <button
               className={styles.pencilButton}
               onClick={togglePencilMode}
-              title={pencilMode ? 'Exit drawing (Esc)' : 'Draw on screen'}
+              title={
+                pencilMode
+                  ? t('commandPalette.tooltip.pencilExit')
+                  : t('commandPalette.tooltip.pencilEnter')
+              }
               data-active={pencilMode}
             >
               <svg
@@ -324,7 +333,11 @@ export function CommandPalette() {
             <button
               className={styles.terminalButton}
               onClick={toggleCliMode}
-              title={cliMode ? 'Exit terminal (Alt+Tab)' : 'Terminal view (Alt+Tab)'}
+              title={
+                cliMode
+                  ? t('commandPalette.tooltip.terminalExit')
+                  : t('commandPalette.tooltip.terminalEnter')
+              }
               data-active={cliMode}
             >
               <svg
@@ -368,10 +381,10 @@ export function CommandPalette() {
               onFocus={() => setIsExpanded(true)}
               placeholder={
                 !isConnected
-                  ? 'Connecting...'
+                  ? t('commandPalette.placeholder.connecting')
                   : isExpanded
-                    ? 'Enter to send, Shift+Enter for new line, Esc to cancel'
-                    : 'Ask the agent anything...'
+                    ? t('commandPalette.placeholder.expanded')
+                    : t('commandPalette.placeholder.default')
               }
               disabled={!isConnected}
               rows={isExpanded ? 3 : 1}
@@ -383,7 +396,7 @@ export function CommandPalette() {
                 !isConnected || (!input.trim() && !hasDrawing && attachedImages.length === 0)
               }
             >
-              Send
+              {t('commandPalette.send')}
             </button>
           </div>
         </div>

@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "연결 중...",
+      "expanded": "Enter로 전송, Shift+Enter로 줄바꿈, Esc로 취소",
+      "default": "에이전트에게 무엇이든 물어보세요..."
+    },
+    "send": "전송",
+    "drawing": {
+      "attached": "그림 첨부됨",
+      "clear": "그림 지우기"
+    },
+    "image": {
+      "remove": "이미지 제거",
+      "clearAll": "모두 지우기"
+    },
+    "menu": {
+      "settings": "설정",
+      "sessions": "세션",
+      "actions": "액션"
+    },
+    "tooltip": {
+      "reset": "창과 컨텍스트 초기화",
+      "pencilExit": "그리기 종료 (Esc)",
+      "pencilEnter": "화면에 그리기",
+      "terminalExit": "터미널 종료 (Alt+Tab)",
+      "terminalEnter": "터미널 보기 (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "에이전트 중지됨",
+      "agentsStopped": "에이전트 {{count}}개 중지됨",
+      "contextReset": "컨텍스트 초기화됨"
+    }
+  },
+  "settings": {
+    "title": "설정",
+    "name": {
+      "label": "이름",
+      "placeholder": "이름을 입력하세요"
+    },
+    "language": {
+      "label": "언어"
+    },
+    "domains": {
+      "label": "모든 도메인 허용",
+      "description": "HTTP 요청에 대한 도메인별 승인을 건너뜁니다"
+    },
+    "wallpaper": {
+      "label": "배경화면",
+      "solidColor": "단색"
+    },
+    "accentColor": {
+      "label": "강조 색상"
+    },
+    "iconSize": {
+      "label": "아이콘 크기"
+    }
+  },
+  "connection": {
+    "title": "YAAR에 연결",
+    "subtitle": "로컬 서버를 감지하지 못했습니다. 원격 서버 정보를 입력하세요.",
+    "serverUrl": "서버 URL",
+    "token": "토큰",
+    "tokenPlaceholder": "서버 터미널에서 토큰을 붙여넣으세요",
+    "connecting": "연결 중...",
+    "connect": "연결",
+    "error": {
+      "required": "서버 URL과 토큰이 필요합니다",
+      "notReachable": "서버에 연결할 수 없습니다",
+      "invalidToken": "유효하지 않은 토큰",
+      "testFailed": "연결 테스트 실패",
+      "failed": "연결 실패"
+    }
+  },
+  "sessions": {
+    "title": "세션",
+    "loading": "세션 불러오는 중...",
+    "empty": "세션을 찾을 수 없습니다",
+    "transcript": {
+      "loading": "대화록 불러오는 중...",
+      "empty": "대화록이 없습니다"
+    },
+    "restore": "복원",
+    "restoreTitle": "이 세션 복원",
+    "export": "내보내기",
+    "exportTitle": "이 세션 내보내기",
+    "error": {
+      "fetchSessions": "세션을 가져오지 못했습니다",
+      "loadSessions": "세션을 불러오지 못했습니다",
+      "fetchTranscript": "대화록을 가져오지 못했습니다",
+      "loadTranscript": "대화록을 불러오지 못했습니다",
+      "restore": "세션 복원에 실패했습니다",
+      "export": "세션 내보내기에 실패했습니다"
+    }
+  },
+  "userPrompt": {
+    "skip": "건너뛰기",
+    "submit": "제출"
+  },
+  "confirmDialog": {
+    "rememberChoice": "내 선택 기억하기"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "로딩 중\u2026"
+  },
+  "window": {
+    "lockedBy": "잠금: {{agent}}",
+    "poolAgent": "풀 에이전트: {{agentId}} ({{status}})",
+    "export": "내용 내보내기"
+  },
+  "recentActions": {
+    "title": "최근 액션 ({{count}})",
+    "clear": "지우기",
+    "empty": "아직 액션이 없습니다. AI의 액션이 여기 표시됩니다.",
+    "action": {
+      "window": {
+        "create": "창 생성됨 \"{{title}}\"",
+        "close": "창 닫힘 {{windowId}}",
+        "focus": "창 포커스됨 {{windowId}}",
+        "minimize": "창 최소화됨 {{windowId}}",
+        "maximize": "창 최대화됨 {{windowId}}",
+        "restore": "창 복원됨 {{windowId}}",
+        "move": "창 {{windowId}} 이동됨 ({{x}}, {{y}})",
+        "resize": "창 {{windowId}} 크기 변경됨 {{w}}x{{h}}",
+        "setTitle": "창 {{windowId}}의 제목 \"{{title}}\" 설정됨",
+        "setContent": "창 {{windowId}}의 내용 업데이트됨",
+        "updateContent": "창 {{windowId}}의 내용 업데이트됨 ({{op}})",
+        "lock": "창 잠금됨 {{windowId}}",
+        "unlock": "창 잠금 해제됨 {{windowId}}"
+      },
+      "notification": {
+        "show": "알림 표시됨 \"{{title}}\"",
+        "dismiss": "알림 닫힘 {{id}}"
+      },
+      "toast": {
+        "show": "토스트 표시됨: {{message}}",
+        "dismiss": "토스트 닫힘 {{id}}"
+      },
+      "dialog": {
+        "confirm": "다이얼로그 표시됨: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "연결됨 ({{provider}})",
+    "connecting": "연결 중...",
+    "disconnected": "연결 끊김",
+    "activeAgents": "활성 에이전트",
+    "stopAll": "모두 중지",
+    "stopAgent": "에이전트 {{agentId}} 중지",
+    "window": "창: {{title}}",
+    "stop": "중지"
+  },
+  "contextMenu": {
+    "continueWith": "\"{{title}}\" 에이전트로 계속",
+    "in": "\"{{title}}...\" 에서",
+    "quickMessage": "빠른 메시지",
+    "send": "전송",
+    "placeholder": {
+      "continue": "대화를 계속하세요...",
+      "newAgent": "이 에이전트가 무엇을 해야 하나요?",
+      "message": "메시지를 입력하세요..."
+    }
+  }
+}

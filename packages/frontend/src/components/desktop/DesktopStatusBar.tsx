@@ -1,6 +1,7 @@
 /**
  * DesktopStatusBar - Connection status bar and expandable agent panel.
  */
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
@@ -10,6 +11,7 @@ interface DesktopStatusBarProps {
 }
 
 export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBarProps) {
+  const { t } = useTranslation();
   const connectionStatus = useDesktopStore((s) => s.connectionStatus);
   const providerType = useDesktopStore((s) => s.providerType);
   const activeAgents = useDesktopStore((s) => s.activeAgents);
@@ -27,10 +29,10 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
         <span className={styles.statusDot} data-status={connectionStatus} />
         <span className={styles.statusText}>
           {connectionStatus === 'connected'
-            ? `Connected (${providerType || 'agent'})`
+            ? t('status.connected', { provider: providerType || 'agent' })
             : connectionStatus === 'connecting'
-              ? 'Connecting...'
-              : 'Disconnected'}
+              ? t('status.connecting')
+              : t('status.disconnected')}
         </span>
         {agentList.length > 0 && (
           <>
@@ -58,9 +60,13 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
       {agentPanelOpen && agentList.length > 0 && (
         <div className={styles.agentPanel}>
           <div className={styles.agentPanelHeader}>
-            <span>Active Agents</span>
-            <button className={styles.stopAllButton} onClick={interrupt} title="Stop all agents">
-              Stop All
+            <span>{t('status.activeAgents')}</span>
+            <button
+              className={styles.stopAllButton}
+              onClick={interrupt}
+              title={t('status.stopAll')}
+            >
+              {t('status.stopAll')}
             </button>
           </div>
           <div className={styles.agentPanelList}>
@@ -76,15 +82,17 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
                     <span className={styles.agentPanelId}>{agent.id}</span>
                     <span className={styles.agentPanelStatus}>{agent.status}</span>
                     {windowTitle && (
-                      <span className={styles.agentPanelWindow}>Window: {windowTitle}</span>
+                      <span className={styles.agentPanelWindow}>
+                        {t('status.window', { title: windowTitle })}
+                      </span>
                     )}
                   </div>
                   <button
                     className={styles.stopAgentButton}
                     onClick={() => interruptAgent(agent.id)}
-                    title={`Stop agent ${agent.id}`}
+                    title={t('status.stopAgent', { agentId: agent.id })}
                   >
-                    Stop
+                    {t('status.stop')}
                   </button>
                 </div>
               );

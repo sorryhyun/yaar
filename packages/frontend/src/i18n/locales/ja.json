@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "接続中...",
+      "expanded": "Enterで送信、Shift+Enterで改行、Escでキャンセル",
+      "default": "エージェントに何でも聞いてください..."
+    },
+    "send": "送信",
+    "drawing": {
+      "attached": "描画が添付されました",
+      "clear": "描画をクリア"
+    },
+    "image": {
+      "remove": "画像を削除",
+      "clearAll": "すべてクリア"
+    },
+    "menu": {
+      "settings": "設定",
+      "sessions": "セッション",
+      "actions": "アクション"
+    },
+    "tooltip": {
+      "reset": "ウィンドウとコンテキストをリセット",
+      "pencilExit": "描画を終了 (Esc)",
+      "pencilEnter": "画面に描く",
+      "terminalExit": "ターミナルを終了 (Alt+Tab)",
+      "terminalEnter": "ターミナルビュー (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "エージェントを停止しました",
+      "agentsStopped": "{{count}}個のエージェントを停止しました",
+      "contextReset": "コンテキストをリセットしました"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "name": {
+      "label": "名前",
+      "placeholder": "名前を入力してください"
+    },
+    "language": {
+      "label": "言語"
+    },
+    "domains": {
+      "label": "すべてのドメインを許可",
+      "description": "HTTPリクエストのドメインごとの承認をスキップします"
+    },
+    "wallpaper": {
+      "label": "壁紙",
+      "solidColor": "単色"
+    },
+    "accentColor": {
+      "label": "アクセントカラー"
+    },
+    "iconSize": {
+      "label": "アイコンサイズ"
+    }
+  },
+  "connection": {
+    "title": "YAARに接続",
+    "subtitle": "ローカルサーバーが検出されませんでした。リモートサーバーの詳細を入力してください。",
+    "serverUrl": "サーバーURL",
+    "token": "トークン",
+    "tokenPlaceholder": "サーバーターミナルからトークンを貼り付け",
+    "connecting": "接続中...",
+    "connect": "接続",
+    "error": {
+      "required": "サーバーURLとトークンが必要です",
+      "notReachable": "サーバーに接続できません",
+      "invalidToken": "無効なトークン",
+      "testFailed": "接続テストに失敗しました",
+      "failed": "接続に失敗しました"
+    }
+  },
+  "sessions": {
+    "title": "セッション",
+    "loading": "セッションを読み込み中...",
+    "empty": "セッションが見つかりません",
+    "transcript": {
+      "loading": "トランスクリプトを読み込み中...",
+      "empty": "トランスクリプトがありません"
+    },
+    "restore": "復元",
+    "restoreTitle": "このセッションを復元",
+    "export": "エクスポート",
+    "exportTitle": "このセッションをエクスポート",
+    "error": {
+      "fetchSessions": "セッションの取得に失敗しました",
+      "loadSessions": "セッションの読み込みに失敗しました",
+      "fetchTranscript": "トランスクリプトの取得に失敗しました",
+      "loadTranscript": "トランスクリプトの読み込みに失敗しました",
+      "restore": "セッションの復元に失敗しました",
+      "export": "セッションのエクスポートに失敗しました"
+    }
+  },
+  "userPrompt": {
+    "skip": "スキップ",
+    "submit": "送信"
+  },
+  "confirmDialog": {
+    "rememberChoice": "この選択を記憶する"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "読み込み中\u2026"
+  },
+  "window": {
+    "lockedBy": "ロック中: {{agent}}",
+    "poolAgent": "プールエージェント: {{agentId}} ({{status}})",
+    "export": "コンテンツをエクスポート"
+  },
+  "recentActions": {
+    "title": "最近のアクション ({{count}})",
+    "clear": "クリア",
+    "empty": "まだアクションはありません。AIのアクションがここに表示されます。",
+    "action": {
+      "window": {
+        "create": "ウィンドウを作成 \"{{title}}\"",
+        "close": "ウィンドウ {{windowId}} を閉じました",
+        "focus": "ウィンドウ {{windowId}} にフォーカス",
+        "minimize": "ウィンドウ {{windowId}} を最小化",
+        "maximize": "ウィンドウ {{windowId}} を最大化",
+        "restore": "ウィンドウ {{windowId}} を復元",
+        "move": "ウィンドウ {{windowId}} を ({{x}}, {{y}}) に移動",
+        "resize": "ウィンドウ {{windowId}} を {{w}}x{{h}} にリサイズ",
+        "setTitle": "ウィンドウ {{windowId}} のタイトルを \"{{title}}\" に設定",
+        "setContent": "ウィンドウ {{windowId}} のコンテンツを更新",
+        "updateContent": "ウィンドウ {{windowId}} のコンテンツを更新 ({{op}})",
+        "lock": "ウィンドウ {{windowId}} をロック",
+        "unlock": "ウィンドウ {{windowId}} のロックを解除"
+      },
+      "notification": {
+        "show": "通知を表示 \"{{title}}\"",
+        "dismiss": "通知 {{id}} を閉じました"
+      },
+      "toast": {
+        "show": "トーストを表示: {{message}}",
+        "dismiss": "トースト {{id}} を閉じました"
+      },
+      "dialog": {
+        "confirm": "ダイアログを表示: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "接続済み ({{provider}})",
+    "connecting": "接続中...",
+    "disconnected": "切断されました",
+    "activeAgents": "アクティブなエージェント",
+    "stopAll": "すべて停止",
+    "stopAgent": "エージェント {{agentId}} を停止",
+    "window": "ウィンドウ: {{title}}",
+    "stop": "停止"
+  },
+  "contextMenu": {
+    "continueWith": "\"{{title}}\" エージェントで続行",
+    "in": "\"{{title}}...\" で",
+    "quickMessage": "クイックメッセージ",
+    "send": "送信",
+    "placeholder": {
+      "continue": "会話を続けてください...",
+      "newAgent": "このエージェントに何をさせますか？",
+      "message": "メッセージを入力してください..."
+    }
+  }
+}

@@ -2,6 +2,7 @@
  * WindowFrame - Draggable, resizable window container.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store';
 import { useComponentAction } from '@/contexts/ComponentActionContext';
 import { WindowCallbackProvider } from '@/contexts/WindowCallbackContext';
@@ -24,6 +25,7 @@ interface WindowFrameProps {
 }
 
 function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProps) {
+  const { t } = useTranslation();
   const variant = window.variant ?? 'standard';
   const isWidget = variant === 'widget';
   const isPanel = variant === 'panel';
@@ -243,7 +245,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             {window.locked && (
               <div
                 className={styles.lockBadge}
-                title={`Locked by: ${window.lockedBy || 'unknown'}`}
+                title={t('window.lockedBy', { agent: window.lockedBy || 'unknown' })}
               >
                 <span className={styles.lockIcon}>🔒</span>
               </div>
@@ -252,7 +254,10 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
               <div
                 className={styles.agentBadge}
                 data-status={windowAgent.status}
-                title={`Pool agent: ${windowAgent.agentId} (${windowAgent.status})`}
+                title={t('window.poolAgent', {
+                  agentId: windowAgent.agentId,
+                  status: windowAgent.status,
+                })}
               >
                 <span className={styles.agentIcon}>
                   {windowAgent.status === 'active' ? '⚡' : '💤'}
@@ -264,7 +269,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             <button
               className={styles.controlBtn}
               data-action="export"
-              title="Export content"
+              title={t('window.export')}
               onClick={() => exportContent(window.content, window.title, window.id)}
             >
               ↑

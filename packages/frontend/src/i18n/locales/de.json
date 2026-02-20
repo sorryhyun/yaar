@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "Verbinde...",
+      "expanded": "Enter zum Senden, Shift+Enter für neue Zeile, Esc zum Abbrechen",
+      "default": "Frag den Agenten alles..."
+    },
+    "send": "Senden",
+    "drawing": {
+      "attached": "Zeichnung angehängt",
+      "clear": "Zeichnung löschen"
+    },
+    "image": {
+      "remove": "Bild entfernen",
+      "clearAll": "Alles löschen"
+    },
+    "menu": {
+      "settings": "Einstellungen",
+      "sessions": "Sitzungen",
+      "actions": "Aktionen"
+    },
+    "tooltip": {
+      "reset": "Fenster und Kontext zurücksetzen",
+      "pencilExit": "Zeichnen beenden (Esc)",
+      "pencilEnter": "Auf dem Bildschirm zeichnen",
+      "terminalExit": "Terminal beenden (Alt+Tab)",
+      "terminalEnter": "Terminalansicht (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "Agent gestoppt",
+      "agentsStopped": "{{count}} Agenten gestoppt",
+      "contextReset": "Kontext zurückgesetzt"
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "name": {
+      "label": "Name",
+      "placeholder": "Namen eingeben"
+    },
+    "language": {
+      "label": "Sprache"
+    },
+    "domains": {
+      "label": "Alle Domains erlauben",
+      "description": "Überspringt die domänenspezifische Genehmigung für HTTP-Anfragen"
+    },
+    "wallpaper": {
+      "label": "Hintergrundbild",
+      "solidColor": "Volltonfarbe"
+    },
+    "accentColor": {
+      "label": "Akzentfarbe"
+    },
+    "iconSize": {
+      "label": "Symbolgröße"
+    }
+  },
+  "connection": {
+    "title": "Mit YAAR verbinden",
+    "subtitle": "Kein lokaler Server gefunden. Gib deine Remote-Serverdetails ein.",
+    "serverUrl": "Server-URL",
+    "token": "Token",
+    "tokenPlaceholder": "Token vom Server-Terminal einfügen",
+    "connecting": "Verbinde...",
+    "connect": "Verbinden",
+    "error": {
+      "required": "Server-URL und Token sind erforderlich",
+      "notReachable": "Server nicht erreichbar",
+      "invalidToken": "Ungültiger Token",
+      "testFailed": "Verbindungstest fehlgeschlagen",
+      "failed": "Verbindung fehlgeschlagen"
+    }
+  },
+  "sessions": {
+    "title": "Sitzungen",
+    "loading": "Sitzungen werden geladen...",
+    "empty": "Keine Sitzungen gefunden",
+    "transcript": {
+      "loading": "Transkript wird geladen...",
+      "empty": "Kein Transkript verfügbar"
+    },
+    "restore": "Wiederherstellen",
+    "restoreTitle": "Diese Sitzung wiederherstellen",
+    "export": "Exportieren",
+    "exportTitle": "Diese Sitzung exportieren",
+    "error": {
+      "fetchSessions": "Sitzungen konnten nicht abgerufen werden",
+      "loadSessions": "Sitzungen konnten nicht geladen werden",
+      "fetchTranscript": "Transkript konnte nicht abgerufen werden",
+      "loadTranscript": "Transkript konnte nicht geladen werden",
+      "restore": "Sitzung konnte nicht wiederhergestellt werden",
+      "export": "Sitzung konnte nicht exportiert werden"
+    }
+  },
+  "userPrompt": {
+    "skip": "Überspringen",
+    "submit": "Absenden"
+  },
+  "confirmDialog": {
+    "rememberChoice": "Meine Auswahl merken"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "Wird geladen\u2026"
+  },
+  "window": {
+    "lockedBy": "Gesperrt von: {{agent}}",
+    "poolAgent": "Pool-Agent: {{agentId}} ({{status}})",
+    "export": "Inhalt exportieren"
+  },
+  "recentActions": {
+    "title": "Letzte Aktionen ({{count}})",
+    "clear": "Leeren",
+    "empty": "Noch keine Aktionen. Die Aktionen der KI werden hier angezeigt.",
+    "action": {
+      "window": {
+        "create": "Fenster erstellt \"{{title}}\"",
+        "close": "Fenster {{windowId}} geschlossen",
+        "focus": "Fenster {{windowId}} fokussiert",
+        "minimize": "Fenster {{windowId}} minimiert",
+        "maximize": "Fenster {{windowId}} maximiert",
+        "restore": "Fenster {{windowId}} wiederhergestellt",
+        "move": "Fenster {{windowId}} nach ({{x}}, {{y}}) verschoben",
+        "resize": "Fenster {{windowId}} auf {{w}}x{{h}} skaliert",
+        "setTitle": "Titel \"{{title}}\" für {{windowId}} gesetzt",
+        "setContent": "Inhalt von {{windowId}} aktualisiert",
+        "updateContent": "Inhalt von {{windowId}} aktualisiert ({{op}})",
+        "lock": "Fenster {{windowId}} gesperrt",
+        "unlock": "Fenster {{windowId}} entsperrt"
+      },
+      "notification": {
+        "show": "Benachrichtigung angezeigt \"{{title}}\"",
+        "dismiss": "Benachrichtigung {{id}} geschlossen"
+      },
+      "toast": {
+        "show": "Toast angezeigt: {{message}}",
+        "dismiss": "Toast {{id}} geschlossen"
+      },
+      "dialog": {
+        "confirm": "Dialog angezeigt: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "Verbunden ({{provider}})",
+    "connecting": "Verbinde...",
+    "disconnected": "Getrennt",
+    "activeAgents": "Aktive Agenten",
+    "stopAll": "Alle stoppen",
+    "stopAgent": "Agent {{agentId}} stoppen",
+    "window": "Fenster: {{title}}",
+    "stop": "Stoppen"
+  },
+  "contextMenu": {
+    "continueWith": "Mit \"{{title}}\"-Agent fortfahren",
+    "in": "In \"{{title}}...\"",
+    "quickMessage": "Schnellnachricht",
+    "send": "Senden",
+    "placeholder": {
+      "continue": "Gespräch fortsetzen...",
+      "newAgent": "Was soll dieser Agent tun?",
+      "message": "Nachricht eingeben..."
+    }
+  }
+}

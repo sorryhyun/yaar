@@ -2,6 +2,7 @@
  * SessionsModal - Modal for viewing and recovering previous sessions.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
@@ -17,6 +18,7 @@ interface SessionInfo {
 }
 
 export function SessionsModal() {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,12 +41,12 @@ export function SessionsModal() {
       setError(null);
       const response = await apiFetch('/api/sessions');
       if (!response.ok) {
-        throw new Error('Failed to fetch sessions');
+        throw new Error(t('sessions.error.fetchSessions'));
       }
       const data = await response.json();
       setSessions(data.sessions);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      setError(err instanceof Error ? err.message : t('sessions.error.loadSessions'));
     } finally {
       setLoading(false);
     }
@@ -63,12 +65,12 @@ export function SessionsModal() {
         setSelectedSession(sessionId);
         const response = await apiFetch(`/api/sessions/${sessionId}/transcript`);
         if (!response.ok) {
-          throw new Error('Failed to fetch transcript');
+          throw new Error(t('sessions.error.fetchTranscript'));
         }
         const data = await response.json();
         setTranscript(data.transcript);
       } catch {
-        setTranscript('Failed to load transcript');
+        setTranscript(t('sessions.error.loadTranscript'));
       } finally {
         setLoadingTranscript(false);
       }
@@ -83,7 +85,7 @@ export function SessionsModal() {
         setRestoring(sessionId);
         const response = await apiFetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' });
         if (!response.ok) {
-          throw new Error('Failed to restore session');
+          throw new Error(t('sessions.error.restore'));
         }
         const data = await response.json();
         clearDesktop();
@@ -130,7 +132,7 @@ export function SessionsModal() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export session');
+      setError(err instanceof Error ? err.message : t('sessions.error.export'));
     } finally {
       setExporting(null);
     }
@@ -151,18 +153,18 @@ export function SessionsModal() {
     <div className={styles.backdrop} onClick={handleBackdropClick}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Sessions</h2>
+          <h2 className={styles.title}>{t('sessions.title')}</h2>
           <button className={styles.closeButton} onClick={toggleSessionsModal}>
             &times;
           </button>
         </div>
         <div className={styles.content}>
           {loading ? (
-            <div className={styles.loading}>Loading sessions...</div>
+            <div className={styles.loading}>{t('sessions.loading')}</div>
           ) : error ? (
             <div className={styles.error}>{error}</div>
           ) : sessions.length === 0 ? (
-            <div className={styles.empty}>No sessions found</div>
+            <div className={styles.empty}>{t('sessions.empty')}</div>
           ) : (
             <div className={styles.sessionList}>
               {sessions.map((session) => (
@@ -182,28 +184,28 @@ export function SessionsModal() {
                         className={styles.actionButton}
                         onClick={(e) => handleRestoreSession(session.sessionId, e)}
                         disabled={restoring === session.sessionId}
-                        title="Restore this session"
+                        title={t('sessions.restoreTitle')}
                       >
-                        {restoring === session.sessionId ? '...' : 'Restore'}
+                        {restoring === session.sessionId ? '...' : t('sessions.restore')}
                       </button>
                       <button
                         className={styles.actionButton}
                         onClick={(e) => handleExportSession(session.sessionId, e)}
                         disabled={exporting === session.sessionId}
-                        title="Export this session"
+                        title={t('sessions.exportTitle')}
                       >
-                        {exporting === session.sessionId ? '...' : 'Export'}
+                        {exporting === session.sessionId ? '...' : t('sessions.export')}
                       </button>
                     </div>
                   </div>
                   {selectedSession === session.sessionId && (
                     <div className={styles.transcriptContainer}>
                       {loadingTranscript ? (
-                        <div className={styles.loading}>Loading transcript...</div>
+                        <div className={styles.loading}>{t('sessions.transcript.loading')}</div>
                       ) : transcript ? (
                         <pre className={styles.transcript}>{transcript}</pre>
                       ) : (
-                        <div className={styles.empty}>No transcript available</div>
+                        <div className={styles.empty}>{t('sessions.transcript.empty')}</div>
                       )}
                     </div>
                   )}

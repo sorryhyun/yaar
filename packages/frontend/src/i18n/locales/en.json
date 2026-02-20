@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "Connecting...",
+      "expanded": "Enter to send, Shift+Enter for new line, Esc to cancel",
+      "default": "Ask the agent anything..."
+    },
+    "send": "Send",
+    "drawing": {
+      "attached": "Drawing attached",
+      "clear": "Clear drawing"
+    },
+    "image": {
+      "remove": "Remove image",
+      "clearAll": "Clear all"
+    },
+    "menu": {
+      "settings": "Settings",
+      "sessions": "Sessions",
+      "actions": "Actions"
+    },
+    "tooltip": {
+      "reset": "Reset windows and context",
+      "pencilExit": "Exit drawing (Esc)",
+      "pencilEnter": "Draw on screen",
+      "terminalExit": "Exit terminal (Alt+Tab)",
+      "terminalEnter": "Terminal view (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "Agent stopped",
+      "agentsStopped": "{{count}} agents stopped",
+      "contextReset": "Context reset"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "name": {
+      "label": "Name",
+      "placeholder": "Enter your name"
+    },
+    "language": {
+      "label": "Language"
+    },
+    "domains": {
+      "label": "Allow all domains",
+      "description": "Skips per-domain approval for HTTP requests"
+    },
+    "wallpaper": {
+      "label": "Wallpaper",
+      "solidColor": "Solid color"
+    },
+    "accentColor": {
+      "label": "Accent Color"
+    },
+    "iconSize": {
+      "label": "Icon Size"
+    }
+  },
+  "connection": {
+    "title": "Connect to YAAR",
+    "subtitle": "No local server detected. Enter your remote server details.",
+    "serverUrl": "Server URL",
+    "token": "Token",
+    "tokenPlaceholder": "Paste token from server terminal",
+    "connecting": "Connecting...",
+    "connect": "Connect",
+    "error": {
+      "required": "Server URL and token are required",
+      "notReachable": "Server not reachable",
+      "invalidToken": "Invalid token",
+      "testFailed": "Connection test failed",
+      "failed": "Connection failed"
+    }
+  },
+  "sessions": {
+    "title": "Sessions",
+    "loading": "Loading sessions...",
+    "empty": "No sessions found",
+    "transcript": {
+      "loading": "Loading transcript...",
+      "empty": "No transcript available"
+    },
+    "restore": "Restore",
+    "restoreTitle": "Restore this session",
+    "export": "Export",
+    "exportTitle": "Export this session",
+    "error": {
+      "fetchSessions": "Failed to fetch sessions",
+      "loadSessions": "Failed to load sessions",
+      "fetchTranscript": "Failed to fetch transcript",
+      "loadTranscript": "Failed to load transcript",
+      "restore": "Failed to restore session",
+      "export": "Failed to export session"
+    }
+  },
+  "userPrompt": {
+    "skip": "Skip",
+    "submit": "Submit"
+  },
+  "confirmDialog": {
+    "rememberChoice": "Remember my choice"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "Loading\u2026"
+  },
+  "window": {
+    "lockedBy": "Locked by: {{agent}}",
+    "poolAgent": "Pool agent: {{agentId}} ({{status}})",
+    "export": "Export content"
+  },
+  "recentActions": {
+    "title": "Recent Actions ({{count}})",
+    "clear": "Clear",
+    "empty": "No actions yet. The AI will show its actions here.",
+    "action": {
+      "window": {
+        "create": "Created window \"{{title}}\"",
+        "close": "Closed window {{windowId}}",
+        "focus": "Focused window {{windowId}}",
+        "minimize": "Minimized window {{windowId}}",
+        "maximize": "Maximized window {{windowId}}",
+        "restore": "Restored window {{windowId}}",
+        "move": "Moved window {{windowId}} to ({{x}}, {{y}})",
+        "resize": "Resized window {{windowId}} to {{w}}x{{h}}",
+        "setTitle": "Set title \"{{title}}\" on {{windowId}}",
+        "setContent": "Updated content of {{windowId}}",
+        "updateContent": "Updated content of {{windowId}} ({{op}})",
+        "lock": "Locked window {{windowId}}",
+        "unlock": "Unlocked window {{windowId}}"
+      },
+      "notification": {
+        "show": "Showed notification \"{{title}}\"",
+        "dismiss": "Dismissed notification {{id}}"
+      },
+      "toast": {
+        "show": "Showed toast: {{message}}",
+        "dismiss": "Dismissed toast {{id}}"
+      },
+      "dialog": {
+        "confirm": "Showed dialog: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "Connected ({{provider}})",
+    "connecting": "Connecting...",
+    "disconnected": "Disconnected",
+    "activeAgents": "Active Agents",
+    "stopAll": "Stop All",
+    "stopAgent": "Stop agent {{agentId}}",
+    "window": "Window: {{title}}",
+    "stop": "Stop"
+  },
+  "contextMenu": {
+    "continueWith": "Continue with \"{{title}}\" agent",
+    "in": "In \"{{title}}...\"",
+    "quickMessage": "Quick message",
+    "send": "Send",
+    "placeholder": {
+      "continue": "Continue the conversation...",
+      "newAgent": "What should this agent do?",
+      "message": "Type your message..."
+    }
+  }
+}

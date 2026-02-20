@@ -1,0 +1,166 @@
+{
+  "commandPalette": {
+    "placeholder": {
+      "connecting": "Conectando...",
+      "expanded": "Enter para enviar, Shift+Enter para nueva línea, Esc para cancelar",
+      "default": "Pregúntale cualquier cosa al agente..."
+    },
+    "send": "Enviar",
+    "drawing": {
+      "attached": "Dibujo adjunto",
+      "clear": "Borrar dibujo"
+    },
+    "image": {
+      "remove": "Eliminar imagen",
+      "clearAll": "Borrar todo"
+    },
+    "menu": {
+      "settings": "Configuración",
+      "sessions": "Sesiones",
+      "actions": "Acciones"
+    },
+    "tooltip": {
+      "reset": "Restablecer ventanas y contexto",
+      "pencilExit": "Salir del dibujo (Esc)",
+      "pencilEnter": "Dibujar en pantalla",
+      "terminalExit": "Salir del terminal (Alt+Tab)",
+      "terminalEnter": "Vista de terminal (Alt+Tab)"
+    },
+    "toast": {
+      "agentStopped": "Agente detenido",
+      "agentsStopped": "{{count}} agentes detenidos",
+      "contextReset": "Contexto restablecido"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "name": {
+      "label": "Nombre",
+      "placeholder": "Introduce tu nombre"
+    },
+    "language": {
+      "label": "Idioma"
+    },
+    "domains": {
+      "label": "Permitir todos los dominios",
+      "description": "Omite la aprobación por dominio para solicitudes HTTP"
+    },
+    "wallpaper": {
+      "label": "Fondo de pantalla",
+      "solidColor": "Color sólido"
+    },
+    "accentColor": {
+      "label": "Color de acento"
+    },
+    "iconSize": {
+      "label": "Tamaño de icono"
+    }
+  },
+  "connection": {
+    "title": "Conectar a YAAR",
+    "subtitle": "No se detectó servidor local. Introduce los detalles del servidor remoto.",
+    "serverUrl": "URL del servidor",
+    "token": "Token",
+    "tokenPlaceholder": "Pega el token del terminal del servidor",
+    "connecting": "Conectando...",
+    "connect": "Conectar",
+    "error": {
+      "required": "La URL del servidor y el token son obligatorios",
+      "notReachable": "El servidor no es accesible",
+      "invalidToken": "Token inválido",
+      "testFailed": "Falló la prueba de conexión",
+      "failed": "Conexión fallida"
+    }
+  },
+  "sessions": {
+    "title": "Sesiones",
+    "loading": "Cargando sesiones...",
+    "empty": "No se encontraron sesiones",
+    "transcript": {
+      "loading": "Cargando transcripción...",
+      "empty": "No hay transcripción disponible"
+    },
+    "restore": "Restaurar",
+    "restoreTitle": "Restaurar esta sesión",
+    "export": "Exportar",
+    "exportTitle": "Exportar esta sesión",
+    "error": {
+      "fetchSessions": "Error al obtener sesiones",
+      "loadSessions": "Error al cargar sesiones",
+      "fetchTranscript": "Error al obtener transcripción",
+      "loadTranscript": "Error al cargar transcripción",
+      "restore": "Error al restaurar sesión",
+      "export": "Error al exportar sesión"
+    }
+  },
+  "userPrompt": {
+    "skip": "Omitir",
+    "submit": "Enviar"
+  },
+  "confirmDialog": {
+    "rememberChoice": "Recordar mi elección"
+  },
+  "loading": {
+    "title": "YAAR OS",
+    "status": "Cargando\u2026"
+  },
+  "window": {
+    "lockedBy": "Bloqueado por: {{agent}}",
+    "poolAgent": "Agente del grupo: {{agentId}} ({{status}})",
+    "export": "Exportar contenido"
+  },
+  "recentActions": {
+    "title": "Acciones recientes ({{count}})",
+    "clear": "Limpiar",
+    "empty": "Aún no hay acciones. Las acciones de la IA se mostrarán aquí.",
+    "action": {
+      "window": {
+        "create": "Ventana creada \"{{title}}\"",
+        "close": "Ventana {{windowId}} cerrada",
+        "focus": "Ventana {{windowId}} enfocada",
+        "minimize": "Ventana {{windowId}} minimizada",
+        "maximize": "Ventana {{windowId}} maximizada",
+        "restore": "Ventana {{windowId}} restaurada",
+        "move": "Ventana {{windowId}} movida a ({{x}}, {{y}})",
+        "resize": "Ventana {{windowId}} redimensionada a {{w}}x{{h}}",
+        "setTitle": "Título \"{{title}}\" establecido en {{windowId}}",
+        "setContent": "Contenido de {{windowId}} actualizado",
+        "updateContent": "Contenido de {{windowId}} actualizado ({{op}})",
+        "lock": "Ventana {{windowId}} bloqueada",
+        "unlock": "Ventana {{windowId}} desbloqueada"
+      },
+      "notification": {
+        "show": "Notificación mostrada \"{{title}}\"",
+        "dismiss": "Notificación {{id}} descartada"
+      },
+      "toast": {
+        "show": "Toast mostrado: {{message}}",
+        "dismiss": "Toast {{id}} descartado"
+      },
+      "dialog": {
+        "confirm": "Diálogo mostrado: {{title}}"
+      }
+    }
+  },
+  "status": {
+    "connected": "Conectado ({{provider}})",
+    "connecting": "Conectando...",
+    "disconnected": "Desconectado",
+    "activeAgents": "Agentes activos",
+    "stopAll": "Detener todo",
+    "stopAgent": "Detener agente {{agentId}}",
+    "window": "Ventana: {{title}}",
+    "stop": "Detener"
+  },
+  "contextMenu": {
+    "continueWith": "Continuar con el agente \"{{title}}\"",
+    "in": "En \"{{title}}...\"",
+    "quickMessage": "Mensaje rápido",
+    "send": "Enviar",
+    "placeholder": {
+      "continue": "Continúa la conversación...",
+      "newAgent": "¿Qué debería hacer este agente?",
+      "message": "Escribe tu mensaje..."
+    }
+  }
+}

@@ -2,6 +2,7 @@
  * SettingsModal - Modal for user preferences (name, language, domain settings, appearance).
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import { WALLPAPER_PRESETS, ACCENT_PRESETS, ICON_SIZE_PRESETS } from '@/constants/appearance';
 import type { IconSizeKey } from '@/constants/appearance';
@@ -19,6 +20,7 @@ const LANGUAGES = [
 ];
 
 export function SettingsModal() {
+  const { t } = useTranslation();
   const toggleSettingsModal = useDesktopStore((s) => s.toggleSettingsModal);
   const userName = useDesktopStore((s) => s.userName);
   const language = useDesktopStore((s) => s.language);
@@ -67,24 +69,24 @@ export function SettingsModal() {
     <div className={styles.backdrop} onClick={handleBackdropClick}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Settings</h2>
+          <h2 className={styles.title}>{t('settings.title')}</h2>
           <button className={styles.closeButton} onClick={toggleSettingsModal}>
             &times;
           </button>
         </div>
         <div className={styles.scrollContent}>
           <div className={styles.field}>
-            <label className={styles.label}>Name</label>
+            <label className={styles.label}>{t('settings.name.label')}</label>
             <input
               className={styles.input}
               type="text"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
-              placeholder="Enter your name"
+              placeholder={t('settings.name.placeholder')}
             />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Language</label>
+            <label className={styles.label}>{t('settings.language.label')}</label>
             <select
               className={styles.select}
               value={language}
@@ -101,8 +103,8 @@ export function SettingsModal() {
           <div className={styles.field}>
             <label className={styles.toggleRow}>
               <span className={styles.toggleLabel}>
-                <span className={styles.label}>Allow all domains</span>
-                <span className={styles.subtitle}>Skips per-domain approval for HTTP requests</span>
+                <span className={styles.label}>{t('settings.domains.label')}</span>
+                <span className={styles.subtitle}>{t('settings.domains.description')}</span>
               </span>
               <input
                 type="checkbox"
@@ -116,7 +118,7 @@ export function SettingsModal() {
           {/* Wallpaper */}
           <div className={styles.divider} />
           <div className={styles.field}>
-            <span className={styles.label}>Wallpaper</span>
+            <span className={styles.label}>{t('settings.wallpaper.label')}</span>
             <div className={styles.swatchRow}>
               {WALLPAPER_PRESETS.map((preset) => (
                 <button
@@ -131,7 +133,7 @@ export function SettingsModal() {
                 type="color"
                 className={styles.solidColorPicker}
                 value={solidColor}
-                title="Solid color"
+                title={t('settings.wallpaper.solidColor')}
                 onChange={(e) => {
                   setSolidColor(e.target.value);
                   setWallpaper(e.target.value);
@@ -143,7 +145,7 @@ export function SettingsModal() {
           {/* Accent Color */}
           <div className={styles.divider} />
           <div className={styles.field}>
-            <span className={styles.label}>Accent Color</span>
+            <span className={styles.label}>{t('settings.accentColor.label')}</span>
             <div className={styles.accentRow}>
               {ACCENT_PRESETS.map((preset) => (
                 <button
@@ -160,7 +162,7 @@ export function SettingsModal() {
           {/* Icon Size */}
           <div className={styles.divider} />
           <div className={styles.field}>
-            <span className={styles.label}>Icon Size</span>
+            <span className={styles.label}>{t('settings.iconSize.label')}</span>
             <div className={styles.segmentedControl}>
               {ICON_SIZE_PRESETS.map((preset) => (
                 <button

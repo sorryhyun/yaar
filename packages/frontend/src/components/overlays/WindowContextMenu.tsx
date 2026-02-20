@@ -2,6 +2,7 @@
  * WindowContextMenu - Right-click context menu for asking about windows.
  */
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import styles from '@/styles/overlays/WindowContextMenu.module.css';
 
 interface WindowContextMenuProps {
@@ -25,6 +26,7 @@ export function WindowContextMenu({
   onSendToWindow,
   onClose,
 }: WindowContextMenuProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -100,9 +102,9 @@ export function WindowContextMenu({
   // Determine header text based on whether a window agent exists
   const headerText = windowId
     ? hasWindowAgent
-      ? `Continue with "${windowTitle}" agent`
-      : `In "${windowTitle}..."`
-    : 'Quick message';
+      ? t('contextMenu.continueWith', { title: windowTitle })
+      : t('contextMenu.in', { title: windowTitle })
+    : t('contextMenu.quickMessage');
 
   return (
     <div
@@ -122,13 +124,13 @@ export function WindowContextMenu({
           placeholder={
             windowId
               ? hasWindowAgent
-                ? 'Continue the conversation...'
-                : 'What should this agent do?'
-              : 'Type your message...'
+                ? t('contextMenu.placeholder.continue')
+                : t('contextMenu.placeholder.newAgent')
+              : t('contextMenu.placeholder.message')
           }
         />
         <button className={styles.sendButton} onClick={handleSubmit} disabled={!input.trim()}>
-          Send
+          {t('contextMenu.send')}
         </button>
       </div>
     </div>
