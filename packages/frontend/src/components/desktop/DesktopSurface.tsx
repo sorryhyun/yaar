@@ -15,6 +15,7 @@ import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
+import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -228,7 +229,7 @@ export function DesktopSurface() {
           for (let sy = rect.y; sy <= endY; sy += STEP) {
             const el = document.elementFromPoint(sx, sy);
             if (!el) continue;
-            const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
+            const winEl = (el as HTMLElement).closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
             if (winEl && winEl.dataset.variant !== 'panel') {
               windowIds.add(winEl.dataset.windowId!);
             }
@@ -243,7 +244,7 @@ export function DesktopSurface() {
         ]) {
           const el = document.elementFromPoint(sx, sy);
           if (!el) continue;
-          const winEl = (el as HTMLElement).closest<HTMLElement>('[data-window-id]');
+          const winEl = (el as HTMLElement).closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
           if (winEl && winEl.dataset.variant !== 'panel') {
             windowIds.add(winEl.dataset.windowId!);
           }

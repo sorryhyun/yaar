@@ -3,24 +3,17 @@
  */
 import { useCallback, useState } from 'react';
 import type { WindowBounds } from '@yaar/shared';
+import { useDesktopStore } from '@/store';
 
 interface UseResizeWindowOptions {
   windowId: string;
   bounds: WindowBounds;
-  userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
-  queueBoundsUpdate: (windowId: string) => void;
   listenersRef: React.RefObject<
     Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>
   >;
 }
 
-export function useResizeWindow({
-  windowId,
-  bounds,
-  userResizeWindow,
-  queueBoundsUpdate,
-  listenersRef,
-}: UseResizeWindowOptions) {
+export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWindowOptions) {
   const [isResizing, setIsResizing] = useState(false);
 
   const handleResizeStart = useCallback(
@@ -94,20 +87,22 @@ export function useResizeWindow({
         if (newH < 150) newH = 150;
 
         const posChanged = resizeLeft || resizeTop;
-        userResizeWindow(
-          windowId,
-          newW,
-          newH,
-          posChanged ? newX : undefined,
-          posChanged ? newY : undefined,
-        );
+        useDesktopStore
+          .getState()
+          .userResizeWindow(
+            windowId,
+            newW,
+            newH,
+            posChanged ? newX : undefined,
+            posChanged ? newY : undefined,
+          );
       };
 
       const entry = { move: handleMouseMove, up: handleMouseUp };
       function handleMouseUp() {
         setIsResizing(false);
         document.documentElement.classList.remove('yaar-dragging');
-        queueBoundsUpdate(windowId);
+        useDesktopStore.getState().queueBoundsUpdate(windowId);
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
         listenersRef.current = listenersRef.current.filter((e) => e !== entry);
@@ -117,7 +112,7 @@ export function useResizeWindow({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [windowId, bounds, userResizeWindow, queueBoundsUpdate, listenersRef],
+    [windowId, bounds, listenersRef],
   );
 
   return { isResizing, handleResizeStart };

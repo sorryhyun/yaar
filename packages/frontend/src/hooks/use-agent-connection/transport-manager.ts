@@ -59,3 +59,6 @@ export function sendEvent(
 export function shouldReconnect(closeCode: number, reconnectAttempts: number): boolean {
   return closeCode !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS;
 }
+
+// Shared singleton used across all hooks in this module
+export const wsManager = createWsManager();

@@ -21,6 +21,7 @@ import type {
   DesktopUpdateShortcutAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
+import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import html2canvas from 'html2canvas';
 
@@ -95,7 +96,9 @@ export function tryIframeSelfCapture(
  */
 async function captureWindow(windowId: string, requestId: string) {
   try {
-    const el = document.querySelector(`[data-window-id="${windowId}"]`) as HTMLElement | null;
+    const el = document.querySelector(
+      `[${WINDOW_ID_DATA_ATTR}="${windowId}"]`,
+    ) as HTMLElement | null;
     if (!el) {
       useDesktopStore.getState().addRenderingFeedback({
         requestId,
@@ -192,7 +195,7 @@ function handleAppProtocolRequest(
   const monitorId = state.activeMonitorId ?? 'monitor-0';
   const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
 
-  const el = document.querySelector(`[data-window-id="${key}"]`) as HTMLElement | null;
+  const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
   if (!el) {
     useDesktopStore.getState().addPendingAppProtocolResponse({
       requestId,

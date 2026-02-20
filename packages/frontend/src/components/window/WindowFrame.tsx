@@ -1,9 +1,10 @@
 /**
  * WindowFrame - Draggable, resizable window container.
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDesktopStore, selectQueuedActionsCount, selectWindowAgent } from '@/store';
 import { useComponentAction } from '@/contexts/ComponentActionContext';
+import { WindowCallbackProvider } from '@/contexts/WindowCallbackContext';
 import type { WindowModel } from '@/types/state';
 import { MemoizedContentRenderer } from './ContentRenderer';
 import { LockOverlay } from './LockOverlay';
@@ -31,17 +32,13 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
-  const userMoveWindow = useDesktopStore((s) => s.userMoveWindow);
-  const userResizeWindow = useDesktopStore((s) => s.userResizeWindow);
-  const userSnapWindow = useDesktopStore((s) => s.userSnapWindow);
-  const queueBoundsUpdate = useDesktopStore((s) => s.queueBoundsUpdate);
   const showContextMenu = useDesktopStore((s) => s.showContextMenu);
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id));
   const windowAgent = useDesktopStore(selectWindowAgent(window.id));
   const isSelected = useDesktopStore((s) => s.selectedWindowIds.includes(window.id));
   const sendComponentAction = useComponentAction();
 
-  const handleComponentAction = useCallback(
+  const onComponentAction = useCallback(
     (
       action: string,
       parallel?: boolean,
@@ -78,6 +75,11 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     [],
   );
 
+  const windowCallbacks = useMemo(
+    () => ({ onRenderSuccess, onRenderError, onComponentAction }),
+    [onRenderSuccess, onRenderError, onComponentAction],
+  );
+
   // Selection action input state
   const [selectionAction, setSelectionAction] = useState<{
     x: number;
@@ -107,17 +109,12 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     bounds: window.bounds,
     variant: window.variant,
     frameless: window.frameless,
-    userMoveWindow,
-    userSnapWindow,
-    queueBoundsUpdate,
     listenersRef,
   });
 
   const { isResizing, handleResizeStart } = useResizeWindow({
     windowId: window.id,
     bounds: window.bounds,
-    userResizeWindow,
-    queueBoundsUpdate,
     listenersRef,
   });
 
@@ -125,7 +122,6 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     useWindowDrop({
       windowId: window.id,
       windowTitle: window.title,
-      userFocusWindow,
     });
 
   // Handle window focus
@@ -323,14 +319,13 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
           showContextMenu(e.clientX, e.clientY, window.id);
         }}
       >
-        <MemoizedContentRenderer
-          content={window.content}
-          windowId={windowId}
-          requestId={window.requestId}
-          onRenderSuccess={onRenderSuccess}
-          onRenderError={onRenderError}
-          onComponentAction={handleComponentAction}
-        />
+        <WindowCallbackProvider callbacks={windowCallbacks}>
+          <MemoizedContentRenderer
+            content={window.content}
+            windowId={windowId}
+            requestId={window.requestId}
+          />
+        </WindowCallbackProvider>
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
         {!isFocused && window.content.renderer === 'iframe' && (
           <div className={styles.iframeFocusOverlay} />

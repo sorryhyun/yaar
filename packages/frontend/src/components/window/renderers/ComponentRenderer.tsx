@@ -15,6 +15,7 @@ import type {
   SelectComponent,
 } from '@yaar/shared';
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext';
+import { useWindowCallbacks } from '@/contexts/WindowCallbackContext';
 import { resolveAssetUrl } from '@/lib/api';
 import rendererStyles from '@/styles/window/renderers.module.css';
 import formStyles from '@/styles/base/forms.module.css';
@@ -66,21 +67,12 @@ function gapToCss(gap: string): string {
 interface ComponentRendererProps {
   data: unknown;
   windowId?: string;
-  onAction?: (
-    action: string,
-    parallel?: boolean,
-    formData?: Record<string, FormValue>,
-    formId?: string,
-    componentPath?: string[],
-  ) => void;
 }
 
 import { FormProvider } from '@/contexts/FormContext';
 
-export const ComponentRenderer = memo(function ComponentRenderer({
-  data,
-  onAction,
-}: ComponentRendererProps) {
+export const ComponentRenderer = memo(function ComponentRenderer({ data }: ComponentRendererProps) {
+  const onAction = useWindowCallbacks()?.onComponentAction;
   const layout = data as ComponentLayout;
   const components = layout?.components;
   if (!Array.isArray(components)) return null;

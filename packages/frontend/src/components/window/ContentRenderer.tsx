@@ -3,6 +3,7 @@
  */
 import { memo, useCallback } from 'react';
 import type { WindowContent } from '@/types';
+import { useWindowCallbacks } from '@/contexts/WindowCallbackContext';
 import { MemoizedMarkdownRenderer } from './renderers/MarkdownRenderer';
 import { MemoizedTableRenderer } from './renderers/TableRenderer';
 import { MemoizedHtmlRenderer } from './renderers/HtmlRenderer';
@@ -10,46 +11,24 @@ import { MemoizedTextRenderer } from './renderers/TextRenderer';
 import { MemoizedIframeRenderer } from './renderers/IframeRenderer';
 import { ComponentRenderer } from './renderers/ComponentRenderer';
 
-type FormValue = string | number | boolean;
-
 interface ContentRendererProps {
   content: WindowContent;
   windowId: string;
   requestId?: string;
-  onRenderSuccess?: (requestId: string, windowId: string, renderer: string) => void;
-  onRenderError?: (
-    requestId: string,
-    windowId: string,
-    renderer: string,
-    error: string,
-    url?: string,
-  ) => void;
-  onComponentAction?: (
-    action: string,
-    parallel?: boolean,
-    formData?: Record<string, FormValue>,
-    formId?: string,
-    componentPath?: string[],
-  ) => void;
 }
 
-function ContentRenderer({
-  content,
-  windowId,
-  requestId,
-  onRenderSuccess,
-  onRenderError,
-  onComponentAction,
-}: ContentRendererProps) {
+function ContentRenderer({ content, windowId, requestId }: ContentRendererProps) {
+  const callbacks = useWindowCallbacks();
+
   const handleIframeSuccess = useCallback(() => {
-    if (requestId) onRenderSuccess?.(requestId, windowId, 'iframe');
-  }, [requestId, windowId, onRenderSuccess]);
+    if (requestId) callbacks?.onRenderSuccess(requestId, windowId, 'iframe');
+  }, [requestId, windowId, callbacks]);
 
   const handleIframeError = useCallback(
     (error: string, url: string) => {
-      if (requestId) onRenderError?.(requestId, windowId, 'iframe', error, url);
+      if (requestId) callbacks?.onRenderError(requestId, windowId, 'iframe', error, url);
     },
-    [requestId, windowId, onRenderError],
+    [requestId, windowId, callbacks],
   );
 
   switch (content.renderer) {
@@ -75,9 +54,7 @@ function ContentRenderer({
       );
 
     case 'component':
-      return (
-        <ComponentRenderer data={content.data} windowId={windowId} onAction={onComponentAction} />
-      );
+      return <ComponentRenderer data={content.data} windowId={windowId} />;
 
     case 'text':
     default:

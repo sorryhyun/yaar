@@ -24,8 +24,10 @@ src/
 ├── components/
 │   ├── desktop/           # DesktopSurface, WindowManager
 │   ├── drawing/           # DrawingOverlay
-│   ├── ui/                # CommandPalette, NotificationCenter, DebugPanel, dialogs, etc.
-│   └── windows/           # WindowFrame, ContentRenderer, LockOverlay
+│   ├── command-palette/   # CommandPalette (primary user input)
+│   ├── taskbar/           # Taskbar (always-visible navigation)
+│   ├── overlays/          # Floating/transient layers (dialogs, toasts, panels, etc.)
+│   └── window/            # WindowFrame, ContentRenderer, LockOverlay
 │       └── renderers/     # Markdown, Table, Html, Iframe, Component, Text renderers
 ├── contexts/              # ComponentActionContext, FormContext
 ├── hooks/                 # useAgentConnection (WebSocket singleton)
@@ -47,6 +49,16 @@ src/
 - `monitorSlice` — virtual desktops (create, remove, switch). Each window belongs to a monitor via `monitorId`. See `docs/monitor_and_windows_guide.md`.
 - `cliSlice` — per-monitor CLI history
 - `connectionSlice` — WebSocket status, sessionId, provider
+- `agentsSlice` — agent state tracking (thinking, active agents)
+- `notificationsSlice` — persistent notification center
+- `toastsSlice` — temporary toast messages
+- `dialogsSlice` — modal confirmation dialogs
+- `userPromptsSlice` — ask/request prompt dialogs
+- `settingsSlice` — user settings (language, onboarding)
+- `drawingSlice` — Ctrl+Drag drawing overlay state
+- `imageAttachSlice` — image attachment for messages
+- `feedbackSlice` — rendering feedback tracking
+- `uiSlice` — general UI state (command palette, debug panel)
 
 **Key selectors:**
 - `selectWindowsInOrder` - Windows sorted by z-order
@@ -58,8 +70,9 @@ src/
 
 `useAgentConnection` hook manages:
 - Singleton WebSocket with auto-reconnect (exponential backoff)
-- Incoming events: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`, `APP_PROTOCOL_REQUEST`
-- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`
+- Reconnects with `?sessionId=X` to rejoin existing sessions; `?token=X` for remote auth
+- Incoming events: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`, `APP_PROTOCOL_REQUEST`, `APPROVAL_REQUEST`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`
+- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `SET_PROVIDER`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `USER_INTERACTION`, `RENDERING_FEEDBACK`, `SUBSCRIBE_MONITOR`, `REMOVE_MONITOR`
 - Sends rendering feedback, user interactions, and app protocol responses back to server
 
 ## Content Renderers
@@ -75,8 +88,8 @@ src/
 
 ## Adding a New Content Renderer
 
-1. Create `src/components/windows/renderers/<Name>Renderer.tsx`
-2. Add case in `src/components/windows/ContentRenderer.tsx`
+1. Create `src/components/window/renderers/<Name>Renderer.tsx`
+2. Add case in `src/components/window/ContentRenderer.tsx`
 3. Add styles in `src/styles/renderers.module.css`
 4. Update renderer enum in `@yaar/server` tools
 

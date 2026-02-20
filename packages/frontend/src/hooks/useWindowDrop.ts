@@ -11,10 +11,9 @@ import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/upload
 interface UseWindowDropOptions {
   windowId: string;
   windowTitle: string;
-  userFocusWindow: (windowId: string) => void;
 }
 
-export function useWindowDrop({ windowId, windowTitle, userFocusWindow }: UseWindowDropOptions) {
+export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -37,10 +36,10 @@ export function useWindowDrop({ windowId, windowTitle, userFocusWindow }: UseWin
       // Focus the window when text is dragged over it from an iframe
       if (getIframeDragSource()) {
         e.preventDefault();
-        userFocusWindow(windowId);
+        useDesktopStore.getState().userFocusWindow(windowId);
       }
     },
-    [userFocusWindow, windowId],
+    [windowId],
   );
 
   const handleDragLeave = useCallback(() => setIsDragOver(false), []);

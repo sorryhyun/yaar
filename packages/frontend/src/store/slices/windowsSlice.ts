@@ -9,6 +9,70 @@ import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../t
 import type { OSAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
+import {
+  TITLEBAR_HEIGHT,
+  TASKBAR_HEIGHT,
+  DEFAULT_VIEWPORT_WIDTH,
+  DEFAULT_VIEWPORT_HEIGHT,
+  MIN_VISIBLE_WINDOW_EDGE,
+  DEFAULT_MONITOR_ID,
+} from '@/constants/layout';
+
+/**
+ * Inserts a window key into zOrder respecting variant layering.
+ * Panels are excluded from zOrder entirely (rendered at a fixed position).
+ * Widgets stay below standard windows. Standard windows go to the top.
+ * Always removes the key first so this is safe to call on focus or re-create.
+ */
+function insertIntoZOrder(
+  state: { zOrder: string[]; windows: Record<string, { variant?: string } | undefined> },
+  key: string,
+  variant: WindowModel['variant'],
+): void {
+  if (variant === 'panel') return;
+  state.zOrder = state.zOrder.filter((id) => id !== key);
+  if (variant === 'widget') {
+    const firstStandardIdx = state.zOrder.findIndex((id) => {
+      const w = state.windows[id];
+      return !w?.variant || w.variant === 'standard';
+    });
+    if (firstStandardIdx === -1) {
+      state.zOrder.push(key);
+    } else {
+      state.zOrder.splice(firstStandardIdx, 0, key);
+    }
+  } else {
+    state.zOrder.push(key);
+  }
+}
+
+/**
+ * Returns true if the window is locked by a different agent (caller should break).
+ * Pushes a failure feedback entry when a requestId is present.
+ * Default error message names the locking agent; pass a custom message to override.
+ */
+function rejectIfLocked(
+  state: Pick<DesktopStore, 'pendingFeedback'>,
+  win: WindowModel | undefined,
+  agentId: string | undefined,
+  reqId: string | undefined,
+  windowId: string,
+  error?: string,
+): boolean {
+  if (!win?.locked || win.lockedBy === agentId) return false;
+  if (reqId) {
+    state.pendingFeedback.push({
+      requestId: reqId,
+      windowId,
+      renderer: 'lock',
+      success: false,
+      error:
+        error ??
+        `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
+    });
+  }
+  return true;
+}
 
 /**
  * Pure mutation function that applies a window action to an Immer draft.
@@ -24,7 +88,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         `[windowsSlice] OS action "${action.type}" missing monitorId, falling back to activeMonitorId="${state.activeMonitorId}"`,
       );
     }
-    const monId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
+    const monId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
     return toWindowKey(monId, rawId);
   };
 
@@ -32,21 +96,23 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
     case 'window.create': {
       const createAction = action as WindowCreateAction;
       const actionMonitorId = (createAction as { monitorId?: string }).monitorId;
-      const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
+      const monitorId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
       const key = toWindowKey(monitorId, createAction.windowId);
       const variant = createAction.variant;
-      const TITLEBAR_H = 36;
-      const TASKBAR_H = 36;
-      const vw = typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : 1280;
-      const vh = typeof globalThis.innerHeight === 'number' ? globalThis.innerHeight : 720;
+      const vw =
+        typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : DEFAULT_VIEWPORT_WIDTH;
+      const vh =
+        typeof globalThis.innerHeight === 'number'
+          ? globalThis.innerHeight
+          : DEFAULT_VIEWPORT_HEIGHT;
       const b = { ...createAction.bounds };
       const isStandard = !variant || variant === 'standard';
       // Skip titlebar offset for widget/panel (no titlebar)
-      const yOffset = isStandard ? TITLEBAR_H : 0;
-      b.x = Math.max(0, Math.min(b.x, vw - 100));
-      b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_H - yOffset));
+      const yOffset = isStandard ? TITLEBAR_HEIGHT : 0;
+      b.x = Math.max(0, Math.min(b.x, vw - MIN_VISIBLE_WINDOW_EDGE));
+      b.y = Math.max(0, Math.min(b.y, vh - TASKBAR_HEIGHT - yOffset));
       b.w = Math.min(b.w, vw - b.x);
-      b.h = Math.min(b.h, vh - TASKBAR_H - b.y);
+      b.h = Math.min(b.h, vh - TASKBAR_HEIGHT - b.y);
       const window: WindowModel = {
         id: key,
         title: createAction.title,
@@ -62,24 +128,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         windowStyle: createAction.windowStyle,
       };
       state.windows[key] = window;
-      state.zOrder = state.zOrder.filter((id) => id !== key);
-      if (variant === 'panel') {
-        // Panel: exclude from zOrder entirely (rendered separately in fixed position)
-      } else if (variant === 'widget') {
-        // Widget: insert before the first non-widget window (stays below standard windows)
-        const firstStandardIdx = state.zOrder.findIndex((id) => {
-          const w = state.windows[id];
-          return !w?.variant || w.variant === 'standard';
-        });
-        if (firstStandardIdx === -1) {
-          state.zOrder.push(key);
-        } else {
-          state.zOrder.splice(firstStandardIdx, 0, key);
-        }
-      } else {
-        // Standard: push to top
-        state.zOrder.push(key);
-      }
+      insertIntoZOrder(state, key, variant);
       // Only steal focus for non-minimized standard windows
       if (isStandard && !createAction.minimized) {
         state.focusedWindowId = key;
@@ -92,18 +141,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const win = state.windows[key];
       const actionAgentId = (action as { agentId?: string }).agentId;
       const reqId = (action as { requestId?: string }).requestId;
-      if (win?.locked && win.lockedBy !== actionAgentId) {
-        if (reqId) {
-          state.pendingFeedback.push({
-            requestId: reqId,
-            windowId: key,
-            renderer: 'lock',
-            success: false,
-            error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
-          });
-        }
-        break;
-      }
+      if (rejectIfLocked(state, win, actionAgentId, reqId, key)) break;
       delete state.windows[key];
       delete state.queuedActions[key];
       state.zOrder = state.zOrder.filter((id) => id !== key);
@@ -117,26 +155,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const key = resolveKey(action.windowId);
       const win = state.windows[key];
       if (win) {
-        const v = win.variant;
-        if (v === 'panel') {
-          // Panel: no-op for z-order (stays fixed)
-        } else if (v === 'widget') {
-          // Widget: move to top of widget layer (before first standard window)
-          state.zOrder = state.zOrder.filter((id) => id !== key);
-          const firstStandardIdx = state.zOrder.findIndex((id) => {
-            const w = state.windows[id];
-            return !w?.variant || w.variant === 'standard';
-          });
-          if (firstStandardIdx === -1) {
-            state.zOrder.push(key);
-          } else {
-            state.zOrder.splice(firstStandardIdx, 0, key);
-          }
-        } else {
-          // Standard: move to top
-          state.zOrder = state.zOrder.filter((id) => id !== key);
-          state.zOrder.push(key);
-        }
+        insertIntoZOrder(state, key, win.variant);
         state.focusedWindowId = key;
         win.minimized = false;
       }
@@ -214,18 +233,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const win = state.windows[key];
       const actionAgentId = (action as { agentId?: string }).agentId;
       const reqId = (action as { requestId?: string }).requestId;
-      if (win?.locked && win.lockedBy !== actionAgentId) {
-        if (reqId) {
-          state.pendingFeedback.push({
-            requestId: reqId,
-            windowId: key,
-            renderer: 'lock',
-            success: false,
-            error: `Window is locked by agent "${win.lockedBy}". Only the locking agent can modify it.`,
-          });
-        }
-        break;
-      }
+      if (rejectIfLocked(state, win, actionAgentId, reqId, key)) break;
       if (win) {
         win.content = { ...action.content };
       }
@@ -237,18 +245,17 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const win = state.windows[key];
       const actionAgentId = (action as { agentId?: string }).agentId;
       const reqId = (action as { requestId?: string }).requestId;
-      if (win?.locked && win.lockedBy !== actionAgentId) {
-        if (reqId) {
-          state.pendingFeedback.push({
-            requestId: reqId,
-            windowId: key,
-            renderer: 'lock',
-            success: false,
-            error: `Window is currently locked by another agent. Use unlock_window to release the lock before updating.`,
-          });
-        }
+      if (
+        rejectIfLocked(
+          state,
+          win,
+          actionAgentId,
+          reqId,
+          key,
+          'Window is currently locked by another agent. Use unlock_window to release the lock before updating.',
+        )
+      )
         break;
-      }
       if (win) {
         const targetRenderer = action.renderer ?? win.content.renderer;
         const operation = action.operation;
@@ -353,26 +360,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
     set((state) => {
       const win = state.windows[windowId];
       if (win) {
-        const v = win.variant;
-        if (v === 'panel') {
-          // Panel: no-op for z-order (stays fixed)
-        } else if (v === 'widget') {
-          // Widget: move to top of widget layer (before first standard window)
-          state.zOrder = state.zOrder.filter((id) => id !== windowId);
-          const firstStandardIdx = state.zOrder.findIndex((id) => {
-            const w = state.windows[id];
-            return !w?.variant || w.variant === 'standard';
-          });
-          if (firstStandardIdx === -1) {
-            state.zOrder.push(windowId);
-          } else {
-            state.zOrder.splice(firstStandardIdx, 0, windowId);
-          }
-        } else {
-          // Standard: move to top
-          state.zOrder = state.zOrder.filter((id) => id !== windowId);
-          state.zOrder.push(windowId);
-        }
+        insertIntoZOrder(state, windowId, win.variant);
         state.focusedWindowId = windowId;
         win.minimized = false;
         (state as DesktopStore).pendingInteractions.push({

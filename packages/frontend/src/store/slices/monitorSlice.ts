@@ -2,14 +2,13 @@
  * Monitor slice - manages virtual desktops (monitors).
  */
 import type { SliceCreator, MonitorSlice, DesktopStore } from '../types';
-
-const MAX_MONITORS = 4;
+import { MAX_MONITORS, DEFAULT_MONITOR_ID } from '@/constants/layout';
 
 let monitorCounter = 1;
 
 export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
-  monitors: [{ id: 'monitor-0', label: 'Monitor 1', createdAt: Date.now() }],
-  activeMonitorId: 'monitor-0',
+  monitors: [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }],
+  activeMonitorId: DEFAULT_MONITOR_ID,
 
   createMonitor: () => {
     const id = `monitor-${monitorCounter++}`;

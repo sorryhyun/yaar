@@ -4,24 +4,22 @@
  */
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react';
 import { useDesktopStore, handleAppProtocolRequest } from '@/store';
-import type { ClientEvent, ServerEvent, AppProtocolRequest } from '@/types';
+import type { ClientEvent, AppProtocolRequest } from '@/types';
 import { ClientEventType } from '@/types';
 import {
-  createWsManager,
+  wsManager,
   MAX_RECONNECT_ATTEMPTS,
   RECONNECT_DELAY,
   sendEvent,
   shouldReconnect,
-} from './use-agent-connection/transport-manager';
-import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
-import { dispatchServerEvent } from './use-agent-connection/server-event-dispatcher';
-import {
+  dispatchServerEvent,
   generateActionId,
   generateMessageId,
-} from './use-agent-connection/outbound-command-helpers';
+  usePendingEventDrainer,
+  useMonitorSync,
+} from './use-agent-connection';
+import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 import { getRawWindowId } from '@/store/helpers';
-
-const wsManager = createWsManager();
 
 function buildWsUrl(): string {
   const state = useDesktopStore.getState();
@@ -50,12 +48,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     setAgentActive,
     clearAgent,
     clearAllAgents,
-    consumePendingFeedback,
-    consumePendingInteractions,
-    consumeGestureMessages,
-    consumePendingAppProtocolResponses,
-    consumeAppProtocolReady,
-    consumePendingAppInteractions,
     consumeDrawing,
     consumeAttachedImages,
     registerWindowAgent,
@@ -105,7 +97,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
-        const message = JSON.parse(event.data) as ServerEvent;
+        const message = JSON.parse(event.data);
         dispatchServerEvent(message, {
           applyActions,
           setIsConnecting,
@@ -160,7 +152,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       wsManager.reconnectAttempts = 0;
       wsManager.notify();
 
-      // Subscribe to the current monitor (default to 'monitor-0' if not yet set)
       const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? 'monitor-0';
       if (wsManager.ws?.readyState === WebSocket.OPEN) {
         sendEvent(wsManager, {
@@ -343,169 +334,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingFeedback.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const feedback = consumePendingFeedback();
-        for (const item of feedback) {
-          send({
-            type: ClientEventType.RENDERING_FEEDBACK,
-            requestId: item.requestId,
-            windowId: getRawWindowId(item.windowId),
-            renderer: item.renderer,
-            success: item.success,
-            error: item.error,
-            url: item.url,
-            locked: item.locked,
-            imageData: item.imageData,
-          });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumePendingFeedback, send]);
-
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (
-        state.pendingAppProtocolResponses.length > 0 &&
-        wsManager.ws?.readyState === WebSocket.OPEN
-      ) {
-        const items = consumePendingAppProtocolResponses();
-        for (const item of items) {
-          send({
-            type: ClientEventType.APP_PROTOCOL_RESPONSE,
-            requestId: item.requestId,
-            windowId: getRawWindowId(item.windowId),
-            response: item.response,
-          });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumePendingAppProtocolResponses, send]);
-
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingAppProtocolReady.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const windowIds = consumeAppProtocolReady();
-        for (const windowId of windowIds) {
-          send({
-            type: ClientEventType.APP_PROTOCOL_READY,
-            windowId: getRawWindowId(windowId),
-          });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumeAppProtocolReady, send]);
-
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingAppInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const items = consumePendingAppInteractions();
-        for (const item of items) {
-          const messageId = generateMessageId();
-          send({
-            type: ClientEventType.WINDOW_MESSAGE,
-            messageId,
-            windowId: getRawWindowId(item.windowId),
-            content: `<app_interaction>${item.content}</app_interaction>`,
-          });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumePendingAppInteractions, send]);
-
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const interactions = consumePendingInteractions();
-        if (interactions.length > 0) {
-          // Unscope windowIds before sending to server (store uses monitorId-scoped keys)
-          const unscopedInteractions = interactions.map((i) =>
-            i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i,
-          );
-          send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumePendingInteractions, send]);
-
-  // Drain gesture messages (drag, selection, region) and send as USER_MESSAGE
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingGestureMessages.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
-        const messages = consumeGestureMessages();
-        for (const content of messages) {
-          const messageId = generateMessageId();
-          const monitorId = useDesktopStore.getState().activeMonitorId;
-          addCliEntry({ type: 'user', content, monitorId });
-          send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
-        }
-      }
-    });
-    return unsubscribe;
-  }, [consumeGestureMessages, send, addCliEntry]);
-
-  useEffect(() => {
-    let previousWindows = useDesktopStore.getState().windows;
-    const consumeQueuedActions = useDesktopStore.getState().consumeQueuedActions;
-
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      for (const [windowId, window] of Object.entries(state.windows)) {
-        const previousWindow = previousWindows[windowId];
-        if (previousWindow?.locked && !window.locked) {
-          const queuedActions = consumeQueuedActions(windowId);
-          for (const action of queuedActions) {
-            sendComponentAction(
-              action.windowId,
-              action.windowTitle,
-              action.action,
-              action.parallel,
-              action.formData,
-              action.formId,
-              action.componentPath,
-            );
-          }
-        }
-      }
-      previousWindows = state.windows;
-    });
-
-    return unsubscribe;
-  }, [sendComponentAction]);
-
-  useEffect(() => {
-    let previousMonitorId = useDesktopStore.getState().activeMonitorId;
-    let previousMonitorIds = new Set(useDesktopStore.getState().monitors.map((m) => m.id));
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      // Detect monitor subscription change
-      if (state.activeMonitorId !== previousMonitorId) {
-        previousMonitorId = state.activeMonitorId;
-        if (wsManager.ws?.readyState === WebSocket.OPEN) {
-          sendEvent(wsManager, {
-            type: ClientEventType.SUBSCRIBE_MONITOR,
-            monitorId: state.activeMonitorId,
-          });
-        }
-      }
-
-      // Detect monitor removals and notify server
-      const currentMonitorIds = new Set(state.monitors.map((m) => m.id));
-      if (wsManager.ws?.readyState === WebSocket.OPEN) {
-        for (const id of previousMonitorIds) {
-          if (!currentMonitorIds.has(id)) {
-            sendEvent(wsManager, { type: ClientEventType.REMOVE_MONITOR, monitorId: id });
-          }
-        }
-      }
-      previousMonitorIds = currentMonitorIds;
-    });
-    return unsubscribe;
-  }, []);
+  usePendingEventDrainer({ send, sendComponentAction, addCliEntry });
+  useMonitorSync();
 
   return {
     isConnected,

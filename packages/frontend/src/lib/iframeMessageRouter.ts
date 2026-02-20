@@ -19,6 +19,7 @@
  * One-shot request/response patterns (app protocol, iframe capture) are NOT
  * handled here — they have their own lifecycle with timeouts and requestIds.
  */
+import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -78,10 +79,10 @@ function resolveSource(raw: MessageEvent): IframeSource | null {
   const src = raw.source;
   if (!src) return null;
 
-  const iframes = document.querySelectorAll<HTMLIFrameElement>('[data-window-id] iframe');
+  const iframes = document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
   for (const iframe of iframes) {
     if (iframe.contentWindow !== src) continue;
-    const windowEl = iframe.closest<HTMLElement>('[data-window-id]');
+    const windowEl = iframe.closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
     const windowId = windowEl?.dataset.windowId;
     if (!windowId) continue;
 

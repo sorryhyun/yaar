@@ -3,6 +3,7 @@
  */
 import { tryIframeSelfCapture } from '@/store/desktop';
 import type { WindowModel } from '@/types/state';
+import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -55,7 +56,7 @@ export async function exportContent(
       // Three-tier iframe export: same-origin HTML > screenshot > URL fallback
       if (windowId) {
         const el = document.querySelector(
-          `[data-window-id="${windowId}"] iframe`,
+          `[${WINDOW_ID_DATA_ATTR}="${windowId}"] iframe`,
         ) as HTMLIFrameElement | null;
         if (el) {
           // Tier 1: Same-origin HTML export
