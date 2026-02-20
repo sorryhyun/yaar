@@ -10,7 +10,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { registerAllTools } from './register.js';
-import { runWithAgentId } from '../agents/session.js';
+import { runWithAgentContext } from '../agents/session.js';
+import { getSessionHub } from '../session/live-session.js';
 
 /** MCP server categories. */
 export const MCP_SERVERS = [
@@ -118,11 +119,9 @@ export async function handleMcpRequest(
     }
   }
 
-  // Restore agent context from X-Agent-Id header (set by Claude provider)
-  const agentId = req.headers['x-agent-id'];
-  if (typeof agentId === 'string') {
-    await runWithAgentId(agentId, () => entry.transport.handleRequest(req, res));
-  } else {
-    await entry.transport.handleRequest(req, res);
-  }
+  // Restore agent context so tools can resolve the active session.
+  // X-Agent-Id is set by the Claude provider; Codex calls omit it.
+  const agentId = (req.headers['x-agent-id'] as string | undefined) ?? 'unknown';
+  const sessionId = getSessionHub().getDefault()?.sessionId;
+  await runWithAgentContext({ agentId, sessionId }, () => entry.transport.handleRequest(req, res));
 }

@@ -4,10 +4,10 @@
 
 import type { Server } from 'http';
 import type { WebSocketServer } from 'ws';
-import { mkdir } from 'fs/promises';
+import { mkdir, stat as fsStat } from 'fs/promises';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
-import { ensureStorageDir } from './storage/index.js';
+import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
@@ -28,6 +28,19 @@ import { generateRemoteToken, getRemoteToken } from './http/auth.js';
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   await ensureStorageDir();
+
+  // Warm mount cache and validate mount paths still exist
+  const mounts = await loadMounts();
+  if (mounts.length > 0) {
+    for (const m of mounts) {
+      try {
+        await fsStat(m.hostPath);
+      } catch {
+        console.warn(`Mount "${m.alias}" \u2192 ${m.hostPath} \u2014 host path not found`);
+      }
+    }
+    console.log(`Loaded ${mounts.length} mount(s)`);
+  }
 
   // In bundled exe mode, auto-create runtime directories
   if (IS_BUNDLED_EXE) {

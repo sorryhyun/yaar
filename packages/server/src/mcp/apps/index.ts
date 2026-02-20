@@ -144,12 +144,32 @@ export function registerAppsTools(server: McpServer): void {
         appId: z.string().describe('The app ID (folder name in apps/)'),
         filename: z.string().describe('Config filename (e.g., credentials.json)'),
         content: z
-          .record(z.string(), z.any())
-          .describe('Content to write (will be JSON stringified)'),
+          .union([z.record(z.string(), z.any()), z.string()])
+          .describe('JSON object to write. Must be a JSON object, not a string.'),
       },
     },
     async (args) => {
-      const result = await writeAppConfig(args.appId, args.filename, args.content);
+      // Normalize content: if agent sent a string, parse it as JSON
+      let content: Record<string, unknown>;
+      if (typeof args.content === 'string') {
+        try {
+          const parsed = JSON.parse(args.content);
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+            return error(
+              'content must be a JSON object (e.g. {"key": "value"}), not a primitive or array.',
+            );
+          }
+          content = parsed;
+        } catch {
+          return error(
+            'content must be a JSON object (e.g. {"key": "value"}), not a plain string.',
+          );
+        }
+      } else {
+        content = args.content;
+      }
+
+      const result = await writeAppConfig(args.appId, args.filename, content);
 
       if (!result.success) {
         return error(result.error!);

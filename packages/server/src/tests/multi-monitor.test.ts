@@ -99,6 +99,7 @@ vi.mock('../agents/session.js', () => {
     getSessionId: vi.fn(),
     getMonitorId: vi.fn(),
     runWithAgentId: vi.fn(),
+    runWithAgentContext: vi.fn(),
   };
 });
 

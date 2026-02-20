@@ -8,8 +8,9 @@ import { join, extname } from 'path';
 import { gzip } from 'zlib';
 import { promisify } from 'util';
 import { renderPdfPage } from '../../lib/pdf/index.js';
-import { STORAGE_DIR, PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
+import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { sendError, sendJson, safePath, type EndpointMeta } from '../utils.js';
+import { resolvePath } from '../../storage/storage-manager.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -224,11 +225,12 @@ export async function handleFileRoutes(
     const pdfPath = decodeURIComponent(pdfMatch[1]);
     const pageNum = parseInt(pdfMatch[2], 10);
 
-    const normalizedPath = safePath(STORAGE_DIR, pdfPath);
-    if (!normalizedPath) {
+    const resolved = resolvePath(pdfPath);
+    if (!resolved) {
       sendError(res, 'Access denied', 403);
       return true;
     }
+    const normalizedPath = resolved.absolutePath;
 
     if (extname(pdfPath).toLowerCase() !== '.pdf') {
       sendError(res, 'Not a PDF file', 400);
@@ -375,8 +377,8 @@ export async function handleFileRoutes(
   if (url.pathname.startsWith('/api/storage/')) {
     const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));
 
-    const normalizedPath = safePath(STORAGE_DIR, filePath);
-    if (!normalizedPath) {
+    const resolved = resolvePath(filePath);
+    if (!resolved) {
       sendError(res, 'Access denied', 403);
       return true;
     }
@@ -396,7 +398,7 @@ export async function handleFileRoutes(
 
       // Serve file
       try {
-        const content = await readFile(normalizedPath);
+        const content = await readFile(resolved.absolutePath);
         const ext = extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
         res.writeHead(200, {
@@ -412,6 +414,10 @@ export async function handleFileRoutes(
 
     // POST — write file
     if (req.method === 'POST') {
+      if (resolved.readOnly) {
+        sendError(res, 'Mount is read-only', 403);
+        return true;
+      }
       try {
         const body = await collectBody(req, res, MAX_UPLOAD_SIZE);
         const result = await storageWrite(filePath, body);
@@ -431,6 +437,10 @@ export async function handleFileRoutes(
 
     // DELETE — remove file
     if (req.method === 'DELETE') {
+      if (resolved.readOnly) {
+        sendError(res, 'Mount is read-only', 403);
+        return true;
+      }
       const result = await storageDelete(filePath);
       if (!result.success) {
         sendError(res, result.error ?? 'Delete failed');

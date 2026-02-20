@@ -20,21 +20,24 @@ import type {
   StorageDeleteResult,
   StorageImageContent,
 } from './types.js';
+import { resolveMountPath, loadMounts, type ResolvedPath } from './mounts.js';
 
 /**
- * Validate and normalize a path within the storage directory.
- * Returns null if the path is outside the storage directory.
+ * Resolve a storage-relative path to an absolute path, checking mounts first.
+ * Returns null if the path escapes the storage directory.
  */
-function validatePath(filePath: string): string | null {
-  const normalizedPath = normalize(join(STORAGE_DIR, filePath));
+export function resolvePath(filePath: string): ResolvedPath | null {
+  // 1. Check mount prefix
+  const mountResult = resolveMountPath(filePath);
+  if (mountResult) return mountResult;
 
-  // Ensure the path is within the storage directory
+  // 2. Default: resolve against STORAGE_DIR
+  const normalizedPath = normalize(join(STORAGE_DIR, filePath));
   const relativePath = relative(STORAGE_DIR, normalizedPath);
   if (relativePath.startsWith('..') || relativePath.includes('..')) {
     return null;
   }
-
-  return normalizedPath;
+  return { absolutePath: normalizedPath, readOnly: false };
 }
 
 /**
@@ -104,10 +107,11 @@ async function convertPdfToImages(filePath: string): Promise<{ images: StorageIm
  * Read a file from storage.
  */
 export async function storageRead(filePath: string): Promise<StorageReadResult> {
-  const validatedPath = validatePath(filePath);
-  if (!validatedPath) {
+  const resolved = resolvePath(filePath);
+  if (!resolved) {
     return { success: false, error: 'Invalid path: path traversal detected' };
   }
+  const validatedPath = resolved.absolutePath;
 
   try {
     // Handle PDF files by converting to images
@@ -162,10 +166,14 @@ export async function storageWrite(
   filePath: string,
   content: string | Buffer
 ): Promise<StorageWriteResult> {
-  const validatedPath = validatePath(filePath);
-  if (!validatedPath) {
+  const resolved = resolvePath(filePath);
+  if (!resolved) {
     return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
   }
+  if (resolved.readOnly) {
+    return { success: false, path: filePath, error: 'Mount is read-only' };
+  }
+  const validatedPath = resolved.absolutePath;
 
   try {
     await ensureStorageDir();
@@ -190,8 +198,22 @@ export async function storageWrite(
  * List files and directories in storage.
  */
 export async function storageList(dirPath: string = ''): Promise<StorageListResult> {
-  const validatedPath = validatePath(dirPath);
-  if (!validatedPath) {
+  const cleaned = dirPath.replace(/^\/+|\/+$/g, '');
+
+  // Virtual: listing "mounts" directory → return mount aliases as dirs
+  if (cleaned === 'mounts') {
+    const mounts = await loadMounts();
+    const entries: StorageEntry[] = mounts.map((m) => ({
+      path: `mounts/${m.alias}`,
+      isDirectory: true,
+      size: 0,
+      modifiedAt: m.createdAt,
+    }));
+    return { success: true, entries };
+  }
+
+  const resolved = resolvePath(cleaned);
+  if (!resolved) {
     return { success: false, error: 'Invalid path: path traversal detected' };
   }
 
@@ -201,22 +223,35 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
 
     let dirEntries: string[];
     try {
-      dirEntries = await readdir(validatedPath);
+      dirEntries = await readdir(resolved.absolutePath);
     } catch {
       // Directory doesn't exist, return empty list
       return { success: true, entries: [] };
     }
 
     for (const entry of dirEntries) {
-      const entryPath = join(validatedPath, entry);
+      const entryPath = join(resolved.absolutePath, entry);
       const stats = await stat(entryPath);
 
       entries.push({
-        path: join(dirPath, entry),
+        path: join(cleaned, entry),
         isDirectory: stats.isDirectory(),
         size: stats.size,
         modifiedAt: stats.mtime.toISOString(),
       });
+    }
+
+    // Inject virtual "mounts" directory at root when mounts exist
+    if (cleaned === '' && !entries.some((e) => e.path === 'mounts')) {
+      const mounts = await loadMounts();
+      if (mounts.length > 0) {
+        entries.push({
+          path: 'mounts',
+          isDirectory: true,
+          size: 0,
+          modifiedAt: new Date().toISOString(),
+        });
+      }
     }
 
     // Sort: directories first, then by name
@@ -238,10 +273,14 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
  * Delete a file from storage.
  */
 export async function storageDelete(filePath: string): Promise<StorageDeleteResult> {
-  const validatedPath = validatePath(filePath);
-  if (!validatedPath) {
+  const resolved = resolvePath(filePath);
+  if (!resolved) {
     return { success: false, path: filePath, error: 'Invalid path: path traversal detected' };
   }
+  if (resolved.readOnly) {
+    return { success: false, path: filePath, error: 'Mount is read-only' };
+  }
+  const validatedPath = resolved.absolutePath;
 
   try {
     await unlink(validatedPath);

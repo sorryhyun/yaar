@@ -84,13 +84,23 @@ export function getMonitorId(): string | undefined {
  * Used to restore agent identity from HTTP headers (e.g., X-Agent-Id in MCP requests).
  */
 export function runWithAgentId<T>(agentId: string, fn: () => T): T {
-  // Preserve existing connectionId/sessionId if available, otherwise use placeholders
+  return runWithAgentContext({ agentId }, fn);
+}
+
+/**
+ * Run a function with a full agent context (agentId + optional sessionId).
+ * Used by the MCP HTTP handler to restore both identity and session scope.
+ */
+export function runWithAgentContext<T>(
+  ctx: { agentId: string; sessionId?: SessionId },
+  fn: () => T,
+): T {
   const existing = agentContext.getStore();
   return agentContext.run(
     {
-      agentId,
+      agentId: ctx.agentId,
       connectionId: existing?.connectionId ?? ('' as ConnectionId),
-      sessionId: existing?.sessionId ?? ('' as SessionId),
+      sessionId: ctx.sessionId ?? existing?.sessionId ?? ('' as SessionId),
     },
     fn,
   );

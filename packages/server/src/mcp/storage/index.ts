@@ -5,6 +5,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { storageRead, storageWrite, storageList, storageDelete } from '../../storage/index.js';
+import { loadMounts, addMount, removeMount } from '../../storage/mounts.js';
+import { actionEmitter } from '../action-emitter.js';
 import { ok, okWithImages, error } from '../utils.js';
 
 export const STORAGE_TOOL_NAMES = [
@@ -12,6 +14,9 @@ export const STORAGE_TOOL_NAMES = [
   'mcp__storage__write',
   'mcp__storage__list',
   'mcp__storage__delete',
+  'mcp__storage__mount',
+  'mcp__storage__unmount',
+  'mcp__storage__list_mounts',
 ] as const;
 
 export function registerStorageTools(server: McpServer): void {
@@ -97,5 +102,76 @@ export function registerStorageTools(server: McpServer): void {
       if (!result.success) return error(result.error!);
       return ok(`Deleted ${args.path}`);
     }
+  );
+
+  // mount — link a host directory into storage/mounts/{alias}/
+  server.registerTool(
+    'mount',
+    {
+      description:
+        'Mount a host directory into storage/mounts/{alias}/ so all storage tools can access it. Requires user approval.',
+      inputSchema: {
+        alias: z
+          .string()
+          .describe('Short name for the mount (lowercase, alphanumeric + hyphens, e.g. "photos")'),
+        hostPath: z.string().describe('Absolute path to the directory on the host filesystem'),
+        readOnly: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('If true, write and delete operations are blocked'),
+      },
+    },
+    async (args) => {
+      const roLabel = args.readOnly ? ' (read-only)' : '';
+      const confirmed = await actionEmitter.showPermissionDialog(
+        'Mount Directory',
+        `Mount "${args.hostPath}" as storage://mounts/${args.alias}/${roLabel}?`,
+        'storage_mount',
+        args.hostPath,
+      );
+
+      if (!confirmed) {
+        return error('User denied the mount request.');
+      }
+
+      const err = await addMount(args.alias, args.hostPath, args.readOnly);
+      if (err) return error(err);
+      return ok(`Mounted "${args.hostPath}" at mounts/${args.alias}/`);
+    },
+  );
+
+  // unmount — remove a mount
+  server.registerTool(
+    'unmount',
+    {
+      description: 'Remove a mount from storage/mounts/',
+      inputSchema: {
+        alias: z.string().describe('Alias of the mount to remove'),
+      },
+    },
+    async (args) => {
+      const err = await removeMount(args.alias);
+      if (err) return error(err);
+      return ok(`Unmounted "${args.alias}"`);
+    },
+  );
+
+  // list_mounts — show current mounts
+  server.registerTool(
+    'list_mounts',
+    {
+      description: 'List all mounted host directories',
+      inputSchema: {},
+    },
+    async () => {
+      const mounts = await loadMounts();
+      if (mounts.length === 0) return ok('No mounts configured.');
+      const lines = mounts.map(
+        (m) =>
+          `mounts/${m.alias}/ → ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`,
+      );
+      return ok(lines.join('\n'));
+    },
   );
 }

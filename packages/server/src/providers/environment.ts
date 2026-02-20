@@ -9,6 +9,7 @@ import { platform } from 'os';
 import type { ProviderType } from './types.js';
 import { listApps } from '../mcp/apps/discovery.js';
 import { storageList } from '../storage/storage-manager.js';
+import { loadMounts } from '../storage/mounts.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';
 import { IS_BUNDLED_EXE } from '../config.js';
 
@@ -53,6 +54,14 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push(`- Storage: ${names}`);
   } else {
     lines.push('- Storage: empty');
+  }
+
+  const mounts = await loadMounts();
+  if (mounts.length > 0) {
+    const mountLines = mounts.map(
+      (m) => `  - mounts/${m.alias}/ \u2192 ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`,
+    );
+    lines.push(`- Mounts:\n${mountLines.join('\n')}`);
   }
 
   if (hiddenApps.length > 0) {
