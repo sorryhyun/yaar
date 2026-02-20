@@ -35,7 +35,23 @@ function getSession(): BrowserSession {
 }
 
 function formatPageState(state: PageState): string {
-  let result = `URL: ${state.url}\nTitle: ${state.title}`;
+  let result = `URL: ${state.url}`;
+  if (state.urlChanged) result += ' (changed)';
+  result += `\nTitle: ${state.title}`;
+  if (state.activeElement) {
+    const ae = state.activeElement;
+    let desc = `<${ae.tag}`;
+    if (ae.name) desc += ` name="${ae.name}"`;
+    if (ae.id) desc += ` id="${ae.id}"`;
+    if (ae.type) desc += ` type="${ae.type}"`;
+    desc += '>';
+    result += `\nActive element: ${desc}`;
+  }
+  if (state.clickTarget) {
+    const ct = state.clickTarget;
+    result += `\nClicked: <${ct.tag}> "${ct.text}"`;
+    if (ct.candidateCount > 1) result += ` (${ct.candidateCount} candidates)`;
+  }
   if (state.textSnippet) {
     result += `\n\nPage content:\n${state.textSnippet}`;
   }
@@ -54,6 +70,11 @@ function updateWindowTitle(session: BrowserSession, title: string): void {
     windowId: session.windowId,
     title: `Browser — ${title}`,
   });
+}
+
+/** Heuristic: find the CSS selector for the largest text-containing block element. */
+async function findMainContent(session: BrowserSession): Promise<string | undefined> {
+  return session.findMainContentSelector();
 }
 
 /**
@@ -234,29 +255,41 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .string()
           .optional()
           .describe('Optional CSS selector to scope extraction (default: entire page)'),
+        maxLinks: z.number().optional().describe('Max links to return (default: 50)'),
+        maxTextLength: z.number().optional().describe('Max text length (default: 3000)'),
+        mainContentOnly: z
+          .boolean()
+          .optional()
+          .describe('Extract only from the largest text-containing block element'),
       },
     },
     async (args) => {
       const session = getSession();
-      const content = await session.extractContent(args.selector);
+      const effectiveSelector =
+        args.mainContentOnly && !args.selector ? await findMainContent(session) : args.selector;
+      const content = await session.extractContent(effectiveSelector);
+
+      const maxText = args.maxTextLength ?? 3000;
+      const maxLinks = args.maxLinks ?? 50;
 
       let result = `URL: ${content.url}\nTitle: ${content.title}\n`;
 
       if (content.fullText) {
         const text =
-          content.fullText.length > 3000
-            ? content.fullText.slice(0, 3000) + '\n... (truncated)'
+          content.fullText.length > maxText
+            ? content.fullText.slice(0, maxText) + '\n... (truncated)'
             : content.fullText;
         result += `\n--- Text ---\n${text}\n`;
       }
 
       if (content.links.length > 0) {
         const linkLines = content.links
-          .slice(0, 50)
+          .slice(0, maxLinks)
           .map((l) => `  [${l.text}](${l.href})`)
           .join('\n');
         result += `\n--- Links (${content.links.length}) ---\n${linkLines}\n`;
-        if (content.links.length > 50) result += `  ... and ${content.links.length - 50} more\n`;
+        if (content.links.length > maxLinks)
+          result += `  ... and ${content.links.length - maxLinks} more\n`;
       }
 
       if (content.forms.length > 0) {

@@ -11,6 +11,17 @@
 import { EventEmitter } from 'events';
 import { CDPClient } from './cdp.js';
 import type { PageState, PageContent } from './types.js';
+import {
+  PAGE_STATE,
+  BODY_TEXT,
+  URL_AND_TITLE,
+  FIND_BY_SELECTOR,
+  FIND_BY_TEXT,
+  FOCUS_AND_CLEAR,
+  FIRE_CHANGE_EVENTS,
+  EXTRACT_CONTENT,
+  FIND_MAIN_CONTENT,
+} from './page-scripts.js';
 
 const SCREENSHOT_WIDTH = 1280;
 const SCREENSHOT_HEIGHT = 800;
@@ -89,26 +100,33 @@ export class BrowserSession extends EventEmitter {
     return this.lastScreenshot;
   }
 
-  private async getPageState(): Promise<PageState> {
-    const evalResult = await this.cdp.send('Runtime.evaluate', {
-      expression: '({url: location.href, title: document.title})',
+  /** Evaluate a JS expression in the page and return the value. */
+  private async eval<T>(expression: string): Promise<T | undefined> {
+    const result = await this.cdp.send('Runtime.evaluate', {
+      expression,
       returnByValue: true,
     });
+    return result.result?.value;
+  }
 
-    const { url, title } = evalResult.result?.value || {
-      url: this.currentUrl,
-      title: '',
-    };
+  /** Evaluate a JS function string with one argument: `(fn)(arg)`. */
+  private async evalFn<T>(fn: string, arg: unknown): Promise<T | undefined> {
+    return this.eval<T>(`(${fn})(${JSON.stringify(arg)})`);
+  }
+
+  private async getPageState(): Promise<PageState> {
+    const { url, title, activeElement } = (await this.eval<{
+      url: string;
+      title: string;
+      activeElement: PageState['activeElement'] | null;
+    }>(PAGE_STATE)) || { url: this.currentUrl, title: '', activeElement: null };
+
     this.currentUrl = url;
     this.currentTitle = title;
 
     let textSnippet = '';
     try {
-      const textResult = await this.cdp.send('Runtime.evaluate', {
-        expression: '(document.body?.innerText || "").trim()',
-        returnByValue: true,
-      });
-      textSnippet = textResult.result?.value || '';
+      textSnippet = (await this.eval<string>(BODY_TEXT)) || '';
       if (textSnippet.length > TEXT_SNIPPET_LENGTH) {
         textSnippet = textSnippet.slice(0, TEXT_SNIPPET_LENGTH) + '...';
       }
@@ -116,7 +134,9 @@ export class BrowserSession extends EventEmitter {
       /* page not ready */
     }
 
-    return { url, title, textSnippet };
+    const state: PageState = { url, title, textSnippet };
+    if (activeElement) state.activeElement = activeElement;
+    return state;
   }
 
   async navigate(url: string): Promise<PageState> {
@@ -143,52 +163,18 @@ export class BrowserSession extends EventEmitter {
       throw new Error('Either selector or text must be provided');
     }
 
-    // Find element coordinates via JS evaluation
-    const findBySelector = `function(sel) {
-      var el = document.querySelector(sel);
-      if (!el) return null;
-      if (el.scrollIntoViewIfNeeded) el.scrollIntoViewIfNeeded();
-      else el.scrollIntoView({block:'center'});
-      var rect = el.getBoundingClientRect();
-      return {x: rect.x + rect.width/2, y: rect.y + rect.height/2};
-    }`;
+    const urlBefore = this.currentUrl;
 
-    const findByText = `function(txt) {
-      var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-      var node;
-      var candidates = [];
-      while (node = walker.nextNode()) {
-        if (node.textContent && node.textContent.trim().includes(txt)) {
-          var el = node.parentElement;
-          if (!el) continue;
-          var tag = el.tagName.toLowerCase();
-          if (tag !== 'body' && tag !== 'html' && el.offsetParent === null) continue;
-          var rect = el.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue;
-          candidates.push({el: el, area: rect.width * rect.height});
-        }
-      }
-      if (candidates.length === 0) return null;
-      var best = candidates[0];
-      for (var i = 1; i < candidates.length; i++) {
-        if (candidates[i].area < best.area) best = candidates[i];
-      }
-      var chosen = best.el;
-      if (chosen.scrollIntoViewIfNeeded) chosen.scrollIntoViewIfNeeded();
-      else chosen.scrollIntoView({block:'center'});
-      var r = chosen.getBoundingClientRect();
-      return {x: r.x + r.width/2, y: r.y + r.height/2};
-    }`;
-
-    const fn = selector ? findBySelector : findByText;
+    const fn = selector ? FIND_BY_SELECTOR : FIND_BY_TEXT;
     const arg = selector || text;
+    const coords = await this.evalFn<{
+      x: number;
+      y: number;
+      tag: string;
+      text: string;
+      candidateCount: number;
+    }>(fn, arg);
 
-    const coordsResult = await this.cdp.send('Runtime.evaluate', {
-      expression: `(${fn})(${JSON.stringify(arg)})`,
-      returnByValue: true,
-    });
-
-    const coords = coordsResult.result?.value;
     if (!coords) {
       throw new Error(`Element not found: ${selector || text}`);
     }
@@ -214,46 +200,39 @@ export class BrowserSession extends EventEmitter {
 
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
+    state.urlChanged = state.url !== urlBefore;
+    state.clickTarget = {
+      tag: coords.tag,
+      text: coords.text,
+      candidateCount: coords.candidateCount,
+    };
     this.notifyUpdate();
     return state;
   }
 
   async type(selector: string, text: string): Promise<PageState> {
     this.touch();
+    const urlBefore = this.currentUrl;
 
     // Focus and clear the input
-    await this.cdp.send('Runtime.evaluate', {
-      expression: `(function(sel) {
-        var el = document.querySelector(sel);
-        if (!el) throw new Error('Element not found: ' + sel);
-        el.focus();
-        el.value = '';
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-      })(${JSON.stringify(selector)})`,
-    });
+    await this.evalFn(FOCUS_AND_CLEAR, selector);
 
     // Insert text
     await this.cdp.send('Input.insertText', { text });
 
     // Fire change events
-    await this.cdp.send('Runtime.evaluate', {
-      expression: `(function(sel) {
-        var el = document.querySelector(sel);
-        if (el) {
-          el.dispatchEvent(new Event('input', {bubbles: true}));
-          el.dispatchEvent(new Event('change', {bubbles: true}));
-        }
-      })(${JSON.stringify(selector)})`,
-    });
+    await this.evalFn(FIRE_CHANGE_EVENTS, selector);
 
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
+    state.urlChanged = state.url !== urlBefore;
     this.notifyUpdate();
     return state;
   }
 
   async press(key: string): Promise<PageState> {
     this.touch();
+    const urlBefore = this.currentUrl;
 
     const keyMap: Record<string, { key: string; code: string; keyCode: number }> = {
       Enter: { key: 'Enter', code: 'Enter', keyCode: 13 },
@@ -291,6 +270,7 @@ export class BrowserSession extends EventEmitter {
     await new Promise((r) => setTimeout(r, 300));
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
+    state.urlChanged = state.url !== urlBefore;
     this.notifyUpdate();
     return state;
   }
@@ -318,55 +298,27 @@ export class BrowserSession extends EventEmitter {
   async extractContent(selector?: string): Promise<PageContent> {
     this.touch();
 
-    const fn = `function(sel) {
-      var root = sel ? document.querySelector(sel) : document.body;
-      if (!root) return {fullText: '', links: [], forms: []};
+    const content = (await this.evalFn<{
+      fullText: string;
+      links: PageContent['links'];
+      forms: PageContent['forms'];
+    }>(EXTRACT_CONTENT, selector ?? null)) || { fullText: '', links: [], forms: [] };
 
-      var fullText = root.innerText || '';
+    const { url, title } = (await this.eval<{ url: string; title: string }>(URL_AND_TITLE)) || {
+      url: '',
+      title: '',
+    };
 
-      var links = [];
-      var anchors = root.querySelectorAll('a[href]');
-      for (var i = 0; i < anchors.length; i++) {
-        var a = anchors[i];
-        var text = (a.textContent || '').trim();
-        var href = a.getAttribute('href') || '';
-        if (text && href) links.push({text: text, href: href});
-      }
+    return { url, title, ...content };
+  }
 
-      var forms = [];
-      var formEls = root.querySelectorAll('form');
-      for (var j = 0; j < formEls.length; j++) {
-        var form = formEls[j];
-        var fields = [];
-        var inputs = form.querySelectorAll('input, select, textarea');
-        for (var k = 0; k < inputs.length; k++) {
-          var inp = inputs[k];
-          fields.push({
-            name: inp.name || inp.id || '',
-            type: inp.type || inp.tagName.toLowerCase(),
-            value: inp.value || undefined
-          });
-        }
-        forms.push({action: form.getAttribute('action') || '', fields: fields});
-      }
-
-      return {fullText: fullText, links: links, forms: forms};
-    }`;
-
-    const evalResult = await this.cdp.send('Runtime.evaluate', {
-      expression: `(${fn})(${JSON.stringify(selector ?? null)})`,
-      returnByValue: true,
-    });
-
-    const urlResult = await this.cdp.send('Runtime.evaluate', {
-      expression: '({url: location.href, title: document.title})',
-      returnByValue: true,
-    });
-
-    const { url, title } = urlResult.result?.value || { url: '', title: '' };
-    const result = evalResult.result?.value || { fullText: '', links: [], forms: [] };
-
-    return { url, title, ...result };
+  /** Heuristic: find CSS selector for the largest text-containing block element. */
+  async findMainContentSelector(): Promise<string | undefined> {
+    try {
+      return (await this.eval<string>(FIND_MAIN_CONTENT)) || undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async close(): Promise<void> {

@@ -6,6 +6,9 @@ export interface PageState {
   url: string;
   title: string;
   textSnippet: string;
+  activeElement?: { tag: string; id?: string; name?: string; type?: string };
+  urlChanged?: boolean;
+  clickTarget?: { tag: string; text: string; candidateCount: number };
 }
 
 export interface PageContent {
