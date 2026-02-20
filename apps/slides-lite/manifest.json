@@ -2,7 +2,7 @@
   "id": "slides-lite",
   "name": "Slides Lite",
   "icon": "🖼️",
-  "description": "",
+  "description": "Lightweight slide editor with markdown, themes, ratios, and app protocol commands",
   "version": "1.0.0",
   "author": "YAAR"
 }

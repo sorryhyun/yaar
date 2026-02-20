@@ -162,6 +162,8 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
     'sandbox_mode=danger-full-access',
     '-c',
     'approval_policy=on-request',
+    '-c',
+    'project_doc_max_bytes=0',
   );
 
   return args;

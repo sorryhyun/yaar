@@ -70,6 +70,18 @@ async function getSdkScripts(minify: boolean): Promise<string> {
 }
 
 /**
+ * Escape JS code for safe embedding inside an HTML `<script>` tag.
+ *
+ * The HTML parser treats `</script` (case-insensitive) as a closing tag even
+ * when it appears inside a JS string literal or template literal.  Replacing
+ * `</script` with `<\/script` is safe because `\/` evaluates to `/` in JS
+ * strings, so runtime behaviour is unchanged.
+ */
+function escapeInlineJs(code: string): string {
+  return code.replace(/<\/script/gi, '<\\/script');
+}
+
+/**
  * Generate an HTML wrapper that embeds bundled JavaScript.
  */
 export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: string): string {
@@ -80,12 +92,12 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
-<script>${sdkCode}</script>
+<script>${escapeInlineJs(sdkCode)}</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
-${jsCode}
+${escapeInlineJs(jsCode)}
 </script>
 </body>
 </html>`;

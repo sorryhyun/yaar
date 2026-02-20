@@ -16,4 +16,5 @@ export interface Deck {
   themeId: ThemeId;
   slides: Slide[];
   activeIndex: number;
+  aspectRatio: string;
 }

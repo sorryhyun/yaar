@@ -314,6 +314,56 @@ function setEditorFromPlainText(text: string) {
   refreshStats();
 }
 
+function setEditorFromHtml(html: string) {
+  editor.innerHTML = html || '<p></p>';
+  refreshStats();
+}
+
+function appendHtmlFragment(html: string) {
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  while (div.firstChild) {
+    editor.appendChild(div.firstChild);
+  }
+  refreshStats();
+}
+
+function extractBodyHtml(rawHtml: string) {
+  const bodyMatch = rawHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  return bodyMatch ? bodyMatch[1] : rawHtml;
+}
+
+type BatchDocInput = {
+  title?: string;
+  text?: string;
+  html?: string;
+};
+
+function docsToMergedHtml(docs: BatchDocInput[]) {
+  if (!docs.length) return '<p></p>';
+
+  return docs
+    .map((doc, index) => {
+      const rawTitle = (doc.title || '').trim() || `Document ${index + 1}`;
+      const safeTitle = rawTitle
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      if (typeof doc.html === 'string') {
+        return `<section><h2>${safeTitle}</h2>${doc.html}</section>`;
+      }
+
+      const escapedText = (doc.text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+      return `<section><h2>${safeTitle}</h2><p>${escapedText}</p></section>`;
+    })
+    .join('');
+}
+
 if (appApi) {
   appApi.register({
     appId: 'word-lite',
@@ -349,8 +399,7 @@ if (appApi) {
           required: ['html'],
         },
         handler: (p: { html: string }) => {
-          editor.innerHTML = p.html || '<p></p>';
-          refreshStats();
+          setEditorFromHtml(p.html || '<p></p>');
           saveState.textContent = 'Updated via app protocol';
           saveDoc();
           return { ok: true };
@@ -416,15 +465,64 @@ if (appApi) {
           required: ['html'],
         },
         handler: (p: { html: string }) => {
-          const div = document.createElement('div');
-          div.innerHTML = p.html || '';
-          while (div.firstChild) {
-            editor.appendChild(div.firstChild);
-          }
-          refreshStats();
+          appendHtmlFragment(p.html || '');
           saveState.textContent = 'Updated via app protocol';
           saveDoc();
           return { ok: true };
+        },
+      },
+      setDocuments: {
+        description: 'Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
+        params: {
+          type: 'object',
+          properties: {
+            docs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  text: { type: 'string' },
+                  html: { type: 'string' },
+                },
+              },
+            },
+          },
+          required: ['docs'],
+        },
+        handler: (p: { docs: BatchDocInput[] }) => {
+          const docs = Array.isArray(p.docs) ? p.docs : [];
+          setEditorFromHtml(docsToMergedHtml(docs));
+          saveState.textContent = `Loaded ${docs.length} document(s) via app protocol`;
+          saveDoc();
+          return { ok: true, count: docs.length };
+        },
+      },
+      appendDocuments: {
+        description: 'Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
+        params: {
+          type: 'object',
+          properties: {
+            docs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  text: { type: 'string' },
+                  html: { type: 'string' },
+                },
+              },
+            },
+          },
+          required: ['docs'],
+        },
+        handler: (p: { docs: BatchDocInput[] }) => {
+          const docs = Array.isArray(p.docs) ? p.docs : [];
+          appendHtmlFragment(docsToMergedHtml(docs));
+          saveState.textContent = `Appended ${docs.length} document(s) via app protocol`;
+          saveDoc();
+          return { ok: true, count: docs.length };
         },
       },
       saveToStorage: {
@@ -445,23 +543,95 @@ if (appApi) {
         },
       },
       loadFromStorage: {
-        description: 'Load a document from YAAR persistent storage into the editor. Params: { path: string }',
+        description: 'Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',
         params: {
           type: 'object',
-          properties: { path: { type: 'string' } },
-          required: ['path'],
+          properties: {
+            path: { type: 'string' },
+            paths: { type: 'array', items: { type: 'string' } },
+            mode: { type: 'string', enum: ['replace', 'append'] },
+          },
         },
-        handler: async (p: { path: string }) => {
+        handler: async (p: { path?: string; paths?: string[]; mode?: 'replace' | 'append' }) => {
           const storage = (window as any).yaar?.storage;
           if (!storage) return { ok: false, error: 'Storage API not available' };
-          const html: string = await storage.read(p.path, { as: 'text' });
-          // Strip outer HTML boilerplate if present, just use body content
-          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-          editor.innerHTML = bodyMatch ? bodyMatch[1] : html;
-          refreshStats();
-          saveState.textContent = `Loaded from storage: ${p.path}`;
+
+          const candidatePaths = [
+            ...(p.path ? [p.path] : []),
+            ...(Array.isArray(p.paths) ? p.paths : []),
+          ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+
+          if (!candidatePaths.length) {
+            return { ok: false, error: 'Provide path or paths' };
+          }
+
+          const loadedDocs: BatchDocInput[] = [];
+          for (const path of candidatePaths) {
+            const raw: string = await storage.read(path, { as: 'text' });
+            const body = extractBodyHtml(raw);
+            const filename = path.split('/').pop() || path;
+            const title = filename.replace(/\.[^/.]+$/, '') || 'Untitled Document';
+            loadedDocs.push({ title, html: body });
+          }
+
+          const mode = p.mode || 'replace';
+          const merged = docsToMergedHtml(loadedDocs);
+          if (mode === 'append') {
+            appendHtmlFragment(merged);
+          } else {
+            setEditorFromHtml(merged);
+          }
+
+          saveState.textContent = `Loaded ${loadedDocs.length} file(s) from storage`;
           saveDoc();
-          return { ok: true, path: p.path };
+          return { ok: true, count: loadedDocs.length, paths: candidatePaths, mode };
+        },
+      },
+      readStorageFile: {
+        description: 'Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: "text"|"json"|"auto" }',
+        params: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            as: { type: 'string', enum: ['text', 'json', 'auto'] },
+          },
+          required: ['path'],
+        },
+        handler: async (p: { path: string; as?: 'text' | 'json' | 'auto' }) => {
+          const storage = (window as any).yaar?.storage;
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          const readAs = p.as || 'text';
+          const content = await storage.read(p.path, { as: readAs });
+          return { ok: true, path: p.path, as: readAs, content };
+        },
+      },
+      readStorageFiles: {
+        description: 'Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: "text"|"json"|"auto" }',
+        params: {
+          type: 'object',
+          properties: {
+            paths: { type: 'array', items: { type: 'string' } },
+            as: { type: 'string', enum: ['text', 'json', 'auto'] },
+          },
+          required: ['paths'],
+        },
+        handler: async (p: { paths: string[]; as?: 'text' | 'json' | 'auto' }) => {
+          const storage = (window as any).yaar?.storage;
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+
+          const paths = (Array.isArray(p.paths) ? p.paths : []).filter(
+            (v): v is string => typeof v === 'string' && v.trim().length > 0,
+          );
+          const readAs = p.as || 'text';
+
+          const files = await Promise.all(
+            paths.map(async (path) => ({
+              path,
+              content: await storage.read(path, { as: readAs }),
+            })),
+          );
+
+          return { ok: true, as: readAs, files };
         },
       },
       newDocument: {

@@ -1,7 +1,7 @@
 {
   "icon": "📝",
   "name": "Word Lite",
-  "description": "Simple rich text editor with title-aware draft save and txt/html/docx export.",
+  "description": "Lightweight document editor with App Protocol batch document and storage read support",
   "protocol": {
     "state": {
       "html": {
@@ -81,6 +81,58 @@
           "required": ["html"]
         }
       },
+      "setDocuments": {
+        "description": "Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "docs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "html": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": ["docs"]
+        }
+      },
+      "appendDocuments": {
+        "description": "Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "docs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "html": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": ["docs"]
+        }
+      },
       "saveToStorage": {
         "description": "Save the current document to YAAR persistent storage. Params: { path: string } — e.g. \"docs/my-doc.html\"",
         "params": {
@@ -94,15 +146,59 @@
         }
       },
       "loadFromStorage": {
-        "description": "Load a document from YAAR persistent storage into the editor. Params: { path: string }",
+        "description": "Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: \"replace\"|\"append\" }",
         "params": {
           "type": "object",
           "properties": {
             "path": {
               "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["replace", "append"]
+            }
+          }
+        }
+      },
+      "readStorageFile": {
+        "description": "Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: \"text\"|\"json\"|\"auto\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "as": {
+              "type": "string",
+              "enum": ["text", "json", "auto"]
             }
           },
           "required": ["path"]
+        }
+      },
+      "readStorageFiles": {
+        "description": "Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: \"text\"|\"json\"|\"auto\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "as": {
+              "type": "string",
+              "enum": ["text", "json", "auto"]
+            }
+          },
+          "required": ["paths"]
         }
       },
       "newDocument": {

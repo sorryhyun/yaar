@@ -12,12 +12,13 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
-import { getCodexBin, getCodexAppServerArgs, getCodexWsPort } from '../../config.js';
+import { getCodexBin, getCodexAppServerArgs, getCodexWsPort, STORAGE_DIR } from '../../config.js';
+import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles.js';
 import type {
   InitializeParams,
   InitializeResponse,
@@ -103,8 +104,15 @@ export class AppServer {
       throw new Error('AppServer is already running');
     }
 
-    // Create an isolated temp directory to prevent file contamination
+    // Create temp directory for agent role configs
     this.tempDir = await mkdtemp(join(tmpdir(), 'codex-'));
+
+    // Write agent role config files so subagents inherit the correct model
+    const agentsDir = join(this.tempDir, 'agents');
+    await mkdir(agentsDir);
+    for (const [role, config] of Object.entries(CODEX_AGENT_ROLES)) {
+      await writeFile(join(agentsDir, `${role}.toml`), codexRoleToToml(config, this.config.model));
+    }
 
     await this.spawnProcess();
 
@@ -125,6 +133,16 @@ export class AppServer {
     // Add model if specified
     if (this.config.model) {
       args.push('-c', `model=${this.config.model}`);
+
+      // Point subagent roles at config files (written in start())
+      if (this.tempDir) {
+        for (const role of Object.keys(CODEX_AGENT_ROLES)) {
+          args.push(
+            '-c',
+            `agents.${role}.config_file=${join(this.tempDir, 'agents', `${role}.toml`)}`,
+          );
+        }
+      }
     }
 
     const codexBin = getCodexBin();
@@ -134,7 +152,7 @@ export class AppServer {
     // orphaned codex processes on server restart).
     const isWindows = process.platform === 'win32';
     this.process = spawn(codexBin, args, {
-      cwd: this.tempDir ?? undefined,
+      cwd: STORAGE_DIR,
       shell: isWindows,
       stdio: ['ignore', 'ignore', 'pipe'],
       env: {

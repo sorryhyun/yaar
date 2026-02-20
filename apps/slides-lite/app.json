@@ -1,4 +1,182 @@
 {
   "icon": "🖼️",
-  "name": "Slides Lite"
+  "name": "Slides Lite",
+  "description": "Lightweight slide editor with markdown, themes, ratios, and app protocol commands",
+  "protocol": {
+    "state": {
+      "deck": {
+        "description": "Current full deck object"
+      },
+      "activeSlide": {
+        "description": "Currently selected slide"
+      },
+      "title": {
+        "description": "Current deck title"
+      },
+      "theme": {
+        "description": "Current deck theme id"
+      },
+      "aspectRatio": {
+        "description": "Current slide aspect ratio (e.g., 16:9)"
+      },
+      "activeIndex": {
+        "description": "Current active slide index"
+      },
+      "slideCount": {
+        "description": "Number of slides in the deck"
+      }
+    },
+    "commands": {
+      "setDeck": {
+        "description": "Replace entire deck. Params: { deck: Deck }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "deck": {
+              "type": "object"
+            }
+          },
+          "required": ["deck"]
+        }
+      },
+      "setSlides": {
+        "description": "Set slides in replace/append mode. Params: { slides: Slide[], mode?: \"replace\"|\"append\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "slides": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["replace", "append"]
+            }
+          },
+          "required": ["slides"]
+        }
+      },
+      "appendSlides": {
+        "description": "Append many slides at once. Params: { slides: Slide[] }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "slides": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "required": ["slides"]
+        }
+      },
+      "setActiveIndex": {
+        "description": "Set active slide index. Params: { index: number }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "index": {
+              "type": "number"
+            }
+          },
+          "required": ["index"]
+        }
+      },
+      "setTheme": {
+        "description": "Set deck theme. Params: { themeId: ThemeId }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "themeId": {
+              "type": "string"
+            }
+          },
+          "required": ["themeId"]
+        }
+      },
+      "setAspectRatio": {
+        "description": "Set deck aspect ratio. Params: { aspectRatio: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "aspectRatio": {
+              "type": "string"
+            }
+          },
+          "required": ["aspectRatio"]
+        }
+      },
+      "saveToStorage": {
+        "description": "Save current deck JSON to YAAR storage. Params: { path: string }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": ["path"]
+        }
+      },
+      "loadFromStorage": {
+        "description": "Load one/many files from YAAR storage and merge into deck. Params: { path?: string, paths?: string[], mode?: \"replace\"|\"append\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["replace", "append"]
+            }
+          }
+        }
+      },
+      "readStorageFile": {
+        "description": "Read one file from YAAR storage. Params: { path: string, as?: \"text\"|\"json\"|\"auto\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "as": {
+              "type": "string",
+              "enum": ["text", "json", "auto"]
+            }
+          },
+          "required": ["path"]
+        }
+      },
+      "readStorageFiles": {
+        "description": "Read many files from YAAR storage. Params: { paths: string[], as?: \"text\"|\"json\"|\"auto\" }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "as": {
+              "type": "string",
+              "enum": ["text", "json", "auto"]
+            }
+          },
+          "required": ["paths"]
+        }
+      }
+    }
+  }
 }

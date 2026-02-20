@@ -15,6 +15,7 @@ import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { SANDBOX_TOOL_NAMES } from '../mcp/sandbox/index.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
+import { BROWSER_TOOL_NAMES } from '../mcp/browser/index.js';
 
 export interface AgentProfile {
   id: string;
@@ -69,6 +70,7 @@ const profiles: Record<string, AgentProfile> = {
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
       ...SANDBOX_TOOL_NAMES,
+      ...BROWSER_TOOL_NAMES,
       ...WINDOW_TOOL_NAMES,
       ...STORAGE_TOOL_NAMES,
       ...APPS_ALL_TOOLS,
@@ -79,12 +81,13 @@ const profiles: Record<string, AgentProfile> = {
 
   web: {
     id: 'web',
-    description: 'Web research, API calls, HTTP requests',
+    description: 'Web research, API calls, HTTP requests, browser automation',
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
+      ...BROWSER_TOOL_NAMES,
       ...WINDOW_TOOL_NAMES,
       ...STORAGE_TOOL_NAMES,
     ],
@@ -136,22 +139,19 @@ export const DEVELOPER_PROFILE: AgentProfile = {
   allowedTools: [
     // Native subagent spawner (Claude SDK Task tool)
     'Task',
-    // Window management (create + update + close)
+    'WebSearch',
+    ...INFO_TOOLS,
+    ...HTTP_TOOL_NAMES,
+    ...SANDBOX_TOOL_NAMES,
+    ...BROWSER_TOOL_NAMES,
     ...WINDOW_TOOL_NAMES,
-    // Storage (read + list)
-    'mcp__storage__read',
-    'mcp__storage__list',
-    // Notifications
-    'mcp__window__show_notification',
-    'mcp__window__dismiss_notification',
-    // Memory + info
-    'mcp__system__memorize',
-    ...SKILL_TOOL_NAMES,
-    'mcp__system__get_info',
-    'mcp__system__get_env_var',
-    // Cache replay
+    ...STORAGE_TOOL_NAMES,
+    ...APPS_ALL_TOOLS,
     ...RELOAD_TOOL_NAMES,
-    // Config hooks
+    ...DEV_TOOL_NAMES,
+    // System tools
+    'mcp__system__memorize',
+    'mcp__system__get_env_var',
     'mcp__system__set_config',
     'mcp__system__get_config',
     'mcp__system__remove_config',
@@ -174,4 +174,46 @@ export function buildAgentDefinitions(): Record<string, AgentDefinition> {
       } satisfies AgentDefinition,
     ]),
   );
+}
+
+// ── Codex agent roles (subagent config for codex app-server) ──────────
+
+export interface CodexAgentRole {
+  description?: string;
+  modelReasoningEffort?: 'high' | 'medium' | 'low';
+  sandboxMode?: string;
+  instructions?: string;
+}
+
+/**
+ * Codex subagent role definitions.
+ * Model is inherited from the main AppServerConfig — these control per-role overrides.
+ * Each role becomes a TOML config file referenced via `-c agents.<role>.config_file=...`.
+ */
+export const CODEX_AGENT_ROLES: Record<string, CodexAgentRole> = {
+  default: {
+    description: 'General-purpose helper',
+  },
+  worker: {
+    description: 'Task execution agent',
+  },
+  explorer: {
+    description: 'Fast codebase explorer for read-heavy tasks',
+    modelReasoningEffort: 'medium',
+    sandboxMode: 'read-only',
+  },
+};
+
+/**
+ * Serialize a Codex agent role to TOML format.
+ * The model is passed separately (from AppServerConfig) and prepended.
+ */
+export function codexRoleToToml(role: CodexAgentRole, model?: string): string {
+  const lines: string[] = [];
+  if (model) lines.push(`model = "${model}"`);
+  if (role.modelReasoningEffort)
+    lines.push(`model_reasoning_effort = "${role.modelReasoningEffort}"`);
+  if (role.sandboxMode) lines.push(`sandbox_mode = "${role.sandboxMode}"`);
+  if (role.instructions) lines.push(`developer_instructions = "${role.instructions}"`);
+  return lines.join('\n') + '\n';
 }

@@ -2,7 +2,7 @@
   "id": "word-lite",
   "name": "Word Lite",
   "icon": "📝",
-  "description": "Simple rich text editor with title-aware draft save and txt/html/docx export.",
-  "version": "1.2.0",
+  "description": "Lightweight document editor with App Protocol batch document and storage read support",
+  "version": "1.0.0",
   "author": "YAAR"
 }
