@@ -12,7 +12,7 @@ import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
 import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
 import { MARKET_TOOL_NAMES } from '../mcp/apps/market.js';
 import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
-import { SKILL_TOOL_NAMES } from '../mcp/skills/index.js';
+import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { SANDBOX_TOOL_NAMES } from '../mcp/sandbox/index.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 

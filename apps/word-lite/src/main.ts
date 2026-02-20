@@ -385,22 +385,83 @@ if (appApi) {
         },
       },
       appendText: {
-        description: 'Append plain text to the document. Params: { text: string, newline?: boolean }',
+        description: 'Append plain text as a new paragraph to the document. Params: { text: string }',
         params: {
           type: 'object',
           properties: {
             text: { type: 'string' },
-            newline: { type: 'boolean' },
           },
           required: ['text'],
         },
-        handler: (p: { text: string; newline?: boolean }) => {
-          const existing = editor.innerText || '';
-          const next = p.newline === false ? `${existing}${p.text}` : `${existing}${existing ? '\n' : ''}${p.text}`;
-          setEditorFromPlainText(next);
+        handler: (p: { text: string }) => {
+          const escaped = (p.text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+          const para = document.createElement('p');
+          para.innerHTML = escaped;
+          editor.appendChild(para);
+          refreshStats();
           saveState.textContent = 'Updated via app protocol';
           saveDoc();
           return { ok: true };
+        },
+      },
+      appendHtml: {
+        description: 'Append HTML content to the end of the document without replacing existing content. Params: { html: string }',
+        params: {
+          type: 'object',
+          properties: { html: { type: 'string' } },
+          required: ['html'],
+        },
+        handler: (p: { html: string }) => {
+          const div = document.createElement('div');
+          div.innerHTML = p.html || '';
+          while (div.firstChild) {
+            editor.appendChild(div.firstChild);
+          }
+          refreshStats();
+          saveState.textContent = 'Updated via app protocol';
+          saveDoc();
+          return { ok: true };
+        },
+      },
+      saveToStorage: {
+        description: 'Save the current document to YAAR persistent storage. Params: { path: string } — e.g. "docs/my-doc.html"',
+        params: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+        handler: async (p: { path: string }) => {
+          const storage = (window as any).yaar?.storage;
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          const title = getTitle();
+          const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
+          await storage.save(p.path, html);
+          saveState.textContent = `Saved to storage: ${p.path}`;
+          return { ok: true, path: p.path, savedAt: nowLabel() };
+        },
+      },
+      loadFromStorage: {
+        description: 'Load a document from YAAR persistent storage into the editor. Params: { path: string }',
+        params: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+        handler: async (p: { path: string }) => {
+          const storage = (window as any).yaar?.storage;
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          const html: string = await storage.read(p.path, { as: 'text' });
+          // Strip outer HTML boilerplate if present, just use body content
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          editor.innerHTML = bodyMatch ? bodyMatch[1] : html;
+          refreshStats();
+          saveState.textContent = `Loaded from storage: ${p.path}`;
+          saveDoc();
+          return { ok: true, path: p.path };
         },
       },
       newDocument: {

@@ -44,7 +44,7 @@ const TOPICS: Record<string, string> = {
   app_protocol: appProtocolMd,
 };
 
-export const SKILL_TOOL_NAMES = ['mcp__system__skill'] as const;
+export { SKILL_TOOL_NAMES } from './names.js';
 
 export function registerSkillTools(server: McpServer): void {
   const topicList = Object.keys(TOPICS).join(', ');
