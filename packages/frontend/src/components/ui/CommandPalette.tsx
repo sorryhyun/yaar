@@ -302,7 +302,7 @@ export function CommandPalette() {
             <button
               className={styles.pencilButton}
               onClick={togglePencilMode}
-              title={pencilMode ? 'Exit drawing (Esc)' : 'Draw on screen (Ctrl Ctrl)'}
+              title={pencilMode ? 'Exit drawing (Esc)' : 'Draw on screen'}
               data-active={pencilMode}
             >
               <svg

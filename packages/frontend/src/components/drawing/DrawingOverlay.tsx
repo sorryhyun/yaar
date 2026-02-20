@@ -1,13 +1,17 @@
 /**
  * DrawingOverlay - Full-screen canvas for freehand drawing.
  *
- * Double-press Ctrl (or click the pencil button) to toggle pencil mode.
- * Then click+drag to draw. Double-press Ctrl again or Escape to exit and capture.
+ * Two drawing modes:
+ *   1. Pencil mode (click pencil button) — left-click drag to draw. Escape to exit.
+ *   2. Right-click drag (always active) — right-click drag anywhere to draw freehand
+ *      lines. Simple right-click (no drag) still shows the context menu.
+ *
  * The saved image includes a screenshot of the current screen with annotations on top.
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useDesktopStore } from '@/store';
+import { iframeMessages } from '@/lib/iframeMessageRouter';
 import styles from '@/styles/ui/DrawingOverlay.module.css';
 
 interface Point {
@@ -15,7 +19,18 @@ interface Point {
   y: number;
 }
 
-const DOUBLE_PRESS_MS = 350;
+const DRAG_THRESHOLD = 5;
+
+function suppressNextContextMenu() {
+  document.addEventListener(
+    'contextmenu',
+    (cm) => {
+      cm.preventDefault();
+      cm.stopPropagation();
+    },
+    { capture: true, once: true },
+  );
+}
 
 export function DrawingOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -27,8 +42,13 @@ export function DrawingOverlay() {
 
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
-  const lastCtrlUpRef = useRef(0);
   const hasStrokesRef = useRef(false);
+
+  // Right-click drawing refs (separate from pencil mode's left-click drawing)
+  const rightDrawingRef = useRef(false);
+  const rightStartRef = useRef<Point | null>(null);
+  const rightMovedRef = useRef(false);
+  const rightLastPointRef = useRef<Point | null>(null);
 
   hasStrokesRef.current = hasStrokes;
 
@@ -95,28 +115,16 @@ export function DrawingOverlay() {
 
   // Capture screen with drawing overlay
   const captureScreenWithDrawing = useCallback(async () => {
-    console.log('[Drawing] captureScreenWithDrawing called');
     const drawingCanvas = canvasRef.current;
-    if (!drawingCanvas) {
-      console.log('[Drawing] captureScreenWithDrawing — no canvas ref!');
-      return;
-    }
+    if (!drawingCanvas) return;
 
     try {
       const dpr = window.devicePixelRatio || 1;
-      console.log('[Drawing] calling html2canvas...', {
-        dpr,
-        bodySize: `${document.body.clientWidth}x${document.body.clientHeight}`,
-      });
       const screenshot = await html2canvas(document.body, {
         ignoreElements: (element) => element === drawingCanvas,
         useCORS: true,
         logging: false,
         scale: dpr,
-      });
-      console.log('[Drawing] html2canvas done', {
-        width: screenshot.width,
-        height: screenshot.height,
       });
 
       const compositeCanvas = document.createElement('canvas');
@@ -138,19 +146,10 @@ export function DrawingOverlay() {
           screenshot.height,
         );
         const dataUrl = compositeCanvas.toDataURL('image/webp', 0.95);
-        console.log('[Drawing] saveDrawing called, dataUrl length:', dataUrl.length);
         saveDrawing(dataUrl);
-        console.log('[Drawing] store state after save:', {
-          hasDrawing: useDesktopStore.getState().hasDrawing,
-          canvasDataUrl: useDesktopStore.getState().canvasDataUrl?.length,
-        });
-      } else {
-        console.log('[Drawing] failed to get composite canvas context');
       }
-    } catch (error) {
-      console.error('[Drawing] html2canvas FAILED:', error);
+    } catch {
       const dataUrl = drawingCanvas.toDataURL('image/webp', 0.95);
-      console.log('[Drawing] fallback saveDrawing, dataUrl length:', dataUrl.length);
       saveDrawing(dataUrl);
     }
   }, [saveDrawing]);
@@ -160,46 +159,22 @@ export function DrawingOverlay() {
     setPencilMode(false);
   }, [setPencilMode]);
 
-  // Double-press Ctrl to toggle pencil mode, Escape to exit
+  // Escape to exit pencil mode
   useEffect(() => {
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control') {
-        const now = Date.now();
-        if (now - lastCtrlUpRef.current < DOUBLE_PRESS_MS) {
-          const current = useDesktopStore.getState().pencilMode;
-          if (current) {
-            exitPencilMode();
-          } else {
-            setPencilMode(true);
-          }
-          lastCtrlUpRef.current = 0;
-        } else {
-          lastCtrlUpRef.current = now;
-        }
-      }
       if (e.key === 'Escape' && useDesktopStore.getState().pencilMode) {
         exitPencilMode();
       }
     };
     window.addEventListener('keyup', handleKeyUp);
     return () => window.removeEventListener('keyup', handleKeyUp);
-  }, [exitPencilMode, setPencilMode]);
+  }, [exitPencilMode]);
 
   // Pencil mode lifecycle: blur on enter, capture on exit
   const prevPencilMode = useRef(false);
   useEffect(() => {
-    console.log('[Drawing] lifecycle effect', {
-      pencilMode,
-      prev: prevPencilMode.current,
-      hasStrokes: hasStrokesRef.current,
-    });
     if (pencilMode && !prevPencilMode.current) {
       // Entering pencil mode — blur active element so canvas receives events
-      console.log(
-        '[Drawing] ENTERING pencil mode, activeElement:',
-        document.activeElement?.tagName,
-        document.activeElement?.className,
-      );
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
@@ -209,49 +184,20 @@ export function DrawingOverlay() {
       lastPointRef.current = null;
       if (hasStrokesRef.current && useDesktopStore.getState().hasDrawing) {
         // Upgrade with screenshot composite (only if drawing wasn't already consumed)
-        console.log('[Drawing] EXITING pencil mode — upgrading with composite capture');
         captureScreenWithDrawing();
-      } else {
-        console.log('[Drawing] EXITING pencil mode — no upgrade needed');
       }
     }
     prevPencilMode.current = pencilMode;
   }, [pencilMode, captureScreenWithDrawing]);
 
-  // Native event listeners for drawing.
+  // Native event listeners for pencil mode (left-click drawing).
   useEffect(() => {
     if (!pencilMode) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    console.log('[Drawing] pencilMode ON — attaching listeners', {
-      canvasSize: `${canvas.width}x${canvas.height}`,
-      pointerEvents: getComputedStyle(canvas).pointerEvents,
-      zIndex: getComputedStyle(canvas).zIndex,
-      clipPath: getComputedStyle(canvas).clipPath,
-      dataActive: canvas.getAttribute('data-active'),
-    });
-
-    // Debug: log what element is actually at click point
-    const debugClick = (e: MouseEvent) => {
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      console.log(
-        '[Drawing] document click — elementFromPoint:',
-        el?.tagName,
-        el?.className,
-        el === canvas ? '(IS CANVAS)' : '(NOT canvas)',
-      );
-    };
-    document.addEventListener('click', debugClick, true);
-
     const onMouseDown = (e: MouseEvent) => {
-      console.log('[Drawing] mousedown', {
-        button: e.button,
-        x: e.clientX,
-        y: e.clientY,
-        target: e.target,
-      });
       if (e.button !== 0) return;
       e.preventDefault();
       isDrawingRef.current = true;
@@ -278,12 +224,10 @@ export function DrawingOverlay() {
 
     const onMouseUp = () => {
       if (!isDrawingRef.current) return;
-      console.log('[Drawing] mouseup — stroke complete');
       isDrawingRef.current = false;
       lastPointRef.current = null;
       // Save canvas immediately so "Drawing attached" shows right away
       const dataUrl = canvas.toDataURL('image/webp', 0.95);
-      console.log('[Drawing] quick-save on stroke end, length:', dataUrl.length);
       saveDrawing(dataUrl);
     };
 
@@ -293,14 +237,130 @@ export function DrawingOverlay() {
     window.addEventListener('mouseup', onMouseUp);
 
     return () => {
-      console.log('[Drawing] pencilMode OFF — removing listeners');
-      document.removeEventListener('click', debugClick, true);
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [pencilMode, drawLine]);
+  }, [pencilMode, drawLine, saveDrawing]);
+
+  // Right-click freehand drawing (always active, even outside pencil mode).
+  // Uses a 5px drag threshold — simple right-click still triggers context menu.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return;
+      rightDrawingRef.current = true;
+      rightMovedRef.current = false;
+      rightStartRef.current = { x: e.clientX, y: e.clientY };
+      rightLastPointRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!rightDrawingRef.current || !rightStartRef.current) return;
+      const dx = e.clientX - rightStartRef.current.x;
+      const dy = e.clientY - rightStartRef.current.y;
+      if (!rightMovedRef.current && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
+        return;
+
+      if (!rightMovedRef.current) {
+        rightMovedRef.current = true;
+        suppressNextContextMenu();
+      }
+
+      const currentPoint = { x: e.clientX, y: e.clientY };
+      if (rightLastPointRef.current) {
+        drawLine(rightLastPointRef.current, currentPoint);
+      }
+      rightLastPointRef.current = currentPoint;
+      setHasStrokes(true);
+    };
+
+    const onMouseUp = () => {
+      if (!rightDrawingRef.current) return;
+      const wasDragged = rightMovedRef.current;
+      rightDrawingRef.current = false;
+      rightStartRef.current = null;
+      rightMovedRef.current = false;
+      rightLastPointRef.current = null;
+
+      if (wasDragged) {
+        // Quick-save canvas, then upgrade with composite screenshot
+        const dataUrl = canvas.toDataURL('image/webp', 0.95);
+        saveDrawing(dataUrl);
+        captureScreenWithDrawing();
+      }
+    };
+
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [drawLine, saveDrawing, captureScreenWithDrawing]);
+
+  // Iframe right-click drawing support — iframes forward right-click events
+  // via postMessage (yaar:arrow-drag-start/move/end) since native mouse events
+  // don't cross iframe boundaries.
+  useEffect(() => {
+    let iframeRightStart: Point | null = null;
+    let iframeRightMoved = false;
+    let iframeRightLastPoint: Point | null = null;
+
+    const offStart = iframeMessages.on('yaar:arrow-drag-start', (ctx) => {
+      if (!ctx.source) return;
+      const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
+      iframeRightStart = { x, y };
+      iframeRightMoved = false;
+      iframeRightLastPoint = { x, y };
+    });
+
+    const offMove = iframeMessages.on('yaar:arrow-drag-move', (ctx) => {
+      if (!ctx.source || !iframeRightStart) return;
+      const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
+      const dx = x - iframeRightStart.x;
+      const dy = y - iframeRightStart.y;
+      if (!iframeRightMoved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
+        return;
+
+      iframeRightMoved = true;
+      const currentPoint = { x, y };
+      if (iframeRightLastPoint) {
+        drawLine(iframeRightLastPoint, currentPoint);
+      }
+      iframeRightLastPoint = currentPoint;
+      setHasStrokes(true);
+    });
+
+    const offEnd = iframeMessages.on('yaar:arrow-drag-end', (_ctx) => {
+      if (!iframeRightStart) return;
+      const wasDragged = iframeRightMoved;
+      iframeRightStart = null;
+      iframeRightMoved = false;
+      iframeRightLastPoint = null;
+
+      if (wasDragged) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const dataUrl = canvas.toDataURL('image/webp', 0.95);
+          saveDrawing(dataUrl);
+          captureScreenWithDrawing();
+        }
+      }
+    });
+
+    return () => {
+      offStart();
+      offMove();
+      offEnd();
+    };
+  }, [drawLine, saveDrawing, captureScreenWithDrawing]);
 
   return <canvas ref={canvasRef} className={styles.overlay} data-active={pencilMode} />;
 }

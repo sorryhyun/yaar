@@ -61,6 +61,7 @@ export type YaarMessageType =
   | 'yaar:click'
   | 'yaar:contextmenu'
   | 'yaar:drag-start'
+  // Right-click drawing forwarded from iframes
   | 'yaar:arrow-drag-start'
   | 'yaar:arrow-drag-move'
   | 'yaar:arrow-drag-end'

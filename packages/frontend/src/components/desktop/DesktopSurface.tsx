@@ -13,7 +13,6 @@ import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionCon
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import type { DesktopShortcut } from '@yaar/shared';
-import { useArrowDrag } from '@/hooks/useArrowDrag';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../windows/WindowFrame';
 import { useShallow } from 'zustand/react/shallow';
@@ -82,8 +81,6 @@ export function DesktopSurface() {
     move: (e: MouseEvent) => void;
     up: (e: MouseEvent) => void;
   } | null>(null);
-
-  const { arrowDrag, handleArrowDragStart } = useArrowDrag();
 
   // Clean up selection listeners on unmount
   useEffect(() => {
@@ -290,8 +287,6 @@ export function DesktopSurface() {
 
   const handleDesktopMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Right-click: start arrow drag (handled separately, captures from anywhere)
-      if (e.button === 2) return;
       // Only start selection when clicking directly on the desktop background
       if (e.target !== e.currentTarget || e.button !== 0) return;
 
@@ -435,10 +430,7 @@ export function DesktopSurface() {
         data-image-dragover={isImageDragOver || undefined}
         onClick={handleBackgroundClick}
         onContextMenu={handleBackgroundContextMenu}
-        onMouseDown={(e) => {
-          handleArrowDragStart(e);
-          handleDesktopMouseDown(e);
-        }}
+        onMouseDown={handleDesktopMouseDown}
         onDragOver={handleDesktopDragOver}
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
@@ -646,43 +638,6 @@ export function DesktopSurface() {
         <CursorSpinner />
       </div>
 
-      {/* These must be outside .desktop to avoid transform breaking fixed positioning */}
-      {arrowDrag && (
-        <svg
-          data-arrow-overlay
-          style={{
-            position: 'fixed',
-            inset: 0,
-            width: '100vw',
-            height: '100vh',
-            pointerEvents: 'none',
-            zIndex: 99998,
-          }}
-        >
-          <defs>
-            <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="10"
-              refY="3.5"
-              orient="auto"
-            >
-              <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.85)" />
-            </marker>
-          </defs>
-          <circle cx={arrowDrag.startX} cy={arrowDrag.startY} r={4} fill="rgba(255,255,255,0.85)" />
-          <line
-            x1={arrowDrag.startX}
-            y1={arrowDrag.startY}
-            x2={arrowDrag.endX}
-            y2={arrowDrag.endY}
-            stroke="rgba(255,255,255,0.85)"
-            strokeWidth={2}
-            markerEnd="url(#arrowhead)"
-          />
-        </svg>
-      )}
       <DrawingOverlay />
       <CommandPalette />
       <ToastContainer onToastAction={sendToastAction} />

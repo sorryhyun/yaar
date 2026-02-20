@@ -348,9 +348,9 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
   if (window.__yaarContextMenuInstalled) return;
   window.__yaarContextMenuInstalled = true;
 
-  // Right-click arrow drag forwarding — the parent uses mousedown/mousemove/mouseup
-  // with button 2 to draw arrows between windows, but those events don't cross
-  // iframe boundaries. Forward them via postMessage so the parent can drive the drag.
+  // Right-click drawing forwarding — the parent uses mousedown/mousemove/mouseup
+  // with button 2 for freehand drawing, but those events don't cross
+  // iframe boundaries. Forward them via postMessage so the parent can drive the drawing.
   var rightDragging = false;
   var rightDragMoved = false;
 
