@@ -35,16 +35,51 @@ This document describes how YAAR manages concurrent AI agents through unified po
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
+## Delegation Model
+
+The main agent acts as an **orchestrator** — it understands user intent, decides the approach, and dispatches work. The design intentionally restricts the main agent's tool set to quick actions (windows, notifications, storage reads, memory, config) and gives it a single delegation primitive (Task tool for Claude, collaboration system for Codex).
+
+```
+User Request
+     │
+     ▼
+┌──────────────┐
+│  Main Agent  │  Understands intent, decides approach
+│ (orchestrator)│
+└──────┬───────┘
+       │
+       ├─ Trivial? ──────────────────────> Handle directly (1-2 tool calls)
+       │  • greeting/ack → notification    • open app → load skill + window
+       │  • read file → storage + window   • replay → reload_cached
+       │
+       ├─ Web/API work? ─────────────────> Task(profile: "web")
+       │  • search, fetch, API calls
+       │
+       ├─ Computation? ──────────────────> Task(profile: "code")
+       │  • run JS, data processing
+       │
+       ├─ App dev? ──────────────────────> Task(profile: "app")
+       │  • write, compile, deploy apps
+       │
+       └─ Multi-part? ──────────────────> Parallel Task agents
+          • "research X and build Y"       (web + app simultaneously)
+```
+
+**Why delegate by default?** Task agents fork the main agent's session (full conversation history) and run with a focused tool set matching their profile. This keeps the main agent responsive — it can accept the next user message while subagents work. It also reduces token waste by keeping the main agent's turns short and action-oriented.
+
+**What stays on the main agent?** Anything that takes 1-2 tool calls using only the main agent's tools: showing notifications, opening/updating windows, loading app skills, reading storage, memory operations, config hooks, and cache replay.
+
 ## Agent Types
 
 ### 1. Main Agent
 
-The persistent agent handling the main conversation flow per monitor. Maintains provider session continuity across messages.
+The persistent orchestrator handling the main conversation flow per monitor. Maintains provider session continuity across messages. Has a restricted tool set focused on quick actions and delegation.
 
 - **Role**: `main-{monitorId}-{messageId}` (set per-message)
 - **Creation**: One per monitor. Primary (`monitor-0`) created at pool init with a pre-warmed provider; additional monitors auto-created on demand (max 4)
 - **Session**: Resumes the same provider session across messages for full conversation history
 - **Canonical ID**: `main-{monitorId}`
+- **Tools**: Windows, notifications, storage read/list, memory, skills, config hooks, cache replay, Task (delegation)
 
 ### 2. Ephemeral Agent
 
@@ -67,12 +102,14 @@ A persistent agent for handling window-specific interactions (button clicks, con
 
 ### 4. Task Agent
 
-A temporary agent created by the `dispatch_task` tool. Forks the main agent's provider session (inheriting full conversation context) and runs with a profile-specific tool subset and system prompt.
+A temporary agent spawned by the main agent to handle delegated work. Forks the main agent's provider session (inheriting full conversation context) and runs with a profile-specific tool subset and system prompt.
 
 - **Role**: `task-{messageId}-{timestamp}`
-- **Creation**: On `dispatch_task` tool call (limited by global `AgentLimiter`)
+- **Creation**: Via Task tool (Claude) or collaboration system (Codex). Limited by global `AgentLimiter`
 - **Context**: Forks main agent's session — inherits full conversation history
+- **Profiles**: `default` (all tools), `web` (HTTP + search), `code` (sandbox), `app` (dev + deploy)
 - **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
+- **Parallel**: Multiple task agents can run concurrently for independent sub-tasks
 
 ## Multi-Monitor Architecture
 
@@ -236,9 +273,9 @@ Tracks window groups. When a window agent creates a child window, the child join
 
 ### MonitorBudgetPolicy
 Per-monitor rate limiting for background monitors. Three budget dimensions:
-1. **Concurrent task semaphore** (default: 2) — max background monitors running queries simultaneously. Primary monitor bypasses.
-2. **Action rate limit** (default: 100 actions/min) — sliding 60-second window per monitor.
-3. **Output rate limit** (default: 1MB/min) — sliding 60-second window per monitor.
+1. **Concurrent task semaphore** (default: 2, `MONITOR_MAX_CONCURRENT`) — max background monitors running queries simultaneously. Primary monitor bypasses.
+2. **Action rate limit** (default: 30 actions/min, `MONITOR_MAX_ACTIONS_PER_MIN`) — sliding 60-second window per monitor.
+3. **Output rate limit** (default: 50,000 bytes/min, `MONITOR_MAX_OUTPUT_PER_MIN`) — sliding 60-second window per monitor.
 
 ## AgentPool Lifecycle
 
@@ -271,9 +308,9 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
 │   │ Task Agents (temporary, forked context)                │  │
-│   │ - Created via dispatch_task tool                       │  │
+│   │ - Created via Task tool (Claude) / collab (Codex)     │  │
 │   │ - Forks main agent's provider session                  │  │
-│   │ - Profile-specific tools and system prompt             │  │
+│   │ - Profile-specific tools (default/web/code/app)       │  │
 │   │ - Disposed immediately after task                      │  │
 │   └────────────────────────────────────────────────────────┘  │
 │                                                               │
@@ -369,7 +406,7 @@ All agents share a single `SessionLogger` for unified history:
 
 ```
 session_logs/
-└── 2026-02-08_14-38-08/
+└── ses-1739000000000-abc1234/
     ├── metadata.json     # Session metadata (provider, threadIds)
     └── messages.jsonl    # All messages from all agents
 ```
@@ -402,8 +439,10 @@ Each log entry includes `agentId` for filtering:
 | `mcp/action-emitter.ts` | ActionEmitter — bridges MCP tools to agent sessions |
 | `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per session |
 | `mcp/domains.ts` | Domain allowlist for HTTP tools and sandbox fetch |
-| `mcp/guidelines/` | Dynamic reference docs (app_dev, sandbox, components) |
-| `mcp/dev/` | App development tools (write, read, compile, deploy) |
+| `mcp/skills/` | Dynamic reference docs via `skill` tool (app_dev, sandbox, components, host_api, app_protocol) |
+| `mcp/dev/` | App development tools (write_ts, read_ts, apply_diff_ts, compile, typecheck, deploy, clone, write_json) |
+| `mcp/browser/` | Browser automation tools via CDP (open, click, type, press, scroll, screenshot, extract, close) |
+| `mcp/user/` | User prompt tools (ask, request) |
 | `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |
 
 ## Example: Concurrent Execution

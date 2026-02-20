@@ -10,23 +10,27 @@ You are the server specialist for the YAAR backend (`packages/server/`).
 
 ## Architecture
 
-The server follows a context-centric agent architecture:
+The server follows a session-centric agent architecture:
 
 ```
-SessionManager (per WebSocket connection)
-└── ContextPool (unified pool)
-    ├── ContextTape (hierarchical message history by source)
-    │   ├── [main] user/assistant messages
-    │   └── [window:id] branch messages
-    └── Agents (dynamic role assignment)
-        └── AgentSession → AITransport
+SessionHub (singleton registry)
+└── LiveSession (per conversation, survives disconnections)
+    ├── connections: Map<ConnectionId, WebSocket>
+    └── ContextPool (unified pool)
+        ├── ContextTape (hierarchical message history by source)
+        │   ├── [main] user/assistant messages
+        │   └── [window:id] branch messages
+        ├── AgentPool (main per monitor, ephemeral, window, task)
+        └── Agents (dynamic role assignment)
+            └── AgentSession → AITransport
 ```
 
 ### Core Pipeline
 
-`ContextPool` → `AgentSession` → `AITransport` (provider)
+`LiveSession.routeMessage()` → `ContextPool.handleTask()` → `AgentSession` → `AITransport` (provider)
 
-- **ContextPool**: Unified task orchestration. Main messages processed sequentially (semaphore), window messages in parallel.
+- **LiveSession**: Single gateway for all server→frontend events. Multiple tabs share one LiveSession via SessionHub.
+- **ContextPool**: Unified task orchestration. Main messages processed sequentially per monitor, window messages in parallel.
 - **AgentSession**: Manages a single agent's lifecycle. Uses `AsyncLocalStorage` to track `agentId` in async context for tool action routing.
 - **AITransport**: Provider interface (`query()`, `interrupt()`, `dispose()`). Factory pattern with dynamic imports keeps SDK dependencies lazy.
 
@@ -34,19 +38,20 @@ SessionManager (per WebSocket connection)
 
 - **Policy classes**: Complex behavior decomposed into focused policies:
   - `session-policies/`: `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge`
-  - `context-pool-policies/`: `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`
+  - `context-pool-policies/`: `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowConnectionPolicy`, `MonitorBudgetPolicy`
 - **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections (observer pattern).
 - **Warm Pool** (`providers/warm-pool.ts`): Providers pre-initialized at startup. Auto-replenishes when acquired.
 - **actionEmitter**: Tools emit actions via `actionEmitter.emitAction()`, which broadcasts to frontend and optionally waits for rendering feedback.
-- **Session forking**: Window agents fork from the default agent's session, inheriting context but running independently.
+- **Session forking**: Window/task agents fork from the main agent's session, inheriting context but running independently.
 
 ### Provider System
 
 Implementing `AITransport` interface:
 - `systemPrompt`, `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`
-- `interrupt()`, `dispose()`
+- `interrupt()`, `dispose()`, optional `steer(content)` for mid-turn steering
 - Factory in `providers/factory.ts` with `providerLoaders` map
-- Claude uses `@anthropic-ai/claude-agent-sdk`; Codex uses JSON-RPC over stdio
+- Claude uses `@anthropic-ai/claude-agent-sdk` (model: `claude-sonnet-4-6`, Task + WebSearch tools)
+- Codex uses JSON-RPC over WebSocket (`codex app-server --listen ws://`, one connection per provider)
 
 ## Conventions
 

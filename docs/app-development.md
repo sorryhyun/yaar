@@ -30,6 +30,7 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 | `apply_diff_ts` | 샌드박스 파일에 검색-치환 편집 |
 | `compile` | `src/main.ts` → 단일 HTML로 번들 (esbuild) |
 | `compile_component` | 샌드박스에 `.yaarcomponent.json` 파일 생성 |
+| `typecheck` | 샌드박스 TypeScript 타입 검사 |
 | `deploy` | 컴파일된 앱을 바탕화면에 배포 |
 | `clone` | 배포된 앱의 소스를 샌드박스로 복제 (편집용) |
 | `write_json` | 배포된 앱에 JSON 파일 직접 쓰기 |
@@ -44,7 +45,7 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 
 | 도구 | 설명 |
 |------|------|
-| `guideline` | 토픽별 참조 문서 로드 (`app_dev`, `sandbox`, `components`) |
+| `skill` | 토픽별 참조 문서 로드 (`app_dev`, `sandbox`, `components`, `host_api`, `app_protocol`) |
 
 ### 앱 관리 도구
 
@@ -54,6 +55,9 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 | `apps_load_skill` | 앱의 SKILL.md 로드 |
 | `apps_read_config` | 설정/소스 파일 읽기 |
 | `apps_write_config` | 설정 파일 쓰기 |
+| `market_list` | 마켓플레이스 앱 목록 조회 |
+| `market_get` | 마켓플레이스에서 앱 설치 |
+| `market_delete` | 설치된 앱 삭제 |
 
 ## 개발 워크플로우 상세
 
@@ -134,7 +138,7 @@ import anime from '@bundled/anime';
 
 ## 샌드박스 실행 환경
 
-`run_js`/`run_ts`는 격리된 VM에서 코드를 실행합니다.
+`run_js`는 격리된 VM에서 코드를 실행합니다.
 
 **사용 가능:** JSON, Math, Date, Promise, fetch (도메인 제한), crypto.createHash, TextEncoder/Decoder, 타입 배열
 
@@ -327,6 +331,7 @@ Users don't need to write code. The AI writes TypeScript in a sandbox, compiles 
 | `apply_diff_ts` | Apply search-and-replace edits to sandbox files |
 | `compile` | Bundle `src/main.ts` → single HTML (esbuild) |
 | `compile_component` | Create `.yaarcomponent.json` files in sandbox |
+| `typecheck` | Run TypeScript type checking on sandbox code |
 | `deploy` | Deploy compiled app to desktop |
 | `clone` | Clone a deployed app's source into a sandbox for editing |
 | `write_json` | Write JSON files directly to a deployed app |
@@ -341,7 +346,7 @@ Users don't need to write code. The AI writes TypeScript in a sandbox, compiles 
 
 | Tool | Description |
 |------|-------------|
-| `guideline` | Load reference docs by topic (`app_dev`, `sandbox`, `components`) |
+| `skill` | Load reference docs by topic (`app_dev`, `sandbox`, `components`, `host_api`, `app_protocol`) |
 
 ### App Management Tools
 
@@ -351,6 +356,9 @@ Users don't need to write code. The AI writes TypeScript in a sandbox, compiles 
 | `apps_load_skill` | Load an app's SKILL.md |
 | `apps_read_config` | Read config/source files |
 | `apps_write_config` | Write config files |
+| `market_list` | List apps available in the marketplace |
+| `market_get` | Download and install an app from the marketplace |
+| `market_delete` | Uninstall an app and its credentials |
 
 ## Development Workflow in Detail
 
@@ -431,7 +439,7 @@ import anime from '@bundled/anime';
 
 ## Sandbox Execution Environment
 
-`run_js`/`run_ts` execute code in an isolated VM.
+`run_js` executes code in an isolated VM.
 
 **Available:** JSON, Math, Date, Promise, fetch (domain-restricted), crypto.createHash, TextEncoder/Decoder, typed arrays
 

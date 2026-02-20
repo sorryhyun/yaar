@@ -22,8 +22,9 @@ Key selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`
 ### WebSocket — `useAgentConnection` hook
 
 - Singleton WebSocket with auto-reconnect (exponential backoff)
-- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`
-- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`
+- Reconnects with `?sessionId=X` (multi-tab session sharing) and `?token=X` (remote auth)
+- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`, `APP_PROTOCOL_REQUEST`, `APPROVAL_REQUEST`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`
+- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `USER_INTERACTION`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `SUBSCRIBE_MONITOR`, `REMOVE_MONITOR`
 - Sends rendering feedback and user interactions back to server
 
 ### Content Renderers
@@ -39,10 +40,8 @@ Dispatch in `ContentRenderer.tsx`, each type in `renderers/`:
 ### Component DSL
 
 Flat array with CSS grid layout (no recursive trees — designed for LLM simplicity):
-- Layout: `stack`, `grid`
-- Container: `form`, `list`
-- Input: `button`, `input`, `textarea`, `select`
-- Display: `text`, `image`, `markdown`, `badge`, `progress`, `alert`, `divider`, `spacer`
+- Types: `button`, `input`, `select`, `text`, `badge`, `progress`, `image`
+- Layout via `ComponentLayout`: `{ components, cols?, gap? }` — `cols` can be a number or ratio array (e.g. `[8,2]`)
 
 ## Conventions
 

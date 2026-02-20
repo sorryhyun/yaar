@@ -41,7 +41,7 @@ Tab 3 ──┘
 1. **First connection** — no `?sessionId` param. Server creates a new `LiveSession` and sends `CONNECTION_STATUS { sessionId }`. Frontend stores it for future reconnections.
 2. **Reconnection** — frontend passes `?sessionId=X`. Server returns the existing session. New client gets a snapshot of current windows via `generateSnapshot()`.
 3. **Lazy init** — the expensive `ContextPool` (agents, provider) isn't created until the first message. This keeps `/health` fast.
-4. **Persistence** — `SessionLogger` writes all messages to `storage/sessions/{sessionDir}/messages.jsonl`. Sessions are browsable via `GET /api/sessions` and restorable via `POST /api/sessions/:id/restore`.
+4. **Persistence** — `SessionLogger` writes all messages to `session_logs/{sessionId}/messages.jsonl`. Sessions are browsable via `GET /api/sessions` and restorable via `POST /api/sessions/:id/restore`.
 5. **Event sequencing** — `EventSequencer` stamps every outgoing event with a monotonic `seq` number. Late-joining clients can replay missed events or fall back to a full snapshot.
 
 ### Key types

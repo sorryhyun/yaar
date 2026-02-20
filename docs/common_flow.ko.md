@@ -35,16 +35,51 @@
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
+## 위임 모델
+
+메인 에이전트는 **오케스트레이터** 역할을 합니다 — 유저의 의도를 파악하고, 접근 방식을 결정하며, 작업을 배분합니다. 설계상 메인 에이전트의 도구 셋은 빠른 액션(윈도우, 알림, 스토리지 읽기, 메모리, 설정)으로 제한되어 있으며, 단일 위임 프리미티브(Claude의 Task 도구 / Codex의 콜라보레이션 시스템)를 통해 실제 작업을 서브에이전트에 위임합니다.
+
+```
+유저 요청
+     │
+     ▼
+┌──────────────┐
+│  메인 에이전트 │  의도 파악, 접근 방식 결정
+│ (오케스트레이터)│
+└──────┬───────┘
+       │
+       ├─ 단순 작업? ────────────────────> 직접 처리 (도구 1-2번 호출)
+       │  • 인사/확인 → 알림                • 앱 열기 → 스킬 로드 + 윈도우
+       │  • 파일 읽기 → 스토리지 + 윈도우    • 재사용 → reload_cached
+       │
+       ├─ 웹/API 작업? ─────────────────> Task(profile: "web")
+       │  • 검색, fetch, API 호출
+       │
+       ├─ 연산 작업? ───────────────────> Task(profile: "code")
+       │  • JS 실행, 데이터 처리
+       │
+       ├─ 앱 개발? ─────────────────────> Task(profile: "app")
+       │  • 작성, 컴파일, 배포
+       │
+       └─ 복합 요청? ───────────────────> 병렬 Task 에이전트
+          • "X 조사하고 Y 만들어줘"        (web + app 동시 실행)
+```
+
+**왜 기본적으로 위임하는가?** 태스크 에이전트는 메인 에이전트의 세션을 포크하여(전체 대화 이력 포함) 프로필에 맞는 도구 셋으로 실행됩니다. 이를 통해 메인 에이전트는 응답성을 유지하며 — 서브에이전트가 작업하는 동안 다음 유저 메시지를 처리할 수 있습니다. 또한 메인 에이전트의 턴을 짧고 행동 지향적으로 유지하여 토큰 낭비를 줄입니다.
+
+**메인 에이전트에 남는 것은?** 메인 에이전트의 도구만으로 1-2번 호출로 완료되는 작업: 알림 표시, 윈도우 열기/업데이트, 앱 스킬 로드, 스토리지 읽기, 메모리 작업, 설정 훅, 캐시 재사용.
+
 ## 에이전트 유형
 
 ### 1. 메인 에이전트
 
-모니터별 메인 대화 흐름을 담당하는 영속 에이전트입니다. 메시지 간 프로바이더 세션 연속성을 유지합니다.
+모니터별 메인 대화 흐름을 담당하는 영속 오케스트레이터입니다. 메시지 간 프로바이더 세션 연속성을 유지합니다. 빠른 액션과 위임에 초점을 맞춘 제한된 도구 셋을 보유합니다.
 
 - **Role**: `main-{monitorId}-{messageId}` (메시지별로 설정)
 - **생성**: 모니터당 하나. 기본 모니터(`monitor-0`)는 풀 초기화 시 워밍된 프로바이더로 생성되고, 추가 모니터는 필요 시 자동 생성 (최대 4개)
 - **세션**: 메시지 간에 동일한 프로바이더 세션을 재개하여 전체 대화 이력을 유지
 - **정규 ID**: `main-{monitorId}`
+- **도구**: 윈도우, 알림, 스토리지 읽기/목록, 메모리, 스킬, 설정 훅, 캐시 재사용, Task (위임)
 
 ### 2. 임시(Ephemeral) 에이전트
 
@@ -67,12 +102,14 @@
 
 ### 4. 태스크 에이전트
 
-`dispatch_task` 도구로 생성되는 임시 에이전트입니다. 메인 에이전트의 프로바이더 세션을 포크하여 전체 대화 컨텍스트를 상속받고, 프로필별 도구 서브셋과 시스템 프롬프트로 실행됩니다.
+메인 에이전트가 위임한 작업을 처리하는 임시 에이전트입니다. 메인 에이전트의 프로바이더 세션을 포크하여 전체 대화 컨텍스트를 상속받고, 프로필별 도구 서브셋과 시스템 프롬프트로 실행됩니다.
 
 - **Role**: `task-{messageId}-{timestamp}`
-- **생성**: `dispatch_task` 도구 호출 시 (글로벌 `AgentLimiter`에 의해 제한)
+- **생성**: Task 도구(Claude) 또는 콜라보레이션 시스템(Codex)을 통해. 글로벌 `AgentLimiter`에 의해 제한
 - **컨텍스트**: 메인 에이전트의 세션을 포크 — 전체 대화 이력 상속
+- **프로필**: `default` (모든 도구), `web` (HTTP + 검색), `code` (샌드박스), `app` (개발 + 배포)
 - **생명주기**: 생성 → 목표 처리 → InteractionTimeline에 기록 → 폐기
+- **병렬**: 독립적인 하위 작업을 위해 여러 태스크 에이전트를 동시에 실행 가능
 
 ## 멀티 모니터 아키텍처
 
@@ -236,9 +273,9 @@ interface ContextMessage {
 
 ### MonitorBudgetPolicy
 백그라운드 모니터에 대한 모니터별 속도 제한. 세 가지 예산 차원:
-1. **동시 태스크 세마포어** (기본: 2) — 백그라운드 모니터가 동시에 쿼리를 실행하는 최대 수. 기본 모니터는 우회.
-2. **액션 속도 제한** (기본: 100 액션/분) — 모니터별 60초 슬라이딩 윈도우.
-3. **출력 속도 제한** (기본: 1MB/분) — 모니터별 60초 슬라이딩 윈도우.
+1. **동시 태스크 세마포어** (기본: 2, `MONITOR_MAX_CONCURRENT`) — 백그라운드 모니터가 동시에 쿼리를 실행하는 최대 수. 기본 모니터는 우회.
+2. **액션 속도 제한** (기본: 30 액션/분, `MONITOR_MAX_ACTIONS_PER_MIN`) — 모니터별 60초 슬라이딩 윈도우.
+3. **출력 속도 제한** (기본: 50,000 bytes/분, `MONITOR_MAX_OUTPUT_PER_MIN`) — 모니터별 60초 슬라이딩 윈도우.
 
 ## AgentPool 생명주기
 
@@ -271,9 +308,9 @@ interface ContextMessage {
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
 │   │ 태스크 에이전트 (일시적, 포크된 컨텍스트)                  │  │
-│   │ - dispatch_task 도구로 생성                               │  │
+│   │ - Task 도구(Claude) / 콜라보(Codex)로 생성               │  │
 │   │ - 메인 에이전트의 프로바이더 세션을 포크                    │  │
-│   │ - 프로필별 도구와 시스템 프롬프트                          │  │
+│   │ - 프로필별 도구 (default/web/code/app)                    │  │
 │   │ - 태스크 후 즉시 폐기                                    │  │
 │   └────────────────────────────────────────────────────────┘  │
 │                                                               │
@@ -344,6 +381,9 @@ interface ContextMessage {
 | `USER_INTERACTION` | 유저 인터랙션 배치 (닫기, 포커스, 이동, 리사이즈, 그리기) |
 | `APP_PROTOCOL_RESPONSE` | iframe 앱의 에이전트 쿼리/명령에 대한 응답 |
 | `APP_PROTOCOL_READY` | iframe 앱이 App Protocol에 등록 완료 |
+| `USER_PROMPT_RESPONSE` | 프롬프트 요청에 대한 유저 응답 |
+| `SUBSCRIBE_MONITOR` | 특정 모니터의 이벤트 구독 |
+| `REMOVE_MONITOR` | 백그라운드 모니터 제거 |
 
 ### 서버 → 클라이언트
 
@@ -367,7 +407,7 @@ interface ContextMessage {
 
 ```
 session_logs/
-└── 2026-02-08_14-38-08/
+└── ses-1739000000000-abc1234/
     ├── metadata.json     # 세션 메타데이터 (프로바이더, threadIds)
     └── messages.jsonl    # 모든 에이전트의 전체 메시지
 ```
@@ -386,7 +426,6 @@ session_logs/
 | 파일 | 역할 |
 |------|------|
 | `session/live-session.ts` | LiveSession + SessionHub — 세션 생명주기, 다중 연결 |
-| `session/event-sequencer.ts` | EventSequencer — 이벤트 재생을 위한 단조 증가 시퀀스 |
 | `agents/context-pool.ts` | ContextPool — 통합 태스크 오케스트레이션 |
 | `agents/agent-pool.ts` | AgentPool — 메인(모니터별), 임시, 윈도우, 태스크 에이전트 관리 |
 | `agents/session.ts` | AgentSession — 프로바이더 + 스트림 매핑을 가진 개별 에이전트 |
@@ -397,12 +436,14 @@ session_logs/
 | `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection, MonitorBudget |
 | `providers/factory.ts` | 프로바이더 자동 감지 및 생성 |
 | `providers/warm-pool.ts` | 빠른 첫 응답을 위한 사전 초기화 프로바이더 |
-| `websocket/broadcast-center.ts` | BroadcastCenter — 세션 내 모든 연결에 이벤트 라우팅 |
+| `session/broadcast-center.ts` | BroadcastCenter — 세션 내 모든 연결에 이벤트 라우팅 |
 | `mcp/action-emitter.ts` | ActionEmitter — MCP 도구와 에이전트 세션 연결 |
 | `mcp/window-state.ts` | WindowStateRegistry — 세션별 열린 윈도우 추적 |
 | `mcp/domains.ts` | HTTP 도구 및 샌드박스 fetch용 도메인 허용 목록 |
-| `mcp/guidelines/` | 동적 참조 문서 (app_dev, sandbox, components) |
-| `mcp/app-dev/` | 앱 개발 도구 (write, read, diff, compile, deploy, clone) |
+| `mcp/skills/` | `skill` 도구를 통한 동적 참조 문서 (app_dev, sandbox, components, host_api, app_protocol) |
+| `mcp/dev/` | 앱 개발 도구 (write_ts, read_ts, apply_diff_ts, compile, typecheck, deploy, clone, write_json) |
+| `mcp/browser/` | CDP 브라우저 자동화 도구 (open, click, type, press, scroll, screenshot, extract, close) |
+| `mcp/user/` | 유저 프롬프트 도구 (ask, request) |
 | `mcp/window/app-protocol.ts` | App Protocol 도구 (app_query, app_command) |
 
 ## 예시: 동시 실행

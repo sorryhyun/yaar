@@ -22,8 +22,8 @@ You review code changes for correctness, security, and consistency with YAAR's a
   - Server MCP tool definitions in `packages/server/src/mcp/`
   - Frontend `applyAction()` reducer in `packages/frontend/src/store/`
 - WebSocket events in `packages/shared/events.ts` must match:
-  - Server emit calls in `packages/server/src/events/`
-  - Frontend hook handlers in `packages/frontend/src/hooks/`
+  - Server emit calls in `packages/server/src/session/live-session.ts` and `session/broadcast-center.ts`
+  - Frontend hook handlers in `packages/frontend/src/hooks/useAgentConnection.ts`
 
 ### Zod v4 Patterns
 - Recursive types use getter pattern, NOT `z.lazy()`

@@ -107,7 +107,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-6. **MCP tools**: 4 namespaced HTTP servers (`system`, `window`, `storage`, `apps`) using `@modelcontextprotocol/sdk`.
+6. **MCP tools**: 7 namespaced HTTP servers (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`) using `@modelcontextprotocol/sdk`.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
 8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
@@ -122,11 +122,12 @@ See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) f
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
+  - `browser/` — CDP browser automation (headless Chromium via Puppeteer, conditional on Chrome availability)
   - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
   - `compiler/` — Bun bundler for sandbox apps
   - `pdf/` — PDF rendering via poppler
   - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
-- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore
+- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{sessionId}/`
 
 ### Connection Lifecycle
 
@@ -180,7 +181,12 @@ Each app folder can contain an `app.json` with optional metadata:
   "icon": "📦",
   "hidden": true,
   "appProtocol": false,
-  "fileAssociations": []
+  "fileAssociations": [],
+  "variant": "standard",
+  "dockEdge": "bottom",
+  "frameless": false,
+  "windowStyle": {},
+  "protocol": { "state": {}, "commands": {} }
 }
 ```
 
@@ -192,6 +198,11 @@ Each app folder can contain an `app.json` with optional metadata:
 | `hidden` | boolean | If true, no desktop icon — AI knows about it via system prompt |
 | `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
 | `fileAssociations` | array | File extensions this app can open |
+| `variant` | `'standard' \| 'widget' \| 'panel'` | Window layer when the app opens (default: `'standard'`) |
+| `dockEdge` | `'top' \| 'bottom'` | Dock edge for panel variant |
+| `frameless` | boolean | Hide the titlebar when the app opens |
+| `windowStyle` | object | Custom CSS styles applied to the window element |
+| `protocol` | object | Static manifest (`{ state, commands }`) appended to SKILL.md for agent discovery |
 
 ### System Apps (Hidden)
 
@@ -216,6 +227,10 @@ Apps with `"hidden": true` in `app.json` don't show a desktop icon. Instead, the
 | `apps_load_skill` | Load SKILL.md for an app |
 | `apps_read_config` | Read config file (credentials.json reads from `config/credentials/{appId}.json`) |
 | `apps_write_config` | Write config file (credentials.json writes to `config/credentials/{appId}.json`) |
+| `apps_set_app_badge` | Set badge count on a desktop app icon |
+| `apps_market_list` | List apps available in the marketplace |
+| `apps_market_get` | Download and install an app from the marketplace |
+| `apps_market_delete` | Uninstall an app and its credentials |
 
 ### Example: Moltbook App
 

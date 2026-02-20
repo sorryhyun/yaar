@@ -166,7 +166,7 @@ Codex warmup starts the child process and establishes a dedicated WebSocket conn
 
 ## MCP Integration
 
-Both providers connect to the same 4 MCP tool servers, but configure them differently:
+Both providers connect to the same 7 MCP tool servers (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`), but configure them differently:
 
 ### Claude
 
@@ -178,6 +178,9 @@ mcpServers: {
   window: { type: 'http', url: 'http://127.0.0.1:8000/mcp/window', headers: { Authorization: 'Bearer ...' } },
   storage: { type: 'http', url: 'http://127.0.0.1:8000/mcp/storage', headers: { Authorization: 'Bearer ...' } },
   apps: { type: 'http', url: 'http://127.0.0.1:8000/mcp/apps', headers: { Authorization: 'Bearer ...' } },
+  user: { type: 'http', url: 'http://127.0.0.1:8000/mcp/user', headers: { Authorization: 'Bearer ...' } },
+  dev: { type: 'http', url: 'http://127.0.0.1:8000/mcp/dev', headers: { Authorization: 'Bearer ...' } },
+  browser: { type: 'http', url: 'http://127.0.0.1:8000/mcp/browser', headers: { Authorization: 'Bearer ...' } },
 }
 ```
 
@@ -191,7 +194,7 @@ codex app-server \
   -c mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN \
   -c mcp_servers.window.url=http://127.0.0.1:8000/mcp/window \
   -c mcp_servers.window.bearer_token_env_var=YAAR_MCP_TOKEN \
-  ...
+  ... (all 7 namespaces)
 ```
 
 The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than directly in headers.
@@ -200,13 +203,14 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 
 | Setting | Claude | Codex |
 |---------|--------|-------|
-| Model | `claude-sonnet-4-5-20250929` | `gpt-5.3-codex` |
+| Model | `claude-sonnet-4-6` | Uses Codex default model |
 | Thinking | Enabled, 4096 max tokens | Medium reasoning effort |
-| Web search | Enabled (`tools: ['WebSearch']`) | Not available |
+| Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Not available |
 | Shell tool | N/A (MCP tools only) | Explicitly disabled |
 | Sandbox | N/A | `danger-full-access` |
 | Personality | Default | `none` |
-| Permissions | `bypassPermissions` | `approval_policy = "never"` |
+| Permissions | `bypassPermissions` | `approval_policy = "on-request"` |
+| Multi-agent | Task tool (profile-based delegation) | `features.collaboration_modes=true` |
 
 ## Image Handling
 

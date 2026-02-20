@@ -320,6 +320,7 @@ Add a shortcut to the desktop.
 | `iconType` | `'emoji' \| 'image'` | Icon kind (optional) |
 | `type` | `'file' \| 'url' \| 'action'` | What the shortcut opens |
 | `target` | `string` | Storage path, URL, or action ID |
+| `osActions` | `OSAction[]` | Optional client-side actions to execute on click (bypasses AI round-trip) |
 | `createdAt` | `number` | Creation timestamp |
 
 ### `desktop.removeShortcut`
@@ -455,6 +456,36 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 
 ---
 
+## User Prompt Actions
+
+### `user.prompt.show`
+
+Show a structured prompt dialog (powers the `ask` and `request` MCP tools).
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `'user.prompt.show'` | yes | |
+| `id` | `string` | yes | Unique prompt ID |
+| `title` | `string` | yes | |
+| `message` | `string` | yes | |
+| `options` | `UserPromptOption[]` | no | Selectable options (ask-style) |
+| `multiSelect` | `boolean` | no | Allow multiple selections |
+| `inputField` | `UserPromptInputField` | no | Text input config (request-style) |
+| `allowDismiss` | `boolean` | no | Whether the user can dismiss without answering |
+
+### `user.prompt.dismiss`
+
+Dismiss a user prompt.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `'user.prompt.dismiss'` | yes |
+| `id` | `string` | yes |
+
+The user's response is sent back via `USER_PROMPT_RESPONSE` client event.
+
+---
+
 ## Union Type
 
 All actions are represented by the `OSAction` union:
@@ -465,6 +496,7 @@ type OSAction =
   | NotificationAction
   | ToastAction
   | DialogAction
+  | UserPromptAction
   | AppAction
   | DesktopAction;
 ```
@@ -477,6 +509,7 @@ type OSAction =
 | `isNotificationAction(action)` | `type` starts with `'notification.'` |
 | `isToastAction(action)` | `type` starts with `'toast.'` |
 | `isDialogAction(action)` | `type` starts with `'dialog.'` |
+| `isUserPromptAction(action)` | `type` starts with `'user.prompt.'` |
 | `isAppAction(action)` | `type` starts with `'app.'` |
 
 ## Validation Helpers

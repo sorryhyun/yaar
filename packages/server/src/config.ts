@@ -138,7 +138,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   // Disable shell tool and apply_patch (apps use clone-revise-compile-deploy flow)
   args.push('-c', 'features.shell_tool=false');
   args.push('-c', 'features.apply_patch_freeform=false');
-
+  args.push('-c', 'features.multi_agent=true');
   // Enable native collaboration/subagent system for task delegation
   args.push('-c', 'features.collaboration_modes=true');
 
@@ -157,7 +157,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
     '-c',
     'model_reasoning_effort=medium',
     '-c',
-    'model_personality=none',
+    'personality=none',
     '-c',
     'sandbox_mode=danger-full-access',
     '-c',

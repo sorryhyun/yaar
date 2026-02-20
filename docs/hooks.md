@@ -74,10 +74,10 @@ Then start the server with `make dev`. When the AI uses app-dev tools, the progr
 
 ## Managing Hooks via MCP Tools
 
-The AI can manage hooks through built-in MCP tools:
+The AI can manage hooks through built-in MCP tools (all on the `system` MCP server):
 
-- **`set_config`** — Register a new hook (shows a permission dialog)
-- **`get_config`** — Read all registered hooks
+- **`set_config`** — Register a new hook (shows a permission dialog) or update settings (`section: "hooks"` or `"settings"`)
+- **`get_config`** — Read registered hooks and/or user settings (`section: "hooks"`, `"settings"`, or omit for both)
 - **`remove_config`** — Delete a hook by ID (shows a confirmation dialog)
 
 ### Example: Adding a Hook via set_config

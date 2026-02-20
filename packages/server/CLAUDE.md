@@ -14,19 +14,29 @@ pnpm build                  # Build for production
 - `PROVIDER` - Force provider (`claude` or `codex`). Auto-detected if not set.
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
+- `MCP_SKIP_AUTH` - Skip MCP authentication (set to `1` for local dev)
+- `REMOTE` - Enable remote mode with token auth (set to `1`)
+- `YAAR_STORAGE` - Override storage directory path
+- `YAAR_CONFIG` - Override config directory path
+- `MONITOR_MAX_CONCURRENT` - Max concurrent background monitors (default: 2)
+- `MONITOR_MAX_ACTIONS_PER_MIN` - Max actions/min per background monitor (default: 30)
+- `MONITOR_MAX_OUTPUT_PER_MIN` - Max output bytes/min per background monitor (default: 50000)
+- `CODEX_WS_PORT` - Codex app-server WebSocket port (default: 4510)
+- `CHROME_PATH` - Path to Chrome/Edge binary for browser tools (auto-detected if not set)
+- `MARKET_URL` - YAAR marketplace base URL (default: `https://yaarmarket.vercel.app`)
 
 ## Directory Structure
 
 ```
 src/
 ├── index.ts           # Thin orchestrator (~35 lines)
-├── config.ts          # Constants, paths, MIME types, PORT
+├── config.ts          # Constants, paths, MIME types, PORT, monitor budget limits
 ├── lifecycle.ts       # initializeSubsystems(), startListening(), shutdown()
 ├── http/              # HTTP server and route handlers
 │   ├── server.ts      # createHttpServer() — CORS, MCP dispatch, route dispatch
 │   ├── utils.ts       # sendJson(), sendError(), safePath() helpers
 │   └── routes/
-│       ├── api.ts     # REST API routes (health, providers, apps, sessions, agents/stats)
+│       ├── api.ts     # REST API routes (health, providers, apps, sessions, shortcuts, settings, domains)
 │       ├── files.ts   # File-serving routes (pdf, sandbox, app-static, storage)
 │       └── static.ts  # Frontend static serving + SPA fallback
 ├── session/           # Session management (LiveSession, SessionHub, BroadcastCenter)
@@ -39,27 +49,35 @@ src/
 ├── providers/         # Pluggable AI backends (Claude, Codex)
 ├── mcp/               # MCP server, domain-organized tools, action emitter
 │   ├── index.ts       # Module re-exports
-│   ├── server.ts      # MCP server init, request handling, token
+│   ├── server.ts      # MCP server init, request handling, token (7 namespaces)
 │   ├── action-emitter.ts  # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts    # WindowStateRegistry — per-session window state tracking
 │   ├── utils.ts       # ok(), okWithImages() response helpers
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
 │   ├── register.ts    # Aggregator: registerAllTools(), getToolNames()
-│   ├── system/        # get_info, get_env_var, memorize
-│   ├── window/        # create, update, close, lock/unlock, list, view, notifications, app protocol
+│   ├── system/        # get_info, get_env_var, memorize, set_config, get_config, remove_config
+│   ├── skills/        # skill tool — loads reference docs (app_dev, sandbox, components, host_api, app_protocol)
+│   ├── desktop/       # create_shortcut, remove_shortcut, update_shortcut, list_shortcuts
+│   ├── window/        # create, create_component, update, update_component, close, lock/unlock, list, view, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
 │   ├── storage/       # read, write, list, delete
 │   ├── http/          # http_get, http_post, request_allowing_domain
-│   │   ├── curl.ts, request.ts, permission.ts
 │   ├── sandbox/       # run_js
-│   ├── apps/          # list, load_skill, read_config, write_config
+│   ├── apps/          # list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete
 │   │   ├── discovery.ts (listApps, loadAppSkill — used by API routes)
 │   │   ├── config.ts (credentials, read/write config)
-│   └── app-dev/       # write_ts, apply_diff_ts, compile, deploy, clone, write_json
-│       ├── helpers.ts, write.ts, compile.ts, deploy.ts
-├── logging/           # Session logging (write), reading, and window restore
-├── storage/           # StorageManager + permissions for persistent data
+│   │   ├── badge.ts (set_app_badge)
+│   │   └── market.ts (marketplace: list, get, delete)
+│   ├── user/          # ask, request (user prompt tools — live on the `user` MCP server)
+│   ├── browser/       # open, click, type, press, scroll, screenshot, extract, close (conditional — Chrome required)
+│   └── dev/           # write_ts, apply_diff_ts, read_ts, compile, compile_component, typecheck, deploy, clone, write_json
+│       ├── write.ts, read.ts, compile.ts, deploy.ts
+├── reload/            # Fingerprint-based action cache
+├── logging/           # Session logging (write), reading, context restore, and window restore
+│   └── session_logs stored at PROJECT_ROOT/session_logs/{sessionId}/
+├── storage/           # StorageManager + permissions + shortcuts + settings
 └── lib/               # Standalone utilities (no server internal imports)
+    ├── browser/       # CDP browser automation (headless Chromium via Puppeteer)
     ├── bundled-types/ # Per-library .d.ts files for @bundled/* imports (used by apps/tsconfig.json)
     ├── compiler/      # esbuild bundler for sandbox apps
     ├── pdf/           # PDF rendering via poppler
@@ -156,11 +174,15 @@ Providers are pre-initialized at server startup for faster first connection:
 3. Gets session ID for resumption
 The system prompt includes a handshake protocol: "ping" → "pong"
 
+Model: `claude-sonnet-4-6`, thinking enabled (4096 max tokens), WebSearch and Task tools enabled, `bypassPermissions`.
+
 **Codex provider (`providers/codex/`):**
 - `app-server.ts` — Manages `codex app-server` child process with WebSocket transport (`--listen ws://`). Spawns the process, maintains a control client for auth, and exposes `createConnection()` so each provider gets its own WS connection with `initialize` handshake.
 - `jsonrpc-ws-client.ts` — WebSocket-based JSON-RPC client. Each provider instance gets a dedicated connection, enabling parallel turns without serialization.
 - `types.ts` — Re-exports generated v2 API types (`ThreadStart`, `ThreadResume`, `ThreadFork`, `TurnStart`, `TurnInterrupt`, notification types) from `generated/v2/`. Also provides JSON-RPC base types.
 - `provider.ts` — `CodexSessionProvider` implementing `AITransport`.
+
+Codex settings: `approval_policy=on-request`, `model_reasoning_effort=medium`, `sandbox_mode=danger-full-access`, `features.collaboration_modes=true` (subagent delegation).
 
 **Adding a new provider:**
 1. Create `src/providers/<name>/provider.ts` implementing `AITransport`
@@ -170,17 +192,22 @@ The system prompt includes a handshake protocol: "ping" → "pong"
 
 ## Tools (MCP)
 
-Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. The aggregator at `mcp/register.ts` wires them to the correct MCP server namespace.
+Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. The aggregator at `mcp/register.ts` wires them to the correct MCP server namespace. There are 7 MCP namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`.
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_info, get_env_var, memorize |
+| `system/` | system | get_info, get_env_var, memorize, set_config, get_config, remove_config |
+| `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
+| `desktop/` | system | create_shortcut, remove_shortcut, update_shortcut, list_shortcuts |
 | `http/` | system | http_get, http_post, request_allowing_domain |
 | `sandbox/` | system | run_js |
 | `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |
 | `storage/` | storage | read, write, list, delete |
-| `apps/` | apps | list, load_skill, read_config, write_config |
-| `app-dev/` | apps | write_ts, apply_diff_ts, compile, compile_component, deploy, clone, write_json |
+| `apps/` | apps | list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete |
+| `user/` | user | ask, request |
+| `dev/` | dev | write_ts, apply_diff_ts, read_ts, compile, compile_component, typecheck, deploy, clone, write_json |
+| `browser/` | browser | open, click, type, press, scroll, screenshot, extract, close (conditional — Chrome/Edge required) |
+| `reload/` | system | reload_cached |
 
 Tools use `actionEmitter.emitAction()` which:
 - Broadcasts action to frontend
@@ -205,7 +232,14 @@ Bidirectional communication between AI agents and iframe apps. Agents discover a
 
 - `GET /health` - Health check
 - `GET /api/providers` - List available providers
+- `GET /api/apps` - List installed apps (with onboardingCompleted, language)
+- `GET /api/shortcuts` - List desktop shortcuts
+- `PATCH /api/settings` - Update user settings (language, onboardingCompleted)
+- `GET /api/domains` - Get domain allowlist settings
 - `GET /api/sessions` - List sessions
 - `GET /api/sessions/:id/transcript` - Session transcript
+- `GET /api/sessions/:id/messages` - Raw session messages (JSONL parsed)
+- `POST /api/sessions/:id/restore` - Restore session (window actions + context)
 - `GET /api/agents/stats` - Agent pool statistics (includes warmPool stats)
 - `GET /api/storage/*` - Serve storage files
+- `GET /api/browser/:sessionId/events` - Browser SSE stream (screenshot updates)
