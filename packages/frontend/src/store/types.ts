@@ -22,7 +22,13 @@ import type {
   CliEntry,
   Monitor,
 } from '@/types/state';
-import type { OSAction, UserInteraction, AppProtocolResponse, DesktopShortcut } from '@yaar/shared';
+import type {
+  OSAction,
+  UserInteraction,
+  AppProtocolResponse,
+  DesktopShortcut,
+  WindowBounds,
+} from '@yaar/shared';
 
 // Re-export for convenience
 export type {
@@ -56,6 +62,7 @@ export interface WindowsSliceActions {
   userCloseWindow: (windowId: string) => void;
   userMoveWindow: (windowId: string, x: number, y: number) => void;
   userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
+  userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
   handleWindowAction: (action: OSAction) => void;
   queueBoundsUpdate: (windowId: string) => void;
 }

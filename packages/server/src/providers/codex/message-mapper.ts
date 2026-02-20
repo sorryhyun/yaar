@@ -39,6 +39,9 @@ type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
 /** Extract the webSearch variant from ThreadItem */
 type WebSearchItem = Extract<ThreadItem, { type: 'webSearch' }>;
 
+/** Extract the collabAgentToolCall variant from ThreadItem */
+type CollabAgentToolCallItem = Extract<ThreadItem, { type: 'collabAgentToolCall' }>;
+
 /** Format MCP tool name with server namespace: "apps:typecheck" */
 function mcpToolName(server?: string, tool?: string): string {
   if (server && tool) return `${server}:${tool}`;
@@ -141,6 +144,13 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
             toolName: 'web_search',
             toolUseId: item.id,
           };
+        case 'collabAgentToolCall':
+          return {
+            type: 'tool_use',
+            toolName: `collab:${item.tool}`,
+            toolUseId: item.id,
+            toolInput: { prompt: item.prompt, agents: item.receiverThreadIds },
+          };
         default:
           console.debug(
             `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
@@ -178,6 +188,13 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
             toolName: 'web_search',
             toolUseId: item.id,
             content: formatWebSearchResult(item),
+          };
+        case 'collabAgentToolCall':
+          return {
+            type: 'tool_result',
+            toolName: `collab:${item.tool}`,
+            toolUseId: item.id,
+            content: formatCollabResult(item as CollabAgentToolCallItem),
           };
         default:
           console.debug(
@@ -479,6 +496,25 @@ function formatAgentStatus(status: AgentStatus): string {
   if ('completed' in status) return `completed${status.completed ? `: ${status.completed}` : ''}`;
   if ('errored' in status) return `errored: ${status.errored}`;
   return JSON.stringify(status);
+}
+
+/**
+ * Format collab agent tool call result as a string.
+ */
+function formatCollabResult(item: CollabAgentToolCallItem): string {
+  const parts: string[] = [`tool: ${item.tool}`, `status: ${item.status}`];
+  if (item.prompt) parts.push(`prompt: ${item.prompt}`);
+  if (item.agentsStates) {
+    const stateEntries = Object.entries(item.agentsStates)
+      .map(([tid, s]) => {
+        if (!s) return `${tid}: unknown`;
+        const msg = s.message ? `: ${s.message}` : '';
+        return `${tid}: ${s.status}${msg}`;
+      })
+      .join(', ');
+    if (stateEntries) parts.push(`agents: ${stateEntries}`);
+  }
+  return parts.join('\n');
 }
 
 /**

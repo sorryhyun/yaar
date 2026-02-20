@@ -35,6 +35,12 @@ export function registerDesktopTools(server: McpServer): void {
         target: z
           .string()
           .describe('Storage path (file), URL (url), or action identifier (action)'),
+        osActions: z
+          .array(z.record(z.string(), z.unknown()))
+          .optional()
+          .describe(
+            'OS Actions to execute client-side on click (bypasses AI). Each object needs a "type" field (e.g. "window.create").',
+          ),
       },
     },
     async (args) => {
@@ -45,6 +51,7 @@ export function registerDesktopTools(server: McpServer): void {
         iconType: args.iconType,
         type: args.type,
         target: args.target,
+        osActions: args.osActions as DesktopShortcut['osActions'],
         createdAt: Date.now(),
       };
       await addShortcut(shortcut);
@@ -85,6 +92,10 @@ export function registerDesktopTools(server: McpServer): void {
         iconType: z.enum(['emoji', 'image']).optional().describe('New icon type'),
         type: z.enum(['file', 'url', 'action']).optional().describe('New shortcut type'),
         target: z.string().optional().describe('New target path/URL/action'),
+        osActions: z
+          .array(z.record(z.string(), z.unknown()))
+          .optional()
+          .describe('OS Actions to execute client-side on click (bypasses AI)'),
       },
     },
     async (args) => {

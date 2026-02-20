@@ -72,7 +72,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
 
 vi.mock('../agents/profiles.js', () => ({
   getProfile: vi.fn(() => ({ id: 'default', systemPrompt: '', allowedTools: [] })),
-  ORCHESTRATOR_PROFILE: { id: 'orchestrator', systemPrompt: '', allowedTools: [] },
+  DEVELOPER_PROFILE: { id: 'developer', systemPrompt: '', allowedTools: [] },
 }));
 
 // Mock AgentSession so we don't need real providers

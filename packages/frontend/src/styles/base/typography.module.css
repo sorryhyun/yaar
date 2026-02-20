@@ -125,3 +125,48 @@
 .markdown strong {
   font-weight: 600;
 }
+
+.markdown hr {
+  border: none;
+  border-top: var(--border-subtle);
+  margin: 1em 0;
+}
+
+.markdown blockquote {
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  margin: 0.5em 0;
+  padding: 0.25em 1em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.95em;
+}
+
+.markdown th,
+.markdown td {
+  padding: 6px 12px;
+  text-align: left;
+  border-bottom: var(--border-subtle);
+}
+
+.markdown th {
+  font-weight: 600;
+  background: var(--bg-dark-overlay);
+}
+
+.markdown tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.markdown a {
+  color: var(--color-btn-primary);
+  text-decoration: none;
+}
+
+.markdown a:hover {
+  text-decoration: underline;
+}

@@ -10,7 +10,7 @@
  * Processing logic is delegated to:
  * - MainTaskProcessor: main queue, ephemeral overflow, budget enforcement
  * - WindowTaskProcessor: window agents, window queue, window close lifecycle
- * - TaskDispatcher: forked task agents with profile-specific tools
+ * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
  */
 
 import { ContextTape, type ContextMessage } from './context.js';
@@ -34,7 +34,6 @@ import {
 } from './context-pool-policies/index.js';
 import { MainTaskProcessor } from './main-task-processor.js';
 import { WindowTaskProcessor } from './window-task-processor.js';
-import { TaskDispatcher, type DispatchResult } from './task-dispatcher.js';
 import type { PoolContext, Task } from './pool-context.js';
 
 // Re-export Task for barrel compatibility
@@ -77,7 +76,6 @@ export class ContextPool implements PoolContext {
   // ── Processors ────────────────────────────────────────────────────
   private mainProcessor: MainTaskProcessor;
   private windowProcessor: WindowTaskProcessor;
-  private dispatcher: TaskDispatcher;
 
   constructor(
     sessionId: SessionId,
@@ -105,7 +103,6 @@ export class ContextPool implements PoolContext {
     // Create processors
     this.mainProcessor = new MainTaskProcessor(this);
     this.windowProcessor = new WindowTaskProcessor(this);
-    this.dispatcher = new TaskDispatcher(this);
   }
 
   // ── PoolContext methods ─────────────────────────────────────────────
@@ -251,16 +248,6 @@ export class ContextPool implements PoolContext {
     this.mainProcessor.recordMonitorAction(monitorId);
   }
 
-  async dispatchTask(options: {
-    objective?: string;
-    profile?: string;
-    hint?: string;
-    monitorId?: string;
-    messageId?: string;
-  }): Promise<DispatchResult> {
-    return this.dispatcher.dispatchTask(options);
-  }
-
   handleWindowClose(windowId: string): void {
     this.windowProcessor.handleWindowClose(windowId);
   }
@@ -322,7 +309,6 @@ export class ContextPool implements PoolContext {
     mainAgent: boolean;
     windowAgents: number;
     ephemeralAgents: number;
-    taskAgents: number;
     monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
   } {
     const poolStats = this.agentPool.getStats();

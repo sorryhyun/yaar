@@ -1,10 +1,5 @@
-/**
- * MarkdownRenderer - Renders markdown content.
- *
- * Note: For production, use a proper markdown library like
- * react-markdown or marked. This is a simplified version.
- */
 import { memo, useMemo } from 'react';
+import { Marked } from 'marked';
 import { resolveAssetUrl } from '@/lib/api';
 import styles from '@/styles/base/typography.module.css';
 
@@ -12,37 +7,26 @@ interface MarkdownRendererProps {
   data: string;
 }
 
+const marked = new Marked({
+  async: false,
+  gfm: true,
+  breaks: true,
+  renderer: {
+    image({ href, title, text }) {
+      const url = resolveAssetUrl(href);
+      const titleAttr = title ? ` title="${title}"` : '';
+      return `<img src="${url}" alt="${text}"${titleAttr} style="max-width:100%;border-radius:4px">`;
+    },
+    link({ href, title, tokens }) {
+      const text = this.parser.parseInline(tokens);
+      const titleAttr = title ? ` title="${title}"` : '';
+      return `<a href="${href}"${titleAttr} target="_blank" rel="noopener">${text}</a>`;
+    },
+  },
+});
+
 function MarkdownRenderer({ data }: MarkdownRendererProps) {
-  // Simple markdown conversion (production should use proper library)
-  const html = useMemo(() => {
-    const result = data
-      // Escape HTML
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      // Images (before headers, since ![...] could appear on its own line)
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt, src) => {
-        const url = resolveAssetUrl(src);
-        return `<img src="${url}" alt="${alt}" style="max-width:100%;border-radius:4px">`;
-      })
-      // Headers
-      .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-      .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-      .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-      // Bold
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      // Italic
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      // Code blocks
-      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-      // Inline code
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      // Line breaks
-      .replace(/\n/g, '<br>');
-
-    return result;
-  }, [data]);
-
+  const html = useMemo(() => marked.parse(data) as string, [data]);
   return <div className={styles.markdown} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

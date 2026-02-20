@@ -8,7 +8,7 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-context.js';
 import type { PooledAgent } from './agent-pool.js';
-import { ORCHESTRATOR_PROFILE } from './profiles.js';
+import { DEVELOPER_PROFILE } from './profiles.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -149,8 +149,7 @@ export class MainTaskProcessor {
       canonicalAgent: canonicalMain,
       resumeSessionId,
       monitorId,
-      allowedTools:
-        this.ctx.providerType === 'codex' ? undefined : ORCHESTRATOR_PROFILE.allowedTools,
+      allowedTools: this.ctx.providerType === 'codex' ? undefined : DEVELOPER_PROFILE.allowedTools,
       onContextMessage: (role, content) => {
         if (role === 'assistant') {
           this.ctx.contextAssembly.appendAssistantMessage(this.ctx.contextTape, content, 'main');

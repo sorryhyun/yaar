@@ -3,7 +3,7 @@
  *
  * - `Task` — moved here to break circular imports between context-pool ↔ policies.
  * - `PoolContext` — the contract that MainTaskProcessor, WindowTaskProcessor,
- *   and TaskDispatcher depend on.
+ *   and WindowTaskProcessor depend on.
  */
 
 import type { ServerEvent, UserInteraction } from '@yaar/shared';

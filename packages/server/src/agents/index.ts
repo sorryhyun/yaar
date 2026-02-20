@@ -8,7 +8,7 @@
  * - ContextPool: Unified pool with dynamic role assignment
  * - ContextTape: Hierarchical conversation context management
  * - PoolContext: Shared interface for ContextPool processors
- * - MainTaskProcessor, WindowTaskProcessor, TaskDispatcher: Extracted processors
+ * - MainTaskProcessor, WindowTaskProcessor: Extracted processors
  */
 
 export * from './session.js';
@@ -19,4 +19,3 @@ export * from './pool-context.js';
 export * from './context-pool.js';
 export * from './main-task-processor.js';
 export * from './window-task-processor.js';
-export * from './task-dispatcher.js';

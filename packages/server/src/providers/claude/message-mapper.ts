@@ -27,6 +27,26 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
     return { type: 'text', sessionId: msg.session_id };
   }
 
+  // Subagent lifecycle events
+  if (msg.type === 'system' && msg.subtype === 'task_started') {
+    const m = msg as { task_id?: string; description?: string };
+    return {
+      type: 'tool_use',
+      toolName: 'Task',
+      toolUseId: m.task_id,
+      toolInput: { description: m.description },
+    };
+  }
+  if (msg.type === 'system' && msg.subtype === 'task_notification') {
+    const m = msg as { task_id?: string; summary?: string };
+    return {
+      type: 'tool_result',
+      toolName: 'Task',
+      toolUseId: m.task_id,
+      content: m.summary ?? 'Task completed',
+    };
+  }
+
   if (msg.type === 'assistant') {
     // Don't return content here - it was already streamed via stream_event.
     // Only return sessionId for session tracking.

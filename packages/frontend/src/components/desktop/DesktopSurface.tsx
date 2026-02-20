@@ -230,6 +230,10 @@ export function DesktopSurface() {
 
   const handleShortcutClick = useCallback(
     (shortcut: DesktopShortcut) => {
+      if (shortcut.osActions && shortcut.osActions.length > 0) {
+        useDesktopStore.getState().applyActions(shortcut.osActions);
+        return;
+      }
       if (cooldownId === shortcut.id) return;
       startCooldown(shortcut.id);
       sendMessage(
@@ -584,7 +588,7 @@ export function DesktopSurface() {
                 ) : (
                   <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
                 )}
-                <span className={styles.shortcutArrow}>↗</span>
+                <span className={styles.shortcutArrow} />
               </span>
               <span className={styles.iconLabel}>{shortcut.label}</span>
             </button>

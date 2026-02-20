@@ -15,6 +15,7 @@
     "@yaar/shared": "workspace:*",
     "html2canvas": "^1.4.1",
     "immer": "^11.0.3",
+    "marked": "^17.0.3",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "zustand": "^5.0.11"

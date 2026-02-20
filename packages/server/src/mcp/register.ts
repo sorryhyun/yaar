@@ -7,7 +7,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServerName } from './server.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
-import { registerDispatchTools, DISPATCH_TOOL_NAMES } from './system/dispatch.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
 import { registerStorageTools, STORAGE_TOOL_NAMES } from './storage/index.js';
 import { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
@@ -40,7 +39,6 @@ export function registerAllTools(servers: Record<McpServerName, McpServer>): voi
   };
 
   registerSystemTools(servers.system);
-  registerDispatchTools(servers.system);
   registerSkillTools(servers.system);
   registerDesktopTools(servers.system);
   registerHttpTools(servers.system);
@@ -76,7 +74,6 @@ export function getToolNames(): string[] {
   const all: string[] = [
     'WebSearch',
     ...SYSTEM_TOOL_NAMES,
-    ...DISPATCH_TOOL_NAMES,
     ...SKILL_TOOL_NAMES,
     ...DESKTOP_TOOL_NAMES,
     ...HTTP_TOOL_NAMES,

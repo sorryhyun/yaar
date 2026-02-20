@@ -44,9 +44,6 @@ export class AgentPool {
   /** Ephemeral agents currently in-flight (disposed after task). */
   private ephemeralAgents = new Set<PooledAgent>();
 
-  /** Task agents currently in-flight (disposed after dispatch_task completes). */
-  private taskAgents = new Set<PooledAgent>();
-
   constructor(sessionId: SessionId, broadcast: (event: ServerEvent) => void) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
@@ -142,37 +139,6 @@ export class AgentPool {
       getAgentLimiter().release();
     }
     console.log(`[AgentPool] Ephemeral agent disposed: ${agent.instanceId}`);
-  }
-
-  // ── Task agents ──────────────────────────────────────────────────
-
-  /**
-   * Create a task agent for dispatch_task.
-   * Uses a warm provider. The caller is responsible for calling disposeTaskAgent() after the task.
-   */
-  async createTaskAgent(): Promise<PooledAgent | null> {
-    const provider = await acquireWarmProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
-    this.taskAgents.add(agent);
-    console.log(`[AgentPool] Task agent created: ${agent.instanceId}`);
-    return agent;
-  }
-
-  /**
-   * Dispose a task agent after its dispatch completes.
-   */
-  async disposeTaskAgent(agent: PooledAgent): Promise<void> {
-    this.taskAgents.delete(agent);
-    try {
-      await agent.session.cleanup();
-    } finally {
-      getAgentLimiter().release();
-    }
-    console.log(`[AgentPool] Task agent disposed: ${agent.instanceId}`);
   }
 
   // ── Main agent ─────────────────────────────────────────────────────
@@ -317,9 +283,6 @@ export class AgentPool {
     for (const agent of this.ephemeralAgents) {
       await agent.session.interrupt();
     }
-    for (const agent of this.taskAgents) {
-      await agent.session.interrupt();
-    }
   }
 
   /**
@@ -347,13 +310,6 @@ export class AgentPool {
         return true;
       }
     }
-    // Check task agents
-    for (const agent of this.taskAgents) {
-      if (agent.currentRole === role) {
-        await agent.session.interrupt();
-        return true;
-      }
-    }
     return false;
   }
 
@@ -368,9 +324,6 @@ export class AgentPool {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
     for (const agent of this.ephemeralAgents) {
-      if (agent.currentRole?.startsWith(prefix)) return true;
-    }
-    for (const agent of this.taskAgents) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
     return false;
@@ -389,7 +342,6 @@ export class AgentPool {
     mainAgents: number;
     windowAgents: number;
     ephemeralAgents: number;
-    taskAgents: number;
   } {
     let total = 0;
     let idle = 0;
@@ -407,7 +359,6 @@ export class AgentPool {
     for (const agent of this.mainAgents.values()) countAgent(agent);
     for (const agent of this.windowAgents.values()) countAgent(agent);
     for (const agent of this.ephemeralAgents) countAgent(agent);
-    for (const agent of this.taskAgents) countAgent(agent);
 
     return {
       totalAgents: total,
@@ -417,7 +368,6 @@ export class AgentPool {
       mainAgents: this.mainAgents.size,
       windowAgents: this.windowAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
-      taskAgents: this.taskAgents.size,
     };
   }
 
@@ -433,7 +383,6 @@ export class AgentPool {
     for (const agent of this.mainAgents.values()) allAgents.push(agent);
     for (const agent of this.windowAgents.values()) allAgents.push(agent);
     for (const agent of this.ephemeralAgents) allAgents.push(agent);
-    for (const agent of this.taskAgents) allAgents.push(agent);
 
     // Phase 1: interrupt all running agents
     for (const agent of allAgents) {
@@ -449,6 +398,5 @@ export class AgentPool {
     this.mainAgents.clear();
     this.windowAgents.clear();
     this.ephemeralAgents.clear();
-    this.taskAgents.clear();
   }
 }

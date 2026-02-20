@@ -1,0 +1,20 @@
+.preview {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99990;
+  background: rgba(137, 180, 250, 0.15);
+  border: 2px solid rgba(137, 180, 250, 0.5);
+  border-radius: var(--radius-lg);
+  animation: snapIn 150ms ease-out;
+}
+
+@keyframes snapIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

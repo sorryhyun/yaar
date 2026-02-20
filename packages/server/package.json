@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.45",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.49",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@yaar/shared": "workspace:*",
     "node-poppler": "^7.2.0",

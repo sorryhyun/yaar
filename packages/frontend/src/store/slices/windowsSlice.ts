@@ -420,6 +420,18 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
     }),
 
+  userSnapWindow: (windowId, bounds) =>
+    set((state) => {
+      const win = state.windows[windowId];
+      if (win) {
+        if (!win.previousBounds) {
+          win.previousBounds = { ...win.bounds };
+        }
+        win.bounds = { ...bounds };
+        win.maximized = false;
+      }
+    }),
+
   // On drag-end / resize-end: push a consolidated interaction with bounds for immediate send
   queueBoundsUpdate: (windowId) =>
     set((state) => {

@@ -1,10 +1,11 @@
 /**
- * Agent profiles for orchestrator and task agents.
+ * Agent profiles for the developer (main) agent and subagent definitions.
  *
- * Each profile defines a tool subset and system prompt for a specific agent role.
- * The orchestrator dispatches tasks to specialized agents via `dispatch_task`.
+ * The main agent uses DEVELOPER_PROFILE with expanded tools for quick actions.
+ * Complex work is delegated to native subagents (Claude Task tool / Codex collab).
  */
 
+import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
 import { STORAGE_TOOL_NAMES } from '../mcp/storage/index.js';
 import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
@@ -30,7 +31,7 @@ const APPS_ALL_TOOLS = [...APPS_TOOL_NAMES, ...MARKET_TOOL_NAMES] as const;
 // ── Task agent system prompt ────────────────────────────────────────
 
 const TASK_AGENT_PROMPT = `You are a task agent for YAAR, a reactive AI-driven operating system interface.
-Execute the objective using your available tools. You have full conversation context from a session fork.
+Execute the objective using your available tools. You have full conversation context from the parent session.
 
 ## Behavior
 - Create windows to display results (prefer visual output over text)
@@ -56,12 +57,12 @@ Use request_allowing_domain to prompt user for new domain access.
 **You MUST call skill(topic) before using related tools for the first time** (app_dev, sandbox, components).
 `;
 
-// ── Profile definitions ─────────────────────────────────────────────
+// ── Profile definitions (used by buildAgentDefinitions) ─────────────
 
 const profiles: Record<string, AgentProfile> = {
   default: {
     id: 'default',
-    description: 'Full execution tools (all except orchestrator-only)',
+    description: 'General-purpose tasks requiring multiple tool types',
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
@@ -78,7 +79,7 @@ const profiles: Record<string, AgentProfile> = {
 
   web: {
     id: 'web',
-    description: 'HTTP requests + display (API calls, web scraping)',
+    description: 'Web research, API calls, HTTP requests',
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
@@ -91,7 +92,7 @@ const profiles: Record<string, AgentProfile> = {
 
   code: {
     id: 'code',
-    description: 'JavaScript sandbox + display',
+    description: 'Code execution, computation, scripting via JavaScript sandbox',
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       ...INFO_TOOLS,
@@ -103,7 +104,7 @@ const profiles: Record<string, AgentProfile> = {
 
   app: {
     id: 'app',
-    description: 'App skills + HTTP + display',
+    description: 'App interactions, development, deployment',
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
@@ -125,20 +126,21 @@ export function getProfile(id: string): AgentProfile {
 }
 
 /**
- * Orchestrator profile — applied to the main agent.
- * Only has dispatch + lightweight management tools.
+ * Developer profile — applied to the main agent.
+ * Can handle quick actions directly and delegates complex work via Task tool.
  */
-export const ORCHESTRATOR_PROFILE: AgentProfile = {
-  id: 'orchestrator',
-  description: 'Intent interpretation + task dispatch',
+export const DEVELOPER_PROFILE: AgentProfile = {
+  id: 'developer',
+  description: 'Developer agent — handles quick actions directly, delegates complex work',
   systemPrompt: '', // Uses the main system prompt
   allowedTools: [
-    // Dispatch
-    'mcp__system__dispatch_task',
-    // Window management (read + close only)
-    'mcp__window__list',
-    'mcp__window__view',
-    'mcp__window__close',
+    // Native subagent spawner (Claude SDK Task tool)
+    'Task',
+    // Window management (create + update + close)
+    ...WINDOW_TOOL_NAMES,
+    // Storage (read + list)
+    'mcp__storage__read',
+    'mcp__storage__list',
     // Notifications
     'mcp__window__show_notification',
     'mcp__window__dismiss_notification',
@@ -155,3 +157,21 @@ export const ORCHESTRATOR_PROFILE: AgentProfile = {
     'mcp__system__remove_config',
   ],
 };
+
+/**
+ * Build Claude SDK AgentDefinition records for native subagents.
+ * Each definition maps to a profile with a specific tool subset.
+ * Subagents inherit the parent's MCP server config.
+ */
+export function buildAgentDefinitions(): Record<string, AgentDefinition> {
+  return Object.fromEntries(
+    Object.entries(profiles).map(([id, profile]) => [
+      id,
+      {
+        description: profile.description,
+        prompt: profile.systemPrompt,
+        tools: profile.allowedTools,
+      } satisfies AgentDefinition,
+    ]),
+  );
+}

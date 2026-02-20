@@ -13,6 +13,7 @@ import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { getStorageDir } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
+import { buildAgentDefinitions } from '../../agents/profiles.js';
 
 // Port for the MCP HTTP server (same as main server)
 const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
@@ -67,7 +68,8 @@ export class ClaudeSessionProvider extends BaseTransport {
       model: 'claude-sonnet-4-6',
       resume: resumeSession,
       cwd: getStorageDir(),
-      tools: ['WebSearch'],
+      tools: ['WebSearch', 'Task'],
+      agents: buildAgentDefinitions(),
       allowedTools: allowedTools ?? getToolNames(),
       maxThinkingTokens: 4096,
       mcpServers: Object.fromEntries(
