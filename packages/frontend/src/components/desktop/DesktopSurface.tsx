@@ -83,7 +83,7 @@ export function DesktopSurface() {
 
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
-  // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors
+  // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors, Ctrl+W to close focused window
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Tab' && e.shiftKey) {
@@ -97,6 +97,14 @@ export function DesktopSurface() {
         if (idx < mons.length) {
           e.preventDefault();
           switchMonitor(mons[idx].id);
+        }
+      }
+      // Ctrl+W: close the focused OS window (prevents browser tab close in --app mode)
+      if (e.ctrlKey && e.key === 'w') {
+        const { focusedWindowId: fwId, userCloseWindow } = useDesktopStore.getState();
+        if (fwId) {
+          e.preventDefault();
+          userCloseWindow(fwId);
         }
       }
     };
