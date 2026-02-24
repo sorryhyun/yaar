@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import { WALLPAPER_PRESETS, ACCENT_PRESETS, ICON_SIZE_PRESETS } from '@/constants/appearance';
 import type { IconSizeKey } from '@/constants/appearance';
+import { apiFetch } from '@/lib/api';
 import styles from '@/styles/overlays/SettingsModal.module.css';
 
 const LANGUAGES = [
@@ -39,7 +40,7 @@ export function SettingsModal() {
   const [solidColor, setSolidColor] = useState(isCustomSolid ? wallpaper : '#2a2a3e');
 
   useEffect(() => {
-    fetch('/api/domains')
+    apiFetch('/api/domains')
       .then((r) => r.json())
       .then((data: { allowAllDomains: boolean }) => {
         setAllowAllDomains(data.allowAllDomains);
@@ -50,7 +51,7 @@ export function SettingsModal() {
   const handleToggleAllowAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.checked;
     setAllowAllDomains(value);
-    fetch('/api/domains', {
+    apiFetch('/api/domains', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ allowAllDomains: value }),

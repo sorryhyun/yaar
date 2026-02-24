@@ -9,6 +9,7 @@ import { RecentActionsPanel } from '../overlays/RecentActionsPanel';
 import { SessionsModal } from '../overlays/SessionsModal';
 import { SettingsModal } from '../overlays/SettingsModal';
 import { Taskbar } from '../taskbar/Taskbar';
+import { apiFetch } from '@/lib/api';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
 function readFilesAsDataUrls(files: File[]): Promise<string[]> {
@@ -332,7 +333,7 @@ export function CommandPalette() {
               className={styles.folderButton}
               onClick={async () => {
                 try {
-                  const res = await fetch('/api/pick-directory', { method: 'POST' });
+                  const res = await apiFetch('/api/pick-directory', { method: 'POST' });
                   const data = await res.json();
                   if (data.path) {
                     sendMessage(`<ui:click>mount: ${data.path}</ui:click>`);

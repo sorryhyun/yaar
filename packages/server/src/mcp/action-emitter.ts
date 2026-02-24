@@ -397,11 +397,24 @@ class ActionEmitter extends EventEmitter {
       allowDismiss: opts.allowDismiss ?? true,
     };
 
-    this.emit('action', {
-      action: action as OSAction,
-      sessionId: undefined,
-      agentId,
-    } as ActionEvent);
+    if (currentSessionId) {
+      // Deliver via dedicated event → LiveSession.broadcast() (session-scoped, no monitor filter)
+      this.emit('user-prompt', {
+        sessionId: currentSessionId,
+        event: {
+          type: ServerEventType.ACTIONS,
+          actions: [action],
+          agentId: agentId ?? 'system',
+        },
+      });
+    } else {
+      // Fallback: generic action path (requires active ToolActionBridge subscription)
+      this.emit('action', {
+        action: action as OSAction,
+        sessionId: undefined,
+        agentId,
+      } as ActionEvent);
+    }
 
     return promptPromise;
   }

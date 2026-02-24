@@ -65,6 +65,8 @@ export class LiveSession {
   private appProtocolListener: ((...args: any[]) => void) | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private approvalRequestListener: ((...args: any[]) => void) | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private userPromptListener: ((...args: any[]) => void) | null = null;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -112,6 +114,14 @@ export class LiveSession {
       }
     };
     actionEmitter.on('approval-request', this.approvalRequestListener);
+
+    // Subscribe to user prompt events (ask/request tools)
+    this.userPromptListener = (data: { sessionId: string; event: ServerEvent }) => {
+      if (data.sessionId === this.sessionId) {
+        this.broadcast(data.event);
+      }
+    };
+    actionEmitter.on('user-prompt', this.userPromptListener);
   }
 
   // ── Connection management ───────────────────────────────────────────
@@ -528,6 +538,10 @@ export class LiveSession {
     if (this.approvalRequestListener) {
       actionEmitter.off('approval-request', this.approvalRequestListener);
       this.approvalRequestListener = null;
+    }
+    if (this.userPromptListener) {
+      actionEmitter.off('user-prompt', this.userPromptListener);
+      this.userPromptListener = null;
     }
 
     // Force-clear any pending requests/dialogs/app-requests for this session

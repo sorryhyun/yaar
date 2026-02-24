@@ -43,6 +43,8 @@ async function tryKdialog(): Promise<string | null> {
   return code === 0 && stdout ? stdout : null;
 }
 
+const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME != null;
+
 async function tryPowerShell(): Promise<string | null> {
   // Write the selected path to a temp file as UTF-8 to avoid encoding issues
   // with non-ASCII characters (e.g. Korean folder names) on stdout.
@@ -63,31 +65,36 @@ if ($d.ShowDialog() -eq 'OK') {
   const { stdout, code } = await exec('powershell.exe', ['-NoProfile', '-Command', script]);
   if (code !== 0 || !stdout) return null;
 
-  // stdout is a Windows temp file path containing the real selected path
   const tmpFile = stdout.trim();
   if (!tmpFile) return null;
 
-  // Read the temp file from WSL, then clean up
   const { readFile, unlink } = await import('fs/promises');
   let winPath: string;
   try {
-    // Convert the Windows temp path to WSL to read it
-    const { stdout: wslTmp } = await exec('wslpath', ['-u', tmpFile]);
-    winPath = (await readFile(wslTmp, 'utf-8')).trim();
+    if (isWSL) {
+      // On WSL: convert Windows temp path → WSL path, then read
+      const { stdout: wslTmp } = await exec('wslpath', ['-u', tmpFile]);
+      winPath = (await readFile(wslTmp, 'utf-8')).trim();
+      await unlink(wslTmp).catch(() => {});
+    } else {
+      // On native Windows: read the temp file directly
+      winPath = (await readFile(tmpFile, 'utf-8')).trim();
+      await unlink(tmpFile).catch(() => {});
+    }
     // Remove BOM if present
     if (winPath.charCodeAt(0) === 0xfeff) winPath = winPath.slice(1);
-    await unlink(wslTmp).catch(() => {});
   } catch {
     return null;
   }
 
   if (!winPath) return null;
 
-  // Convert Windows path (C:\Users\...) to WSL path (/mnt/c/Users/...)
-  if (/^[A-Za-z]:\\/.test(winPath)) {
+  if (isWSL && /^[A-Za-z]:\\/.test(winPath)) {
+    // On WSL: convert Windows path → WSL path
     const { stdout: wslPath, code: wslCode } = await exec('wslpath', ['-u', winPath]);
     return wslCode === 0 && wslPath ? wslPath : null;
   }
+  // On native Windows: return the Windows path as-is
   return winPath;
 }
 
@@ -95,8 +102,13 @@ if ($d.ShowDialog() -eq 'OK') {
  * Open a native directory picker dialog. Returns the absolute path or null if cancelled.
  */
 export async function pickDirectory(): Promise<string | null> {
-  // Try each method in order of preference
-  for (const picker of [tryZenity, tryKdialog, tryPowerShell]) {
+  // On Windows (native or WSL), prefer PowerShell; on Linux, prefer zenity/kdialog
+  const pickers =
+    process.platform === 'win32' || isWSL
+      ? [tryPowerShell, tryZenity, tryKdialog]
+      : [tryZenity, tryKdialog, tryPowerShell];
+
+  for (const picker of pickers) {
     try {
       const result = await picker();
       if (result !== null) return result;
