@@ -149,6 +149,7 @@
     "stopAll": "모두 중지",
     "stopAgent": "에이전트 {{agentId}} 중지",
     "window": "창: {{title}}",
+    "subagents": "서브에이전트 {{count}}개 활성",
     "stop": "중지"
   },
   "contextMenu": {

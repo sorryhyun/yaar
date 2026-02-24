@@ -55,9 +55,8 @@ src/
 │   ├── utils.ts       # ok(), okWithImages() response helpers
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
 │   ├── register.ts    # Aggregator: registerAllTools(), getToolNames()
-│   ├── system/        # get_info, get_env_var, memorize, set_config, get_config, remove_config
+│   ├── system/        # get_info, get_env_var, memorize, set_config (hooks/settings/shortcuts), get_config, remove_config
 │   ├── skills/        # skill tool — loads reference docs (app_dev, sandbox, components, host_api, app_protocol)
-│   ├── desktop/       # create_shortcut, remove_shortcut, update_shortcut, list_shortcuts
 │   ├── window/        # create, create_component, update, update_component, close, lock/unlock, list, view, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
 │   ├── storage/       # read, write, list, delete
@@ -196,9 +195,8 @@ Tools are organized into domain folders under `mcp/`, each with an `index.ts` th
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_info, get_env_var, memorize, set_config, get_config, remove_config |
+| `system/` | system | get_info, get_env_var, memorize, set_config (hooks/settings/shortcuts), get_config, remove_config |
 | `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
-| `desktop/` | system | create_shortcut, remove_shortcut, update_shortcut, list_shortcuts |
 | `http/` | system | http_get, http_post, request_allowing_domain |
 | `sandbox/` | system | run_js |
 | `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |

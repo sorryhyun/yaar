@@ -56,6 +56,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     updateCliStreaming,
     finalizeCliStreaming,
     addCliEntry,
+    incrementSubagentCount,
+    decrementSubagentCount,
   } = useDesktopStore();
 
   const checkForPreviousSession = useCallback(
@@ -113,6 +115,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           finalizeCliStreaming,
           addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,
+          incrementSubagentCount,
+          decrementSubagentCount,
         });
       } catch (e) {
         console.error('Failed to parse message:', e);
@@ -132,6 +136,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       finalizeCliStreaming,
       addCliEntry,
       handleAppProtocolRequestCb,
+      incrementSubagentCount,
+      decrementSubagentCount,
     ],
   );
 

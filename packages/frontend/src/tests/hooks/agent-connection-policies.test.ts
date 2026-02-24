@@ -22,6 +22,8 @@ function createHandlers() {
     finalizeCliStreaming: vi.fn(),
     addCliEntry: vi.fn(),
     handleAppProtocolRequest: vi.fn(),
+    incrementSubagentCount: vi.fn(),
+    decrementSubagentCount: vi.fn(),
   };
 }
 

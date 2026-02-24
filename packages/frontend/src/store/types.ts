@@ -159,6 +159,8 @@ export interface AgentsSliceActions {
   registerWindowAgent: (windowId: string, agentId: string, status: WindowAgent['status']) => void;
   updateWindowAgentStatus: (agentId: string, status: WindowAgent['status']) => void;
   removeWindowAgent: (windowId: string) => void;
+  incrementSubagentCount: (agentId: string) => void;
+  decrementSubagentCount: (agentId: string) => void;
 }
 
 export type AgentsSlice = AgentsSliceState & AgentsSliceActions;

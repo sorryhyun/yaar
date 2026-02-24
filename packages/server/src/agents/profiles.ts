@@ -54,6 +54,9 @@ Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>
 Use http_get/http_post for API calls. Domains require allowlisting.
 Use request_allowing_domain to prompt user for new domain access.
 
+## Relay to Main
+After completing a significant task (form submission, data retrieval, workflow step), call relay_to_main to hand results back to the main agent. Only relay when the main agent needs to take further action — not for simple acknowledgments.
+
 ## Skills
 **You MUST call skill(topic) before using related tools for the first time** (app_dev, sandbox, components).
 `;

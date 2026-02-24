@@ -17,6 +17,7 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
         id: agentId,
         status,
         startedAt: state.activeAgents[agentId]?.startedAt ?? Date.now(),
+        subagentCount: state.activeAgents[agentId]?.subagentCount ?? 0,
       };
     }),
 
@@ -57,6 +58,20 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
         if (wa.windowId === windowId) {
           delete state.windowAgents[key];
         }
+      }
+    }),
+
+  incrementSubagentCount: (agentId) =>
+    set((state) => {
+      if (state.activeAgents[agentId]) {
+        state.activeAgents[agentId].subagentCount += 1;
+      }
+    }),
+
+  decrementSubagentCount: (agentId) =>
+    set((state) => {
+      if (state.activeAgents[agentId] && state.activeAgents[agentId].subagentCount > 0) {
+        state.activeAgents[agentId].subagentCount -= 1;
       }
     }),
 });

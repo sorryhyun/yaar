@@ -149,6 +149,7 @@
     "stopAll": "Stop All",
     "stopAgent": "Stop agent {{agentId}}",
     "window": "Window: {{title}}",
+    "subagents": "{{count}} subagent(s) active",
     "stop": "Stop"
   },
   "contextMenu": {

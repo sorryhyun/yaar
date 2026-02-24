@@ -106,6 +106,15 @@
   font-weight: 500;
 }
 
+.subagentBadge {
+  font-size: var(--text-sm);
+  color: var(--color-blue);
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(137, 180, 250, 0.15);
+}
+
 .agentIndicatorButton {
   display: flex;
   align-items: center;
@@ -199,6 +208,12 @@
 .agentPanelStatus {
   font-size: var(--text-sm);
   color: var(--color-green);
+}
+
+.agentPanelSubagents {
+  font-size: var(--text-sm);
+  color: var(--color-blue);
+  font-weight: 500;
 }
 
 .agentPanelWindow {

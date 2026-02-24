@@ -46,6 +46,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
                 <div key={agent.id} className={styles.agentIndicator}>
                   <span className={styles.agentSpinner} />
                   <span className={styles.agentStatus}>{agent.status}</span>
+                  {agent.subagentCount > 0 && (
+                    <span className={styles.subagentBadge}>+{agent.subagentCount} sub</span>
+                  )}
                 </div>
               ))}
               <span className={styles.expandArrow} data-open={agentPanelOpen}>
@@ -81,6 +84,11 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
                   <div className={styles.agentPanelInfo}>
                     <span className={styles.agentPanelId}>{agent.id}</span>
                     <span className={styles.agentPanelStatus}>{agent.status}</span>
+                    {agent.subagentCount > 0 && (
+                      <span className={styles.agentPanelSubagents}>
+                        {t('status.subagents', { count: agent.subagentCount })}
+                      </span>
+                    )}
                     {windowTitle && (
                       <span className={styles.agentPanelWindow}>
                         {t('status.window', { title: windowTitle })}

@@ -37,6 +37,8 @@ export interface ServerEventDispatchHandlers {
     windowId: string,
     request: AppProtocolRequest,
   ) => void;
+  incrementSubagentCount: (agentId: string) => void;
+  decrementSubagentCount: (agentId: string) => void;
 }
 
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
@@ -122,6 +124,12 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         handlers.setAgentActive(agentId, `Running: ${toolName}`);
       } else if (status === 'complete' || status === 'error') {
         handlers.setAgentActive(agentId, 'Thinking...');
+      }
+      // Track collab subagent lifecycle (Codex)
+      if (toolName === 'collab:spawnAgent' && status === 'running') {
+        handlers.incrementSubagentCount(agentId);
+      } else if (toolName === 'collab:closeAgent' && status === 'complete') {
+        handlers.decrementSubagentCount(agentId);
       }
       // Only show tool calls and errors in CLI; skip successful results
       if (status === 'complete') break;

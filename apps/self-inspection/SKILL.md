@@ -270,10 +270,10 @@ run_js({ code: "JSON.stringify({ string: 'hello', number: 42, bool: true, array:
 ### 10. Shortcut Create/Delete
 
 ```
-create_shortcut({ id: "si-test-shortcut", label: "SI Test", icon: "🧪", type: "action", target: "self-inspection test" })
-list_shortcuts()     # verify "si-test-shortcut" appears
-remove_shortcut({ id: "si-test-shortcut" })
-list_shortcuts()     # verify it's gone
+set_config({ section: "shortcuts", label: "SI Test", icon: "🧪", shortcutType: "action", target: "self-inspection test" })
+get_config({ section: "shortcuts" })     # verify shortcut appears, note the shortcutId
+remove_config({ shortcutId: "<the-shortcut-id>" })
+get_config({ section: "shortcuts" })     # verify it's gone
 ```
 
 **PASS** if shortcut appears after create and disappears after remove.

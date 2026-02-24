@@ -64,6 +64,8 @@ User interactions (window close, focus, move, resize, etc.) and AI actions appea
 </timeline>
 \`\`\`
 
+Window agents can relay results to you via \`<relay>\` messages. When you see a \`<relay from="...">\` block, a window agent completed a task and is asking you to continue the workflow.
+
 **Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
 
 **Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.

@@ -1,5 +1,18 @@
 type Mode = 'viewer' | 'export';
 
+type StorageEntry = {
+  path: string;
+  isDirectory: boolean;
+  size?: number;
+  modifiedAt?: string;
+};
+
+type YaarStorage = {
+  read: (path: string, opts?: { as?: 'text' | 'blob' | 'arraybuffer' | 'json' | 'auto' }) => Promise<ArrayBuffer>;
+  save: (path: string, data: string) => Promise<void>;
+  list: (dirPath?: string) => Promise<StorageEntry[]>;
+};
+
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing app root');
 
@@ -42,6 +55,20 @@ root.innerHTML = `
       border-bottom: 1px solid #d0d7de;
       align-items: center;
       flex-wrap: wrap;
+    }
+    .storage-browser {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .storage-list {
+      min-width: 300px;
+      max-width: 420px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #d0d7de;
+      background: #fff;
     }
     .viewer-frame {
       width: 100%;
@@ -107,9 +134,15 @@ root.innerHTML = `
     <div id="viewer-pane" class="pane viewer-pane">
       <div class="viewer-controls">
         <input id="file-input" type="file" accept="application/pdf" />
-        <button id="open-storage">Open from Storage Path</button>
-        <input id="storage-path" type="text" placeholder="e.g. mydocs/report.pdf" style="min-width: 260px; padding: 6px 8px; border-radius: 8px; border: 1px solid #d0d7de;" />
         <button id="clear-pdf">Clear</button>
+        <div class="storage-browser">
+          <button id="storage-up">Up</button>
+          <button id="storage-refresh">Refresh</button>
+          <span id="storage-current" class="status">Storage: /</span>
+          <select id="storage-list" class="storage-list">
+            <option>Loading...</option>
+          </select>
+        </div>
         <span id="pdf-status" class="status">No PDF loaded.</span>
       </div>
       <div id="drop" class="drop">Drop a PDF file here, or use the file picker above.</div>
@@ -145,8 +178,10 @@ const els = {
   pdfStatus: document.getElementById('pdf-status') as HTMLSpanElement,
   drop: document.getElementById('drop') as HTMLDivElement,
   clearPdf: document.getElementById('clear-pdf') as HTMLButtonElement,
-  openStorage: document.getElementById('open-storage') as HTMLButtonElement,
-  storagePath: document.getElementById('storage-path') as HTMLInputElement,
+  storageUp: document.getElementById('storage-up') as HTMLButtonElement,
+  storageRefresh: document.getElementById('storage-refresh') as HTMLButtonElement,
+  storageCurrent: document.getElementById('storage-current') as HTMLSpanElement,
+  storageList: document.getElementById('storage-list') as HTMLSelectElement,
   contentInput: document.getElementById('content-input') as HTMLTextAreaElement,
   previewBtn: document.getElementById('preview-btn') as HTMLButtonElement,
   exportBtn: document.getElementById('export-btn') as HTMLButtonElement,
@@ -156,6 +191,12 @@ const els = {
 
 let mode: Mode = 'viewer';
 let currentPdfUrl: string | null = null;
+let currentStorageDir = '';
+
+function getStorage(): YaarStorage | null {
+  const maybeWindow = window as unknown as { yaar?: { storage?: YaarStorage } };
+  return maybeWindow.yaar?.storage ?? null;
+}
 
 function setMode(next: Mode) {
   mode = next;
@@ -165,6 +206,24 @@ function setMode(next: Mode) {
   els.btnViewer.classList.toggle('active', viewer);
   els.btnExport.classList.toggle('active', !viewer);
   els.globalStatus.textContent = viewer ? 'Viewer mode' : 'Export mode';
+}
+
+function cleanStoragePath(path: string): string {
+  return path.trim().replace(/^\/+/, '').replace(/\/+/g, '/').replace(/\/$/, '');
+}
+
+function parentDir(path: string): string {
+  const clean = cleanStoragePath(path);
+  if (!clean) return '';
+  const parts = clean.split('/');
+  parts.pop();
+  return parts.join('/');
+}
+
+function basename(path: string): string {
+  const clean = cleanStoragePath(path);
+  const idx = clean.lastIndexOf('/');
+  return idx === -1 ? clean : clean.slice(idx + 1);
 }
 
 function revokeCurrentPdfUrl() {
@@ -183,14 +242,12 @@ function showPdfUrl(url: string, label: string) {
 }
 
 async function openFromStorage(path: string) {
-  const clean = path.trim().replace(/^\/+/, '');
+  const clean = cleanStoragePath(path);
   if (!clean) {
-    els.pdfStatus.textContent = 'Enter a storage path first.';
+    els.pdfStatus.textContent = 'Select a PDF file from storage first.';
     return;
   }
-  // Runtime storage API from YAAR
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const storage = (window as any).yaar?.storage;
+  const storage = getStorage();
   if (!storage) {
     els.pdfStatus.textContent = 'Storage API unavailable in this app context.';
     return;
@@ -204,6 +261,98 @@ async function openFromStorage(path: string) {
     const msg = err instanceof Error ? err.message : String(err);
     els.pdfStatus.textContent = `Failed to read storage file: ${msg}`;
   }
+}
+
+function setStorageListPlaceholder(message: string) {
+  els.storageList.innerHTML = '';
+  const option = document.createElement('option');
+  option.textContent = message;
+  option.disabled = true;
+  option.selected = true;
+  els.storageList.appendChild(option);
+}
+
+async function loadStorageList(dir = currentStorageDir) {
+  const storage = getStorage();
+  if (!storage) {
+    els.storageCurrent.textContent = 'Storage unavailable';
+    setStorageListPlaceholder('Storage API unavailable');
+    return;
+  }
+
+  const cleanDir = cleanStoragePath(dir);
+  currentStorageDir = cleanDir;
+  const displayDir = cleanDir ? `/${cleanDir}` : '/';
+  els.storageCurrent.textContent = `Storage: ${displayDir}`;
+
+  setStorageListPlaceholder('Loading...');
+  try {
+    const entries = await storage.list(cleanDir || undefined);
+    entries.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.path.localeCompare(b.path);
+    });
+
+    els.storageList.innerHTML = '';
+
+    if (cleanDir) {
+      const upOpt = document.createElement('option');
+      upOpt.value = '__up__';
+      upOpt.textContent = '..';
+      upOpt.dataset.kind = 'up';
+      els.storageList.appendChild(upOpt);
+    }
+
+    if (entries.length === 0) {
+      setStorageListPlaceholder('This folder is empty');
+      return;
+    }
+
+    for (const entry of entries) {
+      const opt = document.createElement('option');
+      const itemPath = cleanStoragePath(entry.path);
+      const name = basename(itemPath) || itemPath;
+      opt.value = itemPath;
+      opt.dataset.kind = entry.isDirectory ? 'dir' : 'file';
+      opt.textContent = entry.isDirectory ? `[DIR] ${name}` : name;
+      els.storageList.appendChild(opt);
+    }
+
+    if (els.storageList.options.length > 0) {
+      els.storageList.selectedIndex = 0;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setStorageListPlaceholder(`Load failed: ${msg}`);
+  }
+}
+
+async function handleStorageSelection() {
+  const selected = els.storageList.selectedOptions[0];
+  if (!selected) return;
+
+  const kind = selected.dataset.kind;
+  if (kind === 'up' || selected.value === '__up__') {
+    currentStorageDir = parentDir(currentStorageDir);
+    await loadStorageList(currentStorageDir);
+    return;
+  }
+
+  const path = cleanStoragePath(selected.value);
+  if (!path) return;
+
+  if (kind === 'dir') {
+    currentStorageDir = path;
+    await loadStorageList(currentStorageDir);
+    return;
+  }
+
+  if (!path.toLowerCase().endsWith('.pdf')) {
+    els.pdfStatus.textContent = 'Selected file is not a PDF.';
+    return;
+  }
+
+  await openFromStorage(path);
 }
 
 function renderPreview() {
@@ -228,8 +377,7 @@ function renderPreview() {
 }
 
 async function saveHtmlSnapshot() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const storage = (window as any).yaar?.storage;
+  const storage = getStorage();
   if (!storage) {
     els.globalStatus.textContent = 'Storage API unavailable';
     return;
@@ -259,9 +407,17 @@ els.clearPdf.addEventListener('click', () => {
   els.globalStatus.textContent = 'Viewer cleared';
 });
 
-els.openStorage.addEventListener('click', () => openFromStorage(els.storagePath.value));
-els.storagePath.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') openFromStorage(els.storagePath.value);
+els.storageUp.addEventListener('click', async () => {
+  currentStorageDir = parentDir(currentStorageDir);
+  await loadStorageList(currentStorageDir);
+});
+
+els.storageRefresh.addEventListener('click', async () => {
+  await loadStorageList(currentStorageDir);
+});
+
+els.storageList.addEventListener('change', () => {
+  void handleStorageSelection();
 });
 
 els.drop.addEventListener('dragover', (e) => {
@@ -306,5 +462,6 @@ els.saveHtmlBtn.addEventListener('click', async () => {
 els.contentInput.value = `<h1>Document Title</h1>\n<p>Write or paste your content here, then click <strong>Export PDF</strong>.</p>\n<ul><li>Supports plain text</li><li>Supports basic HTML</li></ul>`;
 renderPreview();
 setMode('viewer');
+void loadStorageList('');
 
 window.addEventListener('beforeunload', () => revokeCurrentPdfUrl());

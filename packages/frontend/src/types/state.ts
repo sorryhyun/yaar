@@ -103,6 +103,7 @@ export interface ActiveAgent {
   id: string;
   status: string; // e.g., "Thinking...", "Running: read_file"
   startedAt: number;
+  subagentCount: number; // Active collab subagents (Codex)
 }
 
 export interface WindowAgent {
