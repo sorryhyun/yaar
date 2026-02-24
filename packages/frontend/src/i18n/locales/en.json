@@ -23,8 +23,7 @@
       "reset": "Reset windows and context",
       "pencilExit": "Exit drawing (Esc)",
       "pencilEnter": "Draw on screen",
-      "terminalExit": "Exit terminal (Alt+Tab)",
-      "terminalEnter": "Terminal view (Alt+Tab)"
+      "attachFile": "Attach images"
     },
     "toast": {
       "agentStopped": "Agent stopped",

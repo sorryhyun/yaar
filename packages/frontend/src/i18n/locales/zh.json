@@ -23,8 +23,7 @@
       "reset": "重置窗口和上下文",
       "pencilExit": "退出绘图 (Esc)",
       "pencilEnter": "在屏幕上绘图",
-      "terminalExit": "退出终端 (Alt+Tab)",
-      "terminalEnter": "终端视图 (Alt+Tab)"
+      "attachFile": "附加图片"
     },
     "toast": {
       "agentStopped": "助手已停止",

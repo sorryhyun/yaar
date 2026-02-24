@@ -23,8 +23,7 @@
       "reset": "Réinitialiser les fenêtres et le contexte",
       "pencilExit": "Quitter le dessin (Échap)",
       "pencilEnter": "Dessiner à l'écran",
-      "terminalExit": "Quitter le terminal (Alt+Tab)",
-      "terminalEnter": "Vue terminal (Alt+Tab)"
+      "attachFile": "Joindre des images"
     },
     "toast": {
       "agentStopped": "Agent arrêté",

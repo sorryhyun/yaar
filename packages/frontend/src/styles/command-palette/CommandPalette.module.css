@@ -214,8 +214,8 @@
   background: rgba(250, 179, 135, 0.12);
 }
 
-/* Terminal CLI button */
-.terminalButton {
+/* Folder attach button */
+.folderButton {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -230,15 +230,9 @@
   box-shadow: var(--shadow-lg);
 }
 
-.terminalButton:hover {
+.folderButton:hover {
   color: var(--color-text);
   background: rgba(255, 255, 255, 0.08);
-}
-
-.terminalButton[data-active='true'] {
-  color: var(--color-green);
-  border-color: var(--color-green);
-  background: rgba(166, 227, 161, 0.12);
 }
 
 @keyframes spin {

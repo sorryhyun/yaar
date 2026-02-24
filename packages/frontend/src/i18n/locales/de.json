@@ -23,8 +23,7 @@
       "reset": "Fenster und Kontext zurücksetzen",
       "pencilExit": "Zeichnen beenden (Esc)",
       "pencilEnter": "Auf dem Bildschirm zeichnen",
-      "terminalExit": "Terminal beenden (Alt+Tab)",
-      "terminalEnter": "Terminalansicht (Alt+Tab)"
+      "attachFile": "Bilder anhängen"
     },
     "toast": {
       "agentStopped": "Agent gestoppt",

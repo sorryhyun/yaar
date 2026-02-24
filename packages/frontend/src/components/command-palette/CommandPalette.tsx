@@ -35,6 +35,7 @@ export function CommandPalette() {
   const [isDragOver, setIsDragOver] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { isConnected, sendMessage, interrupt, reset } = useAgentConnection();
   const recentActionsPanelOpen = useDesktopStore((state) => state.recentActionsPanelOpen);
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel);
@@ -49,8 +50,6 @@ export function CommandPalette() {
   const pencilMode = useDesktopStore((state) => state.pencilMode);
   const setPencilMode = useDesktopStore((state) => state.setPencilMode);
   const togglePencilMode = useDesktopStore((state) => state.togglePencilMode);
-  const cliMode = useDesktopStore((state) => state.cliMode);
-  const toggleCliMode = useDesktopStore((state) => state.toggleCliMode);
   const attachedImages = useDesktopStore((state) => state.attachedImages);
   const addAttachedImages = useDesktopStore((state) => state.addAttachedImages);
   const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
@@ -154,6 +153,18 @@ export function CommandPalette() {
       }
     },
     [handleSubmit, interrupt, activeAgents, applyAction],
+  );
+
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0) return;
+      const dataUrls = await readFilesAsDataUrls(files);
+      addAttachedImages(dataUrls);
+      // Reset so re-selecting the same file triggers change
+      e.target.value = '';
+    },
+    [addAttachedImages],
   );
 
   const handleReset = useCallback(() => {
@@ -331,14 +342,9 @@ export function CommandPalette() {
               </svg>
             </button>
             <button
-              className={styles.terminalButton}
-              onClick={toggleCliMode}
-              title={
-                cliMode
-                  ? t('commandPalette.tooltip.terminalExit')
-                  : t('commandPalette.tooltip.terminalEnter')
-              }
-              data-active={cliMode}
+              className={styles.folderButton}
+              onClick={() => fileInputRef.current?.click()}
+              title={t('commandPalette.tooltip.attachFile')}
             >
               <svg
                 width="18"
@@ -348,14 +354,7 @@ export function CommandPalette() {
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <path
-                  d="M2.5 15H8.33333"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M2.5 5L7.5 10L2.5 15"
+                  d="M2.5 5.83333V15.8333C2.5 16.2754 2.67559 16.6993 2.98816 17.0118C3.30072 17.3244 3.72464 17.5 4.16667 17.5H15.8333C16.2754 17.5 16.6993 17.3244 17.0118 17.0118C17.3244 16.6993 17.5 16.2754 17.5 15.8333V8.33333C17.5 7.89131 17.3244 7.46738 17.0118 7.15482C16.6993 6.84226 16.2754 6.66667 15.8333 6.66667H10L8.33333 4.16667H4.16667C3.72464 4.16667 3.30072 4.34226 2.98816 4.65482C2.67559 4.96738 2.5 5.39131 2.5 5.83333Z"
                   stroke="currentColor"
                   strokeWidth="1.5"
                   strokeLinecap="round"
@@ -363,6 +362,14 @@ export function CommandPalette() {
                 />
               </svg>
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
           </div>
 
           <div
