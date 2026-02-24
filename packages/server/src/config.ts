@@ -97,7 +97,7 @@ export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
 export const PORT = parseInt(process.env.PORT ?? '8000', 10);
 
-export const IS_REMOTE = process.env.REMOTE === '1';
+export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
 // ── Monitor budget limits ────────────────────────────────────────────
 export const MONITOR_MAX_CONCURRENT = parseInt(process.env.MONITOR_MAX_CONCURRENT ?? '2', 10);

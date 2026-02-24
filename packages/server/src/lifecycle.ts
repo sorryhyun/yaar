@@ -5,8 +5,10 @@
 import type { Server } from 'http';
 import type { WebSocketServer } from 'ws';
 import { mkdir, stat as fsStat } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
+import { execSync } from 'child_process';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
@@ -113,6 +115,23 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 }
 
 function getLanIp(): string {
+  // WSL2: the Linux network interfaces have a NAT'd 172.x IP that's unreachable
+  // from other devices. Ask Windows for the real LAN IP via PowerShell.
+  if (isWsl()) {
+    try {
+      const out = execSync(
+        'powershell.exe -NoProfile -c "Get-NetIPAddress -AddressFamily IPv4 | ' +
+          "Where-Object { \\$_.IPAddress -notlike '127.*' -and \\$_.IPAddress -notlike '172.*' " +
+          "-and \\$_.IPAddress -notlike '169.*' -and \\$_.PrefixOrigin -ne 'WellKnown' } | " +
+          'Select-Object -ExpandProperty IPAddress -First 1"',
+        { timeout: 5000, encoding: 'utf-8' },
+      ).trim();
+      if (out) return out;
+    } catch {
+      // PowerShell not available or timed out — fall through
+    }
+  }
+
   const nets = networkInterfaces();
   for (const name of Object.keys(nets)) {
     for (const net of nets[name] ?? []) {
@@ -122,6 +141,14 @@ function getLanIp(): string {
     }
   }
   return '127.0.0.1';
+}
+
+function isWsl(): boolean {
+  try {
+    return readFileSync('/proc/version', 'utf-8').toLowerCase().includes('microsoft');
+  } catch {
+    return false;
+  }
 }
 
 export function startListening(server: Server): void {

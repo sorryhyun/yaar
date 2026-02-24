@@ -146,14 +146,13 @@ export class AppServer {
     }
 
     const codexBin = getCodexBin();
-    // shell: true only on Windows (needed for PATH resolution).
-    // On Linux/macOS, direct spawn ensures SIGTERM reaches the codex process
-    // instead of only reaching an intermediate /bin/sh wrapper (which caused
-    // orphaned codex processes on server restart).
     const isWindows = process.platform === 'win32';
+    // detached: true gives the codex tree its own process group so we can
+    // kill the node wrapper AND the native binary together with kill(-pid).
     this.process = spawn(codexBin, args, {
       cwd: STORAGE_DIR,
       shell: isWindows,
+      detached: !isWindows,
       stdio: ['ignore', 'ignore', 'pipe'],
       env: {
         ...process.env,
@@ -161,6 +160,8 @@ export class AppServer {
         YAAR_MCP_TOKEN: getMcpToken(),
       },
     });
+    // Allow the YAAR server to exit without waiting for this detached child
+    this.process.unref();
 
     // Log stderr for debugging
     this.process.stderr?.on('data', (data: Buffer) => {
@@ -286,13 +287,30 @@ export class AppServer {
     }
 
     if (this.process) {
-      this.process.kill('SIGTERM');
+      const pid = this.process.pid;
+
+      // Kill the entire process group (node wrapper + native binary).
+      // The negative PID targets all processes in the group created by detached: true.
+      if (pid) {
+        try {
+          process.kill(-pid, 'SIGTERM');
+        } catch {
+          // Group may already be gone
+          this.process.kill('SIGTERM');
+        }
+      } else {
+        this.process.kill('SIGTERM');
+      }
 
       // Wait for the process to exit
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
-          if (this.process) {
-            this.process.kill('SIGKILL');
+          if (this.process && pid) {
+            try {
+              process.kill(-pid, 'SIGKILL');
+            } catch {
+              this.process.kill('SIGKILL');
+            }
           }
           resolve();
         }, 5000);

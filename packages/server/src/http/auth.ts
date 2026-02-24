@@ -5,6 +5,7 @@
 
 import { randomBytes } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
 
 let remoteToken: string | null = null;
@@ -31,6 +32,10 @@ export function checkHttpAuth(req: IncomingMessage, res: ServerResponse, url: UR
   // /health is always exempt
   if (url.pathname === '/health') return true;
 
+  // Static frontend assets must load without auth so the client-side JS
+  // can read the #remote=<token> hash fragment and attach it to API/WS calls.
+  if (isStaticAsset(url.pathname)) return true;
+
   const token = extractToken(req, url);
   if (token === remoteToken) return true;
 
@@ -46,6 +51,13 @@ export function checkHttpAuth(req: IncomingMessage, res: ServerResponse, url: UR
 export function checkWsAuth(url: URL): boolean {
   if (!IS_REMOTE || !remoteToken) return true;
   return url.searchParams.get('token') === remoteToken;
+}
+
+/** Routes that serve static frontend assets (no secrets, needed to bootstrap the app). */
+function isStaticAsset(pathname: string): boolean {
+  if (pathname === '/' || pathname === '/index.html') return true;
+  const ext = extname(pathname);
+  return ['.js', '.css', '.html', '.svg', '.png', '.ico', '.woff', '.woff2', '.ttf'].includes(ext);
 }
 
 /** Extract token from Authorization header or query param. */

@@ -23,14 +23,21 @@ cleanup() {
 
   # Kill process groups (negative PID kills the group)
   kill -TERM -$SERVER_PID 2>/dev/null
-  kill -TERM -$FRONTEND_PID 2>/dev/null
+  if [ -n "$FRONTEND_PID" ]; then
+    kill -TERM -$FRONTEND_PID 2>/dev/null
+  fi
 
-  # Wait briefly for clean shutdown
-  sleep 1
+  # Give the server time to gracefully stop child processes (e.g. codex app-server)
+  sleep 3
 
   # Force kill if still running
   kill -KILL -$SERVER_PID 2>/dev/null
-  kill -KILL -$FRONTEND_PID 2>/dev/null
+  if [ -n "$FRONTEND_PID" ]; then
+    kill -KILL -$FRONTEND_PID 2>/dev/null
+  fi
+
+  # Clean up any orphaned codex app-server processes
+  pkill -f "codex app-server" 2>/dev/null || true
 
   exit 0
 }
@@ -66,16 +73,30 @@ SERVER_PID=$!
 echo "Waiting for server to be ready..."
 wait_for_server
 
-echo "Starting frontend..."
-pnpm --filter @yaar/frontend dev 2>&1 &
-FRONTEND_PID=$!
+if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ]; then
+  # Remote mode: build frontend and serve from server (single port 8000)
+  echo "Building frontend for remote mode..."
+  pnpm --filter @yaar/frontend build
+  FRONTEND_PID=""
 
-echo ""
-echo "Development servers started:"
-echo "  Server:   http://localhost:8000"
-echo "  Frontend: http://localhost:5173"
-echo ""
-echo "Press Ctrl+C to stop all servers"
+  echo ""
+  echo "Remote mode ready — everything served from port 8000"
+  echo "Open the URL or scan the QR code printed above."
+  echo ""
+  echo "Press Ctrl+C to stop"
+else
+  # Dev mode: start Vite dev server
+  echo "Starting frontend..."
+  pnpm --filter @yaar/frontend dev 2>&1 &
+  FRONTEND_PID=$!
 
-# Wait for both processes
+  echo ""
+  echo "Development servers started:"
+  echo "  Server:   http://localhost:8000"
+  echo "  Frontend: http://localhost:5173"
+  echo ""
+  echo "Press Ctrl+C to stop all servers"
+fi
+
+# Wait for server (and frontend if running)
 wait
