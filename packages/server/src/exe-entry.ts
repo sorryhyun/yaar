@@ -15,9 +15,11 @@ import { existsSync } from 'fs';
 // The server starts automatically on import
 import './index.js';
 
+import { getRemoteToken } from './http/auth.js';
+
 // Auto-open browser after server starts
 const PORT = process.env.PORT || '8000';
-const URL = `http://127.0.0.1:${PORT}`;
+const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 /**
  * Find a Chromium-based browser that supports --app mode.
@@ -66,15 +68,24 @@ function findChromiumBrowser(): string | null {
 }
 
 /**
+ * Build the full URL, including the remote auth token when in remote/bundled mode.
+ */
+function getAppUrl(): string {
+  const token = getRemoteToken();
+  return token ? `${BASE_URL}/#remote=${token}` : BASE_URL;
+}
+
+/**
  * Launch the app in a standalone window (--app mode) or fall back to default browser.
  */
 function openAppWindow() {
+  const url = getAppUrl();
   const currentPlatform = platform();
   const chromium = findChromiumBrowser();
 
   if (chromium) {
-    console.log(`Opening app window: ${chromium} --app=${URL}`);
-    spawn(chromium, [`--app=${URL}`], {
+    console.log(`Opening app window: ${chromium} --app=${url}`);
+    spawn(chromium, [`--app=${url}`], {
       detached: true,
       stdio: 'ignore',
     }).unref();
@@ -82,31 +93,50 @@ function openAppWindow() {
   }
 
   // Fallback: open in default browser
-  console.log(`No Chromium browser found. Opening default browser: ${URL}`);
+  console.log(`No Chromium browser found. Opening default browser: ${url}`);
   try {
     if (currentPlatform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', URL], {
+      spawn('cmd', ['/c', 'start', '', url], {
         detached: true,
         stdio: 'ignore',
       }).unref();
     } else if (currentPlatform === 'darwin') {
-      spawn('open', [URL], {
+      spawn('open', [url], {
         detached: true,
         stdio: 'ignore',
       }).unref();
     } else {
-      spawn('xdg-open', [URL], {
+      spawn('xdg-open', [url], {
         detached: true,
         stdio: 'ignore',
       }).unref();
     }
   } catch {
-    console.log(`Could not auto-open browser. Please visit: ${URL}`);
+    console.log(`Could not auto-open browser. Please visit: ${url}`);
   }
 }
 
-// Wait for server to start, then open app window
-setTimeout(openAppWindow, 1500);
+/**
+ * Wait for the server to be ready, then open the app window.
+ */
+async function waitAndOpen() {
+  for (let i = 0; i < 30; i++) {
+    try {
+      const res = await fetch(`${BASE_URL}/health`);
+      if (res.ok) {
+        openAppWindow();
+        return;
+      }
+    } catch {
+      // Server not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  // Timeout — try anyway
+  openAppWindow();
+}
+
+waitAndOpen();
 
 // Keep the process running
 process.on('SIGINT', () => {

@@ -32,6 +32,9 @@ export function checkHttpAuth(req: IncomingMessage, res: ServerResponse, url: UR
   // /health is always exempt
   if (url.pathname === '/health') return true;
 
+  // MCP endpoints have their own bearer token auth — exempt from remote auth
+  if (url.pathname.startsWith('/mcp/')) return true;
+
   // Static frontend assets must load without auth so the client-side JS
   // can read the #remote=<token> hash fragment and attach it to API/WS calls.
   if (isStaticAsset(url.pathname)) return true;
@@ -57,14 +60,39 @@ export function checkWsAuth(url: URL): boolean {
 function isStaticAsset(pathname: string): boolean {
   if (pathname === '/' || pathname === '/index.html') return true;
   const ext = extname(pathname);
-  return ['.js', '.css', '.html', '.svg', '.png', '.ico', '.woff', '.woff2', '.ttf'].includes(ext);
+  return [
+    '.js',
+    '.css',
+    '.html',
+    '.svg',
+    '.png',
+    '.ico',
+    '.woff',
+    '.woff2',
+    '.ttf',
+    '.otf',
+  ].includes(ext);
 }
 
-/** Extract token from Authorization header or query param. */
+/** Extract token from Authorization header, query param, or Referer. */
 function extractToken(req: IncomingMessage, url: URL): string | null {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);
   }
-  return url.searchParams.get('token');
+  const queryToken = url.searchParams.get('token');
+  if (queryToken) return queryToken;
+
+  // Iframe apps are loaded with ?token=... in their URL.
+  // Their fetch() calls don't include the token, but the browser sends the
+  // iframe's URL as the Referer header — extract the token from there.
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      return new URL(referer).searchParams.get('token');
+    } catch {
+      // Malformed referer — ignore
+    }
+  }
+  return null;
 }
