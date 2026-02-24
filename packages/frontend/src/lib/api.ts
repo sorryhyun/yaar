@@ -100,6 +100,11 @@ export function buildWsUrl(sessionId?: string | null): string {
  */
 export function resolveAssetUrl(path: string): string {
   if (!path) return path;
+  // Resolve app:// protocol → /api/apps/{appId}/static/index.html
+  const appMatch = path.match(/^app:\/\/(.+)/);
+  if (appMatch) {
+    path = `/api/apps/${appMatch[1]}/static/index.html`;
+  }
   // Pass through absolute URLs and data/blob URLs
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
 

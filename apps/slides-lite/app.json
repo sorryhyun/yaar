@@ -2,6 +2,7 @@
   "icon": "🖼️",
   "name": "Slides Lite",
   "description": "Lightweight slide editor with markdown, themes, ratios, and app protocol commands",
+  "run": "static/index.html",
   "protocol": {
     "state": {
       "deck": {

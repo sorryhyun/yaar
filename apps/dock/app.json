@@ -2,6 +2,7 @@
   "icon": "🧰",
   "name": "Dock",
   "description": "System dock with transparent glass-style clock",
+  "run": "static/index.html",
   "hidden": true,
   "appProtocol": true,
   "frameless": true,

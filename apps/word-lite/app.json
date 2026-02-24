@@ -2,6 +2,7 @@
   "icon": "📝",
   "name": "Word Lite",
   "description": "Lightweight document editor with App Protocol batch document and storage read support",
+  "run": "static/index.html",
   "protocol": {
     "state": {
       "html": {

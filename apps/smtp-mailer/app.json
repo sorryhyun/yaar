@@ -2,6 +2,7 @@
   "icon": "📨",
   "name": "SMTP Mailer",
   "description": "Compose and send email with SMTP or Google API auth flow",
+  "run": "static/index.html",
   "appProtocol": true,
   "protocol": {
     "state": {

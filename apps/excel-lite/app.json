@@ -1,6 +1,7 @@
 {
   "icon": "🎮",
   "name": "Excel Lite",
+  "run": "static/index.html",
   "protocol": {
     "state": {
       "cells": {

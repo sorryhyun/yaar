@@ -228,6 +228,7 @@ export function registerDeployTools(server: McpServer): void {
         metadata.icon = resolvedIcon;
         metadata.name = displayName;
         if (description !== undefined) metadata.description = description;
+        if (hasCompiledApp) metadata.run = 'static/index.html';
         if (hidden !== undefined) {
           if (hidden) metadata.hidden = true;
           else delete metadata.hidden;

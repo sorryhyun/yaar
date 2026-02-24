@@ -1,4 +1,5 @@
 {
   "icon": "📜",
-  "name": "Pdf Viewer"
+  "name": "Pdf Viewer",
+  "run": "static/index.html"
 }

@@ -25,6 +25,7 @@ export interface AppInfo {
   hasSkill: boolean;
   hasCredentials: boolean;
   hidden?: boolean;
+  run?: string; // Resolved iframe URL for app:// protocol (e.g. /api/apps/{id}/static/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   protocol?: Pick<AppManifest, 'state' | 'commands'>; // Static manifest for discovery
@@ -76,6 +77,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let displayName: string | undefined;
       let description: string | undefined;
       let hidden: boolean | undefined;
+      let run: string | undefined;
       let appProtocol: boolean | undefined;
       let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
       let fileAssociations: FileAssociation[] | undefined;
@@ -91,6 +93,7 @@ export async function listApps(): Promise<AppInfo[]> {
         displayName = meta.name;
         if (meta.description) description = meta.description;
         if (meta.hidden) hidden = true;
+        if (typeof meta.run === 'string') run = meta.run;
         if (meta.appProtocol) appProtocol = true;
         if (meta.protocol && typeof meta.protocol === 'object') protocol = meta.protocol;
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
@@ -130,6 +133,15 @@ export async function listApps(): Promise<AppInfo[]> {
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
 
+      // Resolve run URL: explicit from app.json, or auto-detect for compiled apps
+      let resolvedRun: string | undefined;
+      if (run) {
+        // Relative paths resolve against /api/apps/{appId}/
+        resolvedRun = run.startsWith('/') ? run : `/api/apps/${appId}/${run}`;
+      } else if (isCompiled) {
+        resolvedRun = `/api/apps/${appId}/static/index.html`;
+      }
+
       apps.push({
         id: appId,
         name,
@@ -139,6 +151,7 @@ export async function listApps(): Promise<AppInfo[]> {
         hasSkill,
         hasCredentials: appHasCredentials,
         ...(hidden && { hidden }),
+        ...(resolvedRun && { run: resolvedRun }),
         isCompiled,
         ...(appProtocol && { appProtocol }),
         ...(protocol && { protocol }),
@@ -184,6 +197,20 @@ export async function getAppMeta(appId: string): Promise<{
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve an `app://appId` URL to the app's actual iframe URL.
+ * Returns null if the URL is not an app:// protocol or the app has no run URL.
+ */
+export async function resolveAppUrl(url: string): Promise<string | null> {
+  const match = url.match(/^app:\/\/(.+)/);
+  if (!match) return null;
+
+  const appId = match[1];
+  const apps = await listApps();
+  const app = apps.find((a) => a.id === appId);
+  return app?.run ?? null;
 }
 
 /**

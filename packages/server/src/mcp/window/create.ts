@@ -18,7 +18,7 @@ import {
 import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
-import { getAppMeta } from '../apps/discovery.js';
+import { getAppMeta, resolveAppUrl } from '../apps/discovery.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
@@ -68,7 +68,19 @@ export function registerCreateTools(server: McpServer): void {
     async (args) => {
       const content = args.content as DisplayContent;
       const renderer = content.renderer;
-      const data = content.content;
+      let data = content.content;
+
+      // Resolve app:// protocol for iframe content
+      if (renderer === 'iframe' && typeof data === 'string' && data.startsWith('app://')) {
+        const resolved = await resolveAppUrl(data);
+        if (resolved) {
+          data = resolved;
+        } else {
+          return error(
+            `Unknown app "${data.slice(6)}". Use list to see available apps, or load_skill to learn how to use one.`,
+          );
+        }
+      }
 
       // Look up variant/dockEdge from app.json if appId is provided
       const appMeta = args.appId ? await getAppMeta(args.appId as string) : null;

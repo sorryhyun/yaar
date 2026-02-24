@@ -1,4 +1,5 @@
 {
   "icon": "🎮",
-  "name": "Falling Blocks"
+  "name": "Falling Blocks",
+  "run": "static/index.html"
 }

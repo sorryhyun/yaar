@@ -1,6 +1,7 @@
 {
   "icon": "🎮",
   "name": "Recent Papers",
+  "run": "static/index.html",
   "protocol": {
     "state": {
       "papers": {

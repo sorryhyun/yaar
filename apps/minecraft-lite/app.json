@@ -1,4 +1,5 @@
 {
   "icon": "⛏️",
-  "name": "Minecraft Lite"
+  "name": "Minecraft Lite",
+  "run": "static/index.html"
 }
