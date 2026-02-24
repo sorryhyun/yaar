@@ -23,7 +23,7 @@
       "reset": "Restablecer ventanas y contexto",
       "pencilExit": "Salir del dibujo (Esc)",
       "pencilEnter": "Dibujar en pantalla",
-      "attachFile": "Adjuntar imágenes"
+      "mountFolder": "Montar carpeta"
     },
     "toast": {
       "agentStopped": "Agente detenido",

@@ -23,7 +23,7 @@
       "reset": "Réinitialiser les fenêtres et le contexte",
       "pencilExit": "Quitter le dessin (Échap)",
       "pencilEnter": "Dessiner à l'écran",
-      "attachFile": "Joindre des images"
+      "mountFolder": "Monter un dossier"
     },
     "toast": {
       "agentStopped": "Agent arrêté",

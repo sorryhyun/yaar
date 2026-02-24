@@ -23,7 +23,7 @@
       "reset": "창과 컨텍스트 초기화",
       "pencilExit": "그리기 종료 (Esc)",
       "pencilEnter": "화면에 그리기",
-      "attachFile": "이미지 첨부"
+      "mountFolder": "폴더 마운트"
     },
     "toast": {
       "agentStopped": "에이전트 중지됨",

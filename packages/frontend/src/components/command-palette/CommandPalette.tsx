@@ -35,7 +35,6 @@ export function CommandPalette() {
   const [isDragOver, setIsDragOver] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { isConnected, sendMessage, interrupt, reset } = useAgentConnection();
   const recentActionsPanelOpen = useDesktopStore((state) => state.recentActionsPanelOpen);
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel);
@@ -153,18 +152,6 @@ export function CommandPalette() {
       }
     },
     [handleSubmit, interrupt, activeAgents, applyAction],
-  );
-
-  const handleFileSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []);
-      if (files.length === 0) return;
-      const dataUrls = await readFilesAsDataUrls(files);
-      addAttachedImages(dataUrls);
-      // Reset so re-selecting the same file triggers change
-      e.target.value = '';
-    },
-    [addAttachedImages],
   );
 
   const handleReset = useCallback(() => {
@@ -343,8 +330,18 @@ export function CommandPalette() {
             </button>
             <button
               className={styles.folderButton}
-              onClick={() => fileInputRef.current?.click()}
-              title={t('commandPalette.tooltip.attachFile')}
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/pick-directory', { method: 'POST' });
+                  const data = await res.json();
+                  if (data.path) {
+                    sendMessage(`<ui:click>mount: ${data.path}</ui:click>`);
+                  }
+                } catch {
+                  /* dialog failed or cancelled */
+                }
+              }}
+              title={t('commandPalette.tooltip.mountFolder')}
             >
               <svg
                 width="18"
@@ -362,14 +359,6 @@ export function CommandPalette() {
                 />
               </svg>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={handleFileSelect}
-            />
           </div>
 
           <div

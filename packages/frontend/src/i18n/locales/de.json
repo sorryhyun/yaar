@@ -23,7 +23,7 @@
       "reset": "Fenster und Kontext zurücksetzen",
       "pencilExit": "Zeichnen beenden (Esc)",
       "pencilEnter": "Auf dem Bildschirm zeichnen",
-      "attachFile": "Bilder anhängen"
+      "mountFolder": "Ordner einbinden"
     },
     "toast": {
       "agentStopped": "Agent gestoppt",

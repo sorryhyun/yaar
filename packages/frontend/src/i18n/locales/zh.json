@@ -23,7 +23,7 @@
       "reset": "重置窗口和上下文",
       "pencilExit": "退出绘图 (Esc)",
       "pencilEnter": "在屏幕上绘图",
-      "attachFile": "附加图片"
+      "mountFolder": "挂载文件夹"
     },
     "toast": {
       "agentStopped": "助手已停止",

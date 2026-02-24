@@ -29,6 +29,7 @@ import { readSettings, updateSettings } from '../../storage/settings.js';
 import { readShortcuts } from '../../storage/shortcuts.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
+import { pickDirectory } from '../../lib/pick-directory.js';
 
 export async function handleApiRoutes(
   req: IncomingMessage,
@@ -226,6 +227,21 @@ export async function handleApiRoutes(
       sendJson(res, { allowAllDomains, domains });
     } catch {
       sendError(res, 'Failed to update domain settings');
+    }
+    return true;
+  }
+
+  // Pick directory (native folder dialog)
+  if (url.pathname === '/api/pick-directory' && req.method === 'POST') {
+    try {
+      const path = await pickDirectory();
+      if (path) {
+        sendJson(res, { path });
+      } else {
+        sendJson(res, { path: null, cancelled: true });
+      }
+    } catch {
+      sendError(res, 'Failed to open directory picker');
     }
     return true;
   }

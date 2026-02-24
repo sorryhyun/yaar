@@ -23,7 +23,7 @@
       "reset": "ウィンドウとコンテキストをリセット",
       "pencilExit": "描画を終了 (Esc)",
       "pencilEnter": "画面に描く",
-      "attachFile": "画像を添付"
+      "mountFolder": "フォルダをマウント"
     },
     "toast": {
       "agentStopped": "エージェントを停止しました",
