@@ -51,6 +51,13 @@ You may also want to develop apps yourself, so YAAR supports programming capabil
 See the [App Development Guide](./docs/app-development.md) for details.
 
 
+### 4. Remote Access
+
+Running with `make claude` or `make codex`, or using the bundled executable (`.exe`), automatically enables remote mode. A one-time auth token is generated at server startup, and a connection URL and QR code are printed to the terminal. The QR code encodes a URL in the form `http://<LAN IP>:<PORT>/#remote=<token>` — scanning it with your phone camera handles token authentication automatically and connects you right away.
+
+Devices on the same network (phone, tablet, another PC) can connect without any extra setup. For access over the public internet, you can set up port forwarding on your router, but since HTTPS is not supported natively, using a tunneling service like Cloudflare Tunnel is recommended. See the [Remote Access Guide](./docs/remote_mode.md) for details.
+
+
 ## Getting Started
 
 Codex or Claude Code user authentication is required. The program cannot be used without it.
@@ -71,7 +78,7 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 - **Credential isolation**: App credentials are stored in `config/credentials/` and git-ignored.
 - **Path validation**: Storage and sandbox file access is guarded against path traversal.
 - **CORS**: Only frontend dev server origins (`localhost:5173`, `localhost:3000`) are allowed.
-- **Iframe isolation**: Compiled apps run inside iframes and communicate with the server only via `postMessage`.
+- **Iframe isolation**: Compiled apps run inside iframes and communicate with the server only via `postMessage`. A dedicated App Protocol was built for this — see [app-development.md](./docs/app-development.md) for details.
 
 
 ## Project Structure
@@ -84,5 +91,7 @@ yaar/
 │   ├── server/        # WebSocket server + AI providers
 │   └── frontend/      # React frontend
 ```
+
+YAAR's architecture can also be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/os_architecture.md) for the full mapping.
 
 See [CLAUDE.md](./CLAUDE.md) for development details.
