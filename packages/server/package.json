@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.56",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "1.25.3",
     "@yaar/shared": "workspace:*",
     "node-poppler": "^7.2.0",
     "qrcode-terminal": "^0.12.0",
