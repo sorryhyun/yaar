@@ -82,6 +82,19 @@ root.innerHTML = `
       color: #fff;
     }
 
+    .url-bar .url-text[readonly] {
+      cursor: default;
+      border-color: transparent;
+      background: #3e3e3e;
+      color: #ccc;
+    }
+
+    .url-bar .url-text[readonly]:focus {
+      border-color: transparent;
+      background: #3e3e3e;
+      color: #ccc;
+    }
+
     .url-bar .reload-btn,
     .url-bar .nav-btn {
       flex-shrink: 0;
@@ -162,10 +175,10 @@ root.innerHTML = `
 
   <div class="browser-chrome">
     <div class="url-bar">
-      <button id="back-btn" class="nav-btn" title="Back" aria-label="Back">←</button>
-      <button id="forward-btn" class="nav-btn" title="Forward" aria-label="Forward">→</button>
+      <button id="back-btn" class="nav-btn" title="Back" aria-label="Back" disabled hidden>←</button>
+      <button id="forward-btn" class="nav-btn" title="Forward" aria-label="Forward" disabled hidden>→</button>
       <span id="lock" class="lock">🔒</span>
-      <input id="url-text" class="url-text" value="about:blank" />
+      <input id="url-text" class="url-text" value="about:blank" readonly aria-readonly="true" tabindex="-1" />
       <button id="reload-btn" class="reload-btn" title="Reload" aria-label="Reload">↻</button>
       <span id="title-text" class="title-text"></span>
     </div>
@@ -178,8 +191,6 @@ root.innerHTML = `
 `;
 
 const els = {
-  backBtn: document.getElementById('back-btn') as HTMLButtonElement,
-  forwardBtn: document.getElementById('forward-btn') as HTMLButtonElement,
   lock: document.getElementById('lock') as HTMLSpanElement,
   urlText: document.getElementById('url-text') as HTMLInputElement,
   reloadBtn: document.getElementById('reload-btn') as HTMLButtonElement,
@@ -251,38 +262,7 @@ els.reloadBtn.addEventListener('click', () => {
   refreshScreenshot(true);
 });
 
-// ── Back / Forward buttons ───────────────────────────────────────────
-
-els.backBtn.addEventListener('click', () => {
-  const y = (window as any).yaar;
-  y?.app?.sendInteraction?.({ event: 'navigate_back' });
-});
-
-els.forwardBtn.addEventListener('click', () => {
-  const y = (window as any).yaar;
-  y?.app?.sendInteraction?.({ event: 'navigate_forward' });
-});
-
-// ── Editable URL bar ─────────────────────────────────────────────────
-
-els.urlText.addEventListener('focus', () => {
-  els.urlText.select();
-});
-
-els.urlText.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    let url = els.urlText.value.trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)) {
-      url = 'https://' + url;
-    }
-    els.urlText.value = url;
-    els.urlText.blur();
-    const y = (window as any).yaar;
-    y?.app?.sendInteraction?.({ event: 'navigate_request', url });
-  }
-});
+// User-side back/forward and URL entry are intentionally disabled for browser-view.
 
 function clearDisplay() {
   els.screenshot.style.display = 'none';
@@ -341,8 +321,8 @@ if (sessionId) {
 const yaar = (window as any).yaar;
 if (yaar?.app?.register) {
   yaar.app.register({
-    appId: 'browser',
-    name: 'Browser',
+    appId: 'browser-view',
+    name: 'Browser View',
     state: {
       manifest: {
         description: 'App capabilities',

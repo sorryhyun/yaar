@@ -210,7 +210,7 @@ describe('BrowserSession', () => {
     expect(state.title).toBe('Clicked');
   });
 
-  it('type focuses input, inserts text, fires events', async () => {
+  it('type clicks element, focuses input, inserts text, fires events', async () => {
     const session = await BrowserSession.create('type-1', 'ws://localhost:9222/devtools/page/z');
     vi.clearAllMocks();
 
@@ -218,11 +218,15 @@ describe('BrowserSession', () => {
     mockSend.mockImplementation((method: string) => {
       if (method === 'Runtime.evaluate') {
         evalCallCount++;
-        if (evalCallCount <= 2) {
-          // First: focus+clear input; second: fire change events
+        if (evalCallCount === 1) {
+          // FIND_BY_SELECTOR: returns coordinates for the click-before-focus
+          return Promise.resolve({ result: { value: { x: 100, y: 50 } } });
+        }
+        if (evalCallCount <= 3) {
+          // Second: FOCUS_AND_CLEAR; third: FIRE_CHANGE_EVENTS
           return Promise.resolve({ result: {} });
         }
-        if (evalCallCount === 3) {
+        if (evalCallCount === 4) {
           // getPageState: url + title
           return Promise.resolve({
             result: {
@@ -235,6 +239,7 @@ describe('BrowserSession', () => {
       }
       if (method === 'Page.captureScreenshot') return Promise.resolve({ data: FAKE_IMAGE_BASE64 });
       if (method === 'Input.insertText') return Promise.resolve({});
+      if (method === 'Input.dispatchMouseEvent') return Promise.resolve({});
       return Promise.resolve({});
     });
 
@@ -242,18 +247,30 @@ describe('BrowserSession', () => {
 
     const evalCalls = mockSend.mock.calls.filter(([m]) => m === 'Runtime.evaluate');
 
-    // First evaluate: focuses and clears the input element
+    // First evaluate: FIND_BY_SELECTOR to get coordinates for pre-click
     expect(evalCalls[0][1].expression).toContain('#search-input');
-    expect(evalCalls[0][1].expression).toContain('focus');
+
+    // Mouse click dispatched before focus (fires SPA focus handlers)
+    expect(mockSend).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: 100,
+      y: 50,
+      button: 'left',
+      clickCount: 1,
+    });
+
+    // Second evaluate: FOCUS_AND_CLEAR (focuses and clears the input element)
+    expect(evalCalls[1][1].expression).toContain('#search-input');
+    expect(evalCalls[1][1].expression).toContain('focus');
 
     // Text was inserted via CDP Input.insertText
     expect(mockSend).toHaveBeenCalledWith('Input.insertText', {
       text: 'hello world',
     });
 
-    // Second evaluate: fires input and change events
-    expect(evalCalls[1][1].expression).toContain('input');
-    expect(evalCalls[1][1].expression).toContain('change');
+    // Third evaluate: fires input and change events
+    expect(evalCalls[2][1].expression).toContain('input');
+    expect(evalCalls[2][1].expression).toContain('change');
 
     // Returns updated page state
     expect(state.url).toBe('https://example.com');

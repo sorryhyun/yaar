@@ -99,6 +99,12 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
         'Open a URL in a visible browser. Creates a browser window on the desktop. Returns page title, URL, and text content.',
       inputSchema: {
         url: z.string().url().describe('The URL to navigate to'),
+        waitUntil: z
+          .enum(['load', 'domcontentloaded', 'networkidle'])
+          .optional()
+          .describe(
+            'When to consider navigation complete: "load" (default), "domcontentloaded", or "networkidle"',
+          ),
       },
     },
     async (args) => {
@@ -119,7 +125,7 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
         session.windowId = windowId;
 
         // Navigate first so we have a screenshot before showing the window
-        const state = await session.navigate(args.url);
+        const state = await session.navigate(args.url, args.waitUntil);
 
         // Create YAAR window with browser app iframe
         const osAction = {
@@ -141,7 +147,7 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
       }
 
       // Existing session — just navigate
-      const state = await session.navigate(args.url);
+      const state = await session.navigate(args.url, args.waitUntil);
       updateWindowTitle(session, state.title || domain);
       return ok(formatPageState(state));
     },
@@ -153,21 +159,29 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     'click',
     {
       description:
-        'Click an element on the page by CSS selector or visible text. Returns updated page state.',
+        'Click an element on the page by CSS selector, visible text, or x/y coordinates. Returns updated page state.',
       inputSchema: {
         selector: z.string().optional().describe('CSS selector of the element to click'),
         text: z
           .string()
           .optional()
           .describe('Visible text of the element to click (for buttons/links)'),
+        x: z
+          .number()
+          .optional()
+          .describe('X coordinate to click at (use with y for coordinate-based click)'),
+        y: z
+          .number()
+          .optional()
+          .describe('Y coordinate to click at (use with x for coordinate-based click)'),
       },
     },
     async (args) => {
-      if (!args.selector && !args.text) {
-        return error('Provide either "selector" or "text" to identify the element to click.');
+      if (!args.selector && !args.text && (args.x === undefined || args.y === undefined)) {
+        return error('Provide "selector", "text", or both "x" and "y" to identify where to click.');
       }
       const session = getSession();
-      const state = await session.click(args.selector, args.text);
+      const state = await session.click(args.selector, args.text, args.x, args.y);
       return ok(formatPageState(state));
     },
   );
@@ -196,14 +210,18 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     'press',
     {
       description:
-        'Press a keyboard key (Enter, Tab, Escape, ArrowDown, etc.). Returns updated page state.',
+        'Press a keyboard key (Enter, Tab, Escape, ArrowDown, etc.). Optionally focus an element first by selector. Returns updated page state.',
       inputSchema: {
         key: z.string().describe('Key to press (e.g., "Enter", "Tab", "Escape", "ArrowDown")'),
+        selector: z
+          .string()
+          .optional()
+          .describe('CSS selector of the element to focus before pressing the key'),
       },
     },
     async (args) => {
       const session = getSession();
-      const state = await session.press(args.key);
+      const state = await session.press(args.key, args.selector);
       return ok(formatPageState(state));
     },
   );
@@ -304,6 +322,75 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     },
   );
 
+  // ── navigate (history) ────────────────────────────────────────────
+
+  server.registerTool(
+    'navigate',
+    {
+      description: 'Navigate browser history back or forward. Returns updated page state.',
+      inputSchema: {
+        direction: z.enum(['back', 'forward']).describe('Direction to navigate in browser history'),
+      },
+    },
+    async (args) => {
+      const session = getSession();
+      const state = await session.navigateHistory(args.direction);
+      return ok(formatPageState(state));
+    },
+  );
+
+  // ── hover ───────────────────────────────────────────────────────────
+
+  server.registerTool(
+    'hover',
+    {
+      description:
+        'Hover over an element by CSS selector, visible text, or x/y coordinates. Returns updated page state with screenshot.',
+      inputSchema: {
+        selector: z.string().optional().describe('CSS selector of the element to hover'),
+        text: z.string().optional().describe('Visible text of the element to hover'),
+        x: z
+          .number()
+          .optional()
+          .describe('X coordinate to hover at (use with y for coordinate-based hover)'),
+        y: z
+          .number()
+          .optional()
+          .describe('Y coordinate to hover at (use with x for coordinate-based hover)'),
+      },
+    },
+    async (args) => {
+      if (!args.selector && !args.text && (args.x === undefined || args.y === undefined)) {
+        return error('Provide "selector", "text", or both "x" and "y" to identify where to hover.');
+      }
+      const session = getSession();
+      const state = await session.hover(args);
+      return ok(formatPageState(state));
+    },
+  );
+
+  // ── wait_for ────────────────────────────────────────────────────────
+
+  server.registerTool(
+    'wait_for',
+    {
+      description:
+        'Wait for an element matching a CSS selector to appear on the page. Polls every 250ms. Returns page state when found.',
+      inputSchema: {
+        selector: z.string().describe('CSS selector to wait for'),
+        timeout: z
+          .number()
+          .optional()
+          .describe('Max time to wait in milliseconds (default: 10000)'),
+      },
+    },
+    async (args) => {
+      const session = getSession();
+      const state = await session.waitForSelector(args.selector, args.timeout);
+      return ok(formatPageState(state));
+    },
+  );
+
   // ── close ──────────────────────────────────────────────────────────
 
   server.registerTool(
@@ -339,6 +426,9 @@ export const BROWSER_TOOL_NAMES = [
   'mcp__browser__scroll',
   'mcp__browser__screenshot',
   'mcp__browser__extract',
+  'mcp__browser__navigate',
+  'mcp__browser__hover',
+  'mcp__browser__wait_for',
   'mcp__browser__close',
 ] as const;
 

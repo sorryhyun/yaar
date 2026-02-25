@@ -1,0 +1,8 @@
+{
+  "id": "browser-view",
+  "name": "Browser View",
+  "icon": "🎮",
+  "description": "Agent-facing browser surface for viewing live browser sessions with user navigation controls disabled.",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

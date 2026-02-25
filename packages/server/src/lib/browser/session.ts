@@ -13,7 +13,7 @@ import { CDPClient } from './cdp.js';
 import type { PageState, PageContent } from './types.js';
 import {
   PAGE_STATE,
-  BODY_TEXT,
+  VIEWPORT_TEXT,
   URL_AND_TITLE,
   FIND_BY_SELECTOR,
   FIND_BY_TEXT,
@@ -126,7 +126,7 @@ export class BrowserSession extends EventEmitter {
 
     let textSnippet = '';
     try {
-      textSnippet = (await this.eval<string>(BODY_TEXT)) || '';
+      textSnippet = (await this.eval<string>(VIEWPORT_TEXT)) || '';
       if (textSnippet.length > TEXT_SNIPPET_LENGTH) {
         textSnippet = textSnippet.slice(0, TEXT_SNIPPET_LENGTH) + '...';
       }
@@ -139,13 +139,27 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
-  async navigate(url: string): Promise<PageState> {
+  async navigate(
+    url: string,
+    waitUntil: 'load' | 'domcontentloaded' | 'networkidle' = 'load',
+  ): Promise<PageState> {
     this.touch();
 
-    // Start navigation and wait for load
-    const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', 30_000);
-    await this.cdp.send('Page.navigate', { url });
-    await loadPromise.catch(() => {}); // timeout is non-fatal
+    if (waitUntil === 'domcontentloaded') {
+      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', 30_000);
+      await this.cdp.send('Page.navigate', { url });
+      await dcPromise.catch(() => {});
+    } else if (waitUntil === 'networkidle') {
+      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', 30_000);
+      await this.cdp.send('Page.navigate', { url });
+      await loadPromise.catch(() => {});
+      await this.waitForNetworkIdle(500, 15_000);
+    } else {
+      // 'load' (default)
+      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', 30_000);
+      await this.cdp.send('Page.navigate', { url });
+      await loadPromise.catch(() => {}); // timeout is non-fatal
+    }
 
     // Small delay for dynamic content
     await new Promise((r) => setTimeout(r, 500));
@@ -156,41 +170,107 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
-  async click(selector?: string, text?: string): Promise<PageState> {
+  /** Wait until no network requests for `quietMs`, up to `timeoutMs`. */
+  private async waitForNetworkIdle(quietMs: number, timeoutMs: number): Promise<void> {
+    await this.cdp.send('Network.enable');
+    let inflight = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    return new Promise<void>((resolve) => {
+      const deadline = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, timeoutMs);
+
+      const checkQuiet = () => {
+        if (timer) clearTimeout(timer);
+        if (inflight <= 0) {
+          timer = setTimeout(() => {
+            cleanup();
+            resolve();
+          }, quietMs);
+        }
+      };
+
+      const onRequest = () => {
+        inflight++;
+        if (timer) clearTimeout(timer);
+      };
+      const onFinish = () => {
+        inflight--;
+        checkQuiet();
+      };
+
+      this.cdp.on('Network.requestWillBeSent', onRequest);
+      this.cdp.on('Network.loadingFinished', onFinish);
+      this.cdp.on('Network.loadingFailed', onFinish);
+
+      const cleanup = () => {
+        clearTimeout(deadline);
+        if (timer) clearTimeout(timer);
+        this.cdp.off('Network.requestWillBeSent', onRequest);
+        this.cdp.off('Network.loadingFinished', onFinish);
+        this.cdp.off('Network.loadingFailed', onFinish);
+        this.cdp.send('Network.disable').catch(() => {});
+      };
+
+      // Start checking immediately in case no requests are pending
+      checkQuiet();
+    });
+  }
+
+  async click(selector?: string, text?: string, x?: number, y?: number): Promise<PageState> {
     this.touch();
 
-    if (!selector && !text) {
-      throw new Error('Either selector or text must be provided');
-    }
-
     const urlBefore = this.currentUrl;
+    let clickX: number;
+    let clickY: number;
+    let clickTarget: PageState['clickTarget'] | undefined;
 
-    const fn = selector ? FIND_BY_SELECTOR : FIND_BY_TEXT;
-    const arg = selector || text;
-    const coords = await this.evalFn<{
-      x: number;
-      y: number;
-      tag: string;
-      text: string;
-      candidateCount: number;
-    }>(fn, arg);
+    if (x !== undefined && y !== undefined) {
+      // Coordinate-based click — skip element lookup
+      clickX = x;
+      clickY = y;
+    } else {
+      if (!selector && !text) {
+        throw new Error('Either selector, text, or x/y coordinates must be provided');
+      }
 
-    if (!coords) {
-      throw new Error(`Element not found: ${selector || text}`);
+      const fn = selector ? FIND_BY_SELECTOR : FIND_BY_TEXT;
+      const arg = selector || text;
+      const coords = await this.evalFn<{
+        x: number;
+        y: number;
+        tag: string;
+        text: string;
+        candidateCount: number;
+      }>(fn, arg);
+
+      if (!coords) {
+        throw new Error(`Element not found: ${selector || text}`);
+      }
+
+      clickX = coords.x;
+      clickY = coords.y;
+      clickTarget = {
+        tag: coords.tag,
+        text: coords.text,
+        candidateCount: coords.candidateCount,
+      };
     }
 
     // Dispatch mouse click
     await this.cdp.send('Input.dispatchMouseEvent', {
       type: 'mousePressed',
-      x: coords.x,
-      y: coords.y,
+      x: clickX,
+      y: clickY,
       button: 'left',
       clickCount: 1,
     });
     await this.cdp.send('Input.dispatchMouseEvent', {
       type: 'mouseReleased',
-      x: coords.x,
-      y: coords.y,
+      x: clickX,
+      y: clickY,
       button: 'left',
       clickCount: 1,
     });
@@ -201,11 +281,7 @@ export class BrowserSession extends EventEmitter {
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
     state.urlChanged = state.url !== urlBefore;
-    state.clickTarget = {
-      tag: coords.tag,
-      text: coords.text,
-      candidateCount: coords.candidateCount,
-    };
+    if (clickTarget) state.clickTarget = clickTarget;
     this.notifyUpdate();
     return state;
   }
@@ -213,6 +289,26 @@ export class BrowserSession extends EventEmitter {
   async type(selector: string, text: string): Promise<PageState> {
     this.touch();
     const urlBefore = this.currentUrl;
+
+    // Click element first to fire SPA focus handlers that el.focus() alone misses
+    const coords = await this.evalFn<{ x: number; y: number }>(FIND_BY_SELECTOR, selector);
+    if (coords) {
+      await this.cdp.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: coords.x,
+        y: coords.y,
+        button: 'left',
+        clickCount: 1,
+      });
+      await this.cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: coords.x,
+        y: coords.y,
+        button: 'left',
+        clickCount: 1,
+      });
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     // Focus and clear the input
     await this.evalFn(FOCUS_AND_CLEAR, selector);
@@ -230,9 +326,31 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
-  async press(key: string): Promise<PageState> {
+  async press(key: string, selector?: string): Promise<PageState> {
     this.touch();
     const urlBefore = this.currentUrl;
+
+    // If selector provided, click element first to ensure focus
+    if (selector) {
+      const coords = await this.evalFn<{ x: number; y: number }>(FIND_BY_SELECTOR, selector);
+      if (coords) {
+        await this.cdp.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          x: coords.x,
+          y: coords.y,
+          button: 'left',
+          clickCount: 1,
+        });
+        await this.cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          x: coords.x,
+          y: coords.y,
+          button: 'left',
+          clickCount: 1,
+        });
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
 
     const keyMap: Record<string, { key: string; code: string; keyCode: number }> = {
       Enter: { key: 'Enter', code: 'Enter', keyCode: 13 },
@@ -252,12 +370,23 @@ export class BrowserSession extends EventEmitter {
       keyCode: key.charCodeAt(0),
     };
 
+    // Add text/unmodifiedText for keys that produce characters
+    const keyDownExtra: Record<string, unknown> = {};
+    if (desc.key === 'Enter') {
+      keyDownExtra.text = '\r';
+      keyDownExtra.unmodifiedText = '\r';
+    } else if (desc.key === ' ') {
+      keyDownExtra.text = ' ';
+      keyDownExtra.unmodifiedText = ' ';
+    }
+
     await this.cdp.send('Input.dispatchKeyEvent', {
       type: 'keyDown',
       key: desc.key,
       code: desc.code,
       windowsVirtualKeyCode: desc.keyCode,
       nativeVirtualKeyCode: desc.keyCode,
+      ...keyDownExtra,
     });
     await this.cdp.send('Input.dispatchKeyEvent', {
       type: 'keyUp',
@@ -273,6 +402,81 @@ export class BrowserSession extends EventEmitter {
     state.urlChanged = state.url !== urlBefore;
     this.notifyUpdate();
     return state;
+  }
+
+  async navigateHistory(direction: 'back' | 'forward'): Promise<PageState> {
+    this.touch();
+
+    await this.eval(direction === 'back' ? 'history.back()' : 'history.forward()');
+    // Wait for navigation (non-fatal timeout)
+    await this.cdp.waitForEvent('Page.frameNavigated', 5_000).catch(() => {});
+    await new Promise((r) => setTimeout(r, 500));
+
+    if (!this.closed) await this.takeScreenshot();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
+  }
+
+  async hover(opts: {
+    selector?: string;
+    text?: string;
+    x?: number;
+    y?: number;
+  }): Promise<PageState> {
+    this.touch();
+
+    let hoverX: number;
+    let hoverY: number;
+
+    if (opts.x !== undefined && opts.y !== undefined) {
+      hoverX = opts.x;
+      hoverY = opts.y;
+    } else if (opts.selector) {
+      const coords = await this.evalFn<{ x: number; y: number }>(FIND_BY_SELECTOR, opts.selector);
+      if (!coords) throw new Error(`Element not found: ${opts.selector}`);
+      hoverX = coords.x;
+      hoverY = coords.y;
+    } else if (opts.text) {
+      const coords = await this.evalFn<{ x: number; y: number }>(FIND_BY_TEXT, opts.text);
+      if (!coords) throw new Error(`Element not found: ${opts.text}`);
+      hoverX = coords.x;
+      hoverY = coords.y;
+    } else {
+      throw new Error('Provide selector, text, or x/y coordinates');
+    }
+
+    await this.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x: hoverX,
+      y: hoverY,
+    });
+
+    await new Promise((r) => setTimeout(r, 300));
+    if (!this.closed) await this.takeScreenshot();
+    const state = await this.getPageState();
+    this.notifyUpdate();
+    return state;
+  }
+
+  async waitForSelector(selector: string, timeout = 10_000): Promise<PageState> {
+    this.touch();
+
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const found = await this.eval<boolean>(
+        `!!document.querySelector(${JSON.stringify(selector)})`,
+      );
+      if (found) {
+        if (!this.closed) await this.takeScreenshot();
+        const state = await this.getPageState();
+        this.notifyUpdate();
+        return state;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    throw new Error(`Timeout waiting for selector: ${selector}`);
   }
 
   async scroll(direction: 'up' | 'down', amount = 500): Promise<PageState> {

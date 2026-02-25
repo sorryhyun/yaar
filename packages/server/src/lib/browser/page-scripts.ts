@@ -30,6 +30,25 @@ export const PAGE_STATE = `(function() {
 /** Expression that returns the page body text. */
 export const BODY_TEXT = '(document.body?.innerText || "").trim()';
 
+/** IIFE that returns text from elements currently visible in the viewport. */
+export const VIEWPORT_TEXT = `(function() {
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var SKIP = {SCRIPT:1, STYLE:1, NOSCRIPT:1};
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var node, parts = [];
+  while (node = walker.nextNode()) {
+    var parent = node.parentElement;
+    if (!parent || SKIP[parent.tagName]) continue;
+    var text = node.textContent;
+    if (!text || !text.trim()) continue;
+    var rect = parent.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > vh || rect.right < 0 || rect.left > vw) continue;
+    if (rect.width === 0 || rect.height === 0) continue;
+    parts.push(text.trim());
+  }
+  return parts.join(' ');
+})()`;
+
 /** Expression returning {url, title}. */
 export const URL_AND_TITLE = '({url: location.href, title: document.title})';
 
@@ -61,24 +80,51 @@ export const FIND_BY_SELECTOR = `function(sel) {
  */
 export const FIND_BY_TEXT = `function(txt) {
   var INTERACTIVE = ['button','a','summary'];
+  function isVisible(el) {
+    var style = window.getComputedStyle(el);
+    if (style.display === 'none') return false;
+    if (style.visibility === 'hidden' || style.opacity === '0') return false;
+    var pos = style.position;
+    if (el.offsetParent === null && pos !== 'fixed' && pos !== 'sticky') return false;
+    var rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
+    return true;
+  }
+  function isInteractive(el, tag) {
+    return INTERACTIVE.indexOf(tag) !== -1
+      || (tag === 'input' && el.type === 'submit')
+      || el.getAttribute('role') === 'button'
+      || el.getAttribute('role') === 'link'
+      || el.getAttribute('role') === 'tab'
+      || el.hasAttribute('onclick');
+  }
+  var candidates = [];
+  // Pass 1: Walk text nodes (handles simple text containment)
   var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   var node;
-  var candidates = [];
   while (node = walker.nextNode()) {
     if (node.textContent && node.textContent.trim().includes(txt)) {
       var el = node.parentElement;
       if (!el) continue;
       var tag = el.tagName.toLowerCase();
       if (tag === 'body' || tag === 'html') continue;
-      if (el.offsetParent === null && tag !== 'body' && tag !== 'html') continue;
-      var style = window.getComputedStyle(el);
-      if (style.visibility === 'hidden' || style.opacity === '0') continue;
+      if (!isVisible(el)) continue;
       var rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) continue;
-      var isInteractive = INTERACTIVE.indexOf(tag) !== -1
-        || (tag === 'input' && el.type === 'submit')
-        || el.getAttribute('role') === 'button';
-      candidates.push({el: el, area: rect.width * rect.height, tag: tag, isInteractive: isInteractive});
+      candidates.push({el: el, area: rect.width * rect.height, tag: tag, isInteractive: isInteractive(el, tag)});
+    }
+  }
+  // Pass 2: If no candidates, check element.textContent (handles text split across child elements)
+  if (candidates.length === 0) {
+    var all = document.body.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el2 = all[i];
+      var tag2 = el2.tagName.toLowerCase();
+      if (tag2 === 'body' || tag2 === 'html' || tag2 === 'script' || tag2 === 'style') continue;
+      if (el2.textContent && el2.textContent.includes(txt)) {
+        if (!isVisible(el2)) continue;
+        var rect2 = el2.getBoundingClientRect();
+        candidates.push({el: el2, area: rect2.width * rect2.height, tag: tag2, isInteractive: isInteractive(el2, tag2)});
+      }
     }
   }
   if (candidates.length === 0) return null;
