@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 
-export const USER_TOOL_NAMES = ['ask', 'request'] as const;
+export const USER_TOOL_NAMES = ['mcp__user__ask', 'mcp__user__request'] as const;
 
 export function registerUserTools(server: McpServer): void {
   // ask — structured clarification with options

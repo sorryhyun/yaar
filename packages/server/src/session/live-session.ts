@@ -381,18 +381,18 @@ export class LiveSession {
         break;
 
       case ClientEventType.RENDERING_FEEDBACK:
-        this.pool
-          ?.getPrimaryAgent()
-          ?.handleRenderingFeedback(
-            event.requestId,
-            event.windowId,
-            event.renderer,
-            event.success,
-            event.error,
-            event.url,
-            event.locked,
-            event.imageData,
-          );
+        // Resolve directly via actionEmitter — the pending request is global (keyed by requestId),
+        // so routing through a specific agent is unnecessary and fragile.
+        actionEmitter.resolveFeedback({
+          requestId: event.requestId,
+          windowId: event.windowId,
+          renderer: event.renderer,
+          success: event.success,
+          error: event.error,
+          url: event.url,
+          locked: event.locked,
+          imageData: event.imageData,
+        });
         break;
 
       case ClientEventType.DIALOG_FEEDBACK:

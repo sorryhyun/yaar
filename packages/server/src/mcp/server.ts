@@ -3,10 +3,15 @@
  *
  * Provides HTTP endpoints for MCP tool calls across namespaced servers,
  * allowing multiple agents to connect independently without state corruption issues.
+ *
+ * Uses stateful mode (sessionIdGenerator) so each SDK client gets its own MCP
+ * session. The transport is created on the first `initialize` request from each
+ * client and reused for subsequent requests carrying the same session ID.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { runWithAgentContext } from '../agents/session.js';
@@ -22,7 +27,7 @@ import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
-import { registerBrowserTools, BROWSER_TOOL_NAMES } from './browser/index.js';
+import { registerBrowserTools, BROWSER_TOOL_NAMES, isBrowserAvailable } from './browser/index.js';
 
 /** MCP server categories. */
 export const MCP_SERVERS = [
@@ -36,18 +41,29 @@ export const MCP_SERVERS = [
 ] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
-interface McpServerEntry {
+/**
+ * Per-session MCP transport entry.
+ * Each Claude SDK client gets its own McpServer + transport pair per server name.
+ */
+interface McpSessionEntry {
   server: McpServer;
   transport: StreamableHTTPServerTransport;
 }
 
-const mcpServers = new Map<McpServerName, McpServerEntry>();
+/**
+ * Map of `${serverName}:${mcpSessionId}` -> McpSessionEntry.
+ * Created on `initialize` requests, reused for subsequent calls.
+ */
+const mcpSessions = new Map<string, McpSessionEntry>();
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
 
 // Skip auth in dev mode (set MCP_SKIP_AUTH=1)
 const skipAuth = process.env.MCP_SKIP_AUTH === '1';
+
+// Track whether the module has been initialized
+let initialized = false;
 
 /**
  * Get the MCP authentication token.
@@ -61,9 +77,12 @@ export function getMcpToken(): string {
 }
 
 /**
- * Register all YAAR tools on their respective MCP servers.
+ * Create a fresh McpServer for a single namespace and register its tools.
+ * Called per-session so each SDK client gets its own server instance.
  */
-function registerAllTools(servers: Record<McpServerName, McpServer>): void {
+async function createServerForName(name: McpServerName): Promise<McpServer> {
+  const server = new McpServer({ name, version: '1.0.0' }, { capabilities: { tools: {} } });
+
   const getWindowState = (): WindowStateRegistry => {
     const session = getSessionHub().getDefault();
     if (!session) throw new Error('No active session — connect via WebSocket first.');
@@ -75,74 +94,97 @@ function registerAllTools(servers: Record<McpServerName, McpServer>): void {
     return session.reloadCache;
   };
 
-  registerSystemTools(servers.system);
-  registerSkillTools(servers.system);
-  registerHttpTools(servers.system);
-  registerWindowTools(servers.window, getWindowState);
-  registerStorageTools(servers.storage);
-  registerAppsTools(servers.apps);
-  registerUserTools(servers.user);
-  registerAppDevTools(servers.dev);
-  registerReloadTools(servers.system, getReloadCache, getWindowState);
+  switch (name) {
+    case 'system':
+      registerSystemTools(server);
+      registerSkillTools(server);
+      registerHttpTools(server);
+      registerReloadTools(server, getReloadCache, getWindowState);
+      break;
+    case 'window':
+      registerWindowTools(server, getWindowState);
+      break;
+    case 'storage':
+      registerStorageTools(server);
+      break;
+    case 'apps':
+      registerAppsTools(server);
+      break;
+    case 'user':
+      registerUserTools(server);
+      break;
+    case 'dev':
+      registerAppDevTools(server);
+      break;
+    case 'browser':
+      await registerBrowserTools(server);
+      break;
+  }
 
-  // Browser tools (conditional — only if Chrome/Edge is available)
-  registerBrowserTools(servers.browser).catch(() => {
-    // Chrome not found — browser tools unavailable
-  });
+  return server;
 }
 
 /**
- * Initialize all MCP servers with their respective tools.
+ * Initialize MCP subsystem.
+ * Generates the auth token and probes browser availability.
+ * Actual per-session McpServer instances are created on demand in handleMcpRequest.
  */
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
   mcpToken = randomUUID();
 
-  const servers: Record<McpServerName, McpServer> = {} as Record<McpServerName, McpServer>;
+  // Probe browser availability once at startup so isBrowserAvailable() is set.
+  // We create a temporary server just for the probe, then discard it.
+  const probeServer = new McpServer(
+    { name: 'browser', version: '1.0.0' },
+    { capabilities: { tools: {} } },
+  );
+  await registerBrowserTools(probeServer);
 
-  for (const name of MCP_SERVERS) {
-    const server = new McpServer({ name, version: '1.0.0' }, { capabilities: { tools: {} } });
-    servers[name] = server;
-  }
-
-  registerAllTools(servers);
-
-  // Create transports and connect
-  for (const name of MCP_SERVERS) {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless mode
-    });
-
-    await servers[name].connect(transport);
-
-    mcpServers.set(name, {
-      server: servers[name],
-      transport,
-    });
-  }
-
+  initialized = true;
   console.log(
-    `[MCP] HTTP servers initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
+    `[MCP] HTTP server initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
   );
 }
 
 /**
+ * Read and parse the JSON body from an IncomingMessage.
+ */
+function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf-8');
+        resolve(JSON.parse(raw));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+/**
  * Handle incoming MCP HTTP requests.
- * Routes to the correct server based on the sub-path.
+ *
+ * Uses the stateful-per-session pattern from the MCP SDK:
+ * - On `initialize` requests: create a new McpServer + transport, store by session ID
+ * - On subsequent requests: look up the transport by the `mcp-session-id` header
  */
 export async function handleMcpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   serverName: McpServerName,
 ): Promise<void> {
-  if (!mcpToken) {
+  if (!mcpToken || !initialized) {
     res.writeHead(503, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'MCP server not initialized' }));
     return;
   }
 
-  const entry = mcpServers.get(serverName);
-  if (!entry) {
+  if (!(MCP_SERVERS as readonly string[]).includes(serverName)) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `Unknown MCP server: ${serverName}` }));
     return;
@@ -159,11 +201,114 @@ export async function handleMcpRequest(
     }
   }
 
+  // Debug: log browser MCP requests to verify SDK tool discovery
+  if (serverName === 'browser') {
+    console.log(
+      `[MCP] browser server request from agent=${req.headers['x-agent-id'] ?? 'unknown'}`,
+    );
+  }
+
   // Restore agent context so tools can resolve the active session.
   // X-Agent-Id is set by the Claude provider; Codex calls omit it.
   const agentId = (req.headers['x-agent-id'] as string | undefined) ?? 'unknown';
-  const sessionId = getSessionHub().getDefault()?.sessionId;
-  await runWithAgentContext({ agentId, sessionId }, () => entry.transport.handleRequest(req, res));
+  const yaarSessionId = getSessionHub().getDefault()?.sessionId;
+
+  await runWithAgentContext({ agentId, sessionId: yaarSessionId }, async () => {
+    // Check for existing MCP session
+    const mcpSessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    if (mcpSessionId) {
+      // Existing session — look up transport
+      const key = `${serverName}:${mcpSessionId}`;
+      const entry = mcpSessions.get(key);
+      if (entry) {
+        await entry.transport.handleRequest(req, res);
+        return;
+      }
+      // Session not found — return 404 per MCP spec
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Session not found' },
+          id: null,
+        }),
+      );
+      return;
+    }
+
+    // No session ID — must be an initialize request (or invalid).
+    // Parse body to check.
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Method not allowed' },
+          id: null,
+        }),
+      );
+      return;
+    }
+
+    let body: unknown;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32700, message: 'Parse error' },
+          id: null,
+        }),
+      );
+      return;
+    }
+
+    // Validate it is an initialize request
+    const messages = Array.isArray(body) ? body : [body];
+    const isInit = messages.some((m) => isInitializeRequest(m));
+
+    if (!isInit) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32600,
+            message: 'Bad Request: No session ID and not an initialize request',
+          },
+          id: null,
+        }),
+      );
+      return;
+    }
+
+    // Create new McpServer + transport for this session
+    const server = await createServerForName(serverName);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+      onsessioninitialized: (newSessionId: string) => {
+        const key = `${serverName}:${newSessionId}`;
+        mcpSessions.set(key, { server, transport });
+        console.log(`[MCP] New session for ${serverName}: ${newSessionId}`);
+      },
+    });
+
+    // Clean up session when transport closes
+    transport.onclose = () => {
+      const sid = transport.sessionId;
+      if (sid) {
+        const key = `${serverName}:${sid}`;
+        mcpSessions.delete(key);
+      }
+    };
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, body);
+  });
 }
 
 /**
@@ -178,6 +323,7 @@ export function formatToolDisplay(raw: string): string {
 
 /**
  * Get the list of MCP tool names for YAAR.
+ * Browser tools are only included when Chrome/Edge was detected at startup.
  */
 export function getToolNames(): string[] {
   return [
@@ -191,6 +337,6 @@ export function getToolNames(): string[] {
     ...USER_TOOL_NAMES,
     ...DEV_TOOL_NAMES,
     ...RELOAD_TOOL_NAMES,
-    ...BROWSER_TOOL_NAMES,
+    ...(isBrowserAvailable() ? BROWSER_TOOL_NAMES : []),
   ];
 }

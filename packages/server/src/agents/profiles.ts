@@ -13,7 +13,7 @@ import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
 import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
-import { BROWSER_TOOL_NAMES } from '../mcp/browser/index.js';
+import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/browser/index.js';
 
 export interface AgentProfile {
   id: string;
@@ -159,21 +159,73 @@ export const DEVELOPER_PROFILE: AgentProfile = {
   ],
 };
 
+/** Filter out browser tool names when Chrome/Edge is not available. */
+const BROWSER_SET = new Set<string>(BROWSER_TOOL_NAMES);
+function filterAvailableTools(tools: readonly string[]): string[] {
+  if (isBrowserAvailable()) return [...tools];
+  return tools.filter((t) => !BROWSER_SET.has(t));
+}
+
+/** Extract MCP server names from tool names (mcp__<server>__<tool> → server). */
+function extractMcpServerNames(tools: string[]): string[] {
+  const servers = new Set<string>();
+  for (const tool of tools) {
+    const m = tool.match(/^mcp__(\w+)__/);
+    if (m) servers.add(m[1]);
+  }
+  return [...servers];
+}
+
+/**
+ * Get the developer profile's allowed tools, filtered by runtime availability.
+ */
+export function getDeveloperAllowedTools(): string[] {
+  return filterAvailableTools(DEVELOPER_PROFILE.allowedTools);
+}
+
+/** MCP HTTP server config shape (matches SDK's McpHttpServerConfig). */
+interface McpHttpConfig {
+  type: 'http';
+  url: string;
+  headers?: Record<string, string>;
+}
+
 /**
  * Build Claude SDK AgentDefinition records for native subagents.
  * Each definition maps to a profile with a specific tool subset.
- * Subagents inherit the parent's MCP server config.
+ * mcpServers must be explicitly provided — subagents don't inherit parent MCP servers.
  */
-export function buildAgentDefinitions(): Record<string, AgentDefinition> {
+export function buildAgentDefinitions(
+  mcpServerConfigs?: Record<string, McpHttpConfig>,
+): Record<string, AgentDefinition> {
   return Object.fromEntries(
-    Object.entries(profiles).map(([id, profile]) => [
-      id,
-      {
-        description: profile.description,
-        prompt: profile.systemPrompt,
-        tools: profile.allowedTools,
-      } satisfies AgentDefinition,
-    ]),
+    Object.entries(profiles).map(([id, profile]) => {
+      const tools = filterAvailableTools(profile.allowedTools);
+      const neededServers = extractMcpServerNames(tools);
+
+      // Build mcpServers: single Record mapping server name → HTTP config
+      let mcpServers: AgentDefinition['mcpServers'];
+      if (mcpServerConfigs && neededServers.length > 0) {
+        const serverRecord: Record<string, McpHttpConfig> = {};
+        for (const name of neededServers) {
+          if (mcpServerConfigs[name]) serverRecord[name] = mcpServerConfigs[name];
+        }
+        if (Object.keys(serverRecord).length > 0) {
+          mcpServers = [serverRecord];
+        }
+      }
+
+      return [
+        id,
+        {
+          description: profile.description,
+          prompt: profile.systemPrompt,
+          tools,
+          disallowedTools: ['Task'],
+          mcpServers,
+        } satisfies AgentDefinition,
+      ];
+    }),
   );
 }
 

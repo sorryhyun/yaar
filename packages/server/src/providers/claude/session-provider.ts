@@ -10,6 +10,7 @@ import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 import { getStorageDir } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
@@ -62,6 +63,18 @@ export class ClaudeSessionProvider extends BaseTransport {
       mcpHeaders['X-Agent-Id'] = agentId;
     }
 
+    // Build MCP server configs (shared between main agent and subagent definitions)
+    const mcpServerConfigs = Object.fromEntries(
+      MCP_SERVERS.map((name: string) => [
+        name,
+        {
+          type: 'http' as const,
+          url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
+          headers: mcpHeaders,
+        },
+      ]),
+    );
+
     return {
       abortController: this.createAbortController(),
       systemPrompt: systemPrompt ?? this.systemPrompt,
@@ -69,19 +82,10 @@ export class ClaudeSessionProvider extends BaseTransport {
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: ['WebSearch', 'Task'],
-      agents: buildAgentDefinitions(),
+      agents: buildAgentDefinitions(mcpServerConfigs),
       allowedTools: allowedTools ?? getToolNames(),
       maxThinkingTokens: 4096,
-      mcpServers: Object.fromEntries(
-        MCP_SERVERS.map((name: string) => [
-          name,
-          {
-            type: 'http' as const,
-            url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
-            headers: mcpHeaders,
-          },
-        ]),
-      ),
+      mcpServers: mcpServerConfigs,
       includePartialMessages: true,
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
@@ -201,6 +205,12 @@ export class ClaudeSessionProvider extends BaseTransport {
       sdkOptions.forkSession = true;
     }
 
+    // Stamp monitorId and agentId so actions emitted during this turn carry the
+    // correct origin (mirrors Codex provider behavior).
+    if (options.monitorId) {
+      actionEmitter.setCurrentMonitor(options.monitorId);
+    }
+
     try {
       const stream = sdkQuery({ prompt: promptInput, options: sdkOptions });
       this.currentQuery = stream;
@@ -250,6 +260,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       yield this.createErrorMessage(err);
     } finally {
       this.currentQuery = null;
+      actionEmitter.clearCurrentMonitor();
     }
   }
 

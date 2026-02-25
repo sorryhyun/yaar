@@ -13,15 +13,16 @@ import { z } from 'zod';
 import { getBrowserPool } from '../../lib/browser/index.js';
 import type { BrowserSession, PageState } from '../../lib/browser/index.js';
 import { actionEmitter } from '../action-emitter.js';
-import { getAgentId } from '../../agents/session.js';
+import { getSessionId as getContextSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/live-session.js';
 import { isDomainAllowed, extractDomain } from '../domains.js';
 import { ok, okWithImages, error } from '../utils.js';
 
 function getSessionId(): string {
-  // Prefer agent-specific ID (Claude sets X-Agent-Id header), fall back to LiveSession ID
-  const agentId = getAgentId();
-  if (agentId) return agentId;
+  // Use the LiveSession's sessionId so both providers share a consistent browser session key
+  // and the SSE endpoint (/api/browser/{sessionId}/events) can find the session.
+  const contextId = getContextSessionId();
+  if (contextId) return contextId;
   const session = getSessionHub().getDefault();
   if (!session) throw new Error('No active session — connect via WebSocket first.');
   return session.sessionId;
@@ -77,6 +78,15 @@ async function findMainContent(session: BrowserSession): Promise<string | undefi
   return session.findMainContentSelector();
 }
 
+let _available = false;
+
+/**
+ * Whether browser tools were successfully registered (Chrome/Edge was found).
+ */
+export function isBrowserAvailable(): boolean {
+  return _available;
+}
+
 /**
  * Register browser automation tools on the given MCP server.
  * Silently skips if Chrome/Edge is not found.
@@ -89,6 +99,9 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     );
     return;
   }
+
+  _available = true;
+  console.log('[browser] Chrome found — registering browser tools');
 
   // ── open ────────────────────────────────────────────────────────────
 
