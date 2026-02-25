@@ -38,6 +38,18 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
       toolInput: { description: m.description },
     };
   }
+  if (msg.type === 'system' && msg.subtype === 'task_progress') {
+    const m = msg as { task_id?: string; last_tool_name?: string; description?: string };
+    if (m.last_tool_name) {
+      return {
+        type: 'tool_use',
+        toolName: `${SUBAGENT_TOOL_NAME}:${m.last_tool_name}`,
+        toolUseId: m.task_id,
+        toolInput: { description: m.description },
+      };
+    }
+    return null;
+  }
   if (msg.type === 'system' && msg.subtype === 'task_notification') {
     const m = msg as { task_id?: string; summary?: string };
     return {

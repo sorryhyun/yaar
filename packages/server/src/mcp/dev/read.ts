@@ -46,7 +46,9 @@ export function registerReadTools(server: McpServer): void {
 
       // Validate sandbox ID
       if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
+        return error(
+          'Invalid sandbox ID. Must be a numeric timestamp returned by write_ts or clone. This tool reads app sandbox files, not arbitrary filesystem paths.',
+        );
       }
 
       const sandboxPath = getSandboxPath(sandboxId);

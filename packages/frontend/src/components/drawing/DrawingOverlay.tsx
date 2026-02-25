@@ -294,14 +294,27 @@ export function DrawingOverlay() {
       }
     };
 
+    // Cancel right-click tracking when a context menu fires.
+    // A contextmenu event means the right-click was a simple click (not a drag),
+    // so drawing should not be triggered.
+    const onContextMenu = () => {
+      if (rightDrawingRef.current && !rightMovedRef.current) {
+        rightDrawingRef.current = false;
+        rightStartRef.current = null;
+        rightLastPointRef.current = null;
+      }
+    };
+
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('contextmenu', onContextMenu);
 
     return () => {
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('contextmenu', onContextMenu);
     };
   }, [drawLine, saveDrawing, captureScreenWithDrawing]);
 

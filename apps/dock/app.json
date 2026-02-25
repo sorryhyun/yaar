@@ -26,9 +26,6 @@
       },
       "weather": {
         "description": "Current weather data: { icon, temp, city, updatedAt }"
-      },
-      "notificationCount": {
-        "description": "Count of active notifications"
       }
     },
     "commands": {

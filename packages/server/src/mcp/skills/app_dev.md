@@ -47,11 +47,13 @@ Files are stored in the server's `storage/` directory. Paths are relative (e.g.,
 ```ts
 // Save
 await yaar.storage.save('scores.json', JSON.stringify(data));
-// Read
-const data = await yaar.storage.read('scores.json', { as: 'json' });
+// Read (throws on 404 — always handle missing files)
+const data = await yaar.storage.read('scores.json', { as: 'json' }).catch(() => null);
 // Get URL for display
 const imgUrl = yaar.storage.url('photos/cat.png');
 ```
+
+**Error handling:** `read()` throws when the file doesn't exist (404). Always use `.catch()` or try/catch to handle missing files gracefully — especially on first launch when no data has been saved yet. Never call `fetch('/api/...')` directly for endpoints not listed in `skill("host_api")` — they don't exist and will 404.
 
 ## Deploy
 

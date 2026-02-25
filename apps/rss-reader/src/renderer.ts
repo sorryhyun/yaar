@@ -244,6 +244,14 @@ function sanitizeContent(html: string): string {
     img.style.height = 'auto';
     img.setAttribute('onerror', "this.style.display='none'");
   });
+  // Strip all on* event handler attributes from every remaining element
+  doc.querySelectorAll('*').forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      if (attr.name.toLowerCase().startsWith('on')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+  });
   return doc.body.innerHTML;
 }
 

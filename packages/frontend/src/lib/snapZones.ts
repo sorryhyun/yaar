@@ -3,6 +3,16 @@
  * Pure utility — no React or store dependencies.
  */
 import type { WindowBounds } from '@yaar/shared';
+import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
+
+function viewportWidth(): number {
+  return typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : DEFAULT_VIEWPORT_WIDTH;
+}
+function viewportHeight(): number {
+  return typeof globalThis.innerHeight === 'number'
+    ? globalThis.innerHeight
+    : DEFAULT_VIEWPORT_HEIGHT;
+}
 
 export type SnapZone =
   | 'left'
@@ -21,8 +31,8 @@ const TASKBAR_H = 36;
  * Corners take priority over edges.
  */
 export function detectSnapZone(cursorX: number, cursorY: number): SnapZone | null {
-  const vw = globalThis.innerWidth;
-  const vh = globalThis.innerHeight;
+  const vw = viewportWidth();
+  const vh = viewportHeight();
 
   const nearLeft = cursorX <= EDGE_THRESHOLD;
   const nearRight = cursorX >= vw - EDGE_THRESHOLD;
@@ -47,8 +57,8 @@ export function detectSnapZone(cursorX: number, cursorY: number): SnapZone | nul
  * Compute pixel bounds for a snap zone.
  */
 export function getSnapBounds(zone: SnapZone): WindowBounds {
-  const vw = globalThis.innerWidth;
-  const vh = globalThis.innerHeight;
+  const vw = viewportWidth();
+  const vh = viewportHeight();
   const usableH = vh - TASKBAR_H;
   const halfW = Math.round(vw / 2);
   const halfH = Math.round(usableH / 2);

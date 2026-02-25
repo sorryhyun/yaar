@@ -100,7 +100,9 @@ export function registerWriteTools(server: McpServer): void {
 
       // Validate sandbox ID
       if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
+        return error(
+          'Invalid sandbox ID. Must be a numeric timestamp returned by write_ts or clone.',
+        );
       }
 
       const sandboxPath = getSandboxPath(sandboxId);

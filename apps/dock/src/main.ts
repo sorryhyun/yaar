@@ -314,17 +314,13 @@ function renderNotif() {
   }
 }
 
-async function fetchNotifications() {
-  try {
-    const res = await fetch('/api/notifications');
-    if (!res.ok) throw new Error('notif fetch failed');
-    const data = await res.json();
-    notifCount = Array.isArray(data) ? data.length : 0;
+// Subscribe to notification state pushed from parent via SDK
+const notifApi = (window as any).yaar?.notifications;
+if (notifApi) {
+  notifApi.onChange((items: unknown[]) => {
+    notifCount = items.length;
     renderNotif();
-  } catch (_) {
-    notifIconEl.className = 'notif-icon notif-muted';
-    notifCountEl.textContent = '';
-  }
+  });
 }
 
 // ── Init & intervals ────────────────────────────────────────────
@@ -334,9 +330,6 @@ setInterval(renderNow, 1000);
 
 initWeather();
 setInterval(initWeather, 15 * 60 * 1000); // every 15 min
-
-fetchNotifications();
-setInterval(fetchNotifications, 30 * 1000); // every 30 sec
 
 // ── App Protocol ────────────────────────────────────────────────
 const appApi = (window as any).yaar?.app;
@@ -363,10 +356,6 @@ if (appApi) {
       weather: {
         description: 'Current weather data: { icon, temp, city, updatedAt }',
         handler: () => ({ ...weatherState }),
-      },
-      notificationCount: {
-        description: 'Count of active notifications',
-        handler: () => notifCount,
       },
     },
     commands: {

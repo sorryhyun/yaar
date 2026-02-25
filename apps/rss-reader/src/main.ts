@@ -215,6 +215,12 @@ async function handleAddFeed(url?: string, name?: string): Promise<string> {
     throw new Error('Invalid URL');
   }
 
+  // Duplicate URL check
+  if (store.feeds.some(f => f.url === feedUrl)) {
+    showToast('Feed already exists', 'error');
+    throw new Error('Duplicate feed URL');
+  }
+
   const id = generateFeedId();
   const resolvedName = feedName || extractDomainName(feedUrl);
   const newFeed = { id, name: resolvedName, url: feedUrl };

@@ -3,7 +3,7 @@ import { Feed, Article } from './types';
 // ---- Default Feeds ----
 export const DEFAULT_FEEDS: Feed[] = [
   { id: 'hn', name: 'Hacker News', url: 'https://news.ycombinator.com/rss' },
-  { id: 'bbc', name: 'BBC News', url: 'http://feeds.bbci.co.uk/news/rss.xml' },
+  { id: 'bbc', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
   { id: 'nasa', name: 'NASA Breaking News', url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss' },
   { id: 'verge', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
 ];

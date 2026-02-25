@@ -554,6 +554,25 @@ export const useDesktopStore = create<DesktopStore>()(
   })),
 );
 
+/**
+ * Broadcast notification state changes to all iframes via postMessage.
+ * Subscribes to the notifications slice and pushes updates reactively.
+ */
+function initNotificationBroadcaster() {
+  let prev = useDesktopStore.getState().notifications;
+  useDesktopStore.subscribe((state) => {
+    if (state.notifications === prev) return;
+    prev = state.notifications;
+    const items = Object.values(prev);
+    const iframes = document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
+    for (const iframe of iframes) {
+      iframe.contentWindow?.postMessage({ type: 'yaar:notifications-update', items }, '*');
+    }
+  });
+}
+
+initNotificationBroadcaster();
+
 // Re-export selectors for backward compatibility
 export {
   selectWindowsInOrder,

@@ -109,7 +109,7 @@ async function convertPdfToImages(filePath: string): Promise<{ images: StorageIm
 export async function storageRead(filePath: string): Promise<StorageReadResult> {
   const resolved = resolvePath(filePath);
   if (!resolved) {
-    return { success: false, error: 'Invalid path: path traversal detected' };
+    return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
   }
   const validatedPath = resolved.absolutePath;
 
@@ -214,7 +214,7 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
 
   const resolved = resolvePath(cleaned);
   if (!resolved) {
-    return { success: false, error: 'Invalid path: path traversal detected' };
+    return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
   }
 
   try {
@@ -302,7 +302,7 @@ export async function configRead(filePath: string): Promise<StorageReadResult> {
   const normalizedPath = normalize(join(CONFIG_DIR, filePath));
   const rel = relative(CONFIG_DIR, normalizedPath);
   if (rel.startsWith('..') || rel.includes('..')) {
-    return { success: false, error: 'Invalid path: path traversal detected' };
+    return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
   }
 
   try {

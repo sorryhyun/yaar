@@ -12,6 +12,8 @@ import {
   TITLEBAR_CENTER_OFFSET,
   MIN_VISIBLE_WINDOW_EDGE,
   DRAGGING_CSS_CLASS,
+  DEFAULT_VIEWPORT_WIDTH,
+  DEFAULT_VIEWPORT_HEIGHT,
 } from '@/constants/layout';
 
 interface UseDragWindowOptions {
@@ -76,8 +78,14 @@ export function useDragWindow({
       const yClamp = !variant || variant === 'standard' ? TITLEBAR_HEIGHT : 0;
 
       const handleMouseMove = (e: MouseEvent) => {
-        const vw = globalThis.innerWidth;
-        const vh = globalThis.innerHeight;
+        const vw =
+          typeof globalThis.innerWidth === 'number'
+            ? globalThis.innerWidth
+            : DEFAULT_VIEWPORT_WIDTH;
+        const vh =
+          typeof globalThis.innerHeight === 'number'
+            ? globalThis.innerHeight
+            : DEFAULT_VIEWPORT_HEIGHT;
 
         let newX = e.clientX - dragOffset.current.x;
         let newY = e.clientY - dragOffset.current.y;

@@ -10,6 +10,7 @@ import {
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
+  IFRAME_NOTIFICATIONS_SDK_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import { useDesktopStore } from '@/store';
@@ -48,14 +49,22 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
   const sessionId = useDesktopStore((s) => s.sessionId);
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined;
 
+  // Lock sessionId at mount time so late CONNECTION_STATUS doesn't re-render the iframe.
+  // If sessionId isn't available yet, pick it up once and freeze.
+  const sessionIdRef = useRef(sessionId);
+  if (!sessionIdRef.current && sessionId) {
+    sessionIdRef.current = sessionId;
+  }
+
   // Append sessionId to same-origin iframe URLs so the fetch proxy script
   // can pass it to /api/fetch for domain permission dialogs
   const url = (() => {
-    if (!sessionId || !isSameOrigin(resolved)) return resolved;
+    const sid = sessionIdRef.current;
+    if (!sid || !isSameOrigin(resolved)) return resolved;
     try {
       const u = new URL(resolved, window.location.origin);
       if (!u.searchParams.has('sessionId')) {
-        u.searchParams.set('sessionId', sessionId);
+        u.searchParams.set('sessionId', sid);
       }
       // Return pathname + search to keep it relative
       return u.pathname + u.search;
@@ -196,6 +205,16 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
             contextMenuScript.textContent = IFRAME_CONTEXTMENU_SCRIPT;
             doc.head.appendChild(contextMenuScript);
           }
+          if (doc && !doc.querySelector('script[data-yaar-notifications]')) {
+            const notifScript = doc.createElement('script');
+            notifScript.setAttribute('data-yaar-notifications', '1');
+            notifScript.textContent = IFRAME_NOTIFICATIONS_SDK_SCRIPT;
+            doc.head.appendChild(notifScript);
+          }
+          // Push current notification state to the newly loaded iframe
+          const notifs = useDesktopStore.getState().notifications;
+          const items = Object.values(notifs);
+          iframe.contentWindow?.postMessage({ type: 'yaar:notifications-update', items }, '*');
         } catch (e) {
           // Cross-origin — can't inject, capture helper must be baked in
           console.warn(
