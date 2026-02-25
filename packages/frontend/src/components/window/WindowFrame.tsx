@@ -156,6 +156,8 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   if (window.windowStyle) {
     // Custom CSS positioning from app.json windowStyle
     style = {
+      top: window.bounds.y,
+      left: window.bounds.x,
       width: window.bounds.w,
       height: window.bounds.h,
       zIndex: isPanel ? 9000 : zIndex + 100,

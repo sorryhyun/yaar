@@ -1,0 +1,11 @@
+{
+  "icon": "📰",
+  "name": "RSS Reader",
+  "description": "Follow RSS/Atom feeds and read news articles",
+  "run": "static/index.html",
+  "windowStyle": {
+    "width": "900px",
+    "height": "650px"
+  },
+  "appProtocol": true
+}

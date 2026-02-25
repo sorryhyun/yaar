@@ -1,5 +1,5 @@
 import type { ServerEvent, OSAction, AppProtocolRequestEvent, AppProtocolRequest } from '@/types';
-import { ServerEventType } from '@/types';
+import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
 export interface ServerEventDispatchHandlers {
   applyActions: (actions: OSAction[]) => void;
@@ -125,10 +125,10 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       } else if (status === 'complete' || status === 'error') {
         handlers.setAgentActive(agentId, 'Thinking...');
       }
-      // Track collab subagent lifecycle (Codex)
-      if (toolName === 'collab:spawnAgent' && status === 'running') {
+      // Track subagent lifecycle
+      if (toolName === SUBAGENT_TOOL_NAME && status === 'running') {
         handlers.incrementSubagentCount(agentId);
-      } else if (toolName === 'collab:closeAgent' && status === 'complete') {
+      } else if (toolName === SUBAGENT_TOOL_NAME && status === 'complete') {
         handlers.decrementSubagentCount(agentId);
       }
       // Only show tool calls and errors in CLI; skip successful results

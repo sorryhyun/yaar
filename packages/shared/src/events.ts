@@ -5,6 +5,11 @@
 import type { OSAction, PermissionOptions } from './actions.js';
 import type { AppProtocolRequest, AppProtocolResponse } from './app-protocol.js';
 
+// ============ Shared Tool Names ============
+
+/** Canonical tool name for subagent lifecycle events. Providers map their native names to this. */
+export const SUBAGENT_TOOL_NAME = 'subagent' as const;
+
 // ============ Event Type Constants ============
 
 /** Server → Client event type discriminants. */

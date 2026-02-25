@@ -5,6 +5,7 @@
  * Uses generated types from the Codex schema for type-safe notification handling.
  */
 
+import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage } from '../types.js';
 import type {
   AgentMessageDeltaNotification,
@@ -354,7 +355,7 @@ function mapEventMsg(event: EventMsg): StreamMessage | null {
       const e = event as CollabAgentSpawnBeginEvent & { type: string };
       return {
         type: 'tool_use',
-        toolName: 'collab:spawnAgent',
+        toolName: SUBAGENT_TOOL_NAME,
         toolUseId: e.call_id,
         toolInput: { prompt: e.prompt },
       };
@@ -363,7 +364,7 @@ function mapEventMsg(event: EventMsg): StreamMessage | null {
       const e = event as CollabAgentSpawnEndEvent & { type: string };
       return {
         type: 'tool_result',
-        toolName: 'collab:spawnAgent',
+        toolName: SUBAGENT_TOOL_NAME,
         toolUseId: e.call_id,
         content: `status: ${formatAgentStatus(e.status)}${e.new_thread_id ? `, thread: ${e.new_thread_id}` : ''}`,
       };
@@ -411,7 +412,7 @@ function mapEventMsg(event: EventMsg): StreamMessage | null {
       const e = event as CollabCloseBeginEvent & { type: string };
       return {
         type: 'tool_use',
-        toolName: 'collab:closeAgent',
+        toolName: SUBAGENT_TOOL_NAME,
         toolUseId: e.call_id,
         toolInput: { agent: e.receiver_thread_id },
       };
@@ -420,7 +421,7 @@ function mapEventMsg(event: EventMsg): StreamMessage | null {
       const e = event as CollabCloseEndEvent & { type: string };
       return {
         type: 'tool_result',
-        toolName: 'collab:closeAgent',
+        toolName: SUBAGENT_TOOL_NAME,
         toolUseId: e.call_id,
         content: `status: ${formatAgentStatus(e.status)}`,
       };

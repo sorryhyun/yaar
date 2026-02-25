@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSS Reader</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var V=[{id:"hn",name:"Hacker News",url:"https://news.ycombinator.com/rss"},{id:"bbc",name:"BBC News",url:"http://feeds.bbci.co.uk/news/rss.xml"},{id:"nasa",name:"NASA Breaking News",url:"https://www.nasa.gov/rss/dyn/breaking_news.rss"},{id:"verge",name:"The Verge",url:"https://www.theverge.com/rss/index.xml"}],o={feeds:[...V],readArticleIds:[],selectedFeedId:"all",articles:{},loadingFeeds:new Set,errorFeeds:{},selectedArticle:null,unreadCounts:{}};var j="rss-reader/feeds.json";async function F(){try{let r=await yaar.storage.read(j,{as:"json"});if(r&&r.feeds){let e=r;o.feeds=e.feeds,o.readArticleIds=e.readArticleIds||[]}}catch{}}async function g(){try{let r={feeds:o.feeds,readArticleIds:o.readArticleIds};await yaar.storage.save(j,JSON.stringify(r))}catch(r){console.error("Failed to save state:",r)}}function D(r){return new DOMParser().parseFromString(r,"text/html").body.textContent||""}function $(r){let e=r.match(/<img[^>]+src=["']([^"']+)["']/i);return e?e[1]:""}function w(r){if(!r)return"";try{let e=new Date(r),i=new Date().getTime()-e.getTime(),n=Math.floor(i/60000),a=Math.floor(i/3600000),d=Math.floor(i/86400000);if(n<1)return"just now";if(n<60)return`${n}m ago`;if(a<24)return`${a}h ago`;if(d<7)return`${d}d ago`;return e.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}catch{return r}}function c(r){return r.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}function C(){return`feed_${Date.now()}_${Math.random().toString(36).slice(2,7)}`}function M(r){try{return new URL(r).hostname.replace(/^www\./,"")}catch{return r}}var q=()=>{},A=()=>{},J=()=>{},y=async()=>{},G=async()=>{};function N(r){q=r.onSelectFeed,A=r.onOpenArticle,J=r.onRemoveFeed,y=r.onAddFeed,G=r.onRefreshAll}function m(){if(o.selectedFeedId==="all"){let r=[];for(let e of o.feeds)r.push(...o.articles[e.id]||[]);return r.sort((e,t)=>new Date(t.pubDate).getTime()-new Date(e.pubDate).getTime()),r}return o.articles[o.selectedFeedId||""]||[]}function b(){return Object.values(o.unreadCounts).reduce((r,e)=>r+e,0)}function l(){let r=document.getElementById("sidebar");if(!r)return;let e=b();r.innerHTML=`
+    <div class="sidebar-header">
+      <span class="app-title">RSS Reader</span>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="feed-item ${o.selectedFeedId==="all"?"active":""}" data-feed-id="all">
+        <span class="feed-icon">\uD83C\uDF10</span>
+        <span class="feed-name">All Feeds</span>
+        ${e>0?`<span class="badge">${e>99?"99+":e}</span>`:""}
+      </div>
+    </div>
+
+    <div class="sidebar-section-label">MY FEEDS</div>
+    <div class="sidebar-feeds">
+      ${o.feeds.map((a)=>{let d=o.loadingFeeds.has(a.id),p=!!o.errorFeeds[a.id],s=o.unreadCounts[a.id]||0;return`
+          <div class="feed-item ${o.selectedFeedId===a.id?"active":""}" data-feed-id="${a.id}">
+            <span class="feed-icon">${p?"⚠️":d?"":"\uD83D\uDCE1"}</span>
+            ${d?'<span class="spinner"></span>':""}
+            <span class="feed-name" title="${a.url}">${c(a.name)}</span>
+            ${s>0&&!p?`<span class="badge">${s>99?"99+":s}</span>`:""}
+            <button class="feed-remove" data-feed-id="${a.id}" title="Remove feed">×</button>
+          </div>
+        `}).join("")}
+    </div>
+
+    <div class="add-feed-section">
+      <div class="sidebar-section-label">ADD FEED</div>
+      <div class="add-feed-form">
+        <input type="text" id="feed-url-input" placeholder="Feed URL..." class="feed-url-input" />
+        <input type="text" id="feed-name-input" placeholder="Name (optional)" class="feed-name-input" />
+        <button id="add-feed-btn" class="add-feed-btn">Add Feed</button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="refresh-all-btn" id="refresh-all-btn">⟳ Refresh All</button>
+    </div>
+  `,r.querySelectorAll(".feed-item[data-feed-id]").forEach((a)=>{a.addEventListener("click",(d)=>{if(d.target.classList.contains("feed-remove"))return;let s=a.dataset.feedId;q(s)})}),r.querySelectorAll(".feed-remove").forEach((a)=>{a.addEventListener("click",(d)=>{d.stopPropagation();let p=a.dataset.feedId;J(p)})});let t=document.getElementById("add-feed-btn");if(t)t.addEventListener("click",()=>y());let i=document.getElementById("feed-url-input");if(i)i.addEventListener("keydown",(a)=>{if(a.key==="Enter")y()});let n=document.getElementById("refresh-all-btn");if(n)n.addEventListener("click",()=>G())}function x(){let r=document.getElementById("article-list");if(!r)return;let e=m(),t=o.loadingFeeds.size>0;if(o.selectedFeedId!=="all"&&o.selectedFeedId&&o.loadingFeeds.has(o.selectedFeedId)){r.innerHTML=`
+      <div class="loading-state">
+        <div class="spinner-large"></div>
+        <p>Loading articles...</p>
+      </div>
+    `;return}if(e.length===0){r.innerHTML=`
+      <div class="empty-state">
+        <div class="empty-icon">\uD83D\uDCED</div>
+        <p class="empty-title">No articles found</p>
+        <p class="empty-sub">${t?"Loading...":"Try refreshing or adding more feeds"}</p>
+      </div>
+    `;return}r.innerHTML=e.map((i)=>{let n=o.readArticleIds.includes(i.id),a=o.selectedArticle?.id===i.id;return`
+      <div class="article-item ${n?"read":"unread"} ${a?"selected":""}" data-article-id="${i.id}">
+        ${i.thumbnail?`<img class="article-thumb" src="${c(i.thumbnail)}" alt="" onerror="this.style.display='none'" />`:""}
+        <div class="article-meta">
+          <div class="article-source">
+            <span class="source-name">${c(i.feedName)}</span>
+            <span class="pub-date">${w(i.pubDate)}</span>
+          </div>
+          <div class="article-title">${c(i.title)}</div>
+          ${i.description?`<div class="article-desc">${c(i.description)}</div>`:""}
+        </div>
+        ${!n?'<div class="unread-dot"></div>':""}
+      </div>
+    `}).join(""),r.querySelectorAll(".article-item").forEach((i)=>{i.addEventListener("click",()=>{let n=i.dataset.articleId,a=e.find((d)=>d.id===n);if(a)A(a)})})}function f(){let r=document.getElementById("content-area");if(!r)return;if(!o.selectedArticle){r.innerHTML=`
+      <div class="welcome-state">
+        <div class="welcome-icon">\uD83D\uDCF0</div>
+        <h2 class="welcome-title">RSS Reader</h2>
+        <p class="welcome-sub">Select a feed from the sidebar and click an article to read it.</p>
+      </div>
+    `;return}let e=o.selectedArticle,t=X(e.content||e.description||"");r.innerHTML=`
+    <div class="article-view">
+      <div class="article-view-header">
+        <button class="back-btn" id="back-btn">← Back</button>
+        <a href="${c(e.link)}" target="_blank" class="open-external-btn" rel="noopener noreferrer">
+          Open in Browser ↗
+        </a>
+      </div>
+      <div class="article-view-body">
+        <div class="article-view-source">
+          <span>${c(e.feedName)}</span>
+          ${e.author?`<span class="author-sep">·</span><span>${c(e.author)}</span>`:""}
+          ${e.pubDate?`<span class="author-sep">·</span><span>${w(e.pubDate)}</span>`:""}
+        </div>
+        <h1 class="article-view-title">${c(e.title)}</h1>
+        ${e.thumbnail?`<img class="article-view-thumb" src="${c(e.thumbnail)}" alt="" onerror="this.style.display='none'" />`:""}
+        <div class="article-view-content">${t}</div>
+        <div class="article-view-footer">
+          <a href="${c(e.link)}" target="_blank" class="read-more-link" rel="noopener noreferrer">
+            Read full article on ${c(e.feedName)} ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  `,document.getElementById("back-btn")?.addEventListener("click",()=>{o.selectedArticle=null,f(),x()})}function X(r){let e=new DOMParser().parseFromString(r,"text/html");return e.querySelectorAll("script, style, iframe, form, input, button").forEach((t)=>t.remove()),e.querySelectorAll("a").forEach((t)=>{t.setAttribute("target","_blank"),t.setAttribute("rel","noopener noreferrer")}),e.querySelectorAll("img").forEach((t)=>{t.style.maxWidth="100%",t.style.height="auto",t.setAttribute("onerror","this.style.display='none'")}),e.body.innerHTML}function O(r,e="info"){let t=document.getElementById("toast");if(t)t.remove();let i=document.createElement("div");i.id="toast",i.className=`toast toast-${e}`,i.textContent=r,document.body.appendChild(i),setTimeout(()=>{i.classList.add("toast-fade"),setTimeout(()=>i.remove(),400)},2500)}var B="https://api.rss2json.com/v1/api.json?rss_url=";async function Q(r){let e=`${B}${encodeURIComponent(r.url)}&count=30`,t=await fetch(e);if(!t.ok)throw Error(`HTTP ${t.status}`);let i=await t.json();if(i.status!=="ok")throw Error(i.message||"Feed error");return(i.items||[]).map((n)=>{return{id:btoa(encodeURIComponent(n.link||n.title||Math.random().toString())).slice(0,20),feedId:r.id,feedName:r.name,title:n.title||"Untitled",link:n.link||"",pubDate:n.pubDate||"",author:n.author||"",description:D(n.description||"").slice(0,300),content:n.content||n.description||"",thumbnail:n.thumbnail||$(n.content||n.description||"")}})}async function h(){o.articles={},o.unreadCounts={};let r=o.feeds.map(async(e)=>{o.loadingFeeds.add(e.id),o.errorFeeds[e.id]="",l();try{let t=await Q(e);o.articles[e.id]=t,o.unreadCounts[e.id]=t.filter((i)=>!o.readArticleIds.includes(i.id)).length}catch(t){o.errorFeeds[e.id]=t.message||"Failed to load",o.articles[e.id]=[],o.unreadCounts[e.id]=0}finally{o.loadingFeeds.delete(e.id),l(),x()}});await Promise.allSettled(r)}async function Y(r){o.loadingFeeds.add(r.id),o.errorFeeds[r.id]="",l(),x();try{let e=await Q(r);o.articles[r.id]=e,o.unreadCounts[r.id]=e.filter((t)=>!o.readArticleIds.includes(t.id)).length}catch(e){o.errorFeeds[r.id]=e.message||"Failed to load",o.articles[r.id]=[],o.unreadCounts[r.id]=0}finally{o.loadingFeeds.delete(r.id),l(),x()}}function Z(){let r=document.createElement("style");r.textContent=`
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --bg-panel: #161b22;
+      --bg-sidebar: #0d1117;
+      --bg-item: #161b22;
+      --bg-item-hover: #1c2128;
+      --bg-item-active: #21262d;
+      --bg-item-selected: #1f3252;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --text-dim: #6e7681;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --badge-bg: #238636;
+      --badge-text: #ffffff;
+      --unread-dot: #58a6ff;
+      --error: #f85149;
+      --success: #3fb950;
+      --radius: 6px;
+      --radius-lg: 10px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .app-container {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Dividers */
+    .divider {
+      width: 4px;
+      background: transparent;
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      position: relative;
+      z-index: 5;
+    }
+
+    .divider:hover, .divider.dragging {
+      background: var(--accent);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 16px 14px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .app-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+
+    .sidebar-section {
+      padding: 6px 8px;
+    }
+
+    .sidebar-section-label {
+      padding: 10px 14px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .sidebar-feeds {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .sidebar-feeds::-webkit-scrollbar { width: 4px; }
+    .sidebar-feeds::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-feeds::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .feed-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+      user-select: none;
+    }
+
+    .feed-item:hover { background: var(--bg-item-hover); }
+    .feed-item.active { background: var(--bg-item-active); }
+
+    .feed-icon {
+      font-size: 13px;
+      flex-shrink: 0;
+      width: 16px;
+      text-align: center;
+    }
+
+    .feed-name {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      background: var(--badge-bg);
+      color: var(--badge-text);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+      min-width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .feed-remove {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 2px;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .feed-item:hover .feed-remove { opacity: 1; }
+    .feed-remove:hover { color: var(--error) !important; }
+
+    /* Spinner */
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .spinner-large {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Add feed */
+    .add-feed-section {
+      border-top: 1px solid var(--border);
+      padding: 8px 8px 4px;
+    }
+
+    .add-feed-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 4px 0;
+    }
+
+    .feed-url-input, .feed-name-input {
+      background: var(--bg-item);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 8px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    .feed-url-input:focus, .feed-name-input:focus {
+      border-color: var(--accent);
+    }
+
+    .feed-url-input::placeholder, .feed-name-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .add-feed-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+      width: 100%;
+    }
+
+    .add-feed-btn:hover { background: var(--accent-hover); }
+
+    .sidebar-footer {
+      padding: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .refresh-all-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: var(--radius);
+      font-size: 12px;
+      padding: 6px 10px;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.15s;
+    }
+
+    .refresh-all-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Article list wrap */
+    .article-list-wrap {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    /* Article list */
+    .article-list {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .article-list::-webkit-scrollbar { width: 4px; }
+    .article-list::-webkit-scrollbar-track { background: transparent; }
+    .article-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .article-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+      position: relative;
+    }
+
+    .article-item:hover { background: var(--bg-item-hover); }
+    .article-item.selected { background: var(--bg-item-selected); }
+
+    .article-thumb {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: var(--border);
+    }
+
+    .article-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .article-source {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .source-name {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .pub-date {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .article-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .article-item.read .article-title {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .article-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.5;
+    }
+
+    .unread-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--unread-dot);
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    /* Content area */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .content-area::-webkit-scrollbar { width: 5px; }
+    .content-area::-webkit-scrollbar-track { background: transparent; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Panel header (above article list + content) */
+    .main-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-panel);
+      min-width: 0;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+      flex-shrink: 0;
+    }
+
+    #panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .mark-all-read-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: var(--radius);
+      font-size: 11px;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mark-all-read-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .panel-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* States */
+    .loading-state, .empty-state, .welcome-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 200px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .empty-icon, .welcome-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .empty-title, .welcome-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .empty-sub, .welcome-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 240px;
+      line-height: 1.6;
+    }
+
+    /* Article View */
+    .article-view {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+
+    .article-view-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+
+    .back-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: var(--radius);
+      font-size: 13px;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .back-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .open-external-btn {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+
+    .open-external-btn:hover { background: var(--accent-hover); }
+
+    .article-view-body {
+      padding: 28px 32px;
+      max-width: 740px;
+    }
+
+    .article-view-source {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .author-sep { color: var(--text-dim); }
+
+    .article-view-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 16px;
+    }
+
+    .article-view-thumb {
+      width: 100%;
+      max-height: 300px;
+      object-fit: cover;
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+    }
+
+    .article-view-content {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--text);
+    }
+
+    .article-view-content p {
+      margin-bottom: 14px;
+    }
+
+    .article-view-content a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    .article-view-content a:hover {
+      color: var(--accent-hover);
+    }
+
+    .article-view-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      margin: 10px 0;
+    }
+
+    .article-view-content h1, .article-view-content h2, .article-view-content h3 {
+      color: var(--text);
+      margin: 18px 0 8px;
+      line-height: 1.3;
+    }
+
+    .article-view-content blockquote {
+      border-left: 3px solid var(--accent);
+      padding-left: 14px;
+      color: var(--text-muted);
+      margin: 14px 0;
+    }
+
+    .article-view-content pre, .article-view-content code {
+      background: var(--bg-item);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+    }
+
+    .article-view-content pre {
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .article-view-footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .read-more-link {
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+    }
+
+    .read-more-link:hover {
+      text-decoration: underline;
+      color: var(--accent-hover);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+
+    .toast-info { background: var(--bg-item-active); color: var(--text); border: 1px solid var(--border); }
+    .toast-error { background: #2d0f0f; color: var(--error); border: 1px solid var(--error); }
+    .toast-success { background: #0d2d18; color: var(--success); border: 1px solid var(--success); }
+    .toast-fade { opacity: 0; }
+
+    /* Scrollbar for content */
+    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  `,document.head.appendChild(r)}function R(r){let e=window.yaar?.app;if(!e)return;e.register({appId:"rss-reader",name:"RSS Reader",state:{unreadCount:{description:"Total unread article count",handler:()=>b()},feeds:{description:"All feeds with unread counts",handler:()=>o.feeds.map((t)=>({id:t.id,name:t.name,url:t.url,unreadCount:o.unreadCounts[t.id]||0}))},articles:{description:"Current visible articles (max 50)",handler:()=>{let t=[];if(o.selectedFeedId==="all"){for(let i of o.feeds)t.push(...o.articles[i.id]||[]);t.sort((i,n)=>new Date(n.pubDate).getTime()-new Date(i.pubDate).getTime())}else t.push(...o.articles[o.selectedFeedId||""]||[]);return t.slice(0,50).map((i)=>({title:i.title,feedName:i.feedName,pubDate:i.pubDate,isRead:o.readArticleIds.includes(i.id),link:i.link}))}},selectedArticle:{description:"Currently selected article or null",handler:()=>o.selectedArticle?{title:o.selectedArticle.title,feedName:o.selectedArticle.feedName,pubDate:o.selectedArticle.pubDate,link:o.selectedArticle.link}:null}},commands:{refresh:{description:"Refresh all feeds",params:{type:"object",properties:{}},handler:async()=>r.refresh()},markAllRead:{description:"Mark all visible articles as read",params:{type:"object",properties:{}},handler:()=>r.markAllRead()},selectFeed:{description:"Select a feed by ID",params:{type:"object",properties:{feedId:{type:"string"}},required:["feedId"]},handler:(t)=>r.selectFeed(t.feedId)},addFeed:{description:"Add a new feed by URL",params:{type:"object",properties:{url:{type:"string"},name:{type:"string"}},required:["url"]},handler:(t)=>r.addFeed(t.url,t.name)}}})}function v(r){let e=window.yaar?.app;if(!e)return;e.sendInteraction({event:"unread_update",totalUnread:r})}var H=160,E=220,U=300,K="rss-sidebar-width",T="rss-article-width";function I(){let r=parseInt(localStorage.getItem(K)||"240",10),e=parseInt(localStorage.getItem(T)||"320",10);document.body.innerHTML=`
+    <div class="app-container">
+      <aside id="sidebar" class="sidebar" style="width:${r}px"></aside>
+      <div class="divider" id="divider-left"></div>
+      <div class="main-panel">
+        <div class="panel-header" id="panel-header">
+          <span id="panel-title">All Feeds</span>
+          <button class="mark-all-read-btn" id="mark-all-read-btn">Mark all read</button>
+        </div>
+        <div class="panel-body">
+          <div class="article-list-wrap" style="width:${e}px">
+            <div id="article-list" class="article-list"></div>
+          </div>
+          <div class="divider" id="divider-right"></div>
+          <div id="content-area" class="content-area"></div>
+        </div>
+      </div>
+    </div>
+  `,document.getElementById("mark-all-read-btn")?.addEventListener("click",()=>{if(m().forEach((n)=>{if(!o.readArticleIds.includes(n.id))o.readArticleIds.push(n.id)}),o.selectedFeedId==="all")Object.keys(o.unreadCounts).forEach((n)=>o.unreadCounts[n]=0);else if(o.selectedFeedId)o.unreadCounts[o.selectedFeedId]=0;g(),l(),x()}),new MutationObserver(()=>{let i=document.getElementById("panel-title");if(i)i.textContent=o.selectedFeedId==="all"?"All Feeds":o.feeds.find((n)=>n.id===o.selectedFeedId)?.name||"Feed"}).observe(document.getElementById("sidebar"),{childList:!0,subtree:!0}),L("divider-left","sidebar",K,H),_()}function L(r,e,t,i){let n=document.getElementById(r),a=document.getElementById(e);if(!n||!a)return;let d=!1,p=0,s=0;n.addEventListener("mousedown",(u)=>{d=!0,p=u.clientX,s=a.getBoundingClientRect().width,n.classList.add("dragging"),document.body.style.userSelect="none",u.preventDefault()}),document.addEventListener("mousemove",(u)=>{if(!d)return;let z=u.clientX-p,P=Math.max(i,s+z);a.style.width=`${P}px`,localStorage.setItem(t,String(P))}),document.addEventListener("mouseup",()=>{if(!d)return;d=!1,n.classList.remove("dragging"),document.body.style.userSelect=""})}function _(){let r=document.getElementById("divider-right"),e=document.querySelector(".article-list-wrap");if(!r||!e)return;let t=!1,i=0,n=0;r.addEventListener("mousedown",(a)=>{t=!0,i=a.clientX,n=e.getBoundingClientRect().width,r.classList.add("dragging"),document.body.style.userSelect="none",a.preventDefault()}),document.addEventListener("mousemove",(a)=>{if(!t)return;let d=a.clientX-i,p=Math.max(E,n+d),s=document.querySelector(".panel-body");if(s){let u=s.getBoundingClientRect().width,z=4;if(u-p-4<U)return}e.style.width=`${p}px`,localStorage.setItem(T,String(p))}),document.addEventListener("mouseup",()=>{if(!t)return;t=!1,r.classList.remove("dragging"),document.body.style.userSelect=""})}function k(r){o.selectedFeedId=r,o.selectedArticle=null,l(),x(),f()}function W(r){if(o.selectedArticle=r,!o.readArticleIds.includes(r.id)){if(o.readArticleIds.push(r.id),(o.unreadCounts[r.feedId]||0)>0)o.unreadCounts[r.feedId]--;g(),l()}x(),f()}function rr(r){if(o.feeds=o.feeds.filter((e)=>e.id!==r),delete o.articles[r],delete o.unreadCounts[r],delete o.errorFeeds[r],o.selectedFeedId===r)o.selectedFeedId="all",o.selectedArticle=null;g(),l(),x(),f()}async function S(r,e){let t=document.getElementById("feed-url-input"),i=document.getElementById("feed-name-input"),n=r||t?.value.trim()||"",a=e||i?.value.trim()||"";if(!n)throw Error("No URL provided");try{new URL(n)}catch{throw O("Please enter a valid URL","error"),Error("Invalid URL")}let d=C(),p=a||M(n),s={id:d,name:p,url:n};if(o.feeds.push(s),g(),t)t.value="";if(i)i.value="";return l(),await Y(s),k(d),d}async function or(){document.title="RSS Reader",Z(),await F(),N({onSelectFeed:k,onOpenArticle:W,onRemoveFeed:rr,onAddFeed:()=>S().then(()=>{}).catch(()=>{}),onRefreshAll:async()=>{let t=b();await h();let i=b();if(i!==t)v(i)}}),I(),l(),x(),f();let r=b();await h();let e=b();if(e!==r)v(e);R({refresh:async()=>{await h();let t=b();return v(t),{ok:!0,totalUnread:t}},markAllRead:()=>{if(m().forEach((i)=>{if(!o.readArticleIds.includes(i.id))o.readArticleIds.push(i.id)}),o.selectedFeedId==="all")Object.keys(o.unreadCounts).forEach((i)=>o.unreadCounts[i]=0);else if(o.selectedFeedId)o.unreadCounts[o.selectedFeedId]=0;return g(),l(),x(),{ok:!0}},selectFeed:(t)=>{return k(t),{ok:!0}},addFeed:async(t,i)=>{return{ok:!0,feedId:await S(t,i)}}})}or();
+
+</script>
+</body>
+</html>

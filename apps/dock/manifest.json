@@ -1,8 +1,8 @@
 {
   "id": "dock",
   "name": "Dock",
-  "icon": "🧰",
-  "description": "System dock with transparent glass-style clock",
+  "icon": "🕐",
+  "description": "System dock with clock, weather, and notifications",
   "version": "1.0.1",
   "author": "YAAR"
 }

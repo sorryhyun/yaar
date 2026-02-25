@@ -5,6 +5,7 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage } from '../types.js';
 
 /** Track tool_use_id → toolName from content_block_start events */
@@ -32,7 +33,7 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
     const m = msg as { task_id?: string; description?: string };
     return {
       type: 'tool_use',
-      toolName: 'Task',
+      toolName: SUBAGENT_TOOL_NAME,
       toolUseId: m.task_id,
       toolInput: { description: m.description },
     };
@@ -41,7 +42,7 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
     const m = msg as { task_id?: string; summary?: string };
     return {
       type: 'tool_result',
-      toolName: 'Task',
+      toolName: SUBAGENT_TOOL_NAME,
       toolUseId: m.task_id,
       content: m.summary ?? 'Task completed',
     };
