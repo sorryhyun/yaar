@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
-import type { DesktopShortcut } from '@yaar/shared';
+import type { DesktopShortcut, OSAction } from '@yaar/shared';
+import { toWindowKey } from '@/store/helpers';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** App info from /api/apps endpoint */
@@ -17,6 +18,11 @@ interface AppInfo {
   hasSkill: boolean;
   hasCredentials: boolean;
   hidden?: boolean;
+  run?: string;
+  variant?: 'standard' | 'widget' | 'panel';
+  dockEdge?: 'top' | 'bottom';
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
 }
 
 interface DesktopIconsProps {
@@ -94,10 +100,41 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
   }, [shortcuts, storeShortcuts]);
 
   const handleAppClick = useCallback(
-    (appId: string) => {
-      if (cooldownId === appId) return;
-      startCooldown(appId);
-      sendMessage(`<ui:click>app: ${appId}</ui:click>`);
+    (app: AppInfo) => {
+      if (cooldownId === app.id) return;
+      startCooldown(app.id);
+
+      // Compiled apps with a run URL: open directly without AI round-trip
+      if (app.run) {
+        const store = useDesktopStore.getState();
+        const monitorId = store.activeMonitorId;
+        const key = toWindowKey(monitorId, app.id);
+        const existing = store.windows[key];
+        if (existing) {
+          // Focus/restore existing window
+          const actions: OSAction[] = [];
+          if (existing.minimized) actions.push({ type: 'window.restore', windowId: app.id });
+          actions.push({ type: 'window.focus', windowId: app.id });
+          store.applyActions(actions);
+        } else {
+          store.applyActions([
+            {
+              type: 'window.create',
+              windowId: app.id,
+              title: app.name,
+              bounds: { x: 100, y: 100, w: 500, h: 400 },
+              content: { renderer: 'iframe', data: app.run },
+              ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
+              ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
+              ...(app.frameless ? { frameless: true } : {}),
+              ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
+            },
+          ]);
+        }
+        return;
+      }
+
+      sendMessage(`<ui:click>app: ${app.id}</ui:click>`);
     },
     [sendMessage, cooldownId, startCooldown],
   );
@@ -123,7 +160,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
       {!onboardingCompleted && (
         <button
           className={styles.desktopIcon}
-          onClick={() => handleAppClick('onboarding')}
+          onClick={() => sendMessage('<ui:click>app: onboarding</ui:click>')}
           disabled={cooldownId === 'onboarding'}
         >
           <span className={styles.iconImage}>🚀</span>
@@ -138,7 +175,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
             key={app.id}
             className={`${styles.desktopIcon}${selectedAppIds.has(app.id) ? ` ${styles.desktopIconSelected}` : ''}`}
             data-app-id={app.id}
-            onClick={() => handleAppClick(app.id)}
+            onClick={() => handleAppClick(app)}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();

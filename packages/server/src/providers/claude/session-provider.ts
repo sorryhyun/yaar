@@ -122,8 +122,12 @@ export class ClaudeSessionProvider extends BaseTransport {
       `[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`,
     );
 
-    // Build user message content: multimodal (with images) or text-only
-    // Always use async generator for streaming input mode (enables mid-turn steering via streamInput)
+    const messageContent = this.buildMessageContent(prompt, options);
+
+    yield* this.executeQuery(messageContent, resumeSession, options);
+  }
+
+  private buildMessageContent(prompt: string, options: TransportOptions): string | ContentBlock[] {
     let messageContent: string | ContentBlock[] = prompt;
 
     console.log(`[ClaudeSessionProvider] options.images: ${options.images?.length ?? 0} images`);
@@ -132,10 +136,8 @@ export class ClaudeSessionProvider extends BaseTransport {
         `[ClaudeSessionProvider] First image prefix: ${options.images[0].slice(0, 50)}...`,
       );
 
-      // Build multimodal content blocks
       const contentBlocks: ContentBlock[] = [];
 
-      // Add image blocks (already WebP from frontend capture)
       for (const dataUrl of options.images) {
         const parsed = parseDataUrl(dataUrl);
         if (parsed) {
@@ -157,7 +159,6 @@ export class ClaudeSessionProvider extends BaseTransport {
         }
       }
 
-      // Add text block with the prompt
       contentBlocks.push({
         type: 'text',
         text: prompt,
@@ -169,6 +170,14 @@ export class ClaudeSessionProvider extends BaseTransport {
       messageContent = contentBlocks;
     }
 
+    return messageContent;
+  }
+
+  private async *executeQuery(
+    messageContent: string | ContentBlock[],
+    resumeSession: string | undefined,
+    options: TransportOptions,
+  ): AsyncIterable<StreamMessage> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const promptInput = (async function* (): AsyncGenerator<any> {
       yield {
@@ -184,12 +193,10 @@ export class ClaudeSessionProvider extends BaseTransport {
       options.allowedTools,
     );
 
-    // Override model if specified
     if (options.model) {
       sdkOptions.model = options.model;
     }
 
-    // Handle fork session
     if (options.forkSession && resumeSession) {
       sdkOptions.forkSession = true;
     }
@@ -203,9 +210,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         messageCount++;
         if (this.isAborted()) break;
 
-        // Update session ID if we get a new one
         if ('session_id' in msg && msg.session_id) {
-          // Only update our internal sessionId if we're not using an external one
           if (!options.sessionId) {
             this.sessionId = msg.session_id;
           }
@@ -213,12 +218,28 @@ export class ClaudeSessionProvider extends BaseTransport {
 
         const mapped = mapClaudeMessage(msg);
         if (mapped) {
+          // Detect stale session error and retry without resume
+          if (
+            mapped.type === 'error' &&
+            resumeSession &&
+            mapped.error?.includes('No conversation found')
+          ) {
+            console.warn(
+              `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
+            );
+            this.sessionId = null;
+            this.currentQuery = null;
+            yield* this.executeQuery(messageContent, undefined, options);
+            return;
+          }
           yield mapped;
         }
       }
 
       if (messageCount === 0) {
-        console.warn(`[ClaudeSessionProvider] Empty response for: "${prompt.slice(0, 50)}..."`);
+        console.warn(
+          `[ClaudeSessionProvider] Empty response for: "${String(messageContent).slice(0, 50)}..."`,
+        );
       } else {
         console.log(`[ClaudeSessionProvider] Received ${messageCount} messages`);
       }

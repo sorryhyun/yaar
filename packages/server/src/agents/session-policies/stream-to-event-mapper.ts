@@ -2,7 +2,7 @@ import type { StreamMessage } from '../../providers/types.js';
 import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
-import { formatToolDisplay } from '../../mcp/register.js';
+import { formatToolDisplay } from '../../mcp/server.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import { getToolUseHooks } from '../../mcp/system/hooks.js';
 

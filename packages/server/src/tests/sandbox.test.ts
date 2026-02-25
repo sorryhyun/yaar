@@ -21,8 +21,34 @@ describe('Sandbox', () => {
       expect(JSON.parse(result.result!)).toEqual({ a: 1, b: 2 });
     });
 
-    it('returns undefined when no return', async () => {
+    it('returns undefined for declarations (no auto-return)', async () => {
       const result = await executeJs('const x = 1');
+      expect(result.success).toBe(true);
+      expect(result.result).toBeUndefined();
+    });
+
+    it('auto-returns a bare expression', async () => {
+      const result = await executeJs('42');
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('42');
+    });
+
+    it('auto-returns the last expression after statements', async () => {
+      const result = await executeJs('const x = 1; const y = 2; x + y');
+      expect(result.success).toBe(true);
+      expect(result.result).toBe('3');
+    });
+
+    it('auto-returns a function call after statements', async () => {
+      const result = await executeJs(
+        'const hash = crypto.createHash("sha256").update("test").digest("hex"); hash',
+      );
+      expect(result.success).toBe(true);
+      expect(result.result).toBeDefined();
+    });
+
+    it('does not auto-return control flow statements', async () => {
+      const result = await executeJs('for (let i = 0; i < 3; i++) {}');
       expect(result.success).toBe(true);
       expect(result.result).toBeUndefined();
     });

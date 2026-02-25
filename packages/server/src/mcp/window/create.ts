@@ -46,7 +46,7 @@ export function registerCreateTools(server: McpServer): void {
     'create',
     {
       description:
-        'Create a window for displaying content (markdown, HTML, text, or iframe). For interactive UI with buttons/forms, use create_component instead. For PDF files, use iframe renderer with src="/api/storage/<path>" to leverage the browser\'s built-in PDF viewer.',
+        'Create a window for displaying content (markdown, HTML, text, table, or iframe). For interactive UI with buttons/forms, use create_component instead. For PDF files, use iframe renderer with src="/api/storage/<path>" to leverage the browser\'s built-in PDF viewer.',
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),

@@ -15,12 +15,6 @@ import { actionEmitter } from '../action-emitter.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 
-export const MARKET_TOOL_NAMES = [
-  'mcp__apps__market_list',
-  'mcp__apps__market_get',
-  'mcp__apps__market_delete',
-] as const;
-
 const execFileAsync = promisify(execFile);
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';

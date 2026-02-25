@@ -8,6 +8,7 @@ import { ok, error } from '../utils.js';
 import { listApps, loadAppSkill } from './discovery.js';
 import { readAppConfig, writeAppConfig } from './config.js';
 import { registerBadgeTool } from './badge.js';
+import { registerMarketTools } from './market.js';
 
 export const APPS_TOOL_NAMES = [
   'mcp__apps__list',
@@ -15,10 +16,14 @@ export const APPS_TOOL_NAMES = [
   'mcp__apps__read_config',
   'mcp__apps__write_config',
   'mcp__apps__set_app_badge',
+  'mcp__apps__market_list',
+  'mcp__apps__market_get',
+  'mcp__apps__market_delete',
 ] as const;
 
 export function registerAppsTools(server: McpServer): void {
   registerBadgeTool(server);
+  registerMarketTools(server);
 
   // apps_list - List available apps
   server.registerTool(

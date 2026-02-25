@@ -34,7 +34,7 @@
     "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "animejs": "^3.2.2",
+    "animejs": "^4.3.6",
     "cannon-es": "^0.20.0",
     "chart.js": "^4.5.1",
     "clsx": "^2.1.1",

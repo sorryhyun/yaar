@@ -10,10 +10,8 @@ import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
 import { STORAGE_TOOL_NAMES } from '../mcp/storage/index.js';
 import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
 import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
-import { MARKET_TOOL_NAMES } from '../mcp/apps/market.js';
 import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
-import { SANDBOX_TOOL_NAMES } from '../mcp/sandbox/index.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { BROWSER_TOOL_NAMES } from '../mcp/browser/index.js';
 
@@ -27,7 +25,7 @@ export interface AgentProfile {
 // ── Composite tool sets (for profile readability) ─────────────────
 
 const INFO_TOOLS = ['mcp__system__get_info', ...SKILL_TOOL_NAMES] as const;
-const APPS_ALL_TOOLS = [...APPS_TOOL_NAMES, ...MARKET_TOOL_NAMES] as const;
+const APPS_ALL_TOOLS = APPS_TOOL_NAMES;
 
 // ── Task agent system prompt ────────────────────────────────────────
 
@@ -72,7 +70,7 @@ const profiles: Record<string, AgentProfile> = {
       'WebSearch',
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
-      ...SANDBOX_TOOL_NAMES,
+      'mcp__system__run_js',
       ...BROWSER_TOOL_NAMES,
       ...WINDOW_TOOL_NAMES,
       ...STORAGE_TOOL_NAMES,
@@ -102,7 +100,7 @@ const profiles: Record<string, AgentProfile> = {
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       ...INFO_TOOLS,
-      ...SANDBOX_TOOL_NAMES,
+      'mcp__system__run_js',
       ...WINDOW_TOOL_NAMES,
       ...STORAGE_TOOL_NAMES,
     ],
@@ -145,7 +143,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
     'WebSearch',
     ...INFO_TOOLS,
     ...HTTP_TOOL_NAMES,
-    ...SANDBOX_TOOL_NAMES,
+    'mcp__system__run_js',
     ...BROWSER_TOOL_NAMES,
     ...WINDOW_TOOL_NAMES,
     ...STORAGE_TOOL_NAMES,

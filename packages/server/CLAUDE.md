@@ -49,19 +49,17 @@ src/
 ├── providers/         # Pluggable AI backends (Claude, Codex)
 ├── mcp/               # MCP server, domain-organized tools, action emitter
 │   ├── index.ts       # Module re-exports
-│   ├── server.ts      # MCP server init, request handling, token (7 namespaces)
+│   ├── server.ts      # MCP server init, tool registration, request handling, token (7 namespaces)
 │   ├── action-emitter.ts  # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts    # WindowStateRegistry — per-session window state tracking
 │   ├── utils.ts       # ok(), okWithImages() response helpers
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
-│   ├── register.ts    # Aggregator: registerAllTools(), getToolNames()
-│   ├── system/        # get_info, get_env_var, memorize, set_config (hooks/settings/shortcuts), get_config, remove_config
+│   ├── system/        # get_info, get_env_var, memorize, set_config, get_config, remove_config, run_js
 │   ├── skills/        # skill tool — loads reference docs (app_dev, sandbox, components, host_api, app_protocol)
 │   ├── window/        # create, create_component, update, update_component, close, lock/unlock, list, view, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
 │   ├── storage/       # read, write, list, delete
 │   ├── http/          # http_get, http_post, request_allowing_domain
-│   ├── sandbox/       # run_js
 │   ├── apps/          # list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete
 │   │   ├── discovery.ts (listApps, loadAppSkill — used by API routes)
 │   │   ├── config.ts (credentials, read/write config)
@@ -191,14 +189,13 @@ Codex settings: `approval_policy=on-request`, `model_reasoning_effort=medium`, `
 
 ## Tools (MCP)
 
-Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. The aggregator at `mcp/register.ts` wires them to the correct MCP server namespace. There are 7 MCP namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`.
+Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. `mcp/server.ts` wires them to the correct MCP server namespace. There are 7 MCP namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`.
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_info, get_env_var, memorize, set_config (hooks/settings/shortcuts), get_config, remove_config |
+| `system/` | system | get_info, get_env_var, memorize, set_config (hooks/settings/shortcuts), get_config, remove_config, run_js |
 | `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
-| `sandbox/` | system | run_js |
 | `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |
 | `storage/` | storage | read, write, list, delete |
 | `apps/` | apps | list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete |

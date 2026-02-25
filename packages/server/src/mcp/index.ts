@@ -9,20 +9,17 @@ export {
   getMcpToken,
   MCP_SERVERS,
   type McpServerName,
+  getToolNames,
+  formatToolDisplay,
 } from './server.js';
-
-// Tool registration
-export { registerAllTools, getToolNames } from './register.js';
 
 // Domain tool registrations + tool name exports
 export { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 export { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
 export { registerStorageTools, STORAGE_TOOL_NAMES } from './storage/index.js';
 export { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
-export { registerMarketTools, MARKET_TOOL_NAMES } from './apps/market.js';
 export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
 export { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
-export { registerSandboxTools, SANDBOX_TOOL_NAMES } from './sandbox/index.js';
 export { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 
 // Action emitter

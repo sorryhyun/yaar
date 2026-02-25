@@ -24,6 +24,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     response: '`{ apps: AppInfo[] }`',
     description: 'List all installed apps',
   },
+  {
+    method: 'GET',
+    path: '/api/shortcuts',
+    response: '`{ shortcuts: DesktopShortcut[] }`',
+    description: 'List desktop shortcuts',
+  },
 ];
 import { readSettings, updateSettings } from '../../storage/settings.js';
 import { readShortcuts } from '../../storage/shortcuts.js';
