@@ -23,7 +23,10 @@ export const PAGE_STATE = `(function() {
   return {
     url: location.href,
     title: document.title,
-    activeElement: activeElement
+    activeElement: activeElement,
+    scrollY: window.scrollY,
+    scrollHeight: document.documentElement.scrollHeight,
+    viewportHeight: window.innerHeight
   };
 })()`;
 
@@ -78,7 +81,7 @@ export const FIND_BY_SELECTOR = `function(sel) {
  * prefers interactive elements (button, a, summary, input[submit], [role=button]),
  * then picks smallest by area. Filters visibility:hidden and opacity:0.
  */
-export const FIND_BY_TEXT = `function(txt) {
+export const FIND_BY_TEXT = `function(txt, index) {
   var INTERACTIVE = ['button','a','summary'];
   function isVisible(el) {
     var style = window.getComputedStyle(el);
@@ -132,14 +135,15 @@ export const FIND_BY_TEXT = `function(txt) {
     if (a.isInteractive !== b.isInteractive) return a.isInteractive ? -1 : 1;
     return a.area - b.area;
   });
-  var chosen = candidates[0].el;
+  var idx = Math.min(index || 0, candidates.length - 1);
+  var chosen = candidates[idx].el;
   if (chosen.scrollIntoViewIfNeeded) chosen.scrollIntoViewIfNeeded();
   else chosen.scrollIntoView({block:'center'});
   var r = chosen.getBoundingClientRect();
   return {
     x: r.x + r.width/2,
     y: r.y + r.height/2,
-    tag: candidates[0].tag,
+    tag: candidates[idx].tag,
     text: (chosen.textContent || '').trim().slice(0, 80),
     candidateCount: candidates.length
   };

@@ -115,11 +115,21 @@ export class BrowserSession extends EventEmitter {
   }
 
   private async getPageState(): Promise<PageState> {
-    const { url, title, activeElement } = (await this.eval<{
+    const { url, title, activeElement, scrollY, scrollHeight, viewportHeight } = (await this.eval<{
       url: string;
       title: string;
       activeElement: PageState['activeElement'] | null;
-    }>(PAGE_STATE)) || { url: this.currentUrl, title: '', activeElement: null };
+      scrollY: number;
+      scrollHeight: number;
+      viewportHeight: number;
+    }>(PAGE_STATE)) || {
+      url: this.currentUrl,
+      title: '',
+      activeElement: null,
+      scrollY: 0,
+      scrollHeight: 0,
+      viewportHeight: 0,
+    };
 
     this.currentUrl = url;
     this.currentTitle = title;
@@ -134,7 +144,7 @@ export class BrowserSession extends EventEmitter {
       /* page not ready */
     }
 
-    const state: PageState = { url, title, textSnippet };
+    const state: PageState = { url, title, textSnippet, scrollY, scrollHeight, viewportHeight };
     if (activeElement) state.activeElement = activeElement;
     return state;
   }
@@ -219,7 +229,13 @@ export class BrowserSession extends EventEmitter {
     });
   }
 
-  async click(selector?: string, text?: string, x?: number, y?: number): Promise<PageState> {
+  async click(
+    selector?: string,
+    text?: string,
+    x?: number,
+    y?: number,
+    index?: number,
+  ): Promise<PageState> {
     this.touch();
 
     const urlBefore = this.currentUrl;
@@ -236,15 +252,21 @@ export class BrowserSession extends EventEmitter {
         throw new Error('Either selector, text, or x/y coordinates must be provided');
       }
 
-      const fn = selector ? FIND_BY_SELECTOR : FIND_BY_TEXT;
-      const arg = selector || text;
-      const coords = await this.evalFn<{
-        x: number;
-        y: number;
-        tag: string;
-        text: string;
-        candidateCount: number;
-      }>(fn, arg);
+      const coords = selector
+        ? await this.evalFn<{
+            x: number;
+            y: number;
+            tag: string;
+            text: string;
+            candidateCount: number;
+          }>(FIND_BY_SELECTOR, selector)
+        : await this.eval<{
+            x: number;
+            y: number;
+            tag: string;
+            text: string;
+            candidateCount: number;
+          }>(`(${FIND_BY_TEXT})(${JSON.stringify(text)}, ${index ?? 0})`);
 
       if (!coords) {
         throw new Error(`Element not found: ${selector || text}`);
@@ -423,6 +445,7 @@ export class BrowserSession extends EventEmitter {
     text?: string;
     x?: number;
     y?: number;
+    index?: number;
   }): Promise<PageState> {
     this.touch();
 
@@ -438,7 +461,9 @@ export class BrowserSession extends EventEmitter {
       hoverX = coords.x;
       hoverY = coords.y;
     } else if (opts.text) {
-      const coords = await this.evalFn<{ x: number; y: number }>(FIND_BY_TEXT, opts.text);
+      const coords = await this.eval<{ x: number; y: number }>(
+        `(${FIND_BY_TEXT})(${JSON.stringify(opts.text)}, ${opts.index ?? 0})`,
+      );
       if (!coords) throw new Error(`Element not found: ${opts.text}`);
       hoverX = coords.x;
       hoverY = coords.y;

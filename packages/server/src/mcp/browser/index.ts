@@ -48,6 +48,12 @@ function formatPageState(state: PageState): string {
     desc += '>';
     result += `\nActive element: ${desc}`;
   }
+  if (state.scrollHeight && state.viewportHeight && state.scrollHeight > state.viewportHeight) {
+    const percent = Math.round(
+      ((state.scrollY ?? 0) / (state.scrollHeight - state.viewportHeight)) * 100,
+    );
+    result += `\nScroll: ${state.scrollY ?? 0}/${state.scrollHeight} (${percent}% scrolled)`;
+  }
   if (state.clickTarget) {
     const ct = state.clickTarget;
     result += `\nClicked: <${ct.tag}> "${ct.text}"`;
@@ -187,6 +193,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .number()
           .optional()
           .describe('Y coordinate to click at (use with x for coordinate-based click)'),
+        index: z
+          .number()
+          .optional()
+          .describe('0-based index when multiple text matches exist (default: 0, first match)'),
       },
     },
     async (args) => {
@@ -194,7 +204,7 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
         return error('Provide "selector", "text", or both "x" and "y" to identify where to click.');
       }
       const session = getSession();
-      const state = await session.click(args.selector, args.text, args.x, args.y);
+      const state = await session.click(args.selector, args.text, args.x, args.y, args.index);
       return ok(formatPageState(state));
     },
   );
@@ -370,6 +380,10 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .number()
           .optional()
           .describe('Y coordinate to hover at (use with x for coordinate-based hover)'),
+        index: z
+          .number()
+          .optional()
+          .describe('0-based index when multiple text matches exist (default: 0, first match)'),
       },
     },
     async (args) => {

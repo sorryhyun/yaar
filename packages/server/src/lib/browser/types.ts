@@ -9,6 +9,9 @@ export interface PageState {
   activeElement?: { tag: string; id?: string; name?: string; type?: string };
   urlChanged?: boolean;
   clickTarget?: { tag: string; text: string; candidateCount: number };
+  scrollY?: number;
+  scrollHeight?: number;
+  viewportHeight?: number;
 }
 
 export interface PageContent {
