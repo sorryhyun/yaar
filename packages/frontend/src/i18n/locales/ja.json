@@ -151,6 +151,10 @@
     "window": "ウィンドウ: {{title}}",
     "stop": "停止"
   },
+  "shortcutMenu": {
+    "about": "{{name}} について",
+    "delete": "削除"
+  },
   "contextMenu": {
     "continueWith": "\"{{title}}\" エージェントで続行",
     "in": "\"{{title}}...\" で",

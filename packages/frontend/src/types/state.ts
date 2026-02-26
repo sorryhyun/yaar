@@ -79,11 +79,19 @@ export interface UserPromptModel {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+export interface ShortcutContextTarget {
+  id: string;
+  label: string;
+  type: string;
+  target: string;
+}
+
 export interface ContextMenuState {
   x: number;
   y: number;
   windowId?: string;
   windowTitle?: string;
+  shortcut?: ShortcutContextTarget;
 }
 
 export interface RestorePrompt {

@@ -151,6 +151,10 @@
     "window": "Fenster: {{title}}",
     "stop": "Stoppen"
   },
+  "shortcutMenu": {
+    "about": "Über {{name}}",
+    "delete": "Löschen"
+  },
   "contextMenu": {
     "continueWith": "Mit \"{{title}}\"-Agent fortfahren",
     "in": "In \"{{title}}...\"",

@@ -13,6 +13,7 @@ import type {
   UserPromptModel,
   ConnectionStatus,
   ContextMenuState,
+  ShortcutContextTarget,
   RestorePrompt,
   DebugEntry,
   ActiveAgent,
@@ -39,6 +40,7 @@ export type {
   UserPromptModel,
   ConnectionStatus,
   ContextMenuState,
+  ShortcutContextTarget,
   RestorePrompt,
   DebugEntry,
   ActiveAgent,
@@ -175,6 +177,7 @@ export interface UiSliceState {
 
 export interface UiSliceActions {
   showContextMenu: (x: number, y: number, windowId?: string) => void;
+  showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
   hideContextMenu: () => void;
   toggleSessionsModal: () => void;
   toggleSettingsModal: () => void;
@@ -351,6 +354,7 @@ export type DesktopStore = WindowsSlice &
     appBadges: Record<string, number>;
     appsVersion: number;
     shortcuts: DesktopShortcut[];
+    setShortcuts: (shortcuts: DesktopShortcut[]) => void;
     bumpAppsVersion: () => void;
     applyAction: (action: OSAction) => void;
     applyActions: (actions: OSAction[]) => void;

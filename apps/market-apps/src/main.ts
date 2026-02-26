@@ -363,9 +363,12 @@ function card(title: string, subtitle: string, buttonLabel: string, onClick: () 
     gap: 12px;
     align-items: center;
     background: #121a34;
+    min-height: 88px;
+    box-sizing: border-box;
   `;
 
   const left = document.createElement('div');
+  left.style.cssText = 'min-width: 0; flex: 1;';
   const t = document.createElement('div');
   t.textContent = title;
   t.style.cssText = 'font-weight: 600;';
@@ -445,7 +448,14 @@ function render() {
   tabs.append(mk, ins);
 
   const list = document.createElement('div');
-  list.style.cssText = 'padding: 14px 16px; overflow: auto; display: grid; gap: 10px;';
+  list.style.cssText = `
+    padding: 14px 16px;
+    overflow: auto;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    align-content: start;
+  `;
 
   if (activeTab === 'market') {
     if (!marketApps.length) {

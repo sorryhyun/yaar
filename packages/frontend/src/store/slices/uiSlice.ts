@@ -22,6 +22,11 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
       }
     }),
 
+  showShortcutContextMenu: (x, y, shortcut) =>
+    set((state) => {
+      state.contextMenu = { x, y, shortcut };
+    }),
+
   hideContextMenu: () =>
     set((state) => {
       state.contextMenu = null;

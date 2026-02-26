@@ -1,8 +1,0 @@
-{
-  "id": "smtp-mailer",
-  "name": "SMTP Mailer",
-  "icon": "📨",
-  "description": "Compose and send email with SMTP or Google API auth flow",
-  "version": "1.1.0",
-  "author": "YAAR"
-}

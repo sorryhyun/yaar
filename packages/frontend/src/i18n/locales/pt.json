@@ -151,6 +151,10 @@
     "window": "Janela: {{title}}",
     "stop": "Parar"
   },
+  "shortcutMenu": {
+    "about": "Sobre {{name}}",
+    "delete": "Excluir"
+  },
   "contextMenu": {
     "continueWith": "Continuar com o agente \"{{title}}\"",
     "in": "Em \"{{title}}...\"",

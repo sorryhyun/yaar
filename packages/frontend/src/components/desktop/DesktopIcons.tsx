@@ -1,10 +1,11 @@
 /**
  * DesktopIcons - Desktop app icons and shortcuts.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
+import type { ShortcutContextTarget } from '@/store/types';
 import { toWindowKey } from '@/store/helpers';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
@@ -27,16 +28,19 @@ interface AppInfo {
 interface DesktopIconsProps {
   selectedAppIds: Set<string>;
   sendMessage: (msg: string) => void;
-  showContextMenu: (x: number, y: number, windowId?: string) => void;
+  showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
 }
 
-export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: DesktopIconsProps) {
+export function DesktopIcons({
+  selectedAppIds,
+  sendMessage,
+  showShortcutContextMenu,
+}: DesktopIconsProps) {
   const appsVersion = useDesktopStore((s) => s.appsVersion);
   const appBadges = useDesktopStore((s) => s.appBadges);
-  const storeShortcuts = useDesktopStore((s) => s.shortcuts);
+  const shortcuts = useDesktopStore((s) => s.shortcuts);
 
   const [apps, setApps] = useState<AppInfo[]>([]);
-  const [shortcuts, setShortcuts] = useState<DesktopShortcut[]>([]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
 
   // Double-click prevention: track which icon is in cooldown
@@ -74,14 +78,14 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
     fetchApps();
   }, [appsVersion]);
 
-  // Fetch shortcuts on mount
+  // Fetch shortcuts on mount and populate the store
   useEffect(() => {
     async function fetchShortcuts() {
       try {
         const response = await apiFetch('/api/shortcuts');
         if (response.ok) {
           const data = await response.json();
-          setShortcuts(data.shortcuts || []);
+          useDesktopStore.getState().setShortcuts(data.shortcuts || []);
         }
       } catch (err) {
         console.error('Failed to fetch shortcuts:', err);
@@ -89,14 +93,6 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
     }
     fetchShortcuts();
   }, []);
-
-  // Merge fetched shortcuts with store shortcuts (store takes precedence for real-time updates)
-  const mergedShortcuts = useMemo(() => {
-    const map = new Map<string, DesktopShortcut>();
-    for (const s of shortcuts) map.set(s.id, s);
-    for (const s of storeShortcuts) map.set(s.id, s);
-    return Array.from(map.values());
-  }, [shortcuts, storeShortcuts]);
 
   const handleShortcutClick = useCallback(
     (shortcut: DesktopShortcut) => {
@@ -163,7 +159,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
         </button>
       )}
       {/* Desktop shortcuts (includes app shortcuts) */}
-      {mergedShortcuts.map((shortcut) => (
+      {shortcuts.map((shortcut) => (
         <button
           key={shortcut.id}
           className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
@@ -173,7 +169,12 @@ export function DesktopIcons({ selectedAppIds, sendMessage, showContextMenu }: D
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            showContextMenu(e.clientX, e.clientY);
+            showShortcutContextMenu(e.clientX, e.clientY, {
+              id: shortcut.id,
+              label: shortcut.label,
+              type: shortcut.type,
+              target: shortcut.target,
+            });
           }}
           disabled={cooldownId === shortcut.id}
           draggable={shortcut.type === 'app'}

@@ -151,6 +151,10 @@
     "window": "窗口：{{title}}",
     "stop": "停止"
   },
+  "shortcutMenu": {
+    "about": "关于 {{name}}",
+    "delete": "删除"
+  },
   "contextMenu": {
     "continueWith": "继续与 \"{{title}}\" 助手对话",
     "in": "在 \"{{title}}...\" 中",

@@ -5,12 +5,19 @@ import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '@/styles/overlays/WindowContextMenu.module.css';
 
+export interface ContextMenuAction {
+  label: string;
+  onClick: () => void;
+  destructive?: boolean;
+}
+
 interface WindowContextMenuProps {
   x: number;
   y: number;
   windowId?: string;
   windowTitle?: string;
   hasWindowAgent?: boolean;
+  actions?: ContextMenuAction[];
   onSend: (message: string) => void;
   onSendToWindow: (windowId: string, message: string) => void;
   onClose: () => void;
@@ -22,6 +29,7 @@ export function WindowContextMenu({
   windowId,
   windowTitle,
   hasWindowAgent,
+  actions,
   onSend,
   onSendToWindow,
   onClose,
@@ -133,6 +141,22 @@ export function WindowContextMenu({
           {t('contextMenu.send')}
         </button>
       </div>
+      {actions && actions.length > 0 && (
+        <div className={styles.actions}>
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              className={`${styles.actionItem}${action.destructive ? ` ${styles.destructive}` : ''}`}
+              onClick={() => {
+                action.onClick();
+                onClose();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

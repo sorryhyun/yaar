@@ -65,3 +65,33 @@
   opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }
+
+.actions {
+  border-top: var(--border-subtle);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.actionItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-1);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.actionItem:hover {
+  background: var(--color-surface-0);
+}
+
+.destructive {
+  color: var(--color-red);
+}

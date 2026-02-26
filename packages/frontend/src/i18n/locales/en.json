@@ -152,6 +152,10 @@
     "subagents": "{{count}} subagent(s) active",
     "stop": "Stop"
   },
+  "shortcutMenu": {
+    "about": "About {{name}}",
+    "delete": "Delete"
+  },
   "contextMenu": {
     "continueWith": "Continue with \"{{title}}\" agent",
     "in": "In \"{{title}}...\"",

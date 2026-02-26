@@ -11,6 +11,7 @@
  * - Composition of sub-components
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
@@ -37,9 +38,11 @@ import { DesktopIcons } from './DesktopIcons';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 export function DesktopSurface() {
+  const { t } = useTranslation();
   const contextMenu = useDesktopStore((s) => s.contextMenu);
   const hideContextMenu = useDesktopStore((s) => s.hideContextMenu);
   const showContextMenu = useDesktopStore((s) => s.showContextMenu);
+  const showShortcutContextMenu = useDesktopStore((s) => s.showShortcutContextMenu);
   const windowAgents = useDesktopStore((s) => s.windowAgents);
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
@@ -367,7 +370,7 @@ export function DesktopSurface() {
         <DesktopIcons
           selectedAppIds={selectedAppIds}
           sendMessage={sendMessage}
-          showContextMenu={showContextMenu}
+          showShortcutContextMenu={showShortcutContextMenu}
         />
 
         {/* Rubber-band selection rectangle */}
@@ -399,7 +402,7 @@ export function DesktopSurface() {
         {/* Notification center (top-right) */}
         <NotificationCenter />
 
-        {/* Window context menu */}
+        {/* Context menu */}
         {contextMenu && (
           <WindowContextMenu
             x={contextMenu.x}
@@ -410,6 +413,30 @@ export function DesktopSurface() {
               contextMenu.windowId
                 ? Object.values(windowAgents).some((wa) => wa.windowId === contextMenu.windowId)
                 : false
+            }
+            actions={
+              contextMenu.shortcut
+                ? [
+                    {
+                      label: t('shortcutMenu.about', { name: contextMenu.shortcut.label }),
+                      onClick: () => {
+                        const s = contextMenu.shortcut!;
+                        sendMessage(
+                          `<ui:shortcut_action action="about" shortcutId="${s.id}" label="${s.label}" type="${s.type}">User wants to know about this shortcut</ui:shortcut_action>`,
+                        );
+                      },
+                    },
+                    {
+                      label: t('shortcutMenu.delete'),
+                      destructive: true,
+                      onClick: () => {
+                        sendMessage(
+                          `<ui:shortcut_action action="delete" shortcutId="${contextMenu.shortcut!.id}">User chose to delete this shortcut from the desktop</ui:shortcut_action>`,
+                        );
+                      },
+                    },
+                  ]
+                : undefined
             }
             onSend={sendMessage}
             onSendToWindow={sendWindowMessage}
