@@ -75,15 +75,22 @@ export class ClaudeSessionProvider extends BaseTransport {
       ]),
     );
 
+    // Only enable Task built-in tool if allowedTools includes it (or is unfiltered)
+    const effectiveAllowed = allowedTools ?? getToolNames();
+    const builtinTools: SDKOptions['tools'] = ['WebSearch'];
+    if (!allowedTools || allowedTools.includes('Task')) {
+      builtinTools.push('Task');
+    }
+
     return {
       abortController: this.createAbortController(),
       systemPrompt: systemPrompt ?? this.systemPrompt,
       model: 'claude-sonnet-4-6',
       resume: resumeSession,
       cwd: getStorageDir(),
-      tools: ['WebSearch', 'Task'],
+      tools: builtinTools,
       agents: buildAgentDefinitions(mcpServerConfigs),
-      allowedTools: allowedTools ?? getToolNames(),
+      allowedTools: effectiveAllowed,
       maxThinkingTokens: 4096,
       mcpServers: mcpServerConfigs,
       includePartialMessages: true,

@@ -8,6 +8,7 @@
 import { ServerEventType } from '@yaar/shared';
 import type { ContextSource } from './context.js';
 import type { PoolContext, Task } from './pool-context.js';
+import { getToolNames } from '../mcp/server.js';
 
 export class WindowTaskProcessor {
   constructor(private readonly ctx: PoolContext) {}
@@ -131,6 +132,7 @@ export class WindowTaskProcessor {
         messageId: task.messageId,
         canonicalAgent: canonicalWindow,
         resumeSessionId,
+        allowedTools: getToolNames(), // Excludes Task — window agents must not spawn subagents
         onContextMessage: (role, content) => {
           if (role === 'assistant') {
             this.ctx.contextAssembly.appendAssistantMessage(this.ctx.contextTape, content, source);

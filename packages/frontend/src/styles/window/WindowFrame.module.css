@@ -145,7 +145,7 @@
   position: relative;
   flex: 1;
   overflow: auto;
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-1);
   color: var(--color-text);
 }
 
