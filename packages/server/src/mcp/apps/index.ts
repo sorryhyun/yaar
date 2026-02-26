@@ -44,7 +44,7 @@ export function registerAppsTools(server: McpServer): void {
         if (app.hasSkill) flags.push('skill');
         if (app.hasCredentials) flags.push('credentials');
         if (app.appProtocol) flags.push('app-protocol');
-        if (app.hidden) flags.push('hidden');
+        if (app.createShortcut === false) flags.push('no-shortcut');
         const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
         let line = `- ${app.name} (${app.id})${flagStr}`;
         if (app.description) line += `\n  ${app.description}`;

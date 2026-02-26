@@ -13,6 +13,7 @@ import { actionEmitter } from '../action-emitter.js';
 import { componentLayoutSchema } from '@yaar/shared';
 import type { AppManifest } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd, regenerateSkillMd } from './helpers.js';
+import { ensureAppShortcut } from '../../storage/shortcuts.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -28,7 +29,10 @@ export function registerDeployTools(server: McpServer): void {
         name: z.string().optional().describe('Display name'),
         description: z.string().optional().describe('Brief description of what the app does'),
         icon: z.string().optional().describe('Emoji icon'),
-        hidden: z.boolean().optional().describe('Hide from desktop (system app, AI-only access)'),
+        createShortcut: z
+          .boolean()
+          .optional()
+          .describe('Create desktop shortcut on deploy (default: true)'),
         keepSource: z.boolean().optional().describe('Include src/ in deployed app'),
         skill: z.string().optional().describe('Custom SKILL.md content (## Launch auto-appended)'),
         appProtocol: z
@@ -66,7 +70,7 @@ export function registerDeployTools(server: McpServer): void {
         name,
         description,
         icon,
-        hidden,
+        createShortcut,
         keepSource = true,
         skill,
         appProtocol: explicitAppProtocol,
@@ -229,10 +233,12 @@ export function registerDeployTools(server: McpServer): void {
         metadata.name = displayName;
         if (description !== undefined) metadata.description = description;
         if (hasCompiledApp) metadata.run = 'static/index.html';
-        if (hidden !== undefined) {
-          if (hidden) metadata.hidden = true;
-          else delete metadata.hidden;
+        if (createShortcut !== undefined) {
+          if (createShortcut === false) metadata.createShortcut = false;
+          else delete metadata.createShortcut;
         }
+        // Clean up old hidden field
+        delete metadata.hidden;
         if (explicitAppProtocol !== undefined) {
           if (explicitAppProtocol) metadata.appProtocol = true;
           else delete metadata.appProtocol;
@@ -286,6 +292,27 @@ export function registerDeployTools(server: McpServer): void {
 
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+
+        // Auto-create desktop shortcut
+        if (createShortcut !== false) {
+          await ensureAppShortcut({
+            id: appId,
+            name: displayName,
+            icon: resolvedIcon,
+            iconType: 'emoji',
+          });
+          actionEmitter.emitAction({
+            type: 'desktop.createShortcut',
+            shortcut: {
+              id: `app-${appId}`,
+              label: displayName,
+              icon: resolvedIcon,
+              type: 'app',
+              target: appId,
+              createdAt: Date.now(),
+            },
+          });
+        }
 
         return ok(
           JSON.stringify(

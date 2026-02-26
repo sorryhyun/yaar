@@ -244,7 +244,7 @@ export interface DesktopShortcut {
   label: string;
   icon: string;
   iconType?: 'emoji' | 'image';
-  type: 'file' | 'url' | 'action';
+  type: 'file' | 'url' | 'action' | 'app';
   target: string;
   /** When set, clicking the shortcut executes these actions client-side without AI round-trip. */
   osActions?: OSAction[];

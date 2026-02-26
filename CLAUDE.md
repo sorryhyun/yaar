@@ -195,7 +195,7 @@ Each app folder can contain an `app.json` with optional metadata:
 | `name` | string | Display name (defaults to title-cased folder name) |
 | `description` | string | Brief description shown in `apps_list` output |
 | `icon` | string | Emoji icon (overridden by `icon.png` if present) |
-| `hidden` | boolean | If true, no desktop icon — AI knows about it via system prompt |
+| `createShortcut` | boolean | Create desktop shortcut on install (default: true). `hidden: true` treated as `createShortcut: false` for backward compat |
 | `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
 | `fileAssociations` | array | File extensions this app can open |
 | `variant` | `'standard' \| 'widget' \| 'panel'` | Window layer when the app opens (default: `'standard'`) |
@@ -204,9 +204,9 @@ Each app folder can contain an `app.json` with optional metadata:
 | `windowStyle` | object | Custom CSS styles applied to the window element |
 | `protocol` | object | Static manifest (`{ state, commands }`) appended to SKILL.md for agent discovery |
 
-### System Apps (Hidden)
+### System Apps
 
-Apps with `"hidden": true` in `app.json` don't show a desktop icon. Instead, their `SKILL.md` is automatically injected into the AI's system prompt so the AI knows about them immediately. Use this for system capabilities (like storage) that the AI should always know about.
+All apps are listed in the AI system prompt. Apps with `"createShortcut": false` in `app.json` won't get a desktop shortcut on install, but they're still fully accessible via `apps_list` and `load_skill`. Use this for system capabilities (like the dock or storage) that should run without a desktop icon.
 
 ### Creating a New App
 

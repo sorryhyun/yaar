@@ -14,6 +14,8 @@ import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
+import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import { listApps } from './discovery.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -107,6 +109,19 @@ export function registerMarketTools(server: McpServer): void {
       // Refresh desktop apps
       actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
+      // Auto-create desktop shortcut if app wants one
+      const apps = await listApps();
+      const installed = apps.find((a) => a.id === appId);
+      if (installed && installed.createShortcut !== false) {
+        const shortcut = await ensureAppShortcut({
+          id: installed.id,
+          name: installed.name,
+          icon: installed.icon,
+          iconType: installed.iconType,
+        });
+        actionEmitter.emitAction({ type: 'desktop.createShortcut', shortcut });
+      }
+
       return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
     },
   );
@@ -141,6 +156,12 @@ export function registerMarketTools(server: McpServer): void {
 
       // Refresh desktop apps
       actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+
+      // Remove desktop shortcut
+      const removed = await removeAppShortcut(appId);
+      if (removed) {
+        actionEmitter.emitAction({ type: 'desktop.removeShortcut', shortcutId: `app-${appId}` });
+      }
 
       return ok(`Deleted app "${appId}" successfully.`);
     },

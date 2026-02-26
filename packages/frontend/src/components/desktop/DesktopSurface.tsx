@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
+import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -110,6 +111,26 @@ export function DesktopSurface() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
+  }, [switchMonitor]);
+
+  // Forward keyboard shortcuts from focused iframes (they can't bubble to document)
+  useEffect(() => {
+    return iframeMessages.on('yaar:keydown', (ctx) => {
+      const { key, shiftKey, ctrlKey } = ctx.data;
+      if (key === 'Tab' && shiftKey) {
+        useDesktopStore.getState().toggleCliMode();
+        return;
+      }
+      if (ctrlKey && key >= '1' && key <= '9') {
+        const idx = parseInt(key) - 1;
+        const mons = useDesktopStore.getState().monitors;
+        if (idx < mons.length) switchMonitor(mons[idx].id);
+      }
+      if (ctrlKey && key === 'w') {
+        const { focusedWindowId: fwId, userCloseWindow } = useDesktopStore.getState();
+        if (fwId) userCloseWindow(fwId);
+      }
+    });
   }, [switchMonitor]);
 
   // Apply accent color to :root CSS vars

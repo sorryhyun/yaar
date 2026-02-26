@@ -66,6 +66,8 @@ export type YaarMessageType =
   | 'yaar:arrow-drag-start'
   | 'yaar:arrow-drag-move'
   | 'yaar:arrow-drag-end'
+  // Keyboard shortcuts forwarded from focused iframes
+  | 'yaar:keydown'
   // IFRAME_APP_PROTOCOL_SCRIPT (app-protocol.ts)
   | 'yaar:app-ready'
   | 'yaar:app-interaction';

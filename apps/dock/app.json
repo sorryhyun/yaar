@@ -3,7 +3,7 @@
   "name": "Dock",
   "description": "System dock with clock, weather, and notifications",
   "run": "static/index.html",
-  "hidden": true,
+  "createShortcut": false,
   "appProtocol": true,
   "frameless": true,
   "windowStyle": {

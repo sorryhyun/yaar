@@ -3,7 +3,7 @@
   "name": "Browser",
   "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
   "run": "static/index.html",
-  "hidden": true,
+  "createShortcut": false,
   "appProtocol": true,
   "protocol": {
     "state": {

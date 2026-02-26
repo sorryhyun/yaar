@@ -421,6 +421,25 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }, '*');
   });
 
+  // Forward global keyboard shortcuts to the parent so they work even
+  // when the iframe has focus (Shift+Tab, Ctrl+1-9, Ctrl+W).
+  document.addEventListener('keydown', function(e) {
+    var dominated = false;
+    if (e.key === 'Tab' && e.shiftKey) dominated = true;
+    if (e.ctrlKey && e.key >= '1' && e.key <= '9') dominated = true;
+    if (e.ctrlKey && e.key === 'w') dominated = true;
+    if (!dominated) return;
+    e.preventDefault();
+    window.parent.postMessage({
+      type: 'yaar:keydown',
+      key: e.key,
+      shiftKey: e.shiftKey,
+      ctrlKey: e.ctrlKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey
+    }, '*');
+  });
+
   // Text drag: when user drags selected text, notify parent so it can
   // track the drag across windows and handle the drop.
   document.addEventListener('dragstart', function(e) {

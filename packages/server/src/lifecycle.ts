@@ -11,6 +11,8 @@ import { networkInterfaces } from 'os';
 import { execSync } from 'child_process';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
+import { listApps } from './mcp/apps/discovery.js';
+import { ensureAppShortcut } from './storage/shortcuts.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
   listSessions,
@@ -62,6 +64,23 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   initSessionHub();
 
   await initMcpServer();
+
+  // Ensure desktop shortcuts exist for all apps that want them
+  try {
+    const apps = await listApps();
+    for (const app of apps) {
+      if (app.createShortcut !== false) {
+        await ensureAppShortcut({
+          id: app.id,
+          name: app.name,
+          icon: app.icon,
+          iconType: app.iconType,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal: shortcuts will be created on next app interaction
+  }
 
   // Pre-warm provider pool (availability check, no network calls)
   const warmPoolReady = await initWarmPool();

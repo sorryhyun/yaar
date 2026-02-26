@@ -24,7 +24,7 @@ export interface AppInfo {
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
   hasCredentials: boolean;
-  hidden?: boolean;
+  createShortcut?: boolean;
   run?: string; // Resolved iframe URL for app:// protocol (e.g. /api/apps/{id}/static/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
@@ -76,7 +76,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
       let description: string | undefined;
-      let hidden: boolean | undefined;
+      let createShortcut: boolean | undefined;
       let run: string | undefined;
       let appProtocol: boolean | undefined;
       let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
@@ -92,7 +92,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (icon) iconType = 'emoji';
         displayName = meta.name;
         if (meta.description) description = meta.description;
-        if (meta.hidden) hidden = true;
+        if (meta.createShortcut === false || meta.hidden === true) createShortcut = false;
         if (typeof meta.run === 'string') run = meta.run;
         if (meta.appProtocol) appProtocol = true;
         if (meta.protocol && typeof meta.protocol === 'object') protocol = meta.protocol;
@@ -150,7 +150,7 @@ export async function listApps(): Promise<AppInfo[]> {
         iconType,
         hasSkill,
         hasCredentials: appHasCredentials,
-        ...(hidden && { hidden }),
+        ...(createShortcut === false && { createShortcut: false }),
         ...(resolvedRun && { run: resolvedRun }),
         isCompiled,
         ...(appProtocol && { appProtocol }),

@@ -42,11 +42,17 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push('- Mode: Standalone executable');
   }
 
-  const visibleApps = apps.filter((a) => !a.hidden);
-  const hiddenApps = apps.filter((a) => a.hidden);
-
-  if (visibleApps.length > 0) {
-    lines.push(`- Installed apps: ${visibleApps.map((a) => a.id).join(', ')}`);
+  if (apps.length > 0) {
+    const appLines = apps.map((a) => {
+      let line = `  - **${a.name}** (${a.id}): ${a.description || 'No description'}`;
+      if (a.isCompiled) line += ` (iframe: app://${a.id})`;
+      if (a.variant && a.variant !== 'standard') {
+        line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
+      }
+      if (a.createShortcut === false) line += ' [system]';
+      return line;
+    });
+    lines.push(`- Installed apps:\n${appLines.join('\n')}`);
   }
 
   if (storage.success && storage.entries && storage.entries.length > 0) {
@@ -62,18 +68,6 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
       (m) => `  - mounts/${m.alias}/ \u2192 ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`,
     );
     lines.push(`- Mounts:\n${mountLines.join('\n')}`);
-  }
-
-  if (hiddenApps.length > 0) {
-    const systemLines = hiddenApps.map((a) => {
-      let line = `  - **${a.name}**: ${a.description || a.id}`;
-      if (a.isCompiled) line += ` (iframe: app://${a.id})`;
-      if (a.variant && a.variant !== 'standard') {
-        line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
-      }
-      return line;
-    });
-    lines.push(`- System apps:\n${systemLines.join('\n')}`);
   }
 
   let result = `\n\n## Environment\n${lines.join('\n')}`;

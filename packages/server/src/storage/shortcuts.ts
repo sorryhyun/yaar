@@ -47,3 +47,31 @@ export async function updateShortcut(
   await writeShortcuts(shortcuts);
   return shortcut;
 }
+
+export async function ensureAppShortcut(app: {
+  id: string;
+  name: string;
+  icon?: string;
+  iconType?: 'emoji' | 'image';
+}): Promise<DesktopShortcut> {
+  const shortcuts = await readShortcuts();
+  const shortcutId = `app-${app.id}`;
+  const existing = shortcuts.find((s) => s.id === shortcutId);
+  if (existing) return existing;
+  const shortcut: DesktopShortcut = {
+    id: shortcutId,
+    label: app.name,
+    icon: app.icon || '📦',
+    ...(app.iconType && { iconType: app.iconType }),
+    type: 'app',
+    target: app.id,
+    createdAt: Date.now(),
+  };
+  shortcuts.push(shortcut);
+  await writeShortcuts(shortcuts);
+  return shortcut;
+}
+
+export async function removeAppShortcut(appId: string): Promise<boolean> {
+  return removeShortcut(`app-${appId}`);
+}

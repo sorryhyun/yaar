@@ -3,7 +3,7 @@
   "name": "Storage",
   "description": "Persistent file storage for user data, notes, and files across sessions",
   "run": "static/index.html",
-  "hidden": true,
+  "createShortcut": false,
   "appProtocol": true,
   "protocol": {
     "state": {},
