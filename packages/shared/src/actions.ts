@@ -244,10 +244,12 @@ export interface DesktopShortcut {
   label: string;
   icon: string;
   iconType?: 'emoji' | 'image';
-  type: 'file' | 'url' | 'action' | 'app';
+  type: 'file' | 'url' | 'action' | 'app' | 'skill';
   target: string;
   /** When set, clicking the shortcut executes these actions client-side without AI round-trip. */
   osActions?: OSAction[];
+  /** Skill instructions sent to AI when clicked (for type='skill'). */
+  skill?: string;
   createdAt: number;
 }
 

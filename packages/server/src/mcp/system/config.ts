@@ -81,7 +81,7 @@ export function registerConfigTools(server: McpServer): void {
           .optional()
           .describe('(shortcuts) Icon type (default: emoji)'),
         shortcutType: z
-          .enum(['file', 'url', 'action'])
+          .enum(['file', 'url', 'action', 'skill'])
           .optional()
           .describe('(shortcuts) Shortcut type'),
         target: z
@@ -93,6 +93,12 @@ export function registerConfigTools(server: McpServer): void {
           .optional()
           .describe(
             '(shortcuts) OS Actions to execute client-side on click (bypasses AI). Each object needs a "type" field.',
+          ),
+        skill: z
+          .string()
+          .optional()
+          .describe(
+            '(shortcuts) Skill/macro instructions — sent to AI when the shortcut is clicked (type "skill")',
           ),
       },
     },
@@ -117,6 +123,7 @@ export function registerConfigTools(server: McpServer): void {
           if (args.shortcutType !== undefined) updates.type = args.shortcutType;
           if (args.target !== undefined) updates.target = args.target;
           if (args.osActions !== undefined) updates.osActions = args.osActions;
+          if (args.skill !== undefined) updates.skill = args.skill;
           if (Object.keys(updates).length === 0) {
             return error('No updates provided.');
           }
@@ -133,19 +140,24 @@ export function registerConfigTools(server: McpServer): void {
         }
 
         // Create new shortcut
-        if (!args.label || !args.icon || !args.shortcutType || !args.target) {
+        if (args.shortcutType === 'skill') {
+          if (!args.label || !args.icon || !args.skill) {
+            return error('skill shortcuts require label, icon, and skill fields.');
+          }
+        } else if (!args.label || !args.icon || !args.shortcutType || !args.target) {
           return error(
             'shortcuts section requires label, icon, shortcutType, and target fields to create.',
           );
         }
         const shortcut: DesktopShortcut = {
           id: `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          label: args.label,
-          icon: args.icon,
+          label: args.label!,
+          icon: args.icon!,
           iconType: args.iconType,
-          type: args.shortcutType,
-          target: args.target,
+          type: args.shortcutType!,
+          target: args.target || '',
           osActions: args.osActions as DesktopShortcut['osActions'],
+          ...(args.skill && { skill: args.skill }),
           createdAt: Date.now(),
         };
         await addShortcut(shortcut);

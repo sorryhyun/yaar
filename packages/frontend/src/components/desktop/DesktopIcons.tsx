@@ -133,6 +133,14 @@ export function DesktopIcons({
         return;
       }
 
+      // Skill shortcuts: send instructions to AI
+      if (shortcut.type === 'skill' && shortcut.skill) {
+        sendMessage(
+          `<ui:click>skill: ${shortcut.label}</ui:click>\n<skill>\n${shortcut.skill}\n</skill>`,
+        );
+        return;
+      }
+
       // Other shortcuts: use osActions or send to AI
       if (shortcut.osActions && shortcut.osActions.length > 0) {
         useDesktopStore.getState().applyActions(shortcut.osActions);

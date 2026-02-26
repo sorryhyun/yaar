@@ -99,6 +99,11 @@ Use set_config to register hooks that fire automatically on desktop events.
 - The user will be asked to approve each hook via a dialog.
 - Use get_config to see current hooks. Use remove_config to delete a hook.
 
+## Skill Shortcuts
+Desktop shortcuts with type "skill" carry workflow instructions (macros).
+- Create: set_config({ section: "shortcuts", label: "Morning Brief", icon: "☀️", shortcutType: "skill", skill: "Check RSS feeds, summarize top 3 stories in a window." })
+- When a user clicks one, you receive \`<skill>...</skill>\` tags with the instructions. Follow them.
+
 ## Action Reload Cache
 When you see <reload_options> in a message, it contains a JSON array of cached action sequences from previous interactions.
 - Each entry has: cacheId, label, similarity (0-1), actions count, and exact (boolean)

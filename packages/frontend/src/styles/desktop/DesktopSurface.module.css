@@ -51,6 +51,7 @@
   font-size: var(--text-lg);
   backdrop-filter: blur(10px);
   z-index: var(--z-modal);
+  user-select: none;
 }
 
 .statusDot {
@@ -146,6 +147,7 @@
   z-index: var(--z-panel);
   box-shadow: var(--shadow-lg);
   animation: slideDown var(--transition-normal);
+  user-select: none;
 }
 
 .agentPanelHeader {
@@ -264,6 +266,7 @@
   cursor: pointer;
   font-family: inherit;
   transition: background var(--transition-fast);
+  user-select: none;
 }
 
 .desktopIcon:hover {
