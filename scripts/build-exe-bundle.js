@@ -168,6 +168,7 @@ const cmd = [
   `--target=${bunTarget}`,
   `--outfile=${relative(rootDir, outfile)}`,
   '--minify',
+  '--external', 'cpu-features',
   ...defines,
 ].join(' ');
 

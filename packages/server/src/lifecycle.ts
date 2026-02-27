@@ -19,10 +19,13 @@ import {
   getWindowRestoreActions,
   getContextRestoreMessages,
 } from './logging/index.js';
-import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE } from './config.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, PORT } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/live-session.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
+import { loadTunnelConfig, SshTunnel } from './lib/tunnel/index.js';
+
+let activeTunnel: SshTunnel | null = null;
 
 /**
  * Initialize all subsystems (storage, MCP, warm pool, session restore).
@@ -56,6 +59,19 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // Generate auth token for remote mode
   if (IS_REMOTE) {
     generateRemoteToken();
+
+    // Attempt SSH tunnel (defaults to localhost.run if no config)
+    const tunnelConfig = loadTunnelConfig();
+    if (tunnelConfig?.disabled !== true) {
+      const config = tunnelConfig ?? { service: 'localhost.run' as const };
+      const tunnel = new SshTunnel(config, PORT);
+      const ok = await tunnel.connect();
+      if (ok) {
+        activeTunnel = tunnel;
+      } else {
+        console.warn('[Tunnel] Could not establish tunnel — LAN-only mode');
+      }
+    }
   }
 
   // Initialize session hub (LiveSession instances created on first WS connection)
@@ -177,10 +193,12 @@ export async function printBanner(server: Server<any>): Promise<void> {
   const hostname = server.hostname;
 
   if (IS_REMOTE) {
-    const token = getRemoteToken();
+    const token = getRemoteToken()!;
     const lanIp = getLanIp();
     const serverUrl = `http://${lanIp}:${port}`;
-    const connectUrl = `${serverUrl}/#remote=${token}`;
+    const lanConnectUrl = `${serverUrl}/#remote=${token}`;
+    const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
+    const connectUrl = tunnelUrl ?? lanConnectUrl;
 
     console.log('');
     console.log(
@@ -191,6 +209,9 @@ export async function printBanner(server: Server<any>): Promise<void> {
       '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
     );
     console.log(`\u2551  Server:  ${serverUrl}`);
+    if (tunnelUrl) {
+      console.log(`\u2551  Tunnel:  ${tunnelUrl}`);
+    }
     console.log(`\u2551  Token:   ${token}`);
     console.log(
       '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
@@ -225,6 +246,12 @@ export async function printBanner(server: Server<any>): Promise<void> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function shutdown(server: Server<any>): Promise<void> {
   console.log('\nShutting down...');
+
+  // Close SSH tunnel
+  if (activeTunnel) {
+    await activeTunnel.shutdown();
+    activeTunnel = null;
+  }
 
   // Close browser sessions
   try {
