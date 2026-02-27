@@ -1,16 +1,17 @@
 /**
  * Native directory picker — opens a folder selection dialog on the host OS.
  *
- * Tries (in order): zenity, kdialog, PowerShell (for WSL2).
- * Returns the selected absolute path, or null if cancelled.
+ * Platform strategy:
+ * - Windows (native exe): PowerShell FolderBrowserDialog via temp .ps1 file
+ *   (stdout piping is broken in Bun compiled exe, so results go through temp files)
+ * - WSL: PowerShell FolderBrowserDialog + wslpath conversion
+ * - Linux/macOS: zenity or kdialog (direct spawn with stdout)
  *
- * On Windows (Bun compiled exe), stdout piping from child processes is broken.
- * We work around this by writing results to a temp file and polling for it,
- * using detached + stdio:'ignore' spawn (proven to work from exe-entry.ts).
+ * Returns the selected absolute path, or null if cancelled.
  */
 
 import { spawn } from 'child_process';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -22,73 +23,47 @@ const isWin32 = process.platform === 'win32';
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
- * Spawn a command detached with no stdio, have it write result to a temp file, poll for it.
- * This is the only reliable way to run child processes in Bun compiled exe on Windows.
+ * Execute a command directly with stdout piping.
+ * Works on Linux/macOS/WSL where child process stdio is reliable.
  */
-async function execViaFile(
+function execDirect(
   cmd: string,
   args: string[],
   timeoutMs = 60_000,
 ): Promise<{ stdout: string; code: number }> {
-  const id = randomBytes(4).toString('hex');
-  const resultFile = join(tmpdir(), `yaar-exec-${id}.txt`);
-  const doneFile = join(tmpdir(), `yaar-done-${id}.txt`);
-
-  // Wrap command: run the real command, capture output to resultFile, write exit code to doneFile
-  const escapedArgs = args.map((a) => "'" + a.replace(/'/g, "''") + "'").join(' ');
-  const wrappedScript = [
-    'try {',
-    `  $out = & '${cmd}' ${escapedArgs} 2>&1`,
-    `  [System.IO.File]::WriteAllText('${resultFile.replace(/\\/g, '\\\\')}', ($out -join [char]10), [System.Text.Encoding]::UTF8)`,
-    `  [System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '0', [System.Text.Encoding]::UTF8)`,
-    '} catch {',
-    `  [System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '1', [System.Text.Encoding]::UTF8)`,
-    '}',
-  ].join('\n');
-
-  const child = spawn('powershell.exe', ['-NoProfile', '-Command', wrappedScript], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
-  child.unref();
-
-  // Poll for done file
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await sleep(300);
-    if (existsSync(doneFile)) {
-      const code = parseInt(readFileSync(doneFile, 'utf-8').trim(), 10) || 0;
-      const stdout = existsSync(resultFile) ? readFileSync(resultFile, 'utf-8').trim() : '';
-      try {
-        unlinkSync(resultFile);
-      } catch {
-        /* ignore */
-      }
-      try {
-        unlinkSync(doneFile);
-      } catch {
-        /* ignore */
-      }
-      return { stdout, code };
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      resolve({ stdout: '', code: 1 });
+      return;
     }
-  }
-  // Timeout — clean up
-  try {
-    unlinkSync(resultFile);
-  } catch {
-    /* ignore */
-  }
-  try {
-    unlinkSync(doneFile);
-  } catch {
-    /* ignore */
-  }
-  return { stdout: '', code: 1 };
+
+    let stdout = '';
+    child.stdout!.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ stdout: '', code: 1 });
+    }, timeoutMs);
+
+    child.on('close', (code: number | null) => {
+      clearTimeout(timer);
+      resolve({ stdout: stdout.trim(), code: code ?? 1 });
+    });
+
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve({ stdout: '', code: 1 });
+    });
+  });
 }
 
 async function tryZenity(): Promise<string | null> {
-  const { stdout, code } = await execViaFile('zenity', [
+  const { stdout, code } = await execDirect('zenity', [
     '--file-selection',
     '--directory',
     '--title=Select folder to mount',
@@ -97,7 +72,7 @@ async function tryZenity(): Promise<string | null> {
 }
 
 async function tryKdialog(): Promise<string | null> {
-  const { stdout, code } = await execViaFile('kdialog', [
+  const { stdout, code } = await execDirect('kdialog', [
     '--getexistingdirectory',
     '.',
     '--title',
@@ -110,10 +85,11 @@ async function tryPowerShell(): Promise<string | null> {
   const id = randomBytes(4).toString('hex');
   const resultFile = join(tmpdir(), `yaar-pick-${id}.txt`);
   const doneFile = join(tmpdir(), `yaar-pick-done-${id}.txt`);
+  const scriptFile = join(tmpdir(), `yaar-pick-${id}.ps1`);
 
-  // PowerShell script that opens folder dialog and writes result to temp files.
-  // The result file contains the selected path (empty if cancelled).
-  // The done file signals completion.
+  // Escape backslashes for embedding in PowerShell single-quoted string literals
+  const esc = (p: string) => p.replace(/\\/g, '\\\\');
+
   const script = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -126,21 +102,36 @@ $f.Size = New-Object System.Drawing.Size(0,0)
 $f.StartPosition = 'Manual'
 $f.Location = New-Object System.Drawing.Point(-9999,-9999)
 $f.Show()
+$f.Activate()
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
 $d.Description = 'Select folder to mount'
 $d.ShowNewFolderButton = $false
 $result = ''
 if ($d.ShowDialog($f) -eq 'OK') { $result = $d.SelectedPath }
 $f.Dispose()
-[System.IO.File]::WriteAllText('${resultFile.replace(/\\/g, '\\\\')}', $result, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '0', [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText('${esc(resultFile)}', $result, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText('${esc(doneFile)}', '0', [System.Text.Encoding]::UTF8)
 `.trim();
 
-  const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-Command', script], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
+  // Write script to a temp .ps1 file instead of passing via -Command.
+  // On Windows, multi-line scripts passed as -Command arguments can get
+  // mangled by CreateProcessW argument parsing (especially in Bun compiled exe).
+  writeFileSync(scriptFile, script, 'utf-8');
+
+  const child = spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-STA',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      scriptFile,
+    ],
+    { detached: true, stdio: 'ignore' },
+  );
   child.unref();
 
   // Poll for done file (up to 60s)
@@ -149,23 +140,21 @@ $f.Dispose()
     await sleep(300);
     if (existsSync(doneFile)) {
       let winPath = existsSync(resultFile) ? readFileSync(resultFile, 'utf-8').trim() : '';
-      try {
-        unlinkSync(resultFile);
-      } catch {
-        /* ignore */
-      }
-      try {
-        unlinkSync(doneFile);
-      } catch {
-        /* ignore */
+      for (const f of [resultFile, doneFile, scriptFile]) {
+        try {
+          unlinkSync(f);
+        } catch {
+          /* ignore */
+        }
       }
 
       // Remove BOM if present
       if (winPath.charCodeAt(0) === 0xfeff) winPath = winPath.slice(1);
       if (!winPath) return null;
 
+      // WSL: convert Windows path (C:\...) to Linux path (/mnt/c/...)
       if (isWSL && /^[A-Za-z]:\\/.test(winPath)) {
-        const { stdout: wslPath, code: wslCode } = await execViaFile('wslpath', ['-u', winPath]);
+        const { stdout: wslPath, code: wslCode } = await execDirect('wslpath', ['-u', winPath]);
         return wslCode === 0 && wslPath ? wslPath : null;
       }
       return winPath;
@@ -173,15 +162,12 @@ $f.Dispose()
   }
 
   // Timeout — clean up
-  try {
-    unlinkSync(resultFile);
-  } catch {
-    /* ignore */
-  }
-  try {
-    unlinkSync(doneFile);
-  } catch {
-    /* ignore */
+  for (const f of [resultFile, doneFile, scriptFile]) {
+    try {
+      unlinkSync(f);
+    } catch {
+      /* ignore */
+    }
   }
   return null;
 }
@@ -199,8 +185,8 @@ export async function pickDirectory(): Promise<string | null> {
     try {
       const result = await picker();
       if (result !== null) return result;
-    } catch {
-      // Command not found — try next
+    } catch (err) {
+      console.error(`[pickDirectory] ${picker.name} failed:`, err);
     }
   }
   return null;

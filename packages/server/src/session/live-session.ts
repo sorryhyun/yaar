@@ -28,7 +28,7 @@ import {
   type OSAction,
   type AppProtocolRequest,
 } from '@yaar/shared';
-import type { WebSocket } from 'ws';
+import type { YaarWebSocket } from './ws-types.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
@@ -42,7 +42,7 @@ export interface LiveSessionOptions {
 
 export class LiveSession {
   readonly sessionId: SessionId;
-  private connections = new Map<ConnectionId, WebSocket>();
+  private connections = new Map<ConnectionId, YaarWebSocket>();
 
   // Session-scoped state
   private pool: ContextPool | null = null;
@@ -126,7 +126,7 @@ export class LiveSession {
 
   // ── Connection management ───────────────────────────────────────────
 
-  addConnection(connectionId: ConnectionId, ws: WebSocket): void {
+  addConnection(connectionId: ConnectionId, ws: YaarWebSocket): void {
     this.connections.set(connectionId, ws);
     console.log(
       `[LiveSession ${this.sessionId}] Connection added: ${connectionId} (total: ${this.connections.size})`,

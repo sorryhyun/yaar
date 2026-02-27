@@ -2,7 +2,6 @@
  * Shared HTTP helpers — JSON responses, error responses, path validation.
  */
 
-import type { ServerResponse } from 'http';
 import { normalize, join, relative } from 'path';
 
 /** Metadata for a public REST endpoint exposed to iframe apps. */
@@ -13,13 +12,12 @@ export interface EndpointMeta {
   description: string;
 }
 
-export function sendJson(res: ServerResponse, data: unknown, status = 200): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(data));
+export function jsonResponse(data: unknown, status = 200): Response {
+  return Response.json(data, { status });
 }
 
-export function sendError(res: ServerResponse, error: string, status = 500): void {
-  sendJson(res, { error }, status);
+export function errorResponse(error: string, status = 500): Response {
+  return Response.json({ error }, { status });
 }
 
 /**

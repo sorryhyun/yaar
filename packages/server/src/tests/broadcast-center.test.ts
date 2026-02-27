@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BroadcastCenter } from '../session/broadcast-center.js';
 import type { ServerEvent } from '@yaar/shared';
+import type { YaarWebSocket } from '../session/ws-types.js';
 
 /** Minimal mock of WebSocket */
 function createMockWs(readyState = 1 /* OPEN */) {
   return {
     readyState,
-    OPEN: 1,
     send: vi.fn(),
-  } as unknown as import('ws').WebSocket;
+  } as unknown as YaarWebSocket;
 }
 
 describe('BroadcastCenter', () => {

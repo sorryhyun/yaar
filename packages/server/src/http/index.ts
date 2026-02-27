@@ -1,1 +1,1 @@
-export { createHttpServer } from './server.js';
+export { createFetchHandler } from './server.js';

@@ -1,9 +1,8 @@
 /**
- * Server lifecycle — initialization, listening, shutdown.
+ * Server lifecycle — initialization, banner, shutdown.
  */
 
-import type { Server } from 'http';
-import type { WebSocketServer } from 'ws';
+import type { Server } from 'bun';
 import { mkdir, stat as fsStat } from 'fs/promises';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -21,14 +20,14 @@ import {
   getWindowRestoreActions,
   getContextRestoreMessages,
 } from './logging/index.js';
-import { PORT, PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE } from './config.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/live-session.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 
 /**
  * Initialize all subsystems (storage, MCP, warm pool, session restore).
- * Returns the options to pass to createWebSocketServer.
+ * Returns the options to pass to createWsHandlers.
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   await ensureStorageDir();
@@ -170,49 +169,59 @@ function isWsl(): boolean {
   }
 }
 
-export function startListening(server: Server): void {
-  const host = IS_REMOTE ? '0.0.0.0' : '127.0.0.1';
-  server.listen(PORT, host, async () => {
-    if (IS_REMOTE) {
-      const token = getRemoteToken();
-      const lanIp = getLanIp();
-      const serverUrl = `http://${lanIp}:${PORT}`;
-      const connectUrl = `${serverUrl}/#remote=${token}`;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function printBanner(server: Server<any>): Promise<void> {
+  const port = server.port;
+  const hostname = server.hostname;
 
-      console.log('');
-      console.log('╔══════════════════════════════════════════════════╗');
-      console.log('║              YAAR Remote Mode                   ║');
-      console.log('╠══════════════════════════════════════════════════╣');
-      console.log(`║  Server:  ${serverUrl}`);
-      console.log(`║  Token:   ${token}`);
-      console.log('╠══════════════════════════════════════════════════╣');
-      console.log(`║  Connect: ${connectUrl}`);
-      console.log('╚══════════════════════════════════════════════════╝');
-      console.log('');
+  if (IS_REMOTE) {
+    const token = getRemoteToken();
+    const lanIp = getLanIp();
+    const serverUrl = `http://${lanIp}:${port}`;
+    const connectUrl = `${serverUrl}/#remote=${token}`;
 
-      // Print QR code if available
-      try {
-        const qrcode = (await import('qrcode-terminal')) as {
-          default: {
-            generate(text: string, opts: { small: boolean }, cb: (qr: string) => void): void;
-          };
+    console.log('');
+    console.log(
+      '\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557',
+    );
+    console.log('\u2551              YAAR Remote Mode                   \u2551');
+    console.log(
+      '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
+    );
+    console.log(`\u2551  Server:  ${serverUrl}`);
+    console.log(`\u2551  Token:   ${token}`);
+    console.log(
+      '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
+    );
+    console.log(`\u2551  Connect: ${connectUrl}`);
+    console.log(
+      '\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d',
+    );
+    console.log('');
+
+    // Print QR code if available
+    try {
+      const qrcode = (await import('qrcode-terminal')) as {
+        default: {
+          generate(text: string, opts: { small: boolean }, cb: (qr: string) => void): void;
         };
-        qrcode.default.generate(connectUrl, { small: true }, (qr: string) => {
-          console.log('Scan to connect:');
-          console.log(qr);
-        });
-      } catch {
-        // qrcode-terminal not available, skip
-      }
-    } else {
-      console.log(`YAAR server running at http://127.0.0.1:${PORT}`);
-      console.log('WebSocket endpoint: ws://127.0.0.1:' + PORT + '/ws');
-      console.log('MCP endpoints: http://127.0.0.1:' + PORT + '/mcp/{system,window,storage,apps}');
+      };
+      qrcode.default.generate(connectUrl, { small: true }, (qr: string) => {
+        console.log('Scan to connect:');
+        console.log(qr);
+      });
+    } catch {
+      // qrcode-terminal not available, skip
     }
-  });
+  } else {
+    console.log(`YAAR server running at http://${hostname}:${port}`);
+    console.log(`WebSocket endpoint: ws://${hostname}:${port}/ws`);
+    console.log(`MCP endpoints: http://${hostname}:${port}/mcp/{system,window,storage,apps}`);
+  }
 }
 
-export async function shutdown(server: Server, wss: WebSocketServer): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function shutdown(server: Server<any>): Promise<void> {
   console.log('\nShutting down...');
 
   // Close browser sessions
@@ -225,11 +234,6 @@ export async function shutdown(server: Server, wss: WebSocketServer): Promise<vo
 
   await getWarmPool().cleanup();
 
-  wss.close(() => {
-    server.close(() => {
-      process.exit(0);
-    });
-  });
-  // Force exit after 2 seconds if graceful shutdown hangs
-  setTimeout(() => process.exit(0), 2000);
+  server.stop();
+  process.exit(0);
 }

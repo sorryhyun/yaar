@@ -2,14 +2,11 @@
  * File-serving routes — PDF render, sandbox, app static, storage files.
  */
 
-import type { IncomingMessage, ServerResponse } from 'http';
 import { readFile, readdir } from 'fs/promises';
 import { join, extname } from 'path';
-import { gzip } from 'zlib';
-import { promisify } from 'util';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
-import { sendError, sendJson, safePath, type EndpointMeta } from '../utils.js';
+import { errorResponse, jsonResponse, safePath, type EndpointMeta } from '../utils.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -64,8 +61,6 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 ];
 import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
 
-const gzipAsync = promisify(gzip);
-
 /** Content types eligible for gzip compression. */
 const COMPRESSIBLE = new Set([
   'text/html',
@@ -76,51 +71,24 @@ const COMPRESSIBLE = new Set([
 ]);
 
 /** Gzip-compress a buffer if the client accepts it and the content type is compressible. */
-async function maybeGzip(
-  req: IncomingMessage,
+function maybeGzip(
+  req: Request,
   headers: Record<string, string>,
   body: Buffer,
-): Promise<Buffer> {
+): Buffer | Uint8Array {
   const contentType = headers['Content-Type']?.split(';')[0];
   if (!contentType || !COMPRESSIBLE.has(contentType)) return body;
   if (body.length < 256) return body; // not worth compressing tiny responses
-  const accept = req.headers['accept-encoding'] ?? '';
+  const accept = req.headers.get('accept-encoding') ?? '';
   if (!accept.includes('gzip')) return body;
   headers['Content-Encoding'] = 'gzip';
-  return gzipAsync(body) as Promise<Buffer>;
+  return Bun.gzipSync(new Uint8Array(body));
 }
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']);
 
-/**
- * Collect the full request body as a Buffer, enforcing a size limit.
- * Resolves with the Buffer, or rejects / sends 413 if exceeded.
- */
-function collectBody(req: IncomingMessage, res: ServerResponse, maxSize: number): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > maxSize) {
-        req.destroy();
-        sendError(res, `Request body too large (max ${maxSize} bytes)`, 413);
-        reject(new Error('Body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', (err) => reject(err));
-  });
-}
-
-export async function handleFileRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-): Promise<boolean> {
+export async function handleFileRoutes(req: Request, url: URL): Promise<Response | null> {
   // Serve browser screenshot
   // URL format: /api/browser/{sessionId}/screenshot
   const browserScreenshotMatch = url.pathname.match(
@@ -132,25 +100,23 @@ export async function handleFileRoutes(
       const { getBrowserPool } = await import('../../lib/browser/index.js');
       const session = getBrowserPool().getSession(sessionId);
       if (!session) {
-        sendError(res, 'Browser session not found', 404);
-        return true;
+        return errorResponse('Browser session not found', 404);
       }
       const fresh = url.searchParams.has('fresh');
       const buf = fresh ? await session.screenshot() : session.lastScreenshot;
       if (!buf) {
-        sendError(res, 'No screenshot available', 404);
-        return true;
+        return errorResponse('No screenshot available', 404);
       }
-      res.writeHead(200, {
-        'Content-Type': 'image/jpeg',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Content-Length': buf.length.toString(),
+      return new Response(buf, {
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Content-Length': buf.length.toString(),
+        },
       });
-      res.end(buf);
     } catch {
-      sendError(res, 'Browser not available', 404);
+      return errorResponse('Browser not available', 404);
     }
-    return true;
   }
 
   // SSE stream for browser session updates
@@ -162,60 +128,72 @@ export async function handleFileRoutes(
       const { getBrowserPool } = await import('../../lib/browser/index.js');
       const session = getBrowserPool().getSession(sessionId);
       if (!session) {
-        sendError(res, 'Browser session not found', 404);
-        return true;
+        return errorResponse('Browser session not found', 404);
       }
 
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const write = (data: string) => {
+            try {
+              controller.enqueue(encoder.encode(data));
+            } catch {
+              // Stream closed
+              cleanup();
+            }
+          };
+
+          // Send current state immediately so the client doesn't miss anything
+          const initial = JSON.stringify({
+            url: session.currentUrl,
+            title: session.currentTitle,
+            version: session.version,
+          });
+          write(`data: ${initial}\n\n`);
+
+          const cleanup = () => {
+            clearInterval(heartbeat);
+            session.off('updated', onUpdate);
+            session.off('closed', onClosed);
+          };
+
+          // Stream subsequent updates
+          const onUpdate = (update: { url: string; title: string; version: number }) => {
+            write(`data: ${JSON.stringify(update)}\n\n`);
+          };
+          const onClosed = () => {
+            cleanup();
+            try {
+              controller.close();
+            } catch {
+              // Already closed
+            }
+          };
+
+          // Keep connection alive through proxies
+          const heartbeat = setInterval(() => {
+            write(': heartbeat\n\n');
+          }, 30_000);
+
+          session.on('updated', onUpdate);
+          session.on('closed', onClosed);
+
+          // Clean up when the client disconnects
+          req.signal.addEventListener('abort', cleanup);
+        },
       });
 
-      // Send current state immediately so the client doesn't miss anything
-      const initial = JSON.stringify({
-        url: session.currentUrl,
-        title: session.currentTitle,
-        version: session.version,
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        },
       });
-      res.write(`data: ${initial}\n\n`);
-
-      const cleanup = () => {
-        clearInterval(heartbeat);
-        session.off('updated', onUpdate);
-        session.off('closed', onClosed);
-      };
-
-      // Stream subsequent updates
-      const onUpdate = (update: { url: string; title: string; version: number }) => {
-        if (res.destroyed) {
-          cleanup();
-          return;
-        }
-        res.write(`data: ${JSON.stringify(update)}\n\n`);
-      };
-      const onClosed = () => {
-        if (!res.destroyed) res.end();
-        cleanup();
-      };
-
-      // Keep connection alive through proxies
-      const heartbeat = setInterval(() => {
-        if (res.destroyed) {
-          cleanup();
-          return;
-        }
-        res.write(': heartbeat\n\n');
-      }, 30_000);
-
-      session.on('updated', onUpdate);
-      session.on('closed', onClosed);
-      req.on('close', cleanup);
     } catch {
-      sendError(res, 'Browser not available', 404);
+      return errorResponse('Browser not available', 404);
     }
-    return true;
   }
 
   // Render PDF page as image
@@ -227,32 +205,30 @@ export async function handleFileRoutes(
 
     const resolved = resolvePath(pdfPath);
     if (!resolved) {
-      sendError(res, 'Access denied', 403);
-      return true;
+      return errorResponse('Access denied', 403);
     }
     const normalizedPath = resolved.absolutePath;
 
     if (extname(pdfPath).toLowerCase() !== '.pdf') {
-      sendError(res, 'Not a PDF file', 400);
-      return true;
+      return errorResponse('Not a PDF file', 400);
     }
 
     try {
       const pngBuffer = await renderPdfPage(normalizedPath, pageNum, 1.5);
-      res.writeHead(200, {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=3600',
+      return new Response(pngBuffer, {
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=3600',
+        },
       });
-      res.end(pngBuffer);
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Unknown error';
       if (error.includes('Failed to render page')) {
-        sendError(res, error, 404);
+        return errorResponse(error, 404);
       } else {
-        sendError(res, 'Failed to render PDF page');
+        return errorResponse('Failed to render PDF page');
       }
     }
-    return true;
   }
 
   // Serve sandbox files (for previewing compiled apps)
@@ -265,8 +241,7 @@ export async function handleFileRoutes(
     const sandboxDir = join(PROJECT_ROOT, 'sandbox', sandboxId);
     const normalizedPath = safePath(sandboxDir, filePath);
     if (!normalizedPath) {
-      sendError(res, 'Access denied', 403);
-      return true;
+      return errorResponse('Access denied', 403);
     }
 
     try {
@@ -280,13 +255,11 @@ export async function handleFileRoutes(
       if (ext === '.html') {
         headers['Content-Security-Policy'] = "connect-src 'self'";
       }
-      const body = await maybeGzip(req, headers, content);
-      res.writeHead(200, headers);
-      res.end(body);
+      const body = maybeGzip(req, headers, content);
+      return new Response(body, { headers });
     } catch {
-      sendError(res, 'File not found', 404);
+      return errorResponse('File not found', 404);
     }
-    return true;
   }
 
   // Serve app icon image
@@ -298,8 +271,7 @@ export async function handleFileRoutes(
 
     const validated = safePath(PROJECT_ROOT, join('apps', appId));
     if (!validated) {
-      sendError(res, 'Access denied', 403);
-      return true;
+      return errorResponse('Access denied', 403);
     }
 
     try {
@@ -318,23 +290,22 @@ export async function handleFileRoutes(
       }
 
       if (!iconFile) {
-        sendError(res, 'Icon not found', 404);
-        return true;
+        return errorResponse('Icon not found', 404);
       }
 
       const iconPath = join(appDir, iconFile);
       const content = await readFile(iconPath);
       const ext = extname(iconFile).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
+      return new Response(content, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=3600',
+        },
       });
-      res.end(content);
     } catch {
-      sendError(res, 'Icon not found', 404);
+      return errorResponse('Icon not found', 404);
     }
-    return true;
   }
 
   // Serve app static files (for deployed apps)
@@ -349,8 +320,7 @@ export async function handleFileRoutes(
     const appsDir = join(PROJECT_ROOT, 'apps', appId);
     const normalizedPath = safePath(appsDir, filePath);
     if (!normalizedPath) {
-      sendError(res, 'Access denied', 403);
-      return true;
+      return errorResponse('Access denied', 403);
     }
 
     try {
@@ -364,13 +334,11 @@ export async function handleFileRoutes(
       if (ext === '.html') {
         headers['Content-Security-Policy'] = "connect-src 'self'";
       }
-      const body = await maybeGzip(req, headers, content);
-      res.writeHead(200, headers);
-      res.end(body);
+      const body = maybeGzip(req, headers, content);
+      return new Response(body, { headers });
     } catch {
-      sendError(res, 'File not found', 404);
+      return errorResponse('File not found', 404);
     }
-    return true;
   }
 
   // Storage API — GET (read/list), POST (write), DELETE
@@ -379,8 +347,7 @@ export async function handleFileRoutes(
 
     const resolved = resolvePath(filePath);
     if (!resolved) {
-      sendError(res, 'Access denied', 403);
-      return true;
+      return errorResponse('Access denied', 403);
     }
 
     // GET — serve file or list directory
@@ -389,11 +356,9 @@ export async function handleFileRoutes(
       if (url.searchParams.get('list') === 'true') {
         const result = await storageList(filePath);
         if (!result.success) {
-          sendError(res, result.error ?? 'List failed');
-          return true;
+          return errorResponse(result.error ?? 'List failed');
         }
-        sendJson(res, result.entries);
-        return true;
+        return jsonResponse(result.entries);
       }
 
       // Serve file
@@ -401,55 +366,49 @@ export async function handleFileRoutes(
         const content = await readFile(resolved.absolutePath);
         const ext = extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-        res.writeHead(200, {
-          'Content-Type': contentType,
-          'Cache-Control': 'no-cache',
+        return new Response(content, {
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'no-cache',
+          },
         });
-        res.end(content);
       } catch {
-        sendError(res, 'File not found', 404);
+        return errorResponse('File not found', 404);
       }
-      return true;
     }
 
     // POST — write file
     if (req.method === 'POST') {
       if (resolved.readOnly) {
-        sendError(res, 'Mount is read-only', 403);
-        return true;
+        return errorResponse('Mount is read-only', 403);
       }
       try {
-        const body = await collectBody(req, res, MAX_UPLOAD_SIZE);
-        const result = await storageWrite(filePath, body);
+        const body = await req.arrayBuffer();
+        if (body.byteLength > MAX_UPLOAD_SIZE) {
+          return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
+        }
+        const result = await storageWrite(filePath, Buffer.from(body));
         if (!result.success) {
-          sendError(res, result.error ?? 'Write failed');
-          return true;
+          return errorResponse(result.error ?? 'Write failed');
         }
-        sendJson(res, { ok: true, path: result.path });
+        return jsonResponse({ ok: true, path: result.path });
       } catch {
-        // collectBody already sent 413 if body too large
-        if (!res.writableEnded) {
-          sendError(res, 'Write failed');
-        }
+        return errorResponse('Write failed');
       }
-      return true;
     }
 
     // DELETE — remove file
     if (req.method === 'DELETE') {
       if (resolved.readOnly) {
-        sendError(res, 'Mount is read-only', 403);
-        return true;
+        return errorResponse('Mount is read-only', 403);
       }
       const result = await storageDelete(filePath);
       if (!result.success) {
-        sendError(res, result.error ?? 'Delete failed');
-        return true;
+        return errorResponse(result.error ?? 'Delete failed');
       }
-      sendJson(res, { ok: true, path: result.path });
-      return true;
+      return jsonResponse({ ok: true, path: result.path });
     }
   }
 
-  return false;
+  return null;
 }

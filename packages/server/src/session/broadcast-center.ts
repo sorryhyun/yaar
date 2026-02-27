@@ -8,14 +8,14 @@
  * - Session-aware broadcasting to all connections in a session
  */
 
-import type { WebSocket } from 'ws';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from './types.js';
+import { type YaarWebSocket, WS_OPEN } from './ws-types.js';
 
 export type ConnectionId = string;
 
 interface ConnectionEntry {
-  ws: WebSocket;
+  ws: YaarWebSocket;
   sessionId: SessionId;
   subscribedMonitors: Set<string>;
 }
@@ -26,7 +26,7 @@ export class BroadcastCenter {
   /**
    * Register a WebSocket connection with its session.
    */
-  subscribe(connectionId: ConnectionId, ws: WebSocket, sessionId: SessionId): void {
+  subscribe(connectionId: ConnectionId, ws: YaarWebSocket, sessionId: SessionId): void {
     this.connections.set(connectionId, { ws, sessionId, subscribedMonitors: new Set() });
     console.log(`[BroadcastCenter] Connection subscribed: ${connectionId} (session: ${sessionId})`);
   }
@@ -59,7 +59,7 @@ export class BroadcastCenter {
    */
   isConnectionActive(connectionId: ConnectionId): boolean {
     const entry = this.connections.get(connectionId);
-    return entry !== undefined && entry.ws.readyState === entry.ws.OPEN;
+    return entry !== undefined && entry.ws.readyState === WS_OPEN;
   }
 
   /**
@@ -68,7 +68,7 @@ export class BroadcastCenter {
    */
   publishToConnection(event: ServerEvent, connectionId: ConnectionId): boolean {
     const entry = this.connections.get(connectionId);
-    if (!entry || entry.ws.readyState !== entry.ws.OPEN) {
+    if (!entry || entry.ws.readyState !== WS_OPEN) {
       console.warn(`[BroadcastCenter] Connection not available: ${connectionId}`);
       return false;
     }
@@ -90,7 +90,7 @@ export class BroadcastCenter {
     let count = 0;
     const data = JSON.stringify(event);
     for (const [, entry] of this.connections) {
-      if (entry.sessionId === sessionId && entry.ws.readyState === entry.ws.OPEN) {
+      if (entry.sessionId === sessionId && entry.ws.readyState === WS_OPEN) {
         try {
           entry.ws.send(data);
           count++;
@@ -111,7 +111,7 @@ export class BroadcastCenter {
     let count = 0;
     const data = JSON.stringify(event);
     for (const [, entry] of this.connections) {
-      if (entry.sessionId === sessionId && entry.ws.readyState === entry.ws.OPEN) {
+      if (entry.sessionId === sessionId && entry.ws.readyState === WS_OPEN) {
         // Send if: no subscriptions (backward compat) OR subscribed to this monitor
         if (entry.subscribedMonitors.size === 0 || entry.subscribedMonitors.has(monitorId)) {
           try {
@@ -134,7 +134,7 @@ export class BroadcastCenter {
     let count = 0;
     const data = JSON.stringify(event);
     for (const [, entry] of this.connections) {
-      if (entry.ws.readyState === entry.ws.OPEN) {
+      if (entry.ws.readyState === WS_OPEN) {
         try {
           entry.ws.send(data);
           count++;

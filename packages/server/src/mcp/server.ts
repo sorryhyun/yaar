@@ -10,10 +10,9 @@
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import type { IncomingMessage, ServerResponse } from 'http';
 import { runWithAgentContext } from '../agents/session.js';
 import { getSessionHub } from '../session/live-session.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
@@ -47,7 +46,7 @@ export type McpServerName = (typeof MCP_SERVERS)[number];
  */
 interface McpSessionEntry {
   server: McpServer;
-  transport: StreamableHTTPServerTransport;
+  transport: WebStandardStreamableHTTPServerTransport;
 }
 
 /**
@@ -148,122 +147,88 @@ export async function initMcpServer(): Promise<void> {
 }
 
 /**
- * Read and parse the JSON body from an IncomingMessage.
- */
-function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
-    req.on('end', () => {
-      try {
-        const raw = Buffer.concat(chunks).toString('utf-8');
-        resolve(JSON.parse(raw));
-      } catch (err) {
-        reject(err);
-      }
-    });
-    req.on('error', reject);
-  });
-}
-
-/**
- * Handle incoming MCP HTTP requests.
+ * Handle incoming MCP HTTP requests using web-standard Request/Response.
  *
  * Uses the stateful-per-session pattern from the MCP SDK:
  * - On `initialize` requests: create a new McpServer + transport, store by session ID
  * - On subsequent requests: look up the transport by the `mcp-session-id` header
  */
-export async function handleMcpRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  serverName: McpServerName,
-): Promise<void> {
+export async function handleMcpRequest(req: Request, serverName: McpServerName): Promise<Response> {
   if (!mcpToken || !initialized) {
-    res.writeHead(503, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'MCP server not initialized' }));
-    return;
+    return Response.json({ error: 'MCP server not initialized' }, { status: 503 });
   }
 
   if (!(MCP_SERVERS as readonly string[]).includes(serverName)) {
-    res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: `Unknown MCP server: ${serverName}` }));
-    return;
+    return Response.json({ error: `Unknown MCP server: ${serverName}` }, { status: 404 });
   }
 
   // Validate bearer token (skip in dev mode)
   if (!skipAuth) {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.get('authorization');
     if (authHeader !== `Bearer ${mcpToken}`) {
       console.log(`[MCP] Unauthorized request (invalid or missing token)`);
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized' }));
-      return;
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
   }
 
   // Debug: log browser MCP requests to verify SDK tool discovery
   if (serverName === 'browser') {
     console.log(
-      `[MCP] browser server request from agent=${req.headers['x-agent-id'] ?? 'unknown'}`,
+      `[MCP] browser server request from agent=${req.headers.get('x-agent-id') ?? 'unknown'}`,
     );
   }
 
   // Restore agent context so tools can resolve the active session.
   // X-Agent-Id is set by the Claude provider; Codex calls omit it.
-  const agentId = (req.headers['x-agent-id'] as string | undefined) ?? 'unknown';
+  const agentId = req.headers.get('x-agent-id') ?? 'unknown';
   const yaarSessionId = getSessionHub().getDefault()?.sessionId;
 
-  await runWithAgentContext({ agentId, sessionId: yaarSessionId }, async () => {
+  return runWithAgentContext({ agentId, sessionId: yaarSessionId }, async () => {
     // Check for existing MCP session
-    const mcpSessionId = req.headers['mcp-session-id'] as string | undefined;
+    const mcpSessionId = req.headers.get('mcp-session-id') ?? undefined;
 
     if (mcpSessionId) {
       // Existing session — look up transport
       const key = `${serverName}:${mcpSessionId}`;
       const entry = mcpSessions.get(key);
       if (entry) {
-        await entry.transport.handleRequest(req, res);
-        return;
+        return entry.transport.handleRequest(req);
       }
       // Session not found — return 404 per MCP spec
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
+      return Response.json(
+        {
           jsonrpc: '2.0',
           error: { code: -32000, message: 'Session not found' },
           id: null,
-        }),
+        },
+        { status: 404 },
       );
-      return;
     }
 
     // No session ID — must be an initialize request (or invalid).
-    // Parse body to check.
     if (req.method !== 'POST') {
-      res.writeHead(405, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
+      return Response.json(
+        {
           jsonrpc: '2.0',
           error: { code: -32000, message: 'Method not allowed' },
           id: null,
-        }),
+        },
+        { status: 405 },
       );
-      return;
     }
 
     let body: unknown;
     try {
-      body = await readJsonBody(req);
+      body = await req.json();
     } catch {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
+      return Response.json(
+        {
           jsonrpc: '2.0',
           error: { code: -32700, message: 'Parse error' },
           id: null,
-        }),
+        },
+        { status: 400 },
       );
-      return;
     }
 
     // Validate it is an initialize request
@@ -271,23 +236,22 @@ export async function handleMcpRequest(
     const isInit = messages.some((m) => isInitializeRequest(m));
 
     if (!isInit) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
+      return Response.json(
+        {
           jsonrpc: '2.0',
           error: {
             code: -32600,
             message: 'Bad Request: No session ID and not an initialize request',
           },
           id: null,
-        }),
+        },
+        { status: 400 },
       );
-      return;
     }
 
     // Create new McpServer + transport for this session
     const server = await createServerForName(serverName);
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
       onsessioninitialized: (newSessionId: string) => {
@@ -307,7 +271,7 @@ export async function handleMcpRequest(
     };
 
     await server.connect(transport);
-    await transport.handleRequest(req, res, body);
+    return transport.handleRequest(req, { parsedBody: body });
   });
 }
 

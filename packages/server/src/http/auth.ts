@@ -4,7 +4,6 @@
  */
 
 import { randomBytes } from 'crypto';
-import type { IncomingMessage, ServerResponse } from 'http';
 import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
 
@@ -23,28 +22,25 @@ export function getRemoteToken(): string | null {
 
 /**
  * Validate auth for HTTP requests.
- * Returns true if the request is authorized (or auth is not required).
- * Sends 401 and returns false if unauthorized.
+ * Returns a 401 Response if unauthorized, or null if authorized.
  */
-export function checkHttpAuth(req: IncomingMessage, res: ServerResponse, url: URL): boolean {
-  if (!IS_REMOTE || !remoteToken) return true;
+export function checkHttpAuth(req: Request, url: URL): Response | null {
+  if (!IS_REMOTE || !remoteToken) return null;
 
   // /health is always exempt
-  if (url.pathname === '/health') return true;
+  if (url.pathname === '/health') return null;
 
   // MCP endpoints have their own bearer token auth — exempt from remote auth
-  if (url.pathname.startsWith('/mcp/')) return true;
+  if (url.pathname.startsWith('/mcp/')) return null;
 
   // Static frontend assets must load without auth so the client-side JS
   // can read the #remote=<token> hash fragment and attach it to API/WS calls.
-  if (isStaticAsset(url.pathname)) return true;
+  if (isStaticAsset(url.pathname)) return null;
 
   const token = extractToken(req, url);
-  if (token === remoteToken) return true;
+  if (token === remoteToken) return null;
 
-  res.writeHead(401, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Unauthorized' }));
-  return false;
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
 /**
@@ -75,8 +71,8 @@ function isStaticAsset(pathname: string): boolean {
 }
 
 /** Extract token from Authorization header, query param, or Referer. */
-function extractToken(req: IncomingMessage, url: URL): string | null {
-  const authHeader = req.headers.authorization;
+function extractToken(req: Request, url: URL): string | null {
+  const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7);
   }
@@ -86,7 +82,7 @@ function extractToken(req: IncomingMessage, url: URL): string | null {
   // Iframe apps are loaded with ?token=... in their URL.
   // Their fetch() calls don't include the token, but the browser sends the
   // iframe's URL as the Referer header — extract the token from there.
-  const referer = req.headers.referer;
+  const referer = req.headers.get('referer');
   if (referer) {
     try {
       return new URL(referer).searchParams.get('token');

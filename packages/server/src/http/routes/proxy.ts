@@ -5,9 +5,8 @@
  * which checks the domain against curl_allowed_domains.yaml.
  */
 
-import type { IncomingMessage, ServerResponse } from 'http';
 import { MAX_UPLOAD_SIZE } from '../../config.js';
-import { sendError, sendJson, type EndpointMeta } from '../utils.js';
+import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -37,34 +36,9 @@ const INTERNAL_HOSTNAME_PATTERNS = [
   /^\[?fe80:/i,
 ];
 
-/**
- * Collect the full request body as a string.
- */
-function collectJsonBody(req: IncomingMessage, maxSize: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > maxSize) {
-        req.destroy();
-        reject(new Error('Body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-    req.on('error', (err) => reject(err));
-  });
-}
-
-export async function handleProxyRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-): Promise<boolean> {
+export async function handleProxyRoutes(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/fetch' || req.method !== 'POST') {
-    return false;
+    return null;
   }
 
   // Parse request body
@@ -76,17 +50,18 @@ export async function handleProxyRoutes(
     sessionId?: string;
   };
   try {
-    const raw = await collectJsonBody(req, MAX_UPLOAD_SIZE);
+    const raw = await req.text();
+    if (raw.length > MAX_UPLOAD_SIZE) {
+      return errorResponse('Request body too large', 413);
+    }
     body = JSON.parse(raw);
   } catch {
-    sendError(res, 'Invalid JSON body', 400);
-    return true;
+    return errorResponse('Invalid JSON body', 400);
   }
 
   const targetUrl = body.url;
   if (!targetUrl || typeof targetUrl !== 'string') {
-    sendError(res, 'Missing or invalid "url" field', 400);
-    return true;
+    return errorResponse('Missing or invalid "url" field', 400);
   }
 
   // Validate URL scheme
@@ -94,19 +69,16 @@ export async function handleProxyRoutes(
   try {
     parsed = new URL(targetUrl);
   } catch {
-    sendError(res, 'Invalid URL', 400);
-    return true;
+    return errorResponse('Invalid URL', 400);
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    sendError(res, 'Only http: and https: URLs are allowed', 400);
-    return true;
+    return errorResponse('Only http: and https: URLs are allowed', 400);
   }
 
   // Block internal/private network access (SSRF protection)
   if (INTERNAL_HOSTNAME_PATTERNS.some((p) => p.test(parsed.hostname))) {
-    sendError(res, 'Access to internal networks is not allowed', 403);
-    return true;
+    return errorResponse('Access to internal networks is not allowed', 403);
   }
 
   // Check domain allowlist — show permission dialog if sessionId is available
@@ -128,7 +100,7 @@ export async function handleProxyRoutes(
 
     // 2. Referer header (iframe URL may contain ?sessionId=)
     if (!sessionId) {
-      const referer = req.headers.referer;
+      const referer = req.headers.get('referer');
       if (referer) {
         try {
           const refId = new URL(referer).searchParams.get('sessionId') ?? undefined;
@@ -147,12 +119,10 @@ export async function handleProxyRoutes(
     }
 
     if (!sessionId) {
-      sendError(
-        res,
+      return errorResponse(
         `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`,
         403,
       );
-      return true;
     }
 
     // Show permission dialog to the user via WebSocket
@@ -165,8 +135,7 @@ export async function handleProxyRoutes(
     );
 
     if (!confirmed) {
-      sendError(res, `User denied access to domain "${domain}".`, 403);
-      return true;
+      return errorResponse(`User denied access to domain "${domain}".`, 403);
     }
 
     // User approved — add domain to allowlist
@@ -199,15 +168,13 @@ export async function handleProxyRoutes(
     // Check Content-Length before reading body (fast reject)
     const contentLength = response.headers.get('content-length');
     if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
-      sendError(res, 'Response too large (max 10MB)', 502);
-      return true;
+      return errorResponse('Response too large (max 10MB)', 502);
     }
 
     // Read response body with streaming size limit
     const reader = response.body?.getReader();
     if (!reader) {
-      sendError(res, 'No response body', 502);
-      return true;
+      return errorResponse('No response body', 502);
     }
 
     const chunks: Uint8Array[] = [];
@@ -218,8 +185,7 @@ export async function handleProxyRoutes(
       totalSize += value.length;
       if (totalSize > MAX_RESPONSE_SIZE) {
         reader.cancel();
-        sendError(res, 'Response too large (max 10MB)', 502);
-        return true;
+        return errorResponse('Response too large (max 10MB)', 502);
       }
       chunks.push(value);
     }
@@ -256,17 +222,15 @@ export async function handleProxyRoutes(
       result.bodyEncoding = 'base64';
     }
 
-    sendJson(res, result);
+    return jsonResponse(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Proxy request failed';
     if (message.includes('abort')) {
-      sendError(res, 'Request timed out', 504);
+      return errorResponse('Request timed out', 504);
     } else {
-      sendError(res, message, 502);
+      return errorResponse(message, 502);
     }
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
   }
-
-  return true;
 }

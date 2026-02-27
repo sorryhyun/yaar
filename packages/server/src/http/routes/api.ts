@@ -2,7 +2,6 @@
  * REST API routes — health, providers, apps, sessions, agents/stats.
  */
 
-import type { IncomingMessage, ServerResponse } from 'http';
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
 import {
   listSessions,
@@ -15,7 +14,7 @@ import {
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../mcp/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
-import { sendJson, sendError, type EndpointMeta } from '../utils.js';
+import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -37,86 +36,70 @@ import type { ContextRestorePolicy } from '../../logging/index.js';
 import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 
-export async function handleApiRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL,
-): Promise<boolean> {
+export async function handleApiRoutes(req: Request, url: URL): Promise<Response | null> {
   // Health check
   if (url.pathname === '/health' && req.method === 'GET') {
-    sendJson(res, { status: 'ok' });
-    return true;
+    return jsonResponse({ status: 'ok' });
   }
 
   // List available providers
   if (url.pathname === '/api/providers' && req.method === 'GET') {
     const providers = await getAvailableProviders();
-    sendJson(res, { providers });
-    return true;
+    return jsonResponse({ providers });
   }
 
   // List available apps
   if (url.pathname === '/api/apps' && req.method === 'GET') {
     try {
       const [apps, settings] = await Promise.all([listApps(), readSettings()]);
-      sendJson(res, {
+      return jsonResponse({
         apps,
         onboardingCompleted: settings.onboardingCompleted,
         language: settings.language,
       });
     } catch {
-      sendError(res, 'Failed to list apps');
+      return errorResponse('Failed to list apps');
     }
-    return true;
   }
 
   // List desktop shortcuts
   if (url.pathname === '/api/shortcuts' && req.method === 'GET') {
     try {
       const shortcuts = await readShortcuts();
-      sendJson(res, { shortcuts });
+      return jsonResponse({ shortcuts });
     } catch {
-      sendError(res, 'Failed to list shortcuts');
+      return errorResponse('Failed to list shortcuts');
     }
-    return true;
   }
 
   // Update settings
   if (url.pathname === '/api/settings' && req.method === 'PATCH') {
     try {
-      const bodyChunks: Buffer[] = [];
-      for await (const chunk of req) {
-        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
-      if (!body) {
-        sendError(res, 'Empty body', 400);
-        return true;
+      const body = await req.text();
+      if (!body.trim()) {
+        return errorResponse('Empty body', 400);
       }
       let partial: Record<string, unknown>;
       try {
         partial = JSON.parse(body);
       } catch {
-        sendError(res, 'Invalid JSON', 400);
-        return true;
+        return errorResponse('Invalid JSON', 400);
       }
       const settings = await updateSettings(partial as any);
-      sendJson(res, settings);
+      return jsonResponse(settings);
     } catch {
-      sendError(res, 'Failed to update settings');
+      return errorResponse('Failed to update settings');
     }
-    return true;
   }
 
   // List all sessions
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     try {
       const sessions = await listSessions();
-      sendJson(res, { sessions });
+      return jsonResponse({ sessions });
     } catch {
-      sendError(res, 'Failed to list sessions');
+      return errorResponse('Failed to list sessions');
     }
-    return true;
   }
 
   // Get session transcript
@@ -126,14 +109,12 @@ export async function handleApiRoutes(
     try {
       const transcript = await readSessionTranscript(sessionId);
       if (transcript === null) {
-        sendError(res, 'Session not found', 404);
-        return true;
+        return errorResponse('Session not found', 404);
       }
-      sendJson(res, { transcript });
+      return jsonResponse({ transcript });
     } catch {
-      sendError(res, 'Failed to read transcript');
+      return errorResponse('Failed to read transcript');
     }
-    return true;
   }
 
   // Get session messages (for replay)
@@ -143,15 +124,13 @@ export async function handleApiRoutes(
     try {
       const messagesJsonl = await readSessionMessages(sessionId);
       if (messagesJsonl === null) {
-        sendError(res, 'Session not found', 404);
-        return true;
+        return errorResponse('Session not found', 404);
       }
       const messages = parseSessionMessages(messagesJsonl);
-      sendJson(res, { messages });
+      return jsonResponse({ messages });
     } catch {
-      sendError(res, 'Failed to read messages');
+      return errorResponse('Failed to read messages');
     }
-    return true;
   }
 
   // Restore session (returns window create actions + context according to restore policy)
@@ -160,34 +139,27 @@ export async function handleApiRoutes(
     const sessionId = restoreMatch[1];
     try {
       let policy: ContextRestorePolicy | undefined;
-      const bodyChunks: Buffer[] = [];
-      for await (const chunk of req) {
-        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
-      if (body) {
+      const body = await req.text();
+      if (body.trim()) {
         try {
           const parsed = JSON.parse(body) as { policy?: ContextRestorePolicy };
           policy = parsed.policy;
         } catch {
-          sendError(res, 'Invalid JSON body', 400);
-          return true;
+          return errorResponse('Invalid JSON body', 400);
         }
       }
 
       const messagesJsonl = await readSessionMessages(sessionId);
       if (messagesJsonl === null) {
-        sendError(res, 'Session not found', 404);
-        return true;
+        return errorResponse('Session not found', 404);
       }
       const messages = parseSessionMessages(messagesJsonl);
       const restoreActions = getWindowRestoreActions(messages);
       const contextMessages = getContextRestoreMessages(messages, policy);
-      sendJson(res, { actions: restoreActions, contextMessages });
+      return jsonResponse({ actions: restoreActions, contextMessages });
     } catch {
-      sendError(res, 'Failed to restore session');
+      return errorResponse('Failed to restore session');
     }
-    return true;
   }
 
   // Get domain settings
@@ -197,31 +169,24 @@ export async function handleApiRoutes(
         isAllDomainsAllowed(),
         readAllowedDomains(),
       ]);
-      sendJson(res, { allowAllDomains, domains });
+      return jsonResponse({ allowAllDomains, domains });
     } catch {
-      sendError(res, 'Failed to read domain settings');
+      return errorResponse('Failed to read domain settings');
     }
-    return true;
   }
 
   // Update domain settings
   if (url.pathname === '/api/domains' && req.method === 'PATCH') {
     try {
-      const bodyChunks: Buffer[] = [];
-      for await (const chunk of req) {
-        bodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const body = Buffer.concat(bodyChunks).toString('utf-8').trim();
-      if (!body) {
-        sendError(res, 'Empty body', 400);
-        return true;
+      const body = await req.text();
+      if (!body.trim()) {
+        return errorResponse('Empty body', 400);
       }
       let partial: { allowAllDomains?: boolean };
       try {
         partial = JSON.parse(body);
       } catch {
-        sendError(res, 'Invalid JSON', 400);
-        return true;
+        return errorResponse('Invalid JSON', 400);
       }
       if (typeof partial.allowAllDomains === 'boolean') {
         await setAllowAllDomains(partial.allowAllDomains);
@@ -230,11 +195,10 @@ export async function handleApiRoutes(
         isAllDomainsAllowed(),
         readAllowedDomains(),
       ]);
-      sendJson(res, { allowAllDomains, domains });
+      return jsonResponse({ allowAllDomains, domains });
     } catch {
-      sendError(res, 'Failed to update domain settings');
+      return errorResponse('Failed to update domain settings');
     }
-    return true;
   }
 
   // Pick directory (native folder dialog)
@@ -242,14 +206,13 @@ export async function handleApiRoutes(
     try {
       const path = await pickDirectory();
       if (path) {
-        sendJson(res, { path });
+        return jsonResponse({ path });
       } else {
-        sendJson(res, { path: null, cancelled: true });
+        return jsonResponse({ path: null, cancelled: true });
       }
     } catch {
-      sendError(res, 'Failed to open directory picker');
+      return errorResponse('Failed to open directory picker');
     }
-    return true;
   }
 
   // Agent stats endpoint
@@ -257,13 +220,12 @@ export async function handleApiRoutes(
     const limiterStats = getAgentLimiter().getStats();
     const broadcastStats = getBroadcastCenter().getStats();
     const warmPoolStats = getWarmPool().getStats();
-    sendJson(res, {
+    return jsonResponse({
       agents: limiterStats,
       connections: broadcastStats,
       warmPool: warmPoolStats,
     });
-    return true;
   }
 
-  return false;
+  return null;
 }
