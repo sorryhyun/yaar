@@ -145,11 +145,11 @@ export function DrawingOverlay() {
           screenshot.width,
           screenshot.height,
         );
-        const dataUrl = compositeCanvas.toDataURL('image/webp', 0.95);
+        const dataUrl = compositeCanvas.toDataURL('image/webp', 1.0);
         saveDrawing(dataUrl);
       }
     } catch {
-      const dataUrl = drawingCanvas.toDataURL('image/webp', 0.95);
+      const dataUrl = drawingCanvas.toDataURL('image/webp', 1.0);
       saveDrawing(dataUrl);
     }
   }, [saveDrawing]);
@@ -227,7 +227,7 @@ export function DrawingOverlay() {
       isDrawingRef.current = false;
       lastPointRef.current = null;
       // Save canvas immediately so "Drawing attached" shows right away
-      const dataUrl = canvas.toDataURL('image/webp', 0.95);
+      const dataUrl = canvas.toDataURL('image/webp', 1.0);
       saveDrawing(dataUrl);
     };
 
@@ -288,7 +288,7 @@ export function DrawingOverlay() {
 
       if (wasDragged) {
         // Quick-save canvas, then upgrade with composite screenshot
-        const dataUrl = canvas.toDataURL('image/webp', 0.95);
+        const dataUrl = canvas.toDataURL('image/webp', 1.0);
         saveDrawing(dataUrl);
         captureScreenWithDrawing();
       }
@@ -361,7 +361,7 @@ export function DrawingOverlay() {
       if (wasDragged) {
         const canvas = canvasRef.current;
         if (canvas) {
-          const dataUrl = canvas.toDataURL('image/webp', 0.95);
+          const dataUrl = canvas.toDataURL('image/webp', 1.0);
           saveDrawing(dataUrl);
           captureScreenWithDrawing();
         }
