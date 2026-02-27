@@ -52,14 +52,23 @@ async function tryPowerShell(): Promise<string | null> {
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.TopMost = $true
+$f.ShowInTaskbar = $false
+$f.MinimizeBox = $false
+$f.Size = New-Object System.Drawing.Size(0,0)
+$f.StartPosition = 'Manual'
+$f.Location = New-Object System.Drawing.Point(-9999,-9999)
+$f.Show()
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
 $d.Description = 'Select folder to mount'
 $d.ShowNewFolderButton = $false
-if ($d.ShowDialog() -eq 'OK') {
+if ($d.ShowDialog($f) -eq 'OK') {
   $tmp = [System.IO.Path]::GetTempFileName()
   [System.IO.File]::WriteAllText($tmp, $d.SelectedPath, [System.Text.Encoding]::UTF8)
   Write-Output $tmp
 } else { Write-Output '' }
+$f.Dispose()
 `.trim();
 
   const { stdout, code } = await exec('powershell.exe', ['-NoProfile', '-Command', script]);
