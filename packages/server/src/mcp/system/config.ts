@@ -81,7 +81,7 @@ export function registerConfigTools(server: McpServer): void {
           .optional()
           .describe('(shortcuts) Icon type (default: emoji)'),
         shortcutType: z
-          .enum(['file', 'url', 'action', 'skill'])
+          .enum(['file', 'url', 'action', 'app', 'skill'])
           .optional()
           .describe('(shortcuts) Shortcut type'),
         target: z
