@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { SessionInfo, SessionMetadata, ParsedMessage } from './types.js';
@@ -19,7 +19,7 @@ export async function listSessions(): Promise<SessionInfo[]> {
     const metadataPath = join(directory, 'metadata.json');
 
     try {
-      const metadataContent = await readFile(metadataPath, 'utf-8');
+      const metadataContent = await Bun.file(metadataPath).text();
       const rawMetadata = JSON.parse(metadataContent);
 
       // Handle backward compatibility - add agents field if missing
@@ -59,7 +59,7 @@ export async function readSessionMessages(sessionId: string): Promise<string | n
   const messagesPath = join(SESSIONS_DIR, sessionId, 'messages.jsonl');
 
   try {
-    return await readFile(messagesPath, 'utf-8');
+    return await Bun.file(messagesPath).text();
   } catch {
     return null;
   }

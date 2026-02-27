@@ -12,7 +12,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
 import { runWithAgentContext } from '../agents/session.js';
 import { getSessionHub } from '../session/live-session.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
@@ -130,7 +129,7 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
  */
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
-  mcpToken = randomUUID();
+  mcpToken = crypto.randomUUID();
 
   // Probe browser availability once at startup so isBrowserAvailable() is set.
   // We create a temporary server just for the probe, then discard it.
@@ -252,7 +251,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
     // Create new McpServer + transport for this session
     const server = await createServerForName(serverName);
     const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => crypto.randomUUID(),
       enableJsonResponse: true,
       onsessioninitialized: (newSessionId: string) => {
         const key = `${serverName}:${newSessionId}`;

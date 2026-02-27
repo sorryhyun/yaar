@@ -9,7 +9,6 @@
 import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir, platform } from 'os';
-import { spawn } from 'child_process';
 import type { AppServer } from './app-server.js';
 import type { AccountLoginCompletedNotification } from './types.js';
 
@@ -46,14 +45,13 @@ function openUrl(url: string): void {
   const p = platform();
   if (p === 'win32') {
     // Use rundll32 to avoid cmd.exe treating & as a command separator
-    spawn('rundll32', ['url.dll,FileProtocolHandler', url], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
+    Bun.spawn(['rundll32', 'url.dll,FileProtocolHandler', url], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
   } else if (p === 'darwin') {
-    spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+    Bun.spawn(['open', url], { stdio: ['ignore', 'ignore', 'ignore'] });
   } else {
-    spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+    Bun.spawn(['xdg-open', url], { stdio: ['ignore', 'ignore', 'ignore'] });
   }
 }
 

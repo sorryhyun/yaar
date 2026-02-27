@@ -6,9 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { mkdir, writeFile, rm } from 'fs/promises';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { mkdir, rm } from 'fs/promises';
 import { unlink } from 'fs/promises';
 import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
@@ -16,8 +14,6 @@ import { PROJECT_ROOT } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { listApps } from './discovery.js';
-
-const execFileAsync = promisify(execFile);
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
@@ -93,12 +89,24 @@ export function registerMarketTools(server: McpServer): void {
       const tmpFile = join(tmpDir, `${appId}.tar.gz`);
 
       const buffer = Buffer.from(await res.arrayBuffer());
-      await writeFile(tmpFile, buffer);
+      await Bun.write(tmpFile, buffer);
 
       // Extract tar.gz and clean up temp file
       await mkdir(appDir, { recursive: true });
       try {
-        await execFileAsync('tar', ['xzf', tmpFile, '--strip-components=1', '-C', appDir]);
+        const tarProc = Bun.spawnSync([
+          'tar',
+          'xzf',
+          tmpFile,
+          '--strip-components=1',
+          '-C',
+          appDir,
+        ]);
+        if (tarProc.exitCode !== 0) {
+          throw new Error(
+            tarProc.stderr.toString().trim() || `tar exited with code ${tarProc.exitCode}`,
+          );
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         return error(`Failed to extract app archive: ${msg}`);

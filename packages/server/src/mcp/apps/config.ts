@@ -2,7 +2,7 @@
  * App configuration - read/write config files and credential management.
  */
 
-import { readFile, writeFile, stat, mkdir, unlink } from 'fs/promises';
+import { stat, mkdir, unlink } from 'fs/promises';
 import { join } from 'path';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../../config.js';
@@ -84,8 +84,8 @@ async function migrateCredentials(appId: string): Promise<boolean> {
     // Found credentials, migrate them
     try {
       await mkdir(getCredentialsDir(), { recursive: true });
-      const content = await readFile(oldPath, 'utf-8');
-      await writeFile(newPath, content, 'utf-8');
+      const content = await Bun.file(oldPath).text();
+      await Bun.write(newPath, content);
       await unlink(oldPath);
       console.log(`[Apps] Migrated credentials for ${appId} to config/credentials/`);
       return true;
@@ -125,7 +125,7 @@ export async function readAppConfig(
       configPath = join(APPS_DIR, appId, filename);
     }
 
-    const content = await readFile(configPath, 'utf-8');
+    const content = await Bun.file(configPath).text();
 
     // Try to parse as JSON
     try {
@@ -175,7 +175,7 @@ export async function writeAppConfig(
 
     // Write content as JSON if object, otherwise as string
     const data = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-    await writeFile(configPath, data, 'utf-8');
+    await Bun.write(configPath, data);
 
     return { success: true };
   } catch (err) {

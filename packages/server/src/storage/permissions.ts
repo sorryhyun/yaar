@@ -5,7 +5,7 @@
  * Decisions are persisted to config/permissions.json.
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { getConfigDir } from './storage-manager.js';
 
@@ -50,7 +50,7 @@ function getPermissionKey(toolName: string, context?: string): string {
  */
 async function loadPermissions(): Promise<PermissionsFile> {
   try {
-    const content = await readFile(getPermissionsPath(), 'utf-8');
+    const content = await Bun.file(getPermissionsPath()).text();
     return JSON.parse(content) as PermissionsFile;
   } catch {
     // File doesn't exist or is invalid, return empty
@@ -64,7 +64,7 @@ async function loadPermissions(): Promise<PermissionsFile> {
 async function savePermissions(permissions: PermissionsFile): Promise<void> {
   const filePath = getPermissionsPath();
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(permissions, null, 2), 'utf-8');
+  await Bun.write(filePath, JSON.stringify(permissions, null, 2));
 }
 
 /**

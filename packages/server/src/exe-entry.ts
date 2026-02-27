@@ -7,7 +7,6 @@
  * (Chrome/Edge --app flag for a standalone window without browser chrome).
  */
 
-import { spawn, spawnSync } from 'child_process';
 import { platform } from 'os';
 import { existsSync } from 'fs';
 
@@ -58,8 +57,8 @@ function findChromiumBrowser(): string | null {
       'chromium-browser',
       'microsoft-edge',
     ]) {
-      const result = spawnSync('which', [cmd], { stdio: 'pipe' });
-      if (result.status === 0) {
+      const result = Bun.spawnSync(['which', cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
+      if (result.exitCode === 0) {
         return result.stdout.toString().trim();
       }
     }
@@ -85,10 +84,9 @@ function openAppWindow() {
 
   if (chromium) {
     console.log(`Opening app window: ${chromium} --app=${url}`);
-    spawn(chromium, [`--app=${url}`], {
-      detached: true,
-      stdio: 'ignore',
-    }).unref();
+    Bun.spawn([chromium, `--app=${url}`], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
     return;
   }
 
@@ -96,20 +94,17 @@ function openAppWindow() {
   console.log(`No Chromium browser found. Opening default browser: ${url}`);
   try {
     if (currentPlatform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', url], {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
+      Bun.spawn(['cmd', '/c', 'start', '', url], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
     } else if (currentPlatform === 'darwin') {
-      spawn('open', [url], {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
+      Bun.spawn(['open', url], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
     } else {
-      spawn('xdg-open', [url], {
-        detached: true,
-        stdio: 'ignore',
-      }).unref();
+      Bun.spawn(['xdg-open', url], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
     }
   } catch {
     console.log(`Could not auto-open browser. Please visit: ${url}`);

@@ -1,4 +1,4 @@
-import { mkdir, writeFile, appendFile } from 'fs/promises';
+import { mkdir, appendFile } from 'fs/promises';
 import { join } from 'path';
 import type { OSAction, UserInteraction } from '@yaar/shared';
 import { formatCompactInteraction } from '@yaar/shared';
@@ -43,13 +43,13 @@ export async function createSession(provider: string): Promise<SessionInfo> {
     },
   };
 
-  await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata, null, 2));
+  await Bun.write(join(directory, 'metadata.json'), JSON.stringify(metadata, null, 2));
 
   // Create main messages log
-  await writeFile(join(directory, 'messages.jsonl'), '');
+  await Bun.write(join(directory, 'messages.jsonl'), '');
 
   // Create default agent JSONL log
-  await writeFile(join(directory, 'agents', 'default.jsonl'), '');
+  await Bun.write(join(directory, 'agents', 'default.jsonl'), '');
 
   return { sessionId, directory, metadata };
 }
@@ -87,7 +87,7 @@ export class SessionLogger {
 
     // Create agent-specific JSONL file (empty, entries appended later)
     const agentFilename = agentId.replace(/[^a-zA-Z0-9-_]/g, '_');
-    await writeFile(join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`), '');
+    await Bun.write(join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`), '');
 
     // Update metadata
     await this.saveMetadata();
@@ -219,7 +219,7 @@ export class SessionLogger {
    * Save metadata to disk.
    */
   private async saveMetadata(): Promise<void> {
-    await writeFile(
+    await Bun.write(
       join(this.sessionInfo.directory, 'metadata.json'),
       JSON.stringify(this.sessionInfo.metadata, null, 2),
     );

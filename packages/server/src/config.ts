@@ -3,6 +3,7 @@
  */
 
 import { join, dirname } from 'path';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 // Detect if running as bundled executable
@@ -111,11 +112,37 @@ export const MONITOR_MAX_OUTPUT_PER_MIN = parseInt(
 );
 
 /**
- * Get the codex CLI binary path.
- * Codex supports all platforms natively — always use 'codex' from PATH.
+ * Get the codex CLI spawn args (command + prefix args).
+ * When running as a bundled exe, looks for codex next to the executable first,
+ * then resolves the npm global bin directory (handles Windows .cmd wrappers).
+ * Falls back to 'codex' from PATH.
+ *
+ * Returns `[cmd, ...prefixArgs]` — callers should spread this before their own args:
+ *   `Bun.spawn([...getCodexSpawnArgs(), 'app-server', ...])`
  */
+export function getCodexSpawnArgs(): string[] {
+  if (IS_BUNDLED_EXE) {
+    // 1. Check next to the executable
+    const ext = process.platform === 'win32' ? '.exe' : '';
+    const localBin = join(dirname(process.execPath), `codex${ext}`);
+    if (existsSync(localBin)) return [localBin];
+
+    // 2. On Windows, resolve npm global bin (codex.cmd wrapper)
+    //    .cmd files need `cmd /c` to execute via uv_spawn
+    if (process.platform === 'win32') {
+      const npmPrefix = process.env.APPDATA ? join(process.env.APPDATA, 'npm') : null;
+      if (npmPrefix) {
+        const cmdPath = join(npmPrefix, 'codex.cmd');
+        if (existsSync(cmdPath)) return ['cmd', '/c', cmdPath];
+      }
+    }
+  }
+  return ['codex'];
+}
+
+/** @deprecated Use getCodexSpawnArgs() instead */
 export function getCodexBin(): string {
-  return 'codex';
+  return getCodexSpawnArgs()[0];
 }
 
 // ── Codex app-server configuration ────────────────────────────────────

@@ -2,7 +2,7 @@
  * App discovery - list apps and load skills.
  */
 
-import { readdir, readFile, stat } from 'fs/promises';
+import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { PROJECT_ROOT } from '../../config.js';
 import { hasCredentials } from './config.js';
@@ -86,7 +86,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let frameless: boolean | undefined;
       let windowStyle: Record<string, string | number> | undefined;
       try {
-        const metaContent = await readFile(join(appPath, 'app.json'), 'utf-8');
+        const metaContent = await Bun.file(join(appPath, 'app.json')).text();
         const meta = JSON.parse(metaContent);
         icon = meta.icon;
         if (icon) iconType = 'emoji';
@@ -180,7 +180,7 @@ export async function getAppMeta(appId: string): Promise<{
   windowStyle?: Record<string, string | number>;
 } | null> {
   try {
-    const metaContent = await readFile(join(APPS_DIR, appId, 'app.json'), 'utf-8');
+    const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
     const meta = JSON.parse(metaContent);
     const result: {
       variant?: WindowVariantType;
@@ -219,7 +219,7 @@ export async function resolveAppUrl(url: string): Promise<string | null> {
 export async function loadAppSkill(appId: string): Promise<string | null> {
   try {
     const skillPath = join(APPS_DIR, appId, 'SKILL.md');
-    const content = await readFile(skillPath, 'utf-8');
+    const content = await Bun.file(skillPath).text();
     return content;
   } catch {
     return null;

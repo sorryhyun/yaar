@@ -4,7 +4,6 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFile } from 'fs/promises';
 import { join } from 'path';
 import {
   type OSAction,
@@ -181,7 +180,7 @@ export function registerCreateTools(server: McpServer): void {
 
         const fullPath = join(PROJECT_ROOT, 'apps', filePath);
         try {
-          const raw = await readFile(fullPath, 'utf-8');
+          const raw = await Bun.file(fullPath).text();
           const parsed = JSON.parse(raw);
           const result = componentLayoutSchema.safeParse(parsed);
           if (!result.success) {

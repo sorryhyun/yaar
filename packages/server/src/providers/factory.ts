@@ -60,9 +60,11 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
     // Check CLI + auth without needing an AppServer
     // Passive check only — must NOT block with login (called by GET /api/providers)
     try {
-      const { execSync } = await import('child_process');
-      const { getCodexBin } = await import('../config.js');
-      execSync(`"${getCodexBin()}" --version`, { stdio: 'ignore' });
+      const { getCodexSpawnArgs } = await import('../config.js');
+      const result = Bun.spawnSync([...getCodexSpawnArgs(), '--version'], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+      if (result.exitCode !== 0) return false;
     } catch {
       return false;
     }

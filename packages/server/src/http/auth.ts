@@ -3,7 +3,6 @@
  * When IS_REMOTE is true, all HTTP/WS endpoints (except /health) require a valid token.
  */
 
-import { randomBytes } from 'crypto';
 import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
 
@@ -11,7 +10,7 @@ let remoteToken: string | null = null;
 
 /** Generate and store a new remote access token. */
 export function generateRemoteToken(): string {
-  remoteToken = randomBytes(32).toString('base64url');
+  remoteToken = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   return remoteToken;
 }
 

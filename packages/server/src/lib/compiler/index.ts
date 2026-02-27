@@ -5,9 +5,8 @@
  * Uses Bun.build() and Bun.Transpiler for compilation.
  */
 
-import { readFile, writeFile, mkdir, stat, unlink } from 'fs/promises';
+import { mkdir, stat, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
-import { execFile } from 'child_process';
 import { bundledLibraryPluginBun } from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
@@ -179,14 +178,14 @@ export async function compileTypeScript(
     const htmlContent = generateHtmlWrapper(jsCode, title, sdkCode);
 
     // Write to dist/index.html
-    await writeFile(outputPath, htmlContent, 'utf-8');
+    await Bun.write(outputPath, htmlContent);
 
     // Extract app protocol manifest from source (best-effort)
     try {
-      const sourceCode = await readFile(entryPoint, 'utf-8');
+      const sourceCode = await Bun.file(entryPoint).text();
       const protocol = extractProtocolFromSource(sourceCode);
       if (protocol) {
-        await writeFile(join(distDir, 'protocol.json'), JSON.stringify(protocol, null, 2), 'utf-8');
+        await Bun.write(join(distDir, 'protocol.json'), JSON.stringify(protocol, null, 2));
       }
     } catch {
       // Non-fatal — protocol discovery just won't be available
@@ -238,25 +237,19 @@ export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckRe
     include: ['src/**/*.ts'],
   };
 
-  await writeFile(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf-8');
+  await Bun.write(tsconfigPath, JSON.stringify(tsconfig, null, 2));
 
   try {
-    const output = await new Promise<string>((res, rej) => {
-      execFile(
-        TSC_PATH,
-        ['--noEmit', '-p', tsconfigPath],
-        { cwd: sandboxPath, timeout: 30_000 },
-        (err, stdout, stderr) => {
-          // tsc exits non-zero when there are diagnostics — that's not a
-          // process error, so we always resolve with the combined output.
-          if (err && !('code' in err && typeof err.code === 'number')) {
-            rej(err);
-            return;
-          }
-          res((stdout + '\n' + stderr).trim());
-        },
-      );
+    const proc = Bun.spawn([TSC_PATH, '--noEmit', '-p', tsconfigPath], {
+      cwd: sandboxPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const timer = setTimeout(() => proc.kill(), 30_000);
+    await proc.exited;
+    clearTimeout(timer);
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const output = (stdout + '\n' + stderr).trim();
 
     if (!output) {
       return { success: true, diagnostics: [] };

@@ -11,13 +11,18 @@
  * single-turn serialization mutex is no longer needed.
  */
 
-import { execSync, spawn, type ChildProcess } from 'child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import type { Subprocess } from 'bun';
+import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
-import { getCodexBin, getCodexAppServerArgs, getCodexWsPort, STORAGE_DIR } from '../../config.js';
+import {
+  getCodexSpawnArgs,
+  getCodexAppServerArgs,
+  getCodexWsPort,
+  STORAGE_DIR,
+} from '../../config.js';
 import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles.js';
 import type {
   InitializeParams,
@@ -69,7 +74,7 @@ export interface AppServerEvents {
  * ```
  */
 export class AppServer {
-  private process: ChildProcess | null = null;
+  private process: Subprocess | null = null;
   private controlClient: JsonRpcWsClient | null = null;
   private tempDir: string | null = null;
   private readonly config: AppServerConfig;
@@ -111,7 +116,7 @@ export class AppServer {
     const agentsDir = join(this.tempDir, 'agents');
     await mkdir(agentsDir);
     for (const [role, config] of Object.entries(CODEX_AGENT_ROLES)) {
-      await writeFile(join(agentsDir, `${role}.toml`), codexRoleToToml(config, this.config.model));
+      await Bun.write(join(agentsDir, `${role}.toml`), codexRoleToToml(config, this.config.model));
     }
 
     await this.spawnProcess();
@@ -129,7 +134,10 @@ export class AppServer {
     if (process.platform === 'win32') return;
     try {
       // fuser outputs PIDs using the port; -k sends SIGKILL
-      execSync(`fuser -k ${this.wsPort}/tcp 2>/dev/null`, { stdio: 'ignore', timeout: 5000 });
+      Bun.spawnSync(['fuser', '-k', `${this.wsPort}/tcp`], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+        timeout: 5000,
+      });
       console.log(`[codex] Killed stale process on port ${this.wsPort}`);
     } catch {
       // No process on port, or fuser not available — either way, proceed
@@ -164,47 +172,59 @@ export class AppServer {
       }
     }
 
-    const codexBin = getCodexBin();
-    const isWindows = process.platform === 'win32';
-    // detached: true gives the codex tree its own process group so we can
-    // kill the node wrapper AND the native binary together with kill(-pid).
-    this.process = spawn(codexBin, args, {
-      cwd: STORAGE_DIR,
-      shell: isWindows,
-      detached: !isWindows,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      env: {
-        ...process.env,
-        CI: '1',
-        YAAR_MCP_TOKEN: getMcpToken(),
-      },
-    });
-    // Allow the YAAR server to exit without waiting for this detached child
-    this.process.unref();
-
-    // Log stderr for debugging
-    this.process.stderr?.on('data', (data: Buffer) => {
-      const message = data.toString().trim();
-      if (message) {
-        console.error(`[codex app-server stderr] ${message}`);
+    const spawnArgs = [...getCodexSpawnArgs(), ...args];
+    try {
+      this.process = Bun.spawn(spawnArgs, {
+        cwd: STORAGE_DIR,
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: {
+          ...process.env,
+          CI: '1',
+          YAAR_MCP_TOKEN: getMcpToken(),
+        },
+      });
+    } catch (err: unknown) {
+      const isNotFound =
+        err instanceof Error &&
+        ('code' in err
+          ? (err as NodeJS.ErrnoException).code === 'ENOENT'
+          : err.message.includes('ENOENT'));
+      if (isNotFound) {
+        throw new Error(
+          `Codex CLI not found (tried: ${spawnArgs[0]}). ` +
+            `Install it (npm install -g @openai/codex) or place the codex binary next to the executable.`,
+        );
       }
-    });
+      throw err;
+    }
 
-    // Handle process exit
-    this.process.on('exit', (code, signal) => {
+    // Log stderr for debugging (async, runs in background)
+    const stderrStream = this.process.stderr as ReadableStream<Uint8Array>;
+    (async () => {
+      try {
+        const reader = stderrStream.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const message = decoder.decode(value).trim();
+          if (message) {
+            console.error(`[codex app-server stderr] ${message}`);
+          }
+        }
+      } catch {
+        // Stream closed
+      }
+    })();
+
+    // Handle process exit (async, runs in background)
+    this.process.exited.then((code) => {
       this.process = null;
       this.controlClient?.close();
       this.controlClient = null;
 
       for (const listener of this.exitListeners) {
-        listener(code, signal);
-      }
-    });
-
-    // Handle process error
-    this.process.on('error', (err) => {
-      for (const listener of this.errorListeners) {
-        listener(err);
+        listener(code, null);
       }
     });
   }
@@ -308,37 +328,25 @@ export class AppServer {
     if (this.process) {
       const pid = this.process.pid;
 
-      // Kill the entire process group (node wrapper + native binary).
-      // The negative PID targets all processes in the group created by detached: true.
-      if (pid) {
-        try {
-          process.kill(-pid, 'SIGTERM');
-        } catch {
-          // Group may already be gone
-          this.process.kill('SIGTERM');
-        }
-      } else {
-        this.process.kill('SIGTERM');
-      }
+      // Kill the process
+      this.process.kill();
 
-      // Wait for the process to exit
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          if (this.process && pid) {
+      // Wait for the process to exit (with timeout)
+      const exitPromise = this.process.exited;
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          // Force kill if still alive
+          if (pid) {
             try {
-              process.kill(-pid, 'SIGKILL');
+              process.kill(pid, 'SIGKILL');
             } catch {
-              this.process.kill('SIGKILL');
+              // Already dead
             }
           }
           resolve();
         }, 5000);
-
-        this.process!.once('exit', () => {
-          clearTimeout(timeout);
-          resolve();
-        });
       });
+      await Promise.race([exitPromise, timeoutPromise]);
 
       this.process = null;
     }

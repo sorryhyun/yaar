@@ -5,7 +5,7 @@
  * exact (O(1)) and fuzzy (O(n)) matching for cache lookups.
  */
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { dirname } from 'path';
 import type { OSAction } from '@yaar/shared';
 import type { CacheEntry, CacheMatch, Fingerprint } from './types.js';
@@ -32,7 +32,7 @@ export class ReloadCache {
    */
   async load(): Promise<void> {
     try {
-      const data = await readFile(this.filePath, 'utf-8');
+      const data = await Bun.file(this.filePath).text();
       const parsed = JSON.parse(data) as { entries: CacheEntry[]; idCounter?: number };
       this.entries = parsed.entries ?? [];
       this.idCounter = parsed.idCounter ?? this.entries.length;
@@ -71,7 +71,7 @@ export class ReloadCache {
     try {
       await mkdir(dirname(this.filePath), { recursive: true });
       const data = JSON.stringify({ entries: this.entries, idCounter: this.idCounter }, null, 2);
-      await writeFile(this.filePath, data, 'utf-8');
+      await Bun.write(this.filePath, data);
     } catch (err) {
       console.error('[ReloadCache] Failed to write cache file:', err);
     }

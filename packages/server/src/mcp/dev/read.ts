@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFile, readdir, stat } from 'fs/promises';
+import { readdir, stat } from 'fs/promises';
 import { join, relative } from 'path';
 import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
@@ -80,7 +80,7 @@ export function registerReadTools(server: McpServer): void {
           const files = await listFiles(fullPath, sandboxPath);
           return ok(JSON.stringify({ sandboxId, path, files }, null, 2));
         }
-        const content = await readFile(fullPath, 'utf-8');
+        const content = await Bun.file(fullPath).text();
         return ok(content);
       } catch {
         return error(`File not found: ${path}`);

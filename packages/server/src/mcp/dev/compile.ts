@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { writeFile, mkdir, stat } from 'fs/promises';
+import { mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
@@ -119,7 +119,7 @@ export function registerCompileTools(server: McpServer): void {
 
       try {
         await mkdir(sandboxPath, { recursive: true });
-        await writeFile(fullPath, JSON.stringify(result.data, null, 2), 'utf-8');
+        await Bun.write(fullPath, JSON.stringify(result.data, null, 2));
 
         return ok(
           JSON.stringify(

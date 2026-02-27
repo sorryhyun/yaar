@@ -5,7 +5,6 @@
  * both exact and fuzzy matching of previously seen contexts.
  */
 
-import { createHash } from 'crypto';
 import type { WindowState } from '@yaar/shared';
 import type { Task } from '../agents/pool-context.js';
 import type { Fingerprint } from './types.js';
@@ -64,7 +63,7 @@ export function jaccardSimilarity(a: string[], b: string[]): number {
  */
 export function computeContentHash(text: string): string {
   const normalized = normalizeContent(text);
-  return createHash('sha256').update(normalized).digest('hex');
+  return new Bun.CryptoHasher('sha256').update(normalized).digest('hex');
 }
 
 /**
@@ -75,7 +74,7 @@ export function computeWindowStateHash(windows: WindowState[]): string {
     .map((w) => `${w.id}:${w.content.renderer}`)
     .sort()
     .join('|');
-  return createHash('sha256').update(sorted).digest('hex').slice(0, 16);
+  return new Bun.CryptoHasher('sha256').update(sorted).digest('hex').slice(0, 16);
 }
 
 /**

@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { ok, error } from '../utils.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
@@ -57,7 +57,7 @@ export function registerWriteTools(server: McpServer): void {
         await mkdir(dirname(fullPath), { recursive: true });
 
         // Write the file
-        await writeFile(fullPath, content, 'utf-8');
+        await Bun.write(fullPath, content);
 
         return ok(
           JSON.stringify(
@@ -116,7 +116,7 @@ export function registerWriteTools(server: McpServer): void {
       // Read existing content
       let content: string;
       try {
-        content = await readFile(fullPath, 'utf-8');
+        content = await Bun.file(fullPath).text();
       } catch {
         return error(`File not found: ${path}`);
       }
@@ -138,7 +138,7 @@ export function registerWriteTools(server: McpServer): void {
 
       // Apply replacement
       const newContent = content.replace(old_string, new_string);
-      await writeFile(fullPath, newContent, 'utf-8');
+      await Bun.write(fullPath, newContent);
 
       return ok(
         JSON.stringify(

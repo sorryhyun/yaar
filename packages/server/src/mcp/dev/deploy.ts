@@ -4,7 +4,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFile, writeFile, mkdir, cp, readdir, stat, rm } from 'fs/promises';
+import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { ok, error } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
@@ -111,7 +111,7 @@ export function registerDeployTools(server: McpServer): void {
       let hasAppProtocol = explicitAppProtocol ?? false;
       let extractedProtocol: Pick<AppManifest, 'state' | 'commands'> | null = null;
       try {
-        const distHtml = await readFile(distIndexPath, 'utf-8');
+        const distHtml = await Bun.file(distIndexPath).text();
         hasCompiledApp = true;
         if (explicitAppProtocol === undefined) {
           hasAppProtocol = distHtml.includes('.app.register');
@@ -128,7 +128,7 @@ export function registerDeployTools(server: McpServer): void {
               `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`,
             );
           }
-          const distHtml = await readFile(distIndexPath, 'utf-8');
+          const distHtml = await Bun.file(distIndexPath).text();
           hasCompiledApp = true;
           if (explicitAppProtocol === undefined) {
             hasAppProtocol = distHtml.includes('.app.register');
@@ -139,7 +139,7 @@ export function registerDeployTools(server: McpServer): void {
       }
       // Read protocol manifest emitted by compiler (dist/protocol.json)
       try {
-        const protocolJson = await readFile(join(sandboxPath, 'dist', 'protocol.json'), 'utf-8');
+        const protocolJson = await Bun.file(join(sandboxPath, 'dist', 'protocol.json')).text();
         extractedProtocol = JSON.parse(protocolJson);
       } catch {
         // No protocol extracted — app may not use App Protocol
@@ -168,12 +168,12 @@ export function registerDeployTools(server: McpServer): void {
       let existingMeta: Record<string, unknown> = {};
       let existingManifest: Record<string, unknown> = {};
       try {
-        existingMeta = JSON.parse(await readFile(join(appPath, 'app.json'), 'utf-8'));
+        existingMeta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
       } catch {
         // New app
       }
       try {
-        existingManifest = JSON.parse(await readFile(join(appPath, 'manifest.json'), 'utf-8'));
+        existingManifest = JSON.parse(await Bun.file(join(appPath, 'manifest.json')).text());
       } catch {
         // New app
       }
@@ -225,7 +225,7 @@ export function registerDeployTools(server: McpServer): void {
           skill,
           hasAppProtocol,
         );
-        await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
+        await Bun.write(join(appPath, 'SKILL.md'), skillContent);
 
         // Merge app metadata: preserve existing fields, override only what was explicitly provided
         const metadata: Record<string, unknown> = { ...existingMeta };
@@ -265,11 +265,7 @@ export function registerDeployTools(server: McpServer): void {
         } else if (!hasAppProtocol) {
           delete metadata.protocol;
         }
-        await writeFile(
-          join(appPath, 'app.json'),
-          JSON.stringify(metadata, null, 2) + '\n',
-          'utf-8',
-        );
+        await Bun.write(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
         // Merge marketplace manifest: preserve existing fields, override only what was provided
         const manifest: Record<string, unknown> = {
@@ -284,11 +280,7 @@ export function registerDeployTools(server: McpServer): void {
         else if (!manifest.version) manifest.version = '1.0.0';
         if (author !== undefined) manifest.author = author;
         else if (!manifest.author) manifest.author = 'YAAR';
-        await writeFile(
-          join(appPath, 'manifest.json'),
-          JSON.stringify(manifest, null, 2) + '\n',
-          'utf-8',
-        );
+        await Bun.write(join(appPath, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
@@ -439,7 +431,7 @@ export function registerDeployTools(server: McpServer): void {
       }
 
       try {
-        await writeFile(join(appPath, filename), JSON.stringify(content, null, 2), 'utf-8');
+        await Bun.write(join(appPath, filename), JSON.stringify(content, null, 2));
 
         // Regenerate SKILL.md if a component file was added
         if (filename.endsWith('.yaarcomponent.json')) {

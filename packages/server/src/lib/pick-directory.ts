@@ -10,9 +10,7 @@
  * Returns the selected absolute path, or null if cancelled.
  */
 
-import { spawn } from 'child_process';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
-import { randomBytes } from 'crypto';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -26,40 +24,21 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * Execute a command directly with stdout piping.
  * Works on Linux/macOS/WSL where child process stdio is reliable.
  */
-function execDirect(
+async function execDirect(
   cmd: string,
   args: string[],
   timeoutMs = 60_000,
 ): Promise<{ stdout: string; code: number }> {
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
-    } catch {
-      resolve({ stdout: '', code: 1 });
-      return;
-    }
-
-    let stdout = '';
-    child.stdout!.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    const timer = setTimeout(() => {
-      child.kill();
-      resolve({ stdout: '', code: 1 });
-    }, timeoutMs);
-
-    child.on('close', (code: number | null) => {
-      clearTimeout(timer);
-      resolve({ stdout: stdout.trim(), code: code ?? 1 });
-    });
-
-    child.on('error', () => {
-      clearTimeout(timer);
-      resolve({ stdout: '', code: 1 });
-    });
-  });
+  try {
+    const proc = Bun.spawn([cmd, ...args], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const timer = setTimeout(() => proc.kill(), timeoutMs);
+    const code = await proc.exited;
+    clearTimeout(timer);
+    const stdout = await new Response(proc.stdout).text();
+    return { stdout: stdout.trim(), code };
+  } catch {
+    return { stdout: '', code: 1 };
+  }
 }
 
 async function tryZenity(): Promise<string | null> {
@@ -82,7 +61,7 @@ async function tryKdialog(): Promise<string | null> {
 }
 
 async function tryPowerShell(): Promise<string | null> {
-  const id = randomBytes(4).toString('hex');
+  const id = Buffer.from(crypto.getRandomValues(new Uint8Array(4))).toString('hex');
   const resultFile = join(tmpdir(), `yaar-pick-${id}.txt`);
   const doneFile = join(tmpdir(), `yaar-pick-done-${id}.txt`);
   const scriptFile = join(tmpdir(), `yaar-pick-${id}.ps1`);
@@ -118,9 +97,9 @@ $f.Dispose()
   // mangled by CreateProcessW argument parsing (especially in Bun compiled exe).
   writeFileSync(scriptFile, script, 'utf-8');
 
-  const child = spawn(
-    'powershell.exe',
+  Bun.spawn(
     [
+      'powershell.exe',
       '-NoProfile',
       '-STA',
       '-ExecutionPolicy',
@@ -130,9 +109,8 @@ $f.Dispose()
       '-File',
       scriptFile,
     ],
-    { detached: true, stdio: 'ignore' },
+    { stdio: ['ignore', 'ignore', 'ignore'] },
   );
-  child.unref();
 
   // Poll for done file (up to 60s)
   const deadline = Date.now() + 60_000;

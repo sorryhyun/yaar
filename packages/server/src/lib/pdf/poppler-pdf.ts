@@ -8,8 +8,7 @@
 import { Poppler } from 'node-poppler';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
-import { readdir, readFile, rm, mkdir } from 'fs/promises';
-import { randomUUID } from 'crypto';
+import { readdir, rm, mkdir } from 'fs/promises';
 import { IS_BUNDLED_EXE } from '../../config.js';
 
 /**
@@ -55,7 +54,7 @@ export async function pdfToImages(
   const images: PdfPageImage[] = [];
 
   // Create a unique temp directory for this conversion
-  const tempDir = join(tmpdir(), `yaar-pdf-${randomUUID()}`);
+  const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
   try {
@@ -88,7 +87,7 @@ export async function pdfToImages(
 
     for (let i = 0; i < pngFiles.length; i++) {
       const filePath = join(tempDir, pngFiles[i]);
-      const data = await readFile(filePath);
+      const data = Buffer.from(await Bun.file(filePath).arrayBuffer());
       images.push({
         pageNumber: i + 1,
         data,
@@ -114,7 +113,7 @@ export async function renderPdfPage(
   const poppler = getPoppler();
 
   // Create a unique temp directory for this conversion
-  const tempDir = join(tmpdir(), `yaar-pdf-${randomUUID()}`);
+  const tempDir = join(tmpdir(), `yaar-pdf-${crypto.randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
   try {
@@ -137,7 +136,7 @@ export async function renderPdfPage(
       throw new Error(`Failed to render page ${pageNumber}`);
     }
 
-    return await readFile(join(tempDir, pngFile));
+    return Buffer.from(await Bun.file(join(tempDir, pngFile)).arrayBuffer());
   } finally {
     // Cleanup temp directory
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});

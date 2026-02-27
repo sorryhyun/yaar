@@ -6,11 +6,11 @@
  * works anywhere Chrome is installed (including Windows .exe builds).
  */
 
-import { spawn, execFileSync, type ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import type { Subprocess } from 'bun';
 
 const CHROME_PATHS: Record<string, string[]> = {
   linux: [
@@ -61,8 +61,9 @@ export async function findChrome(): Promise<string | null> {
   if (process.platform !== 'win32') {
     for (const cmd of WHICH_CANDIDATES) {
       try {
-        const result = execFileSync('which', [cmd], { stdio: 'pipe' }).toString().trim();
-        if (result) return result;
+        const result = Bun.spawnSync(['which', cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
+        const path = result.stdout.toString().trim();
+        if (result.exitCode === 0 && path) return path;
       } catch {
         // Not found
       }
@@ -73,7 +74,7 @@ export async function findChrome(): Promise<string | null> {
 }
 
 export interface ChromeInstance {
-  process: ChildProcess;
+  process: Subprocess;
   port: number;
   wsUrl: string;
   userDataDir: string;
@@ -103,7 +104,11 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
     'about:blank',
   ];
 
-  const proc = spawn(chromePath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  const proc = Bun.spawn([chromePath, ...args], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
   // Parse the DevTools WebSocket URL from stderr
   const wsUrl = await new Promise<string>((resolve, reject) => {
@@ -112,24 +117,40 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
       reject(new Error('Chrome launch timeout (10s)'));
     }, 10_000);
 
+    // Read stderr as a stream to find the DevTools URL
+    const reader = proc.stderr.getReader();
     let stderrData = '';
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      stderrData += chunk.toString();
-      const match = stderrData.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (match) {
-        clearTimeout(timeout);
-        resolve(match[1]);
-      }
-    });
 
-    proc.on('exit', (code) => {
+    const readChunk = () => {
+      reader
+        .read()
+        .then(({ done, value }) => {
+          if (done) {
+            clearTimeout(timeout);
+            reject(new Error(`Chrome stderr ended. stderr: ${stderrData.slice(0, 500)}`));
+            return;
+          }
+          stderrData += new TextDecoder().decode(value);
+          const match = stderrData.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+          if (match) {
+            clearTimeout(timeout);
+            reader.releaseLock();
+            resolve(match[1]);
+          } else {
+            readChunk();
+          }
+        })
+        .catch((err: unknown) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+    };
+    readChunk();
+
+    // Also handle early exit
+    proc.exited.then((code: number) => {
       clearTimeout(timeout);
       reject(new Error(`Chrome exited with code ${code}. stderr: ${stderrData.slice(0, 500)}`));
-    });
-
-    proc.on('error', (err) => {
-      clearTimeout(timeout);
-      reject(err);
     });
   });
 

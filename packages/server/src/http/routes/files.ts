@@ -2,7 +2,7 @@
  * File-serving routes — PDF render, sandbox, app static, storage files.
  */
 
-import { readFile, readdir } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
@@ -245,7 +245,7 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
 
     try {
-      const content = await readFile(normalizedPath);
+      const content = Buffer.from(await Bun.file(normalizedPath).arrayBuffer());
       const ext = extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       const headers: Record<string, string> = {
@@ -294,10 +294,9 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
       }
 
       const iconPath = join(appDir, iconFile);
-      const content = await readFile(iconPath);
       const ext = extname(iconFile).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      return new Response(content, {
+      return new Response(Bun.file(iconPath), {
         headers: {
           'Content-Type': contentType,
           'Cache-Control': 'public, max-age=3600',
@@ -324,7 +323,7 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
 
     try {
-      const content = await readFile(normalizedPath);
+      const content = Buffer.from(await Bun.file(normalizedPath).arrayBuffer());
       const ext = extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
       const headers: Record<string, string> = {
@@ -361,12 +360,15 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
         return jsonResponse(result.entries);
       }
 
-      // Serve file
+      // Serve file (zero-copy via Bun.file())
       try {
-        const content = await readFile(resolved.absolutePath);
+        const file = Bun.file(resolved.absolutePath);
+        if (!(await file.exists())) {
+          return errorResponse('File not found', 404);
+        }
         const ext = extname(filePath).toLowerCase();
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-        return new Response(content, {
+        return new Response(file, {
           headers: {
             'Content-Type': contentType,
             'Cache-Control': 'no-cache',

@@ -5,7 +5,7 @@
  * pattern from storage-manager.ts.
  */
 
-import { readFile, writeFile, mkdir, stat } from 'fs/promises';
+import { mkdir, stat } from 'fs/promises';
 import { join, dirname, normalize, relative, isAbsolute } from 'path';
 import { getConfigDir } from './storage-manager.js';
 import { STORAGE_DIR } from '../config.js';
@@ -38,7 +38,7 @@ export async function loadMounts(): Promise<MountEntry[]> {
   if (cachedMounts) return cachedMounts;
 
   try {
-    const content = await readFile(getMountsPath(), 'utf-8');
+    const content = await Bun.file(getMountsPath()).text();
     cachedMounts = JSON.parse(content) as MountEntry[];
   } catch {
     cachedMounts = [];
@@ -50,7 +50,7 @@ export async function loadMounts(): Promise<MountEntry[]> {
 async function persistMounts(mounts: MountEntry[]): Promise<void> {
   const filePath = getMountsPath();
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(mounts, null, 2), 'utf-8');
+  await Bun.write(filePath, JSON.stringify(mounts, null, 2));
   cachedMounts = mounts;
 }
 

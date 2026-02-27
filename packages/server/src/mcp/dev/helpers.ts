@@ -2,7 +2,7 @@
  * App development helpers - path validation, naming, SKILL.md generation.
  */
 
-import { readFile, writeFile, readdir } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join, normalize, relative } from 'path';
 
 /**
@@ -126,7 +126,7 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
   // Read existing SKILL.md to preserve custom content
   let customContent: string | undefined;
   try {
-    const existing = await readFile(join(appPath, 'SKILL.md'), 'utf-8');
+    const existing = await Bun.file(join(appPath, 'SKILL.md')).text();
     // Extract everything before ## Launch
     const launchIdx = existing.indexOf('## Launch');
     if (launchIdx > 0) {
@@ -140,7 +140,7 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
   let hasCompiledApp = false;
   let hasAppProtocol = false;
   try {
-    const indexHtml = await readFile(join(appPath, 'index.html'), 'utf-8');
+    const indexHtml = await Bun.file(join(appPath, 'index.html')).text();
     hasCompiledApp = true;
     hasAppProtocol = indexHtml.includes('.app.register');
   } catch {
@@ -160,7 +160,7 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
   // Read display name from app.json
   let displayName = toDisplayName(appId);
   try {
-    const meta = JSON.parse(await readFile(join(appPath, 'app.json'), 'utf-8'));
+    const meta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
     if (meta.name) displayName = meta.name;
   } catch {
     /* no app.json */
@@ -174,5 +174,5 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     customContent,
     hasAppProtocol,
   );
-  await writeFile(join(appPath, 'SKILL.md'), skillContent, 'utf-8');
+  await Bun.write(join(appPath, 'SKILL.md'), skillContent);
 }

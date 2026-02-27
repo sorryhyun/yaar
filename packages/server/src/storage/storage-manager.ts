@@ -4,7 +4,7 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'fs/promises';
+import { mkdir, readdir, unlink, stat } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
 import {
@@ -132,7 +132,7 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
     // Image files — return as base64 image content
     const mime = imageFileMime(validatedPath);
     if (mime) {
-      const buf = await readFile(validatedPath);
+      const buf = Buffer.from(await Bun.file(validatedPath).arrayBuffer());
       const image: StorageImageContent = {
         type: 'image',
         data: buf.toString('base64'),
@@ -151,7 +151,7 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
     }
 
     // Text file
-    const content = await readFile(validatedPath, 'utf-8');
+    const content = await Bun.file(validatedPath).text();
     return { success: true, content };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
@@ -182,11 +182,7 @@ export async function storageWrite(
     const parentDir = join(validatedPath, '..');
     await mkdir(parentDir, { recursive: true });
 
-    if (Buffer.isBuffer(content)) {
-      await writeFile(validatedPath, content);
-    } else {
-      await writeFile(validatedPath, content, 'utf-8');
-    }
+    await Bun.write(validatedPath, content);
     return { success: true, path: filePath };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
@@ -306,7 +302,7 @@ export async function configRead(filePath: string): Promise<StorageReadResult> {
   }
 
   try {
-    const content = await readFile(normalizedPath, 'utf-8');
+    const content = await Bun.file(normalizedPath).text();
     return { success: true, content };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
@@ -329,7 +325,7 @@ export async function configWrite(
 
   try {
     await mkdir(dirname(normalizedPath), { recursive: true });
-    await writeFile(normalizedPath, content, 'utf-8');
+    await Bun.write(normalizedPath, content);
     return { success: true, path: filePath };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';

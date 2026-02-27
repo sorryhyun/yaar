@@ -14,7 +14,7 @@ export function registerRequestTools(server: McpServer): void {
     'http_get',
     {
       description:
-        'Make an HTTP GET request using curl. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
+        'Make an HTTP GET request. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
       inputSchema: {
         url: z.string().url().describe('The URL to fetch'),
         headers: z
@@ -38,30 +38,15 @@ export function registerRequestTools(server: McpServer): void {
       }
 
       try {
-        const curlArgs = [
-          '-s', // Silent mode (no progress)
-          '-S', // Show errors even in silent mode
-          '-i', // Include headers in output
-          '-A',
-          CHROME_USER_AGENT,
-          '--max-time',
-          '30',
-        ];
+        const headers: Record<string, string> = {
+          'User-Agent': CHROME_USER_AGENT,
+          ...args.headers,
+        };
 
-        if (args.followRedirects !== false) {
-          curlArgs.push('-L'); // Follow redirects
-        }
-
-        // Add custom headers
-        if (args.headers) {
-          for (const [key, value] of Object.entries(args.headers)) {
-            curlArgs.push('-H', `${key}: ${value}`);
-          }
-        }
-
-        curlArgs.push(args.url);
-
-        const result = await executeCurl(curlArgs);
+        const result = await executeCurl(args.url, {
+          headers,
+          followRedirects: args.followRedirects !== false,
+        });
         return ok(formatResponse(result));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
@@ -75,7 +60,7 @@ export function registerRequestTools(server: McpServer): void {
     'http_post',
     {
       description:
-        'Make an HTTP POST request using curl. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
+        'Make an HTTP POST request. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
       inputSchema: {
         url: z.string().url().describe('The URL to send the request to'),
         body: z
@@ -110,33 +95,21 @@ export function registerRequestTools(server: McpServer): void {
 
       try {
         const contentType = args.contentType || 'json';
-        const curlArgs = [
-          '-s', // Silent mode (no progress)
-          '-S', // Show errors even in silent mode
-          '-i', // Include headers in output
-          '-X',
-          'POST',
-          '-A',
-          CHROME_USER_AGENT,
-          '--max-time',
-          '30',
-        ];
+        const headers: Record<string, string> = {
+          'User-Agent': CHROME_USER_AGENT,
+          ...args.headers,
+        };
 
-        if (args.followRedirects !== false) {
-          curlArgs.push('-L'); // Follow redirects
-        }
+        let requestBody: string | undefined;
 
-        // Set content type and body
         if (args.body !== undefined) {
-          let requestBody: string;
-
           switch (contentType) {
             case 'json':
-              curlArgs.push('-H', 'Content-Type: application/json');
+              headers['Content-Type'] = 'application/json';
               requestBody = typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
               break;
             case 'form':
-              curlArgs.push('-H', 'Content-Type: application/x-www-form-urlencoded');
+              headers['Content-Type'] = 'application/x-www-form-urlencoded';
               if (typeof args.body === 'object') {
                 requestBody = new URLSearchParams(args.body as Record<string, string>).toString();
               } else {
@@ -144,24 +117,18 @@ export function registerRequestTools(server: McpServer): void {
               }
               break;
             case 'text':
-              curlArgs.push('-H', 'Content-Type: text/plain');
+              headers['Content-Type'] = 'text/plain';
               requestBody = typeof args.body === 'string' ? args.body : JSON.stringify(args.body);
               break;
           }
-
-          curlArgs.push('-d', requestBody);
         }
 
-        // Add custom headers
-        if (args.headers) {
-          for (const [key, value] of Object.entries(args.headers)) {
-            curlArgs.push('-H', `${key}: ${value}`);
-          }
-        }
-
-        curlArgs.push(args.url);
-
-        const result = await executeCurl(curlArgs);
+        const result = await executeCurl(args.url, {
+          method: 'POST',
+          headers,
+          body: requestBody,
+          followRedirects: args.followRedirects !== false,
+        });
         return ok(formatResponse(result));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';

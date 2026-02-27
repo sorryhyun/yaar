@@ -7,7 +7,6 @@ import { mkdir, stat as fsStat } from 'fs/promises';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { networkInterfaces } from 'os';
-import { execSync } from 'child_process';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { listApps } from './mcp/apps/discovery.js';
@@ -137,13 +136,16 @@ function getLanIp(): string {
   // from other devices. Ask Windows for the real LAN IP via PowerShell.
   if (isWsl()) {
     try {
-      const out = execSync(
-        'powershell.exe -NoProfile -c "Get-NetIPAddress -AddressFamily IPv4 | ' +
-          "Where-Object { \\$_.IPAddress -notlike '127.*' -and \\$_.IPAddress -notlike '172.*' " +
-          "-and \\$_.IPAddress -notlike '169.*' -and \\$_.PrefixOrigin -ne 'WellKnown' } | " +
-          'Select-Object -ExpandProperty IPAddress -First 1"',
-        { timeout: 5000, encoding: 'utf-8' },
-      ).trim();
+      const result = Bun.spawnSync(
+        [
+          'powershell.exe',
+          '-NoProfile',
+          '-c',
+          "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '172.*' -and $_.IPAddress -notlike '169.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -ExpandProperty IPAddress -First 1",
+        ],
+        { timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      const out = result.stdout.toString().trim();
       if (out) return out;
     } catch {
       // PowerShell not available or timed out — fall through
