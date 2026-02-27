@@ -227,7 +227,10 @@ These are routed through YAAR's existing permission dialog system (`actionEmitte
 codex app-server \
   # Tools
   -c 'features.shell_tool=false' \          # Disable shell commands
-  # MCP servers (YAAR's 4 namespaced servers)
+  -c 'features.apply_patch_freeform=false' \
+  -c 'features.multi_agent=true' \
+  -c 'features.collaboration_modes=true' \  # Subagent delegation
+  # MCP servers (YAAR's 7 namespaced servers)
   -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
   -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
   -c 'mcp_servers.window.url=http://127.0.0.1:8000/mcp/window' \
@@ -236,13 +239,19 @@ codex app-server \
   -c 'mcp_servers.storage.bearer_token_env_var=YAAR_MCP_TOKEN' \
   -c 'mcp_servers.apps.url=http://127.0.0.1:8000/mcp/apps' \
   -c 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.user.url=http://127.0.0.1:8000/mcp/user' \
+  -c 'mcp_servers.user.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.dev.url=http://127.0.0.1:8000/mcp/dev' \
+  -c 'mcp_servers.dev.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.browser.url=http://127.0.0.1:8000/mcp/browser' \
+  -c 'mcp_servers.browser.bearer_token_env_var=YAAR_MCP_TOKEN' \
   # Model
-  -c 'model=gpt-5.3-codex' \
   -c 'model_reasoning_effort=medium' \
-  -c 'model_personality=none' \
+  -c 'personality=none' \
   # Execution
   -c 'sandbox_mode=danger-full-access' \
-  -c 'approval_policy=never'
+  -c 'approval_policy=on-request' \
+  -c 'project_doc_max_bytes=0'
 ```
 
 ### Environment Variables
@@ -341,7 +350,8 @@ codex app-server \
 
 | Policy | Behavior |
 |--------|----------|
-| `"never"` | Never ask for approval (current) |
+| `"never"` | Never ask for approval |
+| `"on-request"` | Ask on request; routed through YAAR's permission dialog (current) |
 | `"always"` | Ask before every tool execution |
 | `"on-failure"` | Ask only after a command fails |
 

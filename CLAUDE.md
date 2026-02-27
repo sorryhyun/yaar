@@ -20,8 +20,8 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 ```bash
 pnpm install                     # Install all dependencies
 make dev                         # Start with auto-detected provider (opens at localhost:5173)
-make claude                      # Start with Claude provider
-make codex                       # Start with Codex provider
+make claude                      # Start with Claude provider (REMOTE=1, serves from port 8000)
+make codex                       # Start with Codex provider (REMOTE=1, serves from port 8000)
 make claude-dev                  # Claude provider without MCP auth (local dev)
 make codex-dev                   # Codex provider without MCP auth (local dev)
 make build                       # Build all packages
@@ -37,10 +37,10 @@ make server                                  # Start server only
 make frontend                                # Start frontend only
 
 # Testing
-pnpm --filter @yaar/frontend vitest run           # Run all frontend tests
-pnpm --filter @yaar/frontend vitest run store     # Run tests matching "store"
-pnpm --filter @yaar/server vitest run              # Run all server tests
-pnpm --filter @yaar/shared vitest run              # Run all shared tests
+pnpm --filter @yaar/frontend test                 # Run all frontend tests
+pnpm --filter @yaar/frontend exec vitest run store  # Run tests matching "store"
+pnpm --filter @yaar/server test                    # Run all server tests
+pnpm --filter @yaar/shared test                    # Run all shared tests
 
 # Standalone executable (requires Bun)
 pnpm build:exe                   # Build Windows executable
@@ -61,17 +61,20 @@ pnpm build:exe:bundle:macos      # Build macOS executable
 ```
 yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
-│   └── moltbook/
-│       └── SKILL.md             # Instructions for AI on how to use this app
+│   ├── dock/                    # Taskbar/dock panel app
+│   ├── storage/                 # File storage browser app
+│   └── ...                      # Other bundled apps (github-manager, pdf-viewer, etc.)
 ├── config/                      # User config (git-ignored)
-│   ├── credentials/             # Centralized app credentials
-│   │   └── moltbook.json       # API credentials for moltbook
+│   ├── credentials/             # Centralized app credentials (git-ignored)
 │   ├── permissions.json         # Saved permission decisions
+│   ├── hooks.json               # Event-driven hooks config
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
 ├── docs/                        # Architecture documentation
 │   ├── monitor_and_windows_guide.md              # Core concepts: Session, Monitor, Window
 │   ├── common_flow.md           # Agent pools, context, message flow diagrams
 │   └── claude_codex.md          # Claude vs Codex provider behavioral differences
+├── sandbox/                     # Temporary app development workspace (git-ignored)
+├── session_logs/                # AI conversation logs, timestamp-named dirs (git-ignored)
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
@@ -107,13 +110,13 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-6. **MCP tools**: 7 namespaced HTTP servers (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`) using `@modelcontextprotocol/sdk`.
+6. **MCP tools**: 7 namespaced MCP endpoints (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`) served via a single HTTP server using `@modelcontextprotocol/sdk`.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
 8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
 10. **Policy pattern**: Server decomposes complex behavior into focused policy classes:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
-    - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy` (handle task queuing and prompt assembly)
+    - `context-pool-policies/` — `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowConnectionPolicy`, `MonitorBudgetPolicy` (handle task queuing, prompt assembly, and monitor rate limits)
 
 See [`docs/os_architecture.md`](./docs/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences. See `docs/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/remote_mode.md` for network access.
 
@@ -122,12 +125,12 @@ See [`docs/os_architecture.md`](./docs/os_architecture.md) for how YAAR maps to 
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
-  - `browser/` — CDP browser automation (headless Chromium via Puppeteer, conditional on Chrome availability)
+  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability)
   - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
   - `compiler/` — Bun bundler for sandbox apps
   - `pdf/` — PDF rendering via poppler
   - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
-- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{sessionId}/`
+- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`
 
 ### Connection Lifecycle
 
@@ -232,16 +235,17 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 | `apps_market_get` | Download and install an app from the marketplace |
 | `apps_market_delete` | Uninstall an app and its credentials |
 
-### Example: Moltbook App
+### Example: GitHub Manager App
 
 ```
-apps/moltbook/
-└── SKILL.md           # API docs, auth flow, example usage
+apps/github-manager/
+├── SKILL.md           # API docs, auth flow, example usage
+└── app.json           # { "icon": "🐙", "name": "GitHub Manager", "protocol": {...} }
 
 config/credentials/
-└── moltbook.json      # { "api_key": "moltbook_xxx" } (git-ignored)
+└── github-manager.json  # { "api_key": "ghp_xxx" } (git-ignored)
 ```
 
-When user clicks the Moltbook icon, the AI loads `SKILL.md` and can then help with registration, posting, viewing feed, etc.
+When user clicks the GitHub Manager icon, the AI loads `SKILL.md` and can then help with repos, issues, etc.
 
 **Note:** Old credentials at `apps/{appId}/credentials.json` or `storage/credentials/{appId}.json` are automatically migrated to `config/credentials/{appId}.json` on first read.

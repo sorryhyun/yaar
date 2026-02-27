@@ -320,6 +320,6 @@ This means:
 | `providers/codex/provider.ts` | Codex provider with thread management |
 | `providers/codex/app-server.ts` | AppServer process manager (spawn, WS connections, auth) |
 | `providers/codex/jsonrpc-ws-client.ts` | JSON-RPC client over WebSocket |
-| `providers/codex/jsonrpc-client.ts` | JSON-RPC client over stdio (legacy, unused) |
+| `providers/codex/jsonrpc-client.ts` | Base JSON-RPC client (request/notification helpers) |
 | `providers/codex/message-mapper.ts` | Notification → StreamMessage |
 | `providers/codex/system-prompt.ts` | Codex-specific system prompt |

@@ -42,15 +42,13 @@ Tab 3 ──┘
 2. **Reconnection** — frontend passes `?sessionId=X`. Server returns the existing session. New client gets a snapshot of current windows via `generateSnapshot()`.
 3. **Lazy init** — the expensive `ContextPool` (agents, provider) isn't created until the first message. This keeps `/health` fast.
 4. **Persistence** — `SessionLogger` writes all messages to `session_logs/{sessionId}/messages.jsonl`. Sessions are browsable via `GET /api/sessions` and restorable via `POST /api/sessions/:id/restore`.
-5. **Event sequencing** — `EventSequencer` stamps every outgoing event with a monotonic `seq` number. Late-joining clients can replay missed events or fall back to a full snapshot.
 
 ### Key types
 
 | Type | Location | Purpose |
 |------|----------|---------|
-| `LiveSession` | `server/session/live-session.ts` | Session container — owns pool, window state, reload cache, sequencer |
+| `LiveSession` | `server/session/live-session.ts` | Session container — owns pool, window state, reload cache |
 | `SessionHub` | `server/session/live-session.ts` | Singleton registry of all active sessions |
-| `EventSequencer` | `server/session/event-sequencer.ts` | Ring buffer for monotonic event sequencing + replay |
 | `SessionLogger` | `server/logging/session-logger.ts` | Writes messages.jsonl to disk |
 | `SessionMetadata` | `server/logging/types.ts` | On-disk metadata (provider, agent hierarchy, thread IDs) |
 
@@ -198,7 +196,7 @@ AI emits window.close / user clicks X
 
 ```
 Session (1 per conversation)
- ├── owns SessionHub registration, EventSequencer, SessionLogger
+ ├── owns SessionHub registration, SessionLogger
  ├── has 1–4 Monitors (defaults to 1)
  │    ├── each has 1 Main Agent (persistent, sequential within monitor)
  │    ├── each has N Windows (AI-created, user-interactable)

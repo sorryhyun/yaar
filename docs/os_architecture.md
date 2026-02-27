@@ -12,7 +12,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Process table | `AgentPool` | `agents/agent-pool.ts` |
 | Process types | Main (init), window (daemon), ephemeral (one-shot) | `agents/profiles.ts` |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | `agents/context-pool-policies/` |
-| Syscalls | 7 MCP tool namespaces | `mcp/server.ts`, `mcp/register.ts` |
+| Syscalls | 7 MCP tool namespaces | `mcp/server.ts` |
 | Instruction set | System prompt (~108 lines) | `providers/claude/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | `lifecycle.ts` |
 | Filesystem | `storage/` + mount system | `storage/storage-manager.ts`, `storage/mounts.ts` |
@@ -78,17 +78,17 @@ The primary monitor is never throttled.
 
 ## Syscalls (MCP Tools)
 
-MCP tools are syscalls. 7 namespaced servers, each a separate HTTP endpoint:
+MCP tools are syscalls. 7 namespaced HTTP endpoints on the same server (`/mcp/{namespace}`):
 
 | Namespace | OS analogy | Key tools |
 |---|---|---|
-| `system` | Core syscalls | `get_info`, `memorize`, config, HTTP, sandbox, reload |
+| `system` | Core syscalls | `get_info`, `memorize`, `relay_to_main`, config, HTTP, sandbox, reload |
 | `window` | Window manager API | `create`, `update`, `close`, `lock`, `list`, `show_notification` |
-| `storage` | Filesystem API | `read`, `write`, `list`, `delete`, `mount`, `unmount` |
+| `storage` | Filesystem API | `read`, `write`, `list`, `delete`, `mount`, `unmount`, `list_mounts` |
 | `apps` | Package manager | `list`, `load_skill`, `read_config`, `write_config`, marketplace |
 | `user` | stdin/stdout | `ask`, `request` (prompt user for input) |
 | `dev` | Compiler toolchain | `read_ts`, `write_ts`, `compile`, `typecheck`, `deploy` |
-| `browser` | Network stack | `open`, `click`, `type`, `screenshot`, `extract` |
+| `browser` | Network stack | `open`, `click`, `type`, `press`, `scroll`, `screenshot`, `extract`, `navigate`, `hover`, `wait_for`, `close` |
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
 
@@ -114,7 +114,7 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
 
 ## Boot Sequence
 
-`lifecycle.ts` → `initializeSubsystems()`:
+`lifecycle.ts` → `initializeSubsystems()` → `Bun.serve()`:
 
 ```
  1. ensureStorageDir()          ← mkdir storage/
@@ -122,11 +122,12 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
  3. (bundled exe) mkdirs        ← apps/, sandbox/, config/
  4. (remote mode) genToken      ← generate remote access token
  5. initSessionHub()            ← create singleton SessionHub
- 6. initMcpServer()             ← start 7 MCP HTTP servers + bearer token
- 7. initWarmPool()              ← detect provider, pre-initialize instances
- 8. Session restore             ← reload prior windows + context from logs
+ 6. initMcpServer()             ← register 7 MCP namespaces + bearer token
+ 7. ensureAppShortcut() × N     ← sync desktop shortcuts for installed apps
+ 8. initWarmPool()              ← detect provider, pre-initialize instances
+ 9. Session restore             ← reload prior windows + context from logs
 
- startListening()               ← bind HTTP + WebSocket server
+ Bun.serve()                    ← bind HTTP + WebSocket on PORT
 ```
 
 Shutdown reverses: dispose browser pool → warm pool → WebSocket → HTTP.

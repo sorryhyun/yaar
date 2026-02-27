@@ -5,9 +5,10 @@ Shared types between frontend and server.
 ## Exports
 
 - `actions.ts` - OS Actions DSL (includes `WindowState` with `appProtocol?: boolean`)
-- `events.ts` - WebSocket event types
-- `components.ts` - Component schemas, types, and type guards (Zod v4)
+- `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants, `formatCompactInteraction()`
+- `components.ts` - Component schemas, types, type guards (Zod v4), `DisplayContent`/`displayContentSchema`
 - `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
+- `capture-helper.ts` - Inline iframe scripts: `IFRAME_CAPTURE_HELPER_SCRIPT`, `IFRAME_STORAGE_SDK_SCRIPT`, `IFRAME_FETCH_PROXY_SCRIPT`, `IFRAME_CONTEXTMENU_SCRIPT`, `IFRAME_NOTIFICATIONS_SDK_SCRIPT`
 
 ## OS Actions
 
@@ -80,6 +81,8 @@ Interactive components for `component` renderer. Flat array only — no nesting.
 Component types: `button`, `input`, `select`, `text`, `badge`, `progress`, `image`
 
 Layout via `ComponentLayout`: `{ components: Component[], cols?: number | number[], gap?: 'none'|'sm'|'md'|'lg' }`
+
+`DisplayContent` / `displayContentSchema` — non-component content schema for `create_window`/`update_window` MCP tools. Renderer: `markdown | html | text | iframe | table`. Content is a string or `{ headers, rows }` for table.
 
 ## Adding a New OS Action
 

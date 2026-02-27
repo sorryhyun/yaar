@@ -51,7 +51,7 @@ Tool names use the `namespace:name` format (e.g., `apps:compile`, `window:create
 
 ## Example: App-Dev Progress Tracking
 
-An example config at `config/example_hook.json` demonstrates a 4-stage progress window that tracks app development:
+An example config at `docs/example_hooks.json` demonstrates a 4-stage progress window that tracks app development:
 
 | Stage | Trigger Tool | Progress | Status |
 |-------|-------------|----------|--------|
@@ -67,7 +67,7 @@ The first hook creates a small progress window (280x120, top-right corner). Subs
 Copy the example config to the active hooks file:
 
 ```bash
-cp config/example_hook.json config/hooks.json
+cp docs/example_hooks.json config/hooks.json
 ```
 
 Then start the server with `make dev`. When the AI uses app-dev tools, the progress window will appear and update automatically.
