@@ -131,8 +131,8 @@ export async function removeMount(alias: string): Promise<string | null> {
  * Returns null if the path doesn't match a mount prefix.
  */
 export function resolveMountPath(storagePath: string): ResolvedPath | null {
-  // Normalize to handle leading/trailing slashes
-  const cleaned = storagePath.replace(/^\/+/, '');
+  // Normalize backslashes (Windows) and strip leading slashes
+  const cleaned = storagePath.replaceAll('\\', '/').replace(/^\/+/, '');
   if (!cleaned.startsWith('mounts/')) return null;
 
   const rest = cleaned.slice('mounts/'.length); // "alias/sub/path" or "alias"

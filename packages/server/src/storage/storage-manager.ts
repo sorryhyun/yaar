@@ -27,12 +27,15 @@ import { resolveMountPath, loadMounts, type ResolvedPath } from './mounts.js';
  * Returns null if the path escapes the storage directory.
  */
 export function resolvePath(filePath: string): ResolvedPath | null {
+  // Normalize backslashes from Windows paths / URL-decoded %5C
+  const cleanedPath = filePath.replaceAll('\\', '/');
+
   // 1. Check mount prefix
-  const mountResult = resolveMountPath(filePath);
+  const mountResult = resolveMountPath(cleanedPath);
   if (mountResult) return mountResult;
 
   // 2. Default: resolve against STORAGE_DIR
-  const normalizedPath = normalize(join(STORAGE_DIR, filePath));
+  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
   const relativePath = relative(STORAGE_DIR, normalizedPath);
   if (relativePath.startsWith('..') || relativePath.includes('..')) {
     return null;
@@ -230,7 +233,7 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
       const stats = await stat(entryPath);
 
       entries.push({
-        path: join(cleaned, entry),
+        path: join(cleaned, entry).replaceAll('\\', '/'),
         isDirectory: stats.isDirectory(),
         size: stats.size,
         modifiedAt: stats.mtime.toISOString(),

@@ -7,8 +7,9 @@
  * (Chrome/Edge --app flag for a standalone window without browser chrome).
  */
 
-import { platform } from 'os';
-import { existsSync } from 'fs';
+import { platform, tmpdir } from 'os';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
 // Import and start the server
 // The server starts automatically on import
@@ -83,8 +84,27 @@ function openAppWindow() {
   const chromium = findChromiumBrowser();
 
   if (chromium) {
-    console.log(`Opening app window: ${chromium} --app=${url}`);
-    Bun.spawn([chromium, `--app=${url}`], {
+    // Use a dedicated user-data-dir so the --app window launches as an
+    // independent Chrome process.  Without this, Chrome reuses the
+    // already-running instance which can suppress file-picker dialogs
+    // and other OS-level popups in --app mode.
+    const userDataDir = join(tmpdir(), 'yaar-chrome-profile');
+    try {
+      mkdirSync(userDataDir, { recursive: true });
+    } catch {
+      /* ignore */
+    }
+
+    const args = [
+      `--app=${url}`,
+      `--user-data-dir=${userDataDir}`,
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--no-first-run',
+    ];
+
+    console.log(`Opening app window: ${chromium} ${args.join(' ')}`);
+    Bun.spawn([chromium, ...args], {
       stdio: ['ignore', 'ignore', 'ignore'],
     });
     return;

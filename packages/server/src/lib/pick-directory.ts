@@ -73,6 +73,18 @@ async function tryPowerShell(): Promise<string | null> {
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class FocusSteal {
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+}
+'@
 $f = New-Object System.Windows.Forms.Form
 $f.TopMost = $true
 $f.ShowInTaskbar = $false
@@ -81,7 +93,15 @@ $f.Size = New-Object System.Drawing.Size(0,0)
 $f.StartPosition = 'Manual'
 $f.Location = New-Object System.Drawing.Point(-9999,-9999)
 $f.Show()
+$fgHwnd = [FocusSteal]::GetForegroundWindow()
+$fgPid = [uint32]0
+$fgThread = [FocusSteal]::GetWindowThreadProcessId($fgHwnd, [ref]$fgPid)
+$ourThread = [FocusSteal]::GetCurrentThreadId()
+[FocusSteal]::AttachThreadInput($ourThread, $fgThread, $true)
+[FocusSteal]::SetForegroundWindow($f.Handle)
+[FocusSteal]::BringWindowToTop($f.Handle)
 $f.Activate()
+[FocusSteal]::AttachThreadInput($ourThread, $fgThread, $false)
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
 $d.Description = 'Select folder to mount'
 $d.ShowNewFolderButton = $false
