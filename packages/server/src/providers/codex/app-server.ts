@@ -11,7 +11,7 @@
  * single-turn serialization mutex is no longer needed.
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { execSync, spawn, type ChildProcess } from 'child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -121,9 +121,28 @@ export class AppServer {
   }
 
   /**
+   * Kill any stale process occupying the WebSocket port.
+   * This handles the case where a previous YAAR server crashed without
+   * cleaning up its detached codex app-server process.
+   */
+  private killStaleProcess(): void {
+    if (process.platform === 'win32') return;
+    try {
+      // fuser outputs PIDs using the port; -k sends SIGKILL
+      execSync(`fuser -k ${this.wsPort}/tcp 2>/dev/null`, { stdio: 'ignore', timeout: 5000 });
+      console.log(`[codex] Killed stale process on port ${this.wsPort}`);
+    } catch {
+      // No process on port, or fuser not available — either way, proceed
+    }
+  }
+
+  /**
    * Spawn the app-server process with WebSocket listener.
    */
   private async spawnProcess(): Promise<void> {
+    // Kill any orphaned process still holding the port from a previous run
+    this.killStaleProcess();
+
     const namespaces = MCP_SERVERS;
     const args = getCodexAppServerArgs(namespaces);
 

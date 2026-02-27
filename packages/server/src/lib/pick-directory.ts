@@ -3,29 +3,92 @@
  *
  * Tries (in order): zenity, kdialog, PowerShell (for WSL2).
  * Returns the selected absolute path, or null if cancelled.
+ *
+ * On Windows (Bun compiled exe), stdout piping from child processes is broken.
+ * We work around this by writing results to a temp file and polling for it,
+ * using detached + stdio:'ignore' spawn (proven to work from exe-entry.ts).
  */
 
-import { execFile } from 'child_process';
+import { spawn } from 'child_process';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { randomBytes } from 'crypto';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
-function exec(
+const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME != null;
+const isWin32 = process.platform === 'win32';
+
+/** Sleep for ms. */
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Spawn a command detached with no stdio, have it write result to a temp file, poll for it.
+ * This is the only reliable way to run child processes in Bun compiled exe on Windows.
+ */
+async function execViaFile(
   cmd: string,
   args: string[],
-  env?: Record<string, string>,
+  timeoutMs = 60_000,
 ): Promise<{ stdout: string; code: number }> {
-  return new Promise((resolve) => {
-    execFile(
-      cmd,
-      args,
-      { timeout: 60_000, encoding: 'utf-8', env: { ...process.env, ...env } },
-      (err, stdout) => {
-        resolve({ stdout: (stdout ?? '').trim(), code: err ? ((err as any).code ?? 1) : 0 });
-      },
-    );
+  const id = randomBytes(4).toString('hex');
+  const resultFile = join(tmpdir(), `yaar-exec-${id}.txt`);
+  const doneFile = join(tmpdir(), `yaar-done-${id}.txt`);
+
+  // Wrap command: run the real command, capture output to resultFile, write exit code to doneFile
+  const escapedArgs = args.map((a) => "'" + a.replace(/'/g, "''") + "'").join(' ');
+  const wrappedScript = [
+    'try {',
+    `  $out = & '${cmd}' ${escapedArgs} 2>&1`,
+    `  [System.IO.File]::WriteAllText('${resultFile.replace(/\\/g, '\\\\')}', ($out -join [char]10), [System.Text.Encoding]::UTF8)`,
+    `  [System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '0', [System.Text.Encoding]::UTF8)`,
+    '} catch {',
+    `  [System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '1', [System.Text.Encoding]::UTF8)`,
+    '}',
+  ].join('\n');
+
+  const child = spawn('powershell.exe', ['-NoProfile', '-Command', wrappedScript], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
   });
+  child.unref();
+
+  // Poll for done file
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(300);
+    if (existsSync(doneFile)) {
+      const code = parseInt(readFileSync(doneFile, 'utf-8').trim(), 10) || 0;
+      const stdout = existsSync(resultFile) ? readFileSync(resultFile, 'utf-8').trim() : '';
+      try {
+        unlinkSync(resultFile);
+      } catch {
+        /* ignore */
+      }
+      try {
+        unlinkSync(doneFile);
+      } catch {
+        /* ignore */
+      }
+      return { stdout, code };
+    }
+  }
+  // Timeout — clean up
+  try {
+    unlinkSync(resultFile);
+  } catch {
+    /* ignore */
+  }
+  try {
+    unlinkSync(doneFile);
+  } catch {
+    /* ignore */
+  }
+  return { stdout: '', code: 1 };
 }
 
 async function tryZenity(): Promise<string | null> {
-  const { stdout, code } = await exec('zenity', [
+  const { stdout, code } = await execViaFile('zenity', [
     '--file-selection',
     '--directory',
     '--title=Select folder to mount',
@@ -34,7 +97,7 @@ async function tryZenity(): Promise<string | null> {
 }
 
 async function tryKdialog(): Promise<string | null> {
-  const { stdout, code } = await exec('kdialog', [
+  const { stdout, code } = await execViaFile('kdialog', [
     '--getexistingdirectory',
     '.',
     '--title',
@@ -43,11 +106,14 @@ async function tryKdialog(): Promise<string | null> {
   return code === 0 && stdout ? stdout : null;
 }
 
-const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME != null;
-
 async function tryPowerShell(): Promise<string | null> {
-  // Write the selected path to a temp file as UTF-8 to avoid encoding issues
-  // with non-ASCII characters (e.g. Korean folder names) on stdout.
+  const id = randomBytes(4).toString('hex');
+  const resultFile = join(tmpdir(), `yaar-pick-${id}.txt`);
+  const doneFile = join(tmpdir(), `yaar-pick-done-${id}.txt`);
+
+  // PowerShell script that opens folder dialog and writes result to temp files.
+  // The result file contains the selected path (empty if cancelled).
+  // The done file signals completion.
   const script = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -63,57 +129,69 @@ $f.Show()
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
 $d.Description = 'Select folder to mount'
 $d.ShowNewFolderButton = $false
-if ($d.ShowDialog($f) -eq 'OK') {
-  $tmp = [System.IO.Path]::GetTempFileName()
-  [System.IO.File]::WriteAllText($tmp, $d.SelectedPath, [System.Text.Encoding]::UTF8)
-  Write-Output $tmp
-} else { Write-Output '' }
+$result = ''
+if ($d.ShowDialog($f) -eq 'OK') { $result = $d.SelectedPath }
 $f.Dispose()
+[System.IO.File]::WriteAllText('${resultFile.replace(/\\/g, '\\\\')}', $result, [System.Text.Encoding]::UTF8)
+[System.IO.File]::WriteAllText('${doneFile.replace(/\\/g, '\\\\')}', '0', [System.Text.Encoding]::UTF8)
 `.trim();
 
-  const { stdout, code } = await exec('powershell.exe', ['-NoProfile', '-Command', script]);
-  if (code !== 0 || !stdout) return null;
+  const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-Command', script], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  child.unref();
 
-  const tmpFile = stdout.trim();
-  if (!tmpFile) return null;
+  // Poll for done file (up to 60s)
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    await sleep(300);
+    if (existsSync(doneFile)) {
+      let winPath = existsSync(resultFile) ? readFileSync(resultFile, 'utf-8').trim() : '';
+      try {
+        unlinkSync(resultFile);
+      } catch {
+        /* ignore */
+      }
+      try {
+        unlinkSync(doneFile);
+      } catch {
+        /* ignore */
+      }
 
-  const { readFile, unlink } = await import('fs/promises');
-  let winPath: string;
-  try {
-    if (isWSL) {
-      // On WSL: convert Windows temp path → WSL path, then read
-      const { stdout: wslTmp } = await exec('wslpath', ['-u', tmpFile]);
-      winPath = (await readFile(wslTmp, 'utf-8')).trim();
-      await unlink(wslTmp).catch(() => {});
-    } else {
-      // On native Windows: read the temp file directly
-      winPath = (await readFile(tmpFile, 'utf-8')).trim();
-      await unlink(tmpFile).catch(() => {});
+      // Remove BOM if present
+      if (winPath.charCodeAt(0) === 0xfeff) winPath = winPath.slice(1);
+      if (!winPath) return null;
+
+      if (isWSL && /^[A-Za-z]:\\/.test(winPath)) {
+        const { stdout: wslPath, code: wslCode } = await execViaFile('wslpath', ['-u', winPath]);
+        return wslCode === 0 && wslPath ? wslPath : null;
+      }
+      return winPath;
     }
-    // Remove BOM if present
-    if (winPath.charCodeAt(0) === 0xfeff) winPath = winPath.slice(1);
+  }
+
+  // Timeout — clean up
+  try {
+    unlinkSync(resultFile);
   } catch {
-    return null;
+    /* ignore */
   }
-
-  if (!winPath) return null;
-
-  if (isWSL && /^[A-Za-z]:\\/.test(winPath)) {
-    // On WSL: convert Windows path → WSL path
-    const { stdout: wslPath, code: wslCode } = await exec('wslpath', ['-u', winPath]);
-    return wslCode === 0 && wslPath ? wslPath : null;
+  try {
+    unlinkSync(doneFile);
+  } catch {
+    /* ignore */
   }
-  // On native Windows: return the Windows path as-is
-  return winPath;
+  return null;
 }
 
 /**
  * Open a native directory picker dialog. Returns the absolute path or null if cancelled.
  */
 export async function pickDirectory(): Promise<string | null> {
-  // On Windows (native or WSL), prefer PowerShell; on Linux, prefer zenity/kdialog
   const pickers =
-    process.platform === 'win32' || isWSL
+    isWin32 || isWSL
       ? [tryPowerShell, tryZenity, tryKdialog]
       : [tryZenity, tryKdialog, tryPowerShell];
 
