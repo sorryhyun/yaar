@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Viewer Lite</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+var v=document.createElement("div");v.className="app";v.innerHTML=`
+  <style>
+    :root {
+      --bg-a: #f7fbff;
+      --bg-b: #eef4ff;
+      --panel: #ffffffcc;
+      --text: #1d2a3a;
+      --muted: #5f6f85;
+      --line: #d8e3f0;
+      --accent: #1769e0;
+      --accent-strong: #0f57c2;
+      --ok: #0a7f43;
+      --err: #b42318;
+      --shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      color: var(--text);
+      font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 500px at 20% -20%, #dcebff 0%, transparent 70%),
+                  radial-gradient(900px 500px at 110% 120%, #d8e8ff 0%, transparent 60%),
+                  linear-gradient(145deg, var(--bg-a), var(--bg-b));
+    }
+
+    .app {
+      min-height: 100%;
+      padding: 16px;
+      display: grid;
+      place-items: center;
+    }
+
+    .shell {
+      width: min(980px, 100%);
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(6px);
+      box-shadow: var(--shadow);
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      color: var(--muted);
+      min-height: 1.2em;
+      word-break: break-word;
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.err {
+      color: var(--err);
+    }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .input-row input,
+    .controls button,
+    .controls select,
+    .file-btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font: inherit;
+    }
+
+    .input-row input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .btn {
+      padding: 10px 12px;
+      background: var(--accent);
+      color: #fff;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 140ms ease, transform 120ms ease;
+    }
+
+    .btn:hover {
+      background: var(--accent-strong);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .file-btn {
+      background: #fff;
+      color: var(--text);
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, auto));
+      gap: 8px;
+      align-items: center;
+      justify-content: start;
+      flex-wrap: wrap;
+    }
+
+    .controls button,
+    .controls select {
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+
+    .video-wrap {
+      width: 100%;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: #0b1220;
+    }
+
+    video {
+      display: block;
+      width: 100%;
+      max-height: min(62vh, 560px);
+      background: #000;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 0;
+      background: #000;
+    }
+
+    .is-hidden {
+      display: none;
+    }
+
+    .meta {
+      font-size: 0.88rem;
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    @media (max-width: 720px) {
+      .input-row {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        grid-template-columns: repeat(3, minmax(0, auto));
+      }
+    }
+  </style>
+
+  <section class="shell">
+    <div class="title">
+      <h1>Video Viewer Lite</h1>
+      <div class="meta" id="timeMeta">00:00 / 00:00</div>
+    </div>
+
+    <div class="input-row">
+      <input id="urlInput" type="url" placeholder="Paste remote video URL (https://...)" aria-label="Remote video URL" />
+      <button id="loadUrlBtn" class="btn" type="button">Load URL</button>
+    </div>
+
+    <div class="file-row">
+      <input id="fileInput" type="file" accept="video/*" />
+      <span class="meta">Select a local video file to play</span>
+    </div>
+
+    <div class="controls">
+      <button id="playPauseBtn" type="button">Play</button>
+      <button id="backBtn" type="button">-10s</button>
+      <button id="fwdBtn" type="button">+10s</button>
+      <select id="speedSelect" aria-label="Playback speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+      <button id="muteBtn" type="button">Mute</button>
+    </div>
+
+    <div class="video-wrap">
+      <video id="player" controls playsinline preload="metadata"></video>
+      <iframe
+        id="ytPlayer"
+        class="is-hidden"
+        title="YouTube player"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen
+      ></iframe>
+    </div>
+
+    <div id="status" class="status">No source loaded.</div>
+  </section>
+`;document.body.innerHTML="";document.body.appendChild(v);var t=document.getElementById("player"),f=document.getElementById("ytPlayer"),E=document.getElementById("urlInput"),b=document.getElementById("fileInput"),B=document.getElementById("loadUrlBtn"),y=document.getElementById("playPauseBtn"),T=document.getElementById("backBtn"),U=document.getElementById("fwdBtn"),g=document.getElementById("speedSelect"),h=document.getElementById("muteBtn"),m=document.getElementById("status"),w=document.getElementById("timeMeta"),u=null,x="No source loaded",a=!1,k=(e)=>{if(!Number.isFinite(e)||e<0)return"00:00";let r=Math.floor(e),n=Math.floor(r/3600),s=Math.floor(r%3600/60),d=r%60;if(n>0)return`${String(n).padStart(2,"0")}:${String(s).padStart(2,"0")}:${String(d).padStart(2,"0")}`;return`${String(s).padStart(2,"0")}:${String(d).padStart(2,"0")}`},o=(e,r="info")=>{if(m.textContent=e,m.classList.remove("ok","err"),r==="ok")m.classList.add("ok");if(r==="err")m.classList.add("err")},l=()=>{if(a){w.textContent="YouTube embed";return}let e=k(t.currentTime||0),r=k(t.duration||0);w.textContent=`${e} / ${r}`},i=()=>{y.textContent=t.paused?"Play":"Pause",h.textContent=t.muted?"Unmute":"Mute"},L=()=>{if(u)URL.revokeObjectURL(u),u=null},S=(e)=>{y.disabled=!e,T.disabled=!e,U.disabled=!e,g.disabled=!e,h.disabled=!e},M=(e,r)=>{a=!1,f.classList.add("is-hidden"),f.src="",t.classList.remove("is-hidden"),S(!0),t.src=e,x=r,t.load(),o(`Loading: ${r}`,"info"),l()},I=(e,r)=>{a=!0,t.pause(),t.removeAttribute("src"),t.load(),t.classList.add("is-hidden"),f.classList.remove("is-hidden"),f.src=e,x=r,S(!1),i(),l(),o(`Loaded: ${r} (YouTube embed)`,"ok")},R=(e)=>{if(!e)return null;let r=e.trim();if(/^\d+$/.test(r))return r;let n=r.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);if(!n)return null;let s=Number(n[1]??"0"),d=Number(n[2]??"0"),p=Number(n[3]??"0"),c=s*3600+d*60+p;return c>0?String(c):null},P=(e)=>{let r=e.hostname.toLowerCase().replace(/^www\./,""),n="";if(r==="youtu.be")n=e.pathname.split("/").filter(Boolean)[0]??"";else if(r==="youtube.com"||r.endsWith(".youtube.com")){let p=e.pathname.split("/").filter(Boolean),c=p[0]??"";if(c==="watch")n=e.searchParams.get("v")??"";else if(c==="shorts"||c==="embed")n=p[1]??""}else return null;if(!/^[A-Za-z0-9_-]{11}$/.test(n))return null;let s=new URL(`https://www.youtube.com/embed/${n}`),d=R(e.searchParams.get("start")??e.searchParams.get("t"));if(d)s.searchParams.set("start",d);return s.toString()},H=(e)=>{try{let r=new URL(e.trim());if(r.protocol!=="http:"&&r.protocol!=="https:")return null;let n=P(r);if(n)return{sourceUrl:n,isYouTube:!0};return{sourceUrl:r.toString(),isYouTube:!1}}catch{return null}};B.addEventListener("click",()=>{let e=H(E.value);if(!e){o("Invalid URL. Use a full http(s) video URL.","err");return}if(L(),e.isYouTube){I(e.sourceUrl,e.sourceUrl);return}M(e.sourceUrl,e.sourceUrl)});E.addEventListener("keydown",(e)=>{if(e.key==="Enter")B.click()});b.addEventListener("change",()=>{let e=b.files?.[0];if(!e){o("No file selected.","err");return}if(!e.type.startsWith("video/")){o("Selected file is not a video.","err"),b.value="";return}L(),u=URL.createObjectURL(e),M(u,e.name)});y.addEventListener("click",async()=>{if(a)return;try{if(t.paused)await t.play();else t.pause()}catch{o("Playback failed. The source may be blocked or unsupported.","err")}i()});T.addEventListener("click",()=>{if(a)return;t.currentTime=Math.max(0,t.currentTime-10),l()});U.addEventListener("click",()=>{if(a)return;let e=Number.isFinite(t.duration)&&t.duration>0?t.duration:t.currentTime+10;t.currentTime=Math.min(e,t.currentTime+10),l()});g.addEventListener("change",()=>{if(a)return;let e=Number(g.value);t.playbackRate=Number.isFinite(e)?e:1,o(`Speed set to ${t.playbackRate}x`,"ok")});h.addEventListener("click",()=>{if(a)return;t.muted=!t.muted,i()});t.addEventListener("loadedmetadata",()=>{l(),i(),o(`Loaded: ${x}`,"ok")});t.addEventListener("timeupdate",l);t.addEventListener("play",i);t.addEventListener("pause",i);t.addEventListener("volumechange",i);t.addEventListener("error",()=>{o("Could not load this video source. Check URL, CORS, or file format.","err")});window.addEventListener("beforeunload",L);l();i();
+
+</script>
+</body>
+</html>

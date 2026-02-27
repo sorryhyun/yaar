@@ -1,0 +1,8 @@
+{
+  "id": "video-editor-lite",
+  "name": "Video Editor Lite",
+  "icon": "🎞️",
+  "description": "Basic non-destructive video editor with trim preview",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

@@ -156,65 +156,65 @@
   z-index: 1;
 }
 
-/* Resize edges — 12px hit zone centered on border */
+/* Resize edges — 20px hit zone centered on border */
 .resizeN,
 .resizeS {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  height: 12px;
+  left: 20px;
+  right: 20px;
+  height: 20px;
 }
 .resizeW,
 .resizeE {
   position: absolute;
-  top: 16px;
-  bottom: 16px;
-  width: 12px;
+  top: 20px;
+  bottom: 20px;
+  width: 20px;
 }
 .resizeN {
-  top: -6px;
+  top: -10px;
   cursor: ns-resize;
 }
 .resizeS {
-  bottom: -6px;
+  bottom: -10px;
   cursor: ns-resize;
 }
 .resizeW {
-  left: -6px;
+  left: -10px;
   cursor: ew-resize;
 }
 .resizeE {
-  right: -6px;
+  right: -10px;
   cursor: ew-resize;
 }
 
-/* Resize corners — 20px hit zone */
+/* Resize corners — 28px hit zone */
 .resizeNW,
 .resizeNE,
 .resizeSW,
 .resizeSE {
   position: absolute;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
 }
 .resizeNW {
-  top: -6px;
-  left: -6px;
+  top: -8px;
+  left: -8px;
   cursor: nwse-resize;
 }
 .resizeNE {
-  top: -6px;
-  right: -6px;
+  top: -8px;
+  right: -8px;
   cursor: nesw-resize;
 }
 .resizeSW {
-  bottom: -6px;
-  left: -6px;
+  bottom: -8px;
+  left: -8px;
   cursor: nesw-resize;
 }
 .resizeSE {
-  bottom: -6px;
-  right: -6px;
+  bottom: -8px;
+  right: -8px;
   cursor: nwse-resize;
 }
 

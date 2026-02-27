@@ -1,0 +1,6 @@
+{
+  "icon": "🎞️",
+  "name": "Video Editor Lite",
+  "description": "Basic non-destructive video editor with trim preview",
+  "run": "static/index.html"
+}

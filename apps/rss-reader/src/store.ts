@@ -1,7 +1,7 @@
 import { Feed, Article } from './types';
 
-// ---- Default Feeds ----
-export const DEFAULT_FEEDS: Feed[] = [
+// ---- Backward-compatible fallback feeds (used only if no source file/state exists) ----
+export const FALLBACK_FEEDS: Feed[] = [
   { id: 'hn', name: 'Hacker News', url: 'https://news.ycombinator.com/rss' },
   { id: 'bbc', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
   { id: 'nasa', name: 'NASA Breaking News', url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss' },
@@ -10,7 +10,7 @@ export const DEFAULT_FEEDS: Feed[] = [
 
 // ---- Shared Mutable Store ----
 export const store = {
-  feeds: [...DEFAULT_FEEDS] as Feed[],
+  feeds: [] as Feed[],
   readArticleIds: [] as string[],
   selectedFeedId: 'all' as string | null,
   articles: {} as Record<string, Article[]>,

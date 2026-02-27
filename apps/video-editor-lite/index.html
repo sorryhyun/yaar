@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Editor Lite</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFinite(r)||r<0)return"00:00.00";let e=Math.floor(r/60),t=r-e*60,n=Math.floor(t),d=Math.floor((t-n)*100),o=String(e).padStart(2,"0"),a=String(n).padStart(2,"0"),s=String(d).padStart(2,"0");return`${o}:${a}.${s}`}function m(r){let e=Number(r);return Number.isFinite(e)?e:NaN}var M=0.01;class v{state={sourceKind:null,sourceValue:"",objectUrl:null,duration:0,trimStart:0,trimEnd:0,currentTime:0,loopPreview:!1,playing:!1,error:null};listeners=new Set;subscribe(r){return this.listeners.add(r),r(this.getState()),()=>this.listeners.delete(r)}getState(){return{...this.state}}setSource(r,e,t){this.state={...this.state,sourceKind:r,sourceValue:e,objectUrl:t,duration:0,trimStart:0,trimEnd:0,currentTime:0,loopPreview:!1,error:null},this.emit()}setDuration(r){let e=Number.isFinite(r)&&r>0?r:0;this.state={...this.state,duration:e,trimStart:0,trimEnd:e,currentTime:0,error:null},this.emit()}setCurrentTime(r){this.state={...this.state,currentTime:c(r,0,this.state.duration||0)},this.emit()}setPlaying(r){this.state={...this.state,playing:r},this.emit()}setLoopPreview(r){this.state={...this.state,loopPreview:r},this.emit()}setTrim(r){let e=this.state.duration,t=e>0,n=r.trimStart??this.state.trimStart,d=r.trimEnd??this.state.trimEnd;if(!t)return this.state={...this.state,error:"Load a video first."},this.emit(),!1;let o=c(n,0,e),a=c(d,0,e);if(o>=a-M)return this.state={...this.state,error:"Trim start must be less than trim end."},this.emit(),!1;return this.state={...this.state,trimStart:o,trimEnd:a,error:null},this.emit(),!0}clearError(){if(!this.state.error)return;this.state={...this.state,error:null},this.emit()}emit(){let r=this.getState();this.listeners.forEach((e)=>e(r))}}function b(r){r.innerHTML="";let e=document.createElement("style");e.textContent=`
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(145deg, #eef5f4, #dfe7eb);
+      color: #1f2c3b;
+    }
+
+    .editor-shell {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 12px;
+      border: 1px solid #c7d6de;
+      padding: 14px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .row > * {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+      color: #334f63;
+    }
+
+    input, button {
+      width: 100%;
+      border: 1px solid #b8c9d1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #13222d;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      background: #e7eff2;
+    }
+
+    button:hover {
+      background: #d9e7ed;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .video-wrap {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0f1115;
+      min-height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      max-height: 440px;
+      background: #111;
+    }
+
+    .stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: #eff6f9;
+      border: 1px solid #c8d9e1;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .error {
+      color: #9f1f1f;
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    @media (max-width: 700px) {
+      .editor-shell {
+        padding: 12px;
+      }
+    }
+  `,document.head.appendChild(e);let t=document.createElement("div");t.className="editor-shell";let n=document.createElement("section");n.className="panel",n.innerHTML=`
+    <div class="row">
+      <div style="flex:2; min-width: 240px;">
+        <label>Video URL</label>
+        <input id="video-url" type="url" placeholder="https://example.com/video.mp4" />
+      </div>
+      <div style="min-width: 120px;">
+        <label>&nbsp;</label>
+        <button id="load-url">Load URL</button>
+      </div>
+      <div style="min-width: 120px;">
+        <label>&nbsp;</label>
+        <button id="pick-file">Pick Local File</button>
+      </div>
+    </div>
+  `;let d=document.createElement("section");d.className="panel",d.innerHTML=`
+    <div class="video-wrap">
+      <video id="preview" controls preload="metadata"></video>
+    </div>
+  `;let o=document.createElement("section");o.className="panel",o.innerHTML=`
+    <div class="row">
+      <div>
+        <label>Trim Start (sec)</label>
+        <input id="start-input" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div>
+        <label>Trim End (sec)</label>
+        <input id="end-input" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div style="min-width: 160px;">
+        <label>&nbsp;</label>
+        <button id="loop-preview" disabled>Play Trimmed Segment</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <div>
+        <label>Start Slider</label>
+        <input id="start-range" type="range" min="0" max="0" step="0.01" value="0" />
+      </div>
+      <div>
+        <label>End Slider</label>
+        <input id="end-range" type="range" min="0" max="0" step="0.01" value="0" />
+      </div>
+    </div>
+    <div class="stats" style="margin-top:10px;">
+      <div id="time-label" class="chip">Current: 00:00.00</div>
+      <div id="duration-label" class="chip">Selected: 00:00.00</div>
+    </div>
+    <div id="error" class="error"></div>
+  `;let a=document.createElement("input");a.type="file",a.accept="video/*",a.style.display="none",t.append(n,d,o,a),r.appendChild(t);let s=t.querySelector("#video-url"),i=t.querySelector("#load-url"),u=t.querySelector("#pick-file"),l=t.querySelector("#preview"),E=t.querySelector("#start-range"),g=t.querySelector("#end-range"),S=t.querySelector("#start-input"),x=t.querySelector("#end-input"),L=t.querySelector("#loop-preview"),T=t.querySelector("#time-label"),y=t.querySelector("#duration-label"),w=t.querySelector("#error");return{root:t,urlInput:s,loadUrlButton:i,pickFileButton:u,fileInput:a,video:l,startRange:E,endRange:g,startInput:S,endInput:x,loopButton:L,timeLabel:T,durationLabel:y,errorLabel:w}}function h(r,e){let t=Boolean(e.sourceValue),n=e.duration>0,d=Math.max(0,e.trimEnd-e.trimStart),o=String(e.duration||0);if(r.startRange.max=o,r.endRange.max=o,r.startRange.value=String(e.trimStart),r.endRange.value=String(e.trimEnd),r.startInput.value=e.trimStart.toFixed(2),r.endInput.value=e.trimEnd.toFixed(2),r.loopButton.disabled=!n||Boolean(e.error),r.loopButton.textContent=e.loopPreview?"Stop Loop Preview":"Play Trimmed Segment",r.timeLabel.textContent=`Current: ${p(e.currentTime)}`,r.durationLabel.textContent=`Selected: ${p(d)}`,r.errorLabel.textContent=e.error??"",r.video.style.opacity=t?"1":"0.6",!n)r.durationLabel.textContent="Selected: 00:00.00"}function f(r){let e=new v,t=b(r),n=null,d=(i)=>{t.video.src=i,t.video.load()},o=()=>{if(!n)return;URL.revokeObjectURL(n),n=null};t.loadUrlButton.addEventListener("click",()=>{let i=t.urlInput.value.trim();if(!i)return;o(),e.setSource("url",i,null),d(i)}),t.pickFileButton.addEventListener("click",()=>{t.fileInput.click()}),t.fileInput.addEventListener("change",()=>{let i=t.fileInput.files?.[0];if(!i)return;o(),n=URL.createObjectURL(i),e.setSource("file",i.name,n),d(n)}),t.video.addEventListener("loadedmetadata",()=>{e.setDuration(t.video.duration||0)}),t.video.addEventListener("timeupdate",()=>{e.setCurrentTime(t.video.currentTime||0);let i=e.getState();if(i.loopPreview&&t.video.currentTime>=i.trimEnd)t.video.currentTime=i.trimStart,t.video.play()}),t.video.addEventListener("play",()=>{e.setPlaying(!0)}),t.video.addEventListener("pause",()=>{e.setPlaying(!1)});let a=(i)=>{if(Number.isNaN(i))return;if(!e.setTrim({trimStart:i}))return;let l=e.getState();if(t.video.currentTime<l.trimStart||t.video.currentTime>l.trimEnd)t.video.currentTime=l.trimStart},s=(i)=>{if(Number.isNaN(i))return;if(!e.setTrim({trimEnd:i}))return;let l=e.getState();if(t.video.currentTime>l.trimEnd)t.video.currentTime=l.trimStart};t.startRange.addEventListener("input",()=>{a(m(t.startRange.value))}),t.endRange.addEventListener("input",()=>{s(m(t.endRange.value))}),t.startInput.addEventListener("change",()=>{a(m(t.startInput.value))}),t.endInput.addEventListener("change",()=>{s(m(t.endInput.value))}),t.loopButton.addEventListener("click",async()=>{let i=e.getState(),u=!i.loopPreview;if(e.setLoopPreview(u),u){t.video.currentTime=i.trimStart,await t.video.play().catch(()=>{return});return}t.video.pause()}),e.subscribe((i)=>{h(t,i)}),window.addEventListener("beforeunload",()=>{o()})}f(document.body);
+
+</script>
+</body>
+</html>

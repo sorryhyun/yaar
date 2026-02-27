@@ -1,0 +1,6 @@
+{
+  "icon": "🎬",
+  "name": "Video Viewer Lite",
+  "description": "Simple polished MVP video viewer with URL and local file playback, native controls, and quick playback actions.",
+  "run": "static/index.html"
+}

@@ -1,4 +1,4 @@
-# RSS Reader
+# Video Viewer Lite
 
 A compiled TypeScript application.
 
@@ -6,10 +6,10 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "rss-reader",
-  title: "RSS Reader",
+  windowId: "video-viewer-lite",
+  title: "Video Viewer Lite",
   renderer: "iframe",
-  content: "/api/apps/rss-reader/static/index.html"
+  content: "/api/apps/video-viewer-lite/static/index.html"
 })
 ```
 
