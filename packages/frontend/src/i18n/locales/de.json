@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "Symbolgröße"
+    },
+    "provider": {
+      "label": "KI-Anbieter",
+      "description": "Das Ändern des Anbieters startet die Sitzung neu",
+      "apply": "Anwenden",
+      "auto": "Auto",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

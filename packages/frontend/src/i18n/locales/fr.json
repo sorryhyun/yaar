@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "Taille des icônes"
+    },
+    "provider": {
+      "label": "Fournisseur IA",
+      "description": "Changer de fournisseur redémarrera la session",
+      "apply": "Appliquer",
+      "auto": "Auto",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

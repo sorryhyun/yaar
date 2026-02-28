@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "아이콘 크기"
+    },
+    "provider": {
+      "label": "AI 프로바이더",
+      "description": "프로바이더를 변경하면 세션이 재시작됩니다",
+      "apply": "적용",
+      "auto": "자동",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

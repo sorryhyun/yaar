@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "图标大小"
+    },
+    "provider": {
+      "label": "AI 提供商",
+      "description": "更改提供商将重启会话",
+      "apply": "应用",
+      "auto": "自动",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

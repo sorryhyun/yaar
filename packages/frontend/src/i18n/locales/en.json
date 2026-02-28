@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "Icon Size"
+    },
+    "provider": {
+      "label": "AI Provider",
+      "description": "Changing provider will restart the session",
+      "apply": "Apply",
+      "auto": "Auto",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

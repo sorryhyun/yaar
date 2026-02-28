@@ -53,6 +53,14 @@
     },
     "iconSize": {
       "label": "アイコンサイズ"
+    },
+    "provider": {
+      "label": "AIプロバイダー",
+      "description": "プロバイダーを変更するとセッションが再起動されます",
+      "apply": "適用",
+      "auto": "自動",
+      "claude": "Claude",
+      "codex": "Codex"
     }
   },
   "connection": {

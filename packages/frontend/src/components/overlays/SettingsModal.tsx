@@ -1,5 +1,5 @@
 /**
- * SettingsModal - Modal for user preferences (name, language, domain settings, appearance).
+ * SettingsModal - Modal for user preferences (name, language, provider, domain settings, appearance).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,9 @@ const LANGUAGES = [
   { code: 'pt', label: 'Português' },
 ];
 
+type ProviderSetting = 'auto' | 'claude' | 'codex';
+const PROVIDER_OPTIONS: ProviderSetting[] = ['auto', 'claude', 'codex'];
+
 export function SettingsModal() {
   const { t } = useTranslation();
   const toggleSettingsModal = useDesktopStore((s) => s.toggleSettingsModal);
@@ -35,15 +38,29 @@ export function SettingsModal() {
   const setIconSize = useDesktopStore((s) => s.setIconSize);
 
   const [allowAllDomains, setAllowAllDomains] = useState(false);
+  const [serverProvider, setServerProvider] = useState<ProviderSetting>('auto');
+  const [selectedProvider, setSelectedProvider] = useState<ProviderSetting>('auto');
+  const [applyingProvider, setApplyingProvider] = useState(false);
   // Track whether the current wallpaper is a solid (custom) color
   const isCustomSolid = !WALLPAPER_PRESETS.some((p) => p.key === wallpaper);
   const [solidColor, setSolidColor] = useState(isCustomSolid ? wallpaper : '#2a2a3e');
 
+  const providerChanged = selectedProvider !== serverProvider;
+
   useEffect(() => {
+    // Fetch domain settings and provider setting in parallel
     apiFetch('/api/domains')
       .then((r) => r.json())
       .then((data: { allowAllDomains: boolean }) => {
         setAllowAllDomains(data.allowAllDomains);
+      })
+      .catch(() => {});
+    apiFetch('/api/apps')
+      .then((r) => r.json())
+      .then((data: { provider?: ProviderSetting }) => {
+        const p = data.provider ?? 'auto';
+        setServerProvider(p);
+        setSelectedProvider(p);
       })
       .catch(() => {});
   }, []);
@@ -59,6 +76,22 @@ export function SettingsModal() {
       setAllowAllDomains(!value);
     });
   }, []);
+
+  const handleApplyProvider = useCallback(() => {
+    setApplyingProvider(true);
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: selectedProvider }),
+    })
+      .then(() => {
+        // Reload the page to restart the session with the new provider
+        window.location.reload();
+      })
+      .catch(() => {
+        setApplyingProvider(false);
+      });
+  }, [selectedProvider]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -100,6 +133,35 @@ export function SettingsModal() {
               ))}
             </select>
           </div>
+          {/* Provider */}
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <span className={styles.label}>{t('settings.provider.label')}</span>
+            <span className={styles.subtitle}>{t('settings.provider.description')}</span>
+            <div className={styles.providerRow}>
+              <div className={styles.segmentedControl}>
+                {PROVIDER_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    className={`${styles.segmentButton}${selectedProvider === option ? ` ${styles.segmentButtonActive}` : ''}`}
+                    onClick={() => setSelectedProvider(option)}
+                  >
+                    {t(`settings.provider.${option}`)}
+                  </button>
+                ))}
+              </div>
+              {providerChanged && (
+                <button
+                  className={styles.applyButton}
+                  onClick={handleApplyProvider}
+                  disabled={applyingProvider}
+                >
+                  {applyingProvider ? '...' : t('settings.provider.apply')}
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className={styles.divider} />
           <div className={styles.field}>
             <label className={styles.toggleRow}>

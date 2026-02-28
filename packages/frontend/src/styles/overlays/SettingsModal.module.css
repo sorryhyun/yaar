@@ -257,6 +257,42 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
 
+/* Provider row: segmented control + apply button side-by-side */
+.providerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.providerRow .segmentedControl {
+  flex: 1;
+}
+
+.applyButton {
+  padding: 8px 16px;
+  border-radius: var(--radius-lg);
+  border: none;
+  background: var(--color-accent, #89b4fa);
+  color: #fff;
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.applyButton:hover {
+  opacity: 0.85;
+}
+
+.applyButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Segmented control for icon size */
 .segmentedControl {
   display: flex;
