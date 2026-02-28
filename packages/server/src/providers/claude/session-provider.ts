@@ -84,6 +84,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     return {
       abortController: this.createAbortController(),
+      executable: 'bun',
       systemPrompt: systemPrompt ?? this.systemPrompt,
       model: 'claude-sonnet-4-6',
       resume: resumeSession,
