@@ -11,7 +11,7 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import { getStorageDir } from '../../config.js';
+import { getStorageDir, getClaudeSpawnArgs } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 import { buildAgentDefinitions } from '../../agents/profiles.js';
@@ -44,7 +44,7 @@ export class ClaudeSessionProvider extends BaseTransport {
   private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
   async isAvailable(): Promise<boolean> {
-    return this.isCliAvailable('claude');
+    return this.isCliAvailable(...getClaudeSpawnArgs());
   }
 
   /**

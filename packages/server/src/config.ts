@@ -112,6 +112,42 @@ export const MONITOR_MAX_OUTPUT_PER_MIN = parseInt(
 );
 
 /**
+ * Get the claude CLI spawn args.
+ * When running as a bundled exe, looks for claude next to the executable first,
+ * then checks common install locations (Windows: ~/.local/bin, npm global).
+ * Falls back to 'claude' from PATH.
+ *
+ * Returns `[cmd, ...prefixArgs]` — callers should spread this before their own args:
+ *   `Bun.spawn([...getClaudeSpawnArgs(), '--version', ...])`
+ */
+export function getClaudeSpawnArgs(): string[] {
+  if (IS_BUNDLED_EXE) {
+    const ext = process.platform === 'win32' ? '.exe' : '';
+
+    // 1. Check next to the executable
+    const localBin = join(dirname(process.execPath), `claude${ext}`);
+    if (existsSync(localBin)) return [localBin];
+
+    // 2. Check ~/.local/bin/ (standard install location on Windows and Linux)
+    const home = process.env.USERPROFILE || process.env.HOME;
+    if (home) {
+      const dotLocalBin = join(home, '.local', 'bin', `claude${ext}`);
+      if (existsSync(dotLocalBin)) return [dotLocalBin];
+    }
+
+    // 3. On Windows, resolve npm global bin (claude.cmd wrapper)
+    if (process.platform === 'win32') {
+      const npmPrefix = process.env.APPDATA ? join(process.env.APPDATA, 'npm') : null;
+      if (npmPrefix) {
+        const cmdPath = join(npmPrefix, 'claude.cmd');
+        if (existsSync(cmdPath)) return ['cmd', '/c', cmdPath];
+      }
+    }
+  }
+  return ['claude'];
+}
+
+/**
  * Get the codex CLI spawn args (command + prefix args).
  * When running as a bundled exe, looks for codex next to the executable first,
  * then resolves the npm global bin directory (handles Windows .cmd wrappers).

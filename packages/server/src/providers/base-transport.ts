@@ -80,11 +80,14 @@ export abstract class BaseTransport implements AITransport {
   /**
    * Helper to check if a CLI tool is available.
    * Useful for transports that depend on external CLI tools.
+   * @param spawnArgs - The command and any prefix args (e.g. from getClaudeSpawnArgs()).
+   *                    '--version' is appended automatically.
    */
-  protected async isCliAvailable(command: string): Promise<boolean> {
+  protected async isCliAvailable(...spawnArgs: string[]): Promise<boolean> {
     try {
       const { execSync } = await import('child_process');
-      execSync(`"${command}" --version`, { stdio: 'ignore' });
+      const fullCmd = [...spawnArgs, '--version'].map((a) => `"${a}"`).join(' ');
+      execSync(fullCmd, { stdio: 'ignore' });
       return true;
     } catch {
       return false;
