@@ -62,7 +62,7 @@ Devices on the same network (phone, tablet, another PC) can connect without any 
 
 Codex or Claude Code user authentication is required. The program cannot be used without it.
 
-For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar-codex.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
+For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
 
 For other users, clone this repository, install [Bun](https://bun.sh/) and pnpm, then run `pnpm install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
 

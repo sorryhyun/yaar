@@ -10,6 +10,7 @@
 
 import type { AITransport, ProviderType } from './types.js';
 import { AppServer } from './codex/app-server.js';
+import { getForcedProvider } from './get-forced-provider.js';
 
 /**
  * Configuration for the warm pool.
@@ -25,17 +26,6 @@ const DEFAULT_CONFIG: WarmPoolConfig = {
   poolSize: 1,
   autoReplenish: true,
 };
-
-/**
- * Get forced provider from environment variable.
- */
-function getForcedProvider(): ProviderType | null {
-  const provider = process.env.PROVIDER?.toLowerCase();
-  if (provider && (provider === 'claude' || provider === 'codex')) {
-    return provider;
-  }
-  return null;
-}
 
 /**
  * Provider warm pool singleton.
@@ -76,7 +66,7 @@ class ProviderWarmPool {
 
     // Determine which provider to use
     const forcedProvider = getForcedProvider();
-    const providerTypes: ProviderType[] = forcedProvider ? [forcedProvider] : ['claude', 'codex'];
+    const providerTypes: ProviderType[] = forcedProvider ? [forcedProvider] : ['codex', 'claude'];
 
     // Find first available provider and warm it up
     for (const providerType of providerTypes) {

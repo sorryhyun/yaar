@@ -6,6 +6,7 @@
 
 import type { AITransport, ProviderType, ProviderInfo } from './types.js';
 import { getWarmPool } from './warm-pool.js';
+import { getForcedProvider } from './get-forced-provider.js';
 
 /**
  * Registry of available providers with metadata.
@@ -27,20 +28,9 @@ export const providerRegistry: Record<ProviderType, ProviderInfo> = {
 };
 
 /**
- * Preference order for auto-selecting providers.
+ * Preference order for auto-selecting providers (codex first).
  */
-const PROVIDER_PREFERENCE: ProviderType[] = ['claude', 'codex'];
-
-/**
- * Get forced provider from environment variable.
- */
-function getForcedProvider(): ProviderType | null {
-  const provider = process.env.PROVIDER?.toLowerCase();
-  if (provider && (provider === 'claude' || provider === 'codex')) {
-    return provider;
-  }
-  return null;
-}
+const PROVIDER_PREFERENCE: ProviderType[] = ['codex', 'claude'];
 
 /**
  * Lightweight availability checkers per provider.
@@ -111,7 +101,7 @@ export async function createProvider(providerType: ProviderType): Promise<AITran
 
 /**
  * Get the first available provider.
- * If PROVIDER env var is set, only that provider is used.
+ * If PROVIDER env var or settings.json provider is set, only that provider is tried.
  * Returns null if no providers are available.
  */
 export async function getFirstAvailableProvider(): Promise<AITransport | null> {

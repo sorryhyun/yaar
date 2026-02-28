@@ -3,14 +3,16 @@
  * Build standalone executable with frontend assets embedded via Bun.
  *
  * Usage:
- *   bun scripts/build-exe-bundle.js --provider claude --target windows
- *   bun scripts/build-exe-bundle.js --provider codex --target linux
+ *   bun scripts/build-exe-bundle.js --target windows
+ *   bun scripts/build-exe-bundle.js --target linux
  *
  * Generates a temporary entry point that imports all frontend dist files
  * and pre-bundled libraries using `with { type: "file" }`, which tells Bun
  * to embed them as-is (without parsing HTML/CSS/JS). At runtime they're
  * accessible via `Bun.embeddedFiles`. The resulting executable is fully
  * self-contained with app development support built in.
+ *
+ * Provider is selected at runtime via config/settings.json or PROVIDER env var.
  */
 
 import { execSync } from 'child_process';
@@ -30,13 +32,7 @@ function getArg(name) {
   return args[idx + 1];
 }
 
-const provider = getArg('provider') ?? 'claude';
 const target = getArg('target') ?? 'linux';
-
-if (!['claude', 'codex'].includes(provider)) {
-  console.error(`Invalid provider: ${provider}. Use "claude" or "codex".`);
-  process.exit(1);
-}
 
 const bunTargets = {
   windows: 'bun-windows-x64',
@@ -51,7 +47,7 @@ if (!bunTarget) {
 }
 
 const ext = target === 'windows' ? '.exe' : '';
-const exeName = `yaar-${provider}`;
+const exeName = 'yaar';
 const outfile = join(rootDir, 'dist', `${exeName}${ext}`);
 
 // ── Collect frontend dist files ──────────────────────────────────────
@@ -80,7 +76,7 @@ try {
   process.exit(1);
 }
 
-console.log(`Embedding ${frontendFiles.length} frontend files into ${provider} executable...`);
+console.log(`Embedding ${frontendFiles.length} frontend files into executable...`);
 
 // ── Collect pre-bundled library files ────────────────────────────────
 
@@ -99,7 +95,7 @@ if (existsSync(bundledLibsDir)) {
 
 // ── Generate temporary entry point ──────────────────────────────────
 
-const generatedEntry = join(rootDir, 'packages', 'server', 'src', `_build-entry-${provider}.generated.ts`);
+const generatedEntry = join(rootDir, 'packages', 'server', 'src', '_build-entry.generated.ts');
 const serverSrcDir = join(rootDir, 'packages', 'server', 'src');
 
 // Build import lines for each frontend file using { type: "file" }
@@ -149,7 +145,6 @@ const generatedSource = [
     '};',
     '',
   ] : []),
-  `process.env.PROVIDER = ${JSON.stringify(provider)};`,
   `import './exe-entry.js';`,
   '',
 ].join('\n');

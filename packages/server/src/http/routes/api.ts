@@ -42,10 +42,14 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     return jsonResponse({ status: 'ok' });
   }
 
-  // List available providers
+  // List available providers + active provider info
   if (url.pathname === '/api/providers' && req.method === 'GET') {
     const providers = await getAvailableProviders();
-    return jsonResponse({ providers });
+    const warmPoolStats = getWarmPool().getStats();
+    return jsonResponse({
+      providers,
+      activeProvider: warmPoolStats.preferredProvider,
+    });
   }
 
   // List available apps
@@ -56,6 +60,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         apps,
         onboardingCompleted: settings.onboardingCompleted,
         language: settings.language,
+        provider: settings.provider,
       });
     } catch {
       return errorResponse('Failed to list apps');

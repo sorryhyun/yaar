@@ -26,8 +26,12 @@ async function startup() {
 
   await printBanner(server);
 
-  // Graceful shutdown
+  // Guard against re-entrant shutdown (e.g. SIGINT during uncaughtException handler)
+  let shutdownInProgress = false;
+
   function handleShutdown() {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
     shutdown(server).catch((err) => {
       console.error('Shutdown error:', err);
       process.exit(1);
@@ -36,6 +40,16 @@ async function startup() {
 
   process.on('SIGINT', handleShutdown);
   process.on('SIGTERM', handleShutdown);
+
+  // Catch unhandled errors — ensure Chrome and other resources are cleaned up
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+    handleShutdown();
+  });
+  process.on('unhandledRejection', (err) => {
+    console.error('Unhandled rejection:', err);
+    handleShutdown();
+  });
 }
 
 startup();

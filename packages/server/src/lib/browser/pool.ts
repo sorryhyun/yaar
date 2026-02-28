@@ -9,7 +9,14 @@
  */
 
 import { BrowserSession } from './session.js';
-import { findChrome, launchChrome, cleanupChrome, type ChromeInstance } from './chrome.js';
+import {
+  findChrome,
+  launchChrome,
+  cleanupChrome,
+  cleanupStaleChrome,
+  writePidFile,
+  type ChromeInstance,
+} from './chrome.js';
 
 const MAX_SESSIONS = 3;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -48,7 +55,9 @@ export class BrowserPool {
     }
 
     this.initPromise = (async () => {
+      await cleanupStaleChrome();
       const instance = await launchChrome(this.chromePath!);
+      await writePidFile(instance);
       this.chrome = instance;
       this.startCleanup();
       console.log(`[browser] Chrome launched on port ${instance.port}`);

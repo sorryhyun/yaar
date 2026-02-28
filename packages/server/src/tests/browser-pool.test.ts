@@ -12,11 +12,13 @@ vi.mock('../lib/browser/chrome.js', () => ({
   findChrome: vi.fn().mockResolvedValue('/usr/bin/chrome'),
   launchChrome: vi.fn().mockResolvedValue({
     port: 9222,
-    process: { kill: vi.fn() },
+    process: { pid: 99999, kill: vi.fn() },
     wsUrl: 'ws://127.0.0.1:9222/devtools/browser/abc',
     userDataDir: '/tmp/yaar-browser-mock',
   }),
   cleanupChrome: vi.fn().mockResolvedValue(undefined),
+  cleanupStaleChrome: vi.fn().mockResolvedValue(undefined),
+  writePidFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../lib/browser/session.js', () => ({
@@ -47,7 +49,7 @@ vi.stubGlobal(
 
 // Import after mocks are set up
 import { BrowserPool } from '../lib/browser/pool.js';
-import { cleanupChrome } from '../lib/browser/chrome.js';
+import { cleanupChrome, cleanupStaleChrome, writePidFile } from '../lib/browser/chrome.js';
 import { BrowserSession } from '../lib/browser/session.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -156,6 +158,29 @@ describe('BrowserPool', () => {
     expect(pool.getStats().activeSessions).toBe(0);
     expect(pool.getStats().chromeRunning).toBe(false);
     expect(cleanupChrome).toHaveBeenCalled();
+  });
+
+  it('cleans up stale Chrome before launching', async () => {
+    await pool.createSession('first');
+
+    // cleanupStaleChrome should be called before Chrome launch
+    expect(cleanupStaleChrome).toHaveBeenCalledOnce();
+
+    // writePidFile should be called after Chrome launch
+    expect(writePidFile).toHaveBeenCalledOnce();
+    expect(writePidFile).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 9222, userDataDir: '/tmp/yaar-browser-mock' }),
+    );
+  });
+
+  it('does not call stale cleanup on subsequent sessions (Chrome already running)', async () => {
+    await pool.createSession('a');
+    expect(cleanupStaleChrome).toHaveBeenCalledOnce();
+
+    // Second session reuses existing Chrome — no stale cleanup
+    vi.mocked(cleanupStaleChrome).mockClear();
+    await pool.createSession('b');
+    expect(cleanupStaleChrome).not.toHaveBeenCalled();
   });
 
   it('idle cleanup removes stale sessions', async () => {

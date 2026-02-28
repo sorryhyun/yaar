@@ -8,11 +8,13 @@ import { configRead, configWrite } from './storage-manager.js';
 export interface Settings {
   onboardingCompleted: boolean;
   language: string;
+  provider: 'auto' | 'claude' | 'codex';
 }
 
 const DEFAULTS: Settings = {
   onboardingCompleted: false,
   language: 'en',
+  provider: 'auto',
 };
 
 export const LANGUAGE_CODES = [

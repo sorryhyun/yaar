@@ -64,7 +64,7 @@ AI는 **UI를 직접 생성**하여 응답합니다.
 
 Codex 혹은 Claude Code 사용자 인증이 필수입니다. 이게 없다면 본 프로그램은 사용할 수 없습니다.
 
-윈도우 유저의 경우 [Codex CLI](https://github.com/openai/codex)를 설치한 뒤, 릴리즈 탭에서 `yaar-codex.exe`를 다운받아 실행하세요.
+윈도우 유저의 경우 [Codex CLI](https://github.com/openai/codex)를 설치한 뒤, 릴리즈 탭에서 `yaar.exe`를 다운받아 실행하세요.
 
 스마트스크린 이슈가 뜰텐데 이건 제가 유료 인증을 해야하는거라 양해 부탁드립니다. 실행하면 바로 브라우저 창이 뜨는데, 먼저 '필수 앱 설치해줘' 같은 말로 시작하시면 됩니다.
 

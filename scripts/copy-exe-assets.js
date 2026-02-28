@@ -97,8 +97,7 @@ if (popplerBinDir) {
 console.log('\nAsset copy complete!');
 console.log('Distribution structure:');
 console.log('  dist/');
-console.log('  ├── yaar-claude.exe   # Claude provider executable');
-console.log('  ├── yaar-codex.exe    # Codex provider executable');
+console.log('  ├── yaar.exe          # Executable (provider selected at runtime)');
 console.log('  ├── public/           # Frontend assets');
 if (popplerCopied) {
   console.log('  ├── poppler/          # Poppler PDF binaries');
