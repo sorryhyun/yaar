@@ -11,7 +11,7 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import { getStorageDir, getClaudeSpawnArgs } from '../../config.js';
+import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 import { buildAgentDefinitions } from '../../agents/profiles.js';
@@ -82,9 +82,12 @@ export class ClaudeSessionProvider extends BaseTransport {
       builtinTools.push('Task');
     }
 
+    const claudeBin = resolveClaudeBinPath();
+
     return {
       abortController: this.createAbortController(),
       executable: 'bun',
+      ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
       systemPrompt: systemPrompt ?? this.systemPrompt,
       model: 'claude-sonnet-4-6',
       resume: resumeSession,
