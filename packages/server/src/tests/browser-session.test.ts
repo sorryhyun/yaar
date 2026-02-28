@@ -136,8 +136,8 @@ describe('BrowserSession', () => {
 
     // Screenshot was captured
     expect(mockSend).toHaveBeenCalledWith('Page.captureScreenshot', {
-      format: 'jpeg',
-      quality: 80,
+      format: 'webp',
+      quality: 95,
     });
 
     // Returns page state with updated URL and title
@@ -290,8 +290,8 @@ describe('BrowserSession', () => {
 
     // captureScreenshot called with JPEG format and quality
     expect(mockSend).toHaveBeenCalledWith('Page.captureScreenshot', {
-      format: 'jpeg',
-      quality: 80,
+      format: 'webp',
+      quality: 95,
     });
 
     // Returns a Buffer decoded from the base64 CDP response

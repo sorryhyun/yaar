@@ -272,15 +272,29 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     'screenshot',
     {
       description:
-        'Get the current page screenshot as an image. Use when you need to visually inspect the page layout.',
-      inputSchema: {},
+        'Get the current page screenshot as an image. Optionally specify a region to magnify (4x zoom) for closer inspection of small elements.',
+      inputSchema: {
+        x0: z.number().optional().describe('Left edge of the region in pixels'),
+        y0: z.number().optional().describe('Top edge of the region in pixels'),
+        x1: z.number().optional().describe('Right edge of the region in pixels'),
+        y1: z.number().optional().describe('Bottom edge of the region in pixels'),
+      },
     },
-    async () => {
+    async (args) => {
       const session = getSession();
-      const buffer = await session.screenshot();
-      return okWithImages('Current browser screenshot:', [
-        { data: buffer.toString('base64'), mimeType: 'image/jpeg' },
-      ]);
+      const hasRegion =
+        args.x0 !== undefined &&
+        args.y0 !== undefined &&
+        args.x1 !== undefined &&
+        args.y1 !== undefined;
+      const clip = hasRegion
+        ? { x: args.x0!, y: args.y0!, width: args.x1! - args.x0!, height: args.y1! - args.y0! }
+        : undefined;
+      const buffer = await session.screenshot(clip ? { clip } : undefined);
+      const label = clip
+        ? `Magnified region (${args.x0},${args.y0})→(${args.x1},${args.y1}) @4x:`
+        : 'Current browser screenshot:';
+      return okWithImages(label, [{ data: buffer.toString('base64'), mimeType: 'image/webp' }]);
     },
   );
 

@@ -128,9 +128,12 @@ export class BrowserPool {
       // Newer Chrome versions require PUT for /json/new; fall back to GET for older ones.
       let resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, {
         method: 'PUT',
+        signal: AbortSignal.timeout(10_000),
       });
       if (!resp.ok) {
-        resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`);
+        resp = await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, {
+          signal: AbortSignal.timeout(10_000),
+        });
       }
       const target = (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
 

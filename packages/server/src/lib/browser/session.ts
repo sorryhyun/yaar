@@ -2,7 +2,7 @@
  * BrowserSession — wraps one Chrome tab via CDP.
  *
  * Each session tracks its bound YAAR window, current URL, and latest screenshot.
- * Screenshots are stored in memory as JPEG buffers and served via HTTP.
+ * Screenshots are stored in memory as WebP buffers and served via HTTP.
  *
  * Emits 'updated' events after each state change so listeners (SSE, etc.)
  * can push live updates to the browser app iframe.
@@ -25,7 +25,7 @@ import {
 
 const SCREENSHOT_WIDTH = 1280;
 const SCREENSHOT_HEIGHT = 800;
-const SCREENSHOT_QUALITY = 80;
+const SCREENSHOT_QUALITY = 95;
 const TEXT_SNIPPET_LENGTH = 500;
 
 export interface BrowserSessionUpdate {
@@ -91,13 +91,22 @@ export class BrowserSession extends EventEmitter {
     } satisfies BrowserSessionUpdate);
   }
 
-  private async takeScreenshot(): Promise<Buffer> {
+  private async takeScreenshot(clip?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    scale: number;
+  }): Promise<Buffer> {
     const result = await this.cdp.send('Page.captureScreenshot', {
-      format: 'jpeg',
+      format: 'webp',
       quality: SCREENSHOT_QUALITY,
+      ...(clip ? { clip } : {}),
     });
-    this.lastScreenshot = Buffer.from(result.data, 'base64');
-    return this.lastScreenshot;
+    const buf = Buffer.from(result.data, 'base64');
+    // Only cache full-page screenshots (not clipped regions)
+    if (!clip) this.lastScreenshot = buf;
+    return buf;
   }
 
   /** Evaluate a JS expression in the page and return the value. */
@@ -519,8 +528,13 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
-  async screenshot(): Promise<Buffer> {
+  async screenshot(opts?: {
+    clip?: { x: number; y: number; width: number; height: number };
+  }): Promise<Buffer> {
     this.touch();
+    if (opts?.clip) {
+      return this.takeScreenshot({ ...opts.clip, scale: 4 });
+    }
     return this.takeScreenshot();
   }
 

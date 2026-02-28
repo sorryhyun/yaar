@@ -100,6 +100,7 @@ describe('BrowserPool', () => {
     // Fetch was called for /json/new
     expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:9222/json/new?about:blank', {
       method: 'PUT',
+      signal: expect.any(AbortSignal),
     });
 
     const stats = pool.getStats();

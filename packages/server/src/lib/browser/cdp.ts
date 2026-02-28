@@ -49,12 +49,26 @@ export class CDPClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async send(method: string, params?: Record<string, unknown>): Promise<any> {
+  async send(method: string, params?: Record<string, unknown>, timeout = 15_000): Promise<any> {
     if (this.closed) throw new Error('CDP connection closed');
 
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP timeout: ${method} did not respond within ${timeout}ms`));
+      }, timeout);
+
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      });
       this.ws.send(JSON.stringify({ id, method, params: params || {} }));
     });
   }

@@ -15,7 +15,7 @@ async function convertToWebP(file: File): Promise<File> {
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
 
-  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 1.0 });
+  const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.95 });
   const name = file.name.replace(/\.[^.]+$/, '.webp');
   return new File([blob], name, { type: 'image/webp' });
 }

@@ -109,7 +109,7 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
       }
       return new Response(buf, {
         headers: {
-          'Content-Type': 'image/jpeg',
+          'Content-Type': 'image/webp',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Content-Length': buf.length.toString(),
         },
