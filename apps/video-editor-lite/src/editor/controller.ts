@@ -6,8 +6,16 @@ const STORAGE_KEY = 'video-editor-lite:prefs';
 const MIN_TRIM_GAP = 0.01;
 const ALLOWED_PLAYBACK_RATES = new Set([0.5, 1, 1.5, 2]);
 const STORAGE_VIDEO_FILE_RE = /\.(mp4|m4v|webm|mov|avi|mkv|ogv|ogg)$/i;
+const DEFAULT_STORAGE_LIST_PATH = 'mounts/lecture-materials';
 const STORAGE_SCAN_LIMIT = 200;
 const STORAGE_URL_PREFIX = '/api/storage/';
+const EXPORT_PROGRESS_TICK_MS = 120;
+const EXPORT_MIME_CANDIDATES = [
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+  'video/mp4',
+] as const;
 
 type StorageEntry = {
   path: string;
@@ -24,6 +32,7 @@ interface EditorPrefs {
   loopPreview: boolean;
   lastUrl: string;
   lastStoragePath: string;
+  lastStorageListPath: string;
 }
 
 const DEFAULT_PREFS: EditorPrefs = {
@@ -31,7 +40,20 @@ const DEFAULT_PREFS: EditorPrefs = {
   loopPreview: false,
   lastUrl: '',
   lastStoragePath: '',
+  lastStorageListPath: DEFAULT_STORAGE_LIST_PATH,
 };
+
+export interface EditorControllerApi {
+  getCurrentSource: () => { sourceKind: 'url' | 'file' | null; sourceValue: string; objectUrl: string | null };
+  getPlaybackState: () => { playing: boolean; paused: boolean; playbackRate: number; loopPreview: boolean };
+  getTimeline: () => { currentTime: number; duration: number };
+  getTrimRange: () => { trimStart: number; trimEnd: number; selectedDuration: number };
+  loadSource: (params: { url?: string; path?: string }) => { ok: true; source: string };
+  play: () => Promise<{ ok: true }>;
+  pause: () => { ok: true };
+  seek: (time: number) => { ok: true; currentTime: number };
+  setPlaybackRate: (rate: number) => { ok: true; playbackRate: number };
+}
 
 function loadPrefs(): EditorPrefs {
   try {
@@ -52,12 +74,17 @@ function loadPrefs(): EditorPrefs {
       typeof parsed.lastStoragePath === 'string'
         ? parsed.lastStoragePath
         : DEFAULT_PREFS.lastStoragePath;
+    const lastStorageListPath =
+      typeof parsed.lastStorageListPath === 'string' && parsed.lastStorageListPath.trim()
+        ? parsed.lastStorageListPath
+        : DEFAULT_PREFS.lastStorageListPath;
 
     return {
       playbackRate,
       loopPreview,
       lastUrl,
       lastStoragePath,
+      lastStorageListPath,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -72,10 +99,57 @@ function savePrefs(prefs: EditorPrefs): void {
   }
 }
 
-export function createEditorController(parent: HTMLElement): void {
+function pickExportMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') {
+    return '';
+  }
+
+  for (const candidate of EXPORT_MIME_CANDIDATES) {
+    if (!candidate || MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
+function exportExtensionFromMimeType(mimeType: string): string {
+  if (mimeType.includes('mp4')) {
+    return 'mp4';
+  }
+  return 'webm';
+}
+
+function makeExportFilename(extension: string): string {
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    '-',
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0'),
+  ].join('');
+  return `trim-${stamp}.${extension}`;
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+}
+
+export function createEditorController(parent: HTMLElement): EditorControllerApi {
   const store = new EditorStore();
   const ui = createEditorUI(parent);
   let activeObjectUrl: string | null = null;
+  let exportingInProgress = false;
   let prefs = loadPrefs();
 
   const persistPrefs = (patch: Partial<EditorPrefs>): void => {
@@ -134,12 +208,7 @@ export function createEditorController(parent: HTMLElement): void {
     }
     visited.add(visitKey);
 
-    let entries: StorageEntry[] = [];
-    try {
-      entries = await storageApi.list(dirPath);
-    } catch {
-      return collected;
-    }
+    const entries = await storageApi.list(dirPath);
 
     for (const entry of entries) {
       if (collected.length >= STORAGE_SCAN_LIMIT) {
@@ -160,13 +229,81 @@ export function createEditorController(parent: HTMLElement): void {
     return collected;
   };
 
+  const setSidebarMessage = (message: string): void => {
+    ui.fileListStatus.textContent = message;
+  };
+
+  const clearSidebarList = (): void => {
+    ui.fileList.textContent = '';
+  };
+
+  const renderSidebarFiles = (paths: string[]): void => {
+    clearSidebarList();
+
+    if (!paths.length) {
+      const empty = document.createElement('div');
+      empty.className = 'storage-empty';
+      empty.textContent = 'No video files found in this path.';
+      ui.fileList.appendChild(empty);
+      return;
+    }
+
+    for (const path of paths) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'storage-item';
+      item.textContent = path;
+      item.addEventListener('click', () => {
+        const loaded = loadSourceUrl(toStorageUrl(path), path);
+        if (loaded) {
+          setSidebarMessage(`Loaded: ${path}`);
+        }
+      });
+      ui.fileList.appendChild(item);
+    }
+  };
+
+  const refreshStorageList = async (): Promise<void> => {
+    const storageApi = getStorageApi();
+    if (!storageApi) {
+      clearSidebarList();
+      setSidebarMessage('Storage API unavailable in this environment.');
+      return;
+    }
+
+    const basePath = normalizeStoragePath(ui.storagePathInput.value) || DEFAULT_STORAGE_LIST_PATH;
+    ui.storagePathInput.value = basePath;
+    persistPrefs({ lastStorageListPath: basePath });
+
+    ui.refreshFilesButton.disabled = true;
+    setSidebarMessage(`Scanning ${basePath}...`);
+
+    try {
+      const storageVideos = await collectStorageVideoPaths(storageApi, basePath);
+      storageVideos.sort((a, b) => a.localeCompare(b));
+      renderSidebarFiles(storageVideos);
+      setSidebarMessage(`Found ${storageVideos.length} video file${storageVideos.length === 1 ? '' : 's'} in ${basePath}.`);
+    } catch {
+      clearSidebarList();
+      setSidebarMessage(`Unable to list files in ${basePath}.`);
+    } finally {
+      ui.refreshFilesButton.disabled = false;
+    }
+  };
+
   const tryPickStorageVideo = async (): Promise<boolean> => {
     const storageApi = getStorageApi();
     if (!storageApi) {
       return false;
     }
 
-    const storageVideos = await collectStorageVideoPaths(storageApi);
+    let storageVideos: string[] = [];
+    try {
+      storageVideos = await collectStorageVideoPaths(storageApi);
+    } catch {
+      return false;
+    }
+
     if (!storageVideos.length) {
       return false;
     }
@@ -210,21 +347,31 @@ export function createEditorController(parent: HTMLElement): void {
     }
 
     const storageUrl = toStorageUrl(selectedPath);
-    releaseActiveObjectUrl();
-    persistPrefs({
-      lastStoragePath: selectedPath,
-      lastUrl: storageUrl,
-    });
-    ui.urlInput.value = storageUrl;
-    store.setSource('url', storageUrl, null);
-    setVideoSource(storageUrl);
-    return true;
+    return loadSourceUrl(storageUrl, selectedPath);
   };
 
   const setVideoSource = (src: string): void => {
     ui.video.src = src;
     ui.video.playbackRate = prefs.playbackRate;
     ui.video.load();
+  };
+
+  const loadSourceUrl = (url: string, storagePath: string | null = null): boolean => {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      return false;
+    }
+
+    releaseActiveObjectUrl();
+    const prefsPatch: Partial<EditorPrefs> = { lastUrl: trimmedUrl };
+    if (storagePath !== null) {
+      prefsPatch.lastStoragePath = normalizeStoragePath(storagePath);
+    }
+    persistPrefs(prefsPatch);
+    ui.urlInput.value = trimmedUrl;
+    store.setSource('url', trimmedUrl, null);
+    setVideoSource(trimmedUrl);
+    return true;
   };
 
   const releaseActiveObjectUrl = (): void => {
@@ -297,6 +444,173 @@ export function createEditorController(parent: HTMLElement): void {
     ui.video.currentTime = 0;
   };
 
+  const waitForLoadedMetadata = (video: HTMLVideoElement): Promise<void> => {
+    if (video.readyState >= 1) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const onLoaded = (): void => {
+        cleanup();
+        resolve();
+      };
+
+      const onError = (): void => {
+        cleanup();
+        reject(new Error('Unable to read video metadata for export.'));
+      };
+
+      const cleanup = (): void => {
+        video.removeEventListener('loadedmetadata', onLoaded);
+        video.removeEventListener('error', onError);
+      };
+
+      video.addEventListener('loadedmetadata', onLoaded, { once: true });
+      video.addEventListener('error', onError, { once: true });
+    });
+  };
+
+  const exportTrimmedSegment = async (): Promise<void> => {
+    if (exportingInProgress) {
+      return;
+    }
+
+    const state = store.getState();
+    if (state.duration <= 0) {
+      store.setExportState({ exportMessage: 'Load a video before exporting.' });
+      return;
+    }
+
+    const trimStart = clamp(state.trimStart, 0, state.duration);
+    const trimEnd = clamp(state.trimEnd, 0, state.duration);
+    const selectedDuration = trimEnd - trimStart;
+    if (selectedDuration <= MIN_TRIM_GAP) {
+      store.setExportState({ exportMessage: 'Trim range is too small to export.' });
+      return;
+    }
+
+    const sourceUrl = ui.video.currentSrc || ui.video.src;
+    if (!sourceUrl) {
+      store.setExportState({ exportMessage: 'No active media source to export.' });
+      return;
+    }
+
+    const mimeType = pickExportMimeType();
+    if (typeof MediaRecorder === 'undefined') {
+      store.setExportState({ exportMessage: 'MediaRecorder is not available in this browser.' });
+      return;
+    }
+
+    const wasPlaying = !ui.video.paused;
+    const resumeTime = ui.video.currentTime || 0;
+
+    const exporterVideo = document.createElement('video');
+    exporterVideo.src = sourceUrl;
+    exporterVideo.preload = 'auto';
+    exporterVideo.playsInline = true;
+    exporterVideo.muted = true;
+    exporterVideo.volume = 0;
+
+    const chunks: BlobPart[] = [];
+    let recorder: MediaRecorder | null = null;
+    let stream: MediaStream | null = null;
+    let progressTimer = 0;
+
+    exportingInProgress = true;
+    store.setExportState({
+      exporting: true,
+      exportProgress: 0,
+      exportMessage: 'Preparing export...',
+    });
+
+    try {
+      await waitForLoadedMetadata(exporterVideo);
+      exporterVideo.currentTime = trimStart;
+
+      const streamVideo = exporterVideo as HTMLVideoElement & {
+        captureStream?: () => MediaStream;
+        mozCaptureStream?: () => MediaStream;
+      };
+      const captureStreamFn =
+        streamVideo.captureStream?.bind(streamVideo) ?? streamVideo.mozCaptureStream?.bind(streamVideo);
+      if (!captureStreamFn) {
+        throw new Error('This browser does not support capturing media streams from video.');
+      }
+
+      stream = captureStreamFn() as MediaStream;
+
+      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      });
+
+      const stopped = new Promise<void>((resolve, reject) => {
+        recorder!.addEventListener('stop', () => resolve(), { once: true });
+        recorder!.addEventListener('error', () => reject(new Error('Recorder failed while exporting.')), {
+          once: true,
+        });
+      });
+
+      recorder.start(250);
+
+      progressTimer = window.setInterval(() => {
+        const elapsed = clamp(exporterVideo.currentTime - trimStart, 0, selectedDuration);
+        const progress = clamp(elapsed / selectedDuration, 0, 1);
+        store.setExportState({
+          exportProgress: progress,
+          exportMessage: `Exporting ${Math.round(progress * 100)}%`,
+        });
+
+        if (exporterVideo.currentTime >= trimEnd - 0.01 && recorder && recorder.state !== 'inactive') {
+          recorder.stop();
+        }
+      }, EXPORT_PROGRESS_TICK_MS);
+
+      await exporterVideo.play();
+      await stopped;
+
+      const blobType = mimeType || recorder.mimeType || 'video/webm';
+      const outputBlob = new Blob(chunks, { type: blobType });
+      if (outputBlob.size <= 0) {
+        throw new Error('Export produced an empty file.');
+      }
+
+      const extension = exportExtensionFromMimeType(blobType);
+      downloadBlob(outputBlob, makeExportFilename(extension));
+
+      store.setExportState({
+        exporting: false,
+        exportProgress: 1,
+        exportMessage: `Export complete. Downloaded ${selectedDuration.toFixed(2)}s clip.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown export error.';
+      store.setExportState({
+        exporting: false,
+        exportProgress: 0,
+        exportMessage: `Export failed: ${message}`,
+      });
+    } finally {
+      exportingInProgress = false;
+      window.clearInterval(progressTimer);
+      exporterVideo.pause();
+      exporterVideo.removeAttribute('src');
+      exporterVideo.load();
+
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+      stream?.getTracks().forEach((track) => track.stop());
+
+      ui.video.currentTime = clamp(resumeTime, 0, state.duration);
+      if (wasPlaying) {
+        await ui.video.play().catch(() => undefined);
+      }
+    }
+  };
+
   const isTypingContext = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) {
       return false;
@@ -312,24 +626,29 @@ export function createEditorController(parent: HTMLElement): void {
   };
 
   ui.urlInput.value = prefs.lastUrl;
+  ui.storagePathInput.value =
+    normalizeStoragePath(prefs.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
   ui.video.playbackRate = prefs.playbackRate;
   store.setPlaybackRate(prefs.playbackRate);
   store.setLoopPreview(prefs.loopPreview);
 
   ui.loadUrlButton.addEventListener('click', () => {
-    const url = ui.urlInput.value.trim();
-    if (!url) {
-      return;
-    }
-
-    persistPrefs({ lastUrl: url });
-    releaseActiveObjectUrl();
-    store.setSource('url', url, null);
-    setVideoSource(url);
+    void loadSourceUrl(ui.urlInput.value);
   });
 
   ui.urlInput.addEventListener('change', () => {
     persistPrefs({ lastUrl: ui.urlInput.value.trim() });
+  });
+
+  ui.refreshFilesButton.addEventListener('click', () => {
+    void refreshStorageList();
+  });
+
+  ui.storagePathInput.addEventListener('change', () => {
+    const nextPath = normalizeStoragePath(ui.storagePathInput.value) || DEFAULT_STORAGE_LIST_PATH;
+    ui.storagePathInput.value = nextPath;
+    persistPrefs({ lastStorageListPath: nextPath });
+    void refreshStorageList();
   });
 
   ui.pickFileButton.addEventListener('click', async () => {
@@ -418,6 +737,10 @@ export function createEditorController(parent: HTMLElement): void {
     ui.video.pause();
   });
 
+  ui.exportButton.addEventListener('click', () => {
+    void exportTrimmedSegment();
+  });
+
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
       return;
@@ -469,6 +792,8 @@ export function createEditorController(parent: HTMLElement): void {
     }
   });
 
+  void refreshStorageList();
+
   store.subscribe((state) => {
     renderEditor(ui, state);
   });
@@ -476,4 +801,81 @@ export function createEditorController(parent: HTMLElement): void {
   window.addEventListener('beforeunload', () => {
     releaseActiveObjectUrl();
   });
+
+  return {
+    getCurrentSource: () => {
+      const state = store.getState();
+      return {
+        sourceKind: state.sourceKind,
+        sourceValue: state.sourceValue,
+        objectUrl: state.objectUrl,
+      };
+    },
+    getPlaybackState: () => {
+      const state = store.getState();
+      return {
+        playing: state.playing,
+        paused: ui.video.paused,
+        playbackRate: state.playbackRate,
+        loopPreview: state.loopPreview,
+      };
+    },
+    getTimeline: () => {
+      const state = store.getState();
+      return {
+        currentTime: state.currentTime,
+        duration: state.duration,
+      };
+    },
+    getTrimRange: () => {
+      const state = store.getState();
+      return {
+        trimStart: state.trimStart,
+        trimEnd: state.trimEnd,
+        selectedDuration: Math.max(0, state.trimEnd - state.trimStart),
+      };
+    },
+    loadSource: (params) => {
+      const urlParam = typeof params.url === 'string' ? params.url.trim() : '';
+      const pathParam = typeof params.path === 'string' ? normalizeStoragePath(params.path) : '';
+      if (!urlParam && !pathParam) {
+        throw new Error('Provide either \"url\" or \"path\".');
+      }
+
+      const targetUrl = urlParam || toStorageUrl(pathParam);
+      const loaded = loadSourceUrl(targetUrl, pathParam || null);
+      if (!loaded) {
+        throw new Error('Unable to load source.');
+      }
+      return { ok: true as const, source: targetUrl };
+    },
+    play: async () => {
+      await ui.video.play();
+      return { ok: true as const };
+    },
+    pause: () => {
+      ui.video.pause();
+      return { ok: true as const };
+    },
+    seek: (time) => {
+      if (!Number.isFinite(time)) {
+        throw new Error('time must be a number.');
+      }
+      const duration = ui.video.duration || store.getState().duration || 0;
+      if (duration <= 0) {
+        throw new Error('Load a video before seeking.');
+      }
+      ui.video.currentTime = clamp(time, 0, duration);
+      return { ok: true as const, currentTime: ui.video.currentTime };
+    },
+    setPlaybackRate: (rate) => {
+      if (!ALLOWED_PLAYBACK_RATES.has(rate)) {
+        throw new Error('Unsupported playback rate.');
+      }
+      ui.video.playbackRate = rate;
+      store.setPlaybackRate(rate);
+      persistPrefs({ playbackRate: rate });
+      return { ok: true as const, playbackRate: rate };
+    },
+  };
 }

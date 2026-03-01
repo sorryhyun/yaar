@@ -16,33 +16,47 @@ interface UseWindowDropOptions {
 export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (
+  const isValidDrag = useCallback((e: React.DragEvent) => {
+    return (
       e.dataTransfer.types.includes('application/x-yaar-app') ||
       getIframeDragSource() ||
       (e.dataTransfer.types.includes('Files') && isExternalFileDrag())
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-yaar-app')
-        ? 'link'
-        : 'copy';
-      setIsDragOver(true);
-    }
+    );
   }, []);
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (isValidDrag(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/x-yaar-app')
+          ? 'link'
+          : 'copy';
+        setIsDragOver(true);
+      }
+    },
+    [isValidDrag],
+  );
 
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
-      // Focus the window when text is dragged over it from an iframe
-      if (getIframeDragSource()) {
+      if (isValidDrag(e)) {
         e.preventDefault();
+        setIsDragOver(true);
         useDesktopStore.getState().userFocusWindow(windowId);
       }
     },
-    [windowId],
+    [windowId, isValidDrag],
   );
 
-  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only reset when the cursor actually leaves the frame, not when moving between children
+    const frame = e.currentTarget as HTMLElement;
+    const related = e.relatedTarget as Node | null;
+    if (!related || !frame.contains(related)) {
+      setIsDragOver(false);
+    }
+  }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

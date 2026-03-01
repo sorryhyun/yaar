@@ -17,6 +17,9 @@ export class EditorStore {
     playbackRate: 1,
     loopPreview: false,
     playing: false,
+    exporting: false,
+    exportProgress: 0,
+    exportMessage: null,
     error: null,
   };
 
@@ -42,6 +45,9 @@ export class EditorStore {
       trimStart: 0,
       trimEnd: 0,
       currentTime: 0,
+      exporting: false,
+      exportProgress: 0,
+      exportMessage: null,
       error: null,
     };
     this.emit();
@@ -55,6 +61,9 @@ export class EditorStore {
       trimStart: 0,
       trimEnd: normalizedDuration,
       currentTime: 0,
+      exporting: false,
+      exportProgress: 0,
+      exportMessage: null,
       error: null,
     };
     this.emit();
@@ -116,6 +125,24 @@ export class EditorStore {
     };
     this.emit();
     return true;
+  }
+
+  setExportState(patch: { exporting?: boolean; exportProgress?: number; exportMessage?: string | null }): void {
+    this.state = {
+      ...this.state,
+      exporting: patch.exporting ?? this.state.exporting,
+      exportProgress: patch.exportProgress ?? this.state.exportProgress,
+      exportMessage: patch.exportMessage ?? this.state.exportMessage,
+    };
+    this.emit();
+  }
+
+  clearExportMessage(): void {
+    if (!this.state.exportMessage) {
+      return;
+    }
+    this.state = { ...this.state, exportMessage: null };
+    this.emit();
   }
 
   clearError(): void {

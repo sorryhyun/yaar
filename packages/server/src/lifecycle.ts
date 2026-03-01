@@ -10,7 +10,7 @@ import { networkInterfaces } from 'os';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { listApps } from './mcp/apps/discovery.js';
-import { ensureAppShortcut } from './storage/shortcuts.js';
+import { syncAppShortcuts } from './storage/shortcuts.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
   listSessions,
@@ -79,18 +79,12 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   await initMcpServer();
 
-  // Ensure desktop shortcuts exist for all apps that want them
+  // Sync desktop shortcuts: create missing, remove stale
   try {
     const apps = await listApps();
-    for (const app of apps) {
-      if (app.createShortcut !== false) {
-        await ensureAppShortcut({
-          id: app.id,
-          name: app.name,
-          icon: app.icon,
-          iconType: app.iconType,
-        });
-      }
+    const removedIds = await syncAppShortcuts(apps);
+    if (removedIds.length > 0) {
+      console.log(`Cleaned up ${removedIds.length} stale shortcut(s)`);
     }
   } catch {
     // Non-fatal: shortcuts will be created on next app interaction

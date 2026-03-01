@@ -53,7 +53,7 @@ create({
   windowId: "${appId}",
   title: "${appName}",
   renderer: "iframe",
-  content: "/api/apps/${appId}/static/index.html"
+  content: "app://${appId}"
 })
 \`\`\``);
   }
@@ -98,7 +98,7 @@ ${launchSection}
   }
 
   md += `\n## Source
-Source code is available in \`src/\` directory. Use \`read_config\` with path \`src/main.ts\` to view.
+Source code is available in \`src/\` directory. Use \`clone(appId="${appId}")\` to copy source into a sandbox for reading or editing.
 `;
 
   if (hasAppProtocol) {

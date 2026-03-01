@@ -9,9 +9,9 @@ create({
   windowId: "video-editor-lite",
   title: "Video Editor Lite",
   renderer: "iframe",
-  content: "/api/apps/video-editor-lite/static/index.html"
+  content: "app://video-editor-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="video-editor-lite")` to copy source into a sandbox for reading or editing.

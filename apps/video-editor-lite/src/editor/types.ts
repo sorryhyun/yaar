@@ -11,6 +11,9 @@ export interface EditorState {
   playbackRate: number;
   loopPreview: boolean;
   playing: boolean;
+  exporting: boolean;
+  exportProgress: number;
+  exportMessage: string | null;
   error: string | null;
 }
 

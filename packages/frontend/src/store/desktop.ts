@@ -374,12 +374,7 @@ export const useDesktopStore = create<DesktopStore>()(
     setShortcuts: (shortcuts: DesktopShortcut[]) => {
       const [set] = a;
       set((state) => {
-        // Merge: keep store shortcuts that were added in real-time, add fetched ones that are new
-        const existing = new Map(state.shortcuts.map((s) => [s.id, s]));
-        for (const s of shortcuts) {
-          if (!existing.has(s.id)) existing.set(s.id, s);
-        }
-        state.shortcuts = Array.from(existing.values());
+        state.shortcuts = shortcuts;
       });
     },
     bumpAppsVersion: () => {

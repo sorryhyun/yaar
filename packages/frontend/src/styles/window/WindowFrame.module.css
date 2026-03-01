@@ -238,7 +238,6 @@
   position: absolute;
   inset: 0;
   background: rgba(59, 130, 246, 0.08);
-  pointer-events: none;
   z-index: 2;
   border-radius: inherit;
 }

@@ -78,7 +78,7 @@ export function DesktopIcons({
     fetchApps();
   }, [appsVersion]);
 
-  // Fetch shortcuts on mount and populate the store
+  // Fetch shortcuts on mount and when appsVersion changes (after deploy/install/delete)
   useEffect(() => {
     async function fetchShortcuts() {
       try {
@@ -92,7 +92,7 @@ export function DesktopIcons({
       }
     }
     fetchShortcuts();
-  }, []);
+  }, [appsVersion]);
 
   const handleShortcutClick = useCallback(
     (shortcut: DesktopShortcut) => {

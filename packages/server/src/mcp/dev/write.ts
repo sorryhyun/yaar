@@ -82,16 +82,46 @@ export function registerWriteTools(server: McpServer): void {
     'apply_diff_ts',
     {
       description:
-        'Apply a search-and-replace edit to an existing file in a sandbox. Finds the exact old_string and replaces it with new_string. Use this to revise code without rewriting the entire file.',
+        'Apply an edit to an existing file in a sandbox. Two modes:\n' +
+        '1. String mode: provide old_string + new_string (finds exact match and replaces)\n' +
+        '2. Line mode: provide start_line + new_string (replaces lines start_line..end_line with new_string)\n' +
+        'Line numbers are 1-based, matching the output of read_ts.',
       inputSchema: {
         sandboxId: z.string().describe('Sandbox ID containing the file'),
         path: z.string().describe('Relative path in sandbox (e.g., "src/main.ts")'),
-        old_string: z.string().describe('The exact text to find (must be unique in the file)'),
+        old_string: z
+          .string()
+          .optional()
+          .describe('The exact text to find (must be unique). Omit to use line mode.'),
         new_string: z.string().describe('The replacement text'),
+        start_line: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('First line to replace (1-based). Requires line mode (omit old_string).'),
+        end_line: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            'Last line to replace (1-based, inclusive). Defaults to start_line (single line).',
+          ),
       },
     },
     async (args) => {
-      const { sandboxId, path, old_string, new_string } = args;
+      const { sandboxId, path, old_string, new_string, start_line, end_line } = args;
+
+      // Validate mode
+      if (old_string !== undefined && start_line !== undefined) {
+        return error(
+          'Provide either old_string (string mode) or start_line (line mode), not both.',
+        );
+      }
+      if (old_string === undefined && start_line === undefined) {
+        return error('Provide old_string (string mode) or start_line (line mode).');
+      }
 
       // Validate path
       if (path.includes('..') || path.startsWith('/')) {
@@ -121,23 +151,44 @@ export function registerWriteTools(server: McpServer): void {
         return error(`File not found: ${path}`);
       }
 
-      // Check old_string exists
-      if (!content.includes(old_string)) {
-        return error(
-          'old_string not found in file. Make sure it matches exactly (including whitespace).',
-        );
+      let newContent: string;
+
+      if (old_string !== undefined) {
+        // String mode
+        if (!content.includes(old_string)) {
+          return error(
+            'old_string not found in file. Make sure it matches exactly (including whitespace).',
+          );
+        }
+
+        const count = content.split(old_string).length - 1;
+        if (count > 1) {
+          return error(
+            `old_string found ${count} times. Provide more surrounding context to make it unique.`,
+          );
+        }
+
+        newContent = content.replace(old_string, new_string);
+      } else {
+        // Line mode
+        const lines = content.split('\n');
+        const endLine = end_line ?? start_line!;
+
+        if (start_line! > lines.length) {
+          return error(`start_line ${start_line} exceeds file length (${lines.length} lines).`);
+        }
+        if (endLine > lines.length) {
+          return error(`end_line ${endLine} exceeds file length (${lines.length} lines).`);
+        }
+        if (endLine < start_line!) {
+          return error('end_line must be >= start_line.');
+        }
+
+        const before = lines.slice(0, start_line! - 1);
+        const after = lines.slice(endLine);
+        newContent = [...before, new_string, ...after].join('\n');
       }
 
-      // Check uniqueness
-      const count = content.split(old_string).length - 1;
-      if (count > 1) {
-        return error(
-          `old_string found ${count} times. Provide more surrounding context to make it unique.`,
-        );
-      }
-
-      // Apply replacement
-      const newContent = content.replace(old_string, new_string);
       await Bun.write(fullPath, newContent);
 
       return ok(

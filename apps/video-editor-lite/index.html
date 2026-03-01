@@ -10,7 +10,7 @@
 <body>
 <div id="app"></div>
 <script type="module">
-function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFinite(o)||o<0)return"00:00.00";let i=Math.floor(o/60),t=o-i*60,d=Math.floor(t),l=Math.floor((t-d)*100),m=String(i).padStart(2,"0"),a=String(d).padStart(2,"0"),s=String(l).padStart(2,"0");return`${m}:${a}.${s}`}function b(o){let i=Number(o);return Number.isFinite(i)?i:NaN}var V=0.01;class Q{state={sourceKind:null,sourceValue:"",objectUrl:null,duration:0,trimStart:0,trimEnd:0,currentTime:0,playbackRate:1,loopPreview:!1,playing:!1,error:null};listeners=new Set;subscribe(o){return this.listeners.add(o),o(this.getState()),()=>this.listeners.delete(o)}getState(){return{...this.state}}setSource(o,i,t){this.state={...this.state,sourceKind:o,sourceValue:i,objectUrl:t,duration:0,trimStart:0,trimEnd:0,currentTime:0,error:null},this.emit()}setDuration(o){let i=Number.isFinite(o)&&o>0?o:0;this.state={...this.state,duration:i,trimStart:0,trimEnd:i,currentTime:0,error:null},this.emit()}setCurrentTime(o){this.state={...this.state,currentTime:c(o,0,this.state.duration||0)},this.emit()}setPlaying(o){this.state={...this.state,playing:o},this.emit()}setLoopPreview(o){this.state={...this.state,loopPreview:o},this.emit()}setPlaybackRate(o){this.state={...this.state,playbackRate:o},this.emit()}setTrim(o){let i=this.state.duration,t=i>0,d=o.trimStart??this.state.trimStart,l=o.trimEnd??this.state.trimEnd;if(!t)return this.state={...this.state,error:"Load a video first."},this.emit(),!1;let m=c(d,0,i),a=c(l,0,i);if(m>=a-V)return this.state={...this.state,error:"Trim start must be less than trim end."},this.emit(),!1;return this.state={...this.state,trimStart:m,trimEnd:a,error:null},this.emit(),!0}clearError(){if(!this.state.error)return;this.state={...this.state,error:null},this.emit()}emit(){let o=this.getState();this.listeners.forEach((i)=>i(o))}}function W(o){o.innerHTML="";let i=document.createElement("style");i.textContent=`
+function g(o,i,n){return Math.min(n,Math.max(i,o))}function U(o){if(!Number.isFinite(o)||o<0)return"00:00.00";let i=Math.floor(o/60),n=o-i*60,p=Math.floor(n),m=Math.floor((n-p)*100),s=String(i).padStart(2,"0"),d=String(p).padStart(2,"0"),f=String(m).padStart(2,"0");return`${s}:${d}.${f}`}function S(o){let i=Number(o);return Number.isFinite(i)?i:NaN}var ut=0.01;class P{state={sourceKind:null,sourceValue:"",objectUrl:null,duration:0,trimStart:0,trimEnd:0,currentTime:0,playbackRate:1,loopPreview:!1,playing:!1,exporting:!1,exportProgress:0,exportMessage:null,error:null};listeners=new Set;subscribe(o){return this.listeners.add(o),o(this.getState()),()=>this.listeners.delete(o)}getState(){return{...this.state}}setSource(o,i,n){this.state={...this.state,sourceKind:o,sourceValue:i,objectUrl:n,duration:0,trimStart:0,trimEnd:0,currentTime:0,exporting:!1,exportProgress:0,exportMessage:null,error:null},this.emit()}setDuration(o){let i=Number.isFinite(o)&&o>0?o:0;this.state={...this.state,duration:i,trimStart:0,trimEnd:i,currentTime:0,exporting:!1,exportProgress:0,exportMessage:null,error:null},this.emit()}setCurrentTime(o){this.state={...this.state,currentTime:g(o,0,this.state.duration||0)},this.emit()}setPlaying(o){this.state={...this.state,playing:o},this.emit()}setLoopPreview(o){this.state={...this.state,loopPreview:o},this.emit()}setPlaybackRate(o){this.state={...this.state,playbackRate:o},this.emit()}setTrim(o){let i=this.state.duration,n=i>0,p=o.trimStart??this.state.trimStart,m=o.trimEnd??this.state.trimEnd;if(!n)return this.state={...this.state,error:"Load a video first."},this.emit(),!1;let s=g(p,0,i),d=g(m,0,i);if(s>=d-ut)return this.state={...this.state,error:"Trim start must be less than trim end."},this.emit(),!1;return this.state={...this.state,trimStart:s,trimEnd:d,error:null},this.emit(),!0}setExportState(o){this.state={...this.state,exporting:o.exporting??this.state.exporting,exportProgress:o.exportProgress??this.state.exportProgress,exportMessage:o.exportMessage??this.state.exportMessage},this.emit()}clearExportMessage(){if(!this.state.exportMessage)return;this.state={...this.state,exportMessage:null},this.emit()}clearError(){if(!this.state.error)return;this.state={...this.state,error:null},this.emit()}emit(){let o=this.getState();this.listeners.forEach((i)=>i(o))}}function et(o){o.innerHTML="";let i=document.createElement("style");i.textContent=`
     :root {
       color-scheme: light;
       font-family: "Segoe UI", Tahoma, sans-serif;
@@ -27,10 +27,11 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
     }
 
     .editor-shell {
-      max-width: 920px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 20px;
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 14px;
     }
 
@@ -39,6 +40,30 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
       border-radius: 12px;
       border: 1px solid #c7d6de;
       padding: 14px;
+    }
+
+    .editor-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .editor-main {
+      display: grid;
+      gap: 14px;
+    }
+
+    .sidebar-panel {
+      position: sticky;
+      top: 14px;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #2f4b5d;
     }
 
     .row {
@@ -85,6 +110,44 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
       cursor: not-allowed;
     }
 
+    .storage-list-status {
+      font-size: 12px;
+      color: #425f71;
+      min-height: 18px;
+      margin-top: 8px;
+    }
+
+    .storage-list {
+      margin-top: 8px;
+      max-height: 460px;
+      overflow: auto;
+      display: grid;
+      gap: 6px;
+      padding-right: 2px;
+    }
+
+    .storage-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .storage-empty {
+      font-size: 12px;
+      color: #5e7381;
+      padding: 6px 2px;
+    }
+
+    .storage-hint {
+      font-size: 11px;
+      color: #5f7787;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
     .video-wrap {
       position: relative;
       border-radius: 10px;
@@ -124,6 +187,19 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
       line-height: 1.4;
     }
 
+    .export-status {
+      font-size: 12px;
+      color: #2b4f67;
+      min-height: 18px;
+      margin-top: 8px;
+    }
+
+    .export-progress {
+      width: 100%;
+      height: 10px;
+      margin-top: 8px;
+    }
+
     .error {
       color: #9f1f1f;
       font-size: 13px;
@@ -134,8 +210,26 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
       .editor-shell {
         padding: 12px;
       }
+
+      .editor-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar-panel {
+        position: static;
+      }
     }
-  `,document.head.appendChild(i);let t=document.createElement("div");t.className="editor-shell";let d=document.createElement("section");d.className="panel",d.innerHTML=`
+  `,document.head.appendChild(i);let n=document.createElement("div");n.className="editor-shell";let p=document.createElement("div");p.className="editor-layout";let m=document.createElement("aside");m.className="panel sidebar-panel",m.innerHTML=`
+    <div class="sidebar-title">Storage Files</div>
+    <label>Storage Path</label>
+    <div class="row">
+      <input id="storage-path" type="text" placeholder="mounts/lecture-materials" value="mounts/lecture-materials" />
+      <button id="refresh-files" type="button">Refresh</button>
+    </div>
+    <div id="storage-status" class="storage-list-status"></div>
+    <div id="storage-list" class="storage-list"></div>
+    <div class="storage-hint">Click a file to load it directly from storage.</div>
+  `;let s=document.createElement("div");s.className="editor-main";let d=document.createElement("section");d.className="panel",d.innerHTML=`
     <div class="row">
       <div style="flex:2; min-width: 240px;">
         <label>Video URL</label>
@@ -150,11 +244,11 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
         <button id="pick-file">Pick File (Storage First)</button>
       </div>
     </div>
-  `;let l=document.createElement("section");l.className="panel",l.innerHTML=`
+  `;let f=document.createElement("section");f.className="panel",f.innerHTML=`
     <div class="video-wrap">
       <video id="preview" controls preload="metadata"></video>
     </div>
-  `;let m=document.createElement("section");m.className="panel",m.innerHTML=`
+  `;let b=document.createElement("section");b.className="panel",b.innerHTML=`
     <div class="row">
       <div>
         <label>Trim Start (sec)</label>
@@ -177,6 +271,10 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
         <label>&nbsp;</label>
         <button id="loop-preview" disabled>Play Trimmed Segment</button>
       </div>
+      <div style="min-width: 160px;">
+        <label>&nbsp;</label>
+        <button id="export-trim" disabled>Export Trim</button>
+      </div>
     </div>
     <div class="row" style="margin-top: 10px;">
       <div>
@@ -192,14 +290,16 @@ function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFi
       <div id="time-label" class="chip">Current: 00:00.00</div>
       <div id="duration-label" class="chip">Selected: 00:00.00</div>
     </div>
+    <progress id="export-progress" class="export-progress" max="1" value="0" hidden></progress>
+    <div id="export-status" class="export-status"></div>
     <div id="shortcuts" class="shortcuts">
       Shortcuts: Space play/pause, I set start, O set end, X reset trim, Left/Right -/+0.04s, Shift+Left/Right -/+1s.
     </div>
     <div id="error" class="error"></div>
-  `;let a=document.createElement("input");a.type="file",a.accept="video/*",a.style.display="none",t.append(d,l,m,a),o.appendChild(t);let s=t.querySelector("#video-url"),g=t.querySelector("#load-url"),q=t.querySelector("#pick-file"),S=t.querySelector("#preview"),k=t.querySelector("#start-range"),x=t.querySelector("#end-range"),u=t.querySelector("#start-input"),B=t.querySelector("#end-input"),I=t.querySelector("#speed-select"),f=t.querySelector("#loop-preview"),y=t.querySelector("#time-label"),C=t.querySelector("#duration-label"),$=t.querySelector("#shortcuts"),n=t.querySelector("#error");return{root:t,urlInput:s,loadUrlButton:g,pickFileButton:q,fileInput:a,video:S,startRange:k,endRange:x,startInput:u,endInput:B,speedSelect:I,loopButton:f,timeLabel:y,durationLabel:C,shortcutsLabel:$,errorLabel:n}}function X(o,i){let t=Boolean(i.sourceValue),d=i.duration>0,l=Math.max(0,i.trimEnd-i.trimStart),m=String(i.duration||0);if(o.startRange.max=m,o.endRange.max=m,o.startRange.value=String(i.trimStart),o.endRange.value=String(i.trimEnd),o.startInput.value=i.trimStart.toFixed(2),o.endInput.value=i.trimEnd.toFixed(2),o.speedSelect.value=String(i.playbackRate),o.loopButton.disabled=!d||Boolean(i.error),o.loopButton.textContent=i.loopPreview?"Stop Loop Preview":"Play Trimmed Segment",o.timeLabel.textContent=`Current: ${N(i.currentTime)}`,o.durationLabel.textContent=`Selected: ${N(l)}`,o.errorLabel.textContent=i.error??"",o.video.style.opacity=t?"1":"0.6",!d)o.durationLabel.textContent="Selected: 00:00.00"}var j="video-editor-lite:prefs",K=0.01,F=new Set([0.5,1,1.5,2]),U=/\.(mp4|m4v|webm|mov|avi|mkv|ogv|ogg)$/i,Y=200,Z="/api/storage/",h={playbackRate:1,loopPreview:!1,lastUrl:"",lastStoragePath:""};function R(){try{let o=localStorage.getItem(j);if(!o)return{...h};let i=JSON.parse(o),t=typeof i.playbackRate==="number"&&F.has(i.playbackRate)?i.playbackRate:h.playbackRate,d=typeof i.loopPreview==="boolean"?i.loopPreview:h.loopPreview,l=typeof i.lastUrl==="string"?i.lastUrl:h.lastUrl,m=typeof i.lastStoragePath==="string"?i.lastStoragePath:h.lastStoragePath;return{playbackRate:t,loopPreview:d,lastUrl:l,lastStoragePath:m}}catch{return{...h}}}function O(o){try{localStorage.setItem(j,JSON.stringify(o))}catch{}}function G(o){let i=new Q,t=W(o),d=null,l=R(),m=(n)=>{l={...l,...n},O(l)},a=()=>{let n=window.yaar?.storage;if(!n||typeof n.list!=="function")return null;return n},s=(n)=>{let r=n.trim();if(!r)return"";if(r.startsWith(Z))return r.slice(Z.length);return r.replace(/^\/+/,"")},g=(n)=>n.split("/").filter(Boolean).map((r)=>encodeURIComponent(r)).join("/"),q=(n)=>{let r=s(n),e=a();if(e?.url)return e.url(r);return`${Z}${g(r)}`},S=async(n,r="",e=new Set,p=[])=>{if(p.length>=Y)return p;let v=r||"/";if(e.has(v))return p;e.add(v);let L=[];try{L=await n.list(r)}catch{return p}for(let M of L){if(p.length>=Y)break;if(M.isDirectory){await S(n,M.path,e,p);continue}let H=s(M.path);if(U.test(H))p.push(H)}return p},k=async()=>{let n=a();if(!n)return!1;let r=await S(n);if(!r.length)return!1;r.sort((z,J)=>z.localeCompare(J));let e=r[0],p=r.includes(l.lastStoragePath)?l.lastStoragePath:e,v=r.slice(0,12).map((z,J)=>`${J+1}. ${z}`).join(`
-`),L=r.length-12,M=L>0?`
-...and ${L} more`:"",H=window.prompt(`Pick a storage video (number or path):
-${v}${M}`,p);if(H===null)return!1;let D=H.trim();if(!D)return!1;let w="",E=Number(D);if(Number.isInteger(E)&&E>=1&&E<=r.length)w=r[E-1];else w=s(D);if(!w)return!1;let T=q(w);return u(),m({lastStoragePath:w,lastUrl:T}),t.urlInput.value=T,i.setSource("url",T,null),x(T),!0},x=(n)=>{t.video.src=n,t.video.playbackRate=l.playbackRate,t.video.load()},u=()=>{if(!d)return;URL.revokeObjectURL(d),d=null},B=(n)=>{let r=t.video.duration||0;if(r<=0)return;let e=c((t.video.currentTime||0)+n,0,r);t.video.currentTime=e},I=async()=>{if(t.video.paused){await t.video.play().catch(()=>{return});return}t.video.pause()},f=(n)=>{if(Number.isNaN(n))return;if(!i.setTrim({trimStart:n}))return;let e=i.getState();if(t.video.currentTime<e.trimStart||t.video.currentTime>e.trimEnd)t.video.currentTime=e.trimStart},y=(n)=>{if(Number.isNaN(n))return;if(!i.setTrim({trimEnd:n}))return;let e=i.getState();if(t.video.currentTime>e.trimEnd)t.video.currentTime=e.trimStart},C=()=>{let n=i.getState();if(n.duration<=0)return;if(!i.setTrim({trimStart:0,trimEnd:n.duration}))return;t.video.currentTime=0},$=(n)=>{if(!(n instanceof HTMLElement))return!1;let r=n.tagName.toLowerCase();return r==="input"||r==="textarea"||r==="select"||Boolean(n.closest("input, textarea, select"))};t.urlInput.value=l.lastUrl,t.video.playbackRate=l.playbackRate,i.setPlaybackRate(l.playbackRate),i.setLoopPreview(l.loopPreview),t.loadUrlButton.addEventListener("click",()=>{let n=t.urlInput.value.trim();if(!n)return;m({lastUrl:n}),u(),i.setSource("url",n,null),x(n)}),t.urlInput.addEventListener("change",()=>{m({lastUrl:t.urlInput.value.trim()})}),t.pickFileButton.addEventListener("click",async()=>{if(await k())return;t.fileInput.click()}),t.fileInput.addEventListener("change",()=>{let n=t.fileInput.files?.[0];if(!n)return;u(),d=URL.createObjectURL(n),i.setSource("file",n.name,d),x(d)}),t.video.addEventListener("loadedmetadata",()=>{i.setDuration(t.video.duration||0),t.video.playbackRate=i.getState().playbackRate}),t.video.addEventListener("timeupdate",()=>{i.setCurrentTime(t.video.currentTime||0);let n=i.getState();if(n.loopPreview&&t.video.currentTime>=n.trimEnd)t.video.currentTime=n.trimStart,t.video.play()}),t.video.addEventListener("play",()=>{i.setPlaying(!0)}),t.video.addEventListener("pause",()=>{i.setPlaying(!1)}),t.startRange.addEventListener("input",()=>{f(b(t.startRange.value))}),t.endRange.addEventListener("input",()=>{y(b(t.endRange.value))}),t.startInput.addEventListener("change",()=>{f(b(t.startInput.value))}),t.endInput.addEventListener("change",()=>{y(b(t.endInput.value))}),t.speedSelect.addEventListener("change",()=>{let n=b(t.speedSelect.value);if(!F.has(n)){t.speedSelect.value=String(i.getState().playbackRate);return}t.video.playbackRate=n,i.setPlaybackRate(n),m({playbackRate:n})}),t.loopButton.addEventListener("click",async()=>{let n=i.getState(),r=!n.loopPreview;if(i.setLoopPreview(r),m({loopPreview:r}),r){t.video.currentTime=n.trimStart,await t.video.play().catch(()=>{return});return}t.video.pause()}),window.addEventListener("keydown",(n)=>{if(n.metaKey||n.ctrlKey||n.altKey)return;if($(n.target))return;let r=i.getState();if(n.code==="Space"){n.preventDefault(),I();return}if(n.key==="I"||n.key==="i"){if(n.preventDefault(),r.duration<=0)return;let e=Math.min(t.video.currentTime||0,Math.max(0,r.trimEnd-K));f(e);return}if(n.key==="O"||n.key==="o"){if(n.preventDefault(),r.duration<=0)return;let e=Math.max(t.video.currentTime||0,r.trimStart+K);y(e);return}if(n.key==="X"||n.key==="x"){n.preventDefault(),C();return}if(n.key==="ArrowLeft"||n.key==="ArrowRight"){n.preventDefault();let e=n.shiftKey?1:0.04,p=n.key==="ArrowLeft"?-1:1;B(p*e)}}),i.subscribe((n)=>{X(t,n)}),window.addEventListener("beforeunload",()=>{u()})}G(document.body);
+  `;let H=document.createElement("input");H.type="file",H.accept="video/*",H.style.display="none",s.append(d,f,b),p.append(m,s),n.append(p,H),o.appendChild(n);let N=n.querySelector("#video-url"),$=n.querySelector("#load-url"),v=n.querySelector("#pick-file"),I=n.querySelector("#storage-path"),X=n.querySelector("#refresh-files"),T=n.querySelector("#storage-status"),j=n.querySelector("#storage-list"),Z=n.querySelector("#preview"),q=n.querySelector("#start-range"),z=n.querySelector("#end-range"),K=n.querySelector("#start-input"),G=n.querySelector("#end-input"),J=n.querySelector("#speed-select"),Q=n.querySelector("#loop-preview"),F=n.querySelector("#export-trim"),R=n.querySelector("#export-progress"),O=n.querySelector("#export-status"),V=n.querySelector("#time-label"),t=n.querySelector("#duration-label"),e=n.querySelector("#shortcuts"),l=n.querySelector("#error");return{root:n,urlInput:N,loadUrlButton:$,pickFileButton:v,storagePathInput:I,refreshFilesButton:X,fileListStatus:T,fileList:j,fileInput:H,video:Z,startRange:q,endRange:z,startInput:K,endInput:G,speedSelect:J,loopButton:Q,exportButton:F,exportProgress:R,exportStatusLabel:O,timeLabel:V,durationLabel:t,shortcutsLabel:e,errorLabel:l}}function lt(o,i){let n=Boolean(i.sourceValue),p=i.duration>0,m=Math.max(0,i.trimEnd-i.trimStart),s=String(i.duration||0);if(o.startRange.max=s,o.endRange.max=s,o.startRange.value=String(i.trimStart),o.endRange.value=String(i.trimEnd),o.startInput.value=i.trimStart.toFixed(2),o.endInput.value=i.trimEnd.toFixed(2),o.speedSelect.value=String(i.playbackRate),o.loopButton.disabled=!p||Boolean(i.error)||i.exporting,o.loopButton.textContent=i.loopPreview?"Stop Loop Preview":"Play Trimmed Segment",o.exportButton.disabled=!p||Boolean(i.error)||i.exporting,o.exportButton.textContent=i.exporting?"Exporting...":"Export Trim",o.exportProgress.hidden=!i.exporting,o.exportProgress.value=i.exporting?Math.min(1,Math.max(0,i.exportProgress)):0,o.exportStatusLabel.textContent=i.exportMessage??"",o.timeLabel.textContent=`Current: ${U(i.currentTime)}`,o.durationLabel.textContent=`Selected: ${U(m)}`,o.errorLabel.textContent=i.error??"",o.video.style.opacity=n?"1":"0.6",!p)o.durationLabel.textContent="Selected: 00:00.00"}var pt="video-editor-lite:prefs",_=0.01,tt=new Set([0.5,1,1.5,2]),mt=/\.(mp4|m4v|webm|mov|avi|mkv|ogv|ogg)$/i,Y="mounts/lecture-materials",rt=200,A="/api/storage/",ct=120,xt=["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm","video/mp4"],E={playbackRate:1,loopPreview:!1,lastUrl:"",lastStoragePath:"",lastStorageListPath:Y};function bt(){try{let o=localStorage.getItem(pt);if(!o)return{...E};let i=JSON.parse(o),n=typeof i.playbackRate==="number"&&tt.has(i.playbackRate)?i.playbackRate:E.playbackRate,p=typeof i.loopPreview==="boolean"?i.loopPreview:E.loopPreview,m=typeof i.lastUrl==="string"?i.lastUrl:E.lastUrl,s=typeof i.lastStoragePath==="string"?i.lastStoragePath:E.lastStoragePath,d=typeof i.lastStorageListPath==="string"&&i.lastStorageListPath.trim()?i.lastStorageListPath:E.lastStorageListPath;return{playbackRate:n,loopPreview:p,lastUrl:m,lastStoragePath:s,lastStorageListPath:d}}catch{return{...E}}}function gt(o){try{localStorage.setItem(pt,JSON.stringify(o))}catch{}}function ht(){if(typeof MediaRecorder>"u")return"";for(let o of xt)if(!o||MediaRecorder.isTypeSupported(o))return o;return""}function ft(o){if(o.includes("mp4"))return"mp4";return"webm"}function yt(o){let i=new Date;return`trim-${[i.getFullYear(),String(i.getMonth()+1).padStart(2,"0"),String(i.getDate()).padStart(2,"0"),"-",String(i.getHours()).padStart(2,"0"),String(i.getMinutes()).padStart(2,"0"),String(i.getSeconds()).padStart(2,"0")].join("")}.${o}`}function Mt(o,i){let n=URL.createObjectURL(o),p=document.createElement("a");p.href=n,p.download=i,document.body.appendChild(p),p.click(),p.remove(),setTimeout(()=>URL.revokeObjectURL(n),5000)}function st(o){let i=new P,n=et(o),p=null,m=!1,s=bt(),d=(t)=>{s={...s,...t},gt(s)},f=()=>{let t=window.yaar?.storage;if(!t||typeof t.list!=="function")return null;return t},b=(t)=>{let e=t.trim();if(!e)return"";if(e.startsWith(A))return e.slice(A.length);return e.replace(/^\/+/,"")},H=(t)=>t.split("/").filter(Boolean).map((e)=>encodeURIComponent(e)).join("/"),N=(t)=>{let e=b(t),l=f();if(l?.url)return l.url(e);return`${A}${H(e)}`},$=async(t,e="",l=new Set,r=[])=>{if(r.length>=rt)return r;let c=e||"/";if(l.has(c))return r;l.add(c);let h=await t.list(e);for(let w of h){if(r.length>=rt)break;if(w.isDirectory){await $(t,w.path,l,r);continue}let L=b(w.path);if(mt.test(L))r.push(L)}return r},v=(t)=>{n.fileListStatus.textContent=t},I=()=>{n.fileList.textContent=""},X=(t)=>{if(I(),!t.length){let e=document.createElement("div");e.className="storage-empty",e.textContent="No video files found in this path.",n.fileList.appendChild(e);return}for(let e of t){let l=document.createElement("button");l.type="button",l.className="storage-item",l.textContent=e,l.addEventListener("click",()=>{if(q(N(e),e))v(`Loaded: ${e}`)}),n.fileList.appendChild(l)}},T=async()=>{let t=f();if(!t){I(),v("Storage API unavailable in this environment.");return}let e=b(n.storagePathInput.value)||Y;n.storagePathInput.value=e,d({lastStorageListPath:e}),n.refreshFilesButton.disabled=!0,v(`Scanning ${e}...`);try{let l=await $(t,e);l.sort((r,c)=>r.localeCompare(c)),X(l),v(`Found ${l.length} video file${l.length===1?"":"s"} in ${e}.`)}catch{I(),v(`Unable to list files in ${e}.`)}finally{n.refreshFilesButton.disabled=!1}},j=async()=>{let t=f();if(!t)return!1;let e=[];try{e=await $(t)}catch{return!1}if(!e.length)return!1;e.sort((C,x)=>C.localeCompare(x));let l=e[0],r=e.includes(s.lastStoragePath)?s.lastStoragePath:l,c=e.slice(0,12).map((C,x)=>`${x+1}. ${C}`).join(`
+`),h=e.length-12,w=h>0?`
+...and ${h} more`:"",L=window.prompt(`Pick a storage video (number or path):
+${c}${w}`,r);if(L===null)return!1;let a=L.trim();if(!a)return!1;let M="",u=Number(a);if(Number.isInteger(u)&&u>=1&&u<=e.length)M=e[u-1];else M=b(a);if(!M)return!1;let B=N(M);return q(B,M)},Z=(t)=>{n.video.src=t,n.video.playbackRate=s.playbackRate,n.video.load()},q=(t,e=null)=>{let l=t.trim();if(!l)return!1;z();let r={lastUrl:l};if(e!==null)r.lastStoragePath=b(e);return d(r),n.urlInput.value=l,i.setSource("url",l,null),Z(l),!0},z=()=>{if(!p)return;URL.revokeObjectURL(p),p=null},K=(t)=>{let e=n.video.duration||0;if(e<=0)return;let l=g((n.video.currentTime||0)+t,0,e);n.video.currentTime=l},G=async()=>{if(n.video.paused){await n.video.play().catch(()=>{return});return}n.video.pause()},J=(t)=>{if(Number.isNaN(t))return;if(!i.setTrim({trimStart:t}))return;let l=i.getState();if(n.video.currentTime<l.trimStart||n.video.currentTime>l.trimEnd)n.video.currentTime=l.trimStart},Q=(t)=>{if(Number.isNaN(t))return;if(!i.setTrim({trimEnd:t}))return;let l=i.getState();if(n.video.currentTime>l.trimEnd)n.video.currentTime=l.trimStart},F=()=>{let t=i.getState();if(t.duration<=0)return;if(!i.setTrim({trimStart:0,trimEnd:t.duration}))return;n.video.currentTime=0},R=(t)=>{if(t.readyState>=1)return Promise.resolve();return new Promise((e,l)=>{let r=()=>{h(),e()},c=()=>{h(),l(Error("Unable to read video metadata for export."))},h=()=>{t.removeEventListener("loadedmetadata",r),t.removeEventListener("error",c)};t.addEventListener("loadedmetadata",r,{once:!0}),t.addEventListener("error",c,{once:!0})})},O=async()=>{if(m)return;let t=i.getState();if(t.duration<=0){i.setExportState({exportMessage:"Load a video before exporting."});return}let e=g(t.trimStart,0,t.duration),l=g(t.trimEnd,0,t.duration),r=l-e;if(r<=_){i.setExportState({exportMessage:"Trim range is too small to export."});return}let c=n.video.currentSrc||n.video.src;if(!c){i.setExportState({exportMessage:"No active media source to export."});return}let h=ht();if(typeof MediaRecorder>"u"){i.setExportState({exportMessage:"MediaRecorder is not available in this browser."});return}let w=!n.video.paused,L=n.video.currentTime||0,a=document.createElement("video");a.src=c,a.preload="auto",a.playsInline=!0,a.muted=!0,a.volume=0;let M=[],u=null,B=null,C=0;m=!0,i.setExportState({exporting:!0,exportProgress:0,exportMessage:"Preparing export..."});try{await R(a),a.currentTime=e;let x=a,D=x.captureStream?.bind(x)??x.mozCaptureStream?.bind(x);if(!D)throw Error("This browser does not support capturing media streams from video.");B=D(),u=h?new MediaRecorder(B,{mimeType:h}):new MediaRecorder(B),u.addEventListener("dataavailable",(k)=>{if(k.data&&k.data.size>0)M.push(k.data)});let dt=new Promise((k,W)=>{u.addEventListener("stop",()=>k(),{once:!0}),u.addEventListener("error",()=>W(Error("Recorder failed while exporting.")),{once:!0})});u.start(250),C=window.setInterval(()=>{let k=g(a.currentTime-e,0,r),W=g(k/r,0,1);if(i.setExportState({exportProgress:W,exportMessage:`Exporting ${Math.round(W*100)}%`}),a.currentTime>=l-0.01&&u&&u.state!=="inactive")u.stop()},ct),await a.play(),await dt;let it=h||u.mimeType||"video/webm",ot=new Blob(M,{type:it});if(ot.size<=0)throw Error("Export produced an empty file.");let at=ft(it);Mt(ot,yt(at)),i.setExportState({exporting:!1,exportProgress:1,exportMessage:`Export complete. Downloaded ${r.toFixed(2)}s clip.`})}catch(x){let D=x instanceof Error?x.message:"Unknown export error.";i.setExportState({exporting:!1,exportProgress:0,exportMessage:`Export failed: ${D}`})}finally{if(m=!1,window.clearInterval(C),a.pause(),a.removeAttribute("src"),a.load(),u&&u.state!=="inactive")u.stop();if(B?.getTracks().forEach((x)=>x.stop()),n.video.currentTime=g(L,0,t.duration),w)await n.video.play().catch(()=>{return})}},V=(t)=>{if(!(t instanceof HTMLElement))return!1;let e=t.tagName.toLowerCase();return e==="input"||e==="textarea"||e==="select"||Boolean(t.closest("input, textarea, select"))};return n.urlInput.value=s.lastUrl,n.storagePathInput.value=b(s.lastStorageListPath)||Y,n.video.playbackRate=s.playbackRate,i.setPlaybackRate(s.playbackRate),i.setLoopPreview(s.loopPreview),n.loadUrlButton.addEventListener("click",()=>{q(n.urlInput.value)}),n.urlInput.addEventListener("change",()=>{d({lastUrl:n.urlInput.value.trim()})}),n.refreshFilesButton.addEventListener("click",()=>{T()}),n.storagePathInput.addEventListener("change",()=>{let t=b(n.storagePathInput.value)||Y;n.storagePathInput.value=t,d({lastStorageListPath:t}),T()}),n.pickFileButton.addEventListener("click",async()=>{if(await j())return;n.fileInput.click()}),n.fileInput.addEventListener("change",()=>{let t=n.fileInput.files?.[0];if(!t)return;z(),p=URL.createObjectURL(t),i.setSource("file",t.name,p),Z(p)}),n.video.addEventListener("loadedmetadata",()=>{i.setDuration(n.video.duration||0),n.video.playbackRate=i.getState().playbackRate}),n.video.addEventListener("timeupdate",()=>{i.setCurrentTime(n.video.currentTime||0);let t=i.getState();if(t.loopPreview&&n.video.currentTime>=t.trimEnd)n.video.currentTime=t.trimStart,n.video.play()}),n.video.addEventListener("play",()=>{i.setPlaying(!0)}),n.video.addEventListener("pause",()=>{i.setPlaying(!1)}),n.startRange.addEventListener("input",()=>{J(S(n.startRange.value))}),n.endRange.addEventListener("input",()=>{Q(S(n.endRange.value))}),n.startInput.addEventListener("change",()=>{J(S(n.startInput.value))}),n.endInput.addEventListener("change",()=>{Q(S(n.endInput.value))}),n.speedSelect.addEventListener("change",()=>{let t=S(n.speedSelect.value);if(!tt.has(t)){n.speedSelect.value=String(i.getState().playbackRate);return}n.video.playbackRate=t,i.setPlaybackRate(t),d({playbackRate:t})}),n.loopButton.addEventListener("click",async()=>{let t=i.getState(),e=!t.loopPreview;if(i.setLoopPreview(e),d({loopPreview:e}),e){n.video.currentTime=t.trimStart,await n.video.play().catch(()=>{return});return}n.video.pause()}),n.exportButton.addEventListener("click",()=>{O()}),window.addEventListener("keydown",(t)=>{if(t.metaKey||t.ctrlKey||t.altKey)return;if(V(t.target))return;let e=i.getState();if(t.code==="Space"){t.preventDefault(),G();return}if(t.key==="I"||t.key==="i"){if(t.preventDefault(),e.duration<=0)return;let l=Math.min(n.video.currentTime||0,Math.max(0,e.trimEnd-_));J(l);return}if(t.key==="O"||t.key==="o"){if(t.preventDefault(),e.duration<=0)return;let l=Math.max(n.video.currentTime||0,e.trimStart+_);Q(l);return}if(t.key==="X"||t.key==="x"){t.preventDefault(),F();return}if(t.key==="ArrowLeft"||t.key==="ArrowRight"){t.preventDefault();let l=t.shiftKey?1:0.04,r=t.key==="ArrowLeft"?-1:1;K(r*l)}}),T(),i.subscribe((t)=>{lt(n,t)}),window.addEventListener("beforeunload",()=>{z()}),{getCurrentSource:()=>{let t=i.getState();return{sourceKind:t.sourceKind,sourceValue:t.sourceValue,objectUrl:t.objectUrl}},getPlaybackState:()=>{let t=i.getState();return{playing:t.playing,paused:n.video.paused,playbackRate:t.playbackRate,loopPreview:t.loopPreview}},getTimeline:()=>{let t=i.getState();return{currentTime:t.currentTime,duration:t.duration}},getTrimRange:()=>{let t=i.getState();return{trimStart:t.trimStart,trimEnd:t.trimEnd,selectedDuration:Math.max(0,t.trimEnd-t.trimStart)}},loadSource:(t)=>{let e=typeof t.url==="string"?t.url.trim():"",l=typeof t.path==="string"?b(t.path):"";if(!e&&!l)throw Error('Provide either "url" or "path".');let r=e||N(l);if(!q(r,l||null))throw Error("Unable to load source.");return{ok:!0,source:r}},play:async()=>{return await n.video.play(),{ok:!0}},pause:()=>{return n.video.pause(),{ok:!0}},seek:(t)=>{if(!Number.isFinite(t))throw Error("time must be a number.");let e=n.video.duration||i.getState().duration||0;if(e<=0)throw Error("Load a video before seeking.");return n.video.currentTime=g(t,0,e),{ok:!0,currentTime:n.video.currentTime}},setPlaybackRate:(t)=>{if(!tt.has(t))throw Error("Unsupported playback rate.");return n.video.playbackRate=t,i.setPlaybackRate(t),d({playbackRate:t}),{ok:!0,playbackRate:t}}}}var y=st(document.body),nt=window.yaar?.app;if(nt&&typeof nt.register==="function")nt.register({appId:"video-editor-lite",name:"Video Editor Lite",state:{currentSource:{description:"Current media source information.",handler:()=>y.getCurrentSource()},playbackState:{description:"Playback status including play/pause, loop preview, and rate.",handler:()=>y.getPlaybackState()},timeline:{description:"Current playback time and total duration in seconds.",handler:()=>y.getTimeline()},trimRange:{description:"Current trim in/out range and selected duration in seconds.",handler:()=>y.getTrimRange()}},commands:{loadSource:{description:"Load a media source by direct URL or storage path.",params:{type:"object",properties:{url:{type:"string"},path:{type:"string",description:"Path under /api/storage/."}},additionalProperties:!1},handler:(o)=>y.loadSource({url:typeof o.url==="string"?o.url:void 0,path:typeof o.path==="string"?o.path:void 0})},play:{description:"Start playback.",params:{type:"object",properties:{},additionalProperties:!1},handler:async()=>y.play()},pause:{description:"Pause playback.",params:{type:"object",properties:{},additionalProperties:!1},handler:()=>y.pause()},seek:{description:"Seek to an absolute playback time in seconds.",params:{type:"object",properties:{time:{type:"number",minimum:0}},required:["time"],additionalProperties:!1},handler:(o)=>{let i=typeof o.time==="number"?o.time:Number.NaN;return y.seek(i)}},setPlaybackRate:{description:"Set playback speed. Allowed values: 0.5, 1, 1.5, 2.",params:{type:"object",properties:{rate:{type:"number",enum:[0.5,1,1.5,2]}},required:["rate"],additionalProperties:!1},handler:(o)=>{let i=typeof o.rate==="number"?o.rate:Number.NaN;return y.setPlaybackRate(i)}}}});
 
 </script>
 </body>

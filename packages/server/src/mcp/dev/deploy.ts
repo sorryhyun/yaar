@@ -13,7 +13,7 @@ import { actionEmitter } from '../action-emitter.js';
 import { componentLayoutSchema } from '@yaar/shared';
 import type { AppManifest } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd, regenerateSkillMd } from './helpers.js';
-import { ensureAppShortcut } from '../../storage/shortcuts.js';
+import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -285,7 +285,7 @@ export function registerDeployTools(server: McpServer): void {
         // Notify frontend to refresh desktop app icons
         actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
-        // Auto-create desktop shortcut
+        // Manage desktop shortcut
         if (createShortcut !== false) {
           await ensureAppShortcut({
             id: appId,
@@ -304,6 +304,15 @@ export function registerDeployTools(server: McpServer): void {
               createdAt: Date.now(),
             },
           });
+        } else {
+          // Remove existing shortcut if createShortcut is explicitly false
+          const removed = await removeAppShortcut(appId);
+          if (removed) {
+            actionEmitter.emitAction({
+              type: 'desktop.removeShortcut',
+              shortcutId: `app-${appId}`,
+            });
+          }
         }
 
         return ok(

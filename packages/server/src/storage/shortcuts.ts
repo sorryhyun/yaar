@@ -75,3 +75,58 @@ export async function ensureAppShortcut(app: {
 export async function removeAppShortcut(appId: string): Promise<boolean> {
   return removeShortcut(`app-${appId}`);
 }
+
+/**
+ * Sync shortcuts with the current app list:
+ * - Remove shortcuts for apps that no longer exist or have createShortcut: false
+ * - Ensure shortcuts exist for apps that should have them
+ * Returns the list of removed shortcut IDs (for emitting frontend actions).
+ */
+export async function syncAppShortcuts(
+  apps: Array<{
+    id: string;
+    name: string;
+    icon?: string;
+    iconType?: 'emoji' | 'image';
+    createShortcut?: boolean;
+  }>,
+): Promise<string[]> {
+  const shortcuts = await readShortcuts();
+  const appIds = new Set(apps.filter((a) => a.createShortcut !== false).map((a) => a.id));
+  const removedIds: string[] = [];
+  let changed = false;
+
+  // Remove stale app shortcuts
+  const result = shortcuts.filter((s) => {
+    if (s.type === 'app' && !appIds.has(s.target)) {
+      removedIds.push(s.id);
+      changed = true;
+      return false;
+    }
+    return true;
+  });
+
+  // Ensure shortcuts exist for apps that need them
+  for (const app of apps) {
+    if (app.createShortcut === false) continue;
+    const shortcutId = `app-${app.id}`;
+    if (!result.some((s) => s.id === shortcutId)) {
+      result.push({
+        id: shortcutId,
+        label: app.name,
+        icon: app.icon || '📦',
+        ...(app.iconType && { iconType: app.iconType }),
+        type: 'app',
+        target: app.id,
+        createdAt: Date.now(),
+      });
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await writeShortcuts(result);
+  }
+
+  return removedIds;
+}

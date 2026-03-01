@@ -81,7 +81,12 @@ export function registerReadTools(server: McpServer): void {
           return ok(JSON.stringify({ sandboxId, path, files }, null, 2));
         }
         const content = await Bun.file(fullPath).text();
-        return ok(content);
+        const lines = content.split('\n');
+        const width = String(lines.length).length;
+        const numbered = lines
+          .map((line, i) => `${String(i + 1).padStart(width)}\t${line}`)
+          .join('\n');
+        return ok(numbered);
       } catch {
         return error(`File not found: ${path}`);
       }

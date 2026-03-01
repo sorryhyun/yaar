@@ -1,8 +1,8 @@
 {
   "id": "video-editor-lite",
   "name": "Video Editor Lite",
-  "icon": "🎞️",
-  "description": "Basic non-destructive video editor with trim preview",
+  "icon": "🎬",
+  "description": "Trim and preview videos with in-browser export for selected ranges.",
   "version": "1.0.0",
   "author": "YAAR"
 }

@@ -51,7 +51,7 @@ Task agents inherit your full conversation context and MCP tools. They work auto
 - **component**: Interactive UI with buttons, forms, layouts (see tool description for types)
 - **markdown**: Documentation, explanations, formatted text
 - **iframe**: Compiled apps via \`app://appId\` (e.g. \`app://excel-lite\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
-- **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes
+- **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes. **When http_get or WebSearch fails** (blocked domain, timeout, access denied), use browser:open as a fallback to load the page directly. The browser tool works with any URL without domain restrictions
 
 Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 
