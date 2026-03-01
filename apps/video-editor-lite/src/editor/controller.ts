@@ -1,6 +1,19 @@
 import { EditorStore } from './state';
 import { createEditorUI, renderEditor } from './ui';
 import { clamp, parseNumber } from './utils/time';
+import type { Composition } from '../core/types';
+import { DEFAULT_CONFIG } from '../core/types';
+import { createScene } from '../core/scene-registry';
+import type { SceneProps } from '../core/scene-registry';
+import { PreviewPlayer } from '../player/preview-player';
+import { exportComposition, downloadBlob } from '../player/exporter';
+
+// Register all scene types (side-effect imports)
+import '../scenes/solid';
+import '../scenes/text';
+import '../scenes/shape';
+import '../scenes/image';
+import '../scenes/video-clip';
 
 const STORAGE_KEY = 'video-editor-lite:prefs';
 const MIN_TRIM_GAP = 0.01;
@@ -53,6 +66,15 @@ export interface EditorControllerApi {
   pause: () => { ok: true };
   seek: (time: number) => { ok: true; currentTime: number };
   setPlaybackRate: (rate: number) => { ok: true; playbackRate: number };
+  // Creator mode API
+  createComposition: (params: { width?: number; height?: number; fps?: number; durationInFrames?: number }) => { ok: true; config: Composition['config'] };
+  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps }) => { ok: true; sceneId: string };
+  updateScene: (params: { id: string; from?: number; durationInFrames?: number; props?: SceneProps }) => { ok: true };
+  removeScene: (params: { id: string }) => { ok: true };
+  reorderScenes: (params: { ids: string[] }) => { ok: true };
+  getComposition: () => { composition: Composition | null };
+  preview: () => { ok: true };
+  exportVideo: () => Promise<{ ok: true }>;
 }
 
 function loadPrefs(): EditorPrefs {
@@ -120,7 +142,7 @@ function exportExtensionFromMimeType(mimeType: string): string {
   return 'webm';
 }
 
-function makeExportFilename(extension: string): string {
+function makeExportFilename(extension: string, prefix = 'trim'): string {
   const now = new Date();
   const stamp = [
     now.getFullYear(),
@@ -131,18 +153,12 @@ function makeExportFilename(extension: string): string {
     String(now.getMinutes()).padStart(2, '0'),
     String(now.getSeconds()).padStart(2, '0'),
   ].join('');
-  return `trim-${stamp}.${extension}`;
+  return `${prefix}-${stamp}.${extension}`;
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const downloadUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = downloadUrl;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+let sceneIdCounter = 0;
+function nextSceneId(): string {
+  return `s${++sceneIdCounter}${Date.now().toString(36)}`;
 }
 
 export function createEditorController(parent: HTMLElement): EditorControllerApi {
@@ -151,6 +167,8 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
   let activeObjectUrl: string | null = null;
   let exportingInProgress = false;
   let prefs = loadPrefs();
+  let previewPlayer: PreviewPlayer | null = null;
+  let currentStorageFiles: string[] = [];
 
   const persistPrefs = (patch: Partial<EditorPrefs>): void => {
     prefs = { ...prefs, ...patch };
@@ -237,30 +255,62 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
     ui.fileList.textContent = '';
   };
 
-  const renderSidebarFiles = (paths: string[]): void => {
+  const applyFileFilter = (): void => {
+    const query = ui.fileSearch.value.trim().toLowerCase();
+    const filtered = query
+      ? currentStorageFiles.filter((p) => p.toLowerCase().includes(query))
+      : currentStorageFiles;
+
     clearSidebarList();
 
-    if (!paths.length) {
+    if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'storage-empty';
-      empty.textContent = 'No video files found in this path.';
+      empty.textContent = query ? `No files match "${query}".` : 'No video files found in this path.';
       ui.fileList.appendChild(empty);
       return;
     }
 
-    for (const path of paths) {
+    for (const path of filtered) {
+      const segments = path.split('/');
+      const filename = segments.pop() ?? path;
+      const dir = segments.length ? segments.join('/') + '/' : '';
+
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'storage-item';
-      item.textContent = path;
+      item.title = path;
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'file-name';
+      nameEl.textContent = '▶  ' + filename;
+      item.appendChild(nameEl);
+
+      if (dir) {
+        const dirEl = document.createElement('div');
+        dirEl.className = 'file-dir';
+        dirEl.textContent = dir;
+        item.appendChild(dirEl);
+      }
+
       item.addEventListener('click', () => {
         const loaded = loadSourceUrl(toStorageUrl(path), path);
         if (loaded) {
-          setSidebarMessage(`Loaded: ${path}`);
+          setSidebarMessage(`Loaded: ${filename}`);
+          ui.fileList.querySelectorAll<HTMLElement>('.storage-item').forEach((el) =>
+            el.classList.remove('active'),
+          );
+          item.classList.add('active');
         }
       });
+
       ui.fileList.appendChild(item);
     }
+  };
+
+  const renderSidebarFiles = (paths: string[]): void => {
+    currentStorageFiles = [...paths];
+    applyFileFilter();
   };
 
   const refreshStorageList = async (): Promise<void> => {
@@ -578,7 +628,14 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
       }
 
       const extension = exportExtensionFromMimeType(blobType);
-      downloadBlob(outputBlob, makeExportFilename(extension));
+      const anchor = document.createElement('a');
+      const downloadUrl = URL.createObjectURL(outputBlob);
+      anchor.href = downloadUrl;
+      anchor.download = makeExportFilename(extension);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
 
       store.setExportState({
         exporting: false,
@@ -625,6 +682,113 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
     );
   };
 
+  // === Creator mode helpers ===
+
+  const ensureComposition = (): Composition => {
+    const state = store.getState();
+    if (state.composition) return state.composition;
+    const comp: Composition = { config: { ...DEFAULT_CONFIG }, scenes: [] };
+    store.setComposition(comp);
+    return comp;
+  };
+
+  const syncPlayerToComposition = (): void => {
+    const state = store.getState();
+    if (!state.composition) return;
+
+    if (previewPlayer) {
+      previewPlayer.setComposition(state.composition);
+    } else {
+      previewPlayer = new PreviewPlayer(ui.compositionCanvas, state.composition);
+      previewPlayer.setOnFrameChange((frame) => {
+        store.setCreatorFrame(frame);
+      });
+    }
+
+    // Render current frame
+    previewPlayer.seek(state.creatorFrame);
+  };
+
+  const addSceneToComposition = (type: string, from?: number, durationInFrames?: number, props?: SceneProps): string => {
+    const comp = ensureComposition();
+    const id = nextSceneId();
+    const sceneFrom = from ?? 0;
+    const sceneDur = durationInFrames ?? Math.min(comp.config.durationInFrames, 90);
+    const sceneProps = props ?? getDefaultPropsForType(type);
+
+    const scene = createScene(type, id, sceneFrom, sceneDur, sceneProps);
+    store.addScene(scene);
+    syncPlayerToComposition();
+    return id;
+  };
+
+  const getDefaultPropsForType = (type: string): SceneProps => {
+    switch (type) {
+      case 'solid':
+        return { color: '#1a1a2e' };
+      case 'text':
+        return { text: 'Hello World', fontSize: 64, color: '#ffffff', animation: 'fadeIn' };
+      case 'shape':
+        return { shape: 'rect', x: 200, y: 200, width: 200, height: 150, color: '#3498db' };
+      case 'image':
+        return { src: '' };
+      case 'video-clip':
+        return { src: '' };
+      default:
+        return {};
+    }
+  };
+
+  const handleCreatorPlayPause = (): void => {
+    if (!previewPlayer) {
+      syncPlayerToComposition();
+      if (!previewPlayer) return;
+    }
+
+    if (previewPlayer.getState() === 'playing') {
+      previewPlayer.pause();
+      store.setCreatorPlaying(false);
+    } else {
+      previewPlayer.play();
+      store.setCreatorPlaying(true);
+    }
+  };
+
+  const handleCreatorExport = async (): Promise<void> => {
+    const state = store.getState();
+    if (!state.composition || exportingInProgress) return;
+
+    exportingInProgress = true;
+    store.setExportState({ exporting: true, exportProgress: 0, exportMessage: 'Exporting composition...' });
+
+    try {
+      const blob = await exportComposition(state.composition, (p) => {
+        store.setExportState({
+          exportProgress: p.percent,
+          exportMessage: `Exporting ${Math.round(p.percent * 100)}% (frame ${p.frame}/${p.totalFrames})`,
+        });
+      });
+
+      downloadBlob(blob, makeExportFilename('webm', 'composition'));
+      store.setExportState({
+        exporting: false,
+        exportProgress: 1,
+        exportMessage: 'Export complete!',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown export error.';
+      store.setExportState({
+        exporting: false,
+        exportProgress: 0,
+        exportMessage: `Export failed: ${message}`,
+      });
+    } finally {
+      exportingInProgress = false;
+    }
+  };
+
+  // === Event listeners: Edit mode ===
+
   ui.urlInput.value = prefs.lastUrl;
   ui.storagePathInput.value =
     normalizeStoragePath(prefs.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
@@ -649,6 +813,10 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
     ui.storagePathInput.value = nextPath;
     persistPrefs({ lastStorageListPath: nextPath });
     void refreshStorageList();
+  });
+
+  ui.fileSearch.addEventListener('input', () => {
+    applyFileFilter();
   });
 
   ui.pickFileButton.addEventListener('click', async () => {
@@ -741,6 +909,101 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
     void exportTrimmedSegment();
   });
 
+  // === Event listeners: Mode toggle ===
+
+  ui.editTabButton.addEventListener('click', () => {
+    store.setMode('edit');
+    if (previewPlayer) {
+      previewPlayer.pause();
+      store.setCreatorPlaying(false);
+    }
+  });
+
+  ui.createTabButton.addEventListener('click', () => {
+    store.setMode('create');
+    ensureComposition();
+    syncPlayerToComposition();
+  });
+
+  // === Event listeners: Creator mode ===
+
+  ui.creatorPlayButton.addEventListener('click', () => {
+    handleCreatorPlayPause();
+  });
+
+  ui.creatorExportButton.addEventListener('click', () => {
+    void handleCreatorExport();
+  });
+
+  ui.creatorFrameSlider.addEventListener('input', () => {
+    const frame = parseNumber(ui.creatorFrameSlider.value);
+    if (Number.isNaN(frame)) return;
+    if (previewPlayer) {
+      previewPlayer.pause();
+      store.setCreatorPlaying(false);
+      previewPlayer.seek(frame);
+    }
+    store.setCreatorFrame(frame);
+  });
+
+  ui.addSceneButton.addEventListener('click', () => {
+    const type = ui.addSceneSelect.value;
+    addSceneToComposition(type);
+  });
+
+  // Scene panel click delegation
+  ui.scenePanel.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+
+    // Delete button
+    const deleteId = target.dataset.deleteSceneId;
+    if (deleteId) {
+      store.removeScene(deleteId);
+      syncPlayerToComposition();
+      return;
+    }
+
+    // Select scene
+    const item = target.closest<HTMLElement>('.scene-item');
+    if (item?.dataset.sceneId) {
+      store.setSelectedScene(item.dataset.sceneId);
+    }
+  });
+
+  // Timeline click delegation
+  ui.timelineTrack.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.dataset.sceneId) {
+      store.setSelectedScene(target.dataset.sceneId);
+    }
+  });
+
+  // Composition settings
+  const handleCompSettingChange = (): void => {
+    const w = parseNumber(ui.compWidthInput.value);
+    const h = parseNumber(ui.compHeightInput.value);
+    const fps = parseNumber(ui.compFpsInput.value);
+    const dur = parseNumber(ui.compDurationInput.value);
+
+    const patch: Record<string, number> = {};
+    if (!Number.isNaN(w) && w >= 100) patch.width = w;
+    if (!Number.isNaN(h) && h >= 100) patch.height = h;
+    if (!Number.isNaN(fps) && fps >= 1) patch.fps = fps;
+    if (!Number.isNaN(dur) && dur >= 1) patch.durationInFrames = dur;
+
+    if (Object.keys(patch).length) {
+      store.updateCompositionConfig(patch);
+      syncPlayerToComposition();
+    }
+  };
+
+  ui.compWidthInput.addEventListener('change', handleCompSettingChange);
+  ui.compHeightInput.addEventListener('change', handleCompSettingChange);
+  ui.compFpsInput.addEventListener('change', handleCompSettingChange);
+  ui.compDurationInput.addEventListener('change', handleCompSettingChange);
+
+  // === Keyboard shortcuts ===
+
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
       return;
@@ -754,41 +1017,64 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
 
     if (event.code === 'Space') {
       event.preventDefault();
-      void togglePlayPause();
+      if (state.mode === 'create') {
+        handleCreatorPlayPause();
+      } else {
+        void togglePlayPause();
+      }
       return;
     }
 
-    if (event.key === 'I' || event.key === 'i') {
-      event.preventDefault();
-      if (state.duration <= 0) {
+    // Edit-mode-only shortcuts
+    if (state.mode === 'edit') {
+      if (event.key === 'I' || event.key === 'i') {
+        event.preventDefault();
+        if (state.duration <= 0) {
+          return;
+        }
+        const nextStart = Math.min(ui.video.currentTime || 0, Math.max(0, state.trimEnd - MIN_TRIM_GAP));
+        applyTrimStart(nextStart);
         return;
       }
-      const nextStart = Math.min(ui.video.currentTime || 0, Math.max(0, state.trimEnd - MIN_TRIM_GAP));
-      applyTrimStart(nextStart);
-      return;
-    }
 
-    if (event.key === 'O' || event.key === 'o') {
-      event.preventDefault();
-      if (state.duration <= 0) {
+      if (event.key === 'O' || event.key === 'o') {
+        event.preventDefault();
+        if (state.duration <= 0) {
+          return;
+        }
+        const nextEnd = Math.max(ui.video.currentTime || 0, state.trimStart + MIN_TRIM_GAP);
+        applyTrimEnd(nextEnd);
         return;
       }
-      const nextEnd = Math.max(ui.video.currentTime || 0, state.trimStart + MIN_TRIM_GAP);
-      applyTrimEnd(nextEnd);
-      return;
+
+      if (event.key === 'X' || event.key === 'x') {
+        event.preventDefault();
+        resetTrimToFullDuration();
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        const step = event.shiftKey ? 1 : 0.04;
+        const direction = event.key === 'ArrowLeft' ? -1 : 1;
+        seekBy(direction * step);
+      }
     }
 
-    if (event.key === 'X' || event.key === 'x') {
-      event.preventDefault();
-      resetTrimToFullDuration();
-      return;
-    }
-
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.preventDefault();
-      const step = event.shiftKey ? 1 : 0.04;
-      const direction = event.key === 'ArrowLeft' ? -1 : 1;
-      seekBy(direction * step);
+    // Create-mode arrow keys: scrub frames
+    if (state.mode === 'create') {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        const direction = event.key === 'ArrowLeft' ? -1 : 1;
+        const nextFrame = clamp(state.creatorFrame + direction * step, 0, (state.composition?.config.durationInFrames ?? 1) - 1);
+        if (previewPlayer) {
+          previewPlayer.pause();
+          store.setCreatorPlaying(false);
+          previewPlayer.seek(nextFrame);
+        }
+        store.setCreatorFrame(nextFrame);
+      }
     }
   });
 
@@ -800,7 +1086,10 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
 
   window.addEventListener('beforeunload', () => {
     releaseActiveObjectUrl();
+    previewPlayer?.destroy();
   });
+
+  // === Public API ===
 
   return {
     getCurrentSource: () => {
@@ -839,7 +1128,7 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
       const urlParam = typeof params.url === 'string' ? params.url.trim() : '';
       const pathParam = typeof params.path === 'string' ? normalizeStoragePath(params.path) : '';
       if (!urlParam && !pathParam) {
-        throw new Error('Provide either \"url\" or \"path\".');
+        throw new Error('Provide either "url" or "path".');
       }
 
       const targetUrl = urlParam || toStorageUrl(pathParam);
@@ -876,6 +1165,86 @@ export function createEditorController(parent: HTMLElement): EditorControllerApi
       store.setPlaybackRate(rate);
       persistPrefs({ playbackRate: rate });
       return { ok: true as const, playbackRate: rate };
+    },
+
+    // Creator mode API
+    createComposition: (params) => {
+      const config = {
+        width: params.width ?? DEFAULT_CONFIG.width,
+        height: params.height ?? DEFAULT_CONFIG.height,
+        fps: params.fps ?? DEFAULT_CONFIG.fps,
+        durationInFrames: params.durationInFrames ?? DEFAULT_CONFIG.durationInFrames,
+      };
+      const comp: Composition = { config, scenes: [] };
+      store.setComposition(comp);
+      store.setMode('create');
+      syncPlayerToComposition();
+      return { ok: true as const, config };
+    },
+
+    addScene: (params) => {
+      const id = addSceneToComposition(params.type, params.from, params.durationInFrames, params.props);
+      return { ok: true as const, sceneId: id };
+    },
+
+    updateScene: (params) => {
+      const state = store.getState();
+      if (!state.composition) throw new Error('No composition.');
+      const existing = state.composition.scenes.find((s) => s.id === params.id);
+      if (!existing) throw new Error(`Scene "${params.id}" not found.`);
+
+      const from = params.from ?? existing.from;
+      const dur = params.durationInFrames ?? existing.durationInFrames;
+      const mergedProps = { ...getDefaultPropsForType(existing.type), ...params.props };
+      const updated = createScene(existing.type, existing.id, from, dur, mergedProps);
+      store.updateScene(params.id, updated);
+      syncPlayerToComposition();
+      return { ok: true as const };
+    },
+
+    removeScene: (params) => {
+      store.removeScene(params.id);
+      syncPlayerToComposition();
+      return { ok: true as const };
+    },
+
+    reorderScenes: (params) => {
+      store.reorderScenes(params.ids);
+      syncPlayerToComposition();
+      return { ok: true as const };
+    },
+
+    getComposition: () => {
+      const state = store.getState();
+      if (!state.composition) return { composition: null };
+      return {
+        composition: {
+          config: { ...state.composition.config },
+          scenes: state.composition.scenes.map((s) => ({
+            id: s.id,
+            type: s.type,
+            from: s.from,
+            durationInFrames: s.durationInFrames,
+            render: s.render,
+          })),
+        },
+      };
+    },
+
+    preview: () => {
+      store.setMode('create');
+      ensureComposition();
+      syncPlayerToComposition();
+      if (previewPlayer) {
+        previewPlayer.play();
+        store.setCreatorPlaying(true);
+      }
+      return { ok: true as const };
+    },
+
+    exportVideo: async () => {
+      await handleCreatorExport();
+      return { ok: true as const };
     },
   };
 }

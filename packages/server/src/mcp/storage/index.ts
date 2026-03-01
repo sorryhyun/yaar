@@ -25,7 +25,7 @@ export function registerStorageTools(server: McpServer): void {
     'read',
     {
       description:
-        'Read a file from the persistent storage directory. For PDF files, returns page count — display them by creating an iframe window with src="/api/storage/<path>" to use the browser\'s built-in PDF viewer. NEVER render PDF content as markdown.',
+        'Read a file from the persistent storage directory. For PDF files, returns page count — display them by creating an iframe window with content="storage://<path>" to use the browser\'s built-in PDF viewer. NEVER render PDF content as markdown. All storage files are accessible via storage:// protocol (e.g. storage://docs/page.html for iframes, storage://images/photo.png for images).',
       inputSchema: {
         path: z.string().describe('Path to the file relative to storage/'),
       },
@@ -39,7 +39,7 @@ export function registerStorageTools(server: McpServer): void {
       if (result.images && result.images.length > 0) {
         const isPdf = result.totalPages != null;
         const hint = isPdf
-          ? `\n\nTo display this PDF, create an iframe window with src="/api/storage/${args.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`
+          ? `\n\nTo display this PDF, create an iframe window with content="storage://${args.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`
           : '';
         return okWithImages(
           result.content! + hint,
@@ -64,7 +64,7 @@ export function registerStorageTools(server: McpServer): void {
     async (args) => {
       const result = await storageWrite(args.path, args.content);
       if (!result.success) return error(result.error!);
-      return ok(`Written to ${args.path}`);
+      return ok(`Written to storage://${args.path}`);
     }
   );
 

@@ -2,7 +2,7 @@
   "id": "video-editor-lite",
   "name": "Video Editor Lite",
   "icon": "🎬",
-  "description": "Trim and preview videos with in-browser export for selected ranges.",
-  "version": "1.0.0",
+  "description": "Trim, edit and compose video. Full-height sidebar layout with mode toggle, file browser with search, and composition settings.",
+  "version": "1.2.0",
   "author": "YAAR"
 }

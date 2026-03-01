@@ -1,7 +1,7 @@
 {
   "icon": "🎬",
   "name": "Video Editor Lite",
-  "description": "Trim and preview videos with in-browser export for selected ranges.",
+  "description": "Trim, edit and compose video. Full-height sidebar layout with mode toggle, file browser with search, and composition settings.",
   "run": "static/index.html",
   "appProtocol": true,
   "protocol": {
@@ -17,6 +17,9 @@
       },
       "trimRange": {
         "description": "Current trim in/out range and selected duration in seconds."
+      },
+      "composition": {
+        "description": "Current composition state including config and scenes."
       }
     },
     "commands": {
@@ -37,7 +40,7 @@
         }
       },
       "play": {
-        "description": "Start playback.",
+        "description": "Start playback (edit mode: video, create mode: composition preview).",
         "params": {
           "type": "object",
           "properties": {},
@@ -77,6 +80,133 @@
             }
           },
           "required": ["rate"],
+          "additionalProperties": false
+        }
+      },
+      "createComposition": {
+        "description": "Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "number",
+              "description": "Canvas width in pixels"
+            },
+            "height": {
+              "type": "number",
+              "description": "Canvas height in pixels"
+            },
+            "fps": {
+              "type": "number",
+              "description": "Frames per second"
+            },
+            "durationInFrames": {
+              "type": "number",
+              "description": "Total composition length in frames"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "addScene": {
+        "description": "Add a scene to the composition. Types: solid, text, shape, image, video-clip.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["solid", "text", "shape", "image", "video-clip"]
+            },
+            "from": {
+              "type": "number",
+              "description": "Start frame (default: 0)"
+            },
+            "durationInFrames": {
+              "type": "number",
+              "description": "Scene duration in frames"
+            },
+            "props": {
+              "type": "object",
+              "description": "Scene-specific properties. solid: {color, colorEnd, gradient}. text: {text, fontSize, fontFamily, color, x, y, align, animation, shadow}. shape: {shape, x, y, width, height, radius, color, strokeColor, keyframes}. image: {src, fit, kenBurns}. video-clip: {src, trimStart, trimEnd}."
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      },
+      "updateScene": {
+        "description": "Update an existing scene by ID.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "from": {
+              "type": "number"
+            },
+            "durationInFrames": {
+              "type": "number"
+            },
+            "props": {
+              "type": "object",
+              "description": "Updated scene properties (merged with defaults)."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "removeScene": {
+        "description": "Remove a scene by ID.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "reorderScenes": {
+        "description": "Reorder scenes by providing an array of IDs in the desired order.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["ids"],
+          "additionalProperties": false
+        }
+      },
+      "preview": {
+        "description": "Switch to Create mode and start playing the composition preview.",
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      "exportVideo": {
+        "description": "Export the composition as a WebM video file.",
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      "getComposition": {
+        "description": "Get the current composition state.",
+        "params": {
+          "type": "object",
+          "properties": {},
           "additionalProperties": false
         }
       }

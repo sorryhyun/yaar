@@ -84,9 +84,9 @@ export function registerReadTools(server: McpServer): void {
         const lines = content.split('\n');
         const width = String(lines.length).length;
         const numbered = lines
-          .map((line, i) => `${String(i + 1).padStart(width)}\t${line}`)
+          .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
           .join('\n');
-        return ok(numbered);
+        return ok(`── ${path} (${lines.length} lines) ──\n${numbered}`);
       } catch {
         return error(`File not found: ${path}`);
       }

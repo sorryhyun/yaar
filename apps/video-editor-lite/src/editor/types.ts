@@ -1,6 +1,10 @@
+import type { Composition } from '../core/types';
+
 export type SourceKind = 'url' | 'file' | null;
+export type EditorMode = 'edit' | 'create';
 
 export interface EditorState {
+  mode: EditorMode;
   sourceKind: SourceKind;
   sourceValue: string;
   objectUrl: string | null;
@@ -15,6 +19,11 @@ export interface EditorState {
   exportProgress: number;
   exportMessage: string | null;
   error: string | null;
+  // Creator mode state
+  composition: Composition | null;
+  selectedSceneId: string | null;
+  creatorPlaying: boolean;
+  creatorFrame: number;
 }
 
 export interface TrimPatch {

@@ -21,7 +21,7 @@ Use a notification for quick responses ("done", "on it"). Open a window for anyt
 **Renderer selection:**
 - **component**: Interactive UI with buttons, forms, layouts (see tool description for types)
 - **markdown**: Documentation, explanations, formatted text
-- **iframe**: Compiled apps via \`app://appId\` (e.g. \`app://excel-lite\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
+- **iframe**: Compiled apps via \`app://appId\` (e.g. \`app://excel-lite\`), or storage files via \`storage://path\` (e.g. \`storage://mysite/index.html\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
 - **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes
 
 Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`

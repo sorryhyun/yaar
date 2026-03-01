@@ -153,9 +153,14 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
       };
     }
 
-    // Text file
+    // Text file — add line numbers for source code
     const content = await Bun.file(validatedPath).text();
-    return { success: true, content };
+    const lines = content.split('\n');
+    const width = String(lines.length).length;
+    const numbered = lines
+      .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
+      .join('\n');
+    return { success: true, content: `── ${filePath} (${lines.length} lines) ──\n${numbered}` };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error };

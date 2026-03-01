@@ -105,6 +105,11 @@ export function resolveAssetUrl(path: string): string {
   if (appMatch) {
     path = `/api/apps/${appMatch[1]}/static/index.html`;
   }
+  // Resolve storage:// protocol → /api/storage/{path}
+  const storageMatch = path.match(/^storage:\/\/(.+)/);
+  if (storageMatch) {
+    path = `/api/storage/${storageMatch[1]}`;
+  }
   // Pass through absolute URLs and data/blob URLs
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
 

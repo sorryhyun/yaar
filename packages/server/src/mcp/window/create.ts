@@ -81,6 +81,11 @@ export function registerCreateTools(server: McpServer): void {
         }
       }
 
+      // Resolve storage:// protocol for iframe content
+      if (renderer === 'iframe' && typeof data === 'string' && data.startsWith('storage://')) {
+        data = `/api/storage/${data.slice('storage://'.length)}`;
+      }
+
       // Look up variant/dockEdge from app.json if appId is provided
       const appMeta = args.appId ? await getAppMeta(args.appId as string) : null;
 

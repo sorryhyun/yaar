@@ -1,4 +1,5 @@
-import type { EditorState, TrimPatch } from './types';
+import type { EditorState, EditorMode, TrimPatch } from './types';
+import type { Composition, Scene } from '../core/types';
 import { clamp } from './utils/time';
 
 const EPSILON = 0.01;
@@ -7,6 +8,7 @@ type Listener = (state: EditorState) => void;
 
 export class EditorStore {
   private state: EditorState = {
+    mode: 'edit',
     sourceKind: null,
     sourceValue: '',
     objectUrl: null,
@@ -21,6 +23,10 @@ export class EditorStore {
     exportProgress: 0,
     exportMessage: null,
     error: null,
+    composition: null,
+    selectedSceneId: null,
+    creatorPlaying: false,
+    creatorFrame: 0,
   };
 
   private listeners = new Set<Listener>();
@@ -33,6 +39,11 @@ export class EditorStore {
 
   getState(): EditorState {
     return { ...this.state };
+  }
+
+  setMode(mode: EditorMode): void {
+    this.state = { ...this.state, mode, error: null, exportMessage: null };
+    this.emit();
   }
 
   setSource(kind: 'url' | 'file', sourceValue: string, objectUrl: string | null): void {
@@ -150,6 +161,87 @@ export class EditorStore {
       return;
     }
     this.state = { ...this.state, error: null };
+    this.emit();
+  }
+
+  // Creator mode methods
+
+  setComposition(composition: Composition | null): void {
+    this.state = { ...this.state, composition, selectedSceneId: null, creatorFrame: 0 };
+    this.emit();
+  }
+
+  addScene(scene: Scene): void {
+    if (!this.state.composition) return;
+    const scenes = [...this.state.composition.scenes, scene];
+    this.state = {
+      ...this.state,
+      composition: { ...this.state.composition, scenes },
+      selectedSceneId: scene.id,
+    };
+    this.emit();
+  }
+
+  removeScene(id: string): void {
+    if (!this.state.composition) return;
+    const scenes = this.state.composition.scenes.filter((s) => s.id !== id);
+    this.state = {
+      ...this.state,
+      composition: { ...this.state.composition, scenes },
+      selectedSceneId: this.state.selectedSceneId === id ? null : this.state.selectedSceneId,
+    };
+    this.emit();
+  }
+
+  updateScene(id: string, updatedScene: Scene): void {
+    if (!this.state.composition) return;
+    const scenes = this.state.composition.scenes.map((s) => (s.id === id ? updatedScene : s));
+    this.state = {
+      ...this.state,
+      composition: { ...this.state.composition, scenes },
+    };
+    this.emit();
+  }
+
+  reorderScenes(ids: string[]): void {
+    if (!this.state.composition) return;
+    const sceneMap = new Map(this.state.composition.scenes.map((s) => [s.id, s]));
+    const reordered = ids.map((id) => sceneMap.get(id)).filter(Boolean) as Scene[];
+    // Add any scenes not in the list at the end
+    for (const scene of this.state.composition.scenes) {
+      if (!ids.includes(scene.id)) reordered.push(scene);
+    }
+    this.state = {
+      ...this.state,
+      composition: { ...this.state.composition, scenes: reordered },
+    };
+    this.emit();
+  }
+
+  setSelectedScene(id: string | null): void {
+    this.state = { ...this.state, selectedSceneId: id };
+    this.emit();
+  }
+
+  setCreatorPlaying(playing: boolean): void {
+    this.state = { ...this.state, creatorPlaying: playing };
+    this.emit();
+  }
+
+  setCreatorFrame(frame: number): void {
+    this.state = { ...this.state, creatorFrame: frame };
+    this.emit();
+  }
+
+  updateCompositionConfig(patch: { width?: number; height?: number; fps?: number; durationInFrames?: number }): void {
+    if (!this.state.composition) return;
+    this.state = {
+      ...this.state,
+      composition: {
+        ...this.state.composition,
+        config: { ...this.state.composition.config, ...patch },
+      },
+    };
     this.emit();
   }
 

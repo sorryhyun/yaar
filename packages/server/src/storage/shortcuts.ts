@@ -92,13 +92,16 @@ export async function syncAppShortcuts(
   }>,
 ): Promise<string[]> {
   const shortcuts = await readShortcuts();
-  const appIds = new Set(apps.filter((a) => a.createShortcut !== false).map((a) => a.id));
+  const allAppIds = new Set(apps.map((a) => a.id));
+  const autoShortcutAppIds = new Set(
+    apps.filter((a) => a.createShortcut !== false).map((a) => a.id),
+  );
   const removedIds: string[] = [];
   let changed = false;
 
-  // Remove stale app shortcuts
+  // Remove shortcuts only for apps that no longer exist (not just createShortcut: false)
   const result = shortcuts.filter((s) => {
-    if (s.type === 'app' && !appIds.has(s.target)) {
+    if (s.type === 'app' && !allAppIds.has(s.target)) {
       removedIds.push(s.id);
       changed = true;
       return false;
@@ -106,9 +109,9 @@ export async function syncAppShortcuts(
     return true;
   });
 
-  // Ensure shortcuts exist for apps that need them
+  // Auto-create shortcuts only for apps that opt in
   for (const app of apps) {
-    if (app.createShortcut === false) continue;
+    if (!autoShortcutAppIds.has(app.id)) continue;
     const shortcutId = `app-${app.id}`;
     if (!result.some((s) => s.id === shortcutId)) {
       result.push({
