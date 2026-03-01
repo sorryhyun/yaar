@@ -1,5 +1,5 @@
 {
-  "icon": "🎮",
+  "icon": "📊",
   "name": "Excel Lite",
   "run": "static/index.html",
   "protocol": {
@@ -88,5 +88,6 @@
       }
     }
   },
-  "appProtocol": true
+  "appProtocol": true,
+  "description": "Spreadsheet app with formula support, charts, and YAAR storage integration"
 }

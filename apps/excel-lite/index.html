@@ -87,194 +87,220 @@
 <body>
 <div id="app"></div>
 <script type="module">
-function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)+N,M=Math.floor((M-1)/26)}return N}function s(n){let N=0;for(let M of n)N=N*26+(M.charCodeAt(0)-64);return N}function D(n,N){return`${v(n)}${N}`}function z(n){let N=n.toUpperCase().match(/^([A-Z]+)(\d+)$/);if(!N)return null;return{c:s(N[1]),r:Number(N[2])}}function B(n,N){let M=z(n),b=z(N);return{c1:Math.min(M.c,b.c),c2:Math.max(M.c,b.c),r1:Math.min(M.r,b.r),r2:Math.max(M.r,b.r)}}function K(n){let N=[];for(let M=n.r1;M<=n.r2;M++)for(let b=n.c1;b<=n.c2;b++)N.push(D(b,M));return N}function Y1(n,N){let M=z(n),b=z(N);if(!M||!b)return[];let j=[],U=Math.min(M.c,b.c),O=Math.max(M.c,b.c),m=Math.min(M.r,b.r),Z=Math.max(M.r,b.r);for(let $=m;$<=Z;$++)for(let _=U;_<=O;_++)j.push(D(_,$));return j}function Q1(n,N,M){let b=[];for(let j of n){if(!z(j))continue;let O=M(j).trim(),m=(N[j]??"").trim(),$=Number(O||m);if(!Number.isFinite($))continue;b.push({label:j,value:$})}return b}var e=60,u=20,G={bold:!1,italic:!1,underline:!1,fontSize:14,color:"#111827",bg:"#ffffff",align:"left"};function H(n){return JSON.parse(JSON.stringify(n))}function X1(n){if(/[\",\n]/.test(n))return`"${n.replace(/"/g,'""')}"`;return n}function n1(n,N){let M=z(N);if(!M)return null;let b=M.r<n.r1,j=M.r>n.r2,U=M.c<n.c1,O=M.c>n.c2;if(!b&&!j&&!U&&!O)return null;let m=b?n.r1-M.r:j?M.r-n.r2:0,Z=U?n.c1-M.c:O?M.c-n.c2:0;if((b||j)&&m>=Z)return b?{c1:n.c1,c2:n.c2,r1:M.r,r2:n.r1-1}:{c1:n.c1,c2:n.c2,r1:n.r2+1,r2:M.r};return U?{c1:M.c,c2:n.c1-1,r1:n.r1,r2:n.r2}:{c1:n.c2+1,c2:M.c,r1:n.r1,r2:n.r2}}function V1(n,N){let M=z(N),b=n.r2-n.r1+1,j=n.c2-n.c1+1,U=n.r1,O=n.c1;if(M.r>n.r2)U=n.r1+(M.r-n.r1)%b;else if(M.r<n.r1)U=n.r2-(n.r1-M.r-1)%b;else U=M.r;if(M.c>n.c2)O=n.c1+(M.c-n.c1)%j;else if(M.c<n.c1)O=n.c2-(n.c1-M.c-1)%j;else O=M.c;return D(O,U)}function z1(n){function N(j,U=new Set){if(U.has(j))return NaN;U.add(j);let O=n(j).trim();if(!O)return 0;if(!O.startsWith("=")){let m=Number(O);return Number.isFinite(m)?m:NaN}return M(O.slice(1),U)}function M(j,U){try{let O=j.toUpperCase();if(O=O.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g,(Z,$,_)=>{return String(Y1($,_).reduce((q,J)=>{let V=N(J,new Set(U));return q+(Number.isFinite(V)?V:0)},0))}),O=O.replace(/\b([A-Z]+\d+)\b/g,(Z,$)=>{let _=N($,new Set(U));return Number.isFinite(_)?String(_):"NaN"}),!/^[0-9+\-*/().\sNAN]+$/.test(O))return NaN;let m=Function(`"use strict"; return (${O});`)();return Number.isFinite(m)?m:NaN}catch{return NaN}}function b(j){let U=n(j);if(!U.startsWith("="))return U;let O=N(j);return Number.isFinite(O)?String(O):"#ERR"}return{evalCell:N,display:b}}function D1(n,N,M){if(!n.startsWith("="))return n;return n.replace(/\b([A-Z]+)(\d+)\b/g,(b,j,U)=>{let O=Math.max(1,s(j)+M),m=Math.max(1,Number(U)+N);return`${v(O)}${m}`})}function F1(n,N,M,b,j=100){if(n.push({cells:H(M),styles:H(b)}),n.length>j)n.shift();N.length=0}function N1(n,N,M){for(let b of Object.keys(N))delete N[b];for(let[b,j]of Object.entries(n.cells))N[b]=j;for(let b of Object.keys(M))delete M[b];for(let[b,j]of Object.entries(n.styles))M[b]=j}function E(n,N){let M=n[N]??{};return{bold:M.bold??G.bold,italic:M.italic??G.italic,underline:M.underline??G.underline,fontSize:M.fontSize??G.fontSize,color:M.color??G.color,bg:M.bg??G.bg,align:M.align??G.align}}function o(n){let N={};if((n.bold??G.bold)!==G.bold)N.bold=!!n.bold;if((n.italic??G.italic)!==G.italic)N.italic=!!n.italic;if((n.underline??G.underline)!==G.underline)N.underline=!!n.underline;if((n.fontSize??G.fontSize)!==G.fontSize)N.fontSize=n.fontSize;if((n.color??G.color)!==G.color)N.color=n.color;if((n.bg??G.bg)!==G.bg)N.bg=n.bg;if((n.align??G.align)!==G.align)N.align=n.align;return Object.keys(N).length?N:null}function P1(n){let N={};for(let[j,U]of Object.entries(n)){let O=j.toUpperCase();if(!z(O))continue;N[O]=String(U??"")}let b=JSON.stringify({cells:N,format:"excel-lite-json-v1"});return new TextEncoder().encode(b)}function x1(n){try{let N=n instanceof Uint8Array?n:new Uint8Array(n),M=new TextDecoder().decode(N),b=JSON.parse(M),j=b&&b.cells&&typeof b.cells==="object"?b.cells:{},U={};for(let[O,m]of Object.entries(j)){let Z=O.toUpperCase();if(!z(Z))continue;U[Z]=String(m??"")}return{cells:U}}catch{return{cells:{}}}}class C1{static register(...n){}canvas;cfg;constructor(n,N){this.canvas=n,this.cfg=N,this.render()}destroy(){let n=this.canvas.getContext("2d");if(n)n.clearRect(0,0,this.canvas.width,this.canvas.height)}render(){let n=this.canvas.getContext("2d");if(!n)return;let N=this.canvas.width,M=this.canvas.height;n.clearRect(0,0,N,M);let b=this.cfg.data.datasets[0]?.data??[];if(!b.length)return;let j=Math.max(...b,1);if(this.cfg.type==="pie"){let _=-Math.PI/2,q=b.reduce((J,V)=>J+V,0)||1;b.forEach((J,V)=>{let W=_+J/q*Math.PI*2,p1=V*57%360;n.fillStyle=`hsl(${p1} 75% 55%)`,n.beginPath(),n.moveTo(N/2,M/2),n.arc(N/2,M/2,Math.min(N,M)*0.38,_,W),n.closePath(),n.fill(),_=W});return}let U=b.length,O=24,m=N-O*2,Z=M-O*2;if(n.strokeStyle="#9aa7bd",n.beginPath(),n.moveTo(O,M-O),n.lineTo(N-O,M-O),n.stroke(),this.cfg.type==="line"){n.strokeStyle="#2a6df6",n.lineWidth=2,n.beginPath(),b.forEach((_,q)=>{let J=O+q/Math.max(1,U-1)*m,V=M-O-_/j*Z;if(q===0)n.moveTo(J,V);else n.lineTo(J,V)}),n.stroke();return}let $=m/U;b.forEach((_,q)=>{let J=O+q*$+3,V=_/j*Z,W=M-O-V;n.fillStyle="rgba(42,109,246,0.6)",n.fillRect(J,W,Math.max(2,$-6),V)})}}var u1=[];function o1(n,N){if(N!=="HH:mm:ss")return n.toISOString();let M=(b)=>String(b).padStart(2,"0");return`${M(n.getHours())}:${M(n.getMinutes())}:${M(n.getSeconds())}`}var R={format:(n)=>(N)=>Number.isFinite(N)?N.toLocaleString(void 0,{maximumFractionDigits:4}):"0",sum:(n)=>n.reduce((N,M)=>N+M,0),mean:(n)=>n.length?n.reduce((N,M)=>N+M,0)/n.length:void 0,median:(n)=>{if(!n.length)return;let N=[...n].sort((b,j)=>b-j),M=Math.floor(N.length/2);return N.length%2?N[M]:(N[M-1]+N[M])/2},min:(n)=>n.length?Math.min(...n):void 0,max:(n)=>n.length?Math.max(...n):void 0};function d1(n,N=300){let M=null;return(...b)=>{if(M)clearTimeout(M);M=window.setTimeout(()=>n(...b),N)}}var H1=document.createElement("div");H1.innerHTML=`
-  <style>
-    :root {
-      color-scheme: light;
-      --yaar-bg: #f8f9fa;
-      --yaar-bg-surface: #ffffff;
-      --yaar-bg-surface-hover: #f0f1f3;
-      --yaar-text: #1f2328;
-      --yaar-text-muted: #656d76;
-      --yaar-text-dim: #8b949e;
-      --yaar-border: #d0d7de;
-      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
-      --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
-    }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--yaar-bg); user-select: none; color: var(--yaar-text); }
-    .wrap { padding: 10px; display: grid; gap: 8px; }
-    .toolbar {
-      display: grid;
-      gap: 8px;
-      padding: 10px;
-      border: 1px solid var(--yaar-border);
-      border-radius: 12px;
-      background: var(--yaar-bg-surface);
-      box-shadow: var(--yaar-shadow-sm);
-      position: sticky;
-      top: 8px;
-      z-index: 10;
-    }
-    .toolbar-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: nowrap;
-      min-width: 0;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding-bottom: 2px;
-    }
-    .toolbar-row.file #storagePathInput { flex: 1 1 280px; min-width: 240px; }
-    .toolbar-row.edit #formulaInput { flex: 1 1 360px; min-width: 260px; }
-    .toolbar-row.edit .name { flex: 0 0 auto; }
-    .name {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-weight: 700;
-      min-width: 78px;
-      text-align: center;
-      border: 1px solid var(--yaar-border);
-      border-radius: 8px;
-      padding: 7px 8px;
-      background: var(--yaar-bg);
-    }
-    input, select {
-      height: 34px;
-      padding: 6px 9px;
-      border: 1px solid var(--yaar-border);
-      border-radius: 8px;
-      font-size: 13px;
-      background: var(--yaar-bg-surface);
-      box-sizing: border-box;
-    }
-    #formulaInput { width: 100%; }
-    #storagePathInput { min-width: 260px; }
-    #textColor, #bgColor { width: 42px; padding: 2px; }
-    button.active { background: #dce8ff; border-color: #89abf0; }
-    .sheetWrap { overflow: auto; border: 1px solid var(--yaar-border); border-radius: 10px; background: var(--yaar-bg-surface); max-height: calc(100vh - 160px); }
-    .chartPanel {
-      border: 1px solid var(--yaar-border);
-      border-radius: 10px;
-      background: var(--yaar-bg-surface);
-      padding: 8px;
-      display: none;
-      min-height: 220px;
-    }
-    .chartPanel.open { display: block; }
-    .chartPanelHead {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      color: var(--yaar-text);
-      font-size: 13px;
-    }
-    #chartCanvas { width: 100%; max-height: 220px; }
-    .statsPanel {
-      border: 1px solid var(--yaar-border);
-      border-radius: 10px;
-      background: var(--yaar-bg-surface);
-      padding: 10px;
-      display: none;
-    }
-    .statsPanel.open { display: block; }
-    .statsGrid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 8px;
-    }
-    .statCard {
-      border: 1px solid var(--yaar-border);
-      border-radius: 8px;
-      background: var(--yaar-bg);
-      padding: 8px;
-    }
-    .statLabel { font-size: 11px; color: var(--yaar-text-muted); }
-    .statValue { font-size: 14px; font-weight: 700; color: var(--yaar-text); margin-top: 2px; }
-    table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
-    th, td { border: 1px solid #e7ecf5; }
-    th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
-    .rowHead { position: sticky; left: 0; background: #f8faff; z-index: 1; text-align: right; padding: 6px 8px; min-width: 46px; }
-    .corner { position: sticky; left: 0; top: 0; z-index: 3; background: #eef3ff; min-width: 46px; }
-    td { position: relative; min-width: 98px; }
-    td input { width: 100%; border: none; padding: 7px 8px; box-sizing: border-box; outline: none; background: transparent; }
-    td.selected { background: #dce8ff; box-shadow: inset 0 0 0 1px #93b4f4; }
-    td.active { box-shadow: inset 0 0 0 2px #2a6df6; z-index: 1; }
-    .fill-handle { position: absolute; width: 8px; height: 8px; right: -4px; bottom: -4px; border-radius: 1px; background: #2a6df6; cursor: crosshair; z-index: 5; }
-    td.fill-preview { background: #c7dcff; box-shadow: inset 0 0 0 1px #79a3ff; }
-    .hint { color: #5c6475; font-size: 12px; display: none; }
-    .io-status {
-      position: fixed;
-      right: 18px;
-      bottom: 14px;
-      z-index: 30;
-      font-size: 12px;
-      padding: 7px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--yaar-border);
-      background: rgba(255, 255, 255, 0.95);
-      color: var(--yaar-text);
-      box-shadow: var(--yaar-shadow);
-      display: none;
-    }
-    @media (max-width: 1200px) {
-      #formulaInput, #storagePathInput { min-width: 220px; }
-    }
-  </style>
+function u($){let Z="",U=$;while(U>0){let J=(U-1)%26;Z=String.fromCharCode(65+J)+Z,U=Math.floor((U-1)/26)}return Z}function j1($){let Z=0;for(let U of $)Z=Z*26+(U.charCodeAt(0)-64);return Z}function K($,Z){return`${u($)}${Z}`}function H($){let Z=$.toUpperCase().match(/^([A-Z]+)(\d+)$/);if(!Z)return null;return{c:j1(Z[1]),r:Number(Z[2])}}function A($,Z){let U=H($),J=H(Z);return{c1:Math.min(U.c,J.c),c2:Math.max(U.c,J.c),r1:Math.min(U.r,J.r),r2:Math.max(U.r,J.r)}}function R($){let Z=[];for(let U=$.r1;U<=$.r2;U++)for(let J=$.c1;J<=$.c2;J++)Z.push(K(J,U));return Z}function A1($,Z){let U=H($),J=H(Z);if(!U||!J)return[];let Y=[],G=Math.min(U.c,J.c),j=Math.max(U.c,J.c),z=Math.min(U.r,J.r),B=Math.max(U.r,J.r);for(let Q=z;Q<=B;Q++)for(let X=G;X<=j;X++)Y.push(K(X,Q));return Y}function k1($,Z,U){let J=[];for(let Y of $){if(!H(Y))continue;let j=U(Y).trim(),z=(Z[Y]??"").trim(),Q=Number(j||z);if(!Number.isFinite(Q))continue;J.push({label:Y,value:Q})}return J}var G1=60,l=20,V={bold:!1,italic:!1,underline:!1,fontSize:14,color:"#111827",bg:"#ffffff",align:"left"};function k($){return JSON.parse(JSON.stringify($))}function E1($){if(/[\",\n]/.test($))return`"${$.replace(/"/g,'""')}"`;return $}function z1($,Z){let U=H(Z);if(!U)return null;let J=U.r<$.r1,Y=U.r>$.r2,G=U.c<$.c1,j=U.c>$.c2;if(!J&&!Y&&!G&&!j)return null;let z=J?$.r1-U.r:Y?U.r-$.r2:0,B=G?$.c1-U.c:j?U.c-$.c2:0;if((J||Y)&&z>=B)return J?{c1:$.c1,c2:$.c2,r1:U.r,r2:$.r1-1}:{c1:$.c1,c2:$.c2,r1:$.r2+1,r2:U.r};return G?{c1:U.c,c2:$.c1-1,r1:$.r1,r2:$.r2}:{c1:$.c2+1,c2:U.c,r1:$.r1,r2:$.r2}}function T1($,Z){let U=H(Z),J=$.r2-$.r1+1,Y=$.c2-$.c1+1,G=$.r1,j=$.c1;if(U.r>$.r2)G=$.r1+(U.r-$.r1)%J;else if(U.r<$.r1)G=$.r2-($.r1-U.r-1)%J;else G=U.r;if(U.c>$.c2)j=$.c1+(U.c-$.c1)%Y;else if(U.c<$.c1)j=$.c2-($.c1-U.c-1)%Y;else j=U.c;return K(j,G)}function S1($){function Z(Y,G=new Set){if(G.has(Y))return NaN;G.add(Y);let j=$(Y).trim();if(!j)return 0;if(!j.startsWith("=")){let z=Number(j);return Number.isFinite(z)?z:NaN}return U(j.slice(1),G)}function U(Y,G){try{let j=Y.toUpperCase();if(j=j.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g,(B,Q,X)=>{return String(A1(Q,X).reduce((q,F)=>{let M=Z(F,new Set(G));return q+(Number.isFinite(M)?M:0)},0))}),j=j.replace(/\b([A-Z]+\d+)\b/g,(B,Q)=>{let X=Z(Q,new Set(G));return Number.isFinite(X)?String(X):"NaN"}),!/^[0-9+\-*/().\sNAN]+$/.test(j))return NaN;let z=Function(`"use strict"; return (${j});`)();return Number.isFinite(z)?z:NaN}catch{return NaN}}function J(Y){let G=$(Y);if(!G.startsWith("="))return G;let j=Z(Y);return Number.isFinite(j)?String(j):"#ERR"}return{evalCell:Z,display:J}}function m1($,Z,U){if(!$.startsWith("="))return $;return $.replace(/\b([A-Z]+)(\d+)\b/g,(J,Y,G)=>{let j=Math.max(1,j1(Y)+U),z=Math.max(1,Number(G)+Z);return`${u(j)}${z}`})}function f1($,Z,U,J,Y=100){if($.push({cells:k(U),styles:k(J)}),$.length>Y)$.shift();Z.length=0}function Q1($,Z,U){for(let J of Object.keys(Z))delete Z[J];for(let[J,Y]of Object.entries($.cells))Z[J]=Y;for(let J of Object.keys(U))delete U[J];for(let[J,Y]of Object.entries($.styles))U[J]=Y}function m($,Z){let U=$[Z]??{};return{bold:U.bold??V.bold,italic:U.italic??V.italic,underline:U.underline??V.underline,fontSize:U.fontSize??V.fontSize,color:U.color??V.color,bg:U.bg??V.bg,align:U.align??V.align}}function s($){let Z={};if(($.bold??V.bold)!==V.bold)Z.bold=!!$.bold;if(($.italic??V.italic)!==V.italic)Z.italic=!!$.italic;if(($.underline??V.underline)!==V.underline)Z.underline=!!$.underline;if(($.fontSize??V.fontSize)!==V.fontSize)Z.fontSize=$.fontSize;if(($.color??V.color)!==V.color)Z.color=$.color;if(($.bg??V.bg)!==V.bg)Z.bg=$.bg;if(($.align??V.align)!==V.align)Z.align=$.align;return Object.keys(Z).length?Z:null}function y1($){let Z={};for(let[Y,G]of Object.entries($)){let j=Y.toUpperCase();if(!H(j))continue;Z[j]=String(G??"")}let J=JSON.stringify({cells:Z,format:"excel-lite-json-v1"});return new TextEncoder().encode(J)}function v1($){try{let Z=$ instanceof Uint8Array?$:new Uint8Array($),U=new TextDecoder().decode(Z),J=JSON.parse(U),Y=J&&J.cells&&typeof J.cells==="object"?J.cells:{},G={};for(let[j,z]of Object.entries(Y)){let B=j.toUpperCase();if(!H(B))continue;G[B]=String(z??"")}return{cells:G}}catch{return{cells:{}}}}var v=null,q1=null,N2=new Set,V2=0;class i1{_value;_subscribers=new Set;constructor($){this._value=$}get value(){if(v)this._subscribers.add(v),v.dependencies.add(this);return this._value}set value($){if(Object.is(this._value,$))return;this._value=$;for(let Z of[...this._subscribers])if(V2>0)N2.add(Z);else Z.execute()}peek(){return this._value}}function I($){let Z=new i1($),U=(...J)=>{if(J.length===0)return Z.value;Z.value=J[0]};return Object.defineProperty(U,"value",{get:()=>Z.value,set:(J)=>{Z.value=J}}),U.peek=()=>Z.peek(),U}function g1($){for(let Z of $.dependencies)Z._subscribers.delete($);$.dependencies.clear();for(let Z of $.cleanups)Z();$.cleanups=[]}function a($){let Z,U={dependencies:new Set,cleanups:[],execute(){if(g1(U),Z)Z();let J=v,Y=q1;v=U,q1=U.cleanups;try{Z=$()}finally{v=J,q1=Y}}};return U.execute(),()=>{if(g1(U),Z)Z()}}function n1($,Z,...U){let J=$,Y=[],G,j=$.indexOf("#"),z=$.indexOf("."),B=Math.min(j>=0?j:1/0,z>=0?z:1/0);if(B<1/0){J=$.slice(0,B)||"div";let q=$.slice(B).split(/(?=[.#])/);for(let F of q)if(F[0]===".")Y.push(F.slice(1));else if(F[0]==="#")G=F.slice(1)}let Q=document.createElement(J);if(G)Q.id=G;if(Y.length)Q.classList.add(...Y);if(Z)for(let[X,q]of Object.entries(Z))if(X==="className")if(typeof q==="function")a(()=>{Q.className=[Y.join(" "),q()].filter(Boolean).join(" ")});else if(Y.length)Q.className=Y.join(" ")+" "+q;else Q.className=q;else if(X==="style"){if(typeof q==="string")Q.style.cssText=q;else if(typeof q==="object")for(let[F,M]of Object.entries(q))if(typeof M==="function")a(()=>{Q.style[F]=M()});else Q.style[F]=M}else if(X==="ref"){if(typeof q==="function")q(Q)}else if(X.startsWith("on")){let F=X.slice(2).toLowerCase();Q.addEventListener(F,q)}else if(typeof q==="function"&&!X.startsWith("on"))a(()=>{let F=q();if(F==null||F===!1)Q.removeAttribute(X);else Q.setAttribute(X,String(F))});else if(q==null||q===!1);else if(q===!0)Q.setAttribute(X,"");else Q.setAttribute(X,String(q));return t(Q,U),Q}function t($,Z){for(let U of Z){if(U==null||U===!1||U===!0)continue;if(Array.isArray(U))t($,U);else if(typeof U==="function"){let J=document.createTextNode("");$.appendChild(J);let Y=J;a(()=>{let G=U(),j=P2(G);if(j instanceof DocumentFragment){let z=document.createTextNode("");j.appendChild(z),Y.replaceWith(j),Y=z}else Y.replaceWith(j),Y=j})}else if(U instanceof Node)$.appendChild(U);else $.appendChild(document.createTextNode(String(U)))}}function P2($){if($==null||$===!1||$===!0)return document.createTextNode("");if($ instanceof Node)return $;if(Array.isArray($)){let Z=document.createDocumentFragment();return t(Z,$),Z}return document.createTextNode(String($))}function d1($,Z){let U=Z||document.getElementById("app");if(!U)throw Error("Mount target not found");U.appendChild($)}function c1($,...Z){let U=document.createElement("style");U.textContent=String.raw($,...Z),document.head.appendChild(U)}var h1=new WeakMap;function p($,...Z){let U=h1.get($);if(!U)U=W2($),h1.set($,U);return U(Z)}var f=0,u1=1,y=2,F1=3;function W2($){let Z=[],U=f,J="",Y="",G="",j="",z=!1;function B(X){if(J)Z.push(X?{t:"open_close",tag:J}:{t:"open",tag:J});J="",z=!1}function Q(){if(Y)Z.push({t:"attr_static",name:Y,value:G||Y}),Y="",G=""}for(let X=0;X<$.length;X++){let q=$[X];for(let F=0;F<q.length;F++){let M=q[F];if(U===f)if(M==="<")if(q[F+1]==="/"){let O=q.indexOf(">",F);if(O!==-1)F=O,Z.push({t:"close"})}else U=u1,J="",z=!1;else{let O=M;while(F+1<q.length&&q[F+1]!=="<")O+=q[++F];if(O=O.replace(/^\s+|\s+$/g," "),O&&O!==" ")Z.push({t:"text",value:O})}else if(U===u1)if(M==="/"&&J==="");else if(/\s/.test(M)){if(J)Z.push({t:"open",tag:J}),J="",U=y}else if(M===">")B(z),U=f;else if(M==="/")z=!0;else J+=M;else if(U===y)if(M==="=")U=F1,G="",j="";else if(M==="/"||M===">")if(Q(),M===">"){if(z)Z.push({t:"close"}),z=!1;U=f}else z=!0;else if(/\s/.test(M)){if(Y)Q()}else Y+=M;else if(U===F1)if(!j&&(M==='"'||M==="'"))j=M;else if(!j&&/\s/.test(M))Q(),U=y;else if(M===j)Q(),U=y,j="";else if(!j&&(M===">"||M==="/"))if(Q(),M===">"){if(z)Z.push({t:"close"}),z=!1;U=f}else z=!0;else G+=M}if(X<$.length-1){if(U===f)Z.push({t:"field",idx:X});else if(U===F1){let F=Y;Y="",G="",j="",Z.push({t:"attr_field",name:F,idx:X}),U=y}else if(U===y)if(Y)Z.push({t:"attr_static",name:Y,value:Y}),Y="",Z.push({t:"attr_spread",idx:X});else Z.push({t:"attr_spread",idx:X})}}return(X)=>L2(Z,X)}var O2={class:"className",for:"htmlFor"};function p1($){return O2[$]||$}function L2($,Z){let U=[],J=[];function Y(j){if(U.length)U[U.length-1].children.push(j);else J.push(j)}for(let j of $)switch(j.t){case"open":U.push({tag:j.tag,children:[],props:{}});break;case"open_close":Y(n1(j.tag,null));break;case"close":{let z=U.pop();if(z){let B=Object.keys(z.props).length?z.props:void 0;Y(n1(z.tag,B,...z.children))}break}case"attr_static":{let z=U[U.length-1];if(z)z.props[p1(j.name)]=j.value;break}case"attr_field":{let z=U[U.length-1];if(z)z.props[p1(j.name)]=Z[j.idx];break}case"attr_spread":{let z=U[U.length-1],B=Z[j.idx];if(z&&B&&typeof B==="object")Object.assign(z.props,B);break}case"text":Y(j.value);break;case"field":{let z=Z[j.idx];if(Array.isArray(z))for(let B of z)Y(B);else Y(z);break}}if(J.length===1&&J[0]instanceof Node)return J[0];let G=document.createDocumentFragment();return t(G,J),G}function X1($,Z,U){return()=>$()?Z():U?U():null}class _1{static register(...$){}canvas;cfg;constructor($,Z){this.canvas=$,this.cfg=Z,this.render()}destroy(){let $=this.canvas.getContext("2d");if($)$.clearRect(0,0,this.canvas.width,this.canvas.height)}render(){let $=this.canvas.getContext("2d");if(!$)return;let Z=this.canvas.width,U=this.canvas.height;$.clearRect(0,0,Z,U);let J=this.cfg.data.datasets[0]?.data??[];if(!J.length)return;let Y=Math.max(...J,1);if(this.cfg.type==="pie"){let X=-Math.PI/2,q=J.reduce((F,M)=>F+M,0)||1;J.forEach((F,M)=>{let O=X+F/q*Math.PI*2,b2=M*57%360;$.fillStyle=`hsl(${b2} 75% 55%)`,$.beginPath(),$.moveTo(Z/2,U/2),$.arc(Z/2,U/2,Math.min(Z,U)*0.38,X,O),$.closePath(),$.fill(),X=O});return}let G=J.length,j=24,z=Z-j*2,B=U-j*2;if($.strokeStyle="#9aa7bd",$.beginPath(),$.moveTo(j,U-j),$.lineTo(Z-j,U-j),$.stroke(),this.cfg.type==="line"){$.strokeStyle="#2a6df6",$.lineWidth=2,$.beginPath(),J.forEach((X,q)=>{let F=j+q/Math.max(1,G-1)*z,M=U-j-X/Y*B;if(q===0)$.moveTo(F,M);else $.lineTo(F,M)}),$.stroke();return}let Q=z/G;J.forEach((X,q)=>{let F=j+q*Q+3,M=X/Y*B,O=U-j-M;$.fillStyle="rgba(42,109,246,0.6)",$.fillRect(F,O,Math.max(2,Q-6),M)})}}var H2=[];function K2($,Z){if(Z!=="HH:mm:ss")return $.toISOString();let U=(J)=>String(J).padStart(2,"0");return`${U($.getHours())}:${U($.getMinutes())}:${U($.getSeconds())}`}var C={format:($)=>(Z)=>Number.isFinite(Z)?Z.toLocaleString(void 0,{maximumFractionDigits:4}):"0",sum:($)=>$.reduce((Z,U)=>Z+U,0),mean:($)=>$.length?$.reduce((Z,U)=>Z+U,0)/$.length:void 0,median:($)=>{if(!$.length)return;let Z=[...$].sort((J,Y)=>J-Y),U=Math.floor(Z.length/2);return Z.length%2?Z[U]:(Z[U-1]+Z[U])/2},min:($)=>$.length?Math.min(...$):void 0,max:($)=>$.length?Math.max(...$):void 0};function D2($,Z=300){let U=null;return(...J)=>{if(U)clearTimeout(U);U=window.setTimeout(()=>$(...J),Z)}}var s1=I(""),B1=I(!1),b1=I(!1),e=I(!1),a1=I("Selection Chart"),t1=I([]),e1=I(""),N1=I(!1),V1,U1,$2,U2,Z2,J2,P1,W1,O1,L1,H1,Y2,j2;c1`
+  :root {
+    color-scheme: light;
+    --yaar-bg: #f8f9fa;
+    --yaar-bg-surface: #ffffff;
+    --yaar-bg-surface-hover: #f0f1f3;
+    --yaar-text: #1f2328;
+    --yaar-text-muted: #656d76;
+    --yaar-text-dim: #8b949e;
+    --yaar-border: #d0d7de;
+    --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+    --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--yaar-bg); user-select: none; color: var(--yaar-text); }
+  .wrap { padding: 10px; display: grid; gap: 8px; }
+  .toolbar {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--yaar-border);
+    border-radius: 12px;
+    background: var(--yaar-bg-surface);
+    box-shadow: var(--yaar-shadow-sm);
+    position: sticky;
+    top: 8px;
+    z-index: 10;
+  }
+  .toolbar-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+  }
+  .toolbar-row.file #storagePathInput { flex: 1 1 280px; min-width: 240px; }
+  .toolbar-row.edit #formulaInput { flex: 1 1 360px; min-width: 260px; }
+  .toolbar-row.edit .name { flex: 0 0 auto; }
+  .name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700;
+    min-width: 78px;
+    text-align: center;
+    border: 1px solid var(--yaar-border);
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: var(--yaar-bg);
+  }
+  input, select {
+    height: 34px;
+    padding: 6px 9px;
+    border: 1px solid var(--yaar-border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--yaar-bg-surface);
+    box-sizing: border-box;
+  }
+  #formulaInput { width: 100%; }
+  #storagePathInput { min-width: 260px; }
+  #textColor, #bgColor { width: 42px; padding: 2px; }
+  button.active { background: #dce8ff; border-color: #89abf0; }
+  .sheetWrap { overflow: auto; border: 1px solid var(--yaar-border); border-radius: 10px; background: var(--yaar-bg-surface); max-height: calc(100vh - 160px); }
+  .chartPanel {
+    border: 1px solid var(--yaar-border);
+    border-radius: 10px;
+    background: var(--yaar-bg-surface);
+    padding: 8px;
+    display: none;
+    min-height: 220px;
+  }
+  .chartPanel.open { display: block; }
+  .chartPanelHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    color: var(--yaar-text);
+    font-size: 13px;
+  }
+  #chartCanvas { width: 100%; max-height: 220px; }
+  .statsPanel {
+    border: 1px solid var(--yaar-border);
+    border-radius: 10px;
+    background: var(--yaar-bg-surface);
+    padding: 10px;
+    display: none;
+  }
+  .statsPanel.open { display: block; }
+  .statsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .statCard {
+    border: 1px solid var(--yaar-border);
+    border-radius: 8px;
+    background: var(--yaar-bg);
+    padding: 8px;
+  }
+  .statLabel { font-size: 11px; color: var(--yaar-text-muted); }
+  .statValue { font-size: 14px; font-weight: 700; color: var(--yaar-text); margin-top: 2px; }
+  table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
+  th, td { border: 1px solid #e7ecf5; }
+  th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
+  .rowHead { position: sticky; left: 0; background: #f8faff; z-index: 1; text-align: right; padding: 6px 8px; min-width: 46px; }
+  .corner { position: sticky; left: 0; top: 0; z-index: 3; background: #eef3ff; min-width: 46px; }
+  td { position: relative; min-width: 98px; }
+  td input { width: 100%; border: none; padding: 7px 8px; box-sizing: border-box; outline: none; background: transparent; }
+  td.selected { background: #dce8ff; box-shadow: inset 0 0 0 1px #93b4f4; }
+  td.active { box-shadow: inset 0 0 0 2px #2a6df6; z-index: 1; }
+  .fill-handle { position: absolute; width: 8px; height: 8px; right: -4px; bottom: -4px; border-radius: 1px; background: #2a6df6; cursor: crosshair; z-index: 5; }
+  td.fill-preview { background: #c7dcff; box-shadow: inset 0 0 0 1px #79a3ff; }
+  .hint { color: #5c6475; font-size: 12px; display: none; }
+  .io-status {
+    position: fixed;
+    right: 18px;
+    bottom: 14px;
+    z-index: 30;
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--yaar-border);
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--yaar-text);
+    box-shadow: var(--yaar-shadow);
+  }
+  @media (max-width: 1200px) {
+    #formulaInput, #storagePathInput { min-width: 220px; }
+  }
+`;d1(p`
   <div class="wrap">
     <div class="toolbar">
       <div class="toolbar-row file">
-        <button class="y-btn y-btn-sm" id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">\uD83D\uDCBE</button>
-        <button class="y-btn y-btn-sm" id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">\uD83D\uDCC2</button>
-        <button class="y-btn y-btn-sm" id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
-        <button class="y-btn y-btn-sm" id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">\uD83D\uDCCB</button>
-        <button class="y-btn y-btn-sm" id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
-        <button class="y-btn y-btn-sm" id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">\uD83D\uDCCA</button>
-        <button class="y-btn y-btn-sm" id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
-        <select id="chartTypeSel" title="Chart type">
-          <option value="bar" selected>Bar</option>
+        <button class="y-btn y-btn-sm" onClick=${()=>M2()} title="Save workbook XLSX to YAAR storage" aria-label="Save File">&#x1F4BE;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>B2()} title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">&#x1F4C2;</button>
+        <button class="y-btn y-btn-sm" onClick=${async()=>{try{await navigator.clipboard.writeText(X2()),_("Workbook JSON copied to clipboard.")}catch{alert("Clipboard access failed. Use Save Store instead.")}}} title="Copy sheet JSON to clipboard" aria-label="Copy JSON">&#x2398;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>{let $=prompt("Paste JSON: { cells: {...}, styles: {...} } (legacy cell map also supported)");if(!$)return;if(I1($,"Invalid JSON"))_("Loaded workbook from pasted JSON.")}} title="Paste sheet JSON from a dialog" aria-label="Paste JSON">&#x1F4CB;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>{I2(),_("CSV exported.")}} title="Export CSV" aria-label="Export CSV">&#x2B07;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>r1()} title="Create chart from selection" aria-label="Chart Selection">&#x1F4CA;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>R2()} title="Selection statistics" aria-label="Selection Statistics">&#x3A3;</button>
+        <select ref=${($)=>{Y2=$}} title="Chart type"
+          onChange=${()=>{if(e())r1()}}>
+          <option value="bar">Bar</option>
           <option value="line">Line</option>
           <option value="pie">Pie</option>
         </select>
-        <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
+        <input id="storagePathInput" ref=${($)=>{H1=$}} title="Storage path" value="excel-lite/sheet.xlsx" />
       </div>
       <div class="toolbar-row edit">
-        <button class="y-btn y-btn-sm" id="undoBtn" title="Undo" aria-label="Undo">↶</button>
-        <button class="y-btn y-btn-sm" id="redoBtn" title="Redo" aria-label="Redo">↷</button>
-        <div class="name" id="cellName">A1</div>
-        <input class="y-input" id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
-        <button class="y-btn y-btn-sm" id="boldBtn"><b>B</b></button>
-        <button class="y-btn y-btn-sm" id="italicBtn"><i>I</i></button>
-        <button class="y-btn y-btn-sm" id="underlineBtn"><u>U</u></button>
-        <select id="fontSizeSel" title="Font size">
-          <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
+        <button class="y-btn y-btn-sm" onClick=${()=>z2()} title="Undo" aria-label="Undo">&#x21B6;</button>
+        <button class="y-btn y-btn-sm" onClick=${()=>D1()} title="Redo" aria-label="Redo">&#x21B7;</button>
+        <div class="name" ref=${($)=>{$2=$}}>A1</div>
+        <input class="y-input" id="formulaInput" ref=${($)=>{U1=$}}
+          placeholder="Value or formula (=A1+B1, =SUM(A1:A10))"
+          onKeydown=${($)=>{if($.key==="Enter")F2(D,U1.value),g.get(D)?.focus()}} />
+        <button class="y-btn y-btn-sm" ref=${($)=>{U2=$}}
+          onClick=${()=>n("bold")}><b>B</b></button>
+        <button class="y-btn y-btn-sm" ref=${($)=>{Z2=$}}
+          onClick=${()=>n("italic")}><i>I</i></button>
+        <button class="y-btn y-btn-sm" ref=${($)=>{J2=$}}
+          onClick=${()=>n("underline")}><u>U</u></button>
+        <select ref=${($)=>{P1=$}} title="Font size"
+          onChange=${()=>d({fontSize:Number(P1.value)})}>
+          <option value="12">12</option><option value="14">14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
         </select>
-        <input id="textColor" type="color" value="#111827" title="Text color" />
-        <input id="bgColor" type="color" value="#ffffff" title="Cell background" />
-        <select id="alignSel" title="Alignment"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select>
+        <input id="textColor" type="color" ref=${($)=>{W1=$}} value="#111827" title="Text color"
+          onChange=${()=>d({color:W1.value})} />
+        <input id="bgColor" type="color" ref=${($)=>{O1=$}} value="#ffffff" title="Cell background"
+          onChange=${()=>d({bg:O1.value})} />
+        <select ref=${($)=>{L1=$}} title="Alignment"
+          onChange=${()=>d({align:L1.value})}>
+          <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+        </select>
       </div>
     </div>
-    <div class="hint io-status" id="ioStatus" aria-live="polite">Storage ready.</div>
-    <div class="chartPanel" id="chartPanel">
+
+    ${X1(()=>B1(),()=>p`
+      <div class="io-status"
+        style=${()=>`color:${b1()?"#b42318":"#374151"};border-color:${b1()?"#f6b5ad":"#d8e1ef"}`}>
+        ${()=>s1()}
+      </div>
+    `)}
+
+    <div class=${()=>`chartPanel${e()?" open":""}`}>
       <div class="chartPanelHead">
-        <strong id="chartTitle">Selection Chart</strong>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="closeChartBtn" title="Close chart">✕</button>
+        <strong>${()=>a1()}</strong>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>{J1?.destroy(),J1=null,e(!1)}} title="Close chart">&#x2715;</button>
       </div>
-      <canvas id="chartCanvas" height="180"></canvas>
+      <canvas ref=${($)=>{j2=$}} id="chartCanvas" height="180"></canvas>
     </div>
-    <div class="statsPanel" id="statsPanel"></div>
-    <div class="sheetWrap y-scroll" id="sheet"></div>
+
+    <div class=${()=>`statsPanel${N1()?" open":""}`}>
+      ${X1(()=>N1(),()=>p`
+        <div class="chartPanelHead">
+          <strong>Selection Stats</strong>
+          <span>${()=>e1()}</span>
+        </div>
+        <div class="statsGrid">
+          ${()=>t1().map(($)=>p`
+            <div class="statCard">
+              <div class="statLabel">${$.label}</div>
+              <div class="statValue">${$.value}</div>
+            </div>
+          `)}
+        </div>
+      `)}
+    </div>
+
+    <div class="sheetWrap y-scroll" ref=${($)=>{V1=$}}></div>
   </div>
-`;document.body.appendChild(H1);var R1=document.getElementById("sheet"),r=document.getElementById("formulaInput"),r1=document.getElementById("cellName"),k1=document.getElementById("boldBtn"),A1=document.getElementById("italicBtn"),T1=document.getElementById("underlineBtn"),b1=document.getElementById("fontSizeSel"),j1=document.getElementById("textColor"),O1=document.getElementById("bgColor"),U1=document.getElementById("alignSel"),a1=document.getElementById("undoBtn"),t1=document.getElementById("redoBtn"),l1=document.getElementById("saveBtn"),s1=document.getElementById("loadBtn"),w1=document.getElementById("storagePathInput"),e1=document.getElementById("saveFileBtn"),nn=document.getElementById("openFileBtn"),Nn=document.getElementById("csvBtn"),Mn=document.getElementById("chartBtn"),bn=document.getElementById("statsBtn"),E1=document.getElementById("chartTypeSel"),Z1=document.getElementById("chartPanel"),K1=document.getElementById("statsPanel"),jn=document.getElementById("chartCanvas"),On=document.getElementById("chartTitle"),Un=document.getElementById("closeChartBtn"),h=document.getElementById("ioStatus"),C={},Y={},f=new Map,i=new Map,_1=document.createElement("div");_1.className="fill-handle";var F="A1",Q="A1",X="A1",a=null,d=!1,c=!1,L=null,T=null,J1=[],L1=[];function g(n){return C[n]??""}var l=z1(g);C1.register(...u1);var w=window.yaar?.storage,M1,t=null;function P(n,N=!1){if(h.textContent=`[${o1(new Date,"HH:mm:ss")}] ${n}`,h.style.display="block",h.style.color=N?"#b42318":"#374151",h.style.borderColor=N?"#f6b5ad":"#d8e1ef",M1)window.clearTimeout(M1);M1=window.setTimeout(()=>{h.style.display="none"},N?4200:2400)}function f1(){let n=w1.value.trim()||"excel-lite/sheet.xlsx";return w1.value=n,n}var $1="excel-lite/autosave.json",$n=d1(async()=>{if(!w)return;try{await w.save($1,S1())}catch{}},1400);function k(){$n()}function A(){F1(J1,L1,C,Y)}function I1(){let n=J1.pop();if(!n)return;L1.push({cells:H(C),styles:H(Y)}),N1(n,C,Y),x()}function m1(){let n=L1.pop();if(!n)return;J1.push({cells:H(C),styles:H(Y)}),N1(n,C,Y),x()}function S(n){i.forEach((N)=>N.classList.remove(n))}function mn(){let n=E(Y,F);k1.classList.toggle("active",n.bold),A1.classList.toggle("active",n.italic),T1.classList.toggle("active",n.underline),b1.value=String(n.fontSize),j1.value=n.color,O1.value=n.bg,U1.value=n.align}function g1(){S("selected"),S("active"),S("fill-preview");let n=B(Q,X);for(let M of K(n))i.get(M)?.classList.add("selected");let N=i.get(F);if(N)N.classList.add("active"),N.appendChild(_1);if(r1.textContent=Q===X?F:`${Q}:${X}`,a!==F)r.value=g(F);mn()}function y(n,N,M=!1){if(Q=n,X=N,M)F=N;g1()}function v1(n){let N=f.get(n);if(!N)return;if(a!==n)N.value=l.display(n);let M=E(Y,n);N.style.fontWeight=M.bold?"700":"400",N.style.fontStyle=M.italic?"italic":"normal",N.style.textDecoration=M.underline?"underline":"none",N.style.fontSize=`${M.fontSize}px`,N.style.color=M.color,N.style.background=M.bg,N.style.textAlign=M.align}function x(){f.forEach((n,N)=>v1(N)),g1()}function h1(n,N){if(g(n)===N){v1(n);return}if(A(),N)C[n]=N;else delete C[n];x(),k()}function p(n){A();let N=B(Q,X);for(let M of K(N)){let b={...E(Y,M),...n},j=o(b);if(j)Y[M]=j;else delete Y[M]}x(),k()}function I(n){let N=E(Y,F);p({[n]:!N[n]})}function Cn(){A();let n=B(Q,X);for(let N of K(n))delete C[N];x(),k()}function W1(){if(S("fill-preview"),!c||!L||!T)return;let n=n1(L,T);if(!n)return;for(let N of K(n))i.get(N)?.classList.add("fill-preview")}function Zn(){if(!L||!T)return;let n=n1(L,T);if(!n)return;A();for(let N of K(n)){let M=V1(L,N),b=z(N),j=z(M),U=D1(g(M),b.r-j.r,b.c-j.c);if(U)C[N]=U;else delete C[N];let O=Y[M];if(O)Y[N]={...O};else delete Y[N]}if(n.r2>L.r2)Q=D(L.c1,L.r1),X=D(L.c2,n.r2);else if(n.r1<L.r1)Q=D(L.c1,n.r1),X=D(L.c2,L.r2);else if(n.c2>L.c2)Q=D(L.c1,L.r1),X=D(n.c2,L.r2);else if(n.c1<L.c1)Q=D(n.c1,L.r1),X=D(L.c2,L.r2);x(),k()}function y1(){let n=B(Q,X),N=K(n),M=Q1(N,C,(j)=>l.display(j));if(!M.length){P("Selection has no numeric values for charting.",!0);return}let b=E1.value;t?.destroy(),t=new C1(jn,{type:b,data:{labels:M.map((j)=>j.label),datasets:[{label:b.toUpperCase(),data:M.map((j)=>j.value),borderColor:"#2a6df6",backgroundColor:b==="pie"?["#2a6df6","#60a5fa","#93c5fd","#bfdbfe","#dbeafe","#2563eb"]:"rgba(42, 109, 246, 0.35)",borderWidth:2,fill:b==="line",tension:0.25}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:b==="pie"}}}}),On.textContent=`${Q===X?F:`${Q}:${X}`} (${M.length} pts)`,Z1.classList.add("open"),P(`Rendered ${b} chart from selection.`)}function _n(){let n=B(Q,X),M=K(n).map((j)=>Number.parseFloat(l.display(j))).filter((j)=>Number.isFinite(j));if(!M.length){P("Selection has no numeric values for stats.",!0);return}let b=[{label:"Count",value:String(M.length)},{label:"Sum",value:R.format(",.4~f")(R.sum(M))},{label:"Mean",value:R.format(",.4~f")(R.mean(M)??0)},{label:"Median",value:R.format(",.4~f")(R.median(M)??0)},{label:"Min",value:R.format(",.4~f")(R.min(M)??0)},{label:"Max",value:R.format(",.4~f")(R.max(M)??0)}];K1.innerHTML=`
-    <div class="chartPanelHead">
-      <strong>Selection Stats</strong>
-      <span>${Q===X?F:`${Q}:${X}`}</span>
-    </div>
-    <div class="statsGrid">
-      ${b.map((j)=>`<div class="statCard"><div class="statLabel">${j.label}</div><div class="statValue">${j.value}</div></div>`).join("")}
-    </div>
-  `,K1.classList.add("open"),P("Computed stats with d3 for selected range.")}function Jn(){let n=1,N=1;for(let m of Object.keys(C)){let Z=z(m);if(!Z)continue;if(!C[m])continue;n=Math.max(n,Z.r),N=Math.max(N,Z.c)}let M=[];for(let m=1;m<=n;m++){let Z=[];for(let $=1;$<=N;$++)Z.push(X1(g(D($,m))));M.push(Z.join(","))}let b=M.join(`
-`),j=new Blob([b],{type:"text/csv;charset=utf-8"}),U=URL.createObjectURL(j),O=document.createElement("a");O.href=U,O.download="sheet.csv",O.click(),URL.revokeObjectURL(U)}function Ln(){let n=document.createElement("table"),N=document.createElement("thead"),M=document.createElement("tr"),b=document.createElement("th");b.className="corner",M.appendChild(b);for(let U=1;U<=u;U++){let O=document.createElement("th");O.textContent=v(U),M.appendChild(O)}N.appendChild(M),n.appendChild(N);let j=document.createElement("tbody");for(let U=1;U<=e;U++){let O=document.createElement("tr"),m=document.createElement("th");m.className="rowHead",m.textContent=String(U),O.appendChild(m);for(let Z=1;Z<=u;Z++){let $=D(Z,U),_=document.createElement("td");_.dataset.ref=$;let q=document.createElement("input");q.spellcheck=!1,_.addEventListener("mousedown",(J)=>{if(J.button!==0)return;if(J.target.classList.contains("fill-handle"))return;if(d=!0,J.shiftKey)y(Q,$,!0);else F=$,y($,$,!0);q.focus()}),_.addEventListener("mouseenter",()=>{if(d)y(Q,$,!0);if(c)T=$,W1()}),q.addEventListener("focus",()=>{if(a=$,F=$,!d)y($,$,!0);q.value=g($)}),q.addEventListener("blur",()=>{let J=q.value;a=null,h1($,J)}),q.addEventListener("keydown",(J)=>{let V=z($);if(J.key==="Enter"){J.preventDefault(),q.blur();let W=D(V.c,Math.min(e,V.r+1));f.get(W)?.focus()}else if(J.key==="Tab"){J.preventDefault(),q.blur();let W=D(Math.min(u,V.c+1),V.r);f.get(W)?.focus()}else if(J.key==="Escape")J.preventDefault(),q.value=l.display($),q.blur()}),_.appendChild(q),O.appendChild(_),f.set($,q),i.set($,_)}j.appendChild(O)}n.appendChild(j),R1.innerHTML="",R1.appendChild(n),_1.addEventListener("mousedown",(U)=>{U.preventDefault(),U.stopPropagation(),c=!0,L=B(Q,X),T=F,W1()})}r.addEventListener("keydown",(n)=>{if(n.key==="Enter")h1(F,r.value),f.get(F)?.focus()});k1.addEventListener("click",()=>I("bold"));A1.addEventListener("click",()=>I("italic"));T1.addEventListener("click",()=>I("underline"));b1.addEventListener("change",()=>p({fontSize:Number(b1.value)}));j1.addEventListener("change",()=>p({color:j1.value}));O1.addEventListener("change",()=>p({bg:O1.value}));U1.addEventListener("change",()=>p({align:U1.value}));a1.addEventListener("click",I1);t1.addEventListener("click",m1);function S1(){return JSON.stringify({cells:C,styles:Y},null,2)}function q1(n){A();for(let N of Object.keys(C))delete C[N];for(let N of Object.keys(Y))delete Y[N];if(n&&typeof n==="object"&&n.cells&&typeof n.cells==="object"){for(let[N,M]of Object.entries(n.cells))if(typeof M==="string")C[N.toUpperCase()]=M;if(n.styles&&typeof n.styles==="object")for(let[N,M]of Object.entries(n.styles)){if(!M||typeof M!=="object")continue;let b=o(M);if(b)Y[N.toUpperCase()]=b}}else for(let[N,M]of Object.entries(n))if(typeof M==="string")C[N.toUpperCase()]=M;x(),k()}function G1(n,N="Invalid JSON"){try{let M=JSON.parse(n);return q1(M),!0}catch{return alert(N),!1}}async function i1(){if(!w){P("Storage API unavailable in this runtime.",!0);return}try{let n=f1(),N=P1(C);await w.save(n,N),P(`Saved XLSX to storage: ${n}`)}catch(n){let N=n instanceof Error?n.message:"Failed to save";P(N,!0)}}async function c1(){if(!w){P("Storage API unavailable in this runtime.",!0);return}try{let n=f1();if(n.toLowerCase().endsWith(".json")){let U=await w.read(n,{as:"text"});if(typeof U!=="string")throw Error("Workbook content is not text");if(G1(U,`Invalid JSON in ${n}`))P(`Opened JSON from storage: ${n}`);return}let M=await w.read(n,{as:"arraybuffer"}),b=M instanceof Uint8Array?M:new Uint8Array(M),j=x1(b);q1(j),P(`Opened XLSX from storage: ${n}`)}catch(n){let N=n instanceof Error?n.message:"Failed to open file";P(N,!0)}}l1.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(S1()),P("Workbook JSON copied to clipboard.")}catch{alert("Clipboard access failed. Use Save Store instead.")}});s1.addEventListener("click",()=>{let n=prompt("Paste JSON: { cells: {...}, styles: {...} } (legacy cell map also supported)");if(!n)return;if(G1(n,"Invalid JSON"))P("Loaded workbook from pasted JSON.")});e1.addEventListener("click",()=>{i1()});nn.addEventListener("click",()=>{c1()});Nn.addEventListener("click",()=>{Jn(),P("CSV exported.")});Mn.addEventListener("click",()=>{y1()});bn.addEventListener("click",()=>{_n()});E1.addEventListener("change",()=>{if(Z1.classList.contains("open"))y1()});Un.addEventListener("click",()=>{t?.destroy(),t=null,Z1.classList.remove("open")});document.addEventListener("mouseup",()=>{if(d=!1,c)Zn(),c=!1,L=null,T=null,S("fill-preview")});document.addEventListener("keydown",(n)=>{let M=n.target===r;if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="s"){n.preventDefault(),i1();return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="o"){n.preventDefault(),c1();return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="z"){if(n.preventDefault(),n.shiftKey)m1();else I1();return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="y"){n.preventDefault(),m1();return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="b"){n.preventDefault(),I("bold");return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="i"){n.preventDefault(),I("italic");return}if((n.ctrlKey||n.metaKey)&&n.key.toLowerCase()==="u"){n.preventDefault(),I("underline");return}if(n.key==="Delete"&&!M)Cn()});Ln();x();async function qn(){if(!w)return;if(Object.keys(C).length>0)return;try{let n=await w.read($1,{as:"text"});if(typeof n!=="string"||!n.trim())return;if(G1(n,"Autosave is corrupted and could not be restored."))P(`Recovered autosave from ${$1}`)}catch{}}qn();if(!w)P("Storage API unavailable in this runtime.",!0);var B1=window.yaar?.app;if(B1)B1.register({appId:"excel-lite",name:"Excel Lite",state:{cells:{description:'All cell values as a { [ref]: rawValue } object (e.g., {"A1":"Hello","B2":"=A1+1"})',handler:()=>({...C})},styles:{description:"All cell styles as a { [ref]: CellStyle } object",handler:()=>({...Y})},selection:{description:"Current selection: { active, start, end }",handler:()=>({active:F,start:Q,end:X})}},commands:{setCells:{description:"Set one or more cell values. Params: { cells: { [ref]: value } }",params:{type:"object",properties:{cells:{type:"object",additionalProperties:{type:"string"}}},required:["cells"]},handler:(n)=>{A();for(let[N,M]of Object.entries(n.cells)){let b=N.toUpperCase();if(M)C[b]=M;else delete C[b]}return x(),k(),{ok:!0,count:Object.keys(n.cells).length}}},setStyles:{description:"Set styles for one or more cells. Params: { styles: { [ref]: Partial<CellStyle> } }",params:{type:"object",properties:{styles:{type:"object"}},required:["styles"]},handler:(n)=>{A();for(let[N,M]of Object.entries(n.styles)){let b=N.toUpperCase(),j={...E(Y,b),...M},U=o(j);if(U)Y[b]=U;else delete Y[b]}return x(),k(),{ok:!0}}},selectCell:{description:"Select a cell or range. Params: { ref: string } or { start: string, end: string }",params:{type:"object",properties:{ref:{type:"string"},start:{type:"string"},end:{type:"string"}}},handler:(n)=>{let N=(n.start??n.ref??"A1").toUpperCase(),M=(n.end??N).toUpperCase();return F=N,y(N,M,!0),{ok:!0}}},clearRange:{description:"Clear all cell values in a range. Params: { start: string, end: string }",params:{type:"object",properties:{start:{type:"string"},end:{type:"string"}},required:["start","end"]},handler:(n)=>{A();let N=B(n.start.toUpperCase(),n.end.toUpperCase()),M=0;for(let b of K(N))if(C[b])delete C[b],M++;return x(),k(),{ok:!0,cleared:M}}},importWorkbook:{description:"Import a full workbook JSON. Params: { data: { cells: {...}, styles?: {...} } }",params:{type:"object",properties:{data:{type:"object"}},required:["data"]},handler:(n)=>{return q1(n.data),{ok:!0}}}}});
+`);var b={},P={},g=new Map,o=new Map,w1=document.createElement("div");w1.className="fill-handle";var D="A1",W="A1",L="A1",Z1=null,$1=!1,r=!1,N=null,S=null,C1=[],x1=[];function h($){return b[$]??""}var Y1=S1(h);_1.register(...H2);var x=window.yaar?.storage,M1,J1=null;function _($,Z=!1){if(s1(`[${K2(new Date,"HH:mm:ss")}] ${$}`),b1(Z),B1(!0),M1)window.clearTimeout(M1);M1=window.setTimeout(()=>{B1(!1)},Z?4200:2400)}function G2(){let $=H1.value.trim()||"excel-lite/sheet.xlsx";return H1.value=$,$}var K1="excel-lite/autosave.json",_2=D2(async()=>{if(!x)return;try{await x.save(K1,X2())}catch{}},1400);function E(){_2()}function T(){f1(C1,x1,b,P)}function z2(){let $=C1.pop();if(!$)return;x1.push({cells:k(b),styles:k(P)}),Q1($,b,P),w()}function D1(){let $=x1.pop();if(!$)return;C1.push({cells:k(b),styles:k(P)}),Q1($,b,P),w()}function c($){o.forEach((Z)=>Z.classList.remove($))}function w2(){let $=m(P,D);U2.classList.toggle("active",$.bold),Z2.classList.toggle("active",$.italic),J2.classList.toggle("active",$.underline),P1.value=String($.fontSize),W1.value=$.color,O1.value=$.bg,L1.value=$.align}function Q2(){c("selected"),c("active"),c("fill-preview");let $=A(W,L);for(let U of R($))o.get(U)?.classList.add("selected");let Z=o.get(D);if(Z)Z.classList.add("active"),Z.appendChild(w1);if($2.textContent=W===L?D:`${W}:${L}`,Z1!==D)U1.value=h(D);w2()}function i($,Z,U=!1){if(W=$,L=Z,U)D=Z;Q2()}function q2($){let Z=g.get($);if(!Z)return;if(Z1!==$)Z.value=Y1.display($);let U=m(P,$);Z.style.fontWeight=U.bold?"700":"400",Z.style.fontStyle=U.italic?"italic":"normal",Z.style.textDecoration=U.underline?"underline":"none",Z.style.fontSize=`${U.fontSize}px`,Z.style.color=U.color,Z.style.background=U.bg,Z.style.textAlign=U.align}function w(){g.forEach(($,Z)=>q2(Z)),Q2()}function F2($,Z){if(h($)===Z){q2($);return}if(T(),Z)b[$]=Z;else delete b[$];w(),E()}function d($){T();let Z=A(W,L);for(let U of R(Z)){let J={...m(P,U),...$},Y=s(J);if(Y)P[U]=Y;else delete P[U]}w(),E()}function n($){let Z=m(P,D);d({[$]:!Z[$]})}function C2(){T();let $=A(W,L);for(let Z of R($))delete b[Z];w(),E()}function o1(){if(c("fill-preview"),!r||!N||!S)return;let $=z1(N,S);if(!$)return;for(let Z of R($))o.get(Z)?.classList.add("fill-preview")}function x2(){if(!N||!S)return;let $=z1(N,S);if(!$)return;T();for(let Z of R($)){let U=T1(N,Z),J=H(Z),Y=H(U),G=m1(h(U),J.r-Y.r,J.c-Y.c);if(G)b[Z]=G;else delete b[Z];let j=P[U];if(j)P[Z]={...j};else delete P[Z]}if($.r2>N.r2)W=K(N.c1,N.r1),L=K(N.c2,$.r2);else if($.r1<N.r1)W=K(N.c1,$.r1),L=K(N.c2,N.r2);else if($.c2>N.c2)W=K(N.c1,N.r1),L=K($.c2,N.r2);else if($.c1<N.c1)W=K($.c1,N.r1),L=K(N.c2,N.r2);w(),E()}function r1(){let $=A(W,L),Z=R($),U=k1(Z,b,(Y)=>Y1.display(Y));if(!U.length){_("Selection has no numeric values for charting.",!0);return}let J=Y2.value;J1?.destroy(),J1=new _1(j2,{type:J,data:{labels:U.map((Y)=>Y.label),datasets:[{label:J.toUpperCase(),data:U.map((Y)=>Y.value),borderColor:"#2a6df6",backgroundColor:J==="pie"?["#2a6df6","#60a5fa","#93c5fd","#bfdbfe","#dbeafe","#2563eb"]:"rgba(42, 109, 246, 0.35)",borderWidth:2,fill:J==="line",tension:0.25}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:J==="pie"}}}}),a1(`${W===L?D:`${W}:${L}`} (${U.length} pts)`),e(!0),_(`Rendered ${J} chart from selection.`)}function R2(){let $=A(W,L),U=R($).map((Y)=>Number.parseFloat(Y1.display(Y))).filter((Y)=>Number.isFinite(Y));if(!U.length){_("Selection has no numeric values for stats.",!0);return}let J=[{label:"Count",value:String(U.length)},{label:"Sum",value:C.format(",.4~f")(C.sum(U))},{label:"Mean",value:C.format(",.4~f")(C.mean(U)??0)},{label:"Median",value:C.format(",.4~f")(C.median(U)??0)},{label:"Min",value:C.format(",.4~f")(C.min(U)??0)},{label:"Max",value:C.format(",.4~f")(C.max(U)??0)}];t1(J),e1(W===L?D:`${W}:${L}`),N1(!0),_("Computed stats for selected range.")}function I2(){let $=1,Z=1;for(let z of Object.keys(b)){let B=H(z);if(!B)continue;if(!b[z])continue;$=Math.max($,B.r),Z=Math.max(Z,B.c)}let U=[];for(let z=1;z<=$;z++){let B=[];for(let Q=1;Q<=Z;Q++)B.push(E1(h(K(Q,z))));U.push(B.join(","))}let J=U.join(`
+`),Y=new Blob([J],{type:"text/csv;charset=utf-8"}),G=URL.createObjectURL(Y),j=document.createElement("a");j.href=G,j.download="sheet.csv",j.click(),URL.revokeObjectURL(G)}function A2(){let $=document.createElement("table"),Z=document.createElement("thead"),U=document.createElement("tr"),J=document.createElement("th");J.className="corner",U.appendChild(J);for(let G=1;G<=l;G++){let j=document.createElement("th");j.textContent=u(G),U.appendChild(j)}Z.appendChild(U),$.appendChild(Z);let Y=document.createElement("tbody");for(let G=1;G<=G1;G++){let j=document.createElement("tr"),z=document.createElement("th");z.className="rowHead",z.textContent=String(G),j.appendChild(z);for(let B=1;B<=l;B++){let Q=K(B,G),X=document.createElement("td");X.dataset.ref=Q;let q=document.createElement("input");q.spellcheck=!1,X.addEventListener("mousedown",(F)=>{if(F.button!==0)return;if(F.target.classList.contains("fill-handle"))return;if($1=!0,F.shiftKey)i(W,Q,!0);else D=Q,i(Q,Q,!0);q.focus()}),X.addEventListener("mouseenter",()=>{if($1)i(W,Q,!0);if(r)S=Q,o1()}),q.addEventListener("focus",()=>{if(Z1=Q,D=Q,!$1)i(Q,Q,!0);q.value=h(Q)}),q.addEventListener("blur",()=>{let F=q.value;Z1=null,F2(Q,F)}),q.addEventListener("keydown",(F)=>{let M=H(Q);if(F.key==="Enter"){F.preventDefault(),q.blur();let O=K(M.c,Math.min(G1,M.r+1));g.get(O)?.focus()}else if(F.key==="Tab"){F.preventDefault(),q.blur();let O=K(Math.min(l,M.c+1),M.r);g.get(O)?.focus()}else if(F.key==="Escape")F.preventDefault(),q.value=Y1.display(Q),q.blur()}),X.appendChild(q),j.appendChild(X),g.set(Q,q),o.set(Q,X)}Y.appendChild(j)}$.appendChild(Y),V1.innerHTML="",V1.appendChild($),w1.addEventListener("mousedown",(G)=>{G.preventDefault(),G.stopPropagation(),r=!0,N=A(W,L),S=D,o1()})}function X2(){return JSON.stringify({cells:b,styles:P},null,2)}function R1($){T();for(let Z of Object.keys(b))delete b[Z];for(let Z of Object.keys(P))delete P[Z];if($&&typeof $==="object"&&$.cells&&typeof $.cells==="object"){for(let[Z,U]of Object.entries($.cells))if(typeof U==="string")b[Z.toUpperCase()]=U;if($.styles&&typeof $.styles==="object")for(let[Z,U]of Object.entries($.styles)){if(!U||typeof U!=="object")continue;let J=s(U);if(J)P[Z.toUpperCase()]=J}}else for(let[Z,U]of Object.entries($))if(typeof U==="string")b[Z.toUpperCase()]=U;w(),E()}function I1($,Z="Invalid JSON"){try{let U=JSON.parse($);return R1(U),!0}catch{return alert(Z),!1}}async function M2(){if(!x){_("Storage API unavailable in this runtime.",!0);return}try{let $=G2(),Z=y1(b);await x.save($,Z),_(`Saved XLSX to storage: ${$}`)}catch($){let Z=$ instanceof Error?$.message:"Failed to save";_(Z,!0)}}async function B2(){if(!x){_("Storage API unavailable in this runtime.",!0);return}try{let $=G2();if($.toLowerCase().endsWith(".json")){let G=await x.read($,{as:"text"});if(typeof G!=="string")throw Error("Workbook content is not text");if(I1(G,`Invalid JSON in ${$}`))_(`Opened JSON from storage: ${$}`);return}let U=await x.read($,{as:"arraybuffer"}),J=U instanceof Uint8Array?U:new Uint8Array(U),Y=v1(J);R1(Y),_(`Opened XLSX from storage: ${$}`)}catch($){let Z=$ instanceof Error?$.message:"Failed to open file";_(Z,!0)}}document.addEventListener("mouseup",()=>{if($1=!1,r)x2(),r=!1,N=null,S=null,c("fill-preview")});document.addEventListener("keydown",($)=>{let U=$.target===U1;if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="s"){$.preventDefault(),M2();return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="o"){$.preventDefault(),B2();return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="z"){if($.preventDefault(),$.shiftKey)D1();else z2();return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="y"){$.preventDefault(),D1();return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="b"){$.preventDefault(),n("bold");return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="i"){$.preventDefault(),n("italic");return}if(($.ctrlKey||$.metaKey)&&$.key.toLowerCase()==="u"){$.preventDefault(),n("underline");return}if($.key==="Delete"&&!U)C2()});A2();w();async function k2(){if(!x)return;if(Object.keys(b).length>0)return;try{let $=await x.read(K1,{as:"text"});if(typeof $!=="string"||!$.trim())return;if(I1($,"Autosave is corrupted and could not be restored."))_(`Recovered autosave from ${K1}`)}catch{}}k2();if(!x)_("Storage API unavailable in this runtime.",!0);var l1=window.yaar?.app;if(l1)l1.register({appId:"excel-lite",name:"Excel Lite",state:{cells:{description:'All cell values as a { [ref]: rawValue } object (e.g., {"A1":"Hello","B2":"=A1+1"})',handler:()=>({...b})},styles:{description:"All cell styles as a { [ref]: CellStyle } object",handler:()=>({...P})},selection:{description:"Current selection: { active, start, end }",handler:()=>({active:D,start:W,end:L})}},commands:{setCells:{description:"Set one or more cell values. Params: { cells: { [ref]: value } }",params:{type:"object",properties:{cells:{type:"object",additionalProperties:{type:"string"}}},required:["cells"]},handler:($)=>{T();for(let[Z,U]of Object.entries($.cells)){let J=Z.toUpperCase();if(U)b[J]=U;else delete b[J]}return w(),E(),{ok:!0,count:Object.keys($.cells).length}}},setStyles:{description:"Set styles for one or more cells. Params: { styles: { [ref]: Partial<CellStyle> } }",params:{type:"object",properties:{styles:{type:"object"}},required:["styles"]},handler:($)=>{T();for(let[Z,U]of Object.entries($.styles)){let J=Z.toUpperCase(),Y={...m(P,J),...U},G=s(Y);if(G)P[J]=G;else delete P[J]}return w(),E(),{ok:!0}}},selectCell:{description:"Select a cell or range. Params: { ref: string } or { start: string, end: string }",params:{type:"object",properties:{ref:{type:"string"},start:{type:"string"},end:{type:"string"}}},handler:($)=>{let Z=($.start??$.ref??"A1").toUpperCase(),U=($.end??Z).toUpperCase();return D=Z,i(Z,U,!0),{ok:!0}}},clearRange:{description:"Clear all cell values in a range. Params: { start: string, end: string }",params:{type:"object",properties:{start:{type:"string"},end:{type:"string"}},required:["start","end"]},handler:($)=>{T();let Z=A($.start.toUpperCase(),$.end.toUpperCase()),U=0;for(let J of R(Z))if(b[J])delete b[J],U++;return w(),E(),{ok:!0,cleared:U}}},importWorkbook:{description:"Import a full workbook JSON. Params: { data: { cells: {...}, styles?: {...} } }",params:{type:"object",properties:{data:{type:"object"}},required:["data"]},handler:($)=>{return R1($.data),{ok:!0}}}}});
 
 </script>
 </body>

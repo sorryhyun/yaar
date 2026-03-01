@@ -1,7 +1,5 @@
-import { styles } from './styles';
+import { signal, html, css, mount } from '@bundled/yaar';
 import {
-  LEGACY_STORAGE_KEY,
-  STORAGE_KEY,
   countTextStats,
   createDocxBlob,
   debounce,
@@ -11,28 +9,207 @@ import {
   sanitizeFilename,
 } from './utils';
 
-const app = document.getElementById('app') || document.body;
+// ── Styles (replaces styles.ts injection)
+css`
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--yaar-bg); }
+  #app { height: 100%; }
+  .app-shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; color: #e5e7eb; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--yaar-bg-surface); border-bottom: 1px solid var(--yaar-border); }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .doc-meta { display: inline-flex; align-items: center; gap: 8px; }
+  .doc-title-input { min-width: 220px; }
+  .brand-badge { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: var(--yaar-bg-surface); border-bottom: 1px solid var(--yaar-border); }
+  .group { display: inline-flex; gap: 6px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--yaar-border); }
+  .group:last-child { border-right: 0; padding-right: 0; }
+  .editor-wrap { overflow: auto; padding: 24px; background: #0b1220; }
+  .page { max-width: 860px; min-height: calc(100% - 4px); margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 24px rgba(0,0,0,0.22); color: #111827; padding: 36px 44px; outline: none; line-height: 1.5; font-size: 16px; cursor: text; }
+  .page a, .page a:link, .page a:visited, .page a:hover, .page a:active, .page a:focus, .page a * { cursor: pointer !important; }
+  .page a:hover { text-decoration: underline; }
+  .page:empty:before { content: attr(data-placeholder); color: #9ca3af; }
+  .statusbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--yaar-bg-surface); border-top: 1px solid var(--yaar-border); color: var(--yaar-text-muted); }
+  .app-shell.focus-mode .topbar, .app-shell.focus-mode .toolbar, .app-shell.focus-mode .statusbar { display: none; }
+  .app-shell.focus-mode .editor-wrap { padding: 12px; }
+  .muted { color: var(--yaar-text-muted); }
+`;
 
-app.innerHTML = `
-  <style>${styles}</style>
-  <div class="app-shell">
+// ── Reactive signals
+const statsText = signal('0 words • 0 chars • 0 min read');
+const saveStateText = signal('Not saved');
+const focusMode = signal(false);
+
+// ── DOM refs (assigned during mount via ref=)
+let editorEl!: HTMLElement;
+let docTitleEl!: HTMLInputElement;
+let fileInputEl!: HTMLInputElement;
+let formatBlockEl!: HTMLSelectElement;
+
+// ── Storage
+const yaarStorage = (window as any).yaar?.storage;
+const DOC_PATH = 'word-lite/draft.json';
+
+// ── Helpers
+const getTitle = () => (docTitleEl?.value || '').trim() || 'Untitled Document';
+const exportBaseName = () => sanitizeFilename(getTitle());
+
+const refreshStats = () => {
+  const { words, chars } = countTextStats(editorEl?.innerText || '');
+  const readMins = words === 0 ? 0 : Math.max(1, Math.ceil(words / 200));
+  statsText(`${words} words • ${chars} chars • ${readMins} min read`);
+};
+
+const exec = (cmd: string, value?: string) => {
+  editorEl?.focus();
+  document.execCommand(cmd, false, value);
+  refreshStats();
+};
+
+const saveDoc = async () => {
+  const payload = { html: editorEl?.innerHTML || '', title: getTitle(), savedAt: Date.now() };
+  await yaarStorage?.save(DOC_PATH, JSON.stringify(payload));
+  saveStateText(`Saved at ${nowLabel()}`);
+};
+
+const autoSave = debounce(() => saveDoc(), 550);
+
+const loadDoc = async () => {
+  const stored = await yaarStorage?.read(DOC_PATH, { as: 'text' }).catch(() => null);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as { html?: string; title?: string };
+      editorEl.innerHTML = parsed.html || '<h1>Untitled Document</h1><p></p>';
+      docTitleEl.value = parsed.title || 'Untitled Document';
+    } catch {
+      editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
+      docTitleEl.value = 'Untitled Document';
+    }
+    saveStateText('Loaded saved draft');
+  } else {
+    editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
+    docTitleEl.value = 'Untitled Document';
+    saveStateText('New document');
+  }
+  refreshStats();
+};
+
+// ── Event handlers
+const handleEditorInput = () => { refreshStats(); saveStateText('Editing…'); autoSave(); };
+
+const handleLink = () => {
+  const link = prompt('Enter URL (https://...)');
+  if (!link) return;
+  exec('createLink', link);
+};
+
+const handleNew = () => {
+  if (!confirm('Start a new blank document?')) return;
+  editorEl.innerHTML = '<p></p>';
+  docTitleEl.value = 'Untitled Document';
+  refreshStats();
+  saveStateText('Unsaved new document');
+  editorEl.focus();
+};
+
+const handleOpen = () => { fileInputEl.value = ''; fileInputEl.click(); };
+
+const handleFocus = () => {
+  focusMode(!focusMode());
+  saveStateText(focusMode() ? 'Focus mode enabled' : 'Focus mode disabled');
+};
+
+const handleExportTxt = () => downloadFile(`${exportBaseName()}.txt`, editorEl.innerText || '', 'text/plain;charset=utf-8');
+const handleExportHtml = () => {
+  const title = getTitle();
+  const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
+  downloadFile(`${exportBaseName()}.html`, htmlContent, 'text/html;charset=utf-8');
+};
+const handleExportDocx = () => {
+  const blob = createDocxBlob(getTitle(), editorEl.innerText || '');
+  downloadBlob(`${exportBaseName()}.docx`, blob);
+  saveStateText(`Exported .docx at ${nowLabel()}`);
+};
+
+const handleFileChange = async () => {
+  const file = fileInputEl?.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  if (/\.html?$/i.test(file.name)) {
+    editorEl.innerHTML = text;
+  } else {
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    editorEl.innerHTML = `<p>${escaped}</p>`;
+  }
+  docTitleEl.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
+  refreshStats();
+  saveStateText(`Opened ${file.name}`);
+  saveDoc();
+};
+
+const tryOpenLink = (rawHref: string | null) => {
+  if (!rawHref) return;
+  try {
+    const parsed = new URL(rawHref, window.location.href);
+    if (!['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
+      alert(`Unsupported link protocol: ${parsed.protocol}`);
+      return;
+    }
+    window.open(parsed.href, '_blank', 'noopener,noreferrer');
+  } catch { alert('Invalid URL'); }
+};
+
+const handleEditorClick = (e: MouseEvent) => {
+  const linkEl = (e.target as HTMLElement)?.closest('a') as HTMLAnchorElement | null;
+  if (!linkEl) return;
+  e.preventDefault();
+  tryOpenLink(linkEl.getAttribute('href'));
+};
+
+// ── Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && focusMode()) { focusMode(false); saveStateText('Focus mode disabled'); return; }
+  if (!e.ctrlKey && !e.metaKey) return;
+  const key = e.key.toLowerCase();
+  if (key === 's') { e.preventDefault(); saveDoc(); }
+  else if (key === 'b') { e.preventDefault(); exec('bold'); }
+  else if (key === 'i') { e.preventDefault(); exec('italic'); }
+  else if (key === 'u') { e.preventDefault(); exec('underline'); }
+  else if (key === 'o') { e.preventDefault(); fileInputEl.value = ''; fileInputEl.click(); }
+  else if (key === 'n') { e.preventDefault(); editorEl.innerHTML = '<p></p>'; docTitleEl.value = 'Untitled Document'; refreshStats(); saveStateText('Unsaved new document'); editorEl.focus(); }
+});
+
+// ── Mount
+mount(html`
+  <div class=${() => 'app-shell' + (focusMode() ? ' focus-mode' : '')}>
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
       <div class="doc-meta">
         <label for="doc-title" class="muted">Title</label>
-        <input id="doc-title" type="text" placeholder="Untitled Document" maxlength="100" />
+        <input
+          id="doc-title"
+          class="y-input doc-title-input"
+          type="text"
+          placeholder="Untitled Document"
+          maxlength="100"
+          ref=${(el: HTMLInputElement) => { docTitleEl = el; }}
+          onInput=${() => { saveStateText('Editing title…'); autoSave(); }}
+        />
       </div>
     </div>
 
     <div class="toolbar">
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="bold"><b>B</b></button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="italic"><i>I</i></button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="underline"><u>U</u></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('bold')}><b>B</b></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('italic')}><i>I</i></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('underline')}><u>U</u></button>
       </div>
-
       <div class="group">
-        <select id="format-block" title="Style">
+        <select
+          class="y-input"
+          title="Style"
+          ref=${(el: HTMLSelectElement) => { formatBlockEl = el; }}
+          onChange=${() => exec('formatBlock', formatBlockEl.value)}
+        >
           <option value="P">Paragraph</option>
           <option value="H1">Heading 1</option>
           <option value="H2">Heading 2</option>
@@ -40,265 +217,59 @@ app.innerHTML = `
           <option value="BLOCKQUOTE">Quote</option>
         </select>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyLeft">Left</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyCenter">Center</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyRight">Right</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertUnorderedList">• List</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertOrderedList">1. List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('justifyLeft')}>Left</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('justifyCenter')}>Center</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('justifyRight')}>Right</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('insertUnorderedList')}>• List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('insertOrderedList')}>1. List</button>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-link">Link</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="removeFormat">Clear</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="undo">Undo</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="redo">Redo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleLink}>Link</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('removeFormat')}>Clear</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('undo')}>Undo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => exec('redo')}>Redo</button>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-new">New</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-open">Open</button>
-        <button class="y-btn y-btn-sm y-btn-primary" id="btn-save">Save</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-txt">.txt</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-html">.html</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-docx">.docx</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-focus">Focus</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleNew}>New</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleOpen}>Open</button>
+        <button class="y-btn y-btn-sm y-btn-primary" onClick=${saveDoc}>Save</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportTxt}>.txt</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportHtml}>.html</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportDocx}>.docx</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleFocus}>Focus</button>
       </div>
     </div>
 
     <div class="editor-wrap">
-      <article id="editor" class="page" contenteditable="true" spellcheck="true" data-placeholder="Start typing..."></article>
-      <input id="file-input" type="file" accept=".txt,.html,.htm" style="display:none" />
+      <article
+        class="page"
+        contenteditable="true"
+        spellcheck="true"
+        data-placeholder="Start typing..."
+        ref=${(el: HTMLElement) => { editorEl = el; }}
+        onInput=${handleEditorInput}
+        onKeyup=${refreshStats}
+        onClick=${handleEditorClick}
+      ></article>
+      <input
+        type="file"
+        accept=".txt,.html,.htm"
+        style="display:none"
+        ref=${(el: HTMLInputElement) => { fileInputEl = el; }}
+        onChange=${handleFileChange}
+      />
     </div>
 
     <div class="statusbar y-text-sm">
-      <span id="stats">0 words • 0 chars</span>
-      <span id="save-state">Not saved</span>
+      <span>${() => statsText()}</span>
+      <span>${() => saveStateText()}</span>
     </div>
   </div>
-`;
+`);
 
-const editor = document.getElementById('editor') as HTMLElement;
-const fileInput = document.getElementById('file-input') as HTMLInputElement;
-const statsEl = document.getElementById('stats') as HTMLSpanElement;
-const saveState = document.getElementById('save-state') as HTMLSpanElement;
-const formatBlock = document.getElementById('format-block') as HTMLSelectElement;
-const docTitle = document.getElementById('doc-title') as HTMLInputElement;
-
-let isFocusMode = false;
-
-const getTitle = () => (docTitle.value || '').trim() || 'Untitled Document';
-const exportBaseName = () => sanitizeFilename(getTitle());
-
-const exec = (cmd: string, value?: string) => {
-  editor.focus();
-  document.execCommand(cmd, false, value);
-  refreshStats();
-};
-
-const refreshStats = () => {
-  const { words, chars } = countTextStats(editor.innerText || '');
-  const readMins = words === 0 ? 0 : Math.max(1, Math.ceil(words / 200));
-  statsEl.textContent = `${words} words • ${chars} chars • ${readMins} min read`;
-};
-
-const saveDoc = () => {
-  const payload = {
-    html: editor.innerHTML,
-    title: getTitle(),
-    savedAt: Date.now(),
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  saveState.textContent = `Saved at ${nowLabel()}`;
-};
-
-const autoSave = debounce(() => {
-  saveDoc();
-}, 550);
-
-const loadDoc = () => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as { html?: string; title?: string };
-      editor.innerHTML = parsed.html || '<h1>Untitled Document</h1><p></p>';
-      docTitle.value = parsed.title || 'Untitled Document';
-    } catch {
-      editor.innerHTML = stored;
-      docTitle.value = 'Untitled Document';
-    }
-    saveState.textContent = 'Loaded saved draft';
-  } else {
-    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) {
-      editor.innerHTML = legacy;
-      docTitle.value = 'Untitled Document';
-      saveState.textContent = 'Loaded saved draft';
-      saveDoc();
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-    } else {
-      editor.innerHTML = '<h1>Untitled Document</h1><p></p>';
-      docTitle.value = 'Untitled Document';
-      saveState.textContent = 'New document';
-    }
-  }
-  refreshStats();
-};
-
-for (const btn of Array.from(document.querySelectorAll('button[data-cmd]'))) {
-  btn.addEventListener('click', () => {
-    const cmd = (btn as HTMLButtonElement).dataset.cmd!;
-    exec(cmd);
-  });
-}
-
-formatBlock.addEventListener('change', () => {
-  exec('formatBlock', formatBlock.value);
-});
-
-document.getElementById('btn-link')?.addEventListener('click', () => {
-  const link = prompt('Enter URL (https://...)');
-  if (!link) return;
-  exec('createLink', link);
-});
-
-document.getElementById('btn-new')?.addEventListener('click', () => {
-  const ok = confirm('Start a new blank document?');
-  if (!ok) return;
-  editor.innerHTML = '<p></p>';
-  docTitle.value = 'Untitled Document';
-  refreshStats();
-  saveState.textContent = 'Unsaved new document';
-  editor.focus();
-});
-
-document.getElementById('btn-open')?.addEventListener('click', () => {
-  fileInput.value = '';
-  fileInput.click();
-});
-
-document.getElementById('btn-save')?.addEventListener('click', () => {
-  saveDoc();
-});
-
-document.getElementById('btn-focus')?.addEventListener('click', () => {
-  isFocusMode = !isFocusMode;
-  app.classList.toggle('focus-mode', isFocusMode);
-  saveState.textContent = isFocusMode ? 'Focus mode enabled' : 'Focus mode disabled';
-});
-
-document.getElementById('btn-export-txt')?.addEventListener('click', () => {
-  downloadFile(`${exportBaseName()}.txt`, editor.innerText || '', 'text/plain;charset=utf-8');
-});
-
-document.getElementById('btn-export-html')?.addEventListener('click', () => {
-  const title = getTitle();
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
-  downloadFile(`${exportBaseName()}.html`, html, 'text/html;charset=utf-8');
-});
-
-document.getElementById('btn-export-docx')?.addEventListener('click', () => {
-  const blob = createDocxBlob(getTitle(), editor.innerText || '');
-  downloadBlob(`${exportBaseName()}.docx`, blob);
-  saveState.textContent = `Exported .docx at ${nowLabel()}`;
-});
-
-fileInput.addEventListener('change', async () => {
-  const file = fileInput.files?.[0];
-  if (!file) return;
-  const text = await file.text();
-  if (/\.html?$/i.test(file.name)) {
-    editor.innerHTML = text;
-  } else {
-    const escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    editor.innerHTML = `<p>${escaped}</p>`;
-  }
-  docTitle.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
-  refreshStats();
-  saveState.textContent = `Opened ${file.name}`;
-  saveDoc();
-});
-
-editor.addEventListener('input', () => {
-  refreshStats();
-  saveState.textContent = 'Editing…';
-  autoSave();
-});
-
-docTitle.addEventListener('input', () => {
-  saveState.textContent = 'Editing title…';
-  autoSave();
-});
-
-editor.addEventListener('keyup', refreshStats);
-
-const tryOpenLink = (rawHref: string | null) => {
-  if (!rawHref) return;
-  try {
-    const parsed = new URL(rawHref, window.location.href);
-    const allowed = ['http:', 'https:', 'mailto:', 'tel:'];
-    if (!allowed.includes(parsed.protocol)) {
-      alert(`Unsupported link protocol: ${parsed.protocol}`);
-      return;
-    }
-    window.open(parsed.href, '_blank', 'noopener,noreferrer');
-  } catch {
-    alert('Invalid URL');
-  }
-};
-
-editor.addEventListener('click', (e) => {
-  const target = e.target as HTMLElement | null;
-  const linkEl = target?.closest('a') as HTMLAnchorElement | null;
-  if (!linkEl) return;
-
-  e.preventDefault();
-  tryOpenLink(linkEl.getAttribute('href'));
-});
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isFocusMode) {
-    isFocusMode = false;
-    app.classList.remove('focus-mode');
-    saveState.textContent = 'Focus mode disabled';
-    return;
-  }
-
-  if (!e.ctrlKey && !e.metaKey) return;
-  const key = e.key.toLowerCase();
-  if (key === 's') {
-    e.preventDefault();
-    saveDoc();
-  } else if (key === 'b') {
-    e.preventDefault();
-    exec('bold');
-  } else if (key === 'i') {
-    e.preventDefault();
-    exec('italic');
-  } else if (key === 'u') {
-    e.preventDefault();
-    exec('underline');
-  } else if (key === 'o') {
-    e.preventDefault();
-    fileInput.value = '';
-    fileInput.click();
-  } else if (key === 'n') {
-    e.preventDefault();
-    editor.innerHTML = '<p></p>';
-    docTitle.value = 'Untitled Document';
-    refreshStats();
-    saveState.textContent = 'Unsaved new document';
-    editor.focus();
-  }
-});
-
-loadDoc();
-editor.focus();
+// ref fires synchronously during mount — all elements are ready
+loadDoc().then(() => editorEl.focus());
 
 // ── App Protocol: expose state and commands to the AI agent ──────
 
@@ -310,20 +281,20 @@ function setEditorFromPlainText(text: string) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
-  editor.innerHTML = `<p>${escaped}</p>`;
+  editorEl.innerHTML = `<p>${escaped}</p>`;
   refreshStats();
 }
 
-function setEditorFromHtml(html: string) {
-  editor.innerHTML = html || '<p></p>';
+function setEditorFromHtml(htmlStr: string) {
+  editorEl.innerHTML = htmlStr || '<p></p>';
   refreshStats();
 }
 
-function appendHtmlFragment(html: string) {
+function appendHtmlFragment(htmlStr: string) {
   const div = document.createElement('div');
-  div.innerHTML = html || '';
+  div.innerHTML = htmlStr || '';
   while (div.firstChild) {
-    editor.appendChild(div.firstChild);
+    editorEl.appendChild(div.firstChild);
   }
   refreshStats();
 }
@@ -371,15 +342,15 @@ if (appApi) {
     state: {
       html: {
         description: 'Current document HTML content',
-        handler: () => editor.innerHTML,
+        handler: () => editorEl.innerHTML,
       },
       text: {
         description: 'Current document plain text content',
-        handler: () => editor.innerText || '',
+        handler: () => editorEl.innerText || '',
       },
       stats: {
         description: 'Current text stats as { words, chars }',
-        handler: () => countTextStats(editor.innerText || ''),
+        handler: () => countTextStats(editorEl.innerText || ''),
       },
       title: {
         description: 'Current document title',
@@ -387,7 +358,7 @@ if (appApi) {
       },
       saveState: {
         description: 'Current save status label',
-        handler: () => saveState.textContent || '',
+        handler: () => saveStateText(),
       },
     },
     commands: {
@@ -400,7 +371,7 @@ if (appApi) {
         },
         handler: (p: { html: string }) => {
           setEditorFromHtml(p.html || '<p></p>');
-          saveState.textContent = 'Updated via app protocol';
+          saveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -413,8 +384,8 @@ if (appApi) {
           required: ['title'],
         },
         handler: (p: { title: string }) => {
-          docTitle.value = (p.title || '').trim() || 'Untitled Document';
-          saveState.textContent = 'Updated via app protocol';
+          docTitleEl.value = (p.title || '').trim() || 'Untitled Document';
+          saveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -428,7 +399,7 @@ if (appApi) {
         },
         handler: (p: { text: string }) => {
           setEditorFromPlainText(p.text || '');
-          saveState.textContent = 'Updated via app protocol';
+          saveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -450,9 +421,9 @@ if (appApi) {
             .replace(/\n/g, '<br>');
           const para = document.createElement('p');
           para.innerHTML = escaped;
-          editor.appendChild(para);
+          editorEl.appendChild(para);
           refreshStats();
-          saveState.textContent = 'Updated via app protocol';
+          saveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -466,7 +437,7 @@ if (appApi) {
         },
         handler: (p: { html: string }) => {
           appendHtmlFragment(p.html || '');
-          saveState.textContent = 'Updated via app protocol';
+          saveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -493,7 +464,7 @@ if (appApi) {
         handler: (p: { docs: BatchDocInput[] }) => {
           const docs = Array.isArray(p.docs) ? p.docs : [];
           setEditorFromHtml(docsToMergedHtml(docs));
-          saveState.textContent = `Loaded ${docs.length} document(s) via app protocol`;
+          saveStateText(`Loaded ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { ok: true, count: docs.length };
         },
@@ -520,7 +491,7 @@ if (appApi) {
         handler: (p: { docs: BatchDocInput[] }) => {
           const docs = Array.isArray(p.docs) ? p.docs : [];
           appendHtmlFragment(docsToMergedHtml(docs));
-          saveState.textContent = `Appended ${docs.length} document(s) via app protocol`;
+          saveStateText(`Appended ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { ok: true, count: docs.length };
         },
@@ -536,9 +507,9 @@ if (appApi) {
           const storage = (window as any).yaar?.storage;
           if (!storage) return { ok: false, error: 'Storage API not available' };
           const title = getTitle();
-          const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
-          await storage.save(p.path, html);
-          saveState.textContent = `Saved to storage: ${p.path}`;
+          const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
+          await storage.save(p.path, htmlContent);
+          saveStateText(`Saved to storage: ${p.path}`);
           return { ok: true, path: p.path, savedAt: nowLabel() };
         },
       },
@@ -582,7 +553,7 @@ if (appApi) {
             setEditorFromHtml(merged);
           }
 
-          saveState.textContent = `Loaded ${loadedDocs.length} file(s) from storage`;
+          saveStateText(`Loaded ${loadedDocs.length} file(s) from storage`);
           saveDoc();
           return { ok: true, count: loadedDocs.length, paths: candidatePaths, mode };
         },
@@ -638,10 +609,10 @@ if (appApi) {
         description: 'Clear current document to a blank paragraph. Params: {}',
         params: { type: 'object', properties: {} },
         handler: () => {
-          editor.innerHTML = '<p></p>';
-          docTitle.value = 'Untitled Document';
+          editorEl.innerHTML = '<p></p>';
+          docTitleEl.value = 'Untitled Document';
           refreshStats();
-          saveState.textContent = 'Unsaved new document';
+          saveStateText('Unsaved new document');
           return { ok: true };
         },
       },

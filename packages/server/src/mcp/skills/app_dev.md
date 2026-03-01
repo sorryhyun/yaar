@@ -76,26 +76,52 @@ Override any token in your app: `:root { --yaar-accent: #ff6b6b; }`
 Tiny reactive library for building apps without manual DOM manipulation.
 
 ```ts
-import { signal, computed, effect, batch, h, mount, list, Toast } from '@bundled/yaar';
+import {
+  signal, computed, effect, batch,
+  onMount, onCleanup, untrack,
+  h, html, css, mount, list, show, createResource, Toast,
+} from '@bundled/yaar';
 ```
 
-**API:**
+**Reactivity:**
 
 | Function | Description |
 |----------|-------------|
 | `signal(initial)` | Reactive value. `sig()` reads, `sig(val)` writes, `sig.value`, `sig.peek()` |
 | `computed(fn)` | Derived signal, auto-recomputes on dependency change |
-| `effect(fn)` | Side effect, re-runs on tracked signal change. Returns dispose. |
+| `effect(fn)` | Side effect, re-runs on tracked signal change. Returns dispose. `fn` may return a cleanup. |
 | `batch(fn)` | Batch signal writes into one update |
-| `h(tag, props?, ...children)` | Hyperscript. Tag supports `.class#id`. Reactive children via `() => val` |
+| `onCleanup(fn)` | Register cleanup within current effect (called on re-run or dispose) |
+| `onMount(fn)` | Run once after current synchronous code completes (DOM ready) |
+| `untrack(fn)` | Read signals inside `fn` without creating dependencies |
+
+**DOM & Templates:**
+
+| Function | Description |
+|----------|-------------|
+| `html\`...\`` | Tagged template for declarative DOM. Supports `class`, `on*` events, `ref=${(el) => ...}`, reactive `${() => val}` children. **Preferred over `h()`.** |
+| `css\`...\`` | Inject a `<style>` element. Use `--yaar-*` tokens freely. |
+| `h(tag, props?, ...children)` | Hyperscript. Tag supports `.class#id`. Lower-level alternative to `html`. |
 | `mount(element, container?)` | Append to `#app` (default) |
 | `list(container, items$, renderFn, key?)` | Reactive list with key-based reconciliation |
+
+**Conditional & Async:**
+
+| Function | Description |
+|----------|-------------|
+| `show(when, content, fallback?)` | Reactive conditional rendering — returns a reactive child |
+| `createResource(fetcher, opts?)` | Async data with `.loading`, `.error`, `.refetch()` signals |
 | `Toast.show(msg, type?, duration?)` | Toast notification (info/success/error) |
 
 **Example: Todo App**
 
 ```ts
-import { signal, h, mount, list, Toast } from '@bundled/yaar';
+import { signal, html, css, mount, show, onMount, Toast } from '@bundled/yaar';
+
+css`
+  .todo-item { display: flex; align-items: center; justify-content: space-between; }
+  .done { text-decoration: line-through; opacity: 0.5; }
+`;
 
 type Todo = { id: number; text: string; done: boolean };
 const todos = signal<Todo[]>([]);
@@ -110,39 +136,53 @@ function toggle(id: number) {
   todos(todos().map(t => t.id === id ? { ...t, done: !t.done } : t));
 }
 
-const input = h('input.y-input', {
-  placeholder: 'What needs doing?',
-  onKeydown: (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
-      addTodo((e.target as HTMLInputElement).value.trim());
-      (e.target as HTMLInputElement).value = '';
-    }
-  },
-});
+const handleKey = (e: KeyboardEvent) => {
+  const input = e.target as HTMLInputElement;
+  if (e.key === 'Enter' && input.value.trim()) {
+    addTodo(input.value.trim());
+    input.value = '';
+  }
+};
 
-const listEl = h('div.y-flex-col.y-gap-2.y-scroll.y-flex-1');
-list(listEl, todos, (todo) =>
-  h('div.y-card.y-flex-between', null,
-    h('span', {
-      style: { textDecoration: () => todo.done ? 'line-through' : 'none' },
-      className: () => todo.done ? 'y-text-dim' : '',
-    }, todo.text),
-    h('button.y-btn.y-btn-sm.y-btn-ghost', { onClick: () => toggle(todo.id) },
-      todo.done ? '↩' : '✓',
-    ),
-  ),
-  (t) => t.id,
+mount(html`
+  <div class="y-app y-p-3 y-gap-3">
+    <h2 class="y-text-lg">Todos</h2>
+    <input class="y-input" placeholder="What needs doing?" onKeydown=${handleKey} />
+    ${() => todos().map(todo => html`
+      <div class="y-card todo-item">
+        <span class=${() => todo.done ? 'done' : ''}>${todo.text}</span>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => toggle(todo.id)}>
+          ${todo.done ? '↩' : '✓'}
+        </button>
+      </div>
+    `)}
+    <div class="y-text-sm y-text-muted">${() => {
+      const done = todos().filter(t => t.done).length;
+      return `${done}/${todos().length} completed`;
+    }}</div>
+  </div>
+`);
+```
+
+**Example: Async Data**
+
+```ts
+import { html, css, mount, show, createResource } from '@bundled/yaar';
+
+const posts = createResource(() =>
+  fetch('https://jsonplaceholder.typicode.com/posts?_limit=10').then(r => r.json())
 );
 
-mount(h('div.y-app.y-p-3.y-gap-3', null,
-  h('h2.y-text-lg.y-font-bold', null, 'Todos'),
-  input,
-  listEl,
-  h('div.y-text-sm.y-text-muted', null, () => {
-    const done = todos().filter(t => t.done).length;
-    return `${done}/${todos().length} completed`;
-  }),
-));
+mount(html`
+  <div class="y-app y-p-3">
+    <h2 class="y-text-lg">Posts</h2>
+    ${show(() => posts.loading(), () => html`<div class="y-spinner"></div>`)}
+    ${show(() => !!posts.error(), () => html`<div class="y-text-error">${() => posts.error()?.message}</div>`)}
+    ${() => posts()?.map((p: any) => html`
+      <div class="y-card"><strong>${p.title}</strong></div>
+    `)}
+  </div>
+`);
 ```
 
 ## Storage API

@@ -60,19 +60,17 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
+        // Internal libraries resolve to real file paths so Bun follows relative imports
+        if (BUNDLED_LIBRARIES[libName] === null) {
+          const internalPath = join(PLUGIN_DIR, '..', `${libName}-runtime`, 'index.ts');
+          return { path: internalPath };
+        }
         return { path: libName, namespace: NAMESPACE };
       });
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
         const libName = args.path;
         const actualModule = BUNDLED_LIBRARIES[libName];
-
-        // Internal library (null = resolve from server source)
-        if (actualModule === null) {
-          const internalPath = join(PLUGIN_DIR, '..', `${libName}-runtime`, 'index.ts');
-          const contents = await Bun.file(internalPath).text();
-          return { contents, loader: 'ts' };
-        }
 
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
@@ -94,7 +92,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
         // Strategy 3: node_modules (dev non-exe) — resolve from server package
         try {
-          const resolved = Bun.resolveSync(actualModule, PLUGIN_DIR);
+          const resolved = Bun.resolveSync(actualModule!, PLUGIN_DIR);
           const contents = await Bun.file(resolved).text();
           return { contents, loader: 'js' };
         } catch {

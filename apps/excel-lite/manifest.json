@@ -1,8 +1,8 @@
 {
   "id": "excel-lite",
   "name": "Excel Lite",
-  "icon": "🎮",
-  "description": "",
+  "icon": "📊",
+  "description": "Spreadsheet app with formula support, charts, and YAAR storage integration",
   "version": "1.0.0",
   "author": "YAAR"
 }

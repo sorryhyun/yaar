@@ -217,5 +217,6 @@
         }
       }
     }
-  }
+  },
+  "appProtocol": true
 }

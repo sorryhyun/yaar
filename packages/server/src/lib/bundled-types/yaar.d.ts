@@ -70,9 +70,44 @@ declare module '@bundled/yaar' {
    */
   export function batch(fn: () => void): void;
 
+  /**
+   * Register a cleanup function within the current effect.
+   * Called when the effect re-runs or is disposed.
+   *
+   * @example
+   * effect(() => {
+   *   const timer = setInterval(tick, 1000);
+   *   onCleanup(() => clearInterval(timer));
+   * });
+   */
+  export function onCleanup(fn: () => void): void;
+
+  /**
+   * Run a callback once after the current synchronous code completes.
+   * Useful for setup that needs the DOM to be mounted.
+   *
+   * @example
+   * onMount(() => {
+   *   const el = document.getElementById('canvas');
+   *   initChart(el);
+   * });
+   */
+  export function onMount(fn: () => void): void;
+
+  /**
+   * Read signals without creating a dependency.
+   *
+   * @example
+   * effect(() => {
+   *   const x = count();           // tracked
+   *   const y = untrack(() => other()); // NOT tracked
+   * });
+   */
+  export function untrack<T>(fn: () => T): T;
+
   // ── DOM ─────────────────────────────────────────────────────────────────
 
-  /** Valid child types for h(). */
+  /** Valid child types for h() and html``. */
   type Child =
     | string
     | number
@@ -83,8 +118,8 @@ declare module '@bundled/yaar' {
     | Child[]
     | (() => Child);
 
-  /** Props object for h(). */
-  type Props = Record<string, any> | null;
+  /** Props object for h(). Supports `ref` callback, `on*` events, reactive attrs. */
+  type Props = Record<string, any> & { ref?: (el: HTMLElement) => void } | null;
 
   /**
    * Create an HTML element (hyperscript).
@@ -105,7 +140,7 @@ declare module '@bundled/yaar' {
    * Append an element to a container (defaults to `#app`).
    *
    * @example
-   * mount(h('div.y-app', null, h('h1', null, 'Hello')));
+   * mount(html`<div class="y-app"><h1>Hello</h1></div>`);
    */
   export function mount(element: Node, container?: HTMLElement): void;
 
@@ -127,6 +162,94 @@ declare module '@bundled/yaar' {
     renderFn: (item: T, index: number) => HTMLElement,
     key?: (item: T) => string | number,
   ): () => void;
+
+  // ── CSS ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Inject a `<style>` element into the document head.
+   *
+   * @example
+   * css`
+   *   .sidebar { width: 240px; border-right: 1px solid var(--yaar-border); }
+   *   .active { color: var(--yaar-accent); }
+   * `;
+   */
+  export function css(strings: TemplateStringsArray, ...values: unknown[]): void;
+
+  // ── HTML Tagged Template ────────────────────────────────────────────────
+
+  /**
+   * Tagged template for declarative DOM creation. Produces real DOM nodes
+   * using the same reactive system as h(). Supports `class` (mapped to className),
+   * `on*` event handlers, reactive children, and interpolated attributes.
+   *
+   * @example
+   * const App = () => html`
+   *   <div class="y-app y-p-3">
+   *     <h2 class="y-text-lg">Todo</h2>
+   *     <input class="y-input" placeholder="Add..." onKeydown=${handleKey} />
+   *     <div class="y-text-muted">${() => `${todos().length} items`}</div>
+   *     ${() => todos().map(item => html`
+   *       <div class="y-card">${item.text}</div>
+   *     `)}
+   *   </div>
+   * `;
+   * mount(App());
+   */
+  export function html(statics: TemplateStringsArray, ...fields: unknown[]): Node;
+
+  // ── Conditional & Async ─────────────────────────────────────────────────
+
+  /**
+   * Conditional rendering. Returns a reactive child that switches
+   * between content and fallback based on a condition signal.
+   *
+   * @example
+   * html`<div>${show(
+   *   () => loading(),
+   *   () => html`<div class="y-spinner"></div>`,
+   *   () => html`<ul>${items().map(renderItem)}</ul>`
+   * )}</div>`
+   */
+  export function show(
+    when: () => boolean,
+    content: () => Child,
+    fallback?: () => Child,
+  ): () => Child;
+
+  /**
+   * Async data resource with loading/error tracking.
+   */
+  interface Resource<T> {
+    /** Read the data value (tracks dependency). */
+    (): T | undefined;
+    /** Whether the resource is currently loading. */
+    loading: Signal<boolean>;
+    /** Error from the last fetch attempt, or null. */
+    error: Signal<Error | null>;
+    /** Re-trigger the fetcher. */
+    refetch: () => void;
+  }
+
+  /**
+   * Create an async data resource. Fetches immediately and provides
+   * reactive loading/error state.
+   *
+   * @example
+   * const posts = createResource(() =>
+   *   fetch('/api/posts').then(r => r.json())
+   * );
+   *
+   * html`
+   *   ${show(() => posts.loading(), () => html`<div class="y-spinner"></div>`)}
+   *   ${show(() => !!posts.error(), () => html`<div class="y-text-error">${() => posts.error()?.message}</div>`)}
+   *   ${() => posts()?.map(p => html`<div class="y-card">${p.title}</div>`)}
+   * `
+   */
+  export function createResource<T>(
+    fetcher: () => Promise<T>,
+    options?: { initialValue?: T },
+  ): Resource<T>;
 
   // ── Toast ─────────────────────────────────────────────────────────────
 

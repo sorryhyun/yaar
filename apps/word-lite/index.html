@@ -87,156 +87,12 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var J=`
-* { box-sizing: border-box; }
-html, body {
-  margin: 0;
-  height: 100%;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: var(--yaar-bg);
-}
-
-#app {
-  height: 100%;
-}
-
-.app-shell {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  height: 100%;
-  color: #e5e7eb;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-}
-
-.doc-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#doc-title {
-  min-width: 220px;
-}
-
-.brand-badge {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 13px;
-}
-
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--yaar-bg-surface);
-  border-bottom: 1px solid var(--yaar-border);
-}
-
-.group {
-  display: inline-flex;
-  gap: 6px;
-  padding-right: 8px;
-  margin-right: 4px;
-  border-right: 1px solid var(--yaar-border);
-}
-
-.group:last-child {
-  border-right: 0;
-  padding-right: 0;
-}
-
-.editor-wrap {
-  overflow: auto;
-  padding: 24px;
-  background: #0b1220;
-}
-
-.page {
-  max-width: 860px;
-  min-height: calc(100% - 4px);
-  margin: 0 auto;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-  color: #111827;
-  padding: 36px 44px;
-  outline: none;
-  line-height: 1.5;
-  font-size: 16px;
-  cursor: text;
-}
-
-.page a,
-.page a:link,
-.page a:visited,
-.page a:hover,
-.page a:active,
-.page a:focus,
-.page a * {
-  cursor: pointer !important;
-}
-
-.page a:hover {
-  text-decoration: underline;
-}
-
-.page:empty:before {
-  content: attr(data-placeholder);
-  color: #9ca3af;
-}
-
-.statusbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--yaar-bg-surface);
-  border-top: 1px solid var(--yaar-border);
-  color: var(--yaar-text-muted);
-}
-
-#app.focus-mode .topbar,
-#app.focus-mode .toolbar,
-#app.focus-mode .statusbar {
-  display: none;
-}
-
-#app.focus-mode .editor-wrap {
-  padding: 12px;
-}
-
-.muted {
-  color: var(--yaar-text-muted);
-}
-`;var C="word-lite-document-v2",V="word-lite-document-v1";function B(n,t=500){let r=null;return(...e)=>{if(r)window.clearTimeout(r);r=window.setTimeout(()=>n(...e),t)}}function k(n){let t=n.trim();return{words:t?t.split(/\s+/).length:0,chars:n.length}}function P(n,t){let r=URL.createObjectURL(t),e=document.createElement("a");e.href=r,e.download=n,e.click(),URL.revokeObjectURL(r)}function X(n,t,r){P(n,new Blob([t],{type:r}))}function R(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}function D(n){let t=n.trim().toLowerCase();if(!t)return"document";return t.replace(/[^a-z0-9\s-_]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-").slice(0,60)||"document"}var Q=new TextEncoder;function W(n){return n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}function _(n){let t=n.reduce((c,s)=>c+s.length,0),r=new Uint8Array(t),e=0;for(let c of n)r.set(c,e),e+=c.length;return r}function Y(){let n=new Uint32Array(256);for(let t=0;t<256;t++){let r=t;for(let e=0;e<8;e++)r=r&1?3988292384^r>>>1:r>>>1;n[t]=r>>>0}return n}var T=Y();function M(n){let t=4294967295;for(let r=0;r<n.length;r++)t=T[(t^n[r])&255]^t>>>8;return(t^4294967295)>>>0}function E(n=new Date){let t=Math.max(1980,n.getFullYear()),r=n.getMonth()+1,e=n.getDate(),c=n.getHours(),s=n.getMinutes(),p=Math.floor(n.getSeconds()/2),a=t-1980<<9|r<<5|e,x=c<<11|s<<5|p;return{date:a,time:x}}function F(n){let t=[],r=[],e=E(new Date),c=0;for(let x of n){let h=Q.encode(x.name),w=typeof x.data==="string"?Q.encode(x.data):x.data,Z=M(w),j=new Uint8Array(30+h.length),g=new DataView(j.buffer);g.setUint32(0,67324752,!0),g.setUint16(4,20,!0),g.setUint16(6,0,!0),g.setUint16(8,0,!0),g.setUint16(10,e.time,!0),g.setUint16(12,e.date,!0),g.setUint32(14,Z,!0),g.setUint32(18,w.length,!0),g.setUint32(22,w.length,!0),g.setUint16(26,h.length,!0),g.setUint16(28,0,!0),j.set(h,30);let z=new Uint8Array(46+h.length),m=new DataView(z.buffer);m.setUint32(0,33639248,!0),m.setUint16(4,20,!0),m.setUint16(6,20,!0),m.setUint16(8,0,!0),m.setUint16(10,0,!0),m.setUint16(12,e.time,!0),m.setUint16(14,e.date,!0),m.setUint32(16,Z,!0),m.setUint32(20,w.length,!0),m.setUint32(24,w.length,!0),m.setUint16(28,h.length,!0),m.setUint16(30,0,!0),m.setUint16(32,0,!0),m.setUint16(34,0,!0),m.setUint16(36,0,!0),m.setUint32(38,0,!0),m.setUint32(42,c,!0),z.set(h,46),t.push(j,w),r.push(z),c+=j.length+w.length}let s=_(r),p=new Uint8Array(22),a=new DataView(p.buffer);return a.setUint32(0,101010256,!0),a.setUint16(4,0,!0),a.setUint16(6,0,!0),a.setUint16(8,n.length,!0),a.setUint16(10,n.length,!0),a.setUint32(12,s.length,!0),a.setUint32(16,c,!0),a.setUint16(20,0,!0),_([...t,s,p])}function G(n,t){let e=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+var j=null,r=null,G0=new Set,P0=0;class p{_value;_subscribers=new Set;constructor(n){this._value=n}get value(){if(j)this._subscribers.add(j),j.dependencies.add(this);return this._value}set value(n){if(Object.is(this._value,n))return;this._value=n;for(let w of[...this._subscribers])if(P0>0)G0.add(w);else w.execute()}peek(){return this._value}}function O(n){let w=new p(n),U=(...m)=>{if(m.length===0)return w.value;w.value=m[0]};return Object.defineProperty(U,"value",{get:()=>w.value,set:(m)=>{w.value=m}}),U.peek=()=>w.peek(),U}function N(n){for(let w of n.dependencies)w._subscribers.delete(n);n.dependencies.clear();for(let w of n.cleanups)w();n.cleanups=[]}function L(n){let w,U={dependencies:new Set,cleanups:[],execute(){if(N(U),w)w();let m=j,u=r;j=U,r=U.cleanups;try{w=n()}finally{j=m,r=u}}};return U.execute(),()=>{if(N(U),w)w()}}function k(n,w,...U){let m=n,u=[],P,g=n.indexOf("#"),Y=n.indexOf("."),R=Math.min(g>=0?g:1/0,Y>=0?Y:1/0);if(R<1/0){m=n.slice(0,R)||"div";let Z=n.slice(R).split(/(?=[.#])/);for(let $ of Z)if($[0]===".")u.push($.slice(1));else if($[0]==="#")P=$.slice(1)}let f=document.createElement(m);if(P)f.id=P;if(u.length)f.classList.add(...u);if(w)for(let[G,Z]of Object.entries(w))if(G==="className")if(typeof Z==="function")L(()=>{f.className=[u.join(" "),Z()].filter(Boolean).join(" ")});else if(u.length)f.className=u.join(" ")+" "+Z;else f.className=Z;else if(G==="style"){if(typeof Z==="string")f.style.cssText=Z;else if(typeof Z==="object")for(let[$,z]of Object.entries(Z))if(typeof z==="function")L(()=>{f.style[$]=z()});else f.style[$]=z}else if(G==="ref"){if(typeof Z==="function")Z(f)}else if(G.startsWith("on")){let $=G.slice(2).toLowerCase();f.addEventListener($,Z)}else if(typeof Z==="function"&&!G.startsWith("on"))L(()=>{let $=Z();if($==null||$===!1)f.removeAttribute(G);else f.setAttribute(G,String($))});else if(Z==null||Z===!1);else if(Z===!0)f.setAttribute(G,"");else f.setAttribute(G,String(Z));return H(f,U),f}function H(n,w){for(let U of w){if(U==null||U===!1||U===!0)continue;if(Array.isArray(U))H(n,U);else if(typeof U==="function"){let m=document.createTextNode("");n.appendChild(m);let u=m;L(()=>{let P=U(),g=f0(P);if(g instanceof DocumentFragment){let Y=document.createTextNode("");g.appendChild(Y),u.replaceWith(g),u=Y}else u.replaceWith(g),u=g})}else if(U instanceof Node)n.appendChild(U);else n.appendChild(document.createTextNode(String(U)))}}function f0(n){if(n==null||n===!1||n===!0)return document.createTextNode("");if(n instanceof Node)return n;if(Array.isArray(n)){let w=document.createDocumentFragment();return H(w,n),w}return document.createTextNode(String(n))}function E(n,w){let U=w||document.getElementById("app");if(!U)throw Error("Mount target not found");U.appendChild(n)}function s(n,...w){let U=document.createElement("style");U.textContent=String.raw(n,...w),document.head.appendChild(U)}var S=new WeakMap;function v(n,...w){let U=S.get(n);if(!U)U=Z0(n),S.set(n,U);return U(w)}var Q=0,t=1,b=2,D=3;function Z0(n){let w=[],U=Q,m="",u="",P="",g="",Y=!1;function R(G){if(m)w.push(G?{t:"open_close",tag:m}:{t:"open",tag:m});m="",Y=!1}function f(){if(u)w.push({t:"attr_static",name:u,value:P||u}),u="",P=""}for(let G=0;G<n.length;G++){let Z=n[G];for(let $=0;$<Z.length;$++){let z=Z[$];if(U===Q)if(z==="<")if(Z[$+1]==="/"){let x=Z.indexOf(">",$);if(x!==-1)$=x,w.push({t:"close"})}else U=t,m="",Y=!1;else{let x=z;while($+1<Z.length&&Z[$+1]!=="<")x+=Z[++$];if(x=x.replace(/^\s+|\s+$/g," "),x&&x!==" ")w.push({t:"text",value:x})}else if(U===t)if(z==="/"&&m==="");else if(/\s/.test(z)){if(m)w.push({t:"open",tag:m}),m="",U=b}else if(z===">")R(Y),U=Q;else if(z==="/")Y=!0;else m+=z;else if(U===b)if(z==="=")U=D,P="",g="";else if(z==="/"||z===">")if(f(),z===">"){if(Y)w.push({t:"close"}),Y=!1;U=Q}else Y=!0;else if(/\s/.test(z)){if(u)f()}else u+=z;else if(U===D)if(!g&&(z==='"'||z==="'"))g=z;else if(!g&&/\s/.test(z))f(),U=b;else if(z===g)f(),U=b,g="";else if(!g&&(z===">"||z==="/"))if(f(),z===">"){if(Y)w.push({t:"close"}),Y=!1;U=Q}else Y=!0;else P+=z}if(G<n.length-1){if(U===Q)w.push({t:"field",idx:G});else if(U===D){let $=u;u="",P="",g="",w.push({t:"attr_field",name:$,idx:G}),U=b}else if(U===b)if(u)w.push({t:"attr_static",name:u,value:u}),u="",w.push({t:"attr_spread",idx:G});else w.push({t:"attr_spread",idx:G})}}return(G)=>J0(w,G)}var $0={class:"className",for:"htmlFor"};function T(n){return $0[n]||n}function J0(n,w){let U=[],m=[];function u(g){if(U.length)U[U.length-1].children.push(g);else m.push(g)}for(let g of n)switch(g.t){case"open":U.push({tag:g.tag,children:[],props:{}});break;case"open_close":u(k(g.tag,null));break;case"close":{let Y=U.pop();if(Y){let R=Object.keys(Y.props).length?Y.props:void 0;u(k(Y.tag,R,...Y.children))}break}case"attr_static":{let Y=U[U.length-1];if(Y)Y.props[T(g.name)]=g.value;break}case"attr_field":{let Y=U[U.length-1];if(Y)Y.props[T(g.name)]=w[g.idx];break}case"attr_spread":{let Y=U[U.length-1],R=w[g.idx];if(Y&&R&&typeof R==="object")Object.assign(Y.props,R);break}case"text":u(g.value);break;case"field":{let Y=w[g.idx];if(Array.isArray(Y))for(let R of Y)u(R);else u(Y);break}}if(m.length===1&&m[0]instanceof Node)return m[0];let P=document.createDocumentFragment();return H(P,m),P}function e(n,w=500){let U=null;return(...m)=>{if(U)window.clearTimeout(U);U=window.setTimeout(()=>n(...m),w)}}function _(n){let w=n.trim();return{words:w?w.split(/\s+/).length:0,chars:n.length}}function i(n,w){let U=URL.createObjectURL(w),m=document.createElement("a");m.href=U,m.download=n,m.click(),URL.revokeObjectURL(U)}function A(n,w,U){i(n,new Blob([w],{type:U}))}function I(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}function n0(n){let w=n.trim().toLowerCase();if(!w)return"document";return w.replace(/[^a-z0-9\s-_]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-").slice(0,60)||"document"}var d=new TextEncoder;function l(n){return n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;")}function a(n){let w=n.reduce((u,P)=>u+P.length,0),U=new Uint8Array(w),m=0;for(let u of n)U.set(u,m),m+=u.length;return U}function R0(){let n=new Uint32Array(256);for(let w=0;w<256;w++){let U=w;for(let m=0;m<8;m++)U=U&1?3988292384^U>>>1:U>>>1;n[w]=U>>>0}return n}var W0=R0();function V0(n){let w=4294967295;for(let U=0;U<n.length;U++)w=W0[(w^n[U])&255]^w>>>8;return(w^4294967295)>>>0}function o0(n=new Date){let w=Math.max(1980,n.getFullYear()),U=n.getMonth()+1,m=n.getDate(),u=n.getHours(),P=n.getMinutes(),g=Math.floor(n.getSeconds()/2),Y=w-1980<<9|U<<5|m,R=u<<11|P<<5|g;return{date:Y,time:R}}function x0(n){let w=[],U=[],m=o0(new Date),u=0;for(let R of n){let f=d.encode(R.name),G=typeof R.data==="string"?d.encode(R.data):R.data,Z=V0(G),$=new Uint8Array(30+f.length),z=new DataView($.buffer);z.setUint32(0,67324752,!0),z.setUint16(4,20,!0),z.setUint16(6,0,!0),z.setUint16(8,0,!0),z.setUint16(10,m.time,!0),z.setUint16(12,m.date,!0),z.setUint32(14,Z,!0),z.setUint32(18,G.length,!0),z.setUint32(22,G.length,!0),z.setUint16(26,f.length,!0),z.setUint16(28,0,!0),$.set(f,30);let x=new Uint8Array(46+f.length),V=new DataView(x.buffer);V.setUint32(0,33639248,!0),V.setUint16(4,20,!0),V.setUint16(6,20,!0),V.setUint16(8,0,!0),V.setUint16(10,0,!0),V.setUint16(12,m.time,!0),V.setUint16(14,m.date,!0),V.setUint32(16,Z,!0),V.setUint32(20,G.length,!0),V.setUint32(24,G.length,!0),V.setUint16(28,f.length,!0),V.setUint16(30,0,!0),V.setUint16(32,0,!0),V.setUint16(34,0,!0),V.setUint16(36,0,!0),V.setUint32(38,0,!0),V.setUint32(42,u,!0),x.set(f,46),w.push($,G),U.push(x),u+=$.length+G.length}let P=a(U),g=new Uint8Array(22),Y=new DataView(g.buffer);return Y.setUint32(0,101010256,!0),Y.setUint16(4,0,!0),Y.setUint16(6,0,!0),Y.setUint16(8,n.length,!0),Y.setUint16(10,n.length,!0),Y.setUint32(12,P.length,!0),Y.setUint32(16,u,!0),Y.setUint16(20,0,!0),a([...w,P,g])}function w0(n,w){let m=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
   <w:body>
-    ${(t||"").replace(/\r\n/g,`
+    ${(w||"").replace(/\r\n/g,`
 `).split(`
-`).map((x)=>`<w:p><w:r><w:t xml:space="preserve">${W(x)}</w:t></w:r></w:p>`).join("")||"<w:p />"}
+`).map((R)=>`<w:p><w:r><w:t xml:space="preserve">${l(R)}</w:t></w:r></w:p>`).join("")||"<w:p />"}
     <w:sectPr>
       <w:pgSz w:w="12240" w:h="15840" />
       <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
@@ -244,18 +100,18 @@ html, body {
       <w:docGrid w:linePitch="360"/>
     </w:sectPr>
   </w:body>
-</w:document>`,c=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</w:document>`,u=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`,s=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</Types>`,P=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`,p=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+</Relationships>`,g=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>${W(n||"Untitled Document")}</dc:title>
-</cp:coreProperties>`,a=F([{name:"[Content_Types].xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  <dc:title>${l(n||"Untitled Document")}</dc:title>
+</cp:coreProperties>`,Y=x0([{name:"[Content_Types].xml",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
@@ -263,26 +119,59 @@ html, body {
 </Types>`},{name:"_rels/.rels",data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`},{name:"docProps/core.xml",data:p},{name:"word/document.xml",data:e}]);return new Blob([a],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})}var A=document.getElementById("app")||document.body;A.innerHTML=`
-  <style>${J}</style>
-  <div class="app-shell">
+</Relationships>`},{name:"docProps/core.xml",data:g},{name:"word/document.xml",data:m}]);return new Blob([Y],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})}s`
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--yaar-bg); }
+  #app { height: 100%; }
+  .app-shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; color: #e5e7eb; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--yaar-bg-surface); border-bottom: 1px solid var(--yaar-border); }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .doc-meta { display: inline-flex; align-items: center; gap: 8px; }
+  .doc-title-input { min-width: 220px; }
+  .brand-badge { width: 26px; height: 26px; border-radius: 7px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: var(--yaar-bg-surface); border-bottom: 1px solid var(--yaar-border); }
+  .group { display: inline-flex; gap: 6px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--yaar-border); }
+  .group:last-child { border-right: 0; padding-right: 0; }
+  .editor-wrap { overflow: auto; padding: 24px; background: #0b1220; }
+  .page { max-width: 860px; min-height: calc(100% - 4px); margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 10px 24px rgba(0,0,0,0.22); color: #111827; padding: 36px 44px; outline: none; line-height: 1.5; font-size: 16px; cursor: text; }
+  .page a, .page a:link, .page a:visited, .page a:hover, .page a:active, .page a:focus, .page a * { cursor: pointer !important; }
+  .page a:hover { text-decoration: underline; }
+  .page:empty:before { content: attr(data-placeholder); color: #9ca3af; }
+  .statusbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--yaar-bg-surface); border-top: 1px solid var(--yaar-border); color: var(--yaar-text-muted); }
+  .app-shell.focus-mode .topbar, .app-shell.focus-mode .toolbar, .app-shell.focus-mode .statusbar { display: none; }
+  .app-shell.focus-mode .editor-wrap { padding: 12px; }
+  .muted { color: var(--yaar-text-muted); }
+`;var u0=O("0 words • 0 chars • 0 min read"),W=O("Not saved"),K=O(!1),J,X,q,U0,Y0=window.yaar?.storage,g0="word-lite/draft.json",F=()=>(X?.value||"").trim()||"Untitled Document",M=()=>n0(F()),B=()=>{let{words:n,chars:w}=_(J?.innerText||""),U=n===0?0:Math.max(1,Math.ceil(n/200));u0(`${n} words • ${w} chars • ${U} min read`)},o=(n,w)=>{J?.focus(),document.execCommand(n,!1,w),B()},y=async()=>{let n={html:J?.innerHTML||"",title:F(),savedAt:Date.now()};await Y0?.save(g0,JSON.stringify(n)),W(`Saved at ${I()}`)},z0=e(()=>y(),550),y0=async()=>{let n=await Y0?.read(g0,{as:"text"}).catch(()=>null);if(n){try{let w=JSON.parse(n);J.innerHTML=w.html||"<h1>Untitled Document</h1><p></p>",X.value=w.title||"Untitled Document"}catch{J.innerHTML="<h1>Untitled Document</h1><p></p>",X.value="Untitled Document"}W("Loaded saved draft")}else J.innerHTML="<h1>Untitled Document</h1><p></p>",X.value="Untitled Document",W("New document");B()},B0=()=>{B(),W("Editing…"),z0()},X0=()=>{let n=prompt("Enter URL (https://...)");if(!n)return;o("createLink",n)},Q0=()=>{if(!confirm("Start a new blank document?"))return;J.innerHTML="<p></p>",X.value="Untitled Document",B(),W("Unsaved new document"),J.focus()},b0=()=>{q.value="",q.click()},j0=()=>{K(!K()),W(K()?"Focus mode enabled":"Focus mode disabled")},K0=()=>A(`${M()}.txt`,J.innerText||"","text/plain;charset=utf-8"),q0=()=>{let w=`<!doctype html><html><head><meta charset="utf-8"><title>${F()}</title></head><body>${J.innerHTML}</body></html>`;A(`${M()}.html`,w,"text/html;charset=utf-8")},F0=()=>{let n=w0(F(),J.innerText||"");i(`${M()}.docx`,n),W(`Exported .docx at ${I()}`)},I0=async()=>{let n=q?.files?.[0];if(!n)return;let w=await n.text();if(/\.html?$/i.test(n.name))J.innerHTML=w;else{let U=w.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");J.innerHTML=`<p>${U}</p>`}X.value=n.name.replace(/\.[^/.]+$/,"")||"Untitled Document",B(),W(`Opened ${n.name}`),y()},L0=(n)=>{if(!n)return;try{let w=new URL(n,window.location.href);if(!["http:","https:","mailto:","tel:"].includes(w.protocol)){alert(`Unsupported link protocol: ${w.protocol}`);return}window.open(w.href,"_blank","noopener,noreferrer")}catch{alert("Invalid URL")}},O0=(n)=>{let w=n.target?.closest("a");if(!w)return;n.preventDefault(),L0(w.getAttribute("href"))};document.addEventListener("keydown",(n)=>{if(n.key==="Escape"&&K()){K(!1),W("Focus mode disabled");return}if(!n.ctrlKey&&!n.metaKey)return;let w=n.key.toLowerCase();if(w==="s")n.preventDefault(),y();else if(w==="b")n.preventDefault(),o("bold");else if(w==="i")n.preventDefault(),o("italic");else if(w==="u")n.preventDefault(),o("underline");else if(w==="o")n.preventDefault(),q.value="",q.click();else if(w==="n")n.preventDefault(),J.innerHTML="<p></p>",X.value="Untitled Document",B(),W("Unsaved new document"),J.focus()});E(v`
+  <div class=${()=>"app-shell"+(K()?" focus-mode":"")}>
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
       <div class="doc-meta">
         <label for="doc-title" class="muted">Title</label>
-        <input id="doc-title" type="text" placeholder="Untitled Document" maxlength="100" />
+        <input
+          id="doc-title"
+          class="y-input doc-title-input"
+          type="text"
+          placeholder="Untitled Document"
+          maxlength="100"
+          ref=${(n)=>{X=n}}
+          onInput=${()=>{W("Editing title…"),z0()}}
+        />
       </div>
     </div>
 
     <div class="toolbar">
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="bold"><b>B</b></button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="italic"><i>I</i></button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="underline"><u>U</u></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("bold")}><b>B</b></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("italic")}><i>I</i></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("underline")}><u>U</u></button>
       </div>
-
       <div class="group">
-        <select id="format-block" title="Style">
+        <select
+          class="y-input"
+          title="Style"
+          ref=${(n)=>{U0=n}}
+          onChange=${()=>o("formatBlock",U0.value)}
+        >
           <option value="P">Paragraph</option>
           <option value="H1">Heading 1</option>
           <option value="H2">Heading 2</option>
@@ -290,44 +179,56 @@ html, body {
           <option value="BLOCKQUOTE">Quote</option>
         </select>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyLeft">Left</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyCenter">Center</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyRight">Right</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertUnorderedList">• List</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertOrderedList">1. List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("justifyLeft")}>Left</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("justifyCenter")}>Center</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("justifyRight")}>Right</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("insertUnorderedList")}>• List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("insertOrderedList")}>1. List</button>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-link">Link</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="removeFormat">Clear</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="undo">Undo</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="redo">Redo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${X0}>Link</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("removeFormat")}>Clear</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("undo")}>Undo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${()=>o("redo")}>Redo</button>
       </div>
-
       <div class="group">
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-new">New</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-open">Open</button>
-        <button class="y-btn y-btn-sm y-btn-primary" id="btn-save">Save</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-txt">.txt</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-html">.html</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-docx">.docx</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-focus">Focus</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${Q0}>New</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${b0}>Open</button>
+        <button class="y-btn y-btn-sm y-btn-primary" onClick=${y}>Save</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${K0}>.txt</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${q0}>.html</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${F0}>.docx</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${j0}>Focus</button>
       </div>
     </div>
 
     <div class="editor-wrap">
-      <article id="editor" class="page" contenteditable="true" spellcheck="true" data-placeholder="Start typing..."></article>
-      <input id="file-input" type="file" accept=".txt,.html,.htm" style="display:none" />
+      <article
+        class="page"
+        contenteditable="true"
+        spellcheck="true"
+        data-placeholder="Start typing..."
+        ref=${(n)=>{J=n}}
+        onInput=${B0}
+        onKeyup=${B}
+        onClick=${O0}
+      ></article>
+      <input
+        type="file"
+        accept=".txt,.html,.htm"
+        style="display:none"
+        ref=${(n)=>{q=n}}
+        onChange=${I0}
+      />
     </div>
 
     <div class="statusbar y-text-sm">
-      <span id="stats">0 words • 0 chars</span>
-      <span id="save-state">Not saved</span>
+      <span>${()=>u0()}</span>
+      <span>${()=>W()}</span>
     </div>
   </div>
-`;var o=document.getElementById("editor"),U=document.getElementById("file-input"),H=document.getElementById("stats"),i=document.getElementById("save-state"),I=document.getElementById("format-block"),f=document.getElementById("doc-title"),b=!1,y=()=>(f.value||"").trim()||"Untitled Document",O=()=>D(y()),d=(n,t)=>{o.focus(),document.execCommand(n,!1,t),u()},u=()=>{let{words:n,chars:t}=k(o.innerText||""),r=n===0?0:Math.max(1,Math.ceil(n/200));H.textContent=`${n} words • ${t} chars • ${r} min read`},l=()=>{let n={html:o.innerHTML,title:y(),savedAt:Date.now()};localStorage.setItem(C,JSON.stringify(n)),i.textContent=`Saved at ${R()}`},N=B(()=>{l()},550),v=()=>{let n=localStorage.getItem(C);if(n){try{let t=JSON.parse(n);o.innerHTML=t.html||"<h1>Untitled Document</h1><p></p>",f.value=t.title||"Untitled Document"}catch{o.innerHTML=n,f.value="Untitled Document"}i.textContent="Loaded saved draft"}else{let t=localStorage.getItem(V);if(t)o.innerHTML=t,f.value="Untitled Document",i.textContent="Loaded saved draft",l(),localStorage.removeItem(V);else o.innerHTML="<h1>Untitled Document</h1><p></p>",f.value="Untitled Document",i.textContent="New document"}u()};for(let n of Array.from(document.querySelectorAll("button[data-cmd]")))n.addEventListener("click",()=>{let t=n.dataset.cmd;d(t)});I.addEventListener("change",()=>{d("formatBlock",I.value)});document.getElementById("btn-link")?.addEventListener("click",()=>{let n=prompt("Enter URL (https://...)");if(!n)return;d("createLink",n)});document.getElementById("btn-new")?.addEventListener("click",()=>{if(!confirm("Start a new blank document?"))return;o.innerHTML="<p></p>",f.value="Untitled Document",u(),i.textContent="Unsaved new document",o.focus()});document.getElementById("btn-open")?.addEventListener("click",()=>{U.value="",U.click()});document.getElementById("btn-save")?.addEventListener("click",()=>{l()});document.getElementById("btn-focus")?.addEventListener("click",()=>{b=!b,A.classList.toggle("focus-mode",b),i.textContent=b?"Focus mode enabled":"Focus mode disabled"});document.getElementById("btn-export-txt")?.addEventListener("click",()=>{X(`${O()}.txt`,o.innerText||"","text/plain;charset=utf-8")});document.getElementById("btn-export-html")?.addEventListener("click",()=>{let t=`<!doctype html><html><head><meta charset="utf-8"><title>${y()}</title></head><body>${o.innerHTML}</body></html>`;X(`${O()}.html`,t,"text/html;charset=utf-8")});document.getElementById("btn-export-docx")?.addEventListener("click",()=>{let n=G(y(),o.innerText||"");P(`${O()}.docx`,n),i.textContent=`Exported .docx at ${R()}`});U.addEventListener("change",async()=>{let n=U.files?.[0];if(!n)return;let t=await n.text();if(/\.html?$/i.test(n.name))o.innerHTML=t;else{let r=t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");o.innerHTML=`<p>${r}</p>`}f.value=n.name.replace(/\.[^/.]+$/,"")||"Untitled Document",u(),i.textContent=`Opened ${n.name}`,l()});o.addEventListener("input",()=>{u(),i.textContent="Editing…",N()});f.addEventListener("input",()=>{i.textContent="Editing title…",N()});o.addEventListener("keyup",u);var S=(n)=>{if(!n)return;try{let t=new URL(n,window.location.href);if(!["http:","https:","mailto:","tel:"].includes(t.protocol)){alert(`Unsupported link protocol: ${t.protocol}`);return}window.open(t.href,"_blank","noopener,noreferrer")}catch{alert("Invalid URL")}};o.addEventListener("click",(n)=>{let r=n.target?.closest("a");if(!r)return;n.preventDefault(),S(r.getAttribute("href"))});document.addEventListener("keydown",(n)=>{if(n.key==="Escape"&&b){b=!1,A.classList.remove("focus-mode"),i.textContent="Focus mode disabled";return}if(!n.ctrlKey&&!n.metaKey)return;let t=n.key.toLowerCase();if(t==="s")n.preventDefault(),l();else if(t==="b")n.preventDefault(),d("bold");else if(t==="i")n.preventDefault(),d("italic");else if(t==="u")n.preventDefault(),d("underline");else if(t==="o")n.preventDefault(),U.value="",U.click();else if(t==="n")n.preventDefault(),o.innerHTML="<p></p>",f.value="Untitled Document",u(),i.textContent="Unsaved new document",o.focus()});v();o.focus();var K=window.yaar?.app;function nn(n){let t=n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");o.innerHTML=`<p>${t}</p>`,u()}function $(n){o.innerHTML=n||"<p></p>",u()}function L(n){let t=document.createElement("div");t.innerHTML=n||"";while(t.firstChild)o.appendChild(t.firstChild);u()}function tn(n){let t=n.match(/<body[^>]*>([\s\S]*)<\/body>/i);return t?t[1]:n}function q(n){if(!n.length)return"<p></p>";return n.map((t,r)=>{let c=((t.title||"").trim()||`Document ${r+1}`).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");if(typeof t.html==="string")return`<section><h2>${c}</h2>${t.html}</section>`;let s=(t.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");return`<section><h2>${c}</h2><p>${s}</p></section>`}).join("")}if(K)K.register({appId:"word-lite",name:"Word Lite",state:{html:{description:"Current document HTML content",handler:()=>o.innerHTML},text:{description:"Current document plain text content",handler:()=>o.innerText||""},stats:{description:"Current text stats as { words, chars }",handler:()=>k(o.innerText||"")},title:{description:"Current document title",handler:()=>y()},saveState:{description:"Current save status label",handler:()=>i.textContent||""}},commands:{setHtml:{description:"Replace document with HTML. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:(n)=>{return $(n.html||"<p></p>"),i.textContent="Updated via app protocol",l(),{ok:!0}}},setTitle:{description:"Update document title. Params: { title: string }",params:{type:"object",properties:{title:{type:"string"}},required:["title"]},handler:(n)=>{return f.value=(n.title||"").trim()||"Untitled Document",i.textContent="Updated via app protocol",l(),{ok:!0}}},setText:{description:"Replace document with plain text. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:(n)=>{return nn(n.text||""),i.textContent="Updated via app protocol",l(),{ok:!0}}},appendText:{description:"Append plain text as a new paragraph to the document. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:(n)=>{let t=(n.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>"),r=document.createElement("p");return r.innerHTML=t,o.appendChild(r),u(),i.textContent="Updated via app protocol",l(),{ok:!0}}},appendHtml:{description:"Append HTML content to the end of the document without replacing existing content. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:(n)=>{return L(n.html||""),i.textContent="Updated via app protocol",l(),{ok:!0}}},setDocuments:{description:"Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",params:{type:"object",properties:{docs:{type:"array",items:{type:"object",properties:{title:{type:"string"},text:{type:"string"},html:{type:"string"}}}}},required:["docs"]},handler:(n)=>{let t=Array.isArray(n.docs)?n.docs:[];return $(q(t)),i.textContent=`Loaded ${t.length} document(s) via app protocol`,l(),{ok:!0,count:t.length}}},appendDocuments:{description:"Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",params:{type:"object",properties:{docs:{type:"array",items:{type:"object",properties:{title:{type:"string"},text:{type:"string"},html:{type:"string"}}}}},required:["docs"]},handler:(n)=>{let t=Array.isArray(n.docs)?n.docs:[];return L(q(t)),i.textContent=`Appended ${t.length} document(s) via app protocol`,l(),{ok:!0,count:t.length}}},saveToStorage:{description:'Save the current document to YAAR persistent storage. Params: { path: string } — e.g. "docs/my-doc.html"',params:{type:"object",properties:{path:{type:"string"}},required:["path"]},handler:async(n)=>{let t=window.yaar?.storage;if(!t)return{ok:!1,error:"Storage API not available"};let e=`<!doctype html><html><head><meta charset="utf-8"><title>${y()}</title></head><body>${o.innerHTML}</body></html>`;return await t.save(n.path,e),i.textContent=`Saved to storage: ${n.path}`,{ok:!0,path:n.path,savedAt:R()}}},loadFromStorage:{description:'Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',params:{type:"object",properties:{path:{type:"string"},paths:{type:"array",items:{type:"string"}},mode:{type:"string",enum:["replace","append"]}}},handler:async(n)=>{let t=window.yaar?.storage;if(!t)return{ok:!1,error:"Storage API not available"};let r=[...n.path?[n.path]:[],...Array.isArray(n.paths)?n.paths:[]].filter((p)=>typeof p==="string"&&p.trim().length>0);if(!r.length)return{ok:!1,error:"Provide path or paths"};let e=[];for(let p of r){let a=await t.read(p,{as:"text"}),x=tn(a),w=(p.split("/").pop()||p).replace(/\.[^/.]+$/,"")||"Untitled Document";e.push({title:w,html:x})}let c=n.mode||"replace",s=q(e);if(c==="append")L(s);else $(s);return i.textContent=`Loaded ${e.length} file(s) from storage`,l(),{ok:!0,count:e.length,paths:r,mode:c}}},readStorageFile:{description:'Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: "text"|"json"|"auto" }',params:{type:"object",properties:{path:{type:"string"},as:{type:"string",enum:["text","json","auto"]}},required:["path"]},handler:async(n)=>{let t=window.yaar?.storage;if(!t)return{ok:!1,error:"Storage API not available"};let r=n.as||"text",e=await t.read(n.path,{as:r});return{ok:!0,path:n.path,as:r,content:e}}},readStorageFiles:{description:'Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: "text"|"json"|"auto" }',params:{type:"object",properties:{paths:{type:"array",items:{type:"string"}},as:{type:"string",enum:["text","json","auto"]}},required:["paths"]},handler:async(n)=>{let t=window.yaar?.storage;if(!t)return{ok:!1,error:"Storage API not available"};let r=(Array.isArray(n.paths)?n.paths:[]).filter((s)=>typeof s==="string"&&s.trim().length>0),e=n.as||"text",c=await Promise.all(r.map(async(s)=>({path:s,content:await t.read(s,{as:e})})));return{ok:!0,as:e,files:c}}},newDocument:{description:"Clear current document to a blank paragraph. Params: {}",params:{type:"object",properties:{}},handler:()=>{return o.innerHTML="<p></p>",f.value="Untitled Document",u(),i.textContent="Unsaved new document",{ok:!0}}},saveDraft:{description:"Save current document to local draft storage. Params: {}",params:{type:"object",properties:{}},handler:()=>{return l(),{ok:!0,savedAt:R()}}}}});
+`);y0().then(()=>J.focus());var m0=window.yaar?.app;function H0(n){let w=n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");J.innerHTML=`<p>${w}</p>`,B()}function h(n){J.innerHTML=n||"<p></p>",B()}function C(n){let w=document.createElement("div");w.innerHTML=n||"";while(w.firstChild)J.appendChild(w.firstChild);B()}function r0(n){let w=n.match(/<body[^>]*>([\s\S]*)<\/body>/i);return w?w[1]:n}function c(n){if(!n.length)return"<p></p>";return n.map((w,U)=>{let u=((w.title||"").trim()||`Document ${U+1}`).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");if(typeof w.html==="string")return`<section><h2>${u}</h2>${w.html}</section>`;let P=(w.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");return`<section><h2>${u}</h2><p>${P}</p></section>`}).join("")}if(m0)m0.register({appId:"word-lite",name:"Word Lite",state:{html:{description:"Current document HTML content",handler:()=>J.innerHTML},text:{description:"Current document plain text content",handler:()=>J.innerText||""},stats:{description:"Current text stats as { words, chars }",handler:()=>_(J.innerText||"")},title:{description:"Current document title",handler:()=>F()},saveState:{description:"Current save status label",handler:()=>W()}},commands:{setHtml:{description:"Replace document with HTML. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:(n)=>{return h(n.html||"<p></p>"),W("Updated via app protocol"),y(),{ok:!0}}},setTitle:{description:"Update document title. Params: { title: string }",params:{type:"object",properties:{title:{type:"string"}},required:["title"]},handler:(n)=>{return X.value=(n.title||"").trim()||"Untitled Document",W("Updated via app protocol"),y(),{ok:!0}}},setText:{description:"Replace document with plain text. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:(n)=>{return H0(n.text||""),W("Updated via app protocol"),y(),{ok:!0}}},appendText:{description:"Append plain text as a new paragraph to the document. Params: { text: string }",params:{type:"object",properties:{text:{type:"string"}},required:["text"]},handler:(n)=>{let w=(n.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>"),U=document.createElement("p");return U.innerHTML=w,J.appendChild(U),B(),W("Updated via app protocol"),y(),{ok:!0}}},appendHtml:{description:"Append HTML content to the end of the document without replacing existing content. Params: { html: string }",params:{type:"object",properties:{html:{type:"string"}},required:["html"]},handler:(n)=>{return C(n.html||""),W("Updated via app protocol"),y(),{ok:!0}}},setDocuments:{description:"Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",params:{type:"object",properties:{docs:{type:"array",items:{type:"object",properties:{title:{type:"string"},text:{type:"string"},html:{type:"string"}}}}},required:["docs"]},handler:(n)=>{let w=Array.isArray(n.docs)?n.docs:[];return h(c(w)),W(`Loaded ${w.length} document(s) via app protocol`),y(),{ok:!0,count:w.length}}},appendDocuments:{description:"Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",params:{type:"object",properties:{docs:{type:"array",items:{type:"object",properties:{title:{type:"string"},text:{type:"string"},html:{type:"string"}}}}},required:["docs"]},handler:(n)=>{let w=Array.isArray(n.docs)?n.docs:[];return C(c(w)),W(`Appended ${w.length} document(s) via app protocol`),y(),{ok:!0,count:w.length}}},saveToStorage:{description:'Save the current document to YAAR persistent storage. Params: { path: string } — e.g. "docs/my-doc.html"',params:{type:"object",properties:{path:{type:"string"}},required:["path"]},handler:async(n)=>{let w=window.yaar?.storage;if(!w)return{ok:!1,error:"Storage API not available"};let m=`<!doctype html><html><head><meta charset="utf-8"><title>${F()}</title></head><body>${J.innerHTML}</body></html>`;return await w.save(n.path,m),W(`Saved to storage: ${n.path}`),{ok:!0,path:n.path,savedAt:I()}}},loadFromStorage:{description:'Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',params:{type:"object",properties:{path:{type:"string"},paths:{type:"array",items:{type:"string"}},mode:{type:"string",enum:["replace","append"]}}},handler:async(n)=>{let w=window.yaar?.storage;if(!w)return{ok:!1,error:"Storage API not available"};let U=[...n.path?[n.path]:[],...Array.isArray(n.paths)?n.paths:[]].filter((g)=>typeof g==="string"&&g.trim().length>0);if(!U.length)return{ok:!1,error:"Provide path or paths"};let m=[];for(let g of U){let Y=await w.read(g,{as:"text"}),R=r0(Y),G=(g.split("/").pop()||g).replace(/\.[^/.]+$/,"")||"Untitled Document";m.push({title:G,html:R})}let u=n.mode||"replace",P=c(m);if(u==="append")C(P);else h(P);return W(`Loaded ${m.length} file(s) from storage`),y(),{ok:!0,count:m.length,paths:U,mode:u}}},readStorageFile:{description:'Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: "text"|"json"|"auto" }',params:{type:"object",properties:{path:{type:"string"},as:{type:"string",enum:["text","json","auto"]}},required:["path"]},handler:async(n)=>{let w=window.yaar?.storage;if(!w)return{ok:!1,error:"Storage API not available"};let U=n.as||"text",m=await w.read(n.path,{as:U});return{ok:!0,path:n.path,as:U,content:m}}},readStorageFiles:{description:'Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: "text"|"json"|"auto" }',params:{type:"object",properties:{paths:{type:"array",items:{type:"string"}},as:{type:"string",enum:["text","json","auto"]}},required:["paths"]},handler:async(n)=>{let w=window.yaar?.storage;if(!w)return{ok:!1,error:"Storage API not available"};let U=(Array.isArray(n.paths)?n.paths:[]).filter((P)=>typeof P==="string"&&P.trim().length>0),m=n.as||"text",u=await Promise.all(U.map(async(P)=>({path:P,content:await w.read(P,{as:m})})));return{ok:!0,as:m,files:u}}},newDocument:{description:"Clear current document to a blank paragraph. Params: {}",params:{type:"object",properties:{}},handler:()=>{return J.innerHTML="<p></p>",X.value="Untitled Document",B(),W("Unsaved new document"),{ok:!0}}},saveDraft:{description:"Save current document to local draft storage. Params: {}",params:{type:"object",properties:{}},handler:()=>{return y(),{ok:!0,savedAt:I()}}}}});
 
 </script>
 </body>
