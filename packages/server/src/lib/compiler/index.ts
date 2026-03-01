@@ -16,6 +16,7 @@ import {
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
+  YAAR_DESIGN_TOKENS_CSS,
 } from '@yaar/shared';
 
 const SANDBOX_DIR = join(PROJECT_ROOT, 'sandbox');
@@ -92,7 +93,7 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
 <script>${escapeInlineJs(sdkCode)}</script>
 </head>
 <body>

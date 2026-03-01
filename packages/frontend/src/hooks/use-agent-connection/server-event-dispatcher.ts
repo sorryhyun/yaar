@@ -131,8 +131,21 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       } else if (toolName === SUBAGENT_TOOL_NAME && status === 'complete') {
         handlers.decrementSubagentCount(agentId);
       }
-      // Only show tool calls and errors in CLI; skip successful results
-      if (status === 'complete') break;
+      // Skip successful results (except subagent completions which carry a summary)
+      if (status === 'complete') {
+        if (toolName === SUBAGENT_TOOL_NAME) {
+          const summary = (message as { message?: string }).message;
+          if (summary) {
+            handlers.addCliEntry({
+              type: 'tool',
+              content: `[${toolName}] ${summary}`,
+              agentId,
+              monitorId,
+            });
+          }
+        }
+        break;
+      }
       let content: string;
       if (status === 'running' && toolInput) {
         const inputStr = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);

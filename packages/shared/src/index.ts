@@ -9,3 +9,4 @@ export {
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
 } from './capture-helper.js';
+export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';

@@ -48,6 +48,14 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
         toolInput: { description: m.description },
       };
     }
+    if (m.description) {
+      return {
+        type: 'tool_use',
+        toolName: SUBAGENT_TOOL_NAME,
+        toolUseId: m.task_id,
+        toolInput: { description: m.description },
+      };
+    }
     return null;
   }
   if (msg.type === 'system' && msg.subtype === 'task_notification') {

@@ -15,8 +15,10 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 /**
  * Map of @bundled/* import names to actual npm module paths.
  * These libraries are installed as devDependencies and bundled into apps.
+ * `null` = internal library (resolved from server source, not npm).
  */
-export const BUNDLED_LIBRARIES: Record<string, string> = {
+export const BUNDLED_LIBRARIES: Record<string, string | null> = {
+  yaar: null,
   uuid: 'uuid',
   lodash: 'lodash-es',
   'date-fns': 'date-fns',
@@ -51,7 +53,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
       build.onResolve({ filter: /^@bundled\// }, (args: any) => {
         const libName = args.path.replace('@bundled/', '');
-        if (!BUNDLED_LIBRARIES[libName]) {
+        if (!(libName in BUNDLED_LIBRARIES)) {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
@@ -61,6 +63,13 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
         const libName = args.path;
         const actualModule = BUNDLED_LIBRARIES[libName];
+
+        // Internal library (null = resolve from server source)
+        if (actualModule === null) {
+          const internalPath = join(PLUGIN_DIR, '..', `${libName}-runtime`, 'index.ts');
+          const contents = await Bun.file(internalPath).text();
+          return { contents, loader: 'ts' };
+        }
 
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
@@ -82,7 +91,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 
         // Strategy 3: node_modules (dev non-exe) — resolve from server package
         try {
-          const resolved = Bun.resolveSync(actualModule!, PLUGIN_DIR);
+          const resolved = Bun.resolveSync(actualModule, PLUGIN_DIR);
           const contents = await Bun.file(resolved).text();
           return { contents, loader: 'js' };
         } catch {

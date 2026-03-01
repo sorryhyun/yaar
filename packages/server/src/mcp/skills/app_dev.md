@@ -30,6 +30,119 @@ import anime from '@bundled/anime';
 import { format } from '@bundled/date-fns';
 ```
 
+## Design Tokens (CSS)
+
+All compiled apps automatically include shared CSS custom properties (`--yaar-*`) and utility classes (`y-*`). No imports needed — they're injected at compile time.
+
+**Key tokens:**
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--yaar-bg` | `#0f1117` | App background |
+| `--yaar-bg-surface` | `#161b22` | Card/surface background |
+| `--yaar-text` | `#e6edf3` | Primary text |
+| `--yaar-text-muted` | `#8b949e` | Secondary text |
+| `--yaar-accent` | `#58a6ff` | Links, active states |
+| `--yaar-border` | `#30363d` | Borders |
+| `--yaar-success` | `#3fb950` | Success states |
+| `--yaar-error` | `#f85149` | Error states |
+| `--yaar-sp-{1-8}` | 4px increments | Spacing scale |
+| `--yaar-radius` | `6px` | Default border radius |
+
+**Utility classes:**
+
+| Class | Description |
+|-------|-------------|
+| `y-app` | Root container (flex column, full height, themed) |
+| `y-flex`, `y-flex-col`, `y-flex-center`, `y-flex-between` | Flex layouts |
+| `y-gap-{1-4}` | Gap spacing |
+| `y-p-{1-4}`, `y-px-{2-4}`, `y-py-{2-3}` | Padding |
+| `y-text-{xs,sm,base,lg,xl}` | Font sizes |
+| `y-text-muted`, `y-text-dim`, `y-text-accent` | Text colors |
+| `y-card` | Surface with border + padding |
+| `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-sm` | Buttons |
+| `y-input` | Text input |
+| `y-badge`, `y-badge-success`, `y-badge-error` | Badges |
+| `y-spinner`, `y-spinner-lg` | Loading spinner |
+| `y-scroll` | Styled scrollbar container |
+| `y-truncate` | Text ellipsis overflow |
+
+Override any token in your app: `:root { --yaar-accent: #ff6b6b; }`
+
+## `@bundled/yaar` — Reactive DOM Library
+
+Tiny reactive library for building apps without manual DOM manipulation.
+
+```ts
+import { signal, computed, effect, batch, h, mount, list, Toast } from '@bundled/yaar';
+```
+
+**API:**
+
+| Function | Description |
+|----------|-------------|
+| `signal(initial)` | Reactive value. `sig()` reads, `sig(val)` writes, `sig.value`, `sig.peek()` |
+| `computed(fn)` | Derived signal, auto-recomputes on dependency change |
+| `effect(fn)` | Side effect, re-runs on tracked signal change. Returns dispose. |
+| `batch(fn)` | Batch signal writes into one update |
+| `h(tag, props?, ...children)` | Hyperscript. Tag supports `.class#id`. Reactive children via `() => val` |
+| `mount(element, container?)` | Append to `#app` (default) |
+| `list(container, items$, renderFn, key?)` | Reactive list with key-based reconciliation |
+| `Toast.show(msg, type?, duration?)` | Toast notification (info/success/error) |
+
+**Example: Todo App**
+
+```ts
+import { signal, h, mount, list, Toast } from '@bundled/yaar';
+
+type Todo = { id: number; text: string; done: boolean };
+const todos = signal<Todo[]>([]);
+let nextId = 1;
+
+function addTodo(text: string) {
+  todos([...todos(), { id: nextId++, text, done: false }]);
+  Toast.show('Added!', 'success');
+}
+
+function toggle(id: number) {
+  todos(todos().map(t => t.id === id ? { ...t, done: !t.done } : t));
+}
+
+const input = h('input.y-input', {
+  placeholder: 'What needs doing?',
+  onKeydown: (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+      addTodo((e.target as HTMLInputElement).value.trim());
+      (e.target as HTMLInputElement).value = '';
+    }
+  },
+});
+
+const listEl = h('div.y-flex-col.y-gap-2.y-scroll.y-flex-1');
+list(listEl, todos, (todo) =>
+  h('div.y-card.y-flex-between', null,
+    h('span', {
+      style: { textDecoration: () => todo.done ? 'line-through' : 'none' },
+      className: () => todo.done ? 'y-text-dim' : '',
+    }, todo.text),
+    h('button.y-btn.y-btn-sm.y-btn-ghost', { onClick: () => toggle(todo.id) },
+      todo.done ? '↩' : '✓',
+    ),
+  ),
+  (t) => t.id,
+);
+
+mount(h('div.y-app.y-p-3.y-gap-3', null,
+  h('h2.y-text-lg.y-font-bold', null, 'Todos'),
+  input,
+  listEl,
+  h('div.y-text-sm.y-text-muted', null, () => {
+    const done = todos().filter(t => t.done).length;
+    return `${done}/${todos().length} completed`;
+  }),
+));
+```
+
 ## Storage API
 
 Available at runtime via `window.yaar.storage` (auto-injected, no import needed):
