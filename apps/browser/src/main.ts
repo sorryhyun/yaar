@@ -3,6 +3,7 @@
  * Subscribes to SSE (/api/browser/{sessionId}/events) for real-time updates.
  * Also registers with App Protocol for state queries and manual commands.
  */
+export {};
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing app root');

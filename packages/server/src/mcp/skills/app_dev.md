@@ -17,6 +17,8 @@ Optional: use `compile(sandbox)` separately if you want a preview URL before dep
 
 Entry point is `src/main.ts`. Split code into multiple files (e.g., `src/utils.ts`, `src/renderer.ts`) and import them from main.ts — avoid putting everything in one file.
 
+If `main.ts` has no `import` statements, add `export {};` at the top so TypeScript treats it as a module (prevents variable name collisions across apps).
+
 ## Bundled Libraries
 
 Available via `@bundled/*` imports (no npm install needed):

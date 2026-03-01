@@ -1,3 +1,5 @@
+export {};
+
 const root = (document.getElementById('app') as HTMLDivElement | null) ?? document.body;
 root.innerHTML = '';
 root.classList.add('y-app');

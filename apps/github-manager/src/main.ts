@@ -1,3 +1,5 @@
+export {};
+
 type Repo = {
   id: number;
   full_name: string;

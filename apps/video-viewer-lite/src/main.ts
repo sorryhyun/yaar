@@ -1,3 +1,5 @@
+export {};
+
 const app = document.createElement('div');
 app.className = 'app';
 

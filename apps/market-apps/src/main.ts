@@ -1,3 +1,5 @@
+export {};
+
 type ListedApp = {
   id: string;
   name: string;

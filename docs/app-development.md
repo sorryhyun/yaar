@@ -147,6 +147,19 @@ import anime from '@bundled/anime';
 - 타임아웃: 100ms ~ 30,000ms (기본 5,000ms)
 - fetch 허용 도메인: `config/curl_allowed_domains.yaml`에서 관리
 
+## TypeScript 주의 사항
+
+모든 앱의 `src/main.ts`는 파일 상단에 `export {};`를 포함해야 합니다. `apps/tsconfig.json`이 모든 앱을 하나의 프로그램으로 컴파일하기 때문에, 이 구문이 없으면 TypeScript가 파일을 스크립트로 인식하여 앱 간 최상위 변수가 충돌합니다.
+
+```typescript
+export {};
+
+const root = document.getElementById('app');
+// ...
+```
+
+`@bundled/*` 라이브러리를 import하는 경우 이미 모듈로 인식되므로 별도 추가 불필요.
+
 ## 런타임 제약 사항
 
 컴파일된 앱은 **브라우저 iframe 샌드박스**에서 실행됩니다. 다음과 같은 하드 제약이 있습니다:
@@ -447,6 +460,19 @@ import anime from '@bundled/anime';
 
 - Timeout: 100ms–30,000ms (default 5,000ms)
 - Allowed fetch domains: managed in `config/curl_allowed_domains.yaml`
+
+## TypeScript Notes
+
+Every app's `src/main.ts` must include `export {};` at the top of the file. Because `apps/tsconfig.json` compiles all apps in a single program, files without this are treated as scripts by TypeScript, causing top-level variable name collisions across apps.
+
+```typescript
+export {};
+
+const root = document.getElementById('app');
+// ...
+```
+
+If you already `import` from `@bundled/*` or other modules, the file is already a module and no extra `export {};` is needed.
 
 ## Runtime Constraints
 

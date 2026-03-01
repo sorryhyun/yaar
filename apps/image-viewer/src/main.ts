@@ -1,3 +1,5 @@
+export {};
+
 const root = document.getElementById('app') ?? document.body;
 
 type ImageItem = {
