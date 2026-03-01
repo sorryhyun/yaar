@@ -151,6 +151,9 @@ class ProviderWarmPool {
     // Stop any dead AppServer before replacing
     if (this.sharedCodexAppServer) {
       await this.sharedCodexAppServer.stop();
+      this.sharedCodexAppServer = null;
+      // Brief wait for OS to release the port (especially on Windows/WSL)
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     console.log('[WarmPool] Starting shared Codex AppServer');

@@ -129,18 +129,64 @@ export class AppServer {
    * Kill any stale process occupying the WebSocket port.
    * This handles the case where a previous YAAR server crashed without
    * cleaning up its detached codex app-server process.
+   * Tries multiple tools for cross-platform compatibility (Linux, macOS, WSL, Windows).
    */
   private killStaleProcess(): void {
-    if (process.platform === 'win32') return;
+    if (process.platform !== 'win32') {
+      // Unix: try fuser first, then lsof
+      try {
+        const r = Bun.spawnSync(['fuser', '-k', `${this.wsPort}/tcp`], {
+          stdio: ['ignore', 'ignore', 'ignore'],
+          timeout: 5000,
+        });
+        if (r.exitCode === 0) {
+          console.log(`[codex] Killed stale process on port ${this.wsPort} (fuser)`);
+          return;
+        }
+      } catch {
+        // fuser not available
+      }
+
+      try {
+        const r = Bun.spawnSync(['lsof', '-ti', `tcp:${this.wsPort}`], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 5000,
+        });
+        const output = new TextDecoder().decode(r.stdout as Uint8Array).trim();
+        if (output) {
+          for (const line of output.split('\n')) {
+            const pid = parseInt(line.trim(), 10);
+            if (pid > 0) {
+              try {
+                process.kill(pid, 9);
+              } catch {
+                // Already dead
+              }
+            }
+          }
+          console.log(`[codex] Killed stale process on port ${this.wsPort} (lsof)`);
+          return;
+        }
+      } catch {
+        // lsof not available
+      }
+    }
+
+    // Windows native or WSL fallback: try PowerShell to kill Windows-side processes
     try {
-      // fuser outputs PIDs using the port; -k sends SIGKILL
-      Bun.spawnSync(['fuser', '-k', `${this.wsPort}/tcp`], {
-        stdio: ['ignore', 'ignore', 'ignore'],
-        timeout: 5000,
-      });
-      console.log(`[codex] Killed stale process on port ${this.wsPort}`);
+      const ps = process.platform === 'win32' ? 'powershell' : 'powershell.exe';
+      Bun.spawnSync(
+        [
+          ps,
+          '-NoProfile',
+          '-Command',
+          `Get-NetTCPConnection -LocalPort ${this.wsPort} -State Listen -ErrorAction SilentlyContinue | ` +
+            `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+        ],
+        { stdio: ['ignore', 'ignore', 'ignore'], timeout: 10000 },
+      );
     } catch {
-      // No process on port, or fuser not available — either way, proceed
+      // PowerShell not available — proceed anyway
     }
   }
 

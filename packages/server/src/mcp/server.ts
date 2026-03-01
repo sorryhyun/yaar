@@ -170,13 +170,6 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
     }
   }
 
-  // Debug: log browser MCP requests to verify SDK tool discovery
-  if (serverName === 'browser') {
-    console.log(
-      `[MCP] browser server request from agent=${req.headers.get('x-agent-id') ?? 'unknown'}`,
-    );
-  }
-
   // Restore agent context so tools can resolve the active session.
   // X-Agent-Id is set by the Claude provider; Codex calls omit it.
   const agentId = req.headers.get('x-agent-id') ?? 'unknown';

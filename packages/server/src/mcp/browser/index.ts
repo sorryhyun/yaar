@@ -140,15 +140,12 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
 
         if (!session) {
           // Create new session + window
-          console.log(`[browser:open] Creating session for ${sessionId}`);
           session = await pool.createSession(sessionId);
           const windowId = `browser-${sessionId.slice(0, 8)}`;
           session.windowId = windowId;
-          console.log(`[browser:open] Session created, navigating to ${args.url}`);
 
           // Navigate first so we have a screenshot before showing the window
           const state = await session.navigate(args.url, args.waitUntil);
-          console.log(`[browser:open] Navigation complete: ${state.title || '(no title)'}`);
 
           // Create YAAR window with browser app iframe
           const osAction = {
@@ -162,21 +159,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
             },
           };
 
-          const feedback = await actionEmitter.emitActionWithFeedback(osAction, 3000);
-          console.log(
-            `[browser:open] Window feedback: ${feedback ? `success=${feedback.success}` : 'timeout (null)'}`,
-          );
-
-          const result = ok(formatPageState(state));
-          console.log(`[browser:open] Returning result to agent`);
-          return result;
+          await actionEmitter.emitActionWithFeedback(osAction, 3000);
+          console.log(`[browser:open] New session → ${state.title || '(no title)'}`);
+          return ok(formatPageState(state));
         }
 
         // Existing session — just navigate
-        console.log(`[browser:open] Existing session, navigating to ${args.url}`);
         const state = await session.navigate(args.url, args.waitUntil);
         updateWindowTitle(session, state.title || domain);
-        console.log(`[browser:open] Navigation complete: ${state.title || '(no title)'}`);
         return ok(formatPageState(state));
       } catch (err) {
         console.error(`[browser:open] Error:`, err);

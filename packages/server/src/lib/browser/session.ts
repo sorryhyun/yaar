@@ -174,18 +174,14 @@ export class BrowserSession extends EventEmitter {
 
     const NAV_TIMEOUT = 15_000;
 
-    console.log(`[browser:nav] Sending Page.navigate (waitUntil=${waitUntil})`);
     if (waitUntil === 'domcontentloaded') {
       const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
-      console.log('[browser:nav] Page.navigate sent, waiting for DOMContentLoaded...');
       await dcPromise.catch(() => {});
     } else if (waitUntil === 'networkidle') {
       const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
-      console.log('[browser:nav] Page.navigate sent, waiting for load...');
       await loadPromise.catch(() => {});
-      console.log('[browser:nav] Waiting for network idle...');
       await this.waitForNetworkIdle(500, 10_000);
     } else {
       // 'load' (default) — wait for DOMContentLoaded first, then race load vs timeout.
@@ -193,13 +189,9 @@ export class BrowserSession extends EventEmitter {
       const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
       const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
-      console.log('[browser:nav] Page.navigate sent, waiting for DOMContentLoaded...');
-      // Wait for DOMContentLoaded (fast), then give load event a short grace period
       await dcPromise.catch(() => {});
-      console.log('[browser:nav] DOMContentLoaded done, racing load vs 5s grace...');
       await Promise.race([loadPromise.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]);
     }
-    console.log('[browser:nav] Navigation wait complete');
 
     // Small delay for dynamic content
     await new Promise((r) => setTimeout(r, 500));
@@ -213,9 +205,8 @@ export class BrowserSession extends EventEmitter {
         },
       );
     }
-    console.log('[browser:nav] Getting page state...');
     const state = await this.getPageState();
-    console.log(`[browser:nav] Done: ${state.title}`);
+    console.log(`[browser:nav] ${state.title} (${waitUntil})`);
     this.notifyUpdate();
     return state;
   }

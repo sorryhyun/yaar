@@ -20,7 +20,8 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   const msgType = (msg as { type: string; subtype?: string }).type;
   const msgSubtype = (msg as { subtype?: string }).subtype;
   if (msgType !== 'stream_event') {
-    console.log(`[message-mapper] Received: type=${msgType}, subtype=${msgSubtype ?? 'none'}`);
+    const subtypeStr = msgSubtype ? `, subtype=${msgSubtype}` : '';
+    console.log(`[message-mapper] ${msgType}${subtypeStr}`);
   }
 
   // SDK message types: system, assistant, user, result, stream_event

@@ -90,7 +90,20 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       } catch {
         return errorResponse('Invalid JSON', 400);
       }
+
+      // Check if provider is changing
+      const providerChanging =
+        partial.provider !== undefined && partial.provider !== getWarmPool().getPreferredProvider();
+
       const settings = await updateSettings(partial as any);
+
+      // Reinitialize warm pool when provider changes
+      if (providerChanging) {
+        const warmPool = getWarmPool();
+        await warmPool.cleanup();
+        await warmPool.initialize();
+      }
+
       return jsonResponse(settings);
     } catch {
       return errorResponse('Failed to update settings');

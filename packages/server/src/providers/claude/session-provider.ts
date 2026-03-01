@@ -95,7 +95,6 @@ export class ClaudeSessionProvider extends BaseTransport {
       tools: builtinTools,
       agents: buildAgentDefinitions(mcpServerConfigs),
       allowedTools: effectiveAllowed,
-      maxThinkingTokens: 4096,
       mcpServers: mcpServerConfigs,
       includePartialMessages: true,
       permissionMode: 'bypassPermissions',
