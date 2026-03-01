@@ -60,6 +60,14 @@ export class BrowserSession extends EventEmitter {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
 
+    // Auto-dismiss JavaScript dialogs (alert/confirm/prompt/beforeunload).
+    // These block ALL CDP commands until handled, causing tool hangs.
+    cdp.on('Page.javascriptDialogOpening', (params: unknown) => {
+      const p = params as { message?: string; type?: string };
+      console.log(`[browser] Auto-dismissing JS dialog: ${p.type} "${p.message}"`);
+      cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+    });
+
     // Set viewport
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: SCREENSHOT_WIDTH,
@@ -164,27 +172,50 @@ export class BrowserSession extends EventEmitter {
   ): Promise<PageState> {
     this.touch();
 
+    const NAV_TIMEOUT = 15_000;
+
+    console.log(`[browser:nav] Sending Page.navigate (waitUntil=${waitUntil})`);
     if (waitUntil === 'domcontentloaded') {
-      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', 30_000);
+      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
+      console.log('[browser:nav] Page.navigate sent, waiting for DOMContentLoaded...');
       await dcPromise.catch(() => {});
     } else if (waitUntil === 'networkidle') {
-      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', 30_000);
+      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
+      console.log('[browser:nav] Page.navigate sent, waiting for load...');
       await loadPromise.catch(() => {});
-      await this.waitForNetworkIdle(500, 15_000);
+      console.log('[browser:nav] Waiting for network idle...');
+      await this.waitForNetworkIdle(500, 10_000);
     } else {
-      // 'load' (default)
-      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', 30_000);
+      // 'load' (default) — wait for DOMContentLoaded first, then race load vs timeout.
+      // Many pages fire DOMContentLoaded quickly but 'load' can stall on slow resources.
+      const dcPromise = this.cdp.waitForEvent('Page.domContentEventFired', NAV_TIMEOUT);
+      const loadPromise = this.cdp.waitForEvent('Page.loadEventFired', NAV_TIMEOUT);
       await this.cdp.send('Page.navigate', { url });
-      await loadPromise.catch(() => {}); // timeout is non-fatal
+      console.log('[browser:nav] Page.navigate sent, waiting for DOMContentLoaded...');
+      // Wait for DOMContentLoaded (fast), then give load event a short grace period
+      await dcPromise.catch(() => {});
+      console.log('[browser:nav] DOMContentLoaded done, racing load vs 5s grace...');
+      await Promise.race([loadPromise.catch(() => {}), new Promise((r) => setTimeout(r, 5_000))]);
     }
+    console.log('[browser:nav] Navigation wait complete');
 
     // Small delay for dynamic content
     await new Promise((r) => setTimeout(r, 500));
 
-    if (!this.closed) await this.takeScreenshot();
+    if (!this.closed) {
+      // Fire-and-forget: cache screenshot for browser app SSE, don't block navigation result
+      this.takeScreenshot().then(
+        () => this.notifyUpdate(),
+        () => {
+          /* screenshot failure is non-fatal */
+        },
+      );
+    }
+    console.log('[browser:nav] Getting page state...');
     const state = await this.getPageState();
+    console.log(`[browser:nav] Done: ${state.title}`);
     this.notifyUpdate();
     return state;
   }
