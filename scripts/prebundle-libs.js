@@ -34,6 +34,9 @@ const BUNDLED_LIBRARIES = {
   'tone': 'tone',
   'pixi.js': 'pixi.js',
   'p5': 'p5',
+  'mammoth': 'mammoth',
+  'marked': 'marked',
+  'prismjs': 'prismjs',
 };
 
 // Internal library source paths (relative to resolveDir)

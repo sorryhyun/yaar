@@ -179,5 +179,6 @@
         }
       }
     }
-  }
+  },
+  "appProtocol": true
 }

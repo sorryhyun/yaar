@@ -7,6 +7,10 @@
  */
 
 export const YAAR_DESIGN_TOKENS_CSS = `
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Bd.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Eb.otf') format('opentype');font-weight:800;font-style:normal;font-display:swap}
 :root {
   --yaar-bg: #0f1117;
   --yaar-bg-surface: #161b22;
@@ -30,7 +34,7 @@ export const YAAR_DESIGN_TOKENS_CSS = `
   --yaar-radius-sm: 4px;
   --yaar-radius: 6px;
   --yaar-radius-lg: 10px;
-  --yaar-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --yaar-font: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --yaar-font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
   --yaar-text-xs: 11px;
   --yaar-text-sm: 12px;

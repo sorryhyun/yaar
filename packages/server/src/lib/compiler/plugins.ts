@@ -34,6 +34,9 @@ export const BUNDLED_LIBRARIES: Record<string, string | null> = {
   tone: 'tone',
   'pixi.js': 'pixi.js',
   p5: 'p5',
+  mammoth: 'mammoth',
+  marked: 'marked',
+  prismjs: 'prismjs',
 };
 
 /**

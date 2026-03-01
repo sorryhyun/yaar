@@ -96,5 +96,6 @@
         }
       }
     }
-  }
+  },
+  "appProtocol": true
 }

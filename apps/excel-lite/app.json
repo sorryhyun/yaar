@@ -87,5 +87,6 @@
         }
       }
     }
-  }
+  },
+  "appProtocol": true
 }
