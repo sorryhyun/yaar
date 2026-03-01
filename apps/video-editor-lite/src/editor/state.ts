@@ -14,6 +14,7 @@ export class EditorStore {
     trimStart: 0,
     trimEnd: 0,
     currentTime: 0,
+    playbackRate: 1,
     loopPreview: false,
     playing: false,
     error: null,
@@ -41,7 +42,6 @@ export class EditorStore {
       trimStart: 0,
       trimEnd: 0,
       currentTime: 0,
-      loopPreview: false,
       error: null,
     };
     this.emit();
@@ -75,6 +75,11 @@ export class EditorStore {
 
   setLoopPreview(loopPreview: boolean): void {
     this.state = { ...this.state, loopPreview };
+    this.emit();
+  }
+
+  setPlaybackRate(playbackRate: number): void {
+    this.state = { ...this.state, playbackRate };
     this.emit();
   }
 

@@ -12,9 +12,11 @@ export interface EditorUI {
   endRange: HTMLInputElement;
   startInput: HTMLInputElement;
   endInput: HTMLInputElement;
+  speedSelect: HTMLSelectElement;
   loopButton: HTMLButtonElement;
   timeLabel: HTMLDivElement;
   durationLabel: HTMLDivElement;
+  shortcutsLabel: HTMLDivElement;
   errorLabel: HTMLDivElement;
 }
 
@@ -73,7 +75,7 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
       color: #334f63;
     }
 
-    input, button {
+    input, select, button {
       width: 100%;
       border: 1px solid #b8c9d1;
       border-radius: 8px;
@@ -129,6 +131,13 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
       font-weight: 600;
     }
 
+    .shortcuts {
+      font-size: 12px;
+      color: #425f71;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
     .error {
       color: #9f1f1f;
       font-size: 13px;
@@ -160,7 +169,7 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
       </div>
       <div style="min-width: 120px;">
         <label>&nbsp;</label>
-        <button id="pick-file">Pick Local File</button>
+        <button id="pick-file">Pick File (Storage First)</button>
       </div>
     </div>
   `;
@@ -185,6 +194,15 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
         <label>Trim End (sec)</label>
         <input id="end-input" type="number" min="0" step="0.01" value="0" />
       </div>
+      <div style="min-width: 120px;">
+        <label>Speed</label>
+        <select id="speed-select">
+          <option value="0.5">0.5x</option>
+          <option value="1">1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </div>
       <div style="min-width: 160px;">
         <label>&nbsp;</label>
         <button id="loop-preview" disabled>Play Trimmed Segment</button>
@@ -203,6 +221,9 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
     <div class="stats" style="margin-top:10px;">
       <div id="time-label" class="chip">Current: 00:00.00</div>
       <div id="duration-label" class="chip">Selected: 00:00.00</div>
+    </div>
+    <div id="shortcuts" class="shortcuts">
+      Shortcuts: Space play/pause, I set start, O set end, X reset trim, Left/Right -/+0.04s, Shift+Left/Right -/+1s.
     </div>
     <div id="error" class="error"></div>
   `;
@@ -223,9 +244,11 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
   const endRange = root.querySelector<HTMLInputElement>('#end-range')!;
   const startInput = root.querySelector<HTMLInputElement>('#start-input')!;
   const endInput = root.querySelector<HTMLInputElement>('#end-input')!;
+  const speedSelect = root.querySelector<HTMLSelectElement>('#speed-select')!;
   const loopButton = root.querySelector<HTMLButtonElement>('#loop-preview')!;
   const timeLabel = root.querySelector<HTMLDivElement>('#time-label')!;
   const durationLabel = root.querySelector<HTMLDivElement>('#duration-label')!;
+  const shortcutsLabel = root.querySelector<HTMLDivElement>('#shortcuts')!;
   const errorLabel = root.querySelector<HTMLDivElement>('#error')!;
 
   return {
@@ -239,9 +262,11 @@ export function createEditorUI(parent: HTMLElement): EditorUI {
     endRange,
     startInput,
     endInput,
+    speedSelect,
     loopButton,
     timeLabel,
     durationLabel,
+    shortcutsLabel,
     errorLabel,
   };
 }
@@ -259,6 +284,7 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
   ui.endRange.value = String(state.trimEnd);
   ui.startInput.value = state.trimStart.toFixed(2);
   ui.endInput.value = state.trimEnd.toFixed(2);
+  ui.speedSelect.value = String(state.playbackRate);
 
   ui.loopButton.disabled = !hasDuration || Boolean(state.error);
   ui.loopButton.textContent = state.loopPreview ? 'Stop Loop Preview' : 'Play Trimmed Segment';

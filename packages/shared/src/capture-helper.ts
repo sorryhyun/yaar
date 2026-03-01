@@ -440,19 +440,26 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }, '*');
   });
 
-  // Text drag: when user drags selected text, notify parent so it can
-  // track the drag across windows and handle the drop.
+  // Drag: notify parent so it can track cross-window drags.
+  // Handles both text selection drags and draggable element drags (e.g. storage items).
+  // This listener runs on document (bubble phase), so app-specific dragstart handlers
+  // that set dataTransfer have already executed by the time we read it.
   document.addEventListener('dragstart', function(e) {
-    var selectedText = '';
+    var text = '';
     try {
-      selectedText = (window.getSelection() || '').toString().trim();
+      text = (window.getSelection() || '').toString().trim();
     } catch(ex) {}
-    if (!selectedText) return;
-    // Set data so parent can detect this as a text drag
-    try { e.dataTransfer.setData('application/x-yaar-text', selectedText); } catch(ex) {}
+    if (text) {
+      // Text selection drag — also mark it for parent detection
+      try { e.dataTransfer.setData('application/x-yaar-text', text); } catch(ex) {}
+    } else {
+      // Draggable element (no text selection) — read text/plain set by the app
+      try { text = (e.dataTransfer.getData('text/plain') || '').trim(); } catch(ex) {}
+    }
+    if (!text) return;
     window.parent.postMessage({
       type: 'yaar:drag-start',
-      text: selectedText
+      text: text
     }, '*');
   });
 })();

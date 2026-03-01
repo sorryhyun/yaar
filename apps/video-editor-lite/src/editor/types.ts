@@ -8,6 +8,7 @@ export interface EditorState {
   trimStart: number;
   trimEnd: number;
   currentTime: number;
+  playbackRate: number;
   loopPreview: boolean;
   playing: boolean;
   error: string | null;

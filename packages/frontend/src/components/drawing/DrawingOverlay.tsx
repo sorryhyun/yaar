@@ -49,6 +49,7 @@ export function DrawingOverlay() {
   const rightStartRef = useRef<Point | null>(null);
   const rightMovedRef = useRef(false);
   const rightLastPointRef = useRef<Point | null>(null);
+  const rightDragEndedRef = useRef(false);
 
   hasStrokesRef.current = hasStrokes;
 
@@ -287,6 +288,7 @@ export function DrawingOverlay() {
       rightLastPointRef.current = null;
 
       if (wasDragged) {
+        rightDragEndedRef.current = true;
         // Quick-save canvas, then upgrade with composite screenshot
         const dataUrl = canvas.toDataURL('image/webp', 1.0);
         saveDrawing(dataUrl);
@@ -294,10 +296,17 @@ export function DrawingOverlay() {
       }
     };
 
-    // Cancel right-click tracking when a context menu fires.
-    // A contextmenu event means the right-click was a simple click (not a drag),
-    // so drawing should not be triggered.
-    const onContextMenu = () => {
+    // Suppress context menu after a right-click drag, or cancel tracking
+    // for a simple right-click (no drag).
+    const onContextMenu = (e: MouseEvent) => {
+      // After a drag: block both native and React context menus
+      if (rightMovedRef.current || rightDragEndedRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        rightDragEndedRef.current = false;
+        return;
+      }
+      // Simple right-click (no drag): cancel tracking, let context menu through
       if (rightDrawingRef.current && !rightMovedRef.current) {
         rightDrawingRef.current = false;
         rightStartRef.current = null;
@@ -305,16 +314,16 @@ export function DrawingOverlay() {
       }
     };
 
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('mousedown', onMouseDown, { capture: true });
+    window.addEventListener('mousemove', onMouseMove, { capture: true });
+    window.addEventListener('mouseup', onMouseUp, { capture: true });
+    window.addEventListener('contextmenu', onContextMenu, { capture: true });
 
     return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('mousedown', onMouseDown, { capture: true });
+      window.removeEventListener('mousemove', onMouseMove, { capture: true });
+      window.removeEventListener('mouseup', onMouseUp, { capture: true });
+      window.removeEventListener('contextmenu', onContextMenu, { capture: true });
     };
   }, [drawLine, saveDrawing, captureScreenWithDrawing]);
 

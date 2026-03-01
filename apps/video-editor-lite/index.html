@@ -10,7 +10,7 @@
 <body>
 <div id="app"></div>
 <script type="module">
-function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFinite(r)||r<0)return"00:00.00";let e=Math.floor(r/60),t=r-e*60,n=Math.floor(t),d=Math.floor((t-n)*100),o=String(e).padStart(2,"0"),a=String(n).padStart(2,"0"),s=String(d).padStart(2,"0");return`${o}:${a}.${s}`}function m(r){let e=Number(r);return Number.isFinite(e)?e:NaN}var M=0.01;class v{state={sourceKind:null,sourceValue:"",objectUrl:null,duration:0,trimStart:0,trimEnd:0,currentTime:0,loopPreview:!1,playing:!1,error:null};listeners=new Set;subscribe(r){return this.listeners.add(r),r(this.getState()),()=>this.listeners.delete(r)}getState(){return{...this.state}}setSource(r,e,t){this.state={...this.state,sourceKind:r,sourceValue:e,objectUrl:t,duration:0,trimStart:0,trimEnd:0,currentTime:0,loopPreview:!1,error:null},this.emit()}setDuration(r){let e=Number.isFinite(r)&&r>0?r:0;this.state={...this.state,duration:e,trimStart:0,trimEnd:e,currentTime:0,error:null},this.emit()}setCurrentTime(r){this.state={...this.state,currentTime:c(r,0,this.state.duration||0)},this.emit()}setPlaying(r){this.state={...this.state,playing:r},this.emit()}setLoopPreview(r){this.state={...this.state,loopPreview:r},this.emit()}setTrim(r){let e=this.state.duration,t=e>0,n=r.trimStart??this.state.trimStart,d=r.trimEnd??this.state.trimEnd;if(!t)return this.state={...this.state,error:"Load a video first."},this.emit(),!1;let o=c(n,0,e),a=c(d,0,e);if(o>=a-M)return this.state={...this.state,error:"Trim start must be less than trim end."},this.emit(),!1;return this.state={...this.state,trimStart:o,trimEnd:a,error:null},this.emit(),!0}clearError(){if(!this.state.error)return;this.state={...this.state,error:null},this.emit()}emit(){let r=this.getState();this.listeners.forEach((e)=>e(r))}}function b(r){r.innerHTML="";let e=document.createElement("style");e.textContent=`
+function c(o,i,t){return Math.min(t,Math.max(i,o))}function N(o){if(!Number.isFinite(o)||o<0)return"00:00.00";let i=Math.floor(o/60),t=o-i*60,d=Math.floor(t),l=Math.floor((t-d)*100),m=String(i).padStart(2,"0"),a=String(d).padStart(2,"0"),s=String(l).padStart(2,"0");return`${m}:${a}.${s}`}function b(o){let i=Number(o);return Number.isFinite(i)?i:NaN}var V=0.01;class Q{state={sourceKind:null,sourceValue:"",objectUrl:null,duration:0,trimStart:0,trimEnd:0,currentTime:0,playbackRate:1,loopPreview:!1,playing:!1,error:null};listeners=new Set;subscribe(o){return this.listeners.add(o),o(this.getState()),()=>this.listeners.delete(o)}getState(){return{...this.state}}setSource(o,i,t){this.state={...this.state,sourceKind:o,sourceValue:i,objectUrl:t,duration:0,trimStart:0,trimEnd:0,currentTime:0,error:null},this.emit()}setDuration(o){let i=Number.isFinite(o)&&o>0?o:0;this.state={...this.state,duration:i,trimStart:0,trimEnd:i,currentTime:0,error:null},this.emit()}setCurrentTime(o){this.state={...this.state,currentTime:c(o,0,this.state.duration||0)},this.emit()}setPlaying(o){this.state={...this.state,playing:o},this.emit()}setLoopPreview(o){this.state={...this.state,loopPreview:o},this.emit()}setPlaybackRate(o){this.state={...this.state,playbackRate:o},this.emit()}setTrim(o){let i=this.state.duration,t=i>0,d=o.trimStart??this.state.trimStart,l=o.trimEnd??this.state.trimEnd;if(!t)return this.state={...this.state,error:"Load a video first."},this.emit(),!1;let m=c(d,0,i),a=c(l,0,i);if(m>=a-V)return this.state={...this.state,error:"Trim start must be less than trim end."},this.emit(),!1;return this.state={...this.state,trimStart:m,trimEnd:a,error:null},this.emit(),!0}clearError(){if(!this.state.error)return;this.state={...this.state,error:null},this.emit()}emit(){let o=this.getState();this.listeners.forEach((i)=>i(o))}}function W(o){o.innerHTML="";let i=document.createElement("style");i.textContent=`
     :root {
       color-scheme: light;
       font-family: "Segoe UI", Tahoma, sans-serif;
@@ -61,7 +61,7 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
       color: #334f63;
     }
 
-    input, button {
+    input, select, button {
       width: 100%;
       border: 1px solid #b8c9d1;
       border-radius: 8px;
@@ -117,6 +117,13 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
       font-weight: 600;
     }
 
+    .shortcuts {
+      font-size: 12px;
+      color: #425f71;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
     .error {
       color: #9f1f1f;
       font-size: 13px;
@@ -128,7 +135,7 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
         padding: 12px;
       }
     }
-  `,document.head.appendChild(e);let t=document.createElement("div");t.className="editor-shell";let n=document.createElement("section");n.className="panel",n.innerHTML=`
+  `,document.head.appendChild(i);let t=document.createElement("div");t.className="editor-shell";let d=document.createElement("section");d.className="panel",d.innerHTML=`
     <div class="row">
       <div style="flex:2; min-width: 240px;">
         <label>Video URL</label>
@@ -140,14 +147,14 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
       </div>
       <div style="min-width: 120px;">
         <label>&nbsp;</label>
-        <button id="pick-file">Pick Local File</button>
+        <button id="pick-file">Pick File (Storage First)</button>
       </div>
     </div>
-  `;let d=document.createElement("section");d.className="panel",d.innerHTML=`
+  `;let l=document.createElement("section");l.className="panel",l.innerHTML=`
     <div class="video-wrap">
       <video id="preview" controls preload="metadata"></video>
     </div>
-  `;let o=document.createElement("section");o.className="panel",o.innerHTML=`
+  `;let m=document.createElement("section");m.className="panel",m.innerHTML=`
     <div class="row">
       <div>
         <label>Trim Start (sec)</label>
@@ -156,6 +163,15 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
       <div>
         <label>Trim End (sec)</label>
         <input id="end-input" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div style="min-width: 120px;">
+        <label>Speed</label>
+        <select id="speed-select">
+          <option value="0.5">0.5x</option>
+          <option value="1">1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
       </div>
       <div style="min-width: 160px;">
         <label>&nbsp;</label>
@@ -176,8 +192,14 @@ function c(r,e,t){return Math.min(t,Math.max(e,r))}function p(r){if(!Number.isFi
       <div id="time-label" class="chip">Current: 00:00.00</div>
       <div id="duration-label" class="chip">Selected: 00:00.00</div>
     </div>
+    <div id="shortcuts" class="shortcuts">
+      Shortcuts: Space play/pause, I set start, O set end, X reset trim, Left/Right -/+0.04s, Shift+Left/Right -/+1s.
+    </div>
     <div id="error" class="error"></div>
-  `;let a=document.createElement("input");a.type="file",a.accept="video/*",a.style.display="none",t.append(n,d,o,a),r.appendChild(t);let s=t.querySelector("#video-url"),i=t.querySelector("#load-url"),u=t.querySelector("#pick-file"),l=t.querySelector("#preview"),E=t.querySelector("#start-range"),g=t.querySelector("#end-range"),S=t.querySelector("#start-input"),x=t.querySelector("#end-input"),L=t.querySelector("#loop-preview"),T=t.querySelector("#time-label"),y=t.querySelector("#duration-label"),w=t.querySelector("#error");return{root:t,urlInput:s,loadUrlButton:i,pickFileButton:u,fileInput:a,video:l,startRange:E,endRange:g,startInput:S,endInput:x,loopButton:L,timeLabel:T,durationLabel:y,errorLabel:w}}function h(r,e){let t=Boolean(e.sourceValue),n=e.duration>0,d=Math.max(0,e.trimEnd-e.trimStart),o=String(e.duration||0);if(r.startRange.max=o,r.endRange.max=o,r.startRange.value=String(e.trimStart),r.endRange.value=String(e.trimEnd),r.startInput.value=e.trimStart.toFixed(2),r.endInput.value=e.trimEnd.toFixed(2),r.loopButton.disabled=!n||Boolean(e.error),r.loopButton.textContent=e.loopPreview?"Stop Loop Preview":"Play Trimmed Segment",r.timeLabel.textContent=`Current: ${p(e.currentTime)}`,r.durationLabel.textContent=`Selected: ${p(d)}`,r.errorLabel.textContent=e.error??"",r.video.style.opacity=t?"1":"0.6",!n)r.durationLabel.textContent="Selected: 00:00.00"}function f(r){let e=new v,t=b(r),n=null,d=(i)=>{t.video.src=i,t.video.load()},o=()=>{if(!n)return;URL.revokeObjectURL(n),n=null};t.loadUrlButton.addEventListener("click",()=>{let i=t.urlInput.value.trim();if(!i)return;o(),e.setSource("url",i,null),d(i)}),t.pickFileButton.addEventListener("click",()=>{t.fileInput.click()}),t.fileInput.addEventListener("change",()=>{let i=t.fileInput.files?.[0];if(!i)return;o(),n=URL.createObjectURL(i),e.setSource("file",i.name,n),d(n)}),t.video.addEventListener("loadedmetadata",()=>{e.setDuration(t.video.duration||0)}),t.video.addEventListener("timeupdate",()=>{e.setCurrentTime(t.video.currentTime||0);let i=e.getState();if(i.loopPreview&&t.video.currentTime>=i.trimEnd)t.video.currentTime=i.trimStart,t.video.play()}),t.video.addEventListener("play",()=>{e.setPlaying(!0)}),t.video.addEventListener("pause",()=>{e.setPlaying(!1)});let a=(i)=>{if(Number.isNaN(i))return;if(!e.setTrim({trimStart:i}))return;let l=e.getState();if(t.video.currentTime<l.trimStart||t.video.currentTime>l.trimEnd)t.video.currentTime=l.trimStart},s=(i)=>{if(Number.isNaN(i))return;if(!e.setTrim({trimEnd:i}))return;let l=e.getState();if(t.video.currentTime>l.trimEnd)t.video.currentTime=l.trimStart};t.startRange.addEventListener("input",()=>{a(m(t.startRange.value))}),t.endRange.addEventListener("input",()=>{s(m(t.endRange.value))}),t.startInput.addEventListener("change",()=>{a(m(t.startInput.value))}),t.endInput.addEventListener("change",()=>{s(m(t.endInput.value))}),t.loopButton.addEventListener("click",async()=>{let i=e.getState(),u=!i.loopPreview;if(e.setLoopPreview(u),u){t.video.currentTime=i.trimStart,await t.video.play().catch(()=>{return});return}t.video.pause()}),e.subscribe((i)=>{h(t,i)}),window.addEventListener("beforeunload",()=>{o()})}f(document.body);
+  `;let a=document.createElement("input");a.type="file",a.accept="video/*",a.style.display="none",t.append(d,l,m,a),o.appendChild(t);let s=t.querySelector("#video-url"),g=t.querySelector("#load-url"),q=t.querySelector("#pick-file"),S=t.querySelector("#preview"),k=t.querySelector("#start-range"),x=t.querySelector("#end-range"),u=t.querySelector("#start-input"),B=t.querySelector("#end-input"),I=t.querySelector("#speed-select"),f=t.querySelector("#loop-preview"),y=t.querySelector("#time-label"),C=t.querySelector("#duration-label"),$=t.querySelector("#shortcuts"),n=t.querySelector("#error");return{root:t,urlInput:s,loadUrlButton:g,pickFileButton:q,fileInput:a,video:S,startRange:k,endRange:x,startInput:u,endInput:B,speedSelect:I,loopButton:f,timeLabel:y,durationLabel:C,shortcutsLabel:$,errorLabel:n}}function X(o,i){let t=Boolean(i.sourceValue),d=i.duration>0,l=Math.max(0,i.trimEnd-i.trimStart),m=String(i.duration||0);if(o.startRange.max=m,o.endRange.max=m,o.startRange.value=String(i.trimStart),o.endRange.value=String(i.trimEnd),o.startInput.value=i.trimStart.toFixed(2),o.endInput.value=i.trimEnd.toFixed(2),o.speedSelect.value=String(i.playbackRate),o.loopButton.disabled=!d||Boolean(i.error),o.loopButton.textContent=i.loopPreview?"Stop Loop Preview":"Play Trimmed Segment",o.timeLabel.textContent=`Current: ${N(i.currentTime)}`,o.durationLabel.textContent=`Selected: ${N(l)}`,o.errorLabel.textContent=i.error??"",o.video.style.opacity=t?"1":"0.6",!d)o.durationLabel.textContent="Selected: 00:00.00"}var j="video-editor-lite:prefs",K=0.01,F=new Set([0.5,1,1.5,2]),U=/\.(mp4|m4v|webm|mov|avi|mkv|ogv|ogg)$/i,Y=200,Z="/api/storage/",h={playbackRate:1,loopPreview:!1,lastUrl:"",lastStoragePath:""};function R(){try{let o=localStorage.getItem(j);if(!o)return{...h};let i=JSON.parse(o),t=typeof i.playbackRate==="number"&&F.has(i.playbackRate)?i.playbackRate:h.playbackRate,d=typeof i.loopPreview==="boolean"?i.loopPreview:h.loopPreview,l=typeof i.lastUrl==="string"?i.lastUrl:h.lastUrl,m=typeof i.lastStoragePath==="string"?i.lastStoragePath:h.lastStoragePath;return{playbackRate:t,loopPreview:d,lastUrl:l,lastStoragePath:m}}catch{return{...h}}}function O(o){try{localStorage.setItem(j,JSON.stringify(o))}catch{}}function G(o){let i=new Q,t=W(o),d=null,l=R(),m=(n)=>{l={...l,...n},O(l)},a=()=>{let n=window.yaar?.storage;if(!n||typeof n.list!=="function")return null;return n},s=(n)=>{let r=n.trim();if(!r)return"";if(r.startsWith(Z))return r.slice(Z.length);return r.replace(/^\/+/,"")},g=(n)=>n.split("/").filter(Boolean).map((r)=>encodeURIComponent(r)).join("/"),q=(n)=>{let r=s(n),e=a();if(e?.url)return e.url(r);return`${Z}${g(r)}`},S=async(n,r="",e=new Set,p=[])=>{if(p.length>=Y)return p;let v=r||"/";if(e.has(v))return p;e.add(v);let L=[];try{L=await n.list(r)}catch{return p}for(let M of L){if(p.length>=Y)break;if(M.isDirectory){await S(n,M.path,e,p);continue}let H=s(M.path);if(U.test(H))p.push(H)}return p},k=async()=>{let n=a();if(!n)return!1;let r=await S(n);if(!r.length)return!1;r.sort((z,J)=>z.localeCompare(J));let e=r[0],p=r.includes(l.lastStoragePath)?l.lastStoragePath:e,v=r.slice(0,12).map((z,J)=>`${J+1}. ${z}`).join(`
+`),L=r.length-12,M=L>0?`
+...and ${L} more`:"",H=window.prompt(`Pick a storage video (number or path):
+${v}${M}`,p);if(H===null)return!1;let D=H.trim();if(!D)return!1;let w="",E=Number(D);if(Number.isInteger(E)&&E>=1&&E<=r.length)w=r[E-1];else w=s(D);if(!w)return!1;let T=q(w);return u(),m({lastStoragePath:w,lastUrl:T}),t.urlInput.value=T,i.setSource("url",T,null),x(T),!0},x=(n)=>{t.video.src=n,t.video.playbackRate=l.playbackRate,t.video.load()},u=()=>{if(!d)return;URL.revokeObjectURL(d),d=null},B=(n)=>{let r=t.video.duration||0;if(r<=0)return;let e=c((t.video.currentTime||0)+n,0,r);t.video.currentTime=e},I=async()=>{if(t.video.paused){await t.video.play().catch(()=>{return});return}t.video.pause()},f=(n)=>{if(Number.isNaN(n))return;if(!i.setTrim({trimStart:n}))return;let e=i.getState();if(t.video.currentTime<e.trimStart||t.video.currentTime>e.trimEnd)t.video.currentTime=e.trimStart},y=(n)=>{if(Number.isNaN(n))return;if(!i.setTrim({trimEnd:n}))return;let e=i.getState();if(t.video.currentTime>e.trimEnd)t.video.currentTime=e.trimStart},C=()=>{let n=i.getState();if(n.duration<=0)return;if(!i.setTrim({trimStart:0,trimEnd:n.duration}))return;t.video.currentTime=0},$=(n)=>{if(!(n instanceof HTMLElement))return!1;let r=n.tagName.toLowerCase();return r==="input"||r==="textarea"||r==="select"||Boolean(n.closest("input, textarea, select"))};t.urlInput.value=l.lastUrl,t.video.playbackRate=l.playbackRate,i.setPlaybackRate(l.playbackRate),i.setLoopPreview(l.loopPreview),t.loadUrlButton.addEventListener("click",()=>{let n=t.urlInput.value.trim();if(!n)return;m({lastUrl:n}),u(),i.setSource("url",n,null),x(n)}),t.urlInput.addEventListener("change",()=>{m({lastUrl:t.urlInput.value.trim()})}),t.pickFileButton.addEventListener("click",async()=>{if(await k())return;t.fileInput.click()}),t.fileInput.addEventListener("change",()=>{let n=t.fileInput.files?.[0];if(!n)return;u(),d=URL.createObjectURL(n),i.setSource("file",n.name,d),x(d)}),t.video.addEventListener("loadedmetadata",()=>{i.setDuration(t.video.duration||0),t.video.playbackRate=i.getState().playbackRate}),t.video.addEventListener("timeupdate",()=>{i.setCurrentTime(t.video.currentTime||0);let n=i.getState();if(n.loopPreview&&t.video.currentTime>=n.trimEnd)t.video.currentTime=n.trimStart,t.video.play()}),t.video.addEventListener("play",()=>{i.setPlaying(!0)}),t.video.addEventListener("pause",()=>{i.setPlaying(!1)}),t.startRange.addEventListener("input",()=>{f(b(t.startRange.value))}),t.endRange.addEventListener("input",()=>{y(b(t.endRange.value))}),t.startInput.addEventListener("change",()=>{f(b(t.startInput.value))}),t.endInput.addEventListener("change",()=>{y(b(t.endInput.value))}),t.speedSelect.addEventListener("change",()=>{let n=b(t.speedSelect.value);if(!F.has(n)){t.speedSelect.value=String(i.getState().playbackRate);return}t.video.playbackRate=n,i.setPlaybackRate(n),m({playbackRate:n})}),t.loopButton.addEventListener("click",async()=>{let n=i.getState(),r=!n.loopPreview;if(i.setLoopPreview(r),m({loopPreview:r}),r){t.video.currentTime=n.trimStart,await t.video.play().catch(()=>{return});return}t.video.pause()}),window.addEventListener("keydown",(n)=>{if(n.metaKey||n.ctrlKey||n.altKey)return;if($(n.target))return;let r=i.getState();if(n.code==="Space"){n.preventDefault(),I();return}if(n.key==="I"||n.key==="i"){if(n.preventDefault(),r.duration<=0)return;let e=Math.min(t.video.currentTime||0,Math.max(0,r.trimEnd-K));f(e);return}if(n.key==="O"||n.key==="o"){if(n.preventDefault(),r.duration<=0)return;let e=Math.max(t.video.currentTime||0,r.trimStart+K);y(e);return}if(n.key==="X"||n.key==="x"){n.preventDefault(),C();return}if(n.key==="ArrowLeft"||n.key==="ArrowRight"){n.preventDefault();let e=n.shiftKey?1:0.04,p=n.key==="ArrowLeft"?-1:1;B(p*e)}}),i.subscribe((n)=>{X(t,n)}),window.addEventListener("beforeunload",()=>{u()})}G(document.body);
 
 </script>
 </body>

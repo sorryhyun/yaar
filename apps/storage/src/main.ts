@@ -98,6 +98,36 @@ function getExtension(name: string): string {
   return name.includes('.') ? (name.split('.').pop()?.toLowerCase() || '') : '';
 }
 
+function toStorageUri(path: string): string {
+  const cleaned = path.split('/').map((part) => encodeURIComponent(part)).join('/');
+  return `storage://${cleaned}`;
+}
+
+function buildDragMetadata(entry: StorageEntry) {
+  const name = basename(entry.path);
+  const url = !entry.isDirectory ? storage.url(entry.path) : null;
+  return {
+    source: 'storage',
+    appId: 'storage',
+    path: entry.path,
+    name,
+    isDirectory: entry.isDirectory,
+    size: entry.size ?? null,
+    extension: entry.isDirectory ? '' : getExtension(name),
+    mimeType: null,
+    url,
+    storageUri: toStorageUri(entry.path),
+  };
+}
+
+function safeSetDragData(dt: DataTransfer, type: string, value: string) {
+  try {
+    dt.setData(type, value);
+  } catch {
+    // Some environments reject custom MIME types; ignore and continue.
+  }
+}
+
 function requestOpenByAgent(entry: StorageEntry) {
   if (!appApi?.sendInteraction) return;
   const name = basename(entry.path);
@@ -253,6 +283,7 @@ root.innerHTML = `
   }
   .file-row:hover { background: var(--surface-hover); }
   .file-row.selected { background: var(--accent-dim); }
+  .file-row.dragging { opacity: 0.55; }
   .file-icon { width: 24px; text-align: center; font-size: 16px; flex-shrink: 0; }
   .file-name {
     flex: 1;
@@ -547,6 +578,7 @@ function renderFileList() {
     const row = document.createElement('div');
     row.className = 'file-row';
     row.dataset.path = entry.path;
+    row.draggable = true;
 
     row.innerHTML = `
       <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
@@ -572,6 +604,27 @@ function renderFileList() {
     row.addEventListener('dblclick', (e) => {
       if ((e.target as HTMLElement).closest('.file-actions')) return;
       if (!entry.isDirectory) requestOpenByAgent(entry);
+    });
+
+    // Drag support for drops into other apps/windows.
+    row.addEventListener('dragstart', (event) => {
+      const dt = event.dataTransfer;
+      if (!dt) return;
+
+      const metadata = buildDragMetadata(entry);
+      const uriList = [metadata.url, metadata.storageUri].filter(Boolean).join('\n');
+
+      dt.effectAllowed = 'copyMove';
+      safeSetDragData(dt, 'text/plain', `${metadata.path}\n${metadata.name}`);
+      safeSetDragData(dt, 'text/uri-list', uriList);
+      safeSetDragData(dt, 'application/json', JSON.stringify(metadata));
+      safeSetDragData(dt, 'application/x-yaar-storage-item+json', JSON.stringify(metadata));
+
+      row.classList.add('dragging');
+    });
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
     });
 
     // Open in new tab
