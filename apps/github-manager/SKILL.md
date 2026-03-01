@@ -9,9 +9,9 @@ create({
   windowId: "github-manager",
   title: "GitHub Manager",
   renderer: "iframe",
-  content: "/api/apps/github-manager/static/index.html"
+  content: "app://github-manager"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="github-manager")` to copy source into a sandbox for reading or editing.

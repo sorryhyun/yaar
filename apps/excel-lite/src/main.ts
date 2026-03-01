@@ -117,17 +117,28 @@ import { createXlsxWorkbook, parseXlsxWorkbook } from './xlsx-utils';
 const app = document.createElement('div');
 app.innerHTML = `
   <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f3f6fc; user-select: none; color: #111827; }
+    :root {
+      color-scheme: light;
+      --yaar-bg: #f8f9fa;
+      --yaar-bg-surface: #ffffff;
+      --yaar-bg-surface-hover: #f0f1f3;
+      --yaar-text: #1f2328;
+      --yaar-text-muted: #656d76;
+      --yaar-text-dim: #8b949e;
+      --yaar-border: #d0d7de;
+      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+      --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--yaar-bg); user-select: none; color: var(--yaar-text); }
     .wrap { padding: 10px; display: grid; gap: 8px; }
     .toolbar {
       display: grid;
       gap: 8px;
       padding: 10px;
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 12px;
-      background: linear-gradient(180deg, #ffffff, #f8fbff);
-      box-shadow: 0 6px 18px rgba(42, 109, 246, 0.08);
+      background: var(--yaar-bg-surface);
+      box-shadow: var(--yaar-shadow-sm);
       position: sticky;
       top: 8px;
       z-index: 10;
@@ -150,46 +161,32 @@ app.innerHTML = `
       font-weight: 700;
       min-width: 78px;
       text-align: center;
-      border: 1px solid #cfd8e6;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
       padding: 7px 8px;
-      background: #f7faff;
+      background: var(--yaar-bg);
     }
     input, select {
       height: 34px;
       padding: 6px 9px;
-      border: 1px solid #ccd6e4;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
       font-size: 13px;
-      background: white;
+      background: var(--yaar-bg-surface);
       box-sizing: border-box;
     }
     #formulaInput { width: 100%; }
     #storagePathInput { min-width: 260px; }
     #textColor, #bgColor { width: 42px; padding: 2px; }
-    button {
-      height: 34px;
-      min-width: 34px;
-      padding: 6px 10px;
-      border: 1px solid #c8d3e3;
-      border-radius: 9px;
-      background: linear-gradient(180deg, #ffffff, #f7f9fd);
-      cursor: pointer;
-      transition: all 120ms ease;
-      font-weight: 600;
-      color: #1f2937;
-    }
-    button:hover { background: #edf3ff; border-color: #aec2e6; transform: translateY(-1px); }
     button.active { background: #dce8ff; border-color: #89abf0; }
-    .sheetWrap { overflow: auto; border: 1px solid #d8e1ef; border-radius: 10px; background: white; max-height: calc(100vh - 160px); }
+    .sheetWrap { overflow: auto; border: 1px solid var(--yaar-border); border-radius: 10px; background: var(--yaar-bg-surface); max-height: calc(100vh - 160px); }
     .chartPanel {
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 10px;
-      background: #ffffff;
+      background: var(--yaar-bg-surface);
       padding: 8px;
       display: none;
       min-height: 220px;
-      box-shadow: inset 0 0 0 1px #eef3ff;
     }
     .chartPanel.open { display: block; }
     .chartPanelHead {
@@ -197,14 +194,14 @@ app.innerHTML = `
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
-      color: #1e293b;
+      color: var(--yaar-text);
       font-size: 13px;
     }
     #chartCanvas { width: 100%; max-height: 220px; }
     .statsPanel {
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 10px;
-      background: #ffffff;
+      background: var(--yaar-bg-surface);
       padding: 10px;
       display: none;
     }
@@ -215,13 +212,13 @@ app.innerHTML = `
       gap: 8px;
     }
     .statCard {
-      border: 1px solid #e5ecf8;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
-      background: #f8fbff;
+      background: var(--yaar-bg);
       padding: 8px;
     }
-    .statLabel { font-size: 11px; color: #64748b; }
-    .statValue { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+    .statLabel { font-size: 11px; color: var(--yaar-text-muted); }
+    .statValue { font-size: 14px; font-weight: 700; color: var(--yaar-text); margin-top: 2px; }
     table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
     th, td { border: 1px solid #e7ecf5; }
     th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
@@ -242,10 +239,10 @@ app.innerHTML = `
       font-size: 12px;
       padding: 7px 10px;
       border-radius: 8px;
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       background: rgba(255, 255, 255, 0.95);
-      color: #374151;
-      box-shadow: 0 6px 20px rgba(16, 24, 40, 0.12);
+      color: var(--yaar-text);
+      box-shadow: var(--yaar-shadow);
       display: none;
     }
     @media (max-width: 1200px) {
@@ -255,13 +252,13 @@ app.innerHTML = `
   <div class="wrap">
     <div class="toolbar">
       <div class="toolbar-row file">
-        <button id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">💾</button>
-        <button id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">📂</button>
-        <button id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
-        <button id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">📋</button>
-        <button id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
-        <button id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">📊</button>
-        <button id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
+        <button class="y-btn y-btn-sm" id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">💾</button>
+        <button class="y-btn y-btn-sm" id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">📂</button>
+        <button class="y-btn y-btn-sm" id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
+        <button class="y-btn y-btn-sm" id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">📋</button>
+        <button class="y-btn y-btn-sm" id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
+        <button class="y-btn y-btn-sm" id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">📊</button>
+        <button class="y-btn y-btn-sm" id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
         <select id="chartTypeSel" title="Chart type">
           <option value="bar" selected>Bar</option>
           <option value="line">Line</option>
@@ -270,13 +267,13 @@ app.innerHTML = `
         <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
       </div>
       <div class="toolbar-row edit">
-        <button id="undoBtn" title="Undo" aria-label="Undo">↶</button>
-        <button id="redoBtn" title="Redo" aria-label="Redo">↷</button>
+        <button class="y-btn y-btn-sm" id="undoBtn" title="Undo" aria-label="Undo">↶</button>
+        <button class="y-btn y-btn-sm" id="redoBtn" title="Redo" aria-label="Redo">↷</button>
         <div class="name" id="cellName">A1</div>
-        <input id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
-        <button id="boldBtn"><b>B</b></button>
-        <button id="italicBtn"><i>I</i></button>
-        <button id="underlineBtn"><u>U</u></button>
+        <input class="y-input" id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
+        <button class="y-btn y-btn-sm" id="boldBtn"><b>B</b></button>
+        <button class="y-btn y-btn-sm" id="italicBtn"><i>I</i></button>
+        <button class="y-btn y-btn-sm" id="underlineBtn"><u>U</u></button>
         <select id="fontSizeSel" title="Font size">
           <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
         </select>
@@ -289,12 +286,12 @@ app.innerHTML = `
     <div class="chartPanel" id="chartPanel">
       <div class="chartPanelHead">
         <strong id="chartTitle">Selection Chart</strong>
-        <button id="closeChartBtn" title="Close chart">✕</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="closeChartBtn" title="Close chart">✕</button>
       </div>
       <canvas id="chartCanvas" height="180"></canvas>
     </div>
     <div class="statsPanel" id="statsPanel"></div>
-    <div class="sheetWrap" id="sheet"></div>
+    <div class="sheetWrap y-scroll" id="sheet"></div>
   </div>
 `;
 document.body.appendChild(app);

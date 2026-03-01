@@ -9,9 +9,9 @@ create({
   windowId: "minecraft-lite",
   title: "Minecraft Lite",
   renderer: "iframe",
-  content: "/api/apps/minecraft-lite/static/index.html"
+  content: "app://minecraft-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="minecraft-lite")` to copy source into a sandbox for reading or editing.

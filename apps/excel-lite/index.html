@@ -4,25 +4,109 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Excel Lite</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
-<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();</script>
+<style>
+:root {
+  --yaar-bg: #0f1117;
+  --yaar-bg-surface: #161b22;
+  --yaar-bg-surface-hover: #1c2129;
+  --yaar-text: #e6edf3;
+  --yaar-text-muted: #8b949e;
+  --yaar-text-dim: #6e7681;
+  --yaar-accent: #58a6ff;
+  --yaar-accent-hover: #79c0ff;
+  --yaar-border: #30363d;
+  --yaar-success: #3fb950;
+  --yaar-error: #f85149;
+  --yaar-warning: #d29922;
+  --yaar-sp-1: 4px;
+  --yaar-sp-2: 8px;
+  --yaar-sp-3: 12px;
+  --yaar-sp-4: 16px;
+  --yaar-sp-5: 20px;
+  --yaar-sp-6: 24px;
+  --yaar-sp-8: 32px;
+  --yaar-radius-sm: 4px;
+  --yaar-radius: 6px;
+  --yaar-radius-lg: 10px;
+  --yaar-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --yaar-font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
+  --yaar-text-xs: 11px;
+  --yaar-text-sm: 12px;
+  --yaar-text-base: 13px;
+  --yaar-text-lg: 15px;
+  --yaar-text-xl: 18px;
+  --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --yaar-shadow: 0 2px 8px rgba(0,0,0,.4);
+  --yaar-shadow-lg: 0 8px 24px rgba(0,0,0,.5);
+  --yaar-ease: 150ms ease;
+}
+.y-app{display:flex;flex-direction:column;height:100%;color:var(--yaar-text);background:var(--yaar-bg);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5}
+.y-flex{display:flex}.y-flex-col{display:flex;flex-direction:column}.y-flex-center{display:flex;align-items:center;justify-content:center}.y-flex-between{display:flex;align-items:center;justify-content:space-between}.y-flex-1{flex:1;min-width:0;min-height:0}
+.y-gap-1{gap:var(--yaar-sp-1)}.y-gap-2{gap:var(--yaar-sp-2)}.y-gap-3{gap:var(--yaar-sp-3)}.y-gap-4{gap:var(--yaar-sp-4)}
+.y-grid{display:grid}
+.y-p-1{padding:var(--yaar-sp-1)}.y-p-2{padding:var(--yaar-sp-2)}.y-p-3{padding:var(--yaar-sp-3)}.y-p-4{padding:var(--yaar-sp-4)}
+.y-px-2{padding-left:var(--yaar-sp-2);padding-right:var(--yaar-sp-2)}.y-px-3{padding-left:var(--yaar-sp-3);padding-right:var(--yaar-sp-3)}.y-px-4{padding-left:var(--yaar-sp-4);padding-right:var(--yaar-sp-4)}
+.y-py-2{padding-top:var(--yaar-sp-2);padding-bottom:var(--yaar-sp-2)}.y-py-3{padding-top:var(--yaar-sp-3);padding-bottom:var(--yaar-sp-3)}
+.y-text-xs{font-size:var(--yaar-text-xs)}.y-text-sm{font-size:var(--yaar-text-sm)}.y-text-base{font-size:var(--yaar-text-base)}.y-text-lg{font-size:var(--yaar-text-lg)}.y-text-xl{font-size:var(--yaar-text-xl)}
+.y-text-muted{color:var(--yaar-text-muted)}.y-text-dim{color:var(--yaar-text-dim)}.y-text-accent{color:var(--yaar-accent)}
+.y-font-bold{font-weight:600}.y-font-mono{font-family:var(--yaar-font-mono)}
+.y-truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.y-border{border:1px solid var(--yaar-border)}.y-border-b{border-bottom:1px solid var(--yaar-border)}.y-border-t{border-top:1px solid var(--yaar-border)}
+.y-rounded{border-radius:var(--yaar-radius)}.y-rounded-lg{border-radius:var(--yaar-radius-lg)}
+.y-card{background:var(--yaar-bg-surface);border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);padding:var(--yaar-sp-3)}
+.y-surface{background:var(--yaar-bg-surface)}
+.y-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--yaar-sp-2);padding:var(--yaar-sp-2) var(--yaar-sp-3);border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);background:var(--yaar-bg-surface);color:var(--yaar-text);font-size:var(--yaar-text-sm);cursor:pointer;transition:background var(--yaar-ease),border-color var(--yaar-ease);user-select:none;white-space:nowrap}
+.y-btn:hover{background:var(--yaar-bg-surface-hover)}.y-btn:active{opacity:.8}
+.y-btn-primary{background:var(--yaar-accent);border-color:var(--yaar-accent);color:#fff}.y-btn-primary:hover{background:var(--yaar-accent-hover);border-color:var(--yaar-accent-hover)}
+.y-btn-ghost{border-color:transparent;background:transparent}.y-btn-ghost:hover{background:var(--yaar-bg-surface)}
+.y-btn-sm{padding:var(--yaar-sp-1) var(--yaar-sp-2);font-size:var(--yaar-text-xs)}
+.y-input{width:100%;padding:var(--yaar-sp-2) var(--yaar-sp-3);border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);background:var(--yaar-bg);color:var(--yaar-text);font-size:var(--yaar-text-sm);outline:none;transition:border-color var(--yaar-ease)}
+.y-input:focus{border-color:var(--yaar-accent)}.y-input::placeholder{color:var(--yaar-text-dim)}
+.y-badge{display:inline-flex;align-items:center;padding:1px var(--yaar-sp-2);border-radius:10px;font-size:var(--yaar-text-xs);font-weight:500;background:var(--yaar-bg-surface);border:1px solid var(--yaar-border)}
+.y-badge-success{color:var(--yaar-success);border-color:var(--yaar-success);background:rgba(63,185,80,.1)}
+.y-badge-error{color:var(--yaar-error);border-color:var(--yaar-error);background:rgba(248,81,73,.1)}
+.y-badge-warning{color:var(--yaar-warning);border-color:var(--yaar-warning);background:rgba(210,153,34,.1)}
+.y-badge-accent{color:var(--yaar-accent);border-color:var(--yaar-accent);background:rgba(88,166,255,.1)}
+@keyframes y-spin{to{transform:rotate(360deg)}}
+.y-spinner{width:16px;height:16px;border:2px solid var(--yaar-border);border-top-color:var(--yaar-accent);border-radius:50%;animation:y-spin .6s linear infinite}
+.y-spinner-lg{width:24px;height:24px}
+.y-scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--yaar-border) transparent}
+.y-scroll::-webkit-scrollbar{width:6px}.y-scroll::-webkit-scrollbar-track{background:transparent}.y-scroll::-webkit-scrollbar-thumb{background:var(--yaar-border);border-radius:3px}
+.y-toast{position:fixed;bottom:var(--yaar-sp-4);left:50%;transform:translateX(-50%) translateY(20px);padding:var(--yaar-sp-2) var(--yaar-sp-4);border-radius:var(--yaar-radius);font-size:var(--yaar-text-sm);color:var(--yaar-text);background:var(--yaar-bg-surface);border:1px solid var(--yaar-border);box-shadow:var(--yaar-shadow-lg);opacity:0;transition:opacity var(--yaar-ease),transform var(--yaar-ease);pointer-events:none;z-index:9999}
+.y-toast-visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.y-toast-info{border-color:var(--yaar-accent)}.y-toast-success{border-color:var(--yaar-success)}.y-toast-error{border-color:var(--yaar-error)}
+.y-transition{transition:all var(--yaar-ease)}
+.y-overflow-hidden{overflow:hidden}
+*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
 function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)+N,M=Math.floor((M-1)/26)}return N}function s(n){let N=0;for(let M of n)N=N*26+(M.charCodeAt(0)-64);return N}function D(n,N){return`${v(n)}${N}`}function z(n){let N=n.toUpperCase().match(/^([A-Z]+)(\d+)$/);if(!N)return null;return{c:s(N[1]),r:Number(N[2])}}function B(n,N){let M=z(n),b=z(N);return{c1:Math.min(M.c,b.c),c2:Math.max(M.c,b.c),r1:Math.min(M.r,b.r),r2:Math.max(M.r,b.r)}}function K(n){let N=[];for(let M=n.r1;M<=n.r2;M++)for(let b=n.c1;b<=n.c2;b++)N.push(D(b,M));return N}function Y1(n,N){let M=z(n),b=z(N);if(!M||!b)return[];let j=[],U=Math.min(M.c,b.c),O=Math.max(M.c,b.c),m=Math.min(M.r,b.r),Z=Math.max(M.r,b.r);for(let $=m;$<=Z;$++)for(let _=U;_<=O;_++)j.push(D(_,$));return j}function Q1(n,N,M){let b=[];for(let j of n){if(!z(j))continue;let O=M(j).trim(),m=(N[j]??"").trim(),$=Number(O||m);if(!Number.isFinite($))continue;b.push({label:j,value:$})}return b}var e=60,u=20,G={bold:!1,italic:!1,underline:!1,fontSize:14,color:"#111827",bg:"#ffffff",align:"left"};function H(n){return JSON.parse(JSON.stringify(n))}function X1(n){if(/[\",\n]/.test(n))return`"${n.replace(/"/g,'""')}"`;return n}function n1(n,N){let M=z(N);if(!M)return null;let b=M.r<n.r1,j=M.r>n.r2,U=M.c<n.c1,O=M.c>n.c2;if(!b&&!j&&!U&&!O)return null;let m=b?n.r1-M.r:j?M.r-n.r2:0,Z=U?n.c1-M.c:O?M.c-n.c2:0;if((b||j)&&m>=Z)return b?{c1:n.c1,c2:n.c2,r1:M.r,r2:n.r1-1}:{c1:n.c1,c2:n.c2,r1:n.r2+1,r2:M.r};return U?{c1:M.c,c2:n.c1-1,r1:n.r1,r2:n.r2}:{c1:n.c2+1,c2:M.c,r1:n.r1,r2:n.r2}}function V1(n,N){let M=z(N),b=n.r2-n.r1+1,j=n.c2-n.c1+1,U=n.r1,O=n.c1;if(M.r>n.r2)U=n.r1+(M.r-n.r1)%b;else if(M.r<n.r1)U=n.r2-(n.r1-M.r-1)%b;else U=M.r;if(M.c>n.c2)O=n.c1+(M.c-n.c1)%j;else if(M.c<n.c1)O=n.c2-(n.c1-M.c-1)%j;else O=M.c;return D(O,U)}function z1(n){function N(j,U=new Set){if(U.has(j))return NaN;U.add(j);let O=n(j).trim();if(!O)return 0;if(!O.startsWith("=")){let m=Number(O);return Number.isFinite(m)?m:NaN}return M(O.slice(1),U)}function M(j,U){try{let O=j.toUpperCase();if(O=O.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g,(Z,$,_)=>{return String(Y1($,_).reduce((q,J)=>{let V=N(J,new Set(U));return q+(Number.isFinite(V)?V:0)},0))}),O=O.replace(/\b([A-Z]+\d+)\b/g,(Z,$)=>{let _=N($,new Set(U));return Number.isFinite(_)?String(_):"NaN"}),!/^[0-9+\-*/().\sNAN]+$/.test(O))return NaN;let m=Function(`"use strict"; return (${O});`)();return Number.isFinite(m)?m:NaN}catch{return NaN}}function b(j){let U=n(j);if(!U.startsWith("="))return U;let O=N(j);return Number.isFinite(O)?String(O):"#ERR"}return{evalCell:N,display:b}}function D1(n,N,M){if(!n.startsWith("="))return n;return n.replace(/\b([A-Z]+)(\d+)\b/g,(b,j,U)=>{let O=Math.max(1,s(j)+M),m=Math.max(1,Number(U)+N);return`${v(O)}${m}`})}function F1(n,N,M,b,j=100){if(n.push({cells:H(M),styles:H(b)}),n.length>j)n.shift();N.length=0}function N1(n,N,M){for(let b of Object.keys(N))delete N[b];for(let[b,j]of Object.entries(n.cells))N[b]=j;for(let b of Object.keys(M))delete M[b];for(let[b,j]of Object.entries(n.styles))M[b]=j}function E(n,N){let M=n[N]??{};return{bold:M.bold??G.bold,italic:M.italic??G.italic,underline:M.underline??G.underline,fontSize:M.fontSize??G.fontSize,color:M.color??G.color,bg:M.bg??G.bg,align:M.align??G.align}}function o(n){let N={};if((n.bold??G.bold)!==G.bold)N.bold=!!n.bold;if((n.italic??G.italic)!==G.italic)N.italic=!!n.italic;if((n.underline??G.underline)!==G.underline)N.underline=!!n.underline;if((n.fontSize??G.fontSize)!==G.fontSize)N.fontSize=n.fontSize;if((n.color??G.color)!==G.color)N.color=n.color;if((n.bg??G.bg)!==G.bg)N.bg=n.bg;if((n.align??G.align)!==G.align)N.align=n.align;return Object.keys(N).length?N:null}function P1(n){let N={};for(let[j,U]of Object.entries(n)){let O=j.toUpperCase();if(!z(O))continue;N[O]=String(U??"")}let b=JSON.stringify({cells:N,format:"excel-lite-json-v1"});return new TextEncoder().encode(b)}function x1(n){try{let N=n instanceof Uint8Array?n:new Uint8Array(n),M=new TextDecoder().decode(N),b=JSON.parse(M),j=b&&b.cells&&typeof b.cells==="object"?b.cells:{},U={};for(let[O,m]of Object.entries(j)){let Z=O.toUpperCase();if(!z(Z))continue;U[Z]=String(m??"")}return{cells:U}}catch{return{cells:{}}}}class C1{static register(...n){}canvas;cfg;constructor(n,N){this.canvas=n,this.cfg=N,this.render()}destroy(){let n=this.canvas.getContext("2d");if(n)n.clearRect(0,0,this.canvas.width,this.canvas.height)}render(){let n=this.canvas.getContext("2d");if(!n)return;let N=this.canvas.width,M=this.canvas.height;n.clearRect(0,0,N,M);let b=this.cfg.data.datasets[0]?.data??[];if(!b.length)return;let j=Math.max(...b,1);if(this.cfg.type==="pie"){let _=-Math.PI/2,q=b.reduce((J,V)=>J+V,0)||1;b.forEach((J,V)=>{let W=_+J/q*Math.PI*2,p1=V*57%360;n.fillStyle=`hsl(${p1} 75% 55%)`,n.beginPath(),n.moveTo(N/2,M/2),n.arc(N/2,M/2,Math.min(N,M)*0.38,_,W),n.closePath(),n.fill(),_=W});return}let U=b.length,O=24,m=N-O*2,Z=M-O*2;if(n.strokeStyle="#9aa7bd",n.beginPath(),n.moveTo(O,M-O),n.lineTo(N-O,M-O),n.stroke(),this.cfg.type==="line"){n.strokeStyle="#2a6df6",n.lineWidth=2,n.beginPath(),b.forEach((_,q)=>{let J=O+q/Math.max(1,U-1)*m,V=M-O-_/j*Z;if(q===0)n.moveTo(J,V);else n.lineTo(J,V)}),n.stroke();return}let $=m/U;b.forEach((_,q)=>{let J=O+q*$+3,V=_/j*Z,W=M-O-V;n.fillStyle="rgba(42,109,246,0.6)",n.fillRect(J,W,Math.max(2,$-6),V)})}}var u1=[];function o1(n,N){if(N!=="HH:mm:ss")return n.toISOString();let M=(b)=>String(b).padStart(2,"0");return`${M(n.getHours())}:${M(n.getMinutes())}:${M(n.getSeconds())}`}var R={format:(n)=>(N)=>Number.isFinite(N)?N.toLocaleString(void 0,{maximumFractionDigits:4}):"0",sum:(n)=>n.reduce((N,M)=>N+M,0),mean:(n)=>n.length?n.reduce((N,M)=>N+M,0)/n.length:void 0,median:(n)=>{if(!n.length)return;let N=[...n].sort((b,j)=>b-j),M=Math.floor(N.length/2);return N.length%2?N[M]:(N[M-1]+N[M])/2},min:(n)=>n.length?Math.min(...n):void 0,max:(n)=>n.length?Math.max(...n):void 0};function d1(n,N=300){let M=null;return(...b)=>{if(M)clearTimeout(M);M=window.setTimeout(()=>n(...b),N)}}var H1=document.createElement("div");H1.innerHTML=`
   <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f3f6fc; user-select: none; color: #111827; }
+    :root {
+      color-scheme: light;
+      --yaar-bg: #f8f9fa;
+      --yaar-bg-surface: #ffffff;
+      --yaar-bg-surface-hover: #f0f1f3;
+      --yaar-text: #1f2328;
+      --yaar-text-muted: #656d76;
+      --yaar-text-dim: #8b949e;
+      --yaar-border: #d0d7de;
+      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+      --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--yaar-bg); user-select: none; color: var(--yaar-text); }
     .wrap { padding: 10px; display: grid; gap: 8px; }
     .toolbar {
       display: grid;
       gap: 8px;
       padding: 10px;
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 12px;
-      background: linear-gradient(180deg, #ffffff, #f8fbff);
-      box-shadow: 0 6px 18px rgba(42, 109, 246, 0.08);
+      background: var(--yaar-bg-surface);
+      box-shadow: var(--yaar-shadow-sm);
       position: sticky;
       top: 8px;
       z-index: 10;
@@ -45,46 +129,32 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
       font-weight: 700;
       min-width: 78px;
       text-align: center;
-      border: 1px solid #cfd8e6;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
       padding: 7px 8px;
-      background: #f7faff;
+      background: var(--yaar-bg);
     }
     input, select {
       height: 34px;
       padding: 6px 9px;
-      border: 1px solid #ccd6e4;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
       font-size: 13px;
-      background: white;
+      background: var(--yaar-bg-surface);
       box-sizing: border-box;
     }
     #formulaInput { width: 100%; }
     #storagePathInput { min-width: 260px; }
     #textColor, #bgColor { width: 42px; padding: 2px; }
-    button {
-      height: 34px;
-      min-width: 34px;
-      padding: 6px 10px;
-      border: 1px solid #c8d3e3;
-      border-radius: 9px;
-      background: linear-gradient(180deg, #ffffff, #f7f9fd);
-      cursor: pointer;
-      transition: all 120ms ease;
-      font-weight: 600;
-      color: #1f2937;
-    }
-    button:hover { background: #edf3ff; border-color: #aec2e6; transform: translateY(-1px); }
     button.active { background: #dce8ff; border-color: #89abf0; }
-    .sheetWrap { overflow: auto; border: 1px solid #d8e1ef; border-radius: 10px; background: white; max-height: calc(100vh - 160px); }
+    .sheetWrap { overflow: auto; border: 1px solid var(--yaar-border); border-radius: 10px; background: var(--yaar-bg-surface); max-height: calc(100vh - 160px); }
     .chartPanel {
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 10px;
-      background: #ffffff;
+      background: var(--yaar-bg-surface);
       padding: 8px;
       display: none;
       min-height: 220px;
-      box-shadow: inset 0 0 0 1px #eef3ff;
     }
     .chartPanel.open { display: block; }
     .chartPanelHead {
@@ -92,14 +162,14 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
-      color: #1e293b;
+      color: var(--yaar-text);
       font-size: 13px;
     }
     #chartCanvas { width: 100%; max-height: 220px; }
     .statsPanel {
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       border-radius: 10px;
-      background: #ffffff;
+      background: var(--yaar-bg-surface);
       padding: 10px;
       display: none;
     }
@@ -110,13 +180,13 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
       gap: 8px;
     }
     .statCard {
-      border: 1px solid #e5ecf8;
+      border: 1px solid var(--yaar-border);
       border-radius: 8px;
-      background: #f8fbff;
+      background: var(--yaar-bg);
       padding: 8px;
     }
-    .statLabel { font-size: 11px; color: #64748b; }
-    .statValue { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+    .statLabel { font-size: 11px; color: var(--yaar-text-muted); }
+    .statValue { font-size: 14px; font-weight: 700; color: var(--yaar-text); margin-top: 2px; }
     table { border-collapse: collapse; min-width: 1250px; table-layout: fixed; }
     th, td { border: 1px solid #e7ecf5; }
     th { position: sticky; top: 0; background: #f8faff; z-index: 2; font-weight: 600; }
@@ -137,10 +207,10 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
       font-size: 12px;
       padding: 7px 10px;
       border-radius: 8px;
-      border: 1px solid #d8e1ef;
+      border: 1px solid var(--yaar-border);
       background: rgba(255, 255, 255, 0.95);
-      color: #374151;
-      box-shadow: 0 6px 20px rgba(16, 24, 40, 0.12);
+      color: var(--yaar-text);
+      box-shadow: var(--yaar-shadow);
       display: none;
     }
     @media (max-width: 1200px) {
@@ -150,13 +220,13 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
   <div class="wrap">
     <div class="toolbar">
       <div class="toolbar-row file">
-        <button id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">\uD83D\uDCBE</button>
-        <button id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">\uD83D\uDCC2</button>
-        <button id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
-        <button id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">\uD83D\uDCCB</button>
-        <button id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
-        <button id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">\uD83D\uDCCA</button>
-        <button id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
+        <button class="y-btn y-btn-sm" id="saveFileBtn" title="Save workbook XLSX to YAAR storage" aria-label="Save File">\uD83D\uDCBE</button>
+        <button class="y-btn y-btn-sm" id="openFileBtn" title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">\uD83D\uDCC2</button>
+        <button class="y-btn y-btn-sm" id="saveBtn" title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
+        <button class="y-btn y-btn-sm" id="loadBtn" title="Paste sheet JSON from a dialog" aria-label="Paste JSON">\uD83D\uDCCB</button>
+        <button class="y-btn y-btn-sm" id="csvBtn" title="Export CSV" aria-label="Export CSV">⬇</button>
+        <button class="y-btn y-btn-sm" id="chartBtn" title="Create chart from selection" aria-label="Chart Selection">\uD83D\uDCCA</button>
+        <button class="y-btn y-btn-sm" id="statsBtn" title="Selection statistics" aria-label="Selection Statistics">Σ</button>
         <select id="chartTypeSel" title="Chart type">
           <option value="bar" selected>Bar</option>
           <option value="line">Line</option>
@@ -165,13 +235,13 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
         <input id="storagePathInput" title="Storage path" value="excel-lite/sheet.xlsx" />
       </div>
       <div class="toolbar-row edit">
-        <button id="undoBtn" title="Undo" aria-label="Undo">↶</button>
-        <button id="redoBtn" title="Redo" aria-label="Redo">↷</button>
+        <button class="y-btn y-btn-sm" id="undoBtn" title="Undo" aria-label="Undo">↶</button>
+        <button class="y-btn y-btn-sm" id="redoBtn" title="Redo" aria-label="Redo">↷</button>
         <div class="name" id="cellName">A1</div>
-        <input id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
-        <button id="boldBtn"><b>B</b></button>
-        <button id="italicBtn"><i>I</i></button>
-        <button id="underlineBtn"><u>U</u></button>
+        <input class="y-input" id="formulaInput" placeholder="Value or formula (=A1+B1, =SUM(A1:A10))" />
+        <button class="y-btn y-btn-sm" id="boldBtn"><b>B</b></button>
+        <button class="y-btn y-btn-sm" id="italicBtn"><i>I</i></button>
+        <button class="y-btn y-btn-sm" id="underlineBtn"><u>U</u></button>
         <select id="fontSizeSel" title="Font size">
           <option value="12">12</option><option value="14" selected>14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
         </select>
@@ -184,12 +254,12 @@ function v(n){let N="",M=n;while(M>0){let b=(M-1)%26;N=String.fromCharCode(65+b)
     <div class="chartPanel" id="chartPanel">
       <div class="chartPanelHead">
         <strong id="chartTitle">Selection Chart</strong>
-        <button id="closeChartBtn" title="Close chart">✕</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="closeChartBtn" title="Close chart">✕</button>
       </div>
       <canvas id="chartCanvas" height="180"></canvas>
     </div>
     <div class="statsPanel" id="statsPanel"></div>
-    <div class="sheetWrap" id="sheet"></div>
+    <div class="sheetWrap y-scroll" id="sheet"></div>
   </div>
 `;document.body.appendChild(H1);var R1=document.getElementById("sheet"),r=document.getElementById("formulaInput"),r1=document.getElementById("cellName"),k1=document.getElementById("boldBtn"),A1=document.getElementById("italicBtn"),T1=document.getElementById("underlineBtn"),b1=document.getElementById("fontSizeSel"),j1=document.getElementById("textColor"),O1=document.getElementById("bgColor"),U1=document.getElementById("alignSel"),a1=document.getElementById("undoBtn"),t1=document.getElementById("redoBtn"),l1=document.getElementById("saveBtn"),s1=document.getElementById("loadBtn"),w1=document.getElementById("storagePathInput"),e1=document.getElementById("saveFileBtn"),nn=document.getElementById("openFileBtn"),Nn=document.getElementById("csvBtn"),Mn=document.getElementById("chartBtn"),bn=document.getElementById("statsBtn"),E1=document.getElementById("chartTypeSel"),Z1=document.getElementById("chartPanel"),K1=document.getElementById("statsPanel"),jn=document.getElementById("chartCanvas"),On=document.getElementById("chartTitle"),Un=document.getElementById("closeChartBtn"),h=document.getElementById("ioStatus"),C={},Y={},f=new Map,i=new Map,_1=document.createElement("div");_1.className="fill-handle";var F="A1",Q="A1",X="A1",a=null,d=!1,c=!1,L=null,T=null,J1=[],L1=[];function g(n){return C[n]??""}var l=z1(g);C1.register(...u1);var w=window.yaar?.storage,M1,t=null;function P(n,N=!1){if(h.textContent=`[${o1(new Date,"HH:mm:ss")}] ${n}`,h.style.display="block",h.style.color=N?"#b42318":"#374151",h.style.borderColor=N?"#f6b5ad":"#d8e1ef",M1)window.clearTimeout(M1);M1=window.setTimeout(()=>{h.style.display="none"},N?4200:2400)}function f1(){let n=w1.value.trim()||"excel-lite/sheet.xlsx";return w1.value=n,n}var $1="excel-lite/autosave.json",$n=d1(async()=>{if(!w)return;try{await w.save($1,S1())}catch{}},1400);function k(){$n()}function A(){F1(J1,L1,C,Y)}function I1(){let n=J1.pop();if(!n)return;L1.push({cells:H(C),styles:H(Y)}),N1(n,C,Y),x()}function m1(){let n=L1.pop();if(!n)return;J1.push({cells:H(C),styles:H(Y)}),N1(n,C,Y),x()}function S(n){i.forEach((N)=>N.classList.remove(n))}function mn(){let n=E(Y,F);k1.classList.toggle("active",n.bold),A1.classList.toggle("active",n.italic),T1.classList.toggle("active",n.underline),b1.value=String(n.fontSize),j1.value=n.color,O1.value=n.bg,U1.value=n.align}function g1(){S("selected"),S("active"),S("fill-preview");let n=B(Q,X);for(let M of K(n))i.get(M)?.classList.add("selected");let N=i.get(F);if(N)N.classList.add("active"),N.appendChild(_1);if(r1.textContent=Q===X?F:`${Q}:${X}`,a!==F)r.value=g(F);mn()}function y(n,N,M=!1){if(Q=n,X=N,M)F=N;g1()}function v1(n){let N=f.get(n);if(!N)return;if(a!==n)N.value=l.display(n);let M=E(Y,n);N.style.fontWeight=M.bold?"700":"400",N.style.fontStyle=M.italic?"italic":"normal",N.style.textDecoration=M.underline?"underline":"none",N.style.fontSize=`${M.fontSize}px`,N.style.color=M.color,N.style.background=M.bg,N.style.textAlign=M.align}function x(){f.forEach((n,N)=>v1(N)),g1()}function h1(n,N){if(g(n)===N){v1(n);return}if(A(),N)C[n]=N;else delete C[n];x(),k()}function p(n){A();let N=B(Q,X);for(let M of K(N)){let b={...E(Y,M),...n},j=o(b);if(j)Y[M]=j;else delete Y[M]}x(),k()}function I(n){let N=E(Y,F);p({[n]:!N[n]})}function Cn(){A();let n=B(Q,X);for(let N of K(n))delete C[N];x(),k()}function W1(){if(S("fill-preview"),!c||!L||!T)return;let n=n1(L,T);if(!n)return;for(let N of K(n))i.get(N)?.classList.add("fill-preview")}function Zn(){if(!L||!T)return;let n=n1(L,T);if(!n)return;A();for(let N of K(n)){let M=V1(L,N),b=z(N),j=z(M),U=D1(g(M),b.r-j.r,b.c-j.c);if(U)C[N]=U;else delete C[N];let O=Y[M];if(O)Y[N]={...O};else delete Y[N]}if(n.r2>L.r2)Q=D(L.c1,L.r1),X=D(L.c2,n.r2);else if(n.r1<L.r1)Q=D(L.c1,n.r1),X=D(L.c2,L.r2);else if(n.c2>L.c2)Q=D(L.c1,L.r1),X=D(n.c2,L.r2);else if(n.c1<L.c1)Q=D(n.c1,L.r1),X=D(L.c2,L.r2);x(),k()}function y1(){let n=B(Q,X),N=K(n),M=Q1(N,C,(j)=>l.display(j));if(!M.length){P("Selection has no numeric values for charting.",!0);return}let b=E1.value;t?.destroy(),t=new C1(jn,{type:b,data:{labels:M.map((j)=>j.label),datasets:[{label:b.toUpperCase(),data:M.map((j)=>j.value),borderColor:"#2a6df6",backgroundColor:b==="pie"?["#2a6df6","#60a5fa","#93c5fd","#bfdbfe","#dbeafe","#2563eb"]:"rgba(42, 109, 246, 0.35)",borderWidth:2,fill:b==="line",tension:0.25}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:b==="pie"}}}}),On.textContent=`${Q===X?F:`${Q}:${X}`} (${M.length} pts)`,Z1.classList.add("open"),P(`Rendered ${b} chart from selection.`)}function _n(){let n=B(Q,X),M=K(n).map((j)=>Number.parseFloat(l.display(j))).filter((j)=>Number.isFinite(j));if(!M.length){P("Selection has no numeric values for stats.",!0);return}let b=[{label:"Count",value:String(M.length)},{label:"Sum",value:R.format(",.4~f")(R.sum(M))},{label:"Mean",value:R.format(",.4~f")(R.mean(M)??0)},{label:"Median",value:R.format(",.4~f")(R.median(M)??0)},{label:"Min",value:R.format(",.4~f")(R.min(M)??0)},{label:"Max",value:R.format(",.4~f")(R.max(M)??0)}];K1.innerHTML=`
     <div class="chartPanelHead">

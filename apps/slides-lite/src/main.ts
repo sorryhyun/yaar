@@ -61,38 +61,42 @@ function render() {
 
   app.innerHTML = `
     <style>
+      :root {
+        --yaar-bg: #f8f9fa;
+        --yaar-bg-surface: #ffffff;
+        --yaar-bg-surface-hover: #f0f1f3;
+        --yaar-text: #1f2328;
+        --yaar-text-muted: #656d76;
+        --yaar-text-dim: #8b949e;
+        --yaar-border: #d0d7de;
+        --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+        --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: Inter, system-ui, Arial, sans-serif; color: #111827; }
-      input, textarea, select, button { font: inherit; }
-      .root { height: 100vh; display: grid; grid-template-rows: 62px 1fr; background: #f8fafc; }
+      body { margin: 0; font-family: Inter, system-ui, Arial, sans-serif; color: var(--yaar-text); }
+      input, textarea, select { font: inherit; border: 1px solid var(--yaar-border); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+      .root { height: 100vh; display: grid; grid-template-rows: 62px 1fr; background: var(--yaar-bg); }
       .topbar {
         display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb; background: rgba(255,255,255,0.92); backdrop-filter: blur(6px);
+        border-bottom: 1px solid var(--yaar-border); background: var(--yaar-bg-surface); backdrop-filter: blur(6px);
       }
-      .topbar input, .topbar select, .topbar button, .panel input, .panel textarea, .panel select, .left input {
-        border: 1px solid #d1d5db; border-radius: 10px; padding: 8px 10px; font-size: 13px;
-      }
-      .topbar button, .panel button, .thumb-actions button { cursor: pointer; background: white; }
-      .topbar button.primary { background: #111827; color: white; border-color: #111827; }
-      .topbar button:focus-visible, .panel button:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
       .chip { font-size: 12px; border-radius: 999px; padding: 5px 10px; background: #eef2ff; color: #1d4ed8; }
       .chip.dirty { background: #fef3c7; color: #92400e; }
       .main { display: grid; grid-template-columns: 260px 1fr 320px; height: calc(100vh - 62px); }
-      .left { border-right: 1px solid #e5e7eb; overflow: auto; padding: 10px; background: #ffffff; }
+      .left { border-right: 1px solid var(--yaar-border); overflow: auto; padding: 10px; background: var(--yaar-bg-surface); }
       .left-head { display:grid; gap:8px; margin-bottom: 8px; }
-      .left small { color:#6b7280; font-size:11px; }
+      .left small { color: var(--yaar-text-muted); font-size:11px; }
       .thumb {
-        border: 1px solid #d1d5db; border-radius: 12px; padding: 10px; margin-bottom: 8px; cursor: pointer;
-        background: white; transition: transform .12s ease, box-shadow .12s ease;
+        border: 1px solid var(--yaar-border); border-radius: 12px; padding: 10px; margin-bottom: 8px; cursor: pointer;
+        background: var(--yaar-bg-surface); transition: transform .12s ease, box-shadow .12s ease;
       }
       .thumb:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.07); }
       .thumb.active { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
       .thumb h4 { margin: 0 0 4px; font-size: 12px; }
-      .thumb p { margin: 0; font-size: 11px; color: #6b7280; min-height: 28px; }
+      .thumb p { margin: 0; font-size: 11px; color: var(--yaar-text-muted); min-height: 28px; }
       .thumb-badges { margin-top:6px; display:flex; align-items:center; justify-content:space-between; }
       .thumb-badge { font-size: 10px; color:#334155; background:#e2e8f0; border-radius:999px; padding:2px 6px; }
       .thumb-actions { display: flex; gap: 4px; }
-      .thumb-actions button { font-size: 11px; padding: 3px 6px; }
       .center { display: grid; place-items: center; background: ${t.canvas}; padding: 18px; transition: background .18s ease; }
       .slide {
         width: min(980px, 100%); aspect-ratio: ${ratio.cssValue}; border-radius: 16px;
@@ -110,7 +114,7 @@ function render() {
       .slide-body pre code { background: transparent; padding: 0; }
       .slide-body hr { border: 0; border-top: 1px solid rgba(100, 116, 139, 0.45); margin: 12px 0; }
       .slide-body a { color: ${t.accent}; text-decoration: underline; }
-      .panel { border-left: 1px solid #e5e7eb; padding: 12px; overflow: auto; background: #ffffff; }
+      .panel { border-left: 1px solid var(--yaar-border); padding: 12px; overflow: auto; background: var(--yaar-bg-surface); }
       .field { margin-bottom: 10px; display: grid; gap: 6px; }
       .field label { font-size: 12px; color: #4b5563; font-weight: 600; display:flex; justify-content:space-between; }
       .panel textarea { min-height: 120px; resize: vertical; }
@@ -136,16 +140,16 @@ function render() {
         <input id="ratioW" type="number" min="0.1" step="0.1" value="${ratio.width}" style="width:72px;" ${ratio.preset === 'custom' ? '' : 'disabled'} />
         <span>:</span>
         <input id="ratioH" type="number" min="0.1" step="0.1" value="${ratio.height}" style="width:72px;" ${ratio.preset === 'custom' ? '' : 'disabled'} />
-        <button id="newDeckBtn">New</button>
-        <button id="dupBtn">Duplicate</button>
-        <button id="addBtn">Add Slide</button>
-        <button id="saveBtn">Save</button>
-        <button class="primary" id="presentBtn">Present</button>
-        <button id="exportBtn">Export PDF</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="newDeckBtn">New</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="dupBtn">Duplicate</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="addBtn">Add Slide</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="saveBtn">Save</button>
+        <button class="y-btn y-btn-sm y-btn-primary" id="presentBtn">Present</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="exportBtn">Export PDF</button>
         <span class="chip" id="saveBadge"></span>
       </div>
       <div class="main">
-        <div class="left">
+        <div class="left y-scroll">
           <div class="left-head">
             <input id="filterIn" placeholder="Filter slides…" value="${escapeHtml(filterQuery)}" />
             <small>Tip: Alt+↑ / Alt+↓ to reorder • Ctrl/Cmd+Enter to present</small>
@@ -154,7 +158,7 @@ function render() {
         </div>
         <div class="center" id="canvas"></div>
         <div class="panel">
-          <div class="field"><label>Layout</label>
+          <div class="field"><label class="y-flex-between y-text-sm">Layout</label>
             <select id="layoutSel">
               <option value="title-body" ${slide.layout === 'title-body' ? 'selected' : ''}>Title + Body</option>
               <option value="title-image" ${slide.layout === 'title-image' ? 'selected' : ''}>Title + Image</option>
@@ -165,7 +169,7 @@ function render() {
           <div class="field"><label>Body (Markdown supported) <span class="small">${slide.body.length} chars</span></label><textarea id="bodyIn">${escapeHtml(slide.body)}</textarea></div>
           <div class="field"><label>Speaker Notes</label><textarea id="notesIn" placeholder="Private presenter notes…">${escapeHtml(slide.notes)}</textarea></div>
           <div class="field"><label>Image URL</label><input id="imgIn" placeholder="https://..." value="${escapeHtml(slide.imageUrl)}"></div>
-          <div class="field" style="display:flex; gap:8px;"><button id="delBtn">Delete Slide</button><button id="sectionBtn">Quick Section</button></div>
+          <div class="field" style="display:flex; gap:8px;"><button class="y-btn y-btn-sm y-btn-ghost" id="delBtn">Delete Slide</button><button class="y-btn y-btn-sm y-btn-ghost" id="sectionBtn">Quick Section</button></div>
           <div class="small">Autosave enabled. Notes are hidden in exported slides.</div>
         </div>
       </div>

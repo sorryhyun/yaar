@@ -9,9 +9,9 @@ create({
   windowId: "mersoom",
   title: "Mersoom",
   renderer: "iframe",
-  content: "/api/apps/mersoom/static/index.html"
+  content: "app://mersoom"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="mersoom")` to copy source into a sandbox for reading or editing.

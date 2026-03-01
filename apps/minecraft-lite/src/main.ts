@@ -1,5 +1,6 @@
 const root = (document.getElementById('app') as HTMLDivElement | null) ?? document.body;
 root.innerHTML = '';
+root.classList.add('y-app');
 Object.assign(root.style, {
   margin: '0',
   width: '100vw',

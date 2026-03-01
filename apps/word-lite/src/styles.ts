@@ -1,21 +1,10 @@
 export const styles = `
-:root {
-  --bg: #0f172a;
-  --panel: #111827;
-  --toolbar: #1f2937;
-  --surface: #ffffff;
-  --text: #111827;
-  --muted: #6b7280;
-  --accent: #2563eb;
-  --border: #e5e7eb;
-}
-
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   height: 100%;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: var(--bg);
+  background: var(--yaar-bg);
 }
 
 #app {
@@ -34,8 +23,8 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: var(--panel);
-  border-bottom: 1px solid #374151;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
 }
 
 .brand {
@@ -72,8 +61,8 @@ html, body {
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--toolbar);
-  border-bottom: 1px solid #374151;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
 }
 
 .group {
@@ -81,31 +70,12 @@ html, body {
   gap: 6px;
   padding-right: 8px;
   margin-right: 4px;
-  border-right: 1px solid #374151;
+  border-right: 1px solid var(--yaar-border);
 }
 
 .group:last-child {
   border-right: 0;
   padding-right: 0;
-}
-
-button, select, input {
-  border: 1px solid #4b5563;
-  background: #111827;
-  color: #f3f4f6;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-button:hover, select:hover, input:hover {
-  border-color: #9ca3af;
-}
-
-button.primary {
-  background: var(--accent);
-  border-color: #1e40af;
 }
 
 .editor-wrap {
@@ -118,11 +88,11 @@ button.primary {
   max-width: 860px;
   min-height: calc(100% - 4px);
   margin: 0 auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   box-shadow: 0 10px 24px rgba(0,0,0,0.22);
-  color: var(--text);
+  color: #111827;
   padding: 36px 44px;
   outline: none;
   line-height: 1.5;
@@ -154,10 +124,9 @@ button.primary {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: var(--panel);
-  border-top: 1px solid #374151;
-  color: #d1d5db;
-  font-size: 12px;
+  background: var(--yaar-bg-surface);
+  border-top: 1px solid var(--yaar-border);
+  color: var(--yaar-text-muted);
 }
 
 #app.focus-mode .topbar,
@@ -171,6 +140,6 @@ button.primary {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--yaar-text-muted);
 }
 `

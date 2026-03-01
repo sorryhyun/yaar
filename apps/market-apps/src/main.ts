@@ -37,14 +37,7 @@ function getInitialDomain() {
 }
 
 const root = document.createElement('div');
-root.style.cssText = `
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: #0b1020;
-  color: #e8ecff;
-`;
+root.className = 'y-app';
 document.body.style.margin = '0';
 document.body.appendChild(root);
 
@@ -354,41 +347,24 @@ async function uninstallApp(app: InstalledApp) {
 
 function card(title: string, subtitle: string, buttonLabel: string, onClick: () => void, disabled = false) {
   const item = document.createElement('div');
-  item.style.cssText = `
-    border: 1px solid #263254;
-    border-radius: 10px;
-    padding: 12px;
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    background: #121a34;
-    min-height: 88px;
-    box-sizing: border-box;
-  `;
+  item.className = 'y-card y-flex-between y-gap-2';
+  item.style.minHeight = '88px';
 
   const left = document.createElement('div');
   left.style.cssText = 'min-width: 0; flex: 1;';
   const t = document.createElement('div');
   t.textContent = title;
-  t.style.cssText = 'font-weight: 600;';
+  t.style.fontWeight = '600';
   const s = document.createElement('div');
   s.textContent = subtitle;
-  s.style.cssText = 'opacity: 0.8; font-size: 12px; margin-top: 2px;';
+  s.className = 'y-text-xs y-text-muted';
+  s.style.marginTop = '2px';
   left.append(t, s);
 
   const btn = document.createElement('button');
   btn.textContent = buttonLabel;
   btn.disabled = disabled;
-  btn.style.cssText = `
-    border: 1px solid #3c4d84;
-    background: ${disabled ? '#18213f' : '#1f2b54'};
-    color: #e8ecff;
-    border-radius: 8px;
-    padding: 8px 12px;
-    cursor: ${disabled ? 'not-allowed' : 'pointer'};
-    opacity: ${disabled ? 0.7 : 1};
-  `;
+  btn.className = disabled ? 'y-btn y-btn-sm' : 'y-btn y-btn-sm y-btn-primary';
   btn.onclick = onClick;
 
   item.append(left, btn);
@@ -399,7 +375,8 @@ function render() {
   root.innerHTML = '';
 
   const header = document.createElement('div');
-  header.style.cssText = 'padding: 14px 16px; border-bottom: 1px solid #263254; display: flex; justify-content: space-between; align-items: center; gap: 10px;';
+  header.className = 'y-flex-between y-gap-2 y-px-2 y-py-2 y-border-b y-surface';
+  header.style.padding = '14px 16px';
 
   const titleWrap = document.createElement('div');
   const title = document.createElement('div');
@@ -407,16 +384,18 @@ function render() {
   title.style.cssText = 'font-size: 18px; font-weight: 700;';
   const meta = document.createElement('div');
   meta.textContent = `${statusText}${lastUpdated ? ` • ${lastUpdated}` : ''}`;
-  meta.style.cssText = 'font-size: 12px; opacity: 0.8; margin-top: 2px;';
+  meta.className = 'y-text-xs y-text-muted';
+  meta.style.marginTop = '2px';
   const domain = document.createElement('div');
   domain.textContent = apiBase ? `Domain: ${apiBase}` : 'Domain: (not set)';
-  domain.style.cssText = 'font-size: 11px; opacity: 0.7; margin-top: 4px;';
+  domain.className = 'y-text-xs y-text-dim';
+  domain.style.marginTop = '4px';
   titleWrap.append(title, meta, domain);
 
   const refresh = document.createElement('button');
   refresh.textContent = loading ? 'Refreshing…' : 'Refresh';
   refresh.disabled = loading;
-  refresh.style.cssText = 'border: 1px solid #3c4d84; background: #1f2b54; color: #e8ecff; border-radius: 8px; padding: 8px 12px; cursor: pointer;';
+  refresh.className = 'y-btn y-btn-sm y-btn-primary';
   refresh.onclick = () => {
     void refreshData();
   };
@@ -424,18 +403,16 @@ function render() {
   header.append(titleWrap, refresh);
 
   const tabs = document.createElement('div');
-  tabs.style.cssText = 'display: flex; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #263254;';
+  tabs.className = 'y-flex y-gap-2 y-border-b y-surface';
+  tabs.style.padding = '10px 16px';
 
   const mk = document.createElement('button');
   mk.textContent = `Marketplace (${marketApps.length})`;
   const ins = document.createElement('button');
   ins.textContent = `Installed (${installedApps.length})`;
 
-  [mk, ins].forEach((b) => {
-    b.style.cssText = 'border: 1px solid #3c4d84; background: #1a2445; color: #e8ecff; border-radius: 999px; padding: 6px 12px; cursor: pointer;';
-  });
-  if (activeTab === 'market') mk.style.background = '#2f4fd1';
-  if (activeTab === 'installed') ins.style.background = '#2f4fd1';
+  mk.className = activeTab === 'market' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm';
+  ins.className = activeTab === 'installed' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm';
 
   mk.onclick = () => {
     activeTab = 'market';
@@ -448,9 +425,10 @@ function render() {
   tabs.append(mk, ins);
 
   const list = document.createElement('div');
+  list.className = 'y-scroll';
   list.style.cssText = `
     padding: 14px 16px;
-    overflow: auto;
+    flex: 1;
     display: grid;
     gap: 10px;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -461,7 +439,7 @@ function render() {
     if (!marketApps.length) {
       const empty = document.createElement('div');
       empty.textContent = 'No marketplace apps loaded.';
-      empty.style.opacity = '0.8';
+      empty.className = 'y-text-muted';
       list.appendChild(empty);
     } else {
       for (const app of marketApps) {
@@ -482,7 +460,7 @@ function render() {
     if (!installedApps.length) {
       const empty = document.createElement('div');
       empty.textContent = 'No installed apps loaded.';
-      empty.style.opacity = '0.8';
+      empty.className = 'y-text-muted';
       list.appendChild(empty);
     } else {
       for (const app of installedApps) {

@@ -31,32 +31,21 @@ let columns = 3;
 
 root.innerHTML = `
 <style>
-  * { box-sizing: border-box; font-family: Inter, system-ui, -apple-system, sans-serif; }
-  body { margin: 0; background: #0b1020; color: #e2e8f0; }
   .app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-  .toolbar {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding: 10px; border-bottom: 1px solid #233150; background: #0f172a;
-  }
-  .toolbar button, .toolbar select, .toolbar input {
-    border: 1px solid #334155; background: #111827; color: #e2e8f0;
-    border-radius: 8px; padding: 6px 10px;
-  }
-  .toolbar button:hover { cursor: pointer; background: #1f2937; }
+  .toolbar { flex-wrap: wrap; }
   .main { min-height: 0; display: grid; grid-template-columns: 260px 1fr; }
   .sidebar {
-    border-right: 1px solid #233150; min-height: 0;
+    border-right: 1px solid var(--yaar-border); min-height: 0;
     display: grid; grid-template-rows: auto 1fr;
   }
-  .side-head { padding: 8px 10px; font-size: 12px; color: #94a3b8; border-bottom: 1px solid #1e293b; }
-  .thumbs { overflow: auto; padding: 8px; display: grid; gap: 8px; align-content: start; }
+  .thumbs { padding: 8px; display: grid; gap: 8px; align-content: start; }
   .thumb {
-    width: 100%; border: 1px solid #334155; border-radius: 8px;
-    background: #111827; color: #cbd5e1; padding: 6px; text-align: left;
+    width: 100%; border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius);
+    background: var(--yaar-bg-surface); color: var(--yaar-text); padding: 6px; text-align: left;
     font-size: 11px; cursor: pointer;
   }
-  .thumb.active { border-color: #22d3ee; box-shadow: 0 0 0 1px #22d3ee inset; }
-  .thumb img { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 6px; }
+  .thumb.active { border-color: var(--yaar-accent); box-shadow: 0 0 0 1px var(--yaar-accent) inset; }
+  .thumb img { width: 100%; height: 100px; object-fit: cover; border-radius: var(--yaar-radius); display: block; margin-bottom: 6px; }
   .viewer-wrap {
     min-height: 0;
     overflow: auto;
@@ -79,18 +68,18 @@ root.innerHTML = `
     grid-template-rows: auto 1fr;
   }
   .panel {
-    border: 1px solid #334155; border-radius: 10px; background: #0f172a;
+    border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); background: var(--yaar-bg-surface);
     overflow: hidden;
   }
   .panel-head {
-    padding: 8px 10px; font-size: 12px; color: #cbd5e1;
-    border-bottom: 1px solid #1e293b; background: #0b1220;
+    padding: 8px 10px; font-size: 12px; color: var(--yaar-text);
+    border-bottom: 1px solid var(--yaar-border); background: var(--yaar-bg);
   }
   .panel img {
     width: 100%;
     height: min(65vh, 520px);
     object-fit: contain;
-    background: #020617;
+    background: var(--yaar-bg);
     display: block;
   }
   .viewer-single .panel img {
@@ -98,28 +87,28 @@ root.innerHTML = `
     max-height: none;
   }
   .empty {
-    color: #94a3b8; border: 1px dashed #334155; border-radius: 10px;
+    border: 1px dashed var(--yaar-border); border-radius: var(--yaar-radius-lg);
     padding: 30px; text-align: center;
   }
-  .status { padding: 8px 12px; border-top: 1px solid #233150; color: #94a3b8; font-size: 12px; }
+  .status { padding: 8px 12px; border-top: 1px solid var(--yaar-border); }
 </style>
-<div class="app">
-  <div class="toolbar">
+<div class="app y-app">
+  <div class="toolbar y-flex y-gap-2 y-p-2 y-surface y-border-b">
     <input id="fileInput" type="file" accept="image/*" multiple />
-    <button id="loadStorageBtn">Load storage images</button>
-    <button id="gridBtn">Grid</button>
-    <button id="singleBtn">Single</button>
-    <label>Cols <input id="colsInput" type="number" min="1" max="8" value="3" style="width:64px" /></label>
-    <button id="clearBtn">Clear</button>
+    <button id="loadStorageBtn" class="y-btn y-btn-sm">Load storage images</button>
+    <button id="gridBtn" class="y-btn y-btn-sm">Grid</button>
+    <button id="singleBtn" class="y-btn y-btn-sm">Single</button>
+    <label class="y-text-sm">Cols <input id="colsInput" type="number" min="1" max="8" value="3" style="width:64px" class="y-input" /></label>
+    <button id="clearBtn" class="y-btn y-btn-sm y-btn-danger">Clear</button>
   </div>
   <div class="main">
     <aside class="sidebar">
-      <div class="side-head">Loaded Images</div>
-      <div id="thumbs" class="thumbs"></div>
+      <div class="side-head y-p-2 y-text-xs y-text-muted y-border-b">Loaded Images</div>
+      <div id="thumbs" class="thumbs y-scroll"></div>
     </aside>
     <div class="viewer-wrap"><div id="viewer"></div></div>
   </div>
-  <div id="status" class="status">Ready.</div>
+  <div id="status" class="status y-text-xs y-text-muted">Ready.</div>
 </div>
 `;
 

@@ -26,9 +26,9 @@ app.innerHTML = `
 
     <div class="toolbar">
       <div class="group">
-        <button data-cmd="bold"><b>B</b></button>
-        <button data-cmd="italic"><i>I</i></button>
-        <button data-cmd="underline"><u>U</u></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="bold"><b>B</b></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="italic"><i>I</i></button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="underline"><u>U</u></button>
       </div>
 
       <div class="group">
@@ -42,28 +42,28 @@ app.innerHTML = `
       </div>
 
       <div class="group">
-        <button data-cmd="justifyLeft">Left</button>
-        <button data-cmd="justifyCenter">Center</button>
-        <button data-cmd="justifyRight">Right</button>
-        <button data-cmd="insertUnorderedList">• List</button>
-        <button data-cmd="insertOrderedList">1. List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyLeft">Left</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyCenter">Center</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="justifyRight">Right</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertUnorderedList">• List</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="insertOrderedList">1. List</button>
       </div>
 
       <div class="group">
-        <button id="btn-link">Link</button>
-        <button data-cmd="removeFormat">Clear</button>
-        <button data-cmd="undo">Undo</button>
-        <button data-cmd="redo">Redo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-link">Link</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="removeFormat">Clear</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="undo">Undo</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" data-cmd="redo">Redo</button>
       </div>
 
       <div class="group">
-        <button id="btn-new">New</button>
-        <button id="btn-open">Open</button>
-        <button id="btn-save" class="primary">Save</button>
-        <button id="btn-export-txt">.txt</button>
-        <button id="btn-export-html">.html</button>
-        <button id="btn-export-docx">.docx</button>
-        <button id="btn-focus">Focus</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-new">New</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-open">Open</button>
+        <button class="y-btn y-btn-sm y-btn-primary" id="btn-save">Save</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-txt">.txt</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-html">.html</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-export-docx">.docx</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" id="btn-focus">Focus</button>
       </div>
     </div>
 
@@ -72,7 +72,7 @@ app.innerHTML = `
       <input id="file-input" type="file" accept=".txt,.html,.htm" style="display:none" />
     </div>
 
-    <div class="statusbar">
+    <div class="statusbar y-text-sm">
       <span id="stats">0 words • 0 chars</span>
       <span id="save-state">Not saved</span>
     </div>

@@ -1,4 +1,4 @@
-# Pdf Viewer
+# PDF Viewer
 
 A compiled TypeScript application.
 
@@ -7,11 +7,11 @@ Open this app in an iframe window:
 ```
 create({
   windowId: "pdf-viewer",
-  title: "Pdf Viewer",
+  title: "PDF Viewer",
   renderer: "iframe",
-  content: "/api/apps/pdf-viewer/static/index.html"
+  content: "app://pdf-viewer"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="pdf-viewer")` to copy source into a sandbox for reading or editing.

@@ -9,12 +9,12 @@ create({
   windowId: "browser",
   title: "Browser",
   renderer: "iframe",
-  content: "/api/apps/browser/static/index.html"
+  content: "app://browser"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="browser")` to copy source into a sandbox for reading or editing.
 
 ## App Protocol
 

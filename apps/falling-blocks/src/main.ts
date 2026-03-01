@@ -170,9 +170,8 @@ style.textContent = `
   html, body { height: 100%; }
   body {
     margin: 0;
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     background: radial-gradient(1200px 900px at 20% 0%, #1b2440 0%, #0b0f1a 55%, #070910 100%);
-    color: #e9eefc;
+    color: var(--yaar-text);
     display: grid;
     place-items: center;
   }
@@ -180,10 +179,10 @@ style.textContent = `
     display: flex;
     gap: 16px;
     padding: 18px;
-    border-radius: 18px;
+    border-radius: var(--yaar-radius-lg);
     background: rgba(10, 13, 25, 0.7);
-    box-shadow: 0 10px 35px rgba(0,0,0,0.45);
-    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: var(--yaar-shadow);
+    border: 1px solid var(--yaar-border);
     backdrop-filter: blur(10px);
   }
   .panel {
@@ -198,8 +197,8 @@ style.textContent = `
     font-size: 18px;
   }
   .card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--yaar-bg-surface);
+    border: 1px solid var(--yaar-border);
     border-radius: 14px;
     padding: 12px;
   }
@@ -220,24 +219,12 @@ style.textContent = `
     image-rendering: pixelated;
     background: rgba(0,0,0,0.35);
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--yaar-border);
   }
   .miniWrap { display: flex; gap: 10px; }
   .miniCol { display:flex; flex-direction: column; gap: 8px; }
   .miniLabel { font-size: 12px; opacity: 0.85; }
   .btnRow { display:flex; gap: 8px; flex-wrap: wrap; }
-  button {
-    appearance: none;
-    border: 1px solid rgba(255,255,255,0.14);
-    background: rgba(255,255,255,0.06);
-    color: #e9eefc;
-    padding: 8px 10px;
-    border-radius: 10px;
-    font-weight: 650;
-    cursor: pointer;
-  }
-  button:hover { background: rgba(255,255,255,0.10); }
-  button:active { transform: translateY(1px); }
   .overlay {
     position: absolute;
     inset: 0;
@@ -251,7 +238,7 @@ style.textContent = `
     padding: 14px 16px;
     border-radius: 14px;
     background: rgba(0,0,0,0.55);
-    border: 1px solid rgba(255,255,255,0.10);
+    border: 1px solid var(--yaar-border);
     max-width: 320px;
   }
   .overlayBox h2 { margin: 0 0 6px 0; font-size: 18px; }
@@ -284,20 +271,20 @@ const panel = document.createElement('div');
 panel.className = 'panel';
 
 const title = document.createElement('div');
-title.className = 'title';
+title.className = 'title y-text-sm y-font-mono';
 title.textContent = 'Falling Blocks';
 
 const statsCard = document.createElement('div');
 statsCard.className = 'card';
 
 const statScore = document.createElement('div');
-statScore.className = 'stat';
+statScore.className = 'stat y-text-sm y-font-mono';
 const statLines = document.createElement('div');
-statLines.className = 'stat';
+statLines.className = 'stat y-text-sm y-font-mono';
 const statLevel = document.createElement('div');
-statLevel.className = 'stat';
+statLevel.className = 'stat y-text-sm y-font-mono';
 const statHi = document.createElement('div');
-statHi.className = 'stat';
+statHi.className = 'stat y-text-sm y-font-mono';
 
 statsCard.append(statScore, statHi, statLines, statLevel);
 
@@ -329,14 +316,16 @@ btnCard.className = 'card';
 const btnRow = document.createElement('div');
 btnRow.className = 'btnRow';
 const btnRestart = document.createElement('button');
+btnRestart.className = 'y-btn y-btn-sm';
 btnRestart.textContent = 'Restart (R)';
 const btnPause = document.createElement('button');
+btnPause.className = 'y-btn y-btn-sm';
 btnPause.textContent = 'Pause (P)';
 btnRow.append(btnRestart, btnPause);
 btnCard.appendChild(btnRow);
 
 const help = document.createElement('div');
-help.className = 'help';
+help.className = 'help y-text-xs y-text-muted';
 help.textContent = '←/→ move • ↑ rotate • ↓ soft drop • Space hard drop • C hold • P pause • R restart';
 
 panel.append(title, statsCard, miniCard, btnCard, help);

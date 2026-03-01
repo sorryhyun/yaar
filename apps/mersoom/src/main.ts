@@ -32,86 +32,76 @@ const app = document.getElementById("app") ?? document.body;
 app.innerHTML = `
   <style>
     :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1220; color: #e5e7eb; height: 100dvh; overflow: hidden; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--yaar-bg); color: var(--yaar-text); height: 100dvh; overflow: hidden; }
     #layout { display: grid; grid-template-columns: 340px 1fr; height: 100dvh; min-height: 0; }
-    .panel { border-right: 1px solid #1f2937; overflow: auto; min-height: 0; }
+    .panel { border-right: 1px solid var(--yaar-border); overflow: auto; min-height: 0; }
     .panel-right { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; overflow: hidden; }
-    .toolbar, .composer, .post-actions { padding: 12px; border-bottom: 1px solid #1f2937; }
-    .composer { border-top: 1px solid #1f2937; border-bottom: none; }
+    .toolbar, .composer, .post-actions { padding: 12px; border-bottom: 1px solid var(--yaar-border); }
+    .composer { border-top: 1px solid var(--yaar-border); border-bottom: none; }
     .post-list { padding: 8px; }
-    .post-item { padding: 10px; border: 1px solid #1f2937; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
-    .post-item:hover, .post-item.active { border-color: #60a5fa; background: #0f172a; }
+    .post-item { padding: 10px; border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .post-item:hover, .post-item.active { border-color: var(--yaar-accent); background: var(--yaar-bg-surface); }
     .title { font-weight: 700; margin-bottom: 6px; }
-    .muted { font-size: 12px; color: #94a3b8; }
     .post-view { padding: 14px; overflow: auto; min-height: 0; }
-    .card { border: 1px solid #1f2937; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #0f172a; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    input, textarea, select, button { border-radius: 8px; border: 1px solid #374151; background: #111827; color: #e5e7eb; }
-    input, textarea, select { width: 100%; padding: 8px; }
-    textarea { min-height: 88px; resize: vertical; }
-    button { padding: 8px 10px; cursor: pointer; }
-    button.primary { background: #2563eb; border-color: #2563eb; }
-    button.ghost { background: transparent; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    textarea { min-height: 88px; resize: vertical; width: 100%; }
     .comments { margin-top: 8px; }
-    .comment { border-top: 1px solid #1f2937; padding: 8px 0; }
-    .status { padding: 6px 12px; border-top: 1px solid #1f2937; font-size: 12px; color: #93c5fd; }
-    .pill { border: 1px solid #334155; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .comment { border-top: 1px solid var(--yaar-border); padding: 8px 0; }
+    .status { padding: 6px 12px; border-top: 1px solid var(--yaar-border); font-size: 12px; color: var(--yaar-accent); }
+    .pill { border: 1px solid var(--yaar-border); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
     .hidden { display: none !important; }
-    .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
   <div id="layout">
-    <aside class="panel">
+    <aside class="panel y-scroll">
       <div class="toolbar row">
         <strong>Mersoom</strong>
-        <span class="pill">Read + Write</span>
+        <span class="pill y-badge">Read + Write</span>
       </div>
       <div class="toolbar">
-        <div class="muted" style="margin-bottom:6px;">Search posts</div>
-        <input id="search-input" placeholder="Filter by title or content...">
+        <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">Search posts</div>
+        <input id="search-input" class="y-input" placeholder="Filter by title or content...">
       </div>
       <div class="toolbar row">
-        <select id="sort-select" style="max-width: 145px;">
+        <select id="sort-select" class="y-input" style="max-width: 145px;">
           <option value="latest">Latest</option>
           <option value="top">Top score</option>
           <option value="discussed">Most discussed</option>
         </select>
-        <button id="btn-refresh" class="ghost">Refresh</button>
-        <button id="btn-more" class="ghost">Load more</button>
+        <button id="btn-refresh" class="y-btn y-btn-ghost y-btn-sm">Refresh</button>
+        <button id="btn-more" class="y-btn y-btn-ghost y-btn-sm">Load more</button>
       </div>
-      <div id="result-count" class="toolbar muted">0 posts</div>
+      <div id="result-count" class="toolbar y-text-sm y-text-muted">0 posts</div>
       <div id="post-list" class="post-list"></div>
     </aside>
 
     <main class="panel-right">
-      <div class="toolbar">
-        <div id="post-title" class="truncate" style="font-weight:700;">Select a post</div>
-        <div id="post-meta" class="muted">Pick a post from the list.</div>
+      <div class="toolbar y-flex-between">
+        <div id="post-title" class="y-truncate" style="font-weight:700;">Select a post</div>
+        <div id="post-meta" class="y-text-sm y-text-muted">Pick a post from the list.</div>
       </div>
 
-      <section id="post-view" class="post-view"></section>
+      <section id="post-view" class="post-view y-scroll"></section>
 
       <section class="composer">
         <div class="row" style="margin-bottom:8px;">
-          <button id="btn-tab-post" class="primary">New Post</button>
-          <button id="btn-tab-comment" class="ghost">New Comment</button>
+          <button id="btn-tab-post" class="y-btn y-btn-primary">New Post</button>
+          <button id="btn-tab-comment" class="y-btn y-btn-ghost">New Comment</button>
         </div>
 
-        <div id="composer-post" class="card">
+        <div id="composer-post" class="y-card">
           <div class="title">Create post</div>
-          <div class="row" style="margin-bottom:8px;"><input id="post-nickname" placeholder="nickname" value="돌쇠"></div>
-          <div class="row" style="margin-bottom:8px;"><input id="post-title-input" placeholder="title"></div>
-          <div class="row" style="margin-bottom:8px;"><textarea id="post-content-input" placeholder="share your thoughts..."></textarea></div>
-          <div class="row"><button id="btn-create-post" class="primary">Publish Post</button></div>
+          <div class="row" style="margin-bottom:8px;"><input id="post-nickname" class="y-input" placeholder="nickname" value="돌쇠"></div>
+          <div class="row" style="margin-bottom:8px;"><input id="post-title-input" class="y-input" placeholder="title"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="post-content-input" class="y-input" placeholder="share your thoughts..."></textarea></div>
+          <div class="row"><button id="btn-create-post" class="y-btn y-btn-primary">Publish Post</button></div>
         </div>
 
-        <div id="composer-comment" class="card hidden">
+        <div id="composer-comment" class="y-card hidden">
           <div class="title">Create comment</div>
-          <div class="muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
-          <div class="row" style="margin-bottom:8px;"><input id="comment-nickname" placeholder="nickname" value="돌쇠"></div>
-          <div class="row" style="margin-bottom:8px;"><textarea id="comment-content-input" placeholder="add a comment..."></textarea></div>
-          <div class="row"><button id="btn-create-comment" class="primary">Publish Comment</button></div>
+          <div class="y-text-sm y-text-muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
+          <div class="row" style="margin-bottom:8px;"><input id="comment-nickname" class="y-input" placeholder="nickname" value="돌쇠"></div>
+          <div class="row" style="margin-bottom:8px;"><textarea id="comment-content-input" class="y-input" placeholder="add a comment..."></textarea></div>
+          <div class="row"><button id="btn-create-comment" class="y-btn y-btn-primary">Publish Comment</button></div>
         </div>
       </section>
 
@@ -213,7 +203,7 @@ function renderPostList() {
   postListEl.innerHTML = "";
 
   if (!visiblePosts.length) {
-    postListEl.innerHTML = `<div class="muted">No matching posts.</div>`;
+    postListEl.innerHTML = `<div class="y-text-sm y-text-muted">No matching posts.</div>`;
     return;
   }
 
@@ -222,8 +212,8 @@ function renderPostList() {
     item.className = `post-item ${state.selectedPostId === post.id ? "active" : ""}`;
     item.innerHTML = `
       <div class="title">${escapeHtml(post.title)}</div>
-      <div class="muted" style="margin-bottom:6px;">${escapeHtml(fmtPostMeta(post))}</div>
-      <div class="muted">${escapeHtml(truncate(post.content, 92))}</div>
+      <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">${escapeHtml(fmtPostMeta(post))}</div>
+      <div class="y-text-sm y-text-muted">${escapeHtml(truncate(post.content, 92))}</div>
     `;
     item.onclick = () => void selectPost(post.id);
     postListEl.appendChild(item);
@@ -234,7 +224,7 @@ function renderPostDetails(post: Post | null) {
   if (!post) {
     postTitleEl.textContent = "Select a post";
     postMetaEl.textContent = "Pick a post from the list.";
-    postViewEl.innerHTML = `<div class="muted">Pick a post from the list to read and vote.</div>`;
+    postViewEl.innerHTML = `<div class="y-text-sm y-text-muted">Pick a post from the list to read and vote.</div>`;
     syncBusyUI();
     return;
   }
@@ -242,16 +232,16 @@ function renderPostDetails(post: Post | null) {
   postTitleEl.textContent = post.title;
   postMetaEl.textContent = fmtPostMeta(post);
   postViewEl.innerHTML = `
-    <article class="card">
+    <article class="y-card">
       <div class="title">${escapeHtml(post.title)}</div>
-      <div class="muted">${escapeHtml(fmtPostMeta(post))}</div>
+      <div class="y-text-sm y-text-muted">${escapeHtml(fmtPostMeta(post))}</div>
       <p>${escapeHtml(post.content).replace(/\n/g, "<br>")}</p>
       <div class="post-actions row">
-        <button id="btn-upvote" class="ghost">👍 Upvote</button>
-        <button id="btn-downvote" class="ghost">👎 Downvote</button>
+        <button id="btn-upvote" class="y-btn y-btn-ghost y-btn-sm">👍 Upvote</button>
+        <button id="btn-downvote" class="y-btn y-btn-ghost y-btn-sm">👎 Downvote</button>
       </div>
     </article>
-    <section class="card comments">
+    <section class="y-card comments">
       <div class="title">Comments (${state.comments.length})</div>
       <div id="comments-list"></div>
     </section>
@@ -263,13 +253,13 @@ function renderPostDetails(post: Post | null) {
         .map(
           (c) => `
             <div class="comment">
-              <div class="muted">${escapeHtml(c.author?.nickname ?? "돌쇠")}${c.created_at ? ` · ${escapeHtml(relativeTime(c.created_at))}` : ""}</div>
+              <div class="y-text-sm y-text-muted">${escapeHtml(c.author?.nickname ?? "돌쇠")}${c.created_at ? ` · ${escapeHtml(relativeTime(c.created_at))}` : ""}</div>
               <div>${escapeHtml(c.content).replace(/\n/g, "<br>")}</div>
             </div>
           `,
         )
         .join("")
-    : `<div class="muted">No comments.</div>`;
+    : `<div class="y-text-sm y-text-muted">No comments.</div>`;
 
   const upBtn = document.getElementById("btn-upvote") as HTMLButtonElement;
   const downBtn = document.getElementById("btn-downvote") as HTMLButtonElement;
@@ -287,8 +277,8 @@ function setComposerMode(mode: ComposerMode) {
   const showPost = mode === "post";
   composerPostEl.classList.toggle("hidden", !showPost);
   composerCommentEl.classList.toggle("hidden", showPost);
-  tabPostBtnEl.className = showPost ? "primary" : "ghost";
-  tabCommentBtnEl.className = showPost ? "ghost" : "primary";
+  tabPostBtnEl.className = showPost ? "y-btn y-btn-primary" : "y-btn y-btn-ghost";
+  tabCommentBtnEl.className = showPost ? "y-btn y-btn-ghost" : "y-btn y-btn-primary";
 }
 
 async function loadFeed(reset = false) {

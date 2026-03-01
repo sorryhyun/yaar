@@ -5,36 +5,12 @@ export function injectStyles(): void {
   style.textContent = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    :root {
-      --bg: #0f1117;
-      --bg-panel: #161b22;
-      --bg-sidebar: #0d1117;
-      --bg-item: #161b22;
-      --bg-item-hover: #1c2128;
-      --bg-item-active: #21262d;
-      --bg-item-selected: #1f3252;
-      --border: #30363d;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
-      --text-dim: #6e7681;
-      --accent: #58a6ff;
-      --accent-hover: #79c0ff;
-      --badge-bg: #238636;
-      --badge-text: #ffffff;
-      --unread-dot: #58a6ff;
-      --error: #f85149;
-      --success: #3fb950;
-      --radius: 6px;
-      --radius-lg: 10px;
-      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-    }
-
     html, body {
       height: 100%;
       overflow: hidden;
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--yaar-bg);
+      color: var(--yaar-text);
       font-size: 14px;
       line-height: 1.5;
     }
@@ -57,13 +33,13 @@ export function injectStyles(): void {
     }
 
     .divider:hover, .divider.dragging {
-      background: var(--accent);
+      background: var(--yaar-accent);
     }
 
     /* Sidebar */
     .sidebar {
-      background: var(--bg-sidebar);
-      border-right: 1px solid var(--border);
+      background: var(--yaar-bg);
+      border-right: 1px solid var(--yaar-border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -72,13 +48,13 @@ export function injectStyles(): void {
 
     .sidebar-header {
       padding: 16px 14px 12px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--yaar-border);
     }
 
     .app-title {
       font-size: 15px;
       font-weight: 700;
-      color: var(--text);
+      color: var(--yaar-text);
       letter-spacing: 0.3px;
     }
 
@@ -91,7 +67,7 @@ export function injectStyles(): void {
       font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.8px;
-      color: var(--text-dim);
+      color: var(--yaar-text-dim);
       text-transform: uppercase;
     }
 
@@ -100,27 +76,27 @@ export function injectStyles(): void {
       overflow-y: auto;
       padding: 4px 8px;
       scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
+      scrollbar-color: var(--yaar-border) transparent;
     }
 
     .sidebar-feeds::-webkit-scrollbar { width: 4px; }
     .sidebar-feeds::-webkit-scrollbar-track { background: transparent; }
-    .sidebar-feeds::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .sidebar-feeds::-webkit-scrollbar-thumb { background: var(--yaar-border); border-radius: 2px; }
 
     .feed-item {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 7px 8px;
-      border-radius: var(--radius);
+      border-radius: var(--yaar-radius);
       cursor: pointer;
       transition: background 0.15s;
       position: relative;
       user-select: none;
     }
 
-    .feed-item:hover { background: var(--bg-item-hover); }
-    .feed-item.active { background: var(--bg-item-active); }
+    .feed-item:hover { background: var(--yaar-bg-surface-hover); }
+    .feed-item.active { background: var(--yaar-bg-surface); }
 
     .feed-icon {
       font-size: 13px;
@@ -132,15 +108,15 @@ export function injectStyles(): void {
     .feed-name {
       flex: 1;
       font-size: 13px;
-      color: var(--text);
+      color: var(--yaar-text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .badge {
-      background: var(--badge-bg);
-      color: var(--badge-text);
+      background: #238636;
+      color: #ffffff;
       font-size: 10px;
       font-weight: 700;
       padding: 1px 5px;
@@ -153,7 +129,7 @@ export function injectStyles(): void {
     .feed-remove {
       background: none;
       border: none;
-      color: var(--text-dim);
+      color: var(--yaar-text-dim);
       cursor: pointer;
       font-size: 16px;
       line-height: 1;
@@ -164,14 +140,14 @@ export function injectStyles(): void {
     }
 
     .feed-item:hover .feed-remove { opacity: 1; }
-    .feed-remove:hover { color: var(--error) !important; }
+    .feed-remove:hover { color: var(--yaar-error, #f85149) !important; }
 
     /* Spinner */
     .spinner {
       width: 14px;
       height: 14px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
+      border: 2px solid var(--yaar-border);
+      border-top-color: var(--yaar-accent);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
       flex-shrink: 0;
@@ -180,8 +156,8 @@ export function injectStyles(): void {
     .spinner-large {
       width: 36px;
       height: 36px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
+      border: 3px solid var(--yaar-border);
+      border-top-color: var(--yaar-accent);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
       margin: 0 auto 16px;
@@ -191,7 +167,7 @@ export function injectStyles(): void {
 
     /* Add feed */
     .add-feed-section {
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--yaar-border);
       padding: 8px 8px 4px;
     }
 
@@ -203,10 +179,10 @@ export function injectStyles(): void {
     }
 
     .feed-url-input, .feed-name-input {
-      background: var(--bg-item);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
+      background: var(--yaar-bg-surface);
+      border: 1px solid var(--yaar-border);
+      border-radius: var(--yaar-radius);
+      color: var(--yaar-text);
       font-size: 12px;
       padding: 6px 8px;
       outline: none;
@@ -215,18 +191,18 @@ export function injectStyles(): void {
     }
 
     .feed-url-input:focus, .feed-name-input:focus {
-      border-color: var(--accent);
+      border-color: var(--yaar-accent);
     }
 
     .feed-url-input::placeholder, .feed-name-input::placeholder {
-      color: var(--text-dim);
+      color: var(--yaar-text-dim);
     }
 
     .add-feed-btn {
-      background: var(--accent);
+      background: var(--yaar-accent);
       color: #000;
       border: none;
-      border-radius: var(--radius);
+      border-radius: var(--yaar-radius);
       font-size: 12px;
       font-weight: 600;
       padding: 6px 10px;
@@ -235,18 +211,18 @@ export function injectStyles(): void {
       width: 100%;
     }
 
-    .add-feed-btn:hover { background: var(--accent-hover); }
+    .add-feed-btn:hover { background: var(--yaar-accent-hover); }
 
     .sidebar-footer {
       padding: 8px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--yaar-border);
     }
 
     .refresh-all-btn {
       background: none;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      border-radius: var(--radius);
+      border: 1px solid var(--yaar-border);
+      color: var(--yaar-text-muted);
+      border-radius: var(--yaar-radius);
       font-size: 12px;
       padding: 6px 10px;
       cursor: pointer;
@@ -255,8 +231,8 @@ export function injectStyles(): void {
     }
 
     .refresh-all-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+      border-color: var(--yaar-accent);
+      color: var(--yaar-accent);
     }
 
     /* Article list wrap */
@@ -272,26 +248,26 @@ export function injectStyles(): void {
       flex: 1;
       overflow-y: auto;
       scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
+      scrollbar-color: var(--yaar-border) transparent;
     }
 
     .article-list::-webkit-scrollbar { width: 4px; }
     .article-list::-webkit-scrollbar-track { background: transparent; }
-    .article-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .article-list::-webkit-scrollbar-thumb { background: var(--yaar-border); border-radius: 2px; }
 
     .article-item {
       display: flex;
       align-items: flex-start;
       gap: 10px;
       padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--yaar-border);
       cursor: pointer;
       transition: background 0.1s;
       position: relative;
     }
 
-    .article-item:hover { background: var(--bg-item-hover); }
-    .article-item.selected { background: var(--bg-item-selected); }
+    .article-item:hover { background: var(--yaar-bg-surface-hover); }
+    .article-item.selected { background: var(--yaar-bg-surface); }
 
     .article-thumb {
       width: 56px;
@@ -299,7 +275,7 @@ export function injectStyles(): void {
       object-fit: cover;
       border-radius: 4px;
       flex-shrink: 0;
-      background: var(--border);
+      background: var(--yaar-border);
     }
 
     .article-meta {
@@ -316,7 +292,7 @@ export function injectStyles(): void {
 
     .source-name {
       font-size: 11px;
-      color: var(--accent);
+      color: var(--yaar-accent);
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 0.3px;
@@ -324,13 +300,13 @@ export function injectStyles(): void {
 
     .pub-date {
       font-size: 11px;
-      color: var(--text-dim);
+      color: var(--yaar-text-dim);
     }
 
     .article-title {
       font-size: 13px;
       font-weight: 600;
-      color: var(--text);
+      color: var(--yaar-text);
       line-height: 1.4;
       margin-bottom: 4px;
       display: -webkit-box;
@@ -340,13 +316,13 @@ export function injectStyles(): void {
     }
 
     .article-item.read .article-title {
-      color: var(--text-muted);
+      color: var(--yaar-text-muted);
       font-weight: 400;
     }
 
     .article-desc {
       font-size: 11px;
-      color: var(--text-muted);
+      color: var(--yaar-text-muted);
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -357,7 +333,7 @@ export function injectStyles(): void {
     .unread-dot {
       width: 7px;
       height: 7px;
-      background: var(--unread-dot);
+      background: var(--yaar-accent);
       border-radius: 50%;
       flex-shrink: 0;
       margin-top: 6px;
@@ -367,14 +343,14 @@ export function injectStyles(): void {
     .content-area {
       flex: 1;
       overflow-y: auto;
-      background: var(--bg);
+      background: var(--yaar-bg);
       scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
+      scrollbar-color: var(--yaar-border) transparent;
     }
 
     .content-area::-webkit-scrollbar { width: 5px; }
     .content-area::-webkit-scrollbar-track { background: transparent; }
-    .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .content-area::-webkit-scrollbar-thumb { background: var(--yaar-border); border-radius: 2px; }
 
     /* Panel header (above article list + content) */
     .main-panel {
@@ -382,7 +358,7 @@ export function injectStyles(): void {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: var(--bg-panel);
+      background: var(--yaar-bg-surface);
       min-width: 0;
     }
 
@@ -391,22 +367,22 @@ export function injectStyles(): void {
       align-items: center;
       justify-content: space-between;
       padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-panel);
+      border-bottom: 1px solid var(--yaar-border);
+      background: var(--yaar-bg-surface);
       flex-shrink: 0;
     }
 
     #panel-title {
       font-size: 14px;
       font-weight: 600;
-      color: var(--text);
+      color: var(--yaar-text);
     }
 
     .mark-all-read-btn {
       background: none;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      border-radius: var(--radius);
+      border: 1px solid var(--yaar-border);
+      color: var(--yaar-text-muted);
+      border-radius: var(--yaar-radius);
       font-size: 11px;
       padding: 4px 10px;
       cursor: pointer;
@@ -414,8 +390,8 @@ export function injectStyles(): void {
     }
 
     .mark-all-read-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+      border-color: var(--yaar-accent);
+      color: var(--yaar-accent);
     }
 
     .panel-body {
@@ -444,13 +420,13 @@ export function injectStyles(): void {
     .empty-title, .welcome-title {
       font-size: 16px;
       font-weight: 600;
-      color: var(--text);
+      color: var(--yaar-text);
       margin-bottom: 6px;
     }
 
     .empty-sub, .welcome-sub {
       font-size: 13px;
-      color: var(--text-muted);
+      color: var(--yaar-text-muted);
       max-width: 240px;
       line-height: 1.6;
     }
@@ -467,18 +443,18 @@ export function injectStyles(): void {
       align-items: center;
       justify-content: space-between;
       padding: 12px 20px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--yaar-border);
       position: sticky;
       top: 0;
-      background: var(--bg);
+      background: var(--yaar-bg);
       z-index: 10;
     }
 
     .back-btn {
       background: none;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      border-radius: var(--radius);
+      border: 1px solid var(--yaar-border);
+      color: var(--yaar-text-muted);
+      border-radius: var(--yaar-radius);
       font-size: 13px;
       padding: 5px 12px;
       cursor: pointer;
@@ -486,15 +462,15 @@ export function injectStyles(): void {
     }
 
     .back-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
+      border-color: var(--yaar-accent);
+      color: var(--yaar-accent);
     }
 
     .open-external-btn {
-      background: var(--accent);
+      background: var(--yaar-accent);
       color: #000;
       border: none;
-      border-radius: var(--radius);
+      border-radius: var(--yaar-radius);
       font-size: 12px;
       font-weight: 600;
       padding: 5px 12px;
@@ -503,7 +479,7 @@ export function injectStyles(): void {
       transition: background 0.15s;
     }
 
-    .open-external-btn:hover { background: var(--accent-hover); }
+    .open-external-btn:hover { background: var(--yaar-accent-hover); }
 
     .article-view-body {
       padding: 28px 32px;
@@ -515,16 +491,16 @@ export function injectStyles(): void {
       align-items: center;
       gap: 4px;
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--yaar-text-muted);
       margin-bottom: 10px;
     }
 
-    .author-sep { color: var(--text-dim); }
+    .author-sep { color: var(--yaar-text-dim); }
 
     .article-view-title {
       font-size: 22px;
       font-weight: 700;
-      color: var(--text);
+      color: var(--yaar-text);
       line-height: 1.35;
       margin-bottom: 16px;
     }
@@ -533,14 +509,14 @@ export function injectStyles(): void {
       width: 100%;
       max-height: 300px;
       object-fit: cover;
-      border-radius: var(--radius-lg);
+      border-radius: var(--yaar-radius-lg);
       margin-bottom: 20px;
     }
 
     .article-view-content {
       font-size: 15px;
       line-height: 1.75;
-      color: var(--text);
+      color: var(--yaar-text);
     }
 
     .article-view-content p {
@@ -548,36 +524,36 @@ export function injectStyles(): void {
     }
 
     .article-view-content a {
-      color: var(--accent);
+      color: var(--yaar-accent);
       text-decoration: underline;
     }
 
     .article-view-content a:hover {
-      color: var(--accent-hover);
+      color: var(--yaar-accent-hover);
     }
 
     .article-view-content img {
       max-width: 100%;
       height: auto;
-      border-radius: var(--radius);
+      border-radius: var(--yaar-radius);
       margin: 10px 0;
     }
 
     .article-view-content h1, .article-view-content h2, .article-view-content h3 {
-      color: var(--text);
+      color: var(--yaar-text);
       margin: 18px 0 8px;
       line-height: 1.3;
     }
 
     .article-view-content blockquote {
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--yaar-accent);
       padding-left: 14px;
-      color: var(--text-muted);
+      color: var(--yaar-text-muted);
       margin: 14px 0;
     }
 
     .article-view-content pre, .article-view-content code {
-      background: var(--bg-item);
+      background: var(--yaar-bg-surface);
       border-radius: 4px;
       padding: 2px 6px;
       font-family: 'SF Mono', 'Fira Code', monospace;
@@ -592,11 +568,11 @@ export function injectStyles(): void {
     .article-view-footer {
       margin-top: 32px;
       padding-top: 20px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--yaar-border);
     }
 
     .read-more-link {
-      color: var(--accent);
+      color: var(--yaar-accent);
       font-size: 14px;
       font-weight: 500;
       text-decoration: none;
@@ -604,7 +580,7 @@ export function injectStyles(): void {
 
     .read-more-link:hover {
       text-decoration: underline;
-      color: var(--accent-hover);
+      color: var(--yaar-accent-hover);
     }
 
     /* Toast */
@@ -613,7 +589,7 @@ export function injectStyles(): void {
       bottom: 20px;
       right: 20px;
       padding: 10px 16px;
-      border-radius: var(--radius);
+      border-radius: var(--yaar-radius);
       font-size: 13px;
       font-weight: 500;
       z-index: 9999;
@@ -622,13 +598,13 @@ export function injectStyles(): void {
       pointer-events: none;
     }
 
-    .toast-info { background: var(--bg-item-active); color: var(--text); border: 1px solid var(--border); }
-    .toast-error { background: #2d0f0f; color: var(--error); border: 1px solid var(--error); }
-    .toast-success { background: #0d2d18; color: var(--success); border: 1px solid var(--success); }
+    .toast-info { background: var(--yaar-bg-surface); color: var(--yaar-text); border: 1px solid var(--yaar-border); }
+    .toast-error { background: #2d0f0f; color: var(--yaar-error, #f85149); border: 1px solid var(--yaar-error, #f85149); }
+    .toast-success { background: #0d2d18; color: var(--yaar-success, #3fb950); border: 1px solid var(--yaar-success, #3fb950); }
     .toast-fade { opacity: 0; }
 
     /* Scrollbar for content */
-    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    * { scrollbar-width: thin; scrollbar-color: var(--yaar-border) transparent; }
   `;
   document.head.appendChild(style);
 }

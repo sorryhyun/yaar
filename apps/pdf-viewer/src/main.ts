@@ -19,31 +19,28 @@ if (!root) throw new Error('Missing app root');
 root.innerHTML = `
   <style>
     :root {
-      color-scheme: light dark;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      --yaar-bg: #f8f9fa;
+      --yaar-bg-surface: #ffffff;
+      --yaar-bg-surface-hover: #f0f1f3;
+      --yaar-text: #1f2328;
+      --yaar-text-muted: #656d76;
+      --yaar-text-dim: #8b949e;
+      --yaar-border: #d0d7de;
+      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+      --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
     }
-    body { margin: 0; }
+    body { margin: 0; background: var(--yaar-bg); color: var(--yaar-text); }
     .wrap { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
     .top {
       display: flex;
       gap: 8px;
       align-items: center;
       padding: 10px;
-      border-bottom: 1px solid #d0d7de;
-      background: #f6f8fa;
+      border-bottom: 1px solid var(--yaar-border);
+      background: var(--yaar-bg-surface);
       flex-wrap: wrap;
     }
-    .top button, .top select, .top input, .top textarea {
-      font: inherit;
-    }
-    .top button {
-      padding: 6px 10px;
-      border: 1px solid #b6c2cf;
-      border-radius: 8px;
-      background: white;
-      cursor: pointer;
-    }
-    .top button.active { background: #0969da; color: #fff; border-color: #0969da; }
+    .top button.active { background: var(--yaar-accent); color: #fff; border-color: var(--yaar-accent); }
     .top .spacer { flex: 1; }
     .pane { height: calc(100vh - 58px); }
     .hidden { display: none !important; }
@@ -52,7 +49,7 @@ root.innerHTML = `
       display: flex;
       gap: 8px;
       padding: 10px;
-      border-bottom: 1px solid #d0d7de;
+      border-bottom: 1px solid var(--yaar-border);
       align-items: center;
       flex-wrap: wrap;
     }
@@ -65,51 +62,46 @@ root.innerHTML = `
     .storage-list {
       min-width: 300px;
       max-width: 420px;
-      padding: 6px 8px;
-      border-radius: 8px;
-      border: 1px solid #d0d7de;
-      background: #fff;
     }
     .viewer-frame {
       width: 100%;
       height: 100%;
       border: 0;
-      background: #f0f0f0;
+      background: var(--yaar-bg-surface-hover);
     }
     .drop {
-      border: 2px dashed #9aa4b2;
+      border: 2px dashed var(--yaar-border);
       border-radius: 12px;
       padding: 28px;
       margin: 12px;
       text-align: center;
-      color: #57606a;
+      color: var(--yaar-text-muted);
     }
-    .drop.drag { border-color: #0969da; color: #0969da; }
+    .drop.drag { border-color: var(--yaar-accent); color: var(--yaar-accent); }
     .export-pane { display: grid; grid-template-columns: 1fr 1fr; height: 100%; }
     .left, .right { padding: 10px; overflow: auto; }
-    .left { border-right: 1px solid #d0d7de; }
+    .left { border-right: 1px solid var(--yaar-border); }
     textarea {
       width: 100%;
       height: calc(100% - 60px);
       min-height: 220px;
       resize: vertical;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
+      border: 1px solid var(--yaar-border);
+      border-radius: var(--yaar-radius);
       padding: 10px;
       box-sizing: border-box;
-      background: white;
-      color: #111;
+      background: var(--yaar-bg-surface);
+      color: var(--yaar-text);
+      font: inherit;
     }
     .preview {
-      background: white;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
+      background: var(--yaar-bg-surface);
+      border: 1px solid var(--yaar-border);
+      border-radius: var(--yaar-radius);
       padding: 20px;
       min-height: 92%;
-      color: #111;
+      color: var(--yaar-text);
     }
-    .hint { color: #57606a; font-size: 12px; }
-    .status { font-size: 12px; color: #57606a; }
     @media print {
       body * { visibility: hidden !important; }
       #print-area, #print-area * { visibility: visible !important; }
@@ -124,26 +116,26 @@ root.innerHTML = `
   </style>
 
   <div class="wrap">
-    <div class="top">
-      <button id="btn-viewer" class="active">PDF Viewer</button>
-      <button id="btn-export">Export to PDF</button>
+    <div class="top y-flex y-flex-between">
+      <button id="btn-viewer" class="y-btn y-btn-sm active">PDF Viewer</button>
+      <button id="btn-export" class="y-btn y-btn-sm">Export to PDF</button>
       <div class="spacer"></div>
-      <span id="global-status" class="status">Ready</span>
+      <span id="global-status" class="y-text-sm y-text-muted">Ready</span>
     </div>
 
     <div id="viewer-pane" class="pane viewer-pane">
-      <div class="viewer-controls">
+      <div class="viewer-controls y-flex-between">
         <input id="file-input" type="file" accept="application/pdf" />
-        <button id="clear-pdf">Clear</button>
+        <button id="clear-pdf" class="y-btn y-btn-sm">Clear</button>
         <div class="storage-browser">
-          <button id="storage-up">Up</button>
-          <button id="storage-refresh">Refresh</button>
-          <span id="storage-current" class="status">Storage: /</span>
-          <select id="storage-list" class="storage-list">
+          <button id="storage-up" class="y-btn y-btn-sm">Up</button>
+          <button id="storage-refresh" class="y-btn y-btn-sm">Refresh</button>
+          <span id="storage-current" class="y-text-sm y-text-muted">Storage: /</span>
+          <select id="storage-list" class="storage-list y-input">
             <option>Loading...</option>
           </select>
         </div>
-        <span id="pdf-status" class="status">No PDF loaded.</span>
+        <span id="pdf-status" class="y-text-sm y-text-muted">No PDF loaded.</span>
       </div>
       <div id="drop" class="drop">Drop a PDF file here, or use the file picker above.</div>
       <iframe id="pdf-frame" class="viewer-frame hidden"></iframe>
@@ -152,14 +144,14 @@ root.innerHTML = `
     <div id="export-pane" class="pane export-pane hidden">
       <div class="left">
         <h3 style="margin: 0 0 8px;">Content</h3>
-        <p class="hint" style="margin-top: 0;">Type plain text or basic HTML. Use preview, then click “Export PDF”.</p>
+        <p class="y-text-xs y-text-muted" style="margin-top: 0;">Type plain text or basic HTML. Use preview, then click "Export PDF".</p>
         <textarea id="content-input" placeholder="Paste document/content here..."></textarea>
       </div>
       <div class="right">
         <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-          <button id="preview-btn">Refresh Preview</button>
-          <button id="export-btn">Export PDF</button>
-          <button id="save-html-btn">Save HTML to Storage</button>
+          <button id="preview-btn" class="y-btn y-btn-sm">Refresh Preview</button>
+          <button id="export-btn" class="y-btn y-btn-sm y-btn-primary">Export PDF</button>
+          <button id="save-html-btn" class="y-btn y-btn-sm">Save HTML to Storage</button>
         </div>
         <div id="print-area" class="preview"></div>
       </div>

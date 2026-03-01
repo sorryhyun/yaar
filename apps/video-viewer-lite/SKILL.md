@@ -9,9 +9,9 @@ create({
   windowId: "video-viewer-lite",
   title: "Video Viewer Lite",
   renderer: "iframe",
-  content: "/api/apps/video-viewer-lite/static/index.html"
+  content: "app://video-viewer-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="video-viewer-lite")` to copy source into a sandbox for reading or editing.

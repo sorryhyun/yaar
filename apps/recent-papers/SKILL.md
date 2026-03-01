@@ -9,9 +9,9 @@ create({
   windowId: "recent-papers",
   title: "Recent Papers",
   renderer: "iframe",
-  content: "/api/apps/recent-papers/static/index.html"
+  content: "app://recent-papers"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="recent-papers")` to copy source into a sandbox for reading or editing.

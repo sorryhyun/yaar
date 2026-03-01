@@ -4,21 +4,17 @@ app.className = 'app';
 app.innerHTML = `
   <style>
     :root {
-      --bg-a: #f7fbff;
-      --bg-b: #eef4ff;
-      --panel: #ffffffcc;
-      --text: #1d2a3a;
-      --muted: #5f6f85;
-      --line: #d8e3f0;
-      --accent: #1769e0;
-      --accent-strong: #0f57c2;
-      --ok: #0a7f43;
-      --err: #b42318;
-      --shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
-    }
-
-    * {
-      box-sizing: border-box;
+      --yaar-bg: #f7fbff;
+      --yaar-bg-surface: #ffffffcc;
+      --yaar-bg-surface-hover: #eef4ff;
+      --yaar-text: #1d2a3a;
+      --yaar-text-muted: #5f6f85;
+      --yaar-text-dim: #8b949e;
+      --yaar-border: #d8e3f0;
+      --yaar-accent: #1769e0;
+      --yaar-accent-hover: #0f57c2;
+      --yaar-shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
+      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
     }
 
     html, body {
@@ -26,11 +22,10 @@ app.innerHTML = `
       padding: 0;
       width: 100%;
       height: 100%;
-      color: var(--text);
-      font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--yaar-text);
       background: radial-gradient(1200px 500px at 20% -20%, #dcebff 0%, transparent 70%),
                   radial-gradient(900px 500px at 110% 120%, #d8e8ff 0%, transparent 60%),
-                  linear-gradient(145deg, var(--bg-a), var(--bg-b));
+                  linear-gradient(145deg, #f7fbff, #eef4ff);
     }
 
     .app {
@@ -45,11 +40,11 @@ app.innerHTML = `
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--yaar-border);
       border-radius: 18px;
-      background: var(--panel);
+      background: var(--yaar-bg-surface);
       backdrop-filter: blur(6px);
-      box-shadow: var(--shadow);
+      box-shadow: var(--yaar-shadow);
     }
 
     .title {
@@ -69,17 +64,17 @@ app.innerHTML = `
 
     .status {
       font-size: 0.9rem;
-      color: var(--muted);
+      color: var(--yaar-text-muted);
       min-height: 1.2em;
       word-break: break-word;
     }
 
     .status.ok {
-      color: var(--ok);
+      color: #0a7f43;
     }
 
     .status.err {
-      color: var(--err);
+      color: #b42318;
     }
 
     .input-row {
@@ -88,51 +83,11 @@ app.innerHTML = `
       gap: 8px;
     }
 
-    .input-row input,
-    .controls button,
-    .controls select,
-    .file-btn {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      font: inherit;
-    }
-
-    .input-row input {
-      width: 100%;
-      padding: 10px 12px;
-      background: #fff;
-      color: var(--text);
-    }
-
-    .btn {
-      padding: 10px 12px;
-      background: var(--accent);
-      color: #fff;
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: background 140ms ease, transform 120ms ease;
-    }
-
-    .btn:hover {
-      background: var(--accent-strong);
-    }
-
-    .btn:active {
-      transform: translateY(1px);
-    }
-
     .file-row {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-    }
-
-    .file-btn {
-      background: #fff;
-      color: var(--text);
-      padding: 8px 12px;
-      cursor: pointer;
     }
 
     .controls {
@@ -144,19 +99,11 @@ app.innerHTML = `
       flex-wrap: wrap;
     }
 
-    .controls button,
-    .controls select {
-      background: #fff;
-      color: var(--text);
-      padding: 8px 10px;
-      cursor: pointer;
-    }
-
     .video-wrap {
       width: 100%;
       border-radius: 14px;
       overflow: hidden;
-      border: 1px solid var(--line);
+      border: 1px solid var(--yaar-border);
       background: #0b1220;
     }
 
@@ -179,12 +126,6 @@ app.innerHTML = `
       display: none;
     }
 
-    .meta {
-      font-size: 0.88rem;
-      color: var(--muted);
-      word-break: break-word;
-    }
-
     @media (max-width: 720px) {
       .input-row {
         grid-template-columns: 1fr;
@@ -203,29 +144,29 @@ app.innerHTML = `
     </div>
 
     <div class="input-row">
-      <input id="urlInput" type="url" placeholder="Paste remote video URL (https://...)" aria-label="Remote video URL" />
-      <button id="loadUrlBtn" class="btn" type="button">Load URL</button>
+      <input id="urlInput" class="y-input" type="url" placeholder="Paste remote video URL (https://...)" aria-label="Remote video URL" />
+      <button id="loadUrlBtn" class="y-btn y-btn-primary" type="button">Load URL</button>
     </div>
 
     <div class="file-row">
       <input id="fileInput" type="file" accept="video/*" />
-      <span class="meta">Select a local video file to play</span>
+      <span class="y-text-muted">Select a local video file to play</span>
     </div>
 
     <div class="controls">
-      <button id="playPauseBtn" type="button">Play</button>
-      <button id="backBtn" type="button">-10s</button>
-      <button id="fwdBtn" type="button">+10s</button>
-      <select id="speedSelect" aria-label="Playback speed">
+      <button id="playPauseBtn" class="y-btn" type="button">Play</button>
+      <button id="backBtn" class="y-btn" type="button">-10s</button>
+      <button id="fwdBtn" class="y-btn" type="button">+10s</button>
+      <select id="speedSelect" class="y-input" aria-label="Playback speed">
         <option value="0.5">0.5x</option>
         <option value="1" selected>1x</option>
         <option value="1.5">1.5x</option>
         <option value="2">2x</option>
       </select>
-      <button id="muteBtn" type="button">Mute</button>
+      <button id="muteBtn" class="y-btn" type="button">Mute</button>
     </div>
 
-    <div class="video-wrap">
+    <div class="video-wrap y-rounded-lg">
       <video id="player" controls playsinline preload="metadata"></video>
       <iframe
         id="ytPlayer"
@@ -237,7 +178,7 @@ app.innerHTML = `
       ></iframe>
     </div>
 
-    <div id="status" class="status">No source loaded.</div>
+    <div id="status" class="status y-text-muted">No source loaded.</div>
   </section>
 `;
 

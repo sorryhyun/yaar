@@ -2,7 +2,7 @@
   "id": "github-manager",
   "name": "GitHub Manager",
   "icon": "🐙",
-  "description": "",
+  "description": "Manage GitHub repositories and issues",
   "version": "1.0.0",
   "author": "YAAR"
 }

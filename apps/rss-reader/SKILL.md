@@ -9,9 +9,9 @@ create({
   windowId: "rss-reader",
   title: "RSS Reader",
   renderer: "iframe",
-  content: "/api/apps/rss-reader/static/index.html"
+  content: "app://rss-reader"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="rss-reader")` to copy source into a sandbox for reading or editing.

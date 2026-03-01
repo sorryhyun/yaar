@@ -149,23 +149,12 @@ const root = document.getElementById('app') || document.body;
 
 root.innerHTML = `
 <style>
-  :root {
-    --bg: #1a1a2e;
-    --surface: #16213e;
-    --surface-hover: #1a2744;
-    --border: #2a3a5c;
-    --text: #e0e0e0;
-    --text-dim: #8899aa;
-    --accent: #4fc3f7;
-    --accent-dim: #29688a;
-    --danger: #ef5350;
-  }
   #app {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: var(--bg);
-    color: var(--text);
+    background: var(--yaar-bg);
+    color: var(--yaar-text);
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 13px;
     overflow: hidden;
@@ -177,8 +166,8 @@ root.innerHTML = `
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    background: var(--yaar-bg-surface);
+    border-bottom: 1px solid var(--yaar-border);
     flex-shrink: 0;
   }
   .breadcrumb {
@@ -192,32 +181,32 @@ root.innerHTML = `
   .breadcrumb button {
     background: none;
     border: none;
-    color: var(--accent);
+    color: var(--yaar-accent);
     cursor: pointer;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--yaar-radius);
     font-size: 13px;
     white-space: nowrap;
   }
-  .breadcrumb button:hover { background: var(--surface-hover); }
-  .breadcrumb button:last-child { color: var(--text); cursor: default; }
-  .breadcrumb .sep { color: var(--text-dim); font-size: 11px; }
+  .breadcrumb button:hover { background: var(--yaar-bg-surface-hover); }
+  .breadcrumb button:last-child { color: var(--yaar-text); cursor: default; }
+  .breadcrumb .sep { color: var(--yaar-text-muted); font-size: 11px; }
   .toolbar-btn {
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--text);
+    background: var(--yaar-bg-surface-hover);
+    border: 1px solid var(--yaar-border);
+    color: var(--yaar-text);
     cursor: pointer;
     padding: 4px 10px;
-    border-radius: 4px;
+    border-radius: var(--yaar-radius);
     font-size: 12px;
     white-space: nowrap;
   }
-  .toolbar-btn:hover { border-color: var(--accent-dim); }
+  .toolbar-btn:hover { border-color: var(--yaar-accent); }
   .toolbar-select {
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 4px;
+    background: var(--yaar-bg-surface-hover);
+    border: 1px solid var(--yaar-border);
+    color: var(--yaar-text);
+    border-radius: var(--yaar-radius);
     font-size: 12px;
     height: 26px;
     max-width: 180px;
@@ -235,23 +224,23 @@ root.innerHTML = `
   .modal.open { display: flex; }
   .modal-card {
     width: min(520px, calc(100vw - 32px));
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--yaar-bg-surface);
+    border: 1px solid var(--yaar-border);
+    border-radius: var(--yaar-radius-lg);
     padding: 14px;
-    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--yaar-shadow);
   }
   .modal-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-  .modal-note { color: var(--text-dim); font-size: 12px; line-height: 1.4; margin-bottom: 12px; }
+  .modal-note { color: var(--yaar-text-muted); font-size: 12px; line-height: 1.4; margin-bottom: 12px; }
   .modal-form { display: grid; gap: 10px; }
-  .modal-label { font-size: 12px; color: var(--text-dim); }
+  .modal-label { font-size: 12px; color: var(--yaar-text-muted); }
   .modal-input {
     width: 100%;
     box-sizing: border-box;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 4px;
+    background: var(--yaar-bg);
+    border: 1px solid var(--yaar-border);
+    color: var(--yaar-text);
+    border-radius: var(--yaar-radius);
     padding: 7px 9px;
     font-size: 12px;
   }
@@ -281,8 +270,8 @@ root.innerHTML = `
     cursor: pointer;
     border-bottom: 1px solid transparent;
   }
-  .file-row:hover { background: var(--surface-hover); }
-  .file-row.selected { background: var(--accent-dim); }
+  .file-row:hover { background: var(--yaar-bg-surface-hover); }
+  .file-row.selected { background: var(--yaar-accent-hover); }
   .file-row.dragging { opacity: 0.55; }
   .file-icon { width: 24px; text-align: center; font-size: 16px; flex-shrink: 0; }
   .file-name {
@@ -292,8 +281,8 @@ root.innerHTML = `
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .file-name.dir { color: var(--accent); }
-  .file-size { color: var(--text-dim); font-size: 12px; flex-shrink: 0; width: 70px; text-align: right; }
+  .file-name.dir { color: var(--yaar-accent); }
+  .file-size { color: var(--yaar-text-muted); font-size: 12px; flex-shrink: 0; width: 70px; text-align: right; }
   .file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
   .file-row:hover .file-actions { opacity: 1; }
   .file-actions button {
@@ -303,10 +292,10 @@ root.innerHTML = `
     font-size: 14px;
     padding: 2px 4px;
     border-radius: 3px;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
   }
-  .file-actions button:hover { background: var(--border); color: var(--text); }
-  .file-actions button.danger:hover { color: var(--danger); }
+  .file-actions button:hover { background: var(--yaar-border); color: var(--yaar-text); }
+  .file-actions button.danger:hover { color: var(--yaar-error, #f85149); }
 
   /* Empty state */
   .empty {
@@ -314,7 +303,7 @@ root.innerHTML = `
     align-items: center;
     justify-content: center;
     flex: 1;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
     font-size: 14px;
     padding: 40px;
   }
@@ -322,18 +311,18 @@ root.innerHTML = `
   /* Preview panel */
   .preview {
     width: 320px;
-    border-left: 1px solid var(--border);
+    border-left: 1px solid var(--yaar-border);
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: var(--yaar-bg-surface);
     flex-shrink: 0;
   }
   .preview-header {
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--yaar-border);
     font-weight: 600;
     font-size: 12px;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     display: flex;
@@ -343,12 +332,12 @@ root.innerHTML = `
   .preview-close {
     background: none;
     border: none;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
     cursor: pointer;
     font-size: 16px;
     padding: 0 4px;
   }
-  .preview-close:hover { color: var(--text); }
+  .preview-close:hover { color: var(--yaar-text); }
   .preview-body {
     flex: 1;
     overflow: auto;
@@ -360,77 +349,71 @@ root.innerHTML = `
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 12px;
     line-height: 1.5;
-    color: var(--text);
+    color: var(--yaar-text);
     margin: 0;
   }
   .preview-body img {
     max-width: 100%;
-    border-radius: 4px;
+    border-radius: var(--yaar-radius);
   }
   .preview-meta {
     padding: 8px 12px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--yaar-border);
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
   }
 
   /* Status bar */
   .statusbar {
     padding: 4px 12px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
+    background: var(--yaar-bg-surface);
+    border-top: 1px solid var(--yaar-border);
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--yaar-text-muted);
     flex-shrink: 0;
   }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
 </style>
 
-<div class="toolbar">
+<div class="toolbar y-flex-between">
   <div class="breadcrumb" id="breadcrumb"></div>
   <select class="toolbar-select" id="mount-select" title="Jump to mounted folder">
     <option value="">Mounts</option>
   </select>
-  <button class="toolbar-btn" id="btn-mount" title="Request mount folder">Mount...</button>
-  <button class="toolbar-btn" id="btn-refresh" title="Refresh">\u21BB</button>
+  <button class="toolbar-btn y-btn y-btn-sm" id="btn-mount" title="Request mount folder">Mount...</button>
+  <button class="toolbar-btn y-btn y-btn-sm" id="btn-refresh" title="Refresh">\u21BB</button>
 </div>
 <div class="main">
-  <div class="file-list" id="file-list"></div>
+  <div class="file-list y-scroll" id="file-list"></div>
   <div class="preview" id="preview" style="display:none">
-    <div class="preview-header">
-      <span id="preview-title">Preview</span>
+    <div class="preview-header y-flex-between">
+      <span id="preview-title" class="y-truncate">Preview</span>
       <button class="preview-close" id="preview-close">\u2715</button>
     </div>
     <div class="preview-body" id="preview-body"></div>
-    <div class="preview-meta" id="preview-meta"></div>
+    <div class="preview-meta y-text-xs y-text-muted" id="preview-meta"></div>
   </div>
 </div>
 <div class="modal" id="mount-modal">
-  <div class="modal-card">
+  <div class="modal-card y-card">
     <div class="modal-title">Request Host Folder Mount</div>
-    <div class="modal-note">The app cannot mount folders directly. Submit a request and the agent will ask for permission and run the mount tool.</div>
+    <div class="modal-note y-text-sm y-text-muted">The app cannot mount folders directly. Submit a request and the agent will ask for permission and run the mount tool.</div>
     <form class="modal-form" id="mount-form">
-      <label class="modal-label" for="mount-alias">Mount alias</label>
-      <input class="modal-input" id="mount-alias" name="alias" placeholder="project-files" required />
-      <label class="modal-label" for="mount-host-path">Host folder path</label>
-      <input class="modal-input" id="mount-host-path" name="hostPath" placeholder="/Users/name/projects" required />
+      <label class="modal-label y-text-xs y-text-muted" for="mount-alias">Mount alias</label>
+      <input class="modal-input y-input" id="mount-alias" name="alias" placeholder="project-files" required />
+      <label class="modal-label y-text-xs y-text-muted" for="mount-host-path">Host folder path</label>
+      <input class="modal-input y-input" id="mount-host-path" name="hostPath" placeholder="/Users/name/projects" required />
       <label class="modal-check" for="mount-readonly">
         <input type="checkbox" id="mount-readonly" name="readOnly" />
         Read-only mount
       </label>
       <div class="modal-actions">
-        <button class="toolbar-btn" type="button" id="mount-cancel">Cancel</button>
-        <button class="toolbar-btn" type="submit" id="mount-submit">Request Mount</button>
+        <button class="toolbar-btn y-btn y-btn-sm" type="button" id="mount-cancel">Cancel</button>
+        <button class="toolbar-btn y-btn y-btn-sm y-btn-primary" type="submit" id="mount-submit">Request Mount</button>
       </div>
     </form>
   </div>
 </div>
-<div class="statusbar" id="statusbar">Ready</div>
+<div class="statusbar y-text-xs y-text-muted" id="statusbar">Ready</div>
 `;
 
 const elBreadcrumb = document.getElementById('breadcrumb')!;
@@ -662,7 +645,7 @@ async function selectFile(entry: StorageEntry) {
 
   elPreview.style.display = 'flex';
   elPreviewTitle.textContent = name;
-  elPreviewBody.innerHTML = '<span style="color:var(--text-dim)">Loading...</span>';
+  elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Loading...</span>';
   elPreviewMeta.textContent = formatSize(entry.size);
 
   if (isImage(name)) {
@@ -680,7 +663,7 @@ async function selectFile(entry: StorageEntry) {
         .replace(/>/g, '&gt;');
       elPreviewBody.innerHTML = `<pre>${escaped}</pre>`;
     } catch {
-      elPreviewBody.innerHTML = '<span style="color:var(--text-dim)">Unable to preview</span>';
+      elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
     }
     return;
   }
@@ -688,7 +671,7 @@ async function selectFile(entry: StorageEntry) {
   elPreviewBody.innerHTML = `
     <div style="text-align:center;padding:20px">
       <div style="font-size:32px;margin-bottom:8px">${getFileIcon(name, false)}</div>
-      <div style="color:var(--text-dim);margin-bottom:12px">No preview available</div>
+      <div style="color:var(--yaar-text-muted);margin-bottom:12px">No preview available</div>
       <button class="toolbar-btn" id="open-external">Open in browser</button>
     </div>
   `;

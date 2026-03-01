@@ -9,9 +9,9 @@ create({
   windowId: "excel-lite",
   title: "Excel Lite",
   renderer: "iframe",
-  content: "/api/apps/excel-lite/static/index.html"
+  content: "app://excel-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="excel-lite")` to copy source into a sandbox for reading or editing.

@@ -9,9 +9,9 @@ create({
   windowId: "dock",
   title: "Dock",
   renderer: "iframe",
-  content: "/api/apps/dock/static/index.html"
+  content: "app://dock"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="dock")` to copy source into a sandbox for reading or editing.

@@ -9,9 +9,9 @@ create({
   windowId: "storage",
   title: "Storage",
   renderer: "iframe",
-  content: "/api/apps/storage/static/index.html"
+  content: "app://storage"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="storage")` to copy source into a sandbox for reading or editing.

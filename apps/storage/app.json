@@ -1,7 +1,7 @@
 {
-  "icon": "🗂️",
+  "icon": "📁",
   "name": "Storage",
-  "description": "Persistent file storage for user data, notes, and files across sessions",
+  "description": "Visual file manager for YAAR storage",
   "run": "static/index.html",
   "createShortcut": false,
   "appProtocol": true,

@@ -9,15 +9,12 @@ document.body.appendChild(root);
 
 const style = document.createElement('style');
 style.textContent = `
-  :root {
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  }
   html, body {
     width: 100%;
     height: 100%;
     background: transparent;
     margin: 0;
-    color: #eef1f6;
+    color: var(--yaar-text);
   }
   #dock-root {
     height: 100vh;
@@ -69,7 +66,7 @@ style.textContent = `
   }
   .weather-city {
     font-size: 13px;
-    color: #a8b5c4;
+    color: var(--yaar-text-muted);
   }
 
   /* notifications */
@@ -77,7 +74,7 @@ style.textContent = `
   .notif-count {
     font-size: 13px;
     font-weight: 700;
-    color: #7ec8fa;
+    color: var(--yaar-accent);
     font-variant-numeric: tabular-nums;
   }
   .notif-muted { color: rgba(255,255,255,0.35); }
@@ -94,7 +91,7 @@ style.textContent = `
   .date {
     font-size: 16px;
     font-weight: 600;
-    color: #d4dbe6;
+    color: var(--yaar-text);
     line-height: 1;
     text-shadow: 0 1px 3px rgba(0,0,0,0.5);
     font-variant-numeric: tabular-nums;

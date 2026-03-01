@@ -9,9 +9,9 @@ create({
   windowId: "image-viewer",
   title: "Image Viewer",
   renderer: "iframe",
-  content: "/api/apps/image-viewer/static/index.html"
+  content: "app://image-viewer"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="image-viewer")` to copy source into a sandbox for reading or editing.

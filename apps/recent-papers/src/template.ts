@@ -67,7 +67,7 @@ export const APP_HTML = `
       input { min-width: 100%; }
     }
   </style>
-  <div class="wrap">
+  <div class="wrap y-app">
     <div class="top">
       <h1>📚 Recent Papers</h1>
       <span class="muted">Sources: Hugging Face + arXiv</span>

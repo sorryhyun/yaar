@@ -9,9 +9,9 @@ create({
   windowId: "word-lite",
   title: "Word Lite",
   renderer: "iframe",
-  content: "/api/apps/word-lite/static/index.html"
+  content: "app://word-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="word-lite")` to copy source into a sandbox for reading or editing.

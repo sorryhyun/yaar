@@ -9,9 +9,9 @@ create({
   windowId: "slides-lite",
   title: "Slides Lite",
   renderer: "iframe",
-  content: "/api/apps/slides-lite/static/index.html"
+  content: "app://slides-lite"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="slides-lite")` to copy source into a sandbox for reading or editing.

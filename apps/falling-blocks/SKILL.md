@@ -9,9 +9,9 @@ create({
   windowId: "falling-blocks",
   title: "Falling Blocks",
   renderer: "iframe",
-  content: "/api/apps/falling-blocks/static/index.html"
+  content: "app://falling-blocks"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `read_config` with path `src/main.ts` to view.
+Source code is available in `src/` directory. Use `clone(appId="falling-blocks")` to copy source into a sandbox for reading or editing.

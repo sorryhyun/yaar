@@ -1,7 +1,7 @@
 {
   "icon": "🕐",
   "name": "Dock",
-  "description": "System dock with clock, weather, and notifications",
+  "description": "Clock, weather and notifications dock panel",
   "run": "static/index.html",
   "createShortcut": false,
   "appProtocol": true,

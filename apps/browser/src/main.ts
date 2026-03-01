@@ -31,23 +31,14 @@ if (rawInitialUrl) {
 root.innerHTML = `
   <style>
     :root { color-scheme: dark; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1e1e1e; overflow: hidden; }
 
     .browser-chrome {
       display: grid;
       grid-template-rows: auto 1fr;
       height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
     .url-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      background: #2d2d2d;
-      border-bottom: 1px solid #3e3e3e;
       min-height: 40px;
     }
 
@@ -63,63 +54,18 @@ root.innerHTML = `
 
     .url-bar .url-text {
       flex: 1;
-      font-size: 13px;
-      color: #ccc;
-      background: #3e3e3e;
-      border: 1px solid transparent;
       border-radius: 16px;
-      padding: 6px 12px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-family: inherit;
-      outline: none;
-    }
-
-    .url-bar .url-text:focus {
-      border-color: #4fc3f7;
-      background: #333;
-      color: #fff;
-    }
-
-    .url-bar .reload-btn,
-    .url-bar .nav-btn {
-      flex-shrink: 0;
-      width: 28px;
-      height: 28px;
-      border: 1px solid #4b4b4b;
-      border-radius: 999px;
-      background: #3a3a3a;
-      color: #ddd;
-      font-size: 14px;
-      line-height: 1;
-      cursor: pointer;
-    }
-
-    .url-bar .reload-btn:hover,
-    .url-bar .nav-btn:hover {
-      background: #4a4a4a;
-    }
-
-    .url-bar .reload-btn:active,
-    .url-bar .nav-btn:active {
-      transform: scale(0.97);
     }
 
     .url-bar .title-text {
-      font-size: 11px;
-      color: #888;
       flex-shrink: 0;
       max-width: 200px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     .screenshot-area {
       position: relative;
       overflow: auto;
-      background: #1a1a1a;
+      background: var(--yaar-bg);
       cursor: default;
     }
 
@@ -135,8 +81,6 @@ root.innerHTML = `
       align-items: center;
       justify-content: center;
       height: 100%;
-      color: #666;
-      font-size: 14px;
     }
 
     .loading-bar {
@@ -144,7 +88,7 @@ root.innerHTML = `
       top: 0;
       left: 0;
       height: 2px;
-      background: #4fc3f7;
+      background: var(--yaar-accent);
       animation: loading 1.5s ease-in-out infinite;
       display: none;
     }
@@ -160,18 +104,18 @@ root.innerHTML = `
     }
   </style>
 
-  <div class="browser-chrome">
-    <div class="url-bar">
-      <button id="back-btn" class="nav-btn" title="Back" aria-label="Back">←</button>
-      <button id="forward-btn" class="nav-btn" title="Forward" aria-label="Forward">→</button>
+  <div class="browser-chrome y-app">
+    <div class="url-bar y-flex y-gap-2 y-px-2 y-surface y-border-b">
+      <button id="back-btn" class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back">←</button>
+      <button id="forward-btn" class="y-btn y-btn-sm y-btn-ghost" title="Forward" aria-label="Forward">→</button>
       <span id="lock" class="lock">🔒</span>
-      <input id="url-text" class="url-text" value="about:blank" />
-      <button id="reload-btn" class="reload-btn" title="Reload" aria-label="Reload">↻</button>
-      <span id="title-text" class="title-text"></span>
+      <input id="url-text" class="url-text y-input" value="about:blank" />
+      <button id="reload-btn" class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload">↻</button>
+      <span id="title-text" class="title-text y-text-xs y-text-muted y-truncate"></span>
     </div>
     <div id="screenshot-area" class="screenshot-area">
       <div id="loading-bar" class="loading-bar"></div>
-      <div id="placeholder" class="placeholder">${sessionId ? 'Waiting for navigation...' : 'No active browser session.'}</div>
+      <div id="placeholder" class="placeholder y-text-muted y-text-sm">${sessionId ? 'Waiting for navigation...' : 'No active browser session.'}</div>
       <img id="screenshot" style="display:none" alt="Browser screenshot" />
     </div>
   </div>

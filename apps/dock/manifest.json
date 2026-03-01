@@ -2,7 +2,7 @@
   "id": "dock",
   "name": "Dock",
   "icon": "🕐",
-  "description": "System dock with clock, weather, and notifications",
+  "description": "Clock, weather and notifications dock panel",
   "version": "1.0.1",
   "author": "YAAR"
 }

@@ -40,81 +40,78 @@ type DeviceTokenResponse = {
 const root = document.createElement('div');
 root.innerHTML = `
   <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1020; color: #e5e7eb; }
+    body { margin: 0; background: var(--yaar-bg); color: var(--yaar-text); }
     .app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
-    .top { padding: 12px; border-bottom: 1px solid #1f2937; background: #0f172a; display: grid; gap: 8px; }
+    .top { padding: 12px; border-bottom: 1px solid var(--yaar-border); background: var(--yaar-bg-surface); display: grid; gap: 8px; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    input, textarea, button { border-radius: 8px; border: 1px solid #334155; background: #111827; color: #e5e7eb; }
-    input, textarea { padding: 8px 10px; }
-    button { padding: 8px 12px; cursor: pointer; }
-    button:hover { border-color: #60a5fa; }
+    input, textarea { border-radius: var(--yaar-radius); border: 1px solid var(--yaar-border); background: var(--yaar-bg); color: var(--yaar-text); padding: 8px 10px; }
+    button { border-radius: var(--yaar-radius); border: 1px solid var(--yaar-border); background: var(--yaar-bg-surface); color: var(--yaar-text); padding: 8px 12px; cursor: pointer; }
+    button:hover { border-color: var(--yaar-accent); }
     .main { display: grid; grid-template-columns: 360px 1fr; min-height: 0; }
-    .panel { border-right: 1px solid #1f2937; overflow: auto; }
+    .panel { border-right: 1px solid var(--yaar-border); overflow: auto; }
     .panel:last-child { border-right: 0; }
     .repos { padding: 8px; display: grid; gap: 8px; }
-    .repo { border: 1px solid #334155; border-radius: 10px; padding: 10px; background: #0f172a; cursor: pointer; }
-    .repo.active { border-color: #60a5fa; background: #111827; }
+    .repo { border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); padding: 10px; background: var(--yaar-bg-surface); cursor: pointer; }
+    .repo.active { border-color: var(--yaar-accent); background: var(--yaar-bg-surface-hover); }
     .repo-title { font-weight: 600; }
-    .muted { color: #94a3b8; font-size: 12px; }
+    .muted { color: var(--yaar-text-muted); font-size: 12px; }
     .right { padding: 12px; overflow: auto; display: grid; gap: 12px; align-content: start; }
-    .card { border: 1px solid #334155; border-radius: 10px; padding: 12px; background: #0f172a; }
+    .card { border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); padding: 12px; background: var(--yaar-bg-surface); }
     .issues { display: grid; gap: 8px; }
-    .issue { border: 1px solid #334155; border-radius: 8px; padding: 8px; }
-    .status { font-size: 12px; color: #93c5fd; }
-    .pill { display: inline-block; border: 1px solid #334155; border-radius: 999px; padding: 2px 8px; font-size: 11px; margin-left: 6px; }
-    a { color: #93c5fd; text-decoration: none; }
+    .issue { border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius); padding: 8px; }
+    .status { font-size: 12px; color: var(--yaar-accent); }
+    .pill { display: inline-block; border: 1px solid var(--yaar-border); border-radius: 999px; padding: 2px 8px; font-size: 11px; margin-left: 6px; }
+    a { color: var(--yaar-accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .grow { flex: 1; }
-    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: #020617; border: 1px dashed #334155; padding: 4px 8px; border-radius: 8px; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--yaar-bg); border: 1px dashed var(--yaar-border); padding: 4px 8px; border-radius: var(--yaar-radius); }
   </style>
-  <div class="app">
+  <div class="app y-app">
     <div class="top">
-      <div class="row">
-        <input id="token" class="grow" type="password" placeholder="GitHub token (OAuth or PAT)" />
-        <button id="saveToken">Save token</button>
-        <button id="loadRepos">Load repos</button>
+      <div class="row y-flex y-gap-2">
+        <input id="token" class="grow y-input" type="password" placeholder="GitHub token (OAuth or PAT)" />
+        <button id="saveToken" class="y-btn y-btn-sm">Save token</button>
+        <button id="loadRepos" class="y-btn y-btn-sm y-btn-primary">Load repos</button>
       </div>
-      <div class="row">
-        <input id="oauthClientId" class="grow" type="text" placeholder="GitHub OAuth App Client ID (for Login with GitHub)" />
-        <button id="oauthLogin">Login with GitHub</button>
-        <button id="oauthCancel" style="display:none;">Cancel login</button>
+      <div class="row y-flex y-gap-2">
+        <input id="oauthClientId" class="grow y-input" type="text" placeholder="GitHub OAuth App Client ID (for Login with GitHub)" />
+        <button id="oauthLogin" class="y-btn y-btn-sm">Login with GitHub</button>
+        <button id="oauthCancel" class="y-btn y-btn-sm" style="display:none;">Cancel login</button>
       </div>
-      <div class="row" id="oauthHintRow" style="display:none;">
-        <span class="muted">User code:</span>
-        <span id="oauthUserCode" class="code">-</span>
-        <button id="openVerify">Open verification page</button>
+      <div class="row y-flex y-gap-2" id="oauthHintRow" style="display:none;">
+        <span class="muted y-text-muted y-text-sm">User code:</span>
+        <span id="oauthUserCode" class="code y-font-mono">-</span>
+        <button id="openVerify" class="y-btn y-btn-sm">Open verification page</button>
       </div>
-      <div class="row">
-        <input id="filter" class="grow" type="text" placeholder="Filter repos..." />
-        <span id="me" class="muted"></span>
+      <div class="row y-flex y-gap-2">
+        <input id="filter" class="grow y-input" type="text" placeholder="Filter repos..." />
+        <span id="me" class="muted y-text-muted y-text-sm"></span>
         <span id="status" class="status">Ready</span>
       </div>
     </div>
     <div class="main">
-      <div class="panel">
+      <div class="panel y-scroll">
         <div id="repos" class="repos"></div>
       </div>
-      <div class="panel right">
-        <div class="card">
-          <div><strong id="selectedRepo">No repo selected</strong></div>
-          <div class="muted" id="selectedRepoMeta"></div>
+      <div class="panel right y-scroll">
+        <div class="card y-card">
+          <div><strong id="selectedRepo" class="y-truncate">No repo selected</strong></div>
+          <div class="muted y-text-muted y-text-sm" id="selectedRepoMeta"></div>
         </div>
 
-        <div class="card">
+        <div class="card y-card">
           <div style="font-weight:600; margin-bottom:8px;">Create issue</div>
           <div class="row" style="display:grid; gap:8px;">
-            <input id="issueTitle" type="text" placeholder="Issue title" />
-            <textarea id="issueBody" rows="4" placeholder="Issue body"></textarea>
-            <button id="createIssue">Create issue in selected repo</button>
+            <input id="issueTitle" type="text" class="y-input" placeholder="Issue title" />
+            <textarea id="issueBody" rows="4" class="y-input" placeholder="Issue body"></textarea>
+            <button id="createIssue" class="y-btn y-btn-primary">Create issue in selected repo</button>
           </div>
         </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center; gap:8px;">
+        <div class="card y-card">
+          <div class="y-flex-between" style="gap:8px;">
             <strong>Open issues / PRs</strong>
-            <button id="refreshIssues">Refresh</button>
+            <button id="refreshIssues" class="y-btn y-btn-sm y-btn-ghost">Refresh</button>
           </div>
           <div id="issues" class="issues" style="margin-top:8px;"></div>
         </div>
