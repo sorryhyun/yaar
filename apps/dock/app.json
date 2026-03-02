@@ -19,13 +19,13 @@
         "description": "Current time in ISO format"
       },
       "display": {
-        "description": "Current displayed date/time text"
+        "description": "Current displayed date/time text: { time, date }"
       },
       "appearance": {
-        "description": "Current dock appearance settings"
+        "description": "Current dock appearance settings: { showPanel, panelOpacity, panelBlurPx }"
       },
       "weather": {
-        "description": "Current weather data: { icon, temp, city, updatedAt }"
+        "description": "Current weather data: { icon, temp, city }"
       }
     },
     "commands": {
@@ -44,7 +44,7 @@
         }
       },
       "setAppearance": {
-        "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0-1), panelBlurPx?: number (0-40) }",
+        "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }",
         "params": {
           "type": "object",
           "properties": {
@@ -65,5 +65,6 @@
         }
       }
     }
-  }
+  },
+  "capture": "dom"
 }

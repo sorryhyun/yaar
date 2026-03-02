@@ -1,8 +1,8 @@
 {
   "id": "browser",
   "name": "Browser",
-  "icon": "🎮",
-  "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
+  "icon": "🌐",
+  "description": "Live browser with SSE screenshot streaming and navigation controls",
   "version": "1.0.0",
   "author": "YAAR"
 }

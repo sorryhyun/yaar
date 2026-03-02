@@ -1,5 +1,5 @@
 {
-  "icon": "📁",
+  "icon": "🗂️",
   "name": "Storage",
   "description": "Visual file manager for YAAR storage",
   "run": "static/index.html",
@@ -86,5 +86,6 @@
         }
       }
     }
-  }
+  },
+  "capture": "dom"
 }

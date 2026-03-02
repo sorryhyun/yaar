@@ -90,7 +90,7 @@ export function tryIframeSelfCapture(
  * Capture a window element as a PNG image and push feedback.
  *
  * Three-tier capture for iframe windows:
- *   1. Iframe self-capture via postMessage (canvas/svg inside the iframe)
+ *   1. Iframe self-capture via postMessage (canvas/svg inside the iframe; returns null for plain DOM)
  *   2. html2canvas on the iframe's content document (same-origin only)
  *   3. html2canvas on the window frame element (non-iframe or cross-origin fallback)
  */

@@ -5,6 +5,16 @@ import type { Child, Props } from './dom.ts';
 
 // ── HTML Tagged Template ────────────────────────────────────────────────────
 
+const ENTITY_RE = /&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/;
+let _decoder: HTMLTextAreaElement | null = null;
+/** Decode HTML entities (&#x21BB; → ↻, &amp; → &, etc.) using the browser's parser. */
+function decodeEntities(text: string): string {
+  if (!ENTITY_RE.test(text)) return text;
+  if (!_decoder) _decoder = document.createElement('textarea');
+  _decoder.innerHTML = text;
+  return _decoder.value;
+}
+
 const CACHE = new WeakMap<TemplateStringsArray, (fields: unknown[]) => Node>();
 
 export function html(statics: TemplateStringsArray, ...fields: unknown[]): Node {
@@ -64,7 +74,15 @@ function build(statics: TemplateStringsArray): (fields: unknown[]) => Node {
 
       if (mode === MODE_TEXT) {
         if (ch === '<') {
-          if (s[j + 1] === '/') {
+          if (s[j + 1] === '!' && s[j + 2] === '-' && s[j + 3] === '-') {
+            // HTML comment — skip to -->
+            const end = s.indexOf('-->', j + 4);
+            if (end !== -1) {
+              j = end + 2;
+            } else {
+              j = s.length - 1;
+            }
+          } else if (s[j + 1] === '/') {
             // Closing tag — skip to '>'
             const end = s.indexOf('>', j);
             if (end !== -1) {
@@ -83,7 +101,7 @@ function build(statics: TemplateStringsArray): (fields: unknown[]) => Node {
             text += s[++j];
           }
           text = text.replace(/^\s+|\s+$/g, ' ');
-          if (text && text !== ' ') ops.push({ t: 'text', value: text });
+          if (text && text !== ' ') ops.push({ t: 'text', value: decodeEntities(text) });
         }
       } else if (mode === MODE_TAG_NAME) {
         if (ch === '/' && tagName === '') {

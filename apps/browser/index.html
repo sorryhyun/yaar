@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Browser</title>
 <style>
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Bd.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Eb.otf') format('opentype');font-weight:800;font-style:normal;font-display:swap}
 :root {
   --yaar-bg: #0f1117;
   --yaar-bg-surface: #161b22;
@@ -28,7 +32,7 @@
   --yaar-radius-sm: 4px;
   --yaar-radius: 6px;
   --yaar-radius-lg: 10px;
-  --yaar-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --yaar-font: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --yaar-font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
   --yaar-text-xs: 11px;
   --yaar-text-sm: 12px;
@@ -77,104 +81,113 @@
 .y-toast-info{border-color:var(--yaar-accent)}.y-toast-success{border-color:var(--yaar-success)}.y-toast-error{border-color:var(--yaar-error)}
 .y-transition{transition:all var(--yaar-ease)}
 .y-overflow-hidden{overflow:hidden}
-*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
-<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
+*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
-var O=document.getElementById("app");if(!O)throw Error("Missing app root");var P=new URLSearchParams(window.location.search),K=P.get("sessionId")||"",A=/^[a-zA-Z0-9_-]+$/.test(K)?K:"",L=P.get("url")||"",H="about:blank";if(L)try{let j=new URL(L);if(j.protocol==="http:"||j.protocol==="https:")H=j.toString()}catch{}O.innerHTML=`
-  <style>
-    :root { color-scheme: dark; }
+var B=null,L=null,t=new Set,s=0;class u{_value;_subscribers=new Set;constructor(b){this._value=b}get value(){if(B)this._subscribers.add(B),B.dependencies.add(this);return this._value}set value(b){if(Object.is(this._value,b))return;this._value=b;for(let z of[...this._subscribers])if(s>0)t.add(z);else z.execute()}peek(){return this._value}}function X(b){let z=new u(b),x=(...J)=>{if(J.length===0)return z.value;z.value=J[0]};return Object.defineProperty(x,"value",{get:()=>z.value,set:(J)=>{z.value=J}}),x.peek=()=>z.peek(),x}function m(b){for(let z of b.dependencies)z._subscribers.delete(b);b.dependencies.clear();for(let z of b.cleanups)z();b.cleanups=[]}function q(b){let z,x={dependencies:new Set,cleanups:[],execute(){if(m(x),z)z();let J=B,P=L;B=x,L=x.cleanups;try{z=b()}finally{B=J,L=P}}};return x.execute(),()=>{if(m(x),z)z()}}function A(b){if(L)L.push(b)}function N(b){queueMicrotask(b)}function D(b,z,...x){let J=b,P=[],F,Y=b.indexOf("#"),W=b.indexOf("."),Q=Math.min(Y>=0?Y:1/0,W>=0?W:1/0);if(Q<1/0){J=b.slice(0,Q)||"div";let Z=b.slice(Q).split(/(?=[.#])/);for(let G of Z)if(G[0]===".")P.push(G.slice(1));else if(G[0]==="#")F=G.slice(1)}let y=document.createElement(J);if(F)y.id=F;if(P.length)y.classList.add(...P);if(z)for(let[$,Z]of Object.entries(z))if($==="className")if(typeof Z==="function")q(()=>{y.className=[P.join(" "),Z()].filter(Boolean).join(" ")});else if(P.length)y.className=P.join(" ")+" "+Z;else y.className=Z;else if($==="style"){if(typeof Z==="string")y.style.cssText=Z;else if(typeof Z==="object")for(let[G,H]of Object.entries(Z))if(typeof H==="function")q(()=>{y.style[G]=H()});else y.style[G]=H}else if($==="ref"){if(typeof Z==="function")Z(y)}else if($.startsWith("on")){let G=$.slice(2).toLowerCase();y.addEventListener(G,Z)}else if(typeof Z==="function"&&!$.startsWith("on"))q(()=>{let G=Z();if(G==null||G===!1)y.removeAttribute($);else y.setAttribute($,String(G))});else if(Z==null||Z===!1);else if(Z===!0)y.setAttribute($,"");else y.setAttribute($,String(Z));return O(y,x),y}function O(b,z){for(let x of z){if(x==null||x===!1||x===!0)continue;if(Array.isArray(x))O(b,x);else if(typeof x==="function"){let J=document.createComment(""),P=document.createComment("");b.appendChild(J),b.appendChild(P),q(()=>{let F=x();while(J.nextSibling&&J.nextSibling!==P)J.nextSibling.remove();let Y=a(F);P.parentNode.insertBefore(Y,P)})}else if(x instanceof Node)b.appendChild(x);else b.appendChild(document.createTextNode(String(x)))}}function a(b){if(b==null||b===!1||b===!0)return document.createTextNode("");if(b instanceof Node)return b;if(Array.isArray(b)){let z=document.createDocumentFragment();return O(z,b),z}return document.createTextNode(String(b))}function C(b,z){let x=z||document.getElementById("app");if(!x)throw Error("Mount target not found");x.appendChild(b)}var e=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,I=null;function b0(b){if(!e.test(b))return b;if(!I)I=document.createElement("textarea");return I.innerHTML=b,I.value}var h=new WeakMap;function _(b,...z){let x=h.get(b);if(!x)x=x0(b),h.set(b,x);return x(z)}var K=0,i=1,w=2,T=3;function x0(b){let z=[],x=K,J="",P="",F="",Y="",W=!1;function Q($){if(J)z.push($?{t:"open_close",tag:J}:{t:"open",tag:J});J="",W=!1}function y(){if(P)z.push({t:"attr_static",name:P,value:F||P}),P="",F=""}for(let $=0;$<b.length;$++){let Z=b[$];for(let G=0;G<Z.length;G++){let H=Z[G];if(x===K)if(H==="<")if(Z[G+1]==="/"){let j=Z.indexOf(">",G);if(j!==-1)G=j,z.push({t:"close"})}else x=i,J="",W=!1;else{let j=H;while(G+1<Z.length&&Z[G+1]!=="<")j+=Z[++G];if(j=j.replace(/^\s+|\s+$/g," "),j&&j!==" ")z.push({t:"text",value:b0(j)})}else if(x===i)if(H==="/"&&J==="");else if(/\s/.test(H)){if(J)z.push({t:"open",tag:J}),J="",x=w}else if(H===">")Q(W),x=K;else if(H==="/")W=!0;else J+=H;else if(x===w)if(H==="=")x=T,F="",Y="";else if(H==="/"||H===">")if(y(),H===">"){if(W)z.push({t:"close"}),W=!1;x=K}else W=!0;else if(/\s/.test(H)){if(P)y()}else P+=H;else if(x===T)if(!Y&&(H==='"'||H==="'"))Y=H;else if(!Y&&/\s/.test(H))y(),x=w;else if(H===Y)y(),x=w,Y="";else if(!Y&&(H===">"||H==="/"))if(y(),H===">"){if(W)z.push({t:"close"}),W=!1;x=K}else W=!0;else F+=H}if($<b.length-1){if(x===K)z.push({t:"field",idx:$});else if(x===T){let G=P;P="",F="",Y="",z.push({t:"attr_field",name:G,idx:$}),x=w}else if(x===w)if(P)z.push({t:"attr_static",name:P,value:P}),P="",z.push({t:"attr_spread",idx:$});else z.push({t:"attr_spread",idx:$})}}return($)=>P0(z,$)}var z0={class:"className",for:"htmlFor"};function o(b){return z0[b]||b}function P0(b,z){let x=[],J=[];function P(Y){if(x.length)x[x.length-1].children.push(Y);else J.push(Y)}for(let Y of b)switch(Y.t){case"open":x.push({tag:Y.tag,children:[],props:{}});break;case"open_close":P(D(Y.tag,null));break;case"close":{let W=x.pop();if(W){let Q=Object.keys(W.props).length?W.props:void 0;P(D(W.tag,Q,...W.children))}break}case"attr_static":{let W=x[x.length-1];if(W)W.props[o(Y.name)]=Y.value;break}case"attr_field":{let W=x[x.length-1];if(W)W.props[o(Y.name)]=z[Y.idx];break}case"attr_spread":{let W=x[x.length-1],Q=z[Y.idx];if(W&&Q&&typeof Q==="object")Object.assign(W.props,Q);break}case"text":P(Y.value);break;case"field":{let W=z[Y.idx];if(Array.isArray(W))for(let Q of W)P(Q);else P(W);break}}if(J.length===1&&J[0]instanceof Node)return J[0];let F=document.createDocumentFragment();return O(F,J),F}function f(b,z,x){return()=>b()?z():x?x():null}function d(b){let z=window.yaar?.app;if(!z)return;z.register({appId:"browser",name:"Browser",state:{manifest:{description:"App capabilities",handler:()=>({state:["currentUrl"],commands:["refresh","clear","navigate"]})},currentUrl:{description:"Currently displayed URL",handler:()=>b.getCurrentUrl()}},commands:{refresh:{description:"Refresh screenshot and optionally update URL bar. Params: { url?, title? }",params:{type:"object",properties:{url:{type:"string"},title:{type:"string"}}},handler:(x)=>{if(x?.url)b.updateUrlBar(x.url,x.title);return b.refreshScreenshot(),{ok:!0,currentUrl:b.getCurrentUrl()}}},clear:{description:"Clear the browser display. Params: {}",params:{type:"object",properties:{}},handler:()=>{return b.clearDisplay(),{ok:!0}}},navigate:{description:"Navigate the browser to a URL. Params: { url }",params:{type:"object",properties:{url:{type:"string"}},required:["url"]},handler:(x)=>{return window.yaar?.app?.sendInteraction?.({event:"navigate_request",url:x.url}),{ok:!0,url:x.url}}}}})}{let b=document.createElement("style");b.textContent=`:root { color-scheme: dark; }
 
-    .browser-chrome {
-      display: grid;
-      grid-template-rows: auto 1fr;
-      height: 100vh;
-    }
+.browser-chrome {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
 
-    .url-bar {
-      min-height: 40px;
-    }
+.url-bar {
+  min-height: 40px;
+}
 
-    .url-bar .lock {
-      font-size: 12px;
-      color: #4caf50;
-      flex-shrink: 0;
-    }
+.url-bar .lock {
+  font-size: 12px;
+  color: #4caf50;
+  flex-shrink: 0;
+}
 
-    .url-bar .lock.insecure {
-      color: #ff9800;
-    }
+.url-bar .lock.insecure {
+  color: #ff9800;
+}
 
-    .url-bar .url-text {
-      flex: 1;
-      border-radius: 16px;
-    }
+.url-bar .url-text {
+  flex: 1;
+  border-radius: 16px;
+}
 
-    .url-bar .title-text {
-      flex-shrink: 0;
-      max-width: 200px;
-    }
+.url-bar .title-text {
+  flex-shrink: 0;
+  max-width: 200px;
+}
 
-    .screenshot-area {
-      position: relative;
-      overflow: auto;
-      background: var(--yaar-bg);
-      cursor: default;
-    }
+.screenshot-area {
+  position: relative;
+  overflow: auto;
+  background: var(--yaar-bg);
+  cursor: default;
+}
 
-    .screenshot-area img {
-      display: block;
-      width: 100%;
-      height: auto;
-      image-rendering: auto;
-    }
+.screenshot-area img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: auto;
+}
 
-    .screenshot-area .placeholder {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-    }
+.screenshot-area .placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
 
-    .loading-bar {
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 2px;
-      background: var(--yaar-accent);
-      animation: loading 1.5s ease-in-out infinite;
-      display: none;
-    }
+.loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--yaar-accent);
+  animation: loading 1.5s ease-in-out infinite;
+  display: none;
+}
 
-    .loading-bar.active {
-      display: block;
-    }
+.loading-bar.active {
+  display: block;
+}
 
-    @keyframes loading {
-      0% { width: 0%; }
-      50% { width: 70%; }
-      100% { width: 100%; opacity: 0; }
-    }
-  </style>
-
+@keyframes loading {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; opacity: 0; }
+}
+`,document.head.appendChild(b)}var l=new URLSearchParams(window.location.search),p=l.get("sessionId")||"",V=/^[a-zA-Z0-9_-]+$/.test(p)?p:"",c=l.get("url")||"",r="about:blank";if(c)try{let b=new URL(c);if(b.protocol==="http:"||b.protocol==="https:")r=b.toString()}catch{}var S=X(r),g=X(""),k=X(!1),R=X(!1),U=X(V?"Waiting for navigation...":"No active browser session."),n=-1;function J0(){let b=S();if(b==="about:blank")return"lock hidden";try{return new URL(b).protocol==="https:"?"lock":"lock insecure"}catch{return"lock insecure"}}function W0(){let b=S();if(b==="about:blank")return"";try{return new URL(b).protocol==="https:"?"\uD83D\uDD12":"\uD83D\uDD13"}catch{return"\uD83D\uDD13"}}var M;function E(b=!1){let z=Date.now(),x=`/api/browser/${V}/screenshot?t=${z}${b?"&fresh":""}`;k(!0),M.onload=()=>{R(!0),k(!1)},M.onerror=()=>{k(!1)},M.src=x}function v(b,z){if(S(b),z!==void 0)g(z)}function Y0(){R(!1),v("about:blank"),g(""),U("Browser closed.")}function Z0(){window.yaar?.app?.sendInteraction?.({event:"navigate_back"})}function H0(){window.yaar?.app?.sendInteraction?.({event:"navigate_forward"})}function G0(){E(!0)}function $0(b){b.target.select()}function y0(b){if(b.key==="Enter"){b.preventDefault();let z=b.target.value.trim();if(!z)return;if(!/^https?:\/\//i.test(z))z="https://"+z;b.target.value=z,b.target.blur(),window.yaar?.app?.sendInteraction?.({event:"navigate_request",url:z})}}N(()=>{if(!V)return;let b=5,z=0,x=new EventSource(`/api/browser/${V}/events`);x.onmessage=(J)=>{if(z>0)U(V?"Waiting for navigation...":"No active browser session.");z=0;try{let P=JSON.parse(J.data);if(P.version<=n)return;if(n=P.version,P.url)v(P.url,P.title);E()}catch{}},x.onerror=()=>{if(z++,z===1)U("Reconnecting..."),R(!1);if(z>=b)x.close(),U("Connection lost. Session may have ended."),R(!1)},A(()=>x.close())});C(_`
   <div class="browser-chrome y-app">
     <div class="url-bar y-flex y-gap-2 y-px-2 y-surface y-border-b">
-      <button id="back-btn" class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back">←</button>
-      <button id="forward-btn" class="y-btn y-btn-sm y-btn-ghost" title="Forward" aria-label="Forward">→</button>
-      <span id="lock" class="lock">\uD83D\uDD12</span>
-      <input id="url-text" class="url-text y-input" value="about:blank" />
-      <button id="reload-btn" class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload">↻</button>
-      <span id="title-text" class="title-text y-text-xs y-text-muted y-truncate"></span>
+      <button class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back"
+        onClick=${Z0}>←</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" title="Forward" aria-label="Forward"
+        onClick=${H0}>→</button>
+      <span class=${()=>J0()}>${()=>W0()}</span>
+      <input class="url-text y-input"
+        value=${()=>S()}
+        onFocus=${$0}
+        onKeydown=${y0} />
+      <button class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload"
+        disabled=${!V}
+        onClick=${G0}>↻</button>
+      <span class="title-text y-text-xs y-text-muted y-truncate">${()=>g()}</span>
     </div>
-    <div id="screenshot-area" class="screenshot-area">
-      <div id="loading-bar" class="loading-bar"></div>
-      <div id="placeholder" class="placeholder y-text-muted y-text-sm">${A?"Waiting for navigation...":"No active browser session."}</div>
-      <img id="screenshot" style="display:none" alt="Browser screenshot" />
+    <div class="screenshot-area">
+      <div class=${()=>k()?"loading-bar active":"loading-bar"}></div>
+      ${f(()=>!R(),()=>_`
+        <div class="placeholder y-text-muted y-text-sm">${()=>U()}</div>
+      `)}
+      <img
+        ref=${(b)=>{M=b}}
+        style=${()=>R()?"":"display:none"}
+        alt="Browser screenshot" />
     </div>
   </div>
-`;var g={backBtn:document.getElementById("back-btn"),forwardBtn:document.getElementById("forward-btn"),lock:document.getElementById("lock"),urlText:document.getElementById("url-text"),reloadBtn:document.getElementById("reload-btn"),titleText:document.getElementById("title-text"),screenshotArea:document.getElementById("screenshot-area"),loadingBar:document.getElementById("loading-bar"),placeholder:document.getElementById("placeholder"),screenshot:document.getElementById("screenshot")},G=H,M=-1;function F(j,k){if(G=j,g.urlText.value=j,k)g.titleText.textContent=k;if(j==="about:blank"){g.lock.style.display="none";return}g.lock.style.display="";try{if(new URL(j).protocol==="https:")g.lock.textContent="\uD83D\uDD12",g.lock.className="lock";else g.lock.textContent="\uD83D\uDD13",g.lock.className="lock insecure"}catch{g.lock.textContent="\uD83D\uDD13",g.lock.className="lock insecure"}}F(H);function J(j=!1){let k=Date.now(),q=`/api/browser/${A}/screenshot?t=${k}${j?"&fresh":""}`;g.loadingBar.classList.add("active"),g.screenshot.onload=()=>{g.placeholder.style.display="none",g.screenshot.style.display="block",g.loadingBar.classList.remove("active")},g.screenshot.onerror=()=>{g.loadingBar.classList.remove("active")},g.screenshot.src=q}if(!A)g.reloadBtn.disabled=!0;g.reloadBtn.addEventListener("click",()=>{J(!0)});g.backBtn.addEventListener("click",()=>{window.yaar?.app?.sendInteraction?.({event:"navigate_back"})});g.forwardBtn.addEventListener("click",()=>{window.yaar?.app?.sendInteraction?.({event:"navigate_forward"})});g.urlText.addEventListener("focus",()=>{g.urlText.select()});g.urlText.addEventListener("keydown",(j)=>{if(j.key==="Enter"){j.preventDefault();let k=g.urlText.value.trim();if(!k)return;if(!/^https?:\/\//i.test(k))k="https://"+k;g.urlText.value=k,g.urlText.blur(),window.yaar?.app?.sendInteraction?.({event:"navigate_request",url:k})}});function R(){g.screenshot.style.display="none",g.placeholder.style.display="flex",g.placeholder.textContent="Browser closed.",F("about:blank"),g.titleText.textContent=""}if(A){let k=0,q=new EventSource(`/api/browser/${A}/events`);q.onmessage=(Q)=>{if(k>0)g.placeholder.style.display="none";k=0;try{let z=JSON.parse(Q.data);if(z.version<=M)return;if(M=z.version,z.url)F(z.url,z.title);J()}catch{}},q.onerror=()=>{if(k++,k===1)g.placeholder.textContent="Reconnecting...",g.placeholder.style.display="flex";if(k>=5)q.close(),g.placeholder.textContent="Connection lost. Session may have ended.",g.placeholder.style.display="flex",g.screenshot.style.display="none"}}var N=window.yaar;if(N?.app?.register)N.app.register({appId:"browser",name:"Browser",state:{manifest:{description:"App capabilities",handler:()=>({state:["currentUrl"],commands:["refresh","clear","navigate"]})},currentUrl:{description:"Currently displayed URL",handler:()=>G}},commands:{refresh:{description:"Refresh screenshot and optionally update URL bar",params:{type:"object",properties:{url:{type:"string"},title:{type:"string"}}},handler:(j)=>{if(j?.url)F(j.url,j.title);return J(),{ok:!0,currentUrl:G}}},clear:{description:"Clear the browser display",params:{type:"object",properties:{}},handler:async()=>{return R(),{ok:!0}}},navigate:{description:"Navigate the browser to a URL",params:{type:"object",properties:{url:{type:"string"}},required:["url"]},handler:(j)=>{return window.yaar?.app?.sendInteraction?.({event:"navigate_request",url:j.url}),{ok:!0,url:j.url}}}}});
+`);d({getCurrentUrl:()=>S(),updateUrlBar:v,refreshScreenshot:E,clearDisplay:Y0});
 
 </script>
 </body>

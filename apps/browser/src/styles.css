@@ -1,0 +1,81 @@
+:root {
+  color-scheme: dark;
+}
+
+.browser-chrome {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.url-bar {
+  min-height: 40px;
+}
+
+.url-bar .lock {
+  font-size: 12px;
+  color: #4caf50;
+  flex-shrink: 0;
+}
+
+.url-bar .lock.insecure {
+  color: #ff9800;
+}
+
+.url-bar .url-text {
+  flex: 1;
+  border-radius: 16px;
+}
+
+.url-bar .title-text {
+  flex-shrink: 0;
+  max-width: 200px;
+}
+
+.screenshot-area {
+  position: relative;
+  overflow: auto;
+  background: var(--yaar-bg);
+  cursor: default;
+}
+
+.screenshot-area img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: auto;
+}
+
+.screenshot-area .placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--yaar-accent);
+  animation: loading 1.5s ease-in-out infinite;
+  display: none;
+}
+
+.loading-bar.active {
+  display: block;
+}
+
+@keyframes loading {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 70%;
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+  }
+}

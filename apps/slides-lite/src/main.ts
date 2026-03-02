@@ -1,31 +1,39 @@
+import { signal, html, mount, effect } from '@bundled/yaar';
+import './styles.css';
 import { saveDeck, loadDeck } from './storage';
 import { normalizeAspectRatio, parseAspectRatio, RATIO_PRESETS, type RatioPreset } from './aspect-ratio';
-import { newDeck, newSlide, normalizeDeck, normalizeSlideInput } from './deck-utils';
+import { newDeck, newSlide, normalizeDeck, isFontSize } from './deck-utils';
 import { escapeHtml } from './markdown';
 import { renderSlideHtml } from './slide-render';
-import { THEMES, isThemeId } from './theme';
-import type { Deck, Slide, SlideLayout, ThemeId } from './types';
+import { THEMES } from './theme';
+import type { Deck, FontSize, Slide, SlideLayout, ThemeId } from './types';
 import { debounce, formatDistanceToNow, uuid } from './utils';
+import { registerProtocol } from './protocol';
 
-const app = document.getElementById('app')!;
+// === Mutable deck state ===
+let deck = normalizeDeck(newDeck());
 
-let deck = normalizeDeck(loadDeck() ?? newDeck());
+// === Signals for reactive UI ===
+const deckVer = signal(0);        // bumps on content changes (thumbs + canvas update)
+const activeIndexVer = signal(0); // bumps on slide switch (editor panel rebuilds)
+const dirty = signal(false);
+const lastSavedAt = signal(Date.now());
+
+// === Presenting state (kept mutable) ===
 let presenting = false;
 let presentIndex = 0;
 let presentStartedAt = 0;
-let presentTimer: number | null = null;
-let filterQuery = '';
+let presentTimerId: number | null = null;
 
-const saveState = {
-  dirty: false,
-  lastSavedAt: Date.now(),
-};
+// === Misc ===
+let filterQueryValue = '';
 
-const debouncedSave = debounce(() => persist(false), 700);
+// === DOM refs ===
+let canvasEl!: HTMLDivElement;
 
-function cloneDeckValue() {
-  return JSON.parse(JSON.stringify(deck)) as Deck;
-}
+// === Helpers ===
+function bumpDeck() { deckVer(deckVer() + 1); }
+function bumpActiveIndex() { activeIndexVer(activeIndexVer() + 1); }
 
 function clampActive() {
   if (deck.activeIndex < 0) deck.activeIndex = 0;
@@ -37,193 +45,18 @@ function activeSlide(): Slide {
   return deck.slides[deck.activeIndex];
 }
 
+const debouncedSave = debounce(() => { dirty(false); lastSavedAt(Date.now()); void saveDeck(deck); }, 700);
+
 function markDirty() {
-  saveState.dirty = true;
-  updateSaveBadge();
+  dirty(true);
   debouncedSave();
 }
 
 function persist(showToast = false) {
-  saveDeck(deck);
-  saveState.dirty = false;
-  saveState.lastSavedAt = Date.now();
-  updateSaveBadge();
+  void saveDeck(deck);
+  dirty(false);
+  lastSavedAt(Date.now());
   if (showToast) flash('Saved');
-}
-
-function render() {
-  if (!deck.slides.length) deck.slides.push(newSlide());
-  clampActive();
-
-  const t = THEMES[deck.themeId];
-  const slide = activeSlide();
-  const ratio = parseAspectRatio(deck.aspectRatio);
-
-  app.innerHTML = `
-    <style>
-      :root {
-        --yaar-bg: #f8f9fa;
-        --yaar-bg-surface: #ffffff;
-        --yaar-bg-surface-hover: #f0f1f3;
-        --yaar-text: #1f2328;
-        --yaar-text-muted: #656d76;
-        --yaar-text-dim: #8b949e;
-        --yaar-border: #d0d7de;
-        --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
-        --yaar-shadow: 0 2px 8px rgba(0,0,0,.1);
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; font-family: Inter, system-ui, Arial, sans-serif; color: var(--yaar-text); }
-      input, textarea, select { font: inherit; border: 1px solid var(--yaar-border); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
-      .root { height: 100vh; display: grid; grid-template-rows: 62px 1fr; background: var(--yaar-bg); }
-      .topbar {
-        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-        border-bottom: 1px solid var(--yaar-border); background: var(--yaar-bg-surface); backdrop-filter: blur(6px);
-      }
-      .chip { font-size: 12px; border-radius: 999px; padding: 5px 10px; background: #eef2ff; color: #1d4ed8; }
-      .chip.dirty { background: #fef3c7; color: #92400e; }
-      .main { display: grid; grid-template-columns: 260px 1fr 320px; height: calc(100vh - 62px); }
-      .left { border-right: 1px solid var(--yaar-border); overflow: auto; padding: 10px; background: var(--yaar-bg-surface); }
-      .left-head { display:grid; gap:8px; margin-bottom: 8px; }
-      .left small { color: var(--yaar-text-muted); font-size:11px; }
-      .thumb {
-        border: 1px solid var(--yaar-border); border-radius: 12px; padding: 10px; margin-bottom: 8px; cursor: pointer;
-        background: var(--yaar-bg-surface); transition: transform .12s ease, box-shadow .12s ease;
-      }
-      .thumb:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.07); }
-      .thumb.active { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
-      .thumb h4 { margin: 0 0 4px; font-size: 12px; }
-      .thumb p { margin: 0; font-size: 11px; color: var(--yaar-text-muted); min-height: 28px; }
-      .thumb-badges { margin-top:6px; display:flex; align-items:center; justify-content:space-between; }
-      .thumb-badge { font-size: 10px; color:#334155; background:#e2e8f0; border-radius:999px; padding:2px 6px; }
-      .thumb-actions { display: flex; gap: 4px; }
-      .center { display: grid; place-items: center; background: ${t.canvas}; padding: 18px; transition: background .18s ease; }
-      .slide {
-        width: min(980px, 100%); aspect-ratio: ${ratio.cssValue}; border-radius: 16px;
-        padding: 38px; overflow: auto; box-shadow: 0 16px 42px rgba(0,0,0,.18);
-      }
-      .slide h1 { margin-top: 0; margin-bottom: 14px; font-size: clamp(24px, 4vw, 44px); }
-      .slide-body { font-size: clamp(14px, 1.7vw, 26px); line-height: 1.35; }
-      .slide-body p { margin: 0 0 10px; }
-      .slide-body ul, .slide-body ol { margin: 0 0 12px 1.2em; padding: 0; }
-      .slide-body li { margin: 0 0 6px; }
-      .slide-body h2, .slide-body h3, .slide-body h4, .slide-body h5, .slide-body h6 { margin: 8px 0 8px; }
-      .slide-body blockquote { margin: 8px 0; padding: 6px 12px; border-left: 4px solid ${t.accent}; opacity: 0.92; }
-      .slide-body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(148, 163, 184, 0.18); border-radius: 5px; padding: 0 4px; }
-      .slide-body pre { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: rgba(15, 23, 42, 0.08); overflow: auto; }
-      .slide-body pre code { background: transparent; padding: 0; }
-      .slide-body hr { border: 0; border-top: 1px solid rgba(100, 116, 139, 0.45); margin: 12px 0; }
-      .slide-body a { color: ${t.accent}; text-decoration: underline; }
-      .panel { border-left: 1px solid var(--yaar-border); padding: 12px; overflow: auto; background: var(--yaar-bg-surface); }
-      .field { margin-bottom: 10px; display: grid; gap: 6px; }
-      .field label { font-size: 12px; color: #4b5563; font-weight: 600; display:flex; justify-content:space-between; }
-      .panel textarea { min-height: 120px; resize: vertical; }
-      .small { font-size: 11px; color: #64748b; }
-      .present { position: fixed; inset: 0; z-index: 9999; background: #0b1020; display: grid; place-items: center; }
-      .present-ui { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display:flex; gap:8px; align-items:center; }
-      .present-ui button { border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
-      .present-pill { color: #e2e8f0; font-size: 12px; background: rgba(30,41,59,.7); border-radius:999px; padding:6px 10px; }
-      .progress { position: fixed; top: 0; left: 0; height: 4px; background: #38bdf8; transition: width .15s linear; }
-    </style>
-    <div class="root">
-      <div class="topbar">
-        <input id="deckTitle" value="${escapeHtml(deck.title)}" style="min-width:220px;" />
-        <select id="themeSelect">
-          ${Object.entries(THEMES)
-            .map(([id, meta]) => `<option value="${id}" ${id === deck.themeId ? 'selected' : ''}>${meta.name}</option>`)
-            .join('')}
-        </select>
-        <select id="ratioSel" title="Slide ratio">
-          ${RATIO_PRESETS.map((r) => `<option value="${r}" ${ratio.preset === r ? 'selected' : ''}>${r}</option>`).join('')}
-          <option value="custom" ${ratio.preset === 'custom' ? 'selected' : ''}>Custom</option>
-        </select>
-        <input id="ratioW" type="number" min="0.1" step="0.1" value="${ratio.width}" style="width:72px;" ${ratio.preset === 'custom' ? '' : 'disabled'} />
-        <span>:</span>
-        <input id="ratioH" type="number" min="0.1" step="0.1" value="${ratio.height}" style="width:72px;" ${ratio.preset === 'custom' ? '' : 'disabled'} />
-        <button class="y-btn y-btn-sm y-btn-ghost" id="newDeckBtn">New</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="dupBtn">Duplicate</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="addBtn">Add Slide</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="saveBtn">Save</button>
-        <button class="y-btn y-btn-sm y-btn-primary" id="presentBtn">Present</button>
-        <button class="y-btn y-btn-sm y-btn-ghost" id="exportBtn">Export PDF</button>
-        <span class="chip" id="saveBadge"></span>
-      </div>
-      <div class="main">
-        <div class="left y-scroll">
-          <div class="left-head">
-            <input id="filterIn" placeholder="Filter slides…" value="${escapeHtml(filterQuery)}" />
-            <small>Tip: Alt+↑ / Alt+↓ to reorder • Ctrl/Cmd+Enter to present</small>
-          </div>
-          <div id="thumbs"></div>
-        </div>
-        <div class="center" id="canvas"></div>
-        <div class="panel">
-          <div class="field"><label class="y-flex-between y-text-sm">Layout</label>
-            <select id="layoutSel">
-              <option value="title-body" ${slide.layout === 'title-body' ? 'selected' : ''}>Title + Body</option>
-              <option value="title-image" ${slide.layout === 'title-image' ? 'selected' : ''}>Title + Image</option>
-              <option value="section" ${slide.layout === 'section' ? 'selected' : ''}>Section</option>
-            </select>
-          </div>
-          <div class="field"><label>Title <span class="small">${slide.title.length} chars</span></label><input id="titleIn" value="${escapeHtml(slide.title)}"></div>
-          <div class="field"><label>Body (Markdown supported) <span class="small">${slide.body.length} chars</span></label><textarea id="bodyIn">${escapeHtml(slide.body)}</textarea></div>
-          <div class="field"><label>Speaker Notes</label><textarea id="notesIn" placeholder="Private presenter notes…">${escapeHtml(slide.notes)}</textarea></div>
-          <div class="field"><label>Image URL</label><input id="imgIn" placeholder="https://..." value="${escapeHtml(slide.imageUrl)}"></div>
-          <div class="field" style="display:flex; gap:8px;"><button class="y-btn y-btn-sm y-btn-ghost" id="delBtn">Delete Slide</button><button class="y-btn y-btn-sm y-btn-ghost" id="sectionBtn">Quick Section</button></div>
-          <div class="small">Autosave enabled. Notes are hidden in exported slides.</div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  renderThumbs();
-  renderCanvas(true);
-  bindUi();
-  updateSaveBadge();
-}
-
-function renderThumbs() {
-  const thumbs = app.querySelector('#thumbs') as HTMLDivElement;
-  const query = filterQuery.trim().toLowerCase();
-  thumbs.innerHTML = '';
-
-  deck.slides.forEach((s, idx) => {
-    const searchable = `${s.title} ${s.body} ${s.notes}`.toLowerCase();
-    if (query && !searchable.includes(query)) return;
-
-    const el = document.createElement('div');
-    el.className = `thumb ${idx === deck.activeIndex ? 'active' : ''}`;
-    el.innerHTML = `
-      <h4>${idx + 1}. ${escapeHtml(s.title || 'Untitled')}</h4>
-      <p>${escapeHtml((s.body || '').slice(0, 72))}</p>
-      <div class="thumb-badges">
-        <span class="thumb-badge">${escapeHtml(s.layout)}</span>
-        <div class="thumb-actions">
-          <button data-act="up" data-idx="${idx}">↑</button>
-          <button data-act="down" data-idx="${idx}">↓</button>
-        </div>
-      </div>
-    `;
-
-    el.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName.toLowerCase() === 'button') return;
-      deck.activeIndex = idx;
-      render();
-    });
-
-    el.querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const b = e.currentTarget as HTMLButtonElement;
-        const i = Number(b.dataset.idx);
-        if (b.dataset.act === 'up') moveSlide(i, i - 1);
-        if (b.dataset.act === 'down') moveSlide(i, i + 1);
-      });
-    });
-
-    thumbs.appendChild(el);
-  });
 }
 
 function moveSlide(from: number, to: number) {
@@ -232,179 +65,8 @@ function moveSlide(from: number, to: number) {
   deck.slides.splice(to, 0, item);
   deck.activeIndex = to;
   markDirty();
-  render();
-}
-
-function renderCanvas(withAnimation = false) {
-  const canvas = app.querySelector('#canvas') as HTMLDivElement;
-  canvas.innerHTML = renderSlideHtml(activeSlide(), deck.themeId);
-
-  if (withAnimation) {
-    const slideEl = canvas.querySelector('.slide') as HTMLElement | null;
-    if (slideEl) {
-      slideEl.animate(
-        [
-          { opacity: 0, transform: 'translateY(16px)' },
-          { opacity: 1, transform: 'translateY(0px)' },
-        ],
-        { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-      );
-    }
-  }
-}
-
-function bindUi() {
-  const slide = activeSlide();
-
-  (app.querySelector('#deckTitle') as HTMLInputElement).oninput = (e) => {
-    deck.title = (e.target as HTMLInputElement).value;
-    markDirty();
-  };
-
-  (app.querySelector('#themeSelect') as HTMLSelectElement).onchange = (e) => {
-    deck.themeId = (e.target as HTMLSelectElement).value as ThemeId;
-    markDirty();
-    render();
-  };
-
-  const ratioSel = app.querySelector('#ratioSel') as HTMLSelectElement;
-  const ratioW = app.querySelector('#ratioW') as HTMLInputElement;
-  const ratioH = app.querySelector('#ratioH') as HTMLInputElement;
-
-  ratioSel.onchange = (e) => {
-    const value = (e.target as HTMLSelectElement).value as RatioPreset;
-    if (value === 'custom') {
-      ratioW.disabled = false;
-      ratioH.disabled = false;
-      const parsed = parseAspectRatio(deck.aspectRatio);
-      deck.aspectRatio = `${parsed.width}:${parsed.height}`;
-    } else {
-      ratioW.disabled = true;
-      ratioH.disabled = true;
-      deck.aspectRatio = value;
-    }
-    markDirty();
-    render();
-  };
-
-  const updateCustomRatio = () => {
-    if (ratioSel.value !== 'custom') return;
-    const w = Number(ratioW.value);
-    const h = Number(ratioH.value);
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
-    deck.aspectRatio = `${Number(w.toFixed(3))}:${Number(h.toFixed(3))}`;
-    markDirty();
-    render();
-  };
-
-  ratioW.oninput = updateCustomRatio;
-  ratioH.oninput = updateCustomRatio;
-
-  (app.querySelector('#layoutSel') as HTMLSelectElement).onchange = (e) => {
-    slide.layout = (e.target as HTMLSelectElement).value as SlideLayout;
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#titleIn') as HTMLInputElement).oninput = (e) => {
-    slide.title = (e.target as HTMLInputElement).value;
-    markDirty();
-    renderCanvas();
-    renderThumbs();
-  };
-
-  (app.querySelector('#bodyIn') as HTMLTextAreaElement).oninput = (e) => {
-    slide.body = (e.target as HTMLTextAreaElement).value;
-    markDirty();
-    renderCanvas();
-    renderThumbs();
-  };
-
-  (app.querySelector('#notesIn') as HTMLTextAreaElement).oninput = (e) => {
-    slide.notes = (e.target as HTMLTextAreaElement).value;
-    markDirty();
-    renderThumbs();
-  };
-
-  (app.querySelector('#imgIn') as HTMLInputElement).oninput = (e) => {
-    slide.imageUrl = (e.target as HTMLInputElement).value;
-    markDirty();
-    renderCanvas();
-  };
-
-  (app.querySelector('#filterIn') as HTMLInputElement).oninput = (e) => {
-    filterQuery = (e.target as HTMLInputElement).value;
-    renderThumbs();
-  };
-
-  (app.querySelector('#addBtn') as HTMLButtonElement).onclick = () => {
-    deck.slides.splice(deck.activeIndex + 1, 0, newSlide());
-    deck.activeIndex += 1;
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#sectionBtn') as HTMLButtonElement).onclick = () => {
-    const s = newSlide('section');
-    s.title = 'Section Title';
-    s.body = 'Add key message';
-    deck.slides.splice(deck.activeIndex + 1, 0, s);
-    deck.activeIndex += 1;
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#dupBtn') as HTMLButtonElement).onclick = () => {
-    const s = activeSlide();
-    deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uuid(), title: `${s.title} (copy)` });
-    deck.activeIndex += 1;
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#delBtn') as HTMLButtonElement).onclick = () => {
-    if (deck.slides.length === 1) {
-      deck.slides[0] = newSlide();
-      deck.activeIndex = 0;
-    } else {
-      deck.slides.splice(deck.activeIndex, 1);
-      clampActive();
-    }
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#newDeckBtn') as HTMLButtonElement).onclick = () => {
-    deck = newDeck();
-    filterQuery = '';
-    markDirty();
-    render();
-  };
-
-  (app.querySelector('#saveBtn') as HTMLButtonElement).onclick = () => persist(true);
-
-  (app.querySelector('#presentBtn') as HTMLButtonElement).onclick = () => {
-    presenting = true;
-    presentIndex = deck.activeIndex;
-    presentStartedAt = Date.now();
-    renderPresent();
-  };
-
-  (app.querySelector('#exportBtn') as HTMLButtonElement).onclick = exportPdf;
-}
-
-function updateSaveBadge() {
-  const el = app.querySelector('#saveBadge') as HTMLSpanElement | null;
-  if (!el) return;
-
-  if (saveState.dirty) {
-    el.classList.add('dirty');
-    el.textContent = 'Saving…';
-    return;
-  }
-
-  el.classList.remove('dirty');
-  el.textContent = `Saved ${formatDistanceToNow(saveState.lastSavedAt, { addSuffix: true })}`;
+  bumpDeck();
+  bumpActiveIndex();
 }
 
 function flash(msg: string) {
@@ -412,34 +74,202 @@ function flash(msg: string) {
   n.textContent = msg;
   n.style.cssText = 'position:fixed;top:14px;right:14px;background:#111827;color:white;padding:9px 12px;border-radius:10px;z-index:99999';
   document.body.appendChild(n);
-  n.animate(
-    [
-      { opacity: 0, transform: 'translateY(-10px)' },
-      { opacity: 1, transform: 'translateY(0px)' },
-    ],
-    { duration: 220, easing: 'ease-out' },
-  );
+  n.animate([{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'translateY(0px)' }], { duration: 220, easing: 'ease-out' });
   setTimeout(() => {
-    const anim = n.animate(
-      [
-        { opacity: 1, transform: 'translateY(0px)' },
-        { opacity: 0, transform: 'translateY(-6px)' },
-      ],
-      { duration: 180, easing: 'ease-in' },
-    );
+    const anim = n.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in' });
     anim.onfinish = () => n.remove();
   }, 900);
 }
 
+// === Render helpers (for thumbs) ===
+function renderThumbList() {
+  deckVer(); // track
+  const q = filterQueryValue.trim().toLowerCase();
+  return deck.slides
+    .map((s, idx) => ({ s, idx }))
+    .filter(({ s }) => !q || `${s.title} ${s.body} ${s.notes}`.toLowerCase().includes(q))
+    .map(({ s, idx }) => html`
+      <div
+        class=${() => `thumb${deck.activeIndex === idx ? ' active' : ''}`}
+        onClick=${(e: Event) => {
+          if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+          deck.activeIndex = idx;
+          bumpDeck();
+          bumpActiveIndex();
+        }}
+      >
+        <h4>${idx + 1}. ${escapeHtml(s.title || 'Untitled')}</h4>
+        <p>${escapeHtml((s.body || '').slice(0, 72))}</p>
+        <div class="thumb-badges">
+          <span class="thumb-badge">${escapeHtml(s.layout)}</span>
+          <div class="thumb-actions">
+            <button onClick=${(e: Event) => { e.stopPropagation(); moveSlide(idx, idx - 1); }}>↑</button>
+            <button onClick=${(e: Event) => { e.stopPropagation(); moveSlide(idx, idx + 1); }}>↓</button>
+          </div>
+        </div>
+      </div>
+    `);
+}
+
+// === Editor panel (rebuilds when active slide changes) ===
+function renderEditorPanel() {
+  activeIndexVer(); // track — panel rebuilds only on slide switch
+  const slide = activeSlide();
+
+  return html`
+    <div class="field">
+      <label>Layout</label>
+      <select
+        onchange=${(e: Event) => {
+          slide.layout = (e.target as HTMLSelectElement).value as SlideLayout;
+          markDirty(); bumpDeck();
+        }}
+      >
+        <option value="title-body" selected=${slide.layout === 'title-body'}>Title + Body</option>
+        <option value="title-image" selected=${slide.layout === 'title-image'}>Title + Image</option>
+        <option value="section" selected=${slide.layout === 'section'}>Section</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Title <span class="small">${slide.title.length} chars</span></label>
+      <input value=${slide.title} onInput=${(e: Event) => {
+        slide.title = (e.target as HTMLInputElement).value;
+        markDirty(); bumpDeck();
+      }} />
+    </div>
+    <div class="field">
+      <label>Body (Markdown) <span class="small">${slide.body.length} chars</span></label>
+      <textarea onInput=${(e: Event) => {
+        slide.body = (e.target as HTMLTextAreaElement).value;
+        markDirty(); bumpDeck();
+      }}>${slide.body}</textarea>
+    </div>
+    <div class="field">
+      <label>Speaker Notes</label>
+      <textarea placeholder="Private presenter notes…" onInput=${(e: Event) => {
+        slide.notes = (e.target as HTMLTextAreaElement).value;
+        markDirty();
+      }}>${slide.notes}</textarea>
+    </div>
+    <div class="field">
+      <label>Image URL</label>
+      <input placeholder="https://..." value=${slide.imageUrl} onInput=${(e: Event) => {
+        slide.imageUrl = (e.target as HTMLInputElement).value;
+        markDirty(); bumpDeck();
+      }} />
+    </div>
+    <div class="field">
+      <label>Font Size <span class="small">overrides deck setting</span></label>
+      <select
+        onchange=${(e: Event) => {
+          const val = (e.target as HTMLSelectElement).value;
+          if (val === '') {
+            delete slide.fontSize;
+          } else if (isFontSize(val)) {
+            slide.fontSize = val;
+          }
+          markDirty(); bumpDeck();
+        }}
+      >
+        <option value="" selected=${!slide.fontSize}>Default (deck)</option>
+        ${(['sm', 'md', 'lg', 'xl'] as FontSize[]).map(s => html`<option value=${s} selected=${slide.fontSize === s}>${s.toUpperCase()}</option>`)}
+      </select>
+    </div>
+    <div class="field" style="display:flex;gap:8px">
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+        if (deck.slides.length === 1) { deck.slides[0] = newSlide(); deck.activeIndex = 0; }
+        else { deck.slides.splice(deck.activeIndex, 1); clampActive(); }
+        markDirty(); bumpDeck(); bumpActiveIndex();
+      }}>Delete Slide</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+        const s = newSlide('section');
+        s.title = 'Section Title'; s.body = 'Add key message';
+        deck.slides.splice(deck.activeIndex + 1, 0, s);
+        deck.activeIndex += 1;
+        markDirty(); bumpDeck(); bumpActiveIndex();
+      }}>Quick Section</button>
+    </div>
+    <div class="small">Autosave enabled. Notes are hidden in exported slides.</div>
+  `;
+}
+
+// === Ratio controls ===
+function renderRatioControls() {
+  activeIndexVer(); deckVer();
+  const ratio = parseAspectRatio(deck.aspectRatio);
+  return html`
+    <select
+      title="Slide ratio"
+      onchange=${(e: Event) => {
+        const value = (e.target as HTMLSelectElement).value as RatioPreset;
+        if (value !== 'custom') {
+          deck.aspectRatio = value;
+        } else {
+          const p = parseAspectRatio(deck.aspectRatio);
+          deck.aspectRatio = `${p.width}:${p.height}`;
+        }
+        markDirty(); bumpDeck();
+      }}
+    >
+      ${RATIO_PRESETS.map(r => html`<option value=${r} selected=${ratio.preset === r}>${r}</option>`)}
+      <option value="custom" selected=${ratio.preset === 'custom'}>Custom</option>
+    </select>
+    <input type="number" min="0.1" step="0.1" value=${ratio.width} style="width:72px"
+      disabled=${ratio.preset !== 'custom'}
+      onInput=${(e: Event) => {
+        const w = Number((e.target as HTMLInputElement).value);
+        const p = parseAspectRatio(deck.aspectRatio);
+        if (w > 0) { deck.aspectRatio = `${Number(w.toFixed(3))}:${p.height}`; markDirty(); bumpDeck(); }
+      }}
+    />
+    <span>:</span>
+    <input type="number" min="0.1" step="0.1" value=${ratio.height} style="width:72px"
+      disabled=${ratio.preset !== 'custom'}
+      onInput=${(e: Event) => {
+        const h = Number((e.target as HTMLInputElement).value);
+        const p = parseAspectRatio(deck.aspectRatio);
+        if (h > 0) { deck.aspectRatio = `${p.width}:${Number(h.toFixed(3))}`; markDirty(); bumpDeck(); }
+      }}
+    />
+  `;
+}
+
+// === Font size controls ===
+function renderFontSizeControl() {
+  deckVer(); // track so it re-renders when deck.fontSize changes via protocol
+  const sizes: FontSize[] = ['sm', 'md', 'lg', 'xl'];
+  return html`
+    <select
+      title="Font size"
+      onchange=${(e: Event) => {
+        const val = (e.target as HTMLSelectElement).value as FontSize;
+        if (isFontSize(val)) {
+          deck.fontSize = val;
+          markDirty(); bumpDeck();
+        }
+      }}
+    >
+      ${sizes.map(s => html`<option value=${s} selected=${deck.fontSize === s}>${s.toUpperCase()}</option>`)}
+    </select>
+  `;
+}
+
+// === Presentation mode (kept imperative) ===
+function startPresent() {
+  presenting = true;
+  presentIndex = deck.activeIndex;
+  presentStartedAt = Date.now();
+  renderPresent();
+}
+
 function renderPresent() {
   if (!presenting) return;
-
   const s = deck.slides[presentIndex];
   const wrap = document.createElement('div');
   wrap.className = 'present';
   wrap.innerHTML = `
     <div class="progress" id="presentProgress" style="width:${((presentIndex + 1) / deck.slides.length) * 100}%"></div>
-    <div style="width:min(1200px,96vw);" id="presentSlideWrap">${renderSlideHtml(s, deck.themeId)}</div>
+    <div style="width:min(1200px,96vw);" id="presentSlideWrap">${renderSlideHtml(s, deck.themeId, deck.fontSize)}</div>
     <div class="present-ui">
       <span class="present-pill" id="presentCounter">${presentIndex + 1} / ${deck.slides.length}</span>
       <span class="present-pill" id="presentTimer">00:00</span>
@@ -450,26 +280,21 @@ function renderPresent() {
   `;
   document.body.appendChild(wrap);
 
-  const rerenderPresent = () => {
+  const rerender = () => {
     const slot = wrap.querySelector('#presentSlideWrap') as HTMLDivElement;
-    slot.innerHTML = renderSlideHtml(deck.slides[presentIndex], deck.themeId);
-    const progress = wrap.querySelector('#presentProgress') as HTMLDivElement;
-    progress.style.width = `${((presentIndex + 1) / deck.slides.length) * 100}%`;
-    const counter = wrap.querySelector('#presentCounter') as HTMLSpanElement;
-    counter.textContent = `${presentIndex + 1} / ${deck.slides.length}`;
+    slot.innerHTML = renderSlideHtml(deck.slides[presentIndex], deck.themeId, deck.fontSize);
+    (wrap.querySelector('#presentProgress') as HTMLDivElement).style.width = `${((presentIndex + 1) / deck.slides.length) * 100}%`;
+    (wrap.querySelector('#presentCounter') as HTMLSpanElement).textContent = `${presentIndex + 1} / ${deck.slides.length}`;
     (slot.querySelector('.slide') as HTMLElement | null)?.animate(
-      [
-        { opacity: 0.3, transform: 'translateX(10px)' },
-        { opacity: 1, transform: 'translateX(0px)' },
-      ],
+      [{ opacity: 0.3, transform: 'translateX(10px)' }, { opacity: 1, transform: 'translateX(0px)' }],
       { duration: 200, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     );
   };
 
   const close = () => {
     presenting = false;
-    if (presentTimer) window.clearInterval(presentTimer);
-    presentTimer = null;
+    if (presentTimerId) window.clearInterval(presentTimerId);
+    presentTimerId = null;
     wrap.remove();
     window.removeEventListener('keydown', onKey);
   };
@@ -477,409 +302,167 @@ function renderPresent() {
   const onKey = (e: KeyboardEvent) => {
     if (!presenting) return;
     if (e.key === 'Escape') close();
-    if (e.key === 'ArrowRight' && presentIndex < deck.slides.length - 1) {
-      presentIndex += 1;
-      rerenderPresent();
-    }
-    if (e.key === 'ArrowLeft' && presentIndex > 0) {
-      presentIndex -= 1;
-      rerenderPresent();
-    }
+    if (e.key === 'ArrowRight' && presentIndex < deck.slides.length - 1) { presentIndex++; rerender(); }
+    if (e.key === 'ArrowLeft' && presentIndex > 0) { presentIndex--; rerender(); }
   };
 
-  presentTimer = window.setInterval(() => {
+  presentTimerId = window.setInterval(() => {
     const timer = wrap.querySelector('#presentTimer') as HTMLSpanElement | null;
     if (!timer) return;
     const totalSec = Math.floor((Date.now() - presentStartedAt) / 1000);
-    const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
-    const ss = String(totalSec % 60).padStart(2, '0');
-    timer.textContent = `${mm}:${ss}`;
+    timer.textContent = `${String(Math.floor(totalSec / 60)).padStart(2, '0')}:${String(totalSec % 60).padStart(2, '0')}`;
   }, 1000);
 
   window.addEventListener('keydown', onKey);
-  (wrap.querySelector('#prevP') as HTMLButtonElement).onclick = () => {
-    if (presentIndex > 0) presentIndex -= 1;
-    rerenderPresent();
-  };
-  (wrap.querySelector('#nextP') as HTMLButtonElement).onclick = () => {
-    if (presentIndex < deck.slides.length - 1) presentIndex += 1;
-    rerenderPresent();
-  };
+  (wrap.querySelector('#prevP') as HTMLButtonElement).onclick = () => { if (presentIndex > 0) { presentIndex--; rerender(); } };
+  (wrap.querySelector('#nextP') as HTMLButtonElement).onclick = () => { if (presentIndex < deck.slides.length - 1) { presentIndex++; rerender(); } };
   (wrap.querySelector('#exitP') as HTMLButtonElement).onclick = close;
 }
 
+// === PDF Export ===
 function exportPdf() {
   const ratio = parseAspectRatio(deck.aspectRatio);
-  const html = `
-    <html>
-      <head>
-        <title>${escapeHtml(deck.title)}</title>
-        <style>
-          body { margin:0; font-family: Inter, Arial, sans-serif; }
-          .page { page-break-after: always; padding: 24px; }
-          .slide { width: 100%; aspect-ratio: ${ratio.cssValue}; border-radius: 12px; padding: 32px; box-sizing: border-box; }
-          .slide h1 { margin:0 0 12px; font-size: 42px; }
-          .slide-body { font-size: 24px; line-height: 1.35; }
-          .slide-body p { margin: 0 0 10px; }
-          .slide-body ul, .slide-body ol { margin: 0 0 12px 1.2em; padding: 0; }
-          .slide-body li { margin: 0 0 6px; }
-          .slide-body blockquote { margin: 8px 0; padding: 6px 12px; border-left: 4px solid #475569; }
-          .slide-body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-          .slide-body pre { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.08); overflow: auto; }
-          .slide-body a { color: #1d4ed8; text-decoration: underline; }
-          @media print { .page:last-child { page-break-after: auto; } }
-        </style>
-      </head>
-      <body>
-        ${deck.slides.map((s) => `<div class="page">${renderSlideHtml(s, deck.themeId)}</div>`).join('')}
-        <script>window.onload = () => window.print();<\/script>
-      </body>
-    </html>
-  `;
-
+  const htmlStr = `<html><head><title>${escapeHtml(deck.title)}</title><style>
+    body{margin:0;font-family:Inter,Arial,sans-serif;}
+    .page{page-break-after:always;padding:24px;}
+    .slide{width:100%;aspect-ratio:${ratio.cssValue};border-radius:12px;padding:32px;box-sizing:border-box;}
+    .slide h1{margin:0 0 12px;font-size:42px;}
+    .slide-body{font-size:24px;line-height:1.35;}
+    .slide-body p{margin:0 0 10px;}
+    .slide-body ul,.slide-body ol{margin:0 0 12px 1.2em;padding:0;}
+    .slide-body li{margin:0 0 6px;}
+    .slide-body blockquote{margin:8px 0;padding:6px 12px;border-left:4px solid #475569;}
+    .slide-body code{font-family:ui-monospace,Menlo,Consolas,monospace;}
+    .slide-body pre{margin:10px 0;padding:10px 12px;border-radius:8px;background:rgba(15,23,42,.08);overflow:auto;}
+    .slide-body a{color:#1d4ed8;text-decoration:underline;}
+    @media print{.page:last-child{page-break-after:auto;}}
+  </style></head><body>
+    ${deck.slides.map((s) => `<div class="page">${renderSlideHtml(s, deck.themeId, deck.fontSize)}</div>`).join('')}
+    <script>window.onload=()=>window.print();<\/script>
+  </body></html>`;
   const w = window.open('', '_blank');
-  if (!w) {
-    alert('Popup blocked. Please allow popups to export PDF.');
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  if (!w) { alert('Popup blocked. Please allow popups to export PDF.'); return; }
+  w.document.open(); w.document.write(htmlStr); w.document.close();
 }
 
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    persist(true);
-  }
+// === Mount the app ===
+mount(html`
+  <div class="root">
+    <!-- Topbar -->
+    <div class="topbar">
+      <input
+        value=${() => { deckVer(); return deck.title; }}
+        style="min-width:220px"
+        onInput=${(e: Event) => { deck.title = (e.target as HTMLInputElement).value; markDirty(); }}
+      />
+      <select
+        onchange=${(e: Event) => {
+          deck.themeId = (e.target as HTMLSelectElement).value as ThemeId;
+          markDirty(); bumpDeck();
+        }}
+      >
+        ${Object.entries(THEMES).map(([id, meta]) => html`<option value=${id} selected=${deck.themeId === id}>${meta.name}</option>`)}
+      </select>
+      ${() => renderRatioControls()}
+      ${() => renderFontSizeControl()}
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+        deck = newDeck(); filterQueryValue = '';
+        markDirty(); bumpDeck(); bumpActiveIndex();
+      }}>New</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+        const s = activeSlide();
+        deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uuid(), title: `${s.title} (copy)` });
+        deck.activeIndex += 1;
+        markDirty(); bumpDeck(); bumpActiveIndex();
+      }}>Duplicate</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+        deck.slides.splice(deck.activeIndex + 1, 0, newSlide());
+        deck.activeIndex += 1;
+        markDirty(); bumpDeck(); bumpActiveIndex();
+      }}>Add Slide</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => persist(true)}>Save</button>
+      <button class="y-btn y-btn-sm y-btn-primary" onClick=${startPresent}>Present</button>
+      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${exportPdf}>Export PDF</button>
+      <span class=${() => `chip${dirty() ? ' dirty' : ''}`}>
+        ${() => dirty() ? 'Saving\u2026' : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
+      </span>
+    </div>
+    <!-- Main -->
+    <div class="main">
+      <!-- Left: thumbnails -->
+      <div class="left y-scroll">
+        <div class="left-head">
+          <input placeholder="Filter slides\u2026" onInput=${(e: Event) => {
+            filterQueryValue = (e.target as HTMLInputElement).value;
+            bumpDeck();
+          }} />
+          <small>Tip: Alt+\u2191 / Alt+\u2193 to reorder \u2022 Ctrl/Cmd+Enter to present</small>
+        </div>
+        <div>${() => renderThumbList()}</div>
+      </div>
+      <!-- Center: slide canvas -->
+      <div
+        class="center"
+        ref=${(el: HTMLDivElement) => { canvasEl = el; }}
+        style=${() => { deckVer(); return `background:${THEMES[deck.themeId].canvas}`; }}
+      ></div>
+      <!-- Right: editor -->
+      <div class="panel">
+        ${() => renderEditorPanel()}
+      </div>
+    </div>
+  </div>
+`);
 
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !presenting) {
-    e.preventDefault();
-    presenting = true;
-    presentIndex = deck.activeIndex;
-    presentStartedAt = Date.now();
-    renderPresent();
-  }
-
-  if (e.altKey && e.key === 'ArrowUp') {
-    e.preventDefault();
-    moveSlide(deck.activeIndex, deck.activeIndex - 1);
-  }
-
-  if (e.altKey && e.key === 'ArrowDown') {
-    e.preventDefault();
-    moveSlide(deck.activeIndex, deck.activeIndex + 1);
+// === Reactive canvas update via effect ===
+effect(() => {
+  deckVer(); // track any deck content changes
+  if (!canvasEl) return;
+  canvasEl.innerHTML = renderSlideHtml(activeSlide(), deck.themeId, deck.fontSize);
+  // Apply aspect ratio and animate slide-in
+  const slideEl = canvasEl.querySelector('.slide') as HTMLElement | null;
+  if (slideEl) {
+    const ratio = parseAspectRatio(deck.aspectRatio);
+    slideEl.style.aspectRatio = ratio.cssValue;
+    slideEl.animate(
+      [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0px)' }],
+      { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
   }
 });
 
-render();
-persist(false);
-
-// App Protocol
-const appApi = (window as any).yaar?.app;
-
-type StorageReadMode = 'text' | 'json' | 'auto';
-type StorageMergeMode = 'replace' | 'append';
-
-function parseDeckOrSlidesFromStorage(raw: string, fallbackTitle: string): { title: string; slides: Slide[] } {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-
-    if (Array.isArray(parsed)) {
-      const slides = parsed.map((item) => normalizeSlideInput(item as Partial<Slide>));
-      return { title: fallbackTitle, slides: slides.length ? slides : [newSlide()] };
-    }
-
-    if (parsed && typeof parsed === 'object') {
-      const maybeDeck = parsed as Partial<Deck>;
-      if (Array.isArray(maybeDeck.slides)) {
-        const normalized = normalizeDeck({
-          title: maybeDeck.title || fallbackTitle,
-          themeId: isThemeId(maybeDeck.themeId) ? maybeDeck.themeId : 'classic-light',
-          slides: maybeDeck.slides.map((s) => normalizeSlideInput(s)),
-          activeIndex: typeof maybeDeck.activeIndex === 'number' ? maybeDeck.activeIndex : 0,
-          aspectRatio: normalizeAspectRatio((maybeDeck as Deck).aspectRatio),
-        });
-        return { title: normalized.title, slides: normalized.slides };
-      }
-    }
-  } catch {
-    // non-json input -> plain text slide
+// === Keyboard shortcuts ===
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault(); persist(true);
   }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !presenting) {
+    e.preventDefault(); startPresent();
+  }
+  if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); moveSlide(deck.activeIndex, deck.activeIndex - 1); }
+  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveSlide(deck.activeIndex, deck.activeIndex + 1); }
+});
 
-  return {
-    title: fallbackTitle,
-    slides: [
-      normalizeSlideInput({
-        title: fallbackTitle,
-        body: raw,
-      }),
-    ],
-  };
-}
+// === Async initialization ===
+(async () => {
+  const saved = await loadDeck();
+  if (saved) {
+    deck = normalizeDeck(saved as Partial<Deck> & Pick<Deck, 'slides'>);
+    bumpDeck();
+    bumpActiveIndex();
+  }
+  persist(false);
+})();
 
-if (appApi) {
-  appApi.register({
-    appId: 'slides-lite',
-    name: 'Slides Lite',
-    state: {
-      deck: {
-        description: 'Current full deck object',
-        handler: () => cloneDeckValue(),
-      },
-      activeSlide: {
-        description: 'Currently selected slide',
-        handler: () => ({ ...activeSlide() }),
-      },
-      title: {
-        description: 'Current deck title',
-        handler: () => deck.title,
-      },
-      theme: {
-        description: 'Current deck theme id',
-        handler: () => deck.themeId,
-      },
-      aspectRatio: {
-        description: 'Current slide aspect ratio (e.g., 16:9)',
-        handler: () => deck.aspectRatio,
-      },
-      activeIndex: {
-        description: 'Current active slide index',
-        handler: () => deck.activeIndex,
-      },
-      slideCount: {
-        description: 'Number of slides in the deck',
-        handler: () => deck.slides.length,
-      },
-    },
-    commands: {
-      setDeck: {
-        description: 'Replace entire deck. Params: { deck: Deck }',
-        params: {
-          type: 'object',
-          properties: {
-            deck: { type: 'object' },
-          },
-          required: ['deck'],
-        },
-        handler: (p: { deck: Deck }) => {
-          deck = normalizeDeck(p.deck);
-          filterQuery = '';
-          persist(false);
-          render();
-          return { ok: true, slideCount: deck.slides.length };
-        },
-      },
-      setSlides: {
-        description: 'Set slides in replace/append mode. Params: { slides: Slide[], mode?: "replace"|"append" }',
-        params: {
-          type: 'object',
-          properties: {
-            slides: { type: 'array', items: { type: 'object' } },
-            mode: { type: 'string', enum: ['replace', 'append'] },
-          },
-          required: ['slides'],
-        },
-        handler: (p: { slides: Partial<Slide>[]; mode?: StorageMergeMode }) => {
-          const slides = (Array.isArray(p.slides) ? p.slides : []).map((s) => normalizeSlideInput(s));
-          const mode = p.mode || 'replace';
-
-          if (mode === 'append') {
-            if (slides.length) deck.slides.push(...slides);
-            deck.activeIndex = Math.max(0, deck.slides.length - 1);
-          } else {
-            deck.slides = slides.length ? slides : [newSlide()];
-            deck.activeIndex = 0;
-          }
-
-          clampActive();
-          persist(false);
-          render();
-          return { ok: true, mode, slideCount: deck.slides.length };
-        },
-      },
-      appendSlides: {
-        description: 'Append many slides at once. Params: { slides: Slide[] }',
-        params: {
-          type: 'object',
-          properties: {
-            slides: { type: 'array', items: { type: 'object' } },
-          },
-          required: ['slides'],
-        },
-        handler: (p: { slides: Partial<Slide>[] }) => {
-          const slides = (Array.isArray(p.slides) ? p.slides : []).map((s) => normalizeSlideInput(s));
-          if (slides.length) {
-            deck.slides.push(...slides);
-            deck.activeIndex = deck.slides.length - 1;
-            clampActive();
-            persist(false);
-            render();
-          }
-          return { ok: true, appended: slides.length, slideCount: deck.slides.length };
-        },
-      },
-      setActiveIndex: {
-        description: 'Set active slide index. Params: { index: number }',
-        params: {
-          type: 'object',
-          properties: {
-            index: { type: 'number' },
-          },
-          required: ['index'],
-        },
-        handler: (p: { index: number }) => {
-          deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index), deck.slides.length - 1));
-          render();
-          return { ok: true, activeIndex: deck.activeIndex };
-        },
-      },
-      setTheme: {
-        description: 'Set deck theme. Params: { themeId: ThemeId }',
-        params: {
-          type: 'object',
-          properties: {
-            themeId: { type: 'string' },
-          },
-          required: ['themeId'],
-        },
-        handler: (p: { themeId: ThemeId }) => {
-          if (!isThemeId(p.themeId)) {
-            return { ok: false, error: `Invalid themeId: ${String(p.themeId)}` };
-          }
-          deck.themeId = p.themeId;
-          persist(false);
-          render();
-          return { ok: true, themeId: deck.themeId };
-        },
-      },
-      setAspectRatio: {
-        description: 'Set deck aspect ratio. Params: { aspectRatio: string }',
-        params: {
-          type: 'object',
-          properties: {
-            aspectRatio: { type: 'string' },
-          },
-          required: ['aspectRatio'],
-        },
-        handler: (p: { aspectRatio: string }) => {
-          deck.aspectRatio = normalizeAspectRatio(p.aspectRatio);
-          persist(false);
-          render();
-          return { ok: true, aspectRatio: deck.aspectRatio };
-        },
-      },
-      saveToStorage: {
-        description: 'Save current deck JSON to YAAR storage. Params: { path: string }',
-        params: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-          },
-          required: ['path'],
-        },
-        handler: async (p: { path: string }) => {
-          const storage = (window as any).yaar?.storage;
-          if (!storage) return { ok: false, error: 'Storage API not available' };
-          const json = JSON.stringify(deck, null, 2);
-          await storage.save(p.path, json);
-          return { ok: true, path: p.path, slideCount: deck.slides.length };
-        },
-      },
-      loadFromStorage: {
-        description: 'Load one/many files from YAAR storage and merge into deck. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',
-        params: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            paths: { type: 'array', items: { type: 'string' } },
-            mode: { type: 'string', enum: ['replace', 'append'] },
-          },
-        },
-        handler: async (p: { path?: string; paths?: string[]; mode?: StorageMergeMode }) => {
-          const storage = (window as any).yaar?.storage;
-          if (!storage) return { ok: false, error: 'Storage API not available' };
-
-          const candidatePaths = [
-            ...(p.path ? [p.path] : []),
-            ...(Array.isArray(p.paths) ? p.paths : []),
-          ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-
-          if (!candidatePaths.length) {
-            return { ok: false, error: 'Provide path or paths' };
-          }
-
-          const loadedSlides: Slide[] = [];
-          let firstTitle = deck.title;
-
-          for (const path of candidatePaths) {
-            const raw: string = await storage.read(path, { as: 'text' });
-            const fallbackTitle = (path.split('/').pop() || path).replace(/\.[^/.]+$/, '') || 'Imported Deck';
-            const parsed = parseDeckOrSlidesFromStorage(raw, fallbackTitle);
-            if (!firstTitle || firstTitle === 'Untitled Deck') firstTitle = parsed.title || firstTitle;
-            loadedSlides.push(...parsed.slides);
-          }
-
-          const mode = p.mode || 'replace';
-          if (mode === 'append') {
-            if (loadedSlides.length) deck.slides.push(...loadedSlides);
-            deck.activeIndex = Math.max(0, deck.slides.length - 1);
-          } else {
-            deck.slides = loadedSlides.length ? loadedSlides : [newSlide()];
-            deck.activeIndex = 0;
-            deck.title = firstTitle || deck.title;
-          }
-
-          clampActive();
-          persist(false);
-          render();
-          return { ok: true, mode, loaded: loadedSlides.length, paths: candidatePaths };
-        },
-      },
-      readStorageFile: {
-        description: 'Read one file from YAAR storage. Params: { path: string, as?: "text"|"json"|"auto" }',
-        params: {
-          type: 'object',
-          properties: {
-            path: { type: 'string' },
-            as: { type: 'string', enum: ['text', 'json', 'auto'] },
-          },
-          required: ['path'],
-        },
-        handler: async (p: { path: string; as?: StorageReadMode }) => {
-          const storage = (window as any).yaar?.storage;
-          if (!storage) return { ok: false, error: 'Storage API not available' };
-          const readAs = p.as || 'text';
-          const content = await storage.read(p.path, { as: readAs });
-          return { ok: true, path: p.path, as: readAs, content };
-        },
-      },
-      readStorageFiles: {
-        description: 'Read many files from YAAR storage. Params: { paths: string[], as?: "text"|"json"|"auto" }',
-        params: {
-          type: 'object',
-          properties: {
-            paths: { type: 'array', items: { type: 'string' } },
-            as: { type: 'string', enum: ['text', 'json', 'auto'] },
-          },
-          required: ['paths'],
-        },
-        handler: async (p: { paths: string[]; as?: StorageReadMode }) => {
-          const storage = (window as any).yaar?.storage;
-          if (!storage) return { ok: false, error: 'Storage API not available' };
-          const readAs = p.as || 'text';
-          const paths = (Array.isArray(p.paths) ? p.paths : []).filter(
-            (v): v is string => typeof v === 'string' && v.trim().length > 0,
-          );
-          const files = await Promise.all(
-            paths.map(async (path) => ({
-              path,
-              content: await storage.read(path, { as: readAs }),
-            })),
-          );
-          return { ok: true, as: readAs, files };
-        },
-      },
-    },
-  });
-}
+// === App Protocol ===
+registerProtocol({
+  getDeck: () => deck,
+  setDeck: (d: Deck) => { deck = d; },
+  getFilterQuery: () => filterQueryValue,
+  setFilterQuery: (q: string) => { filterQueryValue = q; },
+  activeSlide,
+  clampActive,
+  persist,
+  bumpDeck,
+  bumpActiveIndex,
+});

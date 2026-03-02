@@ -1,17 +1,17 @@
 import type { Deck } from './types';
 
-const KEY = 'slides-lite:draft';
+const STORAGE_PATH = 'slides-lite/draft.json';
+const storage = (window as any).yaar?.storage;
 
-export function saveDeck(deck: Deck): void {
-  localStorage.setItem(KEY, JSON.stringify(deck));
+export async function saveDeck(deck: Deck): Promise<void> {
+  if (!storage) return;
+  try { await storage.save(STORAGE_PATH, JSON.stringify(deck)); } catch { /* ignore */ }
 }
 
-export function loadDeck(): Deck | null {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return null;
+export async function loadDeck(): Promise<Deck | null> {
+  if (!storage) return null;
   try {
+    const raw = await storage.read(STORAGE_PATH, { as: 'text' });
     return JSON.parse(raw) as Deck;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }

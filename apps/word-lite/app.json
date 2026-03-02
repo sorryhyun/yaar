@@ -218,5 +218,6 @@
       }
     }
   },
-  "appProtocol": true
+  "appProtocol": true,
+  "capture": "dom"
 }

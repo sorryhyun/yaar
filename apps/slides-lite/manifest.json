@@ -1,8 +1,8 @@
 {
   "id": "slides-lite",
   "name": "Slides Lite",
-  "icon": "🖼️",
-  "description": "Lightweight slide editor with markdown, themes, ratios, and app protocol commands",
+  "icon": "🎞️",
+  "description": "Reactive slide deck editor with yaar.storage persistence",
   "version": "1.0.0",
   "author": "YAAR"
 }

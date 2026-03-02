@@ -130,21 +130,23 @@ export const componentLayoutSchema = z.object({
  * Display content schema - for markdown, html, text, table, iframe (no components).
  * Used by create_window and update_window tools.
  */
+export const displayRendererSchema = z.enum(['markdown', 'html', 'text', 'iframe', 'table']);
+
+export const displayDataSchema = z.union([
+  z.string().describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
+  z
+    .object({
+      headers: z.array(z.string()).describe('Column header labels'),
+      rows: z.array(z.array(z.string())).describe('Table rows'),
+    })
+    .describe('Table data (for table renderer only)'),
+]);
+
 export const displayContentSchema = z.object({
-  renderer: z
-    .enum(['markdown', 'html', 'text', 'iframe', 'table'])
-    .describe('Content renderer type'),
-  content: z
-    .union([
-      z.string().describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
-      z
-        .object({
-          headers: z.array(z.string()).describe('Column header labels'),
-          rows: z.array(z.array(z.string())).describe('Table rows'),
-        })
-        .describe('Table data (for table renderer only)'),
-    ])
-    .describe('String for markdown/html/text/iframe, or { headers, rows } for table'),
+  renderer: displayRendererSchema.describe('Content renderer type'),
+  content: displayDataSchema.describe(
+    'String for markdown/html/text/iframe, or { headers, rows } for table',
+  ),
 });
 
 // ============ TypeScript Types ============

@@ -7,10 +7,10 @@ import { z } from 'zod';
 import { join } from 'path';
 import {
   type OSAction,
-  type DisplayContent,
   type ComponentLayout,
   type WindowVariant,
-  displayContentSchema,
+  displayRendererSchema,
+  displayDataSchema,
   componentSchema,
   componentLayoutSchema,
 } from '@yaar/shared';
@@ -49,7 +49,12 @@ export function registerCreateTools(server: McpServer): void {
       inputSchema: {
         windowId: z.string().describe('Unique identifier for the window'),
         title: z.string().describe('Window title'),
-        content: displayContentSchema.describe('Display content (markdown, html, text, or iframe)'),
+        renderer: displayRendererSchema.describe(
+          'Content renderer type: markdown, html, text, table, or iframe',
+        ),
+        content: displayDataSchema.describe(
+          'Content string (markdown text, HTML, plain text, or URL for iframe), or { headers, rows } for table',
+        ),
         x: z.number().optional().describe('X position (default: 100)'),
         y: z.number().optional().describe('Y position (default: 100)'),
         width: z.number().optional().describe('Width (default: 500)'),
@@ -65,9 +70,8 @@ export function registerCreateTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const content = args.content as DisplayContent;
-      const renderer = content.renderer;
-      let data = content.content;
+      const renderer = args.renderer as string;
+      let data = args.content as string | { headers: string[]; rows: string[][] };
 
       // Resolve app:// protocol for iframe content
       if (renderer === 'iframe' && typeof data === 'string' && data.startsWith('app://')) {

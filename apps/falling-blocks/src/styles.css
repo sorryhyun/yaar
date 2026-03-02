@@ -1,0 +1,105 @@
+:root {
+  color-scheme: dark;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: radial-gradient(1200px 900px at 20% 0%, #1b2440 0%, #0b0f1a 55%, #070910 100%);
+  color: var(--yaar-text);
+  display: grid;
+  place-items: center;
+}
+#app {
+  display: flex;
+  gap: 16px;
+  padding: 18px;
+  border-radius: var(--yaar-radius-lg);
+  background: rgba(10, 13, 25, 0.7);
+  box-shadow: var(--yaar-shadow);
+  border: 1px solid var(--yaar-border);
+  backdrop-filter: blur(10px);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 210px;
+}
+.title {
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  font-size: 18px;
+}
+.card {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: 14px;
+  padding: 12px;
+}
+.stat {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  font-size: 14px;
+  opacity: 0.95;
+}
+.stat b {
+  font-variant-numeric: tabular-nums;
+}
+.help {
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0.85;
+}
+canvas {
+  image-rendering: pixelated;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  border: 1px solid var(--yaar-border);
+}
+.miniWrap {
+  display: flex;
+  gap: 10px;
+}
+.miniCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.miniLabel {
+  font-size: 12px;
+  opacity: 0.85;
+}
+.btnRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.overlayBox {
+  pointer-events: none;
+  text-align: center;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--yaar-border);
+  max-width: 320px;
+}
+.overlayBox h2 {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+}
+.overlayBox p {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.9;
+}

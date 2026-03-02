@@ -5,10 +5,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  type DisplayContent,
   type ContentUpdateOperation,
   type ComponentLayout,
-  displayContentSchema,
+  displayRendererSchema,
+  displayDataSchema,
   componentSchema,
 } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
@@ -31,9 +31,14 @@ export function registerUpdateTools(
         operation: z
           .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
           .describe('The operation to perform on the content'),
-        content: displayContentSchema
+        renderer: displayRendererSchema
           .optional()
-          .describe('Display content (markdown, html, text, or iframe)'),
+          .describe('Content renderer type (only needed when changing renderer)'),
+        content: displayDataSchema
+          .optional()
+          .describe(
+            'Content string (markdown text, HTML, plain text, or URL for iframe), or { headers, rows } for table',
+          ),
         position: z.number().optional().describe('Character position for insertAt operation'),
       },
     },
@@ -44,9 +49,8 @@ export function registerUpdateTools(
         );
       }
 
-      const content = args.content as DisplayContent | undefined;
-      const renderer = content?.renderer;
-      const data = content?.content ?? '';
+      const renderer = args.renderer as string | undefined;
+      const data = (args.content as string | { headers: string[]; rows: string[][] }) ?? '';
 
       let operation: ContentUpdateOperation;
       switch (args.operation) {

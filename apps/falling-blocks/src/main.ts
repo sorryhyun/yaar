@@ -1,3 +1,8 @@
+import { signal, html, mount, show } from '@bundled/yaar';
+import './styles.css';
+
+// --- Types and constants ---
+
 type PieceType = 'I' | 'J' | 'L' | 'O' | 'S' | 'T' | 'Z';
 
 type Matrix = number[][];
@@ -162,177 +167,25 @@ function pointsForLines(lines: number, level: number): number {
   return base * (level + 1);
 }
 
-// --- UI / Canvas ---
+// --- Display signals ---
 
-const style = document.createElement('style');
-style.textContent = `
-  :root { color-scheme: dark; }
-  html, body { height: 100%; }
-  body {
-    margin: 0;
-    background: radial-gradient(1200px 900px at 20% 0%, #1b2440 0%, #0b0f1a 55%, #070910 100%);
-    color: var(--yaar-text);
-    display: grid;
-    place-items: center;
-  }
-  #app {
-    display: flex;
-    gap: 16px;
-    padding: 18px;
-    border-radius: var(--yaar-radius-lg);
-    background: rgba(10, 13, 25, 0.7);
-    box-shadow: var(--yaar-shadow);
-    border: 1px solid var(--yaar-border);
-    backdrop-filter: blur(10px);
-  }
-  .panel {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 210px;
-  }
-  .title {
-    font-weight: 800;
-    letter-spacing: 0.3px;
-    font-size: 18px;
-  }
-  .card {
-    background: var(--yaar-bg-surface);
-    border: 1px solid var(--yaar-border);
-    border-radius: 14px;
-    padding: 12px;
-  }
-  .stat {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-    font-size: 14px;
-    opacity: 0.95;
-  }
-  .stat b { font-variant-numeric: tabular-nums; }
-  .help {
-    font-size: 12px;
-    line-height: 1.35;
-    opacity: 0.85;
-  }
-  canvas {
-    image-rendering: pixelated;
-    background: rgba(0,0,0,0.35);
-    border-radius: 12px;
-    border: 1px solid var(--yaar-border);
-  }
-  .miniWrap { display: flex; gap: 10px; }
-  .miniCol { display:flex; flex-direction: column; gap: 8px; }
-  .miniLabel { font-size: 12px; opacity: 0.85; }
-  .btnRow { display:flex; gap: 8px; flex-wrap: wrap; }
-  .overlay {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    pointer-events: none;
-  }
-  .overlayBox {
-    pointer-events: none;
-    text-align: center;
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: rgba(0,0,0,0.55);
-    border: 1px solid var(--yaar-border);
-    max-width: 320px;
-  }
-  .overlayBox h2 { margin: 0 0 6px 0; font-size: 18px; }
-  .overlayBox p { margin: 0; font-size: 13px; opacity: 0.9; }
-`;
+const scoreS = signal(0);
+const hiS = signal(0);
+const linesS = signal(0);
+const levelS = signal(0);
+const pausedS = signal(false);
+const gameOverS = signal(false);
 
-document.head.appendChild(style);
+// --- Canvas refs (set synchronously via ref callbacks in html template) ---
 
-document.body.innerHTML = '';
+let canvas!: HTMLCanvasElement;
+let ctx!: CanvasRenderingContext2D;
+let nextCanvas!: HTMLCanvasElement;
+let nextCtx!: CanvasRenderingContext2D;
+let holdCanvas!: HTMLCanvasElement;
+let holdCtx!: CanvasRenderingContext2D;
 
-const app = document.createElement('div');
-app.id = 'app';
-
-const boardWrap = document.createElement('div');
-boardWrap.style.position = 'relative';
-
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d')!;
-
-const overlay = document.createElement('div');
-overlay.className = 'overlay';
-const overlayBox = document.createElement('div');
-overlayBox.className = 'overlayBox';
-overlay.appendChild(overlayBox);
-
-boardWrap.appendChild(canvas);
-boardWrap.appendChild(overlay);
-
-const panel = document.createElement('div');
-panel.className = 'panel';
-
-const title = document.createElement('div');
-title.className = 'title y-text-sm y-font-mono';
-title.textContent = 'Falling Blocks';
-
-const statsCard = document.createElement('div');
-statsCard.className = 'card';
-
-const statScore = document.createElement('div');
-statScore.className = 'stat y-text-sm y-font-mono';
-const statLines = document.createElement('div');
-statLines.className = 'stat y-text-sm y-font-mono';
-const statLevel = document.createElement('div');
-statLevel.className = 'stat y-text-sm y-font-mono';
-const statHi = document.createElement('div');
-statHi.className = 'stat y-text-sm y-font-mono';
-
-statsCard.append(statScore, statHi, statLines, statLevel);
-
-const miniCard = document.createElement('div');
-miniCard.className = 'card';
-
-const miniWrap = document.createElement('div');
-miniWrap.className = 'miniWrap';
-
-function makeMini(label: string): { wrap: HTMLDivElement; c: HTMLCanvasElement; g: CanvasRenderingContext2D } {
-  const col = document.createElement('div');
-  col.className = 'miniCol';
-  const lab = document.createElement('div');
-  lab.className = 'miniLabel';
-  lab.textContent = label;
-  const c = document.createElement('canvas');
-  const g = c.getContext('2d')!;
-  col.append(lab, c);
-  return { wrap: col, c, g };
-}
-
-const nextMini = makeMini('Next');
-const holdMini = makeMini('Hold');
-miniWrap.append(nextMini.wrap, holdMini.wrap);
-miniCard.appendChild(miniWrap);
-
-const btnCard = document.createElement('div');
-btnCard.className = 'card';
-const btnRow = document.createElement('div');
-btnRow.className = 'btnRow';
-const btnRestart = document.createElement('button');
-btnRestart.className = 'y-btn y-btn-sm';
-btnRestart.textContent = 'Restart (R)';
-const btnPause = document.createElement('button');
-btnPause.className = 'y-btn y-btn-sm';
-btnPause.textContent = 'Pause (P)';
-btnRow.append(btnRestart, btnPause);
-btnCard.appendChild(btnRow);
-
-const help = document.createElement('div');
-help.className = 'help y-text-xs y-text-muted';
-help.textContent = '←/→ move • ↑ rotate • ↓ soft drop • Space hard drop • C hold • P pause • R restart';
-
-panel.append(title, statsCard, miniCard, btnCard, help);
-app.append(boardWrap, panel);
-document.body.appendChild(app);
-
-// --- Game state ---
+// --- Mutable game state ---
 
 let board = makeBoard();
 let current = spawn(nextType());
@@ -348,9 +201,46 @@ let dropAccum = 0;
 let lastTime = 0;
 let paused = false;
 let gameOver = false;
+let hi = 0;
 
-const HI_KEY = 'falling-blocks:hi';
-let hi = Number(localStorage.getItem(HI_KEY) ?? '0') || 0;
+// --- Persistence ---
+
+async function saveHi(): Promise<void> {
+  const storage = (window as any).yaar?.storage;
+  if (storage) {
+    try { await storage.save('falling-blocks/hi.json', JSON.stringify({ hi })); } catch { /* ignore */ }
+  }
+}
+
+async function loadHi(): Promise<void> {
+  const storage = (window as any).yaar?.storage;
+  if (storage) {
+    try {
+      const saved = await storage.read('falling-blocks/hi.json', { as: 'json' });
+      if (saved && typeof saved.hi === 'number') { hi = saved.hi; hiS(hi); }
+    } catch { /* no save yet */ }
+  }
+}
+
+// --- State update helpers ---
+
+function updateStats(): void {
+  scoreS(score); hiS(hi); linesS(lines); levelS(level);
+}
+
+function updateOverlay(): void {
+  gameOverS(gameOver); pausedS(paused);
+}
+
+function updateHi(): void {
+  if (score > hi) {
+    hi = score;
+    hiS(hi);
+    void saveHi();
+  }
+}
+
+// --- Game logic ---
 
 function reset(): void {
   board = makeBoard();
@@ -366,21 +256,8 @@ function reset(): void {
   dropAccum = 0;
   paused = false;
   gameOver = false;
+  updateStats();
   updateOverlay();
-}
-
-function updateHi(): void {
-  if (score > hi) {
-    hi = score;
-    localStorage.setItem(HI_KEY, String(hi));
-  }
-}
-
-function updateStats(): void {
-  statScore.innerHTML = `<span>Score</span><b>${score}</b>`;
-  statHi.innerHTML = `<span>High</span><b>${hi}</b>`;
-  statLines.innerHTML = `<span>Lines</span><b>${lines}</b>`;
-  statLevel.innerHTML = `<span>Level</span><b>${level}</b>`;
 }
 
 function tryMove(dx: number, dy: number): boolean {
@@ -416,15 +293,17 @@ function lockAndAdvance(): void {
   if (collides(board, current, 0, 0)) {
     gameOver = true;
   }
+  updateStats();
+  updateOverlay();
 }
 
 function softDrop(): void {
   if (!tryMove(0, 1)) {
     lockAndAdvance();
   } else {
-    // tiny reward for moving down manually
     score += 1;
     updateHi();
+    updateStats();
   }
 }
 
@@ -456,13 +335,13 @@ function holdPiece(): void {
   }
   if (collides(board, current, 0, 0)) {
     gameOver = true;
+    updateOverlay();
   }
 }
 
 function rotateCurrent(): void {
   if (gameOver || paused) return;
   const rotated = rotateCW(current.m);
-  // simple wall-kick attempts
   const kicks = [0, -1, 1, -2, 2];
   for (const k of kicks) {
     if (!collides(board, current, k, 0, rotated)) {
@@ -473,16 +352,10 @@ function rotateCurrent(): void {
   }
 }
 
-function updateOverlay(): void {
-  if (gameOver) {
-    overlayBox.innerHTML = `<h2>Game Over</h2><p>Press R to restart.</p>`;
-    overlay.style.display = 'grid';
-  } else if (paused) {
-    overlayBox.innerHTML = `<h2>Paused</h2><p>Press P to resume.</p>`;
-    overlay.style.display = 'grid';
-  } else {
-    overlay.style.display = 'none';
-  }
+function togglePause(): void {
+  if (gameOver) return;
+  paused = !paused;
+  updateOverlay();
 }
 
 // --- Rendering ---
@@ -490,26 +363,23 @@ function updateOverlay(): void {
 let BLOCK = 26;
 
 function fit(): void {
-  // Keep the board comfortable in the window.
   const maxH = Math.min(760, window.innerHeight - 120);
   BLOCK = Math.max(18, Math.floor(maxH / ROWS));
-
   const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${COLS * BLOCK}px`;
   canvas.style.height = `${ROWS * BLOCK}px`;
   canvas.width = Math.floor(COLS * BLOCK * dpr);
   canvas.height = Math.floor(ROWS * BLOCK * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
   const miniSize = Math.floor(BLOCK * 0.9);
-  for (const { c } of [nextMini, holdMini]) {
+  for (const c of [nextCanvas, holdCanvas]) {
     c.style.width = `${miniSize * 4}px`;
     c.style.height = `${miniSize * 4}px`;
     c.width = Math.floor(miniSize * 4 * dpr);
     c.height = Math.floor(miniSize * 4 * dpr);
   }
-  nextMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  holdMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  nextCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  holdCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function drawCell(g: CanvasRenderingContext2D, x: number, y: number, v: number, alpha = 1): void {
@@ -590,33 +460,30 @@ function render(): void {
   const dpr = window.devicePixelRatio || 1;
 
   // Next
-  nextMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  nextMini.g.clearRect(0, 0, miniSize * 4, miniSize * 4);
-  nextMini.g.fillStyle = 'rgba(0,0,0,0.28)';
-  nextMini.g.fillRect(0, 0, miniSize * 4, miniSize * 4);
-  nextMini.g.save();
-  nextMini.g.scale(miniSize / BLOCK, miniSize / BLOCK);
-  drawMatrix(nextMini.g, next.m, 0, 0, 1);
-  nextMini.g.restore();
+  nextCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  nextCtx.clearRect(0, 0, miniSize * 4, miniSize * 4);
+  nextCtx.fillStyle = 'rgba(0,0,0,0.28)';
+  nextCtx.fillRect(0, 0, miniSize * 4, miniSize * 4);
+  nextCtx.save();
+  nextCtx.scale(miniSize / BLOCK, miniSize / BLOCK);
+  drawMatrix(nextCtx, next.m, 0, 0, 1);
+  nextCtx.restore();
 
   // Hold
-  holdMini.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  holdMini.g.clearRect(0, 0, miniSize * 4, miniSize * 4);
-  holdMini.g.fillStyle = 'rgba(0,0,0,0.28)';
-  holdMini.g.fillRect(0, 0, miniSize * 4, miniSize * 4);
+  holdCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  holdCtx.clearRect(0, 0, miniSize * 4, miniSize * 4);
+  holdCtx.fillStyle = 'rgba(0,0,0,0.28)';
+  holdCtx.fillRect(0, 0, miniSize * 4, miniSize * 4);
   if (hold) {
     const hp = spawn(hold);
-    holdMini.g.save();
-    holdMini.g.scale(miniSize / BLOCK, miniSize / BLOCK);
-    drawMatrix(holdMini.g, hp.m, 0, 0, canHold ? 1 : 0.6);
-    holdMini.g.restore();
+    holdCtx.save();
+    holdCtx.scale(miniSize / BLOCK, miniSize / BLOCK);
+    drawMatrix(holdCtx, hp.m, 0, 0, canHold ? 1 : 0.6);
+    holdCtx.restore();
   }
-
-  updateStats();
-  updateOverlay();
 }
 
-// --- Loop ---
+// --- Game loop ---
 
 function step(time: number): void {
   const dt = time - lastTime;
@@ -637,15 +504,6 @@ function step(time: number): void {
 }
 
 // --- Input ---
-
-function togglePause(): void {
-  if (gameOver) return;
-  paused = !paused;
-  updateOverlay();
-}
-
-btnRestart.onclick = () => reset();
-btnPause.onclick = () => togglePause();
 
 window.addEventListener('keydown', (e) => {
   const key = e.key;
@@ -681,9 +539,60 @@ window.addEventListener('resize', () => {
   fit();
 });
 
+// --- Mount reactive UI ---
+
+mount(html`
+  <div id="app">
+    <div style="position:relative">
+      <canvas ref=${(el: HTMLCanvasElement) => { canvas = el; ctx = el.getContext('2d')!; }} />
+      ${show(
+        () => gameOverS() || pausedS(),
+        () => html`
+          <div class="overlay">
+            <div class="overlayBox">
+              ${() => gameOverS()
+                ? html`<h2>Game Over</h2><p>Press R to restart.</p>`
+                : html`<h2>Paused</h2><p>Press P to resume.</p>`
+              }
+            </div>
+          </div>
+        `
+      )}
+    </div>
+    <div class="panel">
+      <div class="title y-text-sm y-font-mono">Falling Blocks</div>
+      <div class="card">
+        <div class="stat y-text-sm y-font-mono"><span>Score</span><b>${() => scoreS()}</b></div>
+        <div class="stat y-text-sm y-font-mono"><span>High</span><b>${() => hiS()}</b></div>
+        <div class="stat y-text-sm y-font-mono"><span>Lines</span><b>${() => linesS()}</b></div>
+        <div class="stat y-text-sm y-font-mono"><span>Level</span><b>${() => levelS()}</b></div>
+      </div>
+      <div class="card">
+        <div class="miniWrap">
+          <div class="miniCol">
+            <div class="miniLabel">Next</div>
+            <canvas ref=${(el: HTMLCanvasElement) => { nextCanvas = el; nextCtx = el.getContext('2d')!; }} />
+          </div>
+          <div class="miniCol">
+            <div class="miniLabel">Hold</div>
+            <canvas ref=${(el: HTMLCanvasElement) => { holdCanvas = el; holdCtx = el.getContext('2d')!; }} />
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="btnRow">
+          <button class="y-btn y-btn-sm" onClick=${() => reset()}>Restart (R)</button>
+          <button class="y-btn y-btn-sm" onClick=${() => togglePause()}>Pause (P)</button>
+        </div>
+      </div>
+      <div class="help y-text-xs y-text-muted">←/→ move • ↑ rotate • ↓ soft drop • Space hard drop • C hold • P pause • R restart</div>
+    </div>
+  </div>
+`);
+
+// refs are ready synchronously after mount
+void loadHi();
 fit();
 updateStats();
 updateOverlay();
 requestAnimationFrame(step);
-
-export {};

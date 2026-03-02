@@ -1,6 +1,10 @@
-export {};
+import { signal, html, mount, onMount } from '@bundled/yaar';
+import './styles.css';
+import './protocol.js';
 
-type ListedApp = {
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export type ListedApp = {
   id: string;
   name: string;
   description?: string;
@@ -9,7 +13,7 @@ type ListedApp = {
   installed?: boolean;
 };
 
-type InstalledApp = {
+export type InstalledApp = {
   id: string;
   name: string;
   hasSkill?: boolean;
@@ -22,8 +26,22 @@ type ApiPayload = {
   installedApps?: InstalledApp[];
 };
 
-const STORAGE_DOMAIN_KEY = 'market_apps.domain';
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const STORAGE_DOMAIN_KEY = 'market_apps/domain.txt';
 const DEFAULT_MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
+
+// ── Signals (reactive state) ─────────────────────────────────────────────────
+
+export const activeTab = signal<'market' | 'installed'>('market');
+export const marketApps = signal<ListedApp[]>([]);
+export const installedApps = signal<InstalledApp[]>([]);
+export const statusText = signal('Waiting for data…');
+export const lastUpdated = signal('');
+export const loading = signal(false);
+export const apiBase = signal('');
+
+// ── Pure helper functions ────────────────────────────────────────────────────
 
 function normalizeDomain(input?: string | null) {
   const value = (input || '').trim();
@@ -31,127 +49,20 @@ function normalizeDomain(input?: string | null) {
   return value.replace(/\/+$/, '');
 }
 
-function getInitialDomain() {
-  const fromQuery = new URLSearchParams(window.location.search).get('domain');
-  const fromGlobal = (window as any).__MARKET_APPS_DOMAIN__ as string | undefined;
-  const fromStorage = localStorage.getItem(STORAGE_DOMAIN_KEY);
-  return normalizeDomain(fromQuery || fromGlobal || fromStorage || DEFAULT_MARKET_DOMAIN);
-}
-
-const root = document.createElement('div');
-root.className = 'y-app';
-document.body.style.margin = '0';
-document.body.appendChild(root);
-
-let activeTab: 'market' | 'installed' = 'market';
-let marketApps: ListedApp[] = [];
-let installedApps: InstalledApp[] = [];
-let statusText = 'Waiting for data…';
-let lastUpdated = '';
-let loading = false;
-let apiBase = getInitialDomain();
-
-function timeNow() {
-  return new Date().toLocaleString();
-}
-
-function touch() {
-  lastUpdated = timeNow();
-}
-
-function setStatus(next: string, stamp = true) {
-  statusText = next;
-  if (stamp) touch();
-}
-
-function setDomain(nextDomain: string) {
-  apiBase = normalizeDomain(nextDomain);
-  if (apiBase) localStorage.setItem(STORAGE_DOMAIN_KEY, apiBase);
-  else localStorage.removeItem(STORAGE_DOMAIN_KEY);
-  setStatus(apiBase ? `Domain set: ${apiBase}` : 'Domain cleared');
-  render();
-}
-
-async function apiGet<T>(path: string): Promise<T> {
-  if (!apiBase) throw new Error('No domain configured. Set a domain first.');
-  const res = await fetch(`${apiBase}${path}`, { method: 'GET' });
-  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
-  return res.json();
-}
-
-async function apiPost<T>(path: string, body: object): Promise<T> {
-  if (!apiBase) throw new Error('No domain configured. Set a domain first.');
-  const res = await fetch(`${apiBase}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`POST ${path} failed (${res.status})`);
-  return res.json();
-}
-
-async function apiPostAny<T>(paths: string[], body: object): Promise<T> {
-  let lastErr: any;
-  for (const path of paths) {
-    try {
-      return await apiPost<T>(path, body);
-    } catch (err: any) {
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('All POST endpoints failed');
-}
-
 function normalizeId(value: string) {
   return (value || '').trim().toLowerCase();
-}
-
-function hasInstalled(appId: string) {
-  const target = normalizeId(appId);
-  return installedApps.some((a) => normalizeId(a.id) === target);
 }
 
 function sameAppId(a: string, b: string) {
   return normalizeId(a) === normalizeId(b);
 }
 
-function markInstalled(app: { id: string; name: string }, installed: boolean) {
-  if (installed) {
-    if (!installedApps.some((a) => sameAppId(a.id, app.id))) {
-      installedApps = [...installedApps, { id: app.id, name: app.name }];
-    }
-  } else {
-    installedApps = installedApps.filter((a) => !sameAppId(a.id, app.id));
-  }
-
-  marketApps = marketApps.map((m) => (sameAppId(m.id, app.id) ? { ...m, installed } : m));
-}
-
-async function hostAction(action: 'install' | 'uninstall', app: { id: string; name: string }) {
-  const yaarAny = (window as any).yaar;
-
-  if (typeof yaarAny?.os?.action === 'function') {
-    const toolName = action === 'install' ? 'apps:market_get' : 'apps:market_delete';
-    await yaarAny.os.action(toolName, { appId: app.id });
-    return 'os-action' as const;
-  }
-
-  if (typeof yaarAny?.app?.sendInteraction === 'function') {
-    yaarAny.app.sendInteraction({
-      event: 'market-apps:request',
-      action,
-      appId: app.id,
-      appName: app.name,
-      requestedAt: new Date().toISOString(),
-    });
-    return 'interaction' as const;
-  }
-
-  throw new Error('Host install/uninstall API is unavailable.');
-}
-
 function parseMarket(payload: ApiPayload): ListedApp[] {
-  return Array.isArray(payload.marketApps) ? payload.marketApps : Array.isArray(payload.apps) ? payload.apps : [];
+  return Array.isArray(payload.marketApps)
+    ? payload.marketApps
+    : Array.isArray(payload.apps)
+    ? payload.apps
+    : [];
 }
 
 function parseInstalled(payload: ApiPayload): InstalledApp[] {
@@ -233,6 +144,81 @@ function parseInstalledAny(input: any): InstalledApp[] {
   return [];
 }
 
+// ── Signal-aware helpers ─────────────────────────────────────────────────────
+
+function timeNow() {
+  return new Date().toLocaleString();
+}
+
+export function touch() {
+  lastUpdated(timeNow());
+}
+
+export function setStatus(next: string, stamp = true) {
+  statusText(next);
+  if (stamp) touch();
+}
+
+function hasInstalled(appId: string) {
+  const target = normalizeId(appId);
+  return installedApps().some((a) => normalizeId(a.id) === target);
+}
+
+function markInstalledSignal(app: { id: string; name: string }, installed: boolean) {
+  if (installed) {
+    if (!installedApps().some((a) => sameAppId(a.id, app.id))) {
+      installedApps([...installedApps(), { id: app.id, name: app.name }]);
+    }
+  } else {
+    installedApps(installedApps().filter((a) => !sameAppId(a.id, app.id)));
+  }
+  marketApps(marketApps().map((m) => (sameAppId(m.id, app.id) ? { ...m, installed } : m)));
+}
+
+export function setDomain(nextDomain: string) {
+  const d = normalizeDomain(nextDomain);
+  apiBase(d);
+  const storage = (window as any).yaar?.storage;
+  if (storage) {
+    if (d) void storage.save(STORAGE_DOMAIN_KEY, d);
+  }
+  setStatus(d ? `Domain set: ${d}` : 'Domain cleared');
+}
+
+// ── Network helpers ──────────────────────────────────────────────────────────
+
+async function apiGet<T>(path: string): Promise<T> {
+  const base = apiBase();
+  if (!base) throw new Error('No domain configured. Set a domain first.');
+  const res = await fetch(`${base}${path}`, { method: 'GET' });
+  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
+  return res.json();
+}
+
+async function apiPost<T>(path: string, body: object): Promise<T> {
+  const base = apiBase();
+  if (!base) throw new Error('No domain configured. Set a domain first.');
+  const res = await fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`POST ${path} failed (${res.status})`);
+  return res.json();
+}
+
+async function apiPostAny<T>(paths: string[], body: object): Promise<T> {
+  let lastErr: any;
+  for (const path of paths) {
+    try {
+      return await apiPost<T>(path, body);
+    } catch (err: any) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('All POST endpoints failed');
+}
+
 async function getInstalledFromLocalApi(): Promise<InstalledApp[]> {
   const candidates = ['/api/apps', '/api/apps/list', '/api/apps/installed', '/api/installed'];
   for (const path of candidates) {
@@ -257,331 +243,218 @@ async function getInstalledFromLocalApi(): Promise<InstalledApp[]> {
   return [];
 }
 
-async function refreshData() {
-  if (!apiBase) {
+async function hostAction(action: 'install' | 'uninstall', app: { id: string; name: string }) {
+  const yaarAny = (window as any).yaar;
+
+  if (typeof yaarAny?.os?.action === 'function') {
+    const toolName = action === 'install' ? 'apps:market_get' : 'apps:market_delete';
+    await yaarAny.os.action(toolName, { appId: app.id });
+    return 'os-action' as const;
+  }
+
+  if (typeof yaarAny?.app?.sendInteraction === 'function') {
+    yaarAny.app.sendInteraction({
+      event: 'market-apps:request',
+      action,
+      appId: app.id,
+      appName: app.name,
+      requestedAt: new Date().toISOString(),
+    });
+    return 'interaction' as const;
+  }
+
+  throw new Error('Host install/uninstall API is unavailable.');
+}
+
+// ── Business logic ───────────────────────────────────────────────────────────
+
+export async function refreshData() {
+  if (!apiBase()) {
     setStatus('No domain configured. Use App Protocol command setDomain.', true);
-    render();
     return;
   }
 
-  loading = true;
+  loading(true);
   setStatus('Refreshing…', false);
-  render();
 
   try {
     const marketPayload = await apiGet<ApiPayload>('/api/apps/');
-    marketApps = parseMarket(marketPayload);
+    const apps = parseMarket(marketPayload);
 
     const yaarAny = (window as any).yaar;
     if (typeof yaarAny?.os?.action === 'function') {
       try {
         const localInstalled = await yaarAny.os.action('apps:list', {});
-        installedApps = parseInstalledAny(localInstalled);
-        setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps (apps:list)`);
+        installedApps(parseInstalledAny(localInstalled));
+        setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps (apps:list)`);
       } catch {
-        installedApps = [];
-        setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
+        installedApps([]);
+        setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
       }
     } else {
       const localApiInstalled = await getInstalledFromLocalApi();
-      installedApps = localApiInstalled;
-      setStatus(`Loaded ${marketApps.length} market / ${installedApps.length} installed apps`);
+      installedApps(localApiInstalled);
+      setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
     }
 
-    marketApps = marketApps.map((m) => ({ ...m, installed: hasInstalled(m.id) }));
+    marketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
   } catch (err: any) {
     setStatus(`Refresh failed: ${err?.message || String(err)}`);
   } finally {
-    loading = false;
-    render();
+    loading(false);
   }
 }
 
 async function installApp(app: ListedApp) {
   try {
-    loading = true;
+    loading(true);
     setStatus(`Installing ${app.name}…`, false);
-    render();
 
     const hostMode = await hostAction('install', app);
     if (hostMode === 'os-action') {
-      markInstalled(app, true);
+      markInstalledSignal(app, true);
       setStatus(`Installed ${app.name} via apps:market_get`);
-      loading = false;
-      render();
+      loading(false);
       return;
     }
 
     setStatus(`Install request sent for ${app.name} (waiting for agent)`);
-    loading = false;
-    render();
+    loading(false);
   } catch (err: any) {
-    loading = false;
+    loading(false);
     setStatus(`Install failed: ${err?.message || String(err)}`);
-    render();
   }
 }
 
 async function uninstallApp(app: InstalledApp) {
   try {
-    loading = true;
+    loading(true);
     setStatus(`Uninstalling ${app.name}…`, false);
-    render();
 
     const hostMode = await hostAction('uninstall', app);
     if (hostMode === 'os-action') {
-      markInstalled(app, false);
+      markInstalledSignal(app, false);
       setStatus(`Uninstalled ${app.name} via apps:market_delete`);
-      loading = false;
-      render();
+      loading(false);
       return;
     }
 
     setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
-    loading = false;
-    render();
+    loading(false);
   } catch (err: any) {
-    loading = false;
+    loading(false);
     setStatus(`Uninstall failed: ${err?.message || String(err)}`);
-    render();
   }
 }
+
+// ── Card component ───────────────────────────────────────────────────────────
 
 function card(title: string, subtitle: string, buttonLabel: string, onClick: () => void, disabled = false) {
-  const item = document.createElement('div');
-  item.className = 'y-card y-flex-between y-gap-2';
-  item.style.minHeight = '88px';
-
-  const left = document.createElement('div');
-  left.style.cssText = 'min-width: 0; flex: 1;';
-  const t = document.createElement('div');
-  t.textContent = title;
-  t.style.fontWeight = '600';
-  const s = document.createElement('div');
-  s.textContent = subtitle;
-  s.className = 'y-text-xs y-text-muted';
-  s.style.marginTop = '2px';
-  left.append(t, s);
-
-  const btn = document.createElement('button');
-  btn.textContent = buttonLabel;
-  btn.disabled = disabled;
-  btn.className = disabled ? 'y-btn y-btn-sm' : 'y-btn y-btn-sm y-btn-primary';
-  btn.onclick = onClick;
-
-  item.append(left, btn);
-  return item;
+  return html`
+    <div class="y-card y-flex-between y-gap-2" style="min-height:88px">
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:600">${title}</div>
+        <div class="y-text-xs y-text-muted" style="margin-top:2px">${subtitle}</div>
+      </div>
+      <button
+        class=${disabled ? 'y-btn y-btn-sm' : 'y-btn y-btn-sm y-btn-primary'}
+        disabled=${disabled}
+        onClick=${onClick}
+      >${buttonLabel}</button>
+    </div>
+  `;
 }
 
-function render() {
-  root.innerHTML = '';
+// ── Mount reactive UI ────────────────────────────────────────────────────────
 
-  const header = document.createElement('div');
-  header.className = 'y-flex-between y-gap-2 y-px-2 y-py-2 y-border-b y-surface';
-  header.style.padding = '14px 16px';
+mount(html`
+  <div class="y-app">
+    <!-- Header -->
+    <div class="y-flex-between y-gap-2 y-border-b y-surface" style="padding:14px 16px">
+      <div>
+        <div style="font-size:18px;font-weight:700">Market Apps</div>
+        <div class="y-text-xs y-text-muted" style="margin-top:2px">
+          ${() => statusText()}${() => lastUpdated() ? ` • ${lastUpdated()}` : ''}
+        </div>
+        <div class="y-text-xs y-text-dim" style="margin-top:4px">
+          ${() => apiBase() ? `Domain: ${apiBase()}` : 'Domain: (not set)'}
+        </div>
+      </div>
+      <button
+        class="y-btn y-btn-sm y-btn-primary"
+        disabled=${() => loading()}
+        onClick=${() => void refreshData()}
+      >${() => loading() ? 'Refreshing…' : 'Refresh'}</button>
+    </div>
 
-  const titleWrap = document.createElement('div');
-  const title = document.createElement('div');
-  title.textContent = 'Market Apps';
-  title.style.cssText = 'font-size: 18px; font-weight: 700;';
-  const meta = document.createElement('div');
-  meta.textContent = `${statusText}${lastUpdated ? ` • ${lastUpdated}` : ''}`;
-  meta.className = 'y-text-xs y-text-muted';
-  meta.style.marginTop = '2px';
-  const domain = document.createElement('div');
-  domain.textContent = apiBase ? `Domain: ${apiBase}` : 'Domain: (not set)';
-  domain.className = 'y-text-xs y-text-dim';
-  domain.style.marginTop = '4px';
-  titleWrap.append(title, meta, domain);
+    <!-- Tabs -->
+    <div class="y-flex y-gap-2 y-border-b y-surface" style="padding:10px 16px">
+      <button
+        class=${() => activeTab() === 'market' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm'}
+        onClick=${() => activeTab('market')}
+      >${() => `Marketplace (${marketApps().length})`}</button>
+      <button
+        class=${() => activeTab() === 'installed' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm'}
+        onClick=${() => activeTab('installed')}
+      >${() => `Installed (${installedApps().length})`}</button>
+    </div>
 
-  const refresh = document.createElement('button');
-  refresh.textContent = loading ? 'Refreshing…' : 'Refresh';
-  refresh.disabled = loading;
-  refresh.className = 'y-btn y-btn-sm y-btn-primary';
-  refresh.onclick = () => {
-    void refreshData();
-  };
+    <!-- List -->
+    <div class="y-scroll list-grid">
+      ${() => {
+        if (activeTab() === 'market') {
+          const apps = marketApps();
+          if (!apps.length) return html`<div class="y-text-muted">No marketplace apps loaded.</div>`;
+          return apps.map((app) => {
+            const subtitle = [app.description, app.version ? `v${app.version}` : '', app.author || '']
+              .filter(Boolean)
+              .join(' • ');
+            const installed = app.installed || hasInstalled(app.id);
+            return card(
+              app.name,
+              subtitle,
+              installed ? 'Installed' : 'Install',
+              () => void installApp(app),
+              loading() || installed,
+            );
+          });
+        } else {
+          const apps = installedApps();
+          if (!apps.length) return html`<div class="y-text-muted">No installed apps loaded.</div>`;
+          return apps.map((app) =>
+            card(app.name, app.id, 'Uninstall', () => void uninstallApp(app), loading()),
+          );
+        }
+      }}
+    </div>
+  </div>
+`);
 
-  header.append(titleWrap, refresh);
+// ── Async initialization ─────────────────────────────────────────────────────
 
-  const tabs = document.createElement('div');
-  tabs.className = 'y-flex y-gap-2 y-border-b y-surface';
-  tabs.style.padding = '10px 16px';
+onMount(async () => {
+  const storage = (window as any).yaar?.storage;
+  let domain = '';
 
-  const mk = document.createElement('button');
-  mk.textContent = `Marketplace (${marketApps.length})`;
-  const ins = document.createElement('button');
-  ins.textContent = `Installed (${installedApps.length})`;
+  const fromQuery = new URLSearchParams(window.location.search).get('domain');
+  const fromGlobal = (window as any).__MARKET_APPS_DOMAIN__ as string | undefined;
+  domain = normalizeDomain(fromQuery || fromGlobal || '');
 
-  mk.className = activeTab === 'market' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm';
-  ins.className = activeTab === 'installed' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm';
-
-  mk.onclick = () => {
-    activeTab = 'market';
-    render();
-  };
-  ins.onclick = () => {
-    activeTab = 'installed';
-    render();
-  };
-  tabs.append(mk, ins);
-
-  const list = document.createElement('div');
-  list.className = 'y-scroll';
-  list.style.cssText = `
-    padding: 14px 16px;
-    flex: 1;
-    display: grid;
-    gap: 10px;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    align-content: start;
-  `;
-
-  if (activeTab === 'market') {
-    if (!marketApps.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No marketplace apps loaded.';
-      empty.className = 'y-text-muted';
-      list.appendChild(empty);
-    } else {
-      for (const app of marketApps) {
-        const subtitle = [app.description, app.version ? `v${app.version}` : '', app.author || ''].filter(Boolean).join(' • ');
-        const installed = app.installed || hasInstalled(app.id);
-        list.appendChild(
-          card(
-            app.name,
-            subtitle,
-            installed ? 'Installed' : 'Install',
-            () => void installApp(app),
-            loading || installed,
-          ),
-        );
-      }
-    }
-  } else {
-    if (!installedApps.length) {
-      const empty = document.createElement('div');
-      empty.textContent = 'No installed apps loaded.';
-      empty.className = 'y-text-muted';
-      list.appendChild(empty);
-    } else {
-      for (const app of installedApps) {
-        list.appendChild(card(app.name, app.id, 'Uninstall', () => void uninstallApp(app), loading));
-      }
+  if (!domain && storage) {
+    try {
+      const saved = await storage.read(STORAGE_DOMAIN_KEY, { as: 'text' });
+      if (typeof saved === 'string' && saved.trim()) domain = normalizeDomain(saved.trim());
+    } catch {
+      // no saved domain
     }
   }
 
-  root.append(header, tabs, list);
-}
+  if (!domain) domain = DEFAULT_MARKET_DOMAIN;
+  apiBase(domain);
 
-render();
-
-const appApi = (window as any).yaar?.app;
-if (appApi) {
-  appApi.register({
-    appId: 'market-apps',
-    name: 'Market Apps',
-    state: {
-      marketApps: {
-        description: 'Current marketplace app list',
-        handler: () => [...marketApps],
-      },
-      installedApps: {
-        description: 'Current installed app list',
-        handler: () => [...installedApps],
-      },
-      status: {
-        description: 'Status line text',
-        handler: () => statusText,
-      },
-      lastUpdated: {
-        description: 'Last updated local timestamp',
-        handler: () => lastUpdated,
-      },
-      domain: {
-        description: 'Configured marketplace domain',
-        handler: () => apiBase,
-      },
-      loading: {
-        description: 'Whether network request is in progress',
-        handler: () => loading,
-      },
-    },
-    commands: {
-      setDomain: {
-        description: 'Set marketplace API domain (e.g. https://example.com)',
-        params: {
-          type: 'object',
-          properties: {
-            domain: { type: 'string' },
-            autoRefresh: { type: 'boolean' },
-          },
-          required: ['domain'],
-        },
-        handler: async (p: { domain: string; autoRefresh?: boolean }) => {
-          setDomain(p.domain);
-          if (p.autoRefresh !== false) await refreshData();
-          return { ok: true, domain: apiBase };
-        },
-      },
-      refresh: {
-        description: 'Fetch data from configured domain',
-        params: { type: 'object', properties: {} },
-        handler: async () => {
-          await refreshData();
-          return { ok: true, marketCount: marketApps.length, installedCount: installedApps.length };
-        },
-      },
-      setData: {
-        description: 'Set marketplace and installed data manually',
-        params: {
-          type: 'object',
-          properties: {
-            marketApps: { type: 'array', items: { type: 'object' } },
-            installedApps: { type: 'array', items: { type: 'object' } },
-            status: { type: 'string' },
-          },
-        },
-        handler: (p: { marketApps?: ListedApp[]; installedApps?: InstalledApp[]; status?: string }) => {
-          if (p.marketApps) marketApps = p.marketApps;
-          if (p.installedApps) installedApps = p.installedApps;
-          if (p.status) statusText = p.status;
-          touch();
-          render();
-          return { ok: true, marketCount: marketApps.length, installedCount: installedApps.length };
-        },
-      },
-      setStatus: {
-        description: 'Update status line',
-        params: {
-          type: 'object',
-          properties: { status: { type: 'string' } },
-          required: ['status'],
-        },
-        handler: (p: { status: string }) => {
-          setStatus(p.status);
-          render();
-          return { ok: true };
-        },
-      },
-      clearData: {
-        description: 'Clear all app data',
-        params: { type: 'object', properties: {} },
-        handler: () => {
-          marketApps = [];
-          installedApps = [];
-          setStatus('Cleared');
-          render();
-          return { ok: true };
-        },
-      },
-    },
-  });
-}
-
-if (apiBase) {
-  void refreshData();
-} else {
-  setStatus('No domain configured. Set domain via App Protocol setDomain command.', true);
-  render();
-}
+  if (domain) {
+    void refreshData();
+  } else {
+    setStatus('No domain configured. Set domain via App Protocol setDomain command.', true);
+  }
+});

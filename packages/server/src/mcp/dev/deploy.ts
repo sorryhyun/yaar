@@ -61,6 +61,12 @@ export function registerDeployTools(server: McpServer): void {
           .record(z.string(), z.union([z.string(), z.number()]))
           .optional()
           .describe('Custom CSS properties for the window'),
+        capture: z
+          .enum(['auto', 'canvas', 'dom', 'svg', 'protocol'])
+          .optional()
+          .describe(
+            'Screenshot capture strategy: canvas (toDataURL on largest canvas), dom (html2canvas), svg (serialize largest SVG), protocol (app provides its own screenshot), auto (default fallback chain)',
+          ),
       },
     },
     async (args) => {
@@ -81,6 +87,7 @@ export function registerDeployTools(server: McpServer): void {
         dockEdge,
         frameless,
         windowStyle,
+        capture,
       } = args;
 
       // Validate sandbox ID
@@ -259,6 +266,10 @@ export function registerDeployTools(server: McpServer): void {
           else delete metadata.frameless;
         }
         if (windowStyle !== undefined) metadata.windowStyle = windowStyle;
+        if (capture !== undefined) {
+          if (capture !== 'auto') metadata.capture = capture;
+          else delete metadata.capture;
+        }
         // Write extracted protocol manifest (or clear it if app no longer has protocol)
         if (extractedProtocol) {
           metadata.protocol = extractedProtocol;

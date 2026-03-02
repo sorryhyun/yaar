@@ -1,7 +1,7 @@
 {
-  "icon": "🎮",
+  "icon": "🌐",
   "name": "Browser",
-  "description": "Visible browser automation tool showing live screenshots from Playwright sessions.",
+  "description": "Live browser with SSE screenshot streaming and navigation controls",
   "run": "static/index.html",
   "createShortcut": false,
   "appProtocol": true,
@@ -13,7 +13,7 @@
     },
     "commands": {
       "refresh": {
-        "description": "Refresh screenshot and optionally update URL bar",
+        "description": "Refresh screenshot and optionally update URL bar. Params: { url?, title? }",
         "params": {
           "type": "object",
           "properties": {
@@ -27,14 +27,14 @@
         }
       },
       "clear": {
-        "description": "Clear the browser display",
+        "description": "Clear the browser display. Params: {}",
         "params": {
           "type": "object",
           "properties": {}
         }
       },
       "navigate": {
-        "description": "Navigate the browser to a URL",
+        "description": "Navigate the browser to a URL. Params: { url }",
         "params": {
           "type": "object",
           "properties": {
@@ -46,5 +46,6 @@
         }
       }
     }
-  }
+  },
+  "capture": "dom"
 }

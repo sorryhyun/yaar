@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dock</title>
 <style>
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Bd.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Eb.otf') format('opentype');font-weight:800;font-style:normal;font-display:swap}
 :root {
   --yaar-bg: #0f1117;
   --yaar-bg-surface: #161b22;
@@ -28,7 +32,7 @@
   --yaar-radius-sm: 4px;
   --yaar-radius: 6px;
   --yaar-radius-lg: 10px;
-  --yaar-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --yaar-font: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --yaar-font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
   --yaar-text-xs: 11px;
   --yaar-text-sm: 12px;
@@ -77,102 +81,133 @@
 .y-toast-info{border-color:var(--yaar-accent)}.y-toast-success{border-color:var(--yaar-success)}.y-toast-error{border-color:var(--yaar-error)}
 .y-transition{transition:all var(--yaar-ease)}
 .y-overflow-hidden{overflow:hidden}
-*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
-<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
+*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
-var G=document.createElement("div");G.id="dock-root";document.body.appendChild(G);var A=document.createElement("style");A.textContent=`
-  html, body {
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    margin: 0;
-    color: var(--yaar-text);
-  }
-  #dock-root {
-    height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
-    user-select: none;
-    padding: 0 8px;
-    box-sizing: border-box;
-  }
-  .panel {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-    padding: 2px 12px;
-    border-radius: 10px;
-    background: rgba(10, 12, 16, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    gap: 0;
-  }
-  /* sections */
-  .weather-section,
-  .notif-section,
-  .clock-section {
-    display: flex;
-    align-items: center;
-  }
-  .weather-section { gap: 4px; }
-  .notif-section   { gap: 4px; }
-  .clock-section   { align-items: baseline; gap: 8px; }
+var K=null,S=null,e=new Set,x0=0;class o{_value;_subscribers=new Set;constructor(x){this._value=x}get value(){if(K)this._subscribers.add(K),K.dependencies.add(this);return this._value}set value(x){if(Object.is(this._value,x))return;this._value=x;for(let z of[...this._subscribers])if(x0>0)e.add(z);else z.execute()}peek(){return this._value}}function X(x){let z=new o(x),b=(...J)=>{if(J.length===0)return z.value;z.value=J[0]};return Object.defineProperty(b,"value",{get:()=>z.value,set:(J)=>{z.value=J}}),b.peek=()=>z.peek(),b}function r(x){for(let z of x.dependencies)z._subscribers.delete(x);x.dependencies.clear();for(let z of x.cleanups)z();x.cleanups=[]}function U(x){let z,b={dependencies:new Set,cleanups:[],execute(){if(r(b),z)z();let J=K,Y=S;K=b,S=b.cleanups;try{z=x()}finally{K=J,S=Y}}};return b.execute(),()=>{if(r(b),z)z()}}function R(x){if(S)S.push(x)}function k(x){queueMicrotask(x)}function D(x,z,...b){let J=x,Y=[],B,H=x.indexOf("#"),Z=x.indexOf("."),W=Math.min(H>=0?H:1/0,Z>=0?Z:1/0);if(W<1/0){J=x.slice(0,W)||"div";let F=x.slice(W).split(/(?=[.#])/);for(let G of F)if(G[0]===".")Y.push(G.slice(1));else if(G[0]==="#")B=G.slice(1)}let P=document.createElement(J);if(B)P.id=B;if(Y.length)P.classList.add(...Y);if(z)for(let[Q,F]of Object.entries(z))if(Q==="className")if(typeof F==="function")U(()=>{P.className=[Y.join(" "),F()].filter(Boolean).join(" ")});else if(Y.length)P.className=Y.join(" ")+" "+F;else P.className=F;else if(Q==="style"){if(typeof F==="string")P.style.cssText=F;else if(typeof F==="object")for(let[G,$]of Object.entries(F))if(typeof $==="function")U(()=>{P.style[G]=$()});else P.style[G]=$}else if(Q==="ref"){if(typeof F==="function")F(P)}else if(Q.startsWith("on")){let G=Q.slice(2).toLowerCase();P.addEventListener(G,F)}else if(typeof F==="function"&&!Q.startsWith("on"))U(()=>{let G=F();if(G==null||G===!1)P.removeAttribute(Q);else P.setAttribute(Q,String(G))});else if(F==null||F===!1);else if(F===!0)P.setAttribute(Q,"");else P.setAttribute(Q,String(F));return w(P,b),P}function w(x,z){for(let b of z){if(b==null||b===!1||b===!0)continue;if(Array.isArray(b))w(x,b);else if(typeof b==="function"){let J=document.createComment(""),Y=document.createComment("");x.appendChild(J),x.appendChild(Y),U(()=>{let B=b();while(J.nextSibling&&J.nextSibling!==Y)J.nextSibling.remove();let H=b0(B);Y.parentNode.insertBefore(H,Y)})}else if(b instanceof Node)x.appendChild(b);else x.appendChild(document.createTextNode(String(b)))}}function b0(x){if(x==null||x===!1||x===!0)return document.createTextNode("");if(x instanceof Node)return x;if(Array.isArray(x)){let z=document.createDocumentFragment();return w(z,x),z}return document.createTextNode(String(x))}function _(x,z){let b=z||document.getElementById("app");if(!b)throw Error("Mount target not found");b.appendChild(x)}var z0=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,L=null;function J0(x){if(!z0.test(x))return x;if(!L)L=document.createElement("textarea");return L.innerHTML=x,L.value}var n=new WeakMap;function I(x,...z){let b=n.get(x);if(!b)b=Y0(x),n.set(x,b);return b(z)}var V=0,p=1,y=2,f=3;function Y0(x){let z=[],b=V,J="",Y="",B="",H="",Z=!1;function W(Q){if(J)z.push(Q?{t:"open_close",tag:J}:{t:"open",tag:J});J="",Z=!1}function P(){if(Y)z.push({t:"attr_static",name:Y,value:B||Y}),Y="",B=""}for(let Q=0;Q<x.length;Q++){let F=x[Q];for(let G=0;G<F.length;G++){let $=F[G];if(b===V)if($==="<")if(F[G+1]==="/"){let j=F.indexOf(">",G);if(j!==-1)G=j,z.push({t:"close"})}else b=p,J="",Z=!1;else{let j=$;while(G+1<F.length&&F[G+1]!=="<")j+=F[++G];if(j=j.replace(/^\s+|\s+$/g," "),j&&j!==" ")z.push({t:"text",value:J0(j)})}else if(b===p)if($==="/"&&J==="");else if(/\s/.test($)){if(J)z.push({t:"open",tag:J}),J="",b=y}else if($===">")W(Z),b=V;else if($==="/")Z=!0;else J+=$;else if(b===y)if($==="=")b=f,B="",H="";else if($==="/"||$===">")if(P(),$===">"){if(Z)z.push({t:"close"}),Z=!1;b=V}else Z=!0;else if(/\s/.test($)){if(Y)P()}else Y+=$;else if(b===f)if(!H&&($==='"'||$==="'"))H=$;else if(!H&&/\s/.test($))P(),b=y;else if($===H)P(),b=y,H="";else if(!H&&($===">"||$==="/"))if(P(),$===">"){if(Z)z.push({t:"close"}),Z=!1;b=V}else Z=!0;else B+=$}if(Q<x.length-1){if(b===V)z.push({t:"field",idx:Q});else if(b===f){let G=Y;Y="",B="",H="",z.push({t:"attr_field",name:G,idx:Q}),b=y}else if(b===y)if(Y)z.push({t:"attr_static",name:Y,value:Y}),Y="",z.push({t:"attr_spread",idx:Q});else z.push({t:"attr_spread",idx:Q})}}return(Q)=>H0(z,Q)}var Z0={class:"className",for:"htmlFor"};function l(x){return Z0[x]||x}function H0(x,z){let b=[],J=[];function Y(H){if(b.length)b[b.length-1].children.push(H);else J.push(H)}for(let H of x)switch(H.t){case"open":b.push({tag:H.tag,children:[],props:{}});break;case"open_close":Y(D(H.tag,null));break;case"close":{let Z=b.pop();if(Z){let W=Object.keys(Z.props).length?Z.props:void 0;Y(D(Z.tag,W,...Z.children))}break}case"attr_static":{let Z=b[b.length-1];if(Z)Z.props[l(H.name)]=H.value;break}case"attr_field":{let Z=b[b.length-1];if(Z)Z.props[l(H.name)]=z[H.idx];break}case"attr_spread":{let Z=b[b.length-1],W=z[H.idx];if(Z&&W&&typeof W==="object")Object.assign(Z.props,W);break}case"text":Y(H.value);break;case"field":{let Z=z[H.idx];if(Array.isArray(Z))for(let W of Z)Y(W);else Y(Z);break}}if(J.length===1&&J[0]instanceof Node)return J[0];let B=document.createDocumentFragment();return w(B,J),B}function O(x,z,b){return()=>x()?z():b?b():null}function c(x){let z=window.yaar?.app;if(!z)return;z.register({appId:"dock",name:"Dock",state:{nowIso:{description:"Current time in ISO format",handler:()=>x.getNowIso()},display:{description:"Current displayed date/time text: { time, date }",handler:()=>({time:x.getTimeStr(),date:x.getDateStr()})},appearance:{description:"Current dock appearance settings: { showPanel, panelOpacity, panelBlurPx }",handler:()=>({showPanel:x.getShowPanel(),panelOpacity:x.getPanelOpacity(),panelBlurPx:x.getPanelBlurPx()})},weather:{description:"Current weather data: { icon, temp, city }",handler:()=>({icon:x.getWeatherIcon(),temp:x.getWeatherTemp(),city:x.getWeatherCity()})}},commands:{refreshNow:{description:"Force immediate clock refresh. Params: {}",params:{type:"object",properties:{}},handler:()=>{return x.renderNow(),{ok:!0,nowIso:x.getNowIso()}}},refreshWeather:{description:"Force re-fetch weather data. Params: {}",params:{type:"object",properties:{}},handler:async()=>{return await x.initWeather(),{ok:!0,weather:{icon:x.getWeatherIcon(),temp:x.getWeatherTemp(),city:x.getWeatherCity()}}}},setAppearance:{description:"Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }",params:{type:"object",properties:{showPanel:{type:"boolean"},panelOpacity:{type:"number",minimum:0,maximum:1},panelBlurPx:{type:"number",minimum:0,maximum:40}}},handler:(b)=>{if(typeof b?.showPanel==="boolean")x.setShowPanel(b.showPanel);if(typeof b?.panelOpacity==="number")x.setPanelOpacity(Math.max(0,Math.min(1,b.panelOpacity)));if(typeof b?.panelBlurPx==="number")x.setPanelBlurPx(Math.max(0,Math.min(40,b.panelBlurPx)));return x.applyAppearance(),{ok:!0,appearance:{showPanel:x.getShowPanel(),panelOpacity:x.getPanelOpacity(),panelBlurPx:x.getPanelBlurPx()}}}}}})}{let x=document.createElement("style");x.textContent=`html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  margin: 0;
+  color: var(--yaar-text);
+}
 
-  .sep {
-    color: rgba(255,255,255,0.25);
-    font-size: 18px;
-    margin: 0 6px;
-    line-height: 1;
-  }
+#app {
+  height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  user-select: none;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
 
-  /* weather */
-  .weather-icon { font-size: 16px; line-height: 1; }
-  .weather-temp {
-    font-size: 14px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  .weather-city {
-    font-size: 13px;
-    color: var(--yaar-text-muted);
-  }
+.panel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 2px 12px;
+  border-radius: 10px;
+  background: rgba(10, 12, 16, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  gap: 0;
+}
 
-  /* notifications */
-  .notif-icon { font-size: 15px; line-height: 1; }
-  .notif-count {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--yaar-accent);
-    font-variant-numeric: tabular-nums;
-  }
-  .notif-muted { color: rgba(255,255,255,0.35); }
+/* sections */
+.weather-section,
+.notif-section,
+.clock-section {
+  display: flex;
+  align-items: center;
+}
+.weather-section { gap: 4px; }
+.notif-section   { gap: 4px; }
+.clock-section   { align-items: baseline; gap: 8px; }
 
-  /* clock */
-  .time {
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: 0.1px;
-    line-height: 1;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
-    font-variant-numeric: tabular-nums;
-  }
-  .date {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--yaar-text);
-    line-height: 1;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-`;document.head.appendChild(A);var x=document.createElement("div");x.className="panel";var K=document.createElement("div");K.className="weather-section";var M=document.createElement("span");M.className="weather-icon";M.textContent="\uD83C\uDF21️";var Q=document.createElement("span");Q.className="weather-temp";Q.textContent="--°";var R=document.createElement("span");R.className="weather-city";R.textContent="";K.appendChild(M);K.appendChild(Q);K.appendChild(R);var P=document.createElement("span");P.className="sep";P.textContent="|";var V=document.createElement("div");V.className="notif-section";var H=document.createElement("span");H.className="notif-icon notif-muted";H.textContent="\uD83D\uDD14";var J=document.createElement("span");J.className="notif-count";J.textContent="";V.appendChild(H);V.appendChild(J);var g=document.createElement("span");g.className="sep";g.textContent="|";var X=document.createElement("div");X.className="clock-section";var Y=document.createElement("div");Y.className="time";var Z=document.createElement("div");Z.className="date";X.appendChild(Y);X.appendChild(Z);x.appendChild(K);x.appendChild(P);x.appendChild(V);x.appendChild(g);x.appendChild(X);G.appendChild(x);var q={showPanel:!1,panelOpacity:0.45,panelBlurPx:10};function y(){x.style.background=q.showPanel?`rgba(10, 12, 16, ${q.panelOpacity})`:"transparent",x.style.border=q.showPanel?"1px solid rgba(255, 255, 255, 0.12)":"1px solid transparent",x.style.boxShadow=q.showPanel?"0 6px 30px rgba(0, 0, 0, 0.35)":"none",x.style.backdropFilter=q.showPanel?`blur(${q.panelBlurPx}px)`:"none",x.style.webkitBackdropFilter=q.showPanel?`blur(${q.panelBlurPx}px)`:"none"}var j="";function k(){let b=new Date;j=b.toISOString(),Y.textContent=b.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),Z.textContent=b.toLocaleDateString([],{weekday:"short",year:"numeric",month:"short",day:"2-digit"})}function u(b){if(b===0)return"☀️";if(b===1)return"\uD83C\uDF24️";if(b===2)return"⛅";if(b===3)return"☁️";if(b===45||b===48)return"\uD83C\uDF2B️";if([51,53,55,56,57].includes(b))return"\uD83C\uDF26️";if(b===61||b===63||b===65)return"\uD83C\uDF27️";if([71,73,75,77].includes(b))return"\uD83C\uDF28️";if([80,81,82].includes(b))return"\uD83C\uDF26️";if(b===85||b===86)return"\uD83C\uDF28️";if(b===95)return"⛈️";if(b===96||b===99)return"⛈️";return"\uD83C\uDF21️"}var F={icon:"\uD83C\uDF21️",temp:"--°",city:"",updatedAt:""};function f(){M.textContent=F.icon,Q.textContent=F.temp,R.textContent=F.city}async function $(b,D,z){try{let B=`https://api.open-meteo.com/v1/forecast?latitude=${b}&longitude=${D}&current=temperature_2m,weather_code&timezone=auto`,_=await fetch(B);if(!_.ok)throw Error("weather fetch failed");let N=await _.json(),C=Math.round(N.current.temperature_2m),I=N.current.weather_code;F={icon:u(I),temp:`${C}°C`,city:z,updatedAt:new Date().toISOString()},f()}catch(B){}}async function S(b,D){try{let z=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${b}&lon=${D}&format=json`,{headers:{"Accept-Language":"en"}});if(!z.ok)throw Error("geo failed");let B=await z.json();return B?.address?.city||B?.address?.town||B?.address?.county||"Unknown"}catch(z){return"Unknown"}}var O=37.5665,T=126.978;async function U(){if(!("geolocation"in navigator)){await $(O,T,"Seoul");return}navigator.geolocation.getCurrentPosition(async(b)=>{let{latitude:D,longitude:z}=b.coords,B=await S(D,z);await $(D,z,B)},async(b)=>{await $(O,T,"Seoul")},{timeout:5000})}var v=0;function m(){if(v>0)H.className="notif-icon",J.textContent=String(v);else H.className="notif-icon notif-muted",J.textContent=""}var W=window.yaar?.notifications;if(W)W.onChange((b)=>{v=b.length,m()});y();k();setInterval(k,1000);U();setInterval(U,900000);var L=window.yaar?.app;if(L)L.register({appId:"dock",name:"Dock",state:{nowIso:{description:"Current time in ISO format",handler:()=>j},display:{description:"Current displayed date/time text",handler:()=>({time:Y.textContent||"",date:Z.textContent||""})},appearance:{description:"Current dock appearance settings",handler:()=>({...q})},weather:{description:"Current weather data: { icon, temp, city, updatedAt }",handler:()=>({...F})}},commands:{refreshNow:{description:"Force immediate clock refresh. Params: {}",params:{type:"object",properties:{}},handler:()=>{return k(),{ok:!0,nowIso:j}}},refreshWeather:{description:"Force re-fetch weather data. Params: {}",params:{type:"object",properties:{}},handler:async()=>{return await U(),{ok:!0,weather:{...F}}}},setAppearance:{description:"Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0-1), panelBlurPx?: number (0-40) }",params:{type:"object",properties:{showPanel:{type:"boolean"},panelOpacity:{type:"number",minimum:0,maximum:1},panelBlurPx:{type:"number",minimum:0,maximum:40}}},handler:(b)=>{if(typeof b?.showPanel==="boolean")q.showPanel=b.showPanel;if(typeof b?.panelOpacity==="number")q.panelOpacity=Math.max(0,Math.min(1,b.panelOpacity));if(typeof b?.panelBlurPx==="number")q.panelBlurPx=Math.max(0,Math.min(40,b.panelBlurPx));return y(),{ok:!0,appearance:{...q}}}}}});
+.sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 18px;
+  margin: 0 6px;
+  line-height: 1;
+}
+
+/* weather */
+.weather-icon { font-size: 16px; line-height: 1; }
+.weather-temp {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.weather-city {
+  font-size: 13px;
+  color: var(--yaar-text-muted);
+}
+
+/* notifications */
+.notif-icon { font-size: 15px; line-height: 1; }
+.notif-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--yaar-accent);
+  font-variant-numeric: tabular-nums;
+}
+.notif-muted { color: rgba(255, 255, 255, 0.35); }
+
+/* clock */
+.time {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+.date {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--yaar-text);
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+`,document.head.appendChild(x)}function F0(x){if(x===0)return"☀️";if(x===1)return"\uD83C\uDF24️";if(x===2)return"⛅";if(x===3)return"☁️";if(x===45||x===48)return"\uD83C\uDF2B️";if([51,53,55,56,57].includes(x))return"\uD83C\uDF26️";if(x===61||x===63||x===65)return"\uD83C\uDF27️";if([71,73,75,77].includes(x))return"\uD83C\uDF28️";if([80,81,82].includes(x))return"\uD83C\uDF26️";if(x===85||x===86)return"\uD83C\uDF28️";if(x===95)return"⛈️";if(x===96||x===99)return"⛈️";return"\uD83C\uDF21️"}var h=X(""),v=X(""),s=X(""),m=X("\uD83C\uDF21️"),i=X("--°"),M=X(""),g=X(0),C=X(!1),A=X(0.45),N=X(10),q=null;function a(){if(!q)return;let x=C(),z=A(),b=N();q.style.background=x?`rgba(10, 12, 16, ${z})`:"transparent",q.style.border=x?"1px solid rgba(255, 255, 255, 0.12)":"1px solid transparent",q.style.boxShadow=x?"0 6px 30px rgba(0, 0, 0, 0.35)":"none",q.style.backdropFilter=x?`blur(${b}px)`:"none",q.style.webkitBackdropFilter=x?`blur(${b}px)`:"none"}function u(){let x=new Date;s(x.toISOString()),h(x.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"})),v(x.toLocaleDateString([],{weekday:"short",year:"numeric",month:"short",day:"2-digit"}))}var d=37.5665,t=126.978;async function T(x,z,b){try{let J=`https://api.open-meteo.com/v1/forecast?latitude=${x}&longitude=${z}&current=temperature_2m,weather_code&timezone=auto`,Y=await fetch(J);if(!Y.ok)throw Error("weather fetch failed");let B=await Y.json(),H=Math.round(B.current.temperature_2m),Z=B.current.weather_code;m(F0(Z)),i(`${H}°C`),M(b)}catch(J){}}async function $0(x,z){try{let b=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${x}&lon=${z}&format=json`,{headers:{"Accept-Language":"en"}});if(!b.ok)throw Error("geo failed");let J=await b.json();return J?.address?.city||J?.address?.town||J?.address?.county||"Unknown"}catch(b){return"Unknown"}}async function E(){if(!("geolocation"in navigator)){await T(d,t,"Seoul");return}navigator.geolocation.getCurrentPosition(async(x)=>{let{latitude:z,longitude:b}=x.coords,J=await $0(z,b);await T(z,b,J)},async(x)=>{await T(d,t,"Seoul")},{timeout:5000})}_(I`
+  <div
+    class="panel"
+    ref=${(x)=>{q=x,a()}}
+  >
+    <div class="weather-section">
+      <span class="weather-icon">${()=>m()}</span>
+      <span class="weather-temp">${()=>i()}</span>
+      ${O(()=>M()!=="",()=>I`
+        <span class="weather-city">${()=>M()}</span>
+      `)}
+    </div>
+
+    <span class="sep">|</span>
+
+    <div class="notif-section">
+      <span class=${()=>"notif-icon"+(g()>0?"":" notif-muted")}>🔔</span>
+      ${O(()=>g()>0,()=>I`
+        <span class="notif-count">${()=>String(g())}</span>
+      `)}
+    </div>
+
+    <span class="sep">|</span>
+
+    <div class="clock-section">
+      <div class="time">${()=>h()}</div>
+      <div class="date">${()=>v()}</div>
+    </div>
+  </div>
+`);k(()=>{u();let x=setInterval(u,1000);R(()=>clearInterval(x)),E();let z=setInterval(E,900000);R(()=>clearInterval(z));let b=window.yaar?.notifications;if(b)b.onChange((J)=>{g(J.length)})});c({getNowIso:()=>s(),getTimeStr:()=>h(),getDateStr:()=>v(),getWeatherIcon:()=>m(),getWeatherTemp:()=>i(),getWeatherCity:()=>M(),getShowPanel:()=>C(),getPanelOpacity:()=>A(),getPanelBlurPx:()=>N(),setShowPanel:(x)=>C(x),setPanelOpacity:(x)=>A(x),setPanelBlurPx:(x)=>N(x),renderNow:u,initWeather:E,applyAppearance:a});
 
 </script>
 </body>

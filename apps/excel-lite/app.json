@@ -89,5 +89,6 @@
     }
   },
   "appProtocol": true,
-  "description": "Spreadsheet app with formula support, charts, and YAAR storage integration"
+  "description": "A lightweight spreadsheet app with formula support, charting, and XLSX import/export.",
+  "capture": "dom"
 }

@@ -1,0 +1,11 @@
+body {
+  margin: 0;
+}
+.list-grid {
+  padding: 14px 16px;
+  flex: 1;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-content: start;
+}

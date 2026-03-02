@@ -5,7 +5,7 @@
  * Capture priority:
  *   1. Largest <canvas> element (direct toDataURL)
  *   2. Largest <svg> element (serialize → Image → canvas)
- *   3. Full document via foreignObject SVG (inline styles baked in)
+ *   3. Returns null — parent falls back to html2canvas on contentDocument
  */
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 (function() {
@@ -18,22 +18,6 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       requestId: requestId,
       imageData: imageData
     }, '*');
-  }
-
-  /**
-   * Inline all computed styles as style attributes so the foreignObject
-   * SVG render looks correct (external stylesheets won't apply).
-   */
-  function inlineStyles(original, clone) {
-    var origEls = original.querySelectorAll('*');
-    var cloneEls = clone.querySelectorAll('*');
-    for (var i = 0; i < origEls.length && i < cloneEls.length; i++) {
-      var cs = window.getComputedStyle(origEls[i]);
-      cloneEls[i].setAttribute('style', cs.cssText);
-    }
-    // Also inline styles on root element
-    var rootCs = window.getComputedStyle(original);
-    clone.setAttribute('style', rootCs.cssText);
   }
 
   /**
@@ -111,31 +95,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         }
       }
 
-      // Tier 3: capture the full document body via foreignObject SVG
-      var body = document.body;
-      if (body) {
-        var w = Math.min(body.scrollWidth, window.innerWidth) || window.innerWidth || 800;
-        var h = Math.min(body.scrollHeight, window.innerHeight) || window.innerHeight || 600;
-        var clone = body.cloneNode(true);
-        inlineStyles(body, clone);
-        // Remove scripts and iframes from clone
-        var remove = clone.querySelectorAll('script,iframe');
-        for (var i = 0; i < remove.length; i++) remove[i].remove();
-
-        var xmlns = 'http://www.w3.org/1999/xhtml';
-        var svgNS = 'http://www.w3.org/2000/svg';
-        var xhtml = new XMLSerializer().serializeToString(clone);
-        var svgStr = '<svg xmlns="' + svgNS + '" width="' + w + '" height="' + h + '">'
-          + '<foreignObject width="100%" height="100%">'
-          + '<body xmlns="' + xmlns + '" style="margin:0;padding:0;">'
-          + xhtml
-          + '</body></foreignObject></svg>';
-
-        svgToCanvas(svgStr, w, h, function(data) {
-          respond(requestId, data);
-        });
-        return; // async
-      }
+      // No canvas or SVG found — return null so the parent can try
+      // html2canvas on the iframe's contentDocument (more reliable than
+      // foreignObject SVG which often produces blank/white images).
     } catch (ex) {
       // Capture failed, imageData stays null
     }

@@ -1,6 +1,6 @@
 import { normalizeAspectRatio } from './aspect-ratio';
 import { isThemeId } from './theme';
-import type { Deck, Slide, SlideLayout } from './types';
+import type { Deck, FontSize, Slide, SlideLayout } from './types';
 import { uuid } from './utils';
 
 export function newSlide(layout: SlideLayout = 'title-body'): Slide {
@@ -14,6 +14,7 @@ export function newDeck(): Deck {
     slides: [newSlide()],
     activeIndex: 0,
     aspectRatio: '16:9',
+    fontSize: 'md',
   };
 }
 
@@ -21,9 +22,13 @@ export function isSlideLayout(value: unknown): value is SlideLayout {
   return value === 'title-body' || value === 'title-image' || value === 'section';
 }
 
+export function isFontSize(value: unknown): value is FontSize {
+  return value === 'sm' || value === 'md' || value === 'lg' || value === 'xl';
+}
+
 export function normalizeSlideInput(raw: Partial<Slide> | null | undefined): Slide {
   const source = raw ?? {};
-  return {
+  const slide: Slide = {
     id: source.id || uuid(),
     layout: isSlideLayout(source.layout) ? source.layout : 'title-body',
     title: source.title || '',
@@ -31,22 +36,23 @@ export function normalizeSlideInput(raw: Partial<Slide> | null | undefined): Sli
     imageUrl: source.imageUrl || '',
     notes: source.notes || '',
   };
+  // Optional per-slide fontSize: only set if valid, undefined means inherit from deck
+  if (isFontSize(source.fontSize)) {
+    slide.fontSize = source.fontSize;
+  }
+  return slide;
 }
 
-export function normalizeDeck(raw: Deck): Deck {
-  const slides = (raw.slides?.length ? raw.slides : [newSlide()]).map((s) => ({
-    id: s.id || uuid(),
-    layout: s.layout || 'title-body',
-    title: s.title || '',
-    body: s.body || '',
-    imageUrl: s.imageUrl || '',
-    notes: (s as Slide & { notes?: string }).notes || '',
-  }));
+export function normalizeDeck(raw: Partial<Deck> & Pick<Deck, 'slides'>): Deck {
+  const slides = (raw.slides?.length ? raw.slides : [newSlide()]).map((s) =>
+    normalizeSlideInput(s),
+  );
   return {
     title: raw.title || 'Untitled Deck',
     themeId: isThemeId(raw.themeId) ? raw.themeId : 'classic-light',
     slides,
     activeIndex: Math.min(Math.max(raw.activeIndex ?? 0, 0), slides.length - 1),
     aspectRatio: normalizeAspectRatio(raw.aspectRatio),
+    fontSize: isFontSize(raw.fontSize) ? raw.fontSize : 'md',
   };
 }
