@@ -13,17 +13,8 @@ export const SCENE_COLORS: Record<string, string> = {
 export function renderEditor(ui: EditorUI, state: EditorState): void {
   const isEdit = state.mode === 'edit';
 
-  // Mode toggle active state
-  ui.editTabButton.classList.toggle('active', isEdit);
-  ui.createTabButton.classList.toggle('active', !isEdit);
-
-  // Show/hide sidebar sections
-  ui.sidebarEditSection.style.display = isEdit ? '' : 'none';
-  ui.sidebarCreateSection.style.display = isEdit ? 'none' : '';
-
-  // Show/hide main sections
-  ui.editContainer.style.display = isEdit ? '' : 'none';
-  ui.createContainer.style.display = isEdit ? 'none' : '';
+  // NOTE: mode toggle active classes and section show/hide are now
+  // handled reactively by the signal bindings in ui.ts template.
 
   if (isEdit) {
     const hasDuration = state.duration > 0;

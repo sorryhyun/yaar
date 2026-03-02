@@ -82,191 +82,154 @@
 .y-transition{transition:all var(--yaar-ease)}
 .y-overflow-hidden{overflow:hidden}
 *{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
-<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function inlineStyles(original,clone){var origEls=original.querySelectorAll("*");var cloneEls=clone.querySelectorAll("*");for(var i=0;i<origEls.length&&i<cloneEls.length;i++){var cs=window.getComputedStyle(origEls[i]);cloneEls[i].setAttribute("style",cs.cssText)}var rootCs=window.getComputedStyle(original);clone.setAttribute("style",rootCs.cssText)}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}var body=document.body;if(body){var w=Math.min(body.scrollWidth,window.innerWidth)||window.innerWidth||800;var h=Math.min(body.scrollHeight,window.innerHeight)||window.innerHeight||600;var clone=body.cloneNode(true);inlineStyles(body,clone);var remove=clone.querySelectorAll("script,iframe");for(var i=0;i<remove.length;i++)remove[i].remove();var xmlns="http://www.w3.org/1999/xhtml";var svgNS="http://www.w3.org/2000/svg";var xhtml=new XMLSerializer().serializeToString(clone);var svgStr='<svg xmlns="'+svgNS+'" width="'+w+'" height="'+h+'">'+'<foreignObject width="100%" height="100%">'+'<body xmlns="'+xmlns+'" style="margin:0;padding:0;">'+xhtml+"</body></foreignObject></svg>";svgToCanvas(svgStr,w,h,function(data){respond(requestId,data)});return}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
+<script>(function(){if(window.__yaarCaptureInstalled)return;window.__yaarCaptureInstalled=true;function respond(requestId,imageData){window.parent.postMessage({type:"yaar:capture-response",requestId,imageData},"*")}function svgToCanvas(svgStr,w,h,cb){var blob=new Blob([svgStr],{type:"image/svg+xml;charset=utf-8"});var url=URL.createObjectURL(blob);var img=new Image;img.onload=function(){var c=document.createElement("canvas");c.width=w;c.height=h;var ctx=c.getContext("2d");ctx.drawImage(img,0,0,w,h);URL.revokeObjectURL(url);cb(c.toDataURL("image/png"))};img.onerror=function(){URL.revokeObjectURL(url);cb(null)};img.src=url}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:capture-request")return;var requestId=e.data.requestId;var imageData=null;try{var canvases=document.querySelectorAll("canvas");if(canvases.length>0){var largest=null;var largestArea=0;for(var i=0;i<canvases.length;i++){var area=canvases[i].width*canvases[i].height;if(area>largestArea){largestArea=area;largest=canvases[i]}}if(largest){imageData=largest.toDataURL("image/png")}}if(imageData){respond(requestId,imageData);return}var svgs=document.querySelectorAll("svg");if(svgs.length>0){var largest=null;var largestArea=0;for(var i=0;i<svgs.length;i++){var rect=svgs[i].getBoundingClientRect();var area=rect.width*rect.height;if(area>largestArea){largestArea=area;largest=svgs[i]}}if(largest){var serializer=new XMLSerializer;var svgStr=serializer.serializeToString(largest);var rect=largest.getBoundingClientRect();svgToCanvas(svgStr,rect.width||300,rect.height||150,function(data){respond(requestId,data)});return}}}catch(ex){}respond(requestId,null)})})();(function(){if(window.__yaarStorageInstalled)return;window.__yaarStorageInstalled=true;function encodePath(p){return p.split("/").map(encodeURIComponent).join("/")}window.yaar=window.yaar||{};window.yaar.storage={async save(path,data){var body;if(typeof data==="string"){body=data}else if(data instanceof Blob){body=await data.arrayBuffer()}else if(data instanceof ArrayBuffer){body=data}else if(data instanceof Uint8Array){body=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)}else{body=String(data)}var res=await fetch("/api/storage/"+encodePath(path),{method:"POST",body});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Save failed")}return res.json()},async read(path,options){var mode=options&&options.as||"auto";var res=await fetch("/api/storage/"+encodePath(path));if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Read failed")}if(mode==="blob")return res.blob();if(mode==="arraybuffer")return res.arrayBuffer();if(mode==="json")return res.json();if(mode==="text")return res.text();var ct=res.headers.get("content-type")||"";if(ct.includes("json"))return res.json();if(ct.startsWith("text/"))return res.text();return res.blob()},async list(dirPath){var p=dirPath?encodePath(dirPath):"";var res=await fetch("/api/storage/"+p+"?list=true");if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"List failed")}return res.json()},async remove(path){var res=await fetch("/api/storage/"+encodePath(path),{method:"DELETE"});if(!res.ok){var err=await res.json().catch(function(){return{error:res.statusText}});throw new Error(err.error||"Delete failed")}return res.json()},url:function(path){return"/api/storage/"+encodePath(path)}}})();(function(){if(window.__yaarFetchProxyInstalled)return;window.__yaarFetchProxyInstalled=true;var realFetch=window.fetch.bind(window);var sessionId="";try{var sp=new URLSearchParams(location.search);var raw=sp.get("sessionId")||"";if(/^[a-zA-Z0-9_-]+$/.test(raw))sessionId=raw}catch(e){}window.fetch=function(input,init){var url;if(input instanceof Request){url=input.url}else{url=String(input)}if(url.startsWith("/")||url.startsWith("./")||url.startsWith("../")){return realFetch(input,init)}try{var parsed=new URL(url,location.origin);if(parsed.origin===location.origin){return realFetch(input,init)}}catch(e){return realFetch(input,init)}var method=init&&init.method||(input instanceof Request?input.method:"GET");var headers={};if(init&&init.headers){if(init.headers instanceof Headers){init.headers.forEach(function(v,k){headers[k]=v})}else if(Array.isArray(init.headers)){init.headers.forEach(function(pair){headers[pair[0]]=pair[1]})}else{headers=Object.assign({},init.headers)}}else if(input instanceof Request){input.headers.forEach(function(v,k){headers[k]=v})}var bodyPromise;if(init&&init.body!=null){if(typeof init.body==="string"){bodyPromise=Promise.resolve(init.body)}else{bodyPromise=new Response(init.body).text()}}else if(input instanceof Request&&method!=="GET"&&method!=="HEAD"){bodyPromise=input.text()}else{bodyPromise=Promise.resolve(undefined)}return bodyPromise.then(function(bodyStr){var payload={url,method,headers};if(bodyStr!==undefined)payload.body=bodyStr;if(sessionId)payload.sessionId=sessionId;return realFetch("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})}).then(function(proxyRes){if(!proxyRes.ok){return proxyRes.json().then(function(err){throw new Error(err.error||"Fetch proxy error: "+proxyRes.status)})}return proxyRes.json()}).then(function(data){var body;if(data.bodyEncoding==="base64"){var bin=atob(data.body);var bytes=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);body=bytes.buffer}else{body=data.body}return new Response(body,{status:data.status,statusText:data.statusText,headers:data.headers})})}})();(function(){if(window.__yaarAppProtocolInstalled)return;window.__yaarAppProtocolInstalled=true;window.yaar=window.yaar||{};var registration=null;window.yaar.app={register:function(config){registration=config;window.parent.postMessage({type:"yaar:app-ready",appId:config.appId},"*")},sendInteraction:function(description){window.parent.postMessage({type:"yaar:app-interaction",content:typeof description==="string"?description:JSON.stringify(description)},"*")}};window.addEventListener("message",function(e){if(!e.data||!e.data.type)return;var msg=e.data;var requestId=msg.requestId;if(msg.type==="yaar:app-manifest-request"){if(!registration){window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest:null,error:"No app registered"},"*");return}var manifest={appId:registration.appId,name:registration.name,state:{},commands:{}};if(registration.state){for(var key in registration.state){var s=registration.state[key];manifest.state[key]={description:s.description};if(s.schema)manifest.state[key].schema=s.schema}}if(registration.commands){for(var key in registration.commands){var c=registration.commands[key];manifest.commands[key]={description:c.description};if(c.params)manifest.commands[key].params=c.params;if(c.returns)manifest.commands[key].returns=c.returns}}window.parent.postMessage({type:"yaar:app-manifest-response",requestId,manifest},"*");return}if(msg.type==="yaar:app-query-request"){if(!registration||!registration.state||!registration.state[msg.stateKey]){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:"Unknown state key: "+msg.stateKey},"*");return}try{var result=registration.state[msg.stateKey].handler();if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-query-response",requestId,data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-query-response",requestId,data:result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-query-response",requestId,data:null,error:String(err)},"*")}return}if(msg.type==="yaar:app-command-request"){if(!registration||!registration.commands||!registration.commands[msg.command]){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:"Unknown command: "+msg.command},"*");return}try{var result=registration.commands[msg.command].handler(msg.params);if(result&&typeof result.then==="function"){result.then(function(data){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:data},"*")}).catch(function(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")})}else{window.parent.postMessage({type:"yaar:app-command-response",requestId,result},"*")}}catch(err){window.parent.postMessage({type:"yaar:app-command-response",requestId,result:null,error:String(err)},"*")}return}})})();(function(){if(window.__yaarNotificationsInstalled)return;window.__yaarNotificationsInstalled=true;window.yaar=window.yaar||{};var items=[];var callbacks=[];function notify(){for(var i=0;i<callbacks.length;i++){try{callbacks[i](items)}catch(e){}}}window.addEventListener("message",function(e){if(!e.data||e.data.type!=="yaar:notifications-update")return;items=Array.isArray(e.data.items)?e.data.items:[];notify()});window.yaar.notifications={list:function(){return items},count:function(){return items.length},onChange:function(cb){callbacks.push(cb);try{cb(items)}catch(e){}return function(){callbacks=callbacks.filter(function(fn){return fn!==cb})}}}})();</script>
 </head>
 <body>
 <div id="app"></div>
 <script type="module">
-var g=document.createElement("div");g.className="app";g.innerHTML=`
-  <style>
-    :root {
-      --yaar-bg: #f7fbff;
-      --yaar-bg-surface: #ffffffcc;
-      --yaar-bg-surface-hover: #eef4ff;
-      --yaar-text: #1d2a3a;
-      --yaar-text-muted: #5f6f85;
-      --yaar-text-dim: #8b949e;
-      --yaar-border: #d8e3f0;
-      --yaar-accent: #1769e0;
-      --yaar-accent-hover: #0f57c2;
-      --yaar-shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
-      --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
-    }
+var j=null,L=null,x0=new Set,w0=0;class u{_value;_subscribers=new Set;constructor(x){this._value=x}get value(){if(j)this._subscribers.add(j),j.dependencies.add(this);return this._value}set value(x){if(Object.is(this._value,x))return;this._value=x;for(let z of[...this._subscribers])if(w0>0)x0.add(z);else z.execute()}peek(){return this._value}}function R(x){let z=new u(x),w=(...W)=>{if(W.length===0)return z.value;z.value=W[0]};return Object.defineProperty(w,"value",{get:()=>z.value,set:(W)=>{z.value=W}}),w.peek=()=>z.peek(),w}function i(x){for(let z of x.dependencies)z._subscribers.delete(x);x.dependencies.clear();for(let z of x.cleanups)z();x.cleanups=[]}function f(x){let z,w={dependencies:new Set,cleanups:[],execute(){if(i(w),z)z();let W=j,J=L;j=w,L=w.cleanups;try{z=x()}finally{j=W,L=J}}};return w.execute(),()=>{if(i(w),z)z()}}function C(x){if(L)L.push(x)}function k(x){queueMicrotask(x)}function y(x,z,...w){let W=x,J=[],P,Z=x.indexOf("#"),G=x.indexOf("."),q=Math.min(Z>=0?Z:1/0,G>=0?G:1/0);if(q<1/0){W=x.slice(0,q)||"div";let $=x.slice(q).split(/(?=[.#])/);for(let B of $)if(B[0]===".")J.push(B.slice(1));else if(B[0]==="#")P=B.slice(1)}let X=document.createElement(W);if(P)X.id=P;if(J.length)X.classList.add(...J);if(z)for(let[Q,$]of Object.entries(z))if(Q==="className")if(typeof $==="function")f(()=>{X.className=[J.join(" "),$()].filter(Boolean).join(" ")});else if(J.length)X.className=J.join(" ")+" "+$;else X.className=$;else if(Q==="style"){if(typeof $==="string")X.style.cssText=$;else if(typeof $==="object")for(let[B,F]of Object.entries($))if(typeof F==="function")f(()=>{X.style[B]=F()});else X.style[B]=F}else if(Q==="ref"){if(typeof $==="function")$(X)}else if(Q.startsWith("on")){let B=Q.slice(2).toLowerCase();X.addEventListener(B,$)}else if(typeof $==="function"&&!Q.startsWith("on"))f(()=>{let B=$();if(B==null||B===!1)X.removeAttribute(Q);else X.setAttribute(Q,String(B))});else if($==null||$===!1);else if($===!0)X.setAttribute(Q,"");else X.setAttribute(Q,String($));return g(X,w),X}function g(x,z){for(let w of z){if(w==null||w===!1||w===!0)continue;if(Array.isArray(w))g(x,w);else if(typeof w==="function"){let W=document.createComment(""),J=document.createComment("");x.appendChild(W),x.appendChild(J),f(()=>{let P=w();while(W.nextSibling&&W.nextSibling!==J)W.nextSibling.remove();let Z=z0(P);J.parentNode.insertBefore(Z,J)})}else if(w instanceof Node)x.appendChild(w);else x.appendChild(document.createTextNode(String(w)))}}function z0(x){if(x==null||x===!1||x===!0)return document.createTextNode("");if(x instanceof Node)return x;if(Array.isArray(x)){let z=document.createDocumentFragment();return g(z,x),z}return document.createTextNode(String(x))}function N(x,z){let w=z||document.getElementById("app");if(!w)throw Error("Mount target not found");w.appendChild(x)}var J0=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,A=null;function W0(x){if(!J0.test(x))return x;if(!A)A=document.createElement("textarea");return A.innerHTML=x,A.value}var p=new WeakMap;function T(x,...z){let w=p.get(x);if(!w)w=Z0(x),p.set(x,w);return w(z)}var I=0,d=1,b=2,h=3;function Z0(x){let z=[],w=I,W="",J="",P="",Z="",G=!1;function q(Q){if(W)z.push(Q?{t:"open_close",tag:W}:{t:"open",tag:W});W="",G=!1}function X(){if(J)z.push({t:"attr_static",name:J,value:P||J}),J="",P=""}for(let Q=0;Q<x.length;Q++){let $=x[Q];for(let B=0;B<$.length;B++){let F=$[B];if(w===I)if(F==="<")if($[B+1]==="!"&&$[B+2]==="-"&&$[B+3]==="-"){let K=$.indexOf("-->",B+4);if(K!==-1)B=K+2;else B=$.length-1}else if($[B+1]==="/"){let K=$.indexOf(">",B);if(K!==-1)B=K,z.push({t:"close"})}else w=d,W="",G=!1;else{let K=F;while(B+1<$.length&&$[B+1]!=="<")K+=$[++B];if(K=K.replace(/^\s+|\s+$/g," "),K&&K!==" ")z.push({t:"text",value:W0(K)})}else if(w===d)if(F==="/"&&W==="");else if(/\s/.test(F)){if(W)z.push({t:"open",tag:W}),W="",w=b}else if(F===">")q(G),w=I;else if(F==="/")G=!0;else W+=F;else if(w===b)if(F==="=")w=h,P="",Z="";else if(F==="/"||F===">")if(X(),F===">"){if(G)z.push({t:"close"}),G=!1;w=I}else G=!0;else if(/\s/.test(F)){if(J)X()}else J+=F;else if(w===h)if(!Z&&(F==='"'||F==="'"))Z=F;else if(!Z&&/\s/.test(F))X(),w=b;else if(F===Z)X(),w=b,Z="";else if(!Z&&(F===">"||F==="/"))if(X(),F===">"){if(G)z.push({t:"close"}),G=!1;w=I}else G=!0;else P+=F}if(Q<x.length-1){if(w===I)z.push({t:"field",idx:Q});else if(w===h){let B=J;J="",P="",Z="",z.push({t:"attr_field",name:B,idx:Q}),w=b}else if(w===b)if(J)z.push({t:"attr_static",name:J,value:J}),J="",z.push({t:"attr_spread",idx:Q});else z.push({t:"attr_spread",idx:Q})}}return(Q)=>G0(z,Q)}var H0={class:"className",for:"htmlFor"};function r(x){return H0[x]||x}function G0(x,z){let w=[],W=[];function J(Z){if(w.length)w[w.length-1].children.push(Z);else W.push(Z)}for(let Z of x)switch(Z.t){case"open":w.push({tag:Z.tag,children:[],props:{}});break;case"open_close":J(y(Z.tag,null));break;case"close":{let G=w.pop();if(G){let q=Object.keys(G.props).length?G.props:void 0;J(y(G.tag,q,...G.children))}break}case"attr_static":{let G=w[w.length-1];if(G)G.props[r(Z.name)]=Z.value;break}case"attr_field":{let G=w[w.length-1];if(G)G.props[r(Z.name)]=z[Z.idx];break}case"attr_spread":{let G=w[w.length-1],q=z[Z.idx];if(G&&q&&typeof q==="object")Object.assign(G.props,q);break}case"text":J(Z.value);break;case"field":{let G=z[Z.idx];if(Array.isArray(G))for(let q of G)J(q);else J(G);break}}if(W.length===1&&W[0]instanceof Node)return W[0];let P=document.createDocumentFragment();return g(P,W),P}{let x=document.createElement("style");x.textContent=`:root {
+  --yaar-bg: #f7fbff;
+  --yaar-bg-surface: #ffffffcc;
+  --yaar-bg-surface-hover: #eef4ff;
+  --yaar-text: #1d2a3a;
+  --yaar-text-muted: #5f6f85;
+  --yaar-text-dim: #8b949e;
+  --yaar-border: #d8e3f0;
+  --yaar-accent: #1769e0;
+  --yaar-accent-hover: #0f57c2;
+  --yaar-shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
+  --yaar-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+}
 
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      color: var(--yaar-text);
-      background: radial-gradient(1200px 500px at 20% -20%, #dcebff 0%, transparent 70%),
-                  radial-gradient(900px 500px at 110% 120%, #d8e8ff 0%, transparent 60%),
-                  linear-gradient(145deg, #f7fbff, #eef4ff);
-    }
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  color: var(--yaar-text);
+  background: radial-gradient(1200px 500px at 20% -20%, #dcebff 0%, transparent 70%),
+              radial-gradient(900px 500px at 110% 120%, #d8e8ff 0%, transparent 60%),
+              linear-gradient(145deg, #f7fbff, #eef4ff);
+}
 
-    .app {
-      min-height: 100%;
-      padding: 16px;
-      display: grid;
-      place-items: center;
-    }
+.app {
+  min-height: 100%; padding: 16px;
+  display: grid; place-items: center;
+}
 
-    .shell {
-      width: min(980px, 100%);
-      display: grid;
-      gap: 12px;
-      padding: 14px;
-      border: 1px solid var(--yaar-border);
-      border-radius: 18px;
-      background: var(--yaar-bg-surface);
-      backdrop-filter: blur(6px);
-      box-shadow: var(--yaar-shadow);
-    }
+.shell {
+  width: min(980px, 100%);
+  display: grid; gap: 12px; padding: 14px;
+  border: 1px solid var(--yaar-border); border-radius: 18px;
+  background: var(--yaar-bg-surface); backdrop-filter: blur(6px);
+  box-shadow: var(--yaar-shadow);
+}
 
-    .title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
+.title { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.title h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: 0.2px; }
 
-    .title h1 {
-      margin: 0;
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: 0.2px;
-    }
+.status { font-size: 0.9rem; color: var(--yaar-text-muted); min-height: 1.2em; word-break: break-word; }
+.status.ok { color: #0a7f43; }
+.status.err { color: #b42318; }
 
-    .status {
-      font-size: 0.9rem;
-      color: var(--yaar-text-muted);
-      min-height: 1.2em;
-      word-break: break-word;
-    }
+.input-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.file-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-    .status.ok {
-      color: #0a7f43;
-    }
+.controls {
+  display: grid; grid-template-columns: repeat(6, minmax(0, auto));
+  gap: 8px; align-items: center; justify-content: start; flex-wrap: wrap;
+}
 
-    .status.err {
-      color: #b42318;
-    }
+.video-wrap {
+  width: 100%; border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--yaar-border); background: #0b1220;
+}
 
-    .input-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-    }
+video { display: block; width: 100%; max-height: min(62vh, 560px); background: #000; }
+iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #000; }
 
-    .file-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
+.is-hidden { display: none; }
 
-    .controls {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, auto));
-      gap: 8px;
-      align-items: center;
-      justify-content: start;
-      flex-wrap: wrap;
-    }
+@media (max-width: 720px) {
+  .input-row { grid-template-columns: 1fr; }
+  .controls { grid-template-columns: repeat(3, minmax(0, auto)); }
+}
+`,document.head.appendChild(x)}var V=R(!1),s=R("No source loaded."),t=R("info"),M=R("00:00 / 00:00"),_=R(!1),D=R(!1),U=R(!0),H,m,l,v,a,O=null,E="No source loaded",n=(x)=>{if(!Number.isFinite(x)||x<0)return"00:00";let z=Math.floor(x),w=Math.floor(z/3600),W=Math.floor(z%3600/60),J=z%60;if(w>0)return`${String(w).padStart(2,"0")}:${String(W).padStart(2,"0")}:${String(J).padStart(2,"0")}`;return`${String(W).padStart(2,"0")}:${String(J).padStart(2,"0")}`},Y=(x,z="info")=>{s(x),t(z)},S=()=>{if(V()){M("YouTube embed");return}let x=n(H.currentTime||0),z=n(H.duration||0);M(`${x} / ${z}`)},o=()=>{if(O)URL.revokeObjectURL(O),O=null},e=(x,z)=>{V(!1),m.src="",U(!1),H.src=x,E=z,H.load(),Y(`Loading: ${z}`,"info"),S()},$0=(x,z)=>{V(!0),H.pause(),H.removeAttribute("src"),H.load(),m.src=x,E=z,U(!0),_(!1),D(!1),S(),Y(`Loaded: ${z} (YouTube embed)`,"ok")},B0=(x)=>{if(!x)return null;let z=x.trim();if(/^\d+$/.test(z))return z;let w=z.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);if(!w)return null;let W=Number(w[1]??"0"),J=Number(w[2]??"0"),P=Number(w[3]??"0"),Z=W*3600+J*60+P;return Z>0?String(Z):null},F0=(x)=>{let z=x.hostname.toLowerCase().replace(/^www\./,""),w="";if(z==="youtu.be")w=x.pathname.split("/").filter(Boolean)[0]??"";else if(z==="youtube.com"||z.endsWith(".youtube.com")){let P=x.pathname.split("/").filter(Boolean),Z=P[0]??"";if(Z==="watch")w=x.searchParams.get("v")??"";else if(Z==="shorts"||Z==="embed")w=P[1]??""}else return null;if(!/^[A-Za-z0-9_-]{11}$/.test(w))return null;let W=new URL(`https://www.youtube.com/embed/${w}`),J=B0(x.searchParams.get("start")??x.searchParams.get("t"));if(J)W.searchParams.set("start",J);return W.toString()},Q0=(x)=>{try{let z=new URL(x.trim());if(z.protocol!=="http:"&&z.protocol!=="https:")return null;let w=F0(z);if(w)return{sourceUrl:w,isYouTube:!0};return{sourceUrl:z.toString(),isYouTube:!1}}catch{return null}},c=()=>{let x=Q0(l.value);if(!x){Y("Invalid URL. Use a full http(s) video URL.","err");return}if(o(),x.isYouTube){$0(x.sourceUrl,x.sourceUrl);return}e(x.sourceUrl,x.sourceUrl)},X0=()=>{let x=v.files?.[0];if(!x){Y("No file selected.","err");return}if(!x.type.startsWith("video/")){Y("Selected file is not a video.","err"),v.value="";return}o(),O=URL.createObjectURL(x),e(O,x.name)},P0=async()=>{if(V())return;try{if(H.paused)await H.play();else H.pause()}catch{Y("Playback failed. The source may be blocked or unsupported.","err")}},q0=()=>{if(V())return;H.currentTime=Math.max(0,H.currentTime-10),S()},K0=()=>{if(V())return;let x=Number.isFinite(H.duration)&&H.duration>0?H.duration:H.currentTime+10;H.currentTime=Math.min(x,H.currentTime+10),S()},R0=()=>{if(V())return;let x=Number(a.value);H.playbackRate=Number.isFinite(x)?x:1,Y(`Speed set to ${H.playbackRate}x`,"ok")},V0=()=>{if(V())return;H.muted=!H.muted,D(H.muted)};k(()=>{H.addEventListener("loadedmetadata",()=>{S(),_(!H.paused),D(H.muted),Y(`Loaded: ${E}`,"ok")}),H.addEventListener("timeupdate",S),H.addEventListener("play",()=>{_(!0)}),H.addEventListener("pause",()=>{_(!1)}),H.addEventListener("volumechange",()=>{D(H.muted)}),H.addEventListener("error",()=>{Y("Could not load this video source. Check URL, CORS, or file format.","err")}),S(),C(o)});N(T`
+  <div class="app">
+    <section class="shell">
+      <div class="title">
+        <h1>Video Viewer Lite</h1>
+        <div class="meta">${()=>M()}</div>
+      </div>
 
-    .video-wrap {
-      width: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid var(--yaar-border);
-      background: #0b1220;
-    }
+      <div class="input-row">
+        <input
+          ref=${(x)=>{l=x}}
+          class="y-input" type="url"
+          placeholder="Paste remote video URL (https://...)"
+          aria-label="Remote video URL"
+          onKeydown=${(x)=>{if(x.key==="Enter")c()}}
+        />
+        <button class="y-btn y-btn-primary" type="button" onClick=${c}>Load URL</button>
+      </div>
 
-    video {
-      display: block;
-      width: 100%;
-      max-height: min(62vh, 560px);
-      background: #000;
-    }
+      <div class="file-row">
+        <input
+          ref=${(x)=>{v=x}}
+          type="file" accept="video/*"
+          onChange=${X0}
+        />
+        <span class="y-text-muted">Select a local video file to play</span>
+      </div>
 
-    iframe {
-      display: block;
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      border: 0;
-      background: #000;
-    }
+      <div class="controls">
+        <button class="y-btn" type="button"
+          disabled=${()=>U()}
+          onClick=${P0}>
+          ${()=>_()?"Pause":"Play"}
+        </button>
+        <button class="y-btn" type="button"
+          disabled=${()=>U()}
+          onClick=${q0}>-10s</button>
+        <button class="y-btn" type="button"
+          disabled=${()=>U()}
+          onClick=${K0}>+10s</button>
+        <select
+          ref=${(x)=>{a=x}}
+          class="y-input" aria-label="Playback speed"
+          disabled=${()=>U()}
+          onChange=${R0}>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+        <button class="y-btn" type="button"
+          disabled=${()=>U()}
+          onClick=${V0}>
+          ${()=>D()?"Unmute":"Mute"}
+        </button>
+      </div>
 
-    .is-hidden {
-      display: none;
-    }
+      <div class="video-wrap y-rounded-lg">
+        <video
+          ref=${(x)=>{H=x}}
+          controls playsinline preload="metadata"
+          class=${()=>V()?"is-hidden":""}
+        ></video>
+        <iframe
+          ref=${(x)=>{m=x}}
+          class=${()=>V()?"":"is-hidden"}
+          title="YouTube player"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen
+        ></iframe>
+      </div>
 
-    @media (max-width: 720px) {
-      .input-row {
-        grid-template-columns: 1fr;
-      }
-
-      .controls {
-        grid-template-columns: repeat(3, minmax(0, auto));
-      }
-    }
-  </style>
-
-  <section class="shell">
-    <div class="title">
-      <h1>Video Viewer Lite</h1>
-      <div class="meta" id="timeMeta">00:00 / 00:00</div>
-    </div>
-
-    <div class="input-row">
-      <input id="urlInput" class="y-input" type="url" placeholder="Paste remote video URL (https://...)" aria-label="Remote video URL" />
-      <button id="loadUrlBtn" class="y-btn y-btn-primary" type="button">Load URL</button>
-    </div>
-
-    <div class="file-row">
-      <input id="fileInput" type="file" accept="video/*" />
-      <span class="y-text-muted">Select a local video file to play</span>
-    </div>
-
-    <div class="controls">
-      <button id="playPauseBtn" class="y-btn" type="button">Play</button>
-      <button id="backBtn" class="y-btn" type="button">-10s</button>
-      <button id="fwdBtn" class="y-btn" type="button">+10s</button>
-      <select id="speedSelect" class="y-input" aria-label="Playback speed">
-        <option value="0.5">0.5x</option>
-        <option value="1" selected>1x</option>
-        <option value="1.5">1.5x</option>
-        <option value="2">2x</option>
-      </select>
-      <button id="muteBtn" class="y-btn" type="button">Mute</button>
-    </div>
-
-    <div class="video-wrap y-rounded-lg">
-      <video id="player" controls playsinline preload="metadata"></video>
-      <iframe
-        id="ytPlayer"
-        class="is-hidden"
-        title="YouTube player"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allowfullscreen
-      ></iframe>
-    </div>
-
-    <div id="status" class="status y-text-muted">No source loaded.</div>
-  </section>
-`;document.body.innerHTML="";document.body.appendChild(g);var t=document.getElementById("player"),f=document.getElementById("ytPlayer"),k=document.getElementById("urlInput"),b=document.getElementById("fileInput"),B=document.getElementById("loadUrlBtn"),v=document.getElementById("playPauseBtn"),T=document.getElementById("backBtn"),U=document.getElementById("fwdBtn"),y=document.getElementById("speedSelect"),h=document.getElementById("muteBtn"),m=document.getElementById("status"),w=document.getElementById("timeMeta"),c=null,L="No source loaded",o=!1,E=(e)=>{if(!Number.isFinite(e)||e<0)return"00:00";let r=Math.floor(e),a=Math.floor(r/3600),i=Math.floor(r%3600/60),d=r%60;if(a>0)return`${String(a).padStart(2,"0")}:${String(i).padStart(2,"0")}:${String(d).padStart(2,"0")}`;return`${String(i).padStart(2,"0")}:${String(d).padStart(2,"0")}`},n=(e,r="info")=>{if(m.textContent=e,m.classList.remove("ok","err"),r==="ok")m.classList.add("ok");if(r==="err")m.classList.add("err")},l=()=>{if(o){w.textContent="YouTube embed";return}let e=E(t.currentTime||0),r=E(t.duration||0);w.textContent=`${e} / ${r}`},s=()=>{v.textContent=t.paused?"Play":"Pause",h.textContent=t.muted?"Unmute":"Mute"},x=()=>{if(c)URL.revokeObjectURL(c),c=null},M=(e)=>{v.disabled=!e,T.disabled=!e,U.disabled=!e,y.disabled=!e,h.disabled=!e},S=(e,r)=>{o=!1,f.classList.add("is-hidden"),f.src="",t.classList.remove("is-hidden"),M(!0),t.src=e,L=r,t.load(),n(`Loading: ${r}`,"info"),l()},I=(e,r)=>{o=!0,t.pause(),t.removeAttribute("src"),t.load(),t.classList.add("is-hidden"),f.classList.remove("is-hidden"),f.src=e,L=r,M(!1),s(),l(),n(`Loaded: ${r} (YouTube embed)`,"ok")},R=(e)=>{if(!e)return null;let r=e.trim();if(/^\d+$/.test(r))return r;let a=r.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);if(!a)return null;let i=Number(a[1]??"0"),d=Number(a[2]??"0"),p=Number(a[3]??"0"),u=i*3600+d*60+p;return u>0?String(u):null},P=(e)=>{let r=e.hostname.toLowerCase().replace(/^www\./,""),a="";if(r==="youtu.be")a=e.pathname.split("/").filter(Boolean)[0]??"";else if(r==="youtube.com"||r.endsWith(".youtube.com")){let p=e.pathname.split("/").filter(Boolean),u=p[0]??"";if(u==="watch")a=e.searchParams.get("v")??"";else if(u==="shorts"||u==="embed")a=p[1]??""}else return null;if(!/^[A-Za-z0-9_-]{11}$/.test(a))return null;let i=new URL(`https://www.youtube.com/embed/${a}`),d=R(e.searchParams.get("start")??e.searchParams.get("t"));if(d)i.searchParams.set("start",d);return i.toString()},$=(e)=>{try{let r=new URL(e.trim());if(r.protocol!=="http:"&&r.protocol!=="https:")return null;let a=P(r);if(a)return{sourceUrl:a,isYouTube:!0};return{sourceUrl:r.toString(),isYouTube:!1}}catch{return null}};B.addEventListener("click",()=>{let e=$(k.value);if(!e){n("Invalid URL. Use a full http(s) video URL.","err");return}if(x(),e.isYouTube){I(e.sourceUrl,e.sourceUrl);return}S(e.sourceUrl,e.sourceUrl)});k.addEventListener("keydown",(e)=>{if(e.key==="Enter")B.click()});b.addEventListener("change",()=>{let e=b.files?.[0];if(!e){n("No file selected.","err");return}if(!e.type.startsWith("video/")){n("Selected file is not a video.","err"),b.value="";return}x(),c=URL.createObjectURL(e),S(c,e.name)});v.addEventListener("click",async()=>{if(o)return;try{if(t.paused)await t.play();else t.pause()}catch{n("Playback failed. The source may be blocked or unsupported.","err")}s()});T.addEventListener("click",()=>{if(o)return;t.currentTime=Math.max(0,t.currentTime-10),l()});U.addEventListener("click",()=>{if(o)return;let e=Number.isFinite(t.duration)&&t.duration>0?t.duration:t.currentTime+10;t.currentTime=Math.min(e,t.currentTime+10),l()});y.addEventListener("change",()=>{if(o)return;let e=Number(y.value);t.playbackRate=Number.isFinite(e)?e:1,n(`Speed set to ${t.playbackRate}x`,"ok")});h.addEventListener("click",()=>{if(o)return;t.muted=!t.muted,s()});t.addEventListener("loadedmetadata",()=>{l(),s(),n(`Loaded: ${L}`,"ok")});t.addEventListener("timeupdate",l);t.addEventListener("play",s);t.addEventListener("pause",s);t.addEventListener("volumechange",s);t.addEventListener("error",()=>{n("Could not load this video source. Check URL, CORS, or file format.","err")});window.addEventListener("beforeunload",x);l();s();
+      <div class=${()=>{let x=t();return"status"+(x==="ok"?" ok":"")+(x==="err"?" err":"")}}>
+        ${()=>s()}
+      </div>
+    </section>
+  </div>
+`);
 
 </script>
 </body>

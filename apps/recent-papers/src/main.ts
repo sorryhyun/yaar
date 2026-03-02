@@ -1,11 +1,12 @@
 export {};
 import { signal, html, mount, show } from '@bundled/yaar';
-import type { DailyPaperItem, Recommendation, PaperDetails } from './types';
+import type { DailyPaperItem, Recommendation } from './types';
 import {
   getComments, getPublishedAt, getPublishedMs, getSource, getUpvotes,
   paperAbsUrl, paperId, paperSummary, paperTitle, formatDate,
 } from './paper-utils';
-import { fetchArxivPapers, fetchHfPapers, fetchPaperDetailsById } from './data';
+import { fetchArxivPapers, fetchHfPapers } from './data';
+import { registerProtocol } from './protocol';
 import './styles.css';
 
 // ── Signals ──────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ const limitVal = signal(20);
 const dayRange = signal('all');
 const sortBy = signal('newest');
 const arxivQuery = signal('cat:cs.AI OR cat:cs.LG');
-let paperDetailsCache: Record<string, PaperDetails> = {};
+const paperDetailsCache: Record<string, import('./types').PaperDetails> = {};
 
 // ── Logic ────────────────────────────────────────────────────────────────────
 function applyFiltersAndSort() {
@@ -263,105 +264,14 @@ mount(html`
 `);
 
 // ── App Protocol ──────────────────────────────────────────────────────────────
-const appApi = (window as any).yaar?.app;
-if (appApi) {
-  appApi.register({
-    appId: 'recent-papers',
-    name: 'Recent Papers',
-    state: {
-      papers: {
-        description: 'Current filtered paper list loaded in the UI',
-        handler: () => papers().map((p) => ({
-          id: paperId(p),
-          source: getSource(p),
-          title: paperTitle(p),
-          summary: paperSummary(p),
-          upvotes: getUpvotes(p),
-          comments: getComments(p),
-        })),
-      },
-      recommendations: {
-        description: 'Current recommended papers',
-        handler: () => recommendations(),
-      },
-      paperDetailsCache: {
-        description: 'Cached detailed paper data fetched by paper id',
-        handler: () => paperDetailsCache,
-      },
-    },
-    commands: {
-      refresh: {
-        description: 'Reload papers from selected sources',
-        params: { type: 'object', properties: {} },
-        handler: async () => { await loadPapers(); return { ok: true, count: papers().length }; },
-      },
-      recommendTop2Today: {
-        description: 'Ask the AI agent to recommend 2 papers from current context',
-        params: { type: 'object', properties: {} },
-        handler: async () => {
-          if (!sourcePapers().length) await loadPapers();
-          requestRecommendationsFromAgent('app-command');
-          return { ok: true, queued: true, candidateCount: papers().length };
-        },
-      },
-      fetchPaperDetails: {
-        description: 'Fetch detailed summary/content metadata for one Hugging Face paper by id',
-        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        handler: async (p: { id: string }) => {
-          const detail = await fetchPaperDetailsById(p.id, paperDetailsCache);
-          return { ok: true, detail };
-        },
-      },
-      fetchPaperDetailsBatch: {
-        description: 'Fetch detailed summary/content metadata for multiple Hugging Face paper ids',
-        params: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } }, required: ['ids'] },
-        handler: async (p: { ids: string[] }) => {
-          const ids = Array.isArray(p.ids) ? p.ids.filter(Boolean).slice(0, 20) : [];
-          const details: any[] = [];
-          for (const id of ids) {
-            try { details.push(await fetchPaperDetailsById(id, paperDetailsCache)); }
-            catch (e: any) { details.push({ id, error: e?.message || String(e) }); }
-          }
-          return { ok: true, count: details.length, details };
-        },
-      },
-      setRecommendations: {
-        description: 'Set AI-generated recommendations to display in the UI',
-        params: {
-          type: 'object',
-          properties: {
-            recommendations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' }, title: { type: 'string' }, reason: { type: 'string' },
-                  upvotes: { type: 'number' }, comments: { type: 'number' },
-                  source: { type: 'string' }, url: { type: 'string' },
-                },
-                required: ['id', 'title', 'reason'],
-              },
-            },
-          },
-          required: ['recommendations'],
-        },
-        handler: async (p: { recommendations: Recommendation[] }) => {
-          recommendations(
-            (p.recommendations || []).slice(0, 2).map((r) => ({
-              id: String(r.id || ''),
-              title: String(r.title || 'Untitled paper'),
-              reason: String(r.reason || ''),
-              upvotes: Number(r.upvotes || 0),
-              comments: Number(r.comments || 0),
-              source: (r.source || 'arxiv') as any,
-              url: String(r.url || ''),
-            }))
-          );
-          return { ok: true, count: recommendations().length };
-        },
-      },
-    },
-  });
-}
+registerProtocol({
+  getPapers: () => papers(),
+  getSourcePapers: () => sourcePapers(),
+  getRecommendations: () => recommendations(),
+  setRecommendations: (recs) => recommendations(recs),
+  loadPapers,
+  requestRecommendationsFromAgent,
+  paperDetailsCache,
+});
 
 loadPapers();

@@ -1,4 +1,6 @@
-const STORAGE_KEY = 'video-editor-lite:prefs';
+const PREFS_KEY = 'video-editor-lite/prefs.json';
+const storage = (window as any).yaar?.storage;
+
 export const ALLOWED_PLAYBACK_RATES = new Set([0.5, 1, 1.5, 2]);
 
 export interface EditorPrefs {
@@ -17,46 +19,33 @@ export const DEFAULT_PREFS: EditorPrefs = {
   lastStorageListPath: 'mounts/lecture-materials',
 };
 
-export function loadPrefs(): EditorPrefs {
+export async function loadPrefs(): Promise<EditorPrefs> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return { ...DEFAULT_PREFS };
-    }
+    const parsed = await storage?.read(PREFS_KEY, { as: 'json' }) as Partial<EditorPrefs> | null;
+    if (!parsed) return { ...DEFAULT_PREFS };
 
-    const parsed = JSON.parse(raw) as Partial<EditorPrefs>;
     const playbackRate =
       typeof parsed.playbackRate === 'number' && ALLOWED_PLAYBACK_RATES.has(parsed.playbackRate)
-        ? parsed.playbackRate
-        : DEFAULT_PREFS.playbackRate;
+        ? parsed.playbackRate : DEFAULT_PREFS.playbackRate;
     const loopPreview =
       typeof parsed.loopPreview === 'boolean' ? parsed.loopPreview : DEFAULT_PREFS.loopPreview;
     const lastUrl = typeof parsed.lastUrl === 'string' ? parsed.lastUrl : DEFAULT_PREFS.lastUrl;
     const lastStoragePath =
-      typeof parsed.lastStoragePath === 'string'
-        ? parsed.lastStoragePath
-        : DEFAULT_PREFS.lastStoragePath;
+      typeof parsed.lastStoragePath === 'string' ? parsed.lastStoragePath : DEFAULT_PREFS.lastStoragePath;
     const lastStorageListPath =
       typeof parsed.lastStorageListPath === 'string' && parsed.lastStorageListPath.trim()
-        ? parsed.lastStorageListPath
-        : DEFAULT_PREFS.lastStorageListPath;
+        ? parsed.lastStorageListPath : DEFAULT_PREFS.lastStorageListPath;
 
-    return {
-      playbackRate,
-      loopPreview,
-      lastUrl,
-      lastStoragePath,
-      lastStorageListPath,
-    };
+    return { playbackRate, loopPreview, lastUrl, lastStoragePath, lastStorageListPath };
   } catch {
     return { ...DEFAULT_PREFS };
   }
 }
 
-export function savePrefs(prefs: EditorPrefs): void {
+export async function savePrefs(prefs: EditorPrefs): Promise<void> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    await storage?.save(PREFS_KEY, JSON.stringify(prefs));
   } catch {
-    // no-op; prefer functional editor even when storage is unavailable
+    // no-op
   }
 }

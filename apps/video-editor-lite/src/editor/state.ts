@@ -1,252 +1,167 @@
+import { signal } from '@bundled/yaar';
 import type { EditorState, EditorMode, TrimPatch } from './types';
 import type { Composition, Scene } from '../core/types';
 import { clamp } from './utils/time';
 
 const EPSILON = 0.01;
 
-type Listener = (state: EditorState) => void;
-
 export class EditorStore {
-  private state: EditorState = {
-    mode: 'edit',
-    sourceKind: null,
-    sourceValue: '',
-    objectUrl: null,
-    duration: 0,
-    trimStart: 0,
-    trimEnd: 0,
-    currentTime: 0,
-    playbackRate: 1,
-    loopPreview: false,
-    playing: false,
-    exporting: false,
-    exportProgress: 0,
-    exportMessage: null,
-    error: null,
-    composition: null,
-    selectedSceneId: null,
-    creatorPlaying: false,
-    creatorFrame: 0,
-  };
+  // Public signals — readable directly from templates
+  readonly mode = signal<EditorMode>('edit');
+  readonly sourceKind = signal<'url' | 'file' | null>(null);
+  readonly sourceValue = signal('');
+  readonly objectUrl = signal<string | null>(null);
+  readonly duration = signal(0);
+  readonly trimStart = signal(0);
+  readonly trimEnd = signal(0);
+  readonly currentTime = signal(0);
+  readonly playbackRate = signal(1);
+  readonly loopPreview = signal(false);
+  readonly playing = signal(false);
+  readonly exporting = signal(false);
+  readonly exportProgress = signal(0);
+  readonly exportMessage = signal<string | null>(null);
+  readonly error = signal<string | null>(null);
+  readonly composition = signal<Composition | null>(null);
+  readonly selectedSceneId = signal<string | null>(null);
+  readonly creatorPlaying = signal(false);
+  readonly creatorFrame = signal(0);
 
-  private listeners = new Set<Listener>();
-
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    listener(this.getState());
-    return () => this.listeners.delete(listener);
-  }
-
+  // Backward-compat snapshot (used by callers that still call getState())
   getState(): EditorState {
-    return { ...this.state };
+    return {
+      mode: this.mode(),
+      sourceKind: this.sourceKind(),
+      sourceValue: this.sourceValue(),
+      objectUrl: this.objectUrl(),
+      duration: this.duration(),
+      trimStart: this.trimStart(),
+      trimEnd: this.trimEnd(),
+      currentTime: this.currentTime(),
+      playbackRate: this.playbackRate(),
+      loopPreview: this.loopPreview(),
+      playing: this.playing(),
+      exporting: this.exporting(),
+      exportProgress: this.exportProgress(),
+      exportMessage: this.exportMessage(),
+      error: this.error(),
+      composition: this.composition(),
+      selectedSceneId: this.selectedSceneId(),
+      creatorPlaying: this.creatorPlaying(),
+      creatorFrame: this.creatorFrame(),
+    };
   }
 
   setMode(mode: EditorMode): void {
-    this.state = { ...this.state, mode, error: null, exportMessage: null };
-    this.emit();
+    this.mode(mode);
+    this.error(null);
+    this.exportMessage(null);
   }
 
   setSource(kind: 'url' | 'file', sourceValue: string, objectUrl: string | null): void {
-    this.state = {
-      ...this.state,
-      sourceKind: kind,
-      sourceValue,
-      objectUrl,
-      duration: 0,
-      trimStart: 0,
-      trimEnd: 0,
-      currentTime: 0,
-      exporting: false,
-      exportProgress: 0,
-      exportMessage: null,
-      error: null,
-    };
-    this.emit();
+    this.sourceKind(kind);
+    this.sourceValue(sourceValue);
+    this.objectUrl(objectUrl);
+    this.duration(0);
+    this.trimStart(0);
+    this.trimEnd(0);
+    this.currentTime(0);
+    this.exporting(false);
+    this.exportProgress(0);
+    this.exportMessage(null);
+    this.error(null);
   }
 
   setDuration(duration: number): void {
-    const normalizedDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
-    this.state = {
-      ...this.state,
-      duration: normalizedDuration,
-      trimStart: 0,
-      trimEnd: normalizedDuration,
-      currentTime: 0,
-      exporting: false,
-      exportProgress: 0,
-      exportMessage: null,
-      error: null,
-    };
-    this.emit();
+    const n = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    this.duration(n);
+    this.trimStart(0);
+    this.trimEnd(n);
+    this.currentTime(0);
+    this.exporting(false);
+    this.exportProgress(0);
+    this.exportMessage(null);
+    this.error(null);
   }
 
   setCurrentTime(currentTime: number): void {
-    this.state = {
-      ...this.state,
-      currentTime: clamp(currentTime, 0, this.state.duration || 0),
-    };
-    this.emit();
+    this.currentTime(clamp(currentTime, 0, this.duration() || 0));
   }
 
-  setPlaying(playing: boolean): void {
-    this.state = { ...this.state, playing };
-    this.emit();
-  }
-
-  setLoopPreview(loopPreview: boolean): void {
-    this.state = { ...this.state, loopPreview };
-    this.emit();
-  }
-
-  setPlaybackRate(playbackRate: number): void {
-    this.state = { ...this.state, playbackRate };
-    this.emit();
-  }
+  setPlaying(playing: boolean): void { this.playing(playing); }
+  setLoopPreview(loopPreview: boolean): void { this.loopPreview(loopPreview); }
+  setPlaybackRate(playbackRate: number): void { this.playbackRate(playbackRate); }
 
   setTrim(patch: TrimPatch): boolean {
-    const duration = this.state.duration;
-    const hasDuration = duration > 0;
-
-    const nextStart = patch.trimStart ?? this.state.trimStart;
-    const nextEnd = patch.trimEnd ?? this.state.trimEnd;
-
-    if (!hasDuration) {
-      this.state = { ...this.state, error: 'Load a video first.' };
-      this.emit();
-      return false;
-    }
-
+    const duration = this.duration();
+    if (duration <= 0) { this.error('Load a video first.'); return false; }
+    const nextStart = patch.trimStart ?? this.trimStart();
+    const nextEnd = patch.trimEnd ?? this.trimEnd();
     const clampedStart = clamp(nextStart, 0, duration);
     const clampedEnd = clamp(nextEnd, 0, duration);
-
     if (clampedStart >= clampedEnd - EPSILON) {
-      this.state = {
-        ...this.state,
-        error: 'Trim start must be less than trim end.',
-      };
-      this.emit();
+      this.error('Trim start must be less than trim end.');
       return false;
     }
-
-    this.state = {
-      ...this.state,
-      trimStart: clampedStart,
-      trimEnd: clampedEnd,
-      error: null,
-    };
-    this.emit();
+    this.trimStart(clampedStart);
+    this.trimEnd(clampedEnd);
+    this.error(null);
     return true;
   }
 
   setExportState(patch: { exporting?: boolean; exportProgress?: number; exportMessage?: string | null }): void {
-    this.state = {
-      ...this.state,
-      exporting: patch.exporting ?? this.state.exporting,
-      exportProgress: patch.exportProgress ?? this.state.exportProgress,
-      exportMessage: patch.exportMessage ?? this.state.exportMessage,
-    };
-    this.emit();
+    if (patch.exporting !== undefined) this.exporting(patch.exporting);
+    if (patch.exportProgress !== undefined) this.exportProgress(patch.exportProgress);
+    if (patch.exportMessage !== undefined) this.exportMessage(patch.exportMessage ?? null);
   }
 
-  clearExportMessage(): void {
-    if (!this.state.exportMessage) {
-      return;
-    }
-    this.state = { ...this.state, exportMessage: null };
-    this.emit();
-  }
-
-  clearError(): void {
-    if (!this.state.error) {
-      return;
-    }
-    this.state = { ...this.state, error: null };
-    this.emit();
-  }
-
-  // Creator mode methods
+  clearExportMessage(): void { if (this.exportMessage()) this.exportMessage(null); }
+  clearError(): void { if (this.error()) this.error(null); }
 
   setComposition(composition: Composition | null): void {
-    this.state = { ...this.state, composition, selectedSceneId: null, creatorFrame: 0 };
-    this.emit();
+    this.composition(composition);
+    this.selectedSceneId(null);
+    this.creatorFrame(0);
   }
 
   addScene(scene: Scene): void {
-    if (!this.state.composition) return;
-    const scenes = [...this.state.composition.scenes, scene];
-    this.state = {
-      ...this.state,
-      composition: { ...this.state.composition, scenes },
-      selectedSceneId: scene.id,
-    };
-    this.emit();
+    const comp = this.composition();
+    if (!comp) return;
+    this.composition({ ...comp, scenes: [...comp.scenes, scene] });
+    this.selectedSceneId(scene.id);
   }
 
   removeScene(id: string): void {
-    if (!this.state.composition) return;
-    const scenes = this.state.composition.scenes.filter((s) => s.id !== id);
-    this.state = {
-      ...this.state,
-      composition: { ...this.state.composition, scenes },
-      selectedSceneId: this.state.selectedSceneId === id ? null : this.state.selectedSceneId,
-    };
-    this.emit();
+    const comp = this.composition();
+    if (!comp) return;
+    this.composition({ ...comp, scenes: comp.scenes.filter((s) => s.id !== id) });
+    if (this.selectedSceneId() === id) this.selectedSceneId(null);
   }
 
   updateScene(id: string, updatedScene: Scene): void {
-    if (!this.state.composition) return;
-    const scenes = this.state.composition.scenes.map((s) => (s.id === id ? updatedScene : s));
-    this.state = {
-      ...this.state,
-      composition: { ...this.state.composition, scenes },
-    };
-    this.emit();
+    const comp = this.composition();
+    if (!comp) return;
+    this.composition({ ...comp, scenes: comp.scenes.map((s) => (s.id === id ? updatedScene : s)) });
   }
 
   reorderScenes(ids: string[]): void {
-    if (!this.state.composition) return;
-    const sceneMap = new Map(this.state.composition.scenes.map((s) => [s.id, s]));
+    const comp = this.composition();
+    if (!comp) return;
+    const sceneMap = new Map(comp.scenes.map((s) => [s.id, s]));
     const reordered = ids.map((id) => sceneMap.get(id)).filter(Boolean) as Scene[];
-    // Add any scenes not in the list at the end
-    for (const scene of this.state.composition.scenes) {
+    for (const scene of comp.scenes) {
       if (!ids.includes(scene.id)) reordered.push(scene);
     }
-    this.state = {
-      ...this.state,
-      composition: { ...this.state.composition, scenes: reordered },
-    };
-    this.emit();
+    this.composition({ ...comp, scenes: reordered });
   }
 
-  setSelectedScene(id: string | null): void {
-    this.state = { ...this.state, selectedSceneId: id };
-    this.emit();
-  }
-
-  setCreatorPlaying(playing: boolean): void {
-    this.state = { ...this.state, creatorPlaying: playing };
-    this.emit();
-  }
-
-  setCreatorFrame(frame: number): void {
-    this.state = { ...this.state, creatorFrame: frame };
-    this.emit();
-  }
+  setSelectedScene(id: string | null): void { this.selectedSceneId(id); }
+  setCreatorPlaying(playing: boolean): void { this.creatorPlaying(playing); }
+  setCreatorFrame(frame: number): void { this.creatorFrame(frame); }
 
   updateCompositionConfig(patch: { width?: number; height?: number; fps?: number; durationInFrames?: number }): void {
-    if (!this.state.composition) return;
-    this.state = {
-      ...this.state,
-      composition: {
-        ...this.state.composition,
-        config: { ...this.state.composition.config, ...patch },
-      },
-    };
-    this.emit();
-  }
-
-  private emit(): void {
-    const snapshot = this.getState();
-    this.listeners.forEach((listener) => listener(snapshot));
+    const comp = this.composition();
+    if (!comp) return;
+    this.composition({ ...comp, config: { ...comp.config, ...patch } });
   }
 }

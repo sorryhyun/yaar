@@ -19,11 +19,11 @@ If localhost is not in the allowed domains list, use `request_allowing_domain({ 
 Open 5 windows simultaneously using different renderers, verify all exist, then close all:
 
 ```
-create({ windowId: "si-mr-md", title: "Test: Markdown", width: 300, height: 200, content: { renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." } })
-create({ windowId: "si-mr-html", title: "Test: HTML", width: 300, height: 200, content: { renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" } })
-create({ windowId: "si-mr-text", title: "Test: Text", width: 300, height: 200, content: { renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." } })
+create({ windowId: "si-mr-md", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
+create({ windowId: "si-mr-html", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
+create({ windowId: "si-mr-text", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
 create_component({ windowId: "si-mr-comp", title: "Test: Component", width: 300, height: 200, components: [{ type: "text", content: "Component DSL", variant: "heading" }, { type: "badge", label: "OK", variant: "success" }, { type: "progress", value: 75, label: "Progress" }] })
-create({ windowId: "si-mr-tbl", title: "Test: Table", width: 300, height: 200, content: { renderer: "table", content: { headers: ["Col A", "Col B"], rows: [["1", "2"], ["3", "4"]] } } })
+create({ windowId: "si-mr-tbl", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { headers: ["Col A", "Col B"], rows: [["1", "2"], ["3", "4"]] } })
 ```
 
 Then verify:
@@ -45,7 +45,7 @@ close({ windowId: "si-mr-tbl" })
 Create a markdown window and test all update operations:
 
 ```
-create({ windowId: "si-update", title: "Update Test", content: { renderer: "markdown", content: "Line 1" } })
+create({ windowId: "si-update", title: "Update Test", renderer: "markdown", content: "Line 1" })
 update({ windowId: "si-update", operation: "append", content: "\nLine 2" })
 view({ windowId: "si-update" })          # should contain "Line 1\nLine 2"
 update({ windowId: "si-update", operation: "prepend", content: "Line 0\n" })
@@ -60,8 +60,8 @@ close({ windowId: "si-update" })
 ### 3. Window Lock/Unlock
 
 ```
-create({ windowId: "si-lock", title: "Lock Test", content: { renderer: "text", content: "Locked window test." } })
-lock({ windowId: "si-lock" })
+create({ windowId: "si-lock", title: "Lock Test", renderer: "text", content: "Locked window test." })
+lock({ windowId: "si-lock", agentId: "si-tester" })
 ```
 Attempt to update the locked window — it should return a lock error or feedback:
 ```
@@ -69,7 +69,7 @@ update({ windowId: "si-lock", operation: "replace", content: "Should fail." })
 ```
 Then unlock and update successfully:
 ```
-unlock({ windowId: "si-lock" })
+unlock({ windowId: "si-lock", agentId: "si-tester" })
 update({ windowId: "si-lock", operation: "replace", content: "Unlocked and updated." })
 view({ windowId: "si-lock" })            # should contain "Unlocked and updated."
 close({ windowId: "si-lock" })
@@ -108,7 +108,7 @@ close({ windowId: "si-form" })
 Open Excel Lite, query its manifest, write cells, read them back, verify data integrity:
 
 ```
-create({ windowId: "si-excel", title: "Excel Lite", appId: "excel-lite", content: { renderer: "iframe" } })
+create({ windowId: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
 ```
 
 Wait for App Protocol ready, then:
@@ -146,7 +146,7 @@ close({ windowId: "si-excel" })
 Open Word Lite, set content, read it back:
 
 ```
-create({ windowId: "si-word", title: "Word Lite", appId: "word-lite", content: { renderer: "iframe" } })
+create({ windowId: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "app://word-lite" })
 ```
 
 Wait for ready, then:
@@ -172,7 +172,7 @@ read({ path: "_si-test-data.json" })     # verify JSON is readable
 
 Open Excel and import:
 ```
-create({ windowId: "si-cross", title: "Cross-App Test", appId: "excel-lite", content: { renderer: "iframe" } })
+create({ windowId: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
@@ -208,7 +208,7 @@ compile({ sandbox: <sandboxId> })
 
 **Step 3 — Deploy:**
 ```
-deploy({ sandbox: <sandboxId>, appId: "si-dev-test", name: "SI Dev Test", icon: "🧪", description: "Temporary test app from self-inspection", hidden: true })
+deploy({ sandbox: <sandboxId>, appId: "si-dev-test", name: "SI Dev Test", icon: "🧪", description: "Temporary test app from self-inspection", createShortcut: false })
 ```
 **PASS (deploy)** if deploy succeeds without error.
 
@@ -220,7 +220,7 @@ Verify "si-dev-test" appears in the app list.
 
 **Step 5 — Open and verify:**
 ```
-create({ windowId: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", content: { renderer: "iframe" } })
+create({ windowId: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "app://si-dev-test" })
 list()    # verify window exists
 close({ windowId: "si-dev-verify" })
 ```
@@ -334,9 +334,9 @@ delete({ path: "_si-test-dir/sub/file3.txt" })
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
-create({ windowId: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", content: { renderer: "iframe" } })
-create({ windowId: "si-multi-word", title: "Multi: Word", appId: "word-lite", content: { renderer: "iframe" } })
-create({ windowId: "si-multi-img", title: "Multi: Images", appId: "image-viewer", content: { renderer: "iframe" } })
+create({ windowId: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
+create({ windowId: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "app://word-lite" })
+create({ windowId: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "app://image-viewer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:
@@ -374,10 +374,8 @@ create({
   windowId: "self-inspection-report",
   title: "Self Inspection Report",
   width: 700, height: 700,
-  content: {
-    renderer: "markdown",
-    content: "# Self Inspection Report\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 2 | Content Updates | PASS | append/prepend/replace verified |\n| 3 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 4 | Form Submission | PASS | received username, color fields |\n| 5 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 6 | App Protocol (Word) | PASS | setHtml/title/stats verified |\n| 7 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 8 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 9 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 10 | Shortcuts | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n\n**Result: X/13 checks passed**"
-  }
+  renderer: "markdown",
+  content: "# Self Inspection Report\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 2 | Content Updates | PASS | append/prepend/replace verified |\n| 3 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 4 | Form Submission | PASS | received username, color fields |\n| 5 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 6 | App Protocol (Word) | PASS | setHtml/title/stats verified |\n| 7 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 8 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 9 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 10 | Shortcuts | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n\n**Result: X/13 checks passed**"
 })
 ```
 

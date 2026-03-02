@@ -87,78 +87,228 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var W=null,T=null,Gr=new Set,Jr=0;class nr{_value;_subscribers=new Set;constructor(r){this._value=r}get value(){if(W)this._subscribers.add(W),W.dependencies.add(this);return this._value}set value(r){if(Object.is(this._value,r))return;this._value=r;for(let o of[...this._subscribers])if(Jr>0)Gr.add(o);else o.execute()}peek(){return this._value}}function I(r){let o=new nr(r),n=(...u)=>{if(u.length===0)return o.value;o.value=u[0]};return Object.defineProperty(n,"value",{get:()=>o.value,set:(u)=>{o.value=u}}),n.peek=()=>o.peek(),n}function or(r){for(let o of r.dependencies)o._subscribers.delete(r);r.dependencies.clear();for(let o of r.cleanups)o();r.cleanups=[]}function G(r){let o,n={dependencies:new Set,cleanups:[],execute(){if(or(n),o)o();let u=W,x=T;W=n,T=n.cleanups;try{o=r()}finally{W=u,T=x}}};return n.execute(),()=>{if(or(n),o)o()}}function j(r,o,...n){let u=r,x=[],w,t=r.indexOf("#"),i=r.indexOf("."),z=Math.min(t>=0?t:1/0,i>=0?i:1/0);if(z<1/0){u=r.slice(0,z)||"div";let y=r.slice(z).split(/(?=[.#])/);for(let b of y)if(b[0]===".")x.push(b.slice(1));else if(b[0]==="#")w=b.slice(1)}let p=document.createElement(u);if(w)p.id=w;if(x.length)p.classList.add(...x);if(o)for(let[g,y]of Object.entries(o))if(g==="className")if(typeof y==="function")G(()=>{p.className=[x.join(" "),y()].filter(Boolean).join(" ")});else if(x.length)p.className=x.join(" ")+" "+y;else p.className=y;else if(g==="style"){if(typeof y==="string")p.style.cssText=y;else if(typeof y==="object")for(let[b,f]of Object.entries(y))if(typeof f==="function")G(()=>{p.style[b]=f()});else p.style[b]=f}else if(g==="ref"){if(typeof y==="function")y(p)}else if(g.startsWith("on")){let b=g.slice(2).toLowerCase();p.addEventListener(b,y)}else if(typeof y==="function"&&!g.startsWith("on"))G(()=>{let b=y();if(b==null||b===!1)p.removeAttribute(g);else p.setAttribute(g,String(b))});else if(y==null||y===!1);else if(y===!0)p.setAttribute(g,"");else p.setAttribute(g,String(y));return q(p,n),p}function q(r,o){for(let n of o){if(n==null||n===!1||n===!0)continue;if(Array.isArray(n))q(r,n);else if(typeof n==="function"){let u=document.createComment(""),x=document.createComment("");r.appendChild(u),r.appendChild(x),G(()=>{let w=n();while(u.nextSibling&&u.nextSibling!==x)u.nextSibling.remove();let t=Wr(w);x.parentNode.insertBefore(t,x)})}else if(n instanceof Node)r.appendChild(n);else r.appendChild(document.createTextNode(String(n)))}}function Wr(r){if(r==null||r===!1||r===!0)return document.createTextNode("");if(r instanceof Node)return r;if(Array.isArray(r)){let o=document.createDocumentFragment();return q(o,r),o}return document.createTextNode(String(r))}function E(r,o){let n=o||document.getElementById("app");if(!n)throw Error("Mount target not found");n.appendChild(r)}var Yr=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,O=null;function Zr(r){if(!Yr.test(r))return r;if(!O)O=document.createElement("textarea");return O.innerHTML=r,O.value}var xr=new WeakMap;function P(r,...o){let n=xr.get(r);if(!n)n=Dr(r),xr.set(r,n);return n(o)}var Y=0,ur=1,Z=2,v=3;function Dr(r){let o=[],n=Y,u="",x="",w="",t="",i=!1;function z(g){if(u)o.push(g?{t:"open_close",tag:u}:{t:"open",tag:u});u="",i=!1}function p(){if(x)o.push({t:"attr_static",name:x,value:w||x}),x="",w=""}for(let g=0;g<r.length;g++){let y=r[g];for(let b=0;b<y.length;b++){let f=y[b];if(n===Y)if(f==="<")if(y[b+1]==="!"&&y[b+2]==="-"&&y[b+3]==="-"){let $=y.indexOf("-->",b+4);if($!==-1)b=$+2;else b=y.length-1}else if(y[b+1]==="/"){let $=y.indexOf(">",b);if($!==-1)b=$,o.push({t:"close"})}else n=ur,u="",i=!1;else{let $=f;while(b+1<y.length&&y[b+1]!=="<")$+=y[++b];if($=$.replace(/^\s+|\s+$/g," "),$&&$!==" ")o.push({t:"text",value:Zr($)})}else if(n===ur)if(f==="/"&&u==="");else if(/\s/.test(f)){if(u)o.push({t:"open",tag:u}),u="",n=Z}else if(f===">")z(i),n=Y;else if(f==="/")i=!0;else u+=f;else if(n===Z)if(f==="=")n=v,w="",t="";else if(f==="/"||f===">")if(p(),f===">"){if(i)o.push({t:"close"}),i=!1;n=Y}else i=!0;else if(/\s/.test(f)){if(x)p()}else x+=f;else if(n===v)if(!t&&(f==='"'||f==="'"))t=f;else if(!t&&/\s/.test(f))p(),n=Z;else if(f===t)p(),n=Z,t="";else if(!t&&(f===">"||f==="/"))if(p(),f===">"){if(i)o.push({t:"close"}),i=!1;n=Y}else i=!0;else w+=f}if(g<r.length-1){if(n===Y)o.push({t:"field",idx:g});else if(n===v){let b=x;x="",w="",t="",o.push({t:"attr_field",name:b,idx:g}),n=Z}else if(n===Z)if(x)o.push({t:"attr_static",name:x,value:x}),x="",o.push({t:"attr_spread",idx:g});else o.push({t:"attr_spread",idx:g})}}return(g)=>dr(o,g)}var Xr={class:"className",for:"htmlFor"};function tr(r){return Xr[r]||r}function dr(r,o){let n=[],u=[];function x(t){if(n.length)n[n.length-1].children.push(t);else u.push(t)}for(let t of r)switch(t.t){case"open":n.push({tag:t.tag,children:[],props:{}});break;case"open_close":x(j(t.tag,null));break;case"close":{let i=n.pop();if(i){let z=Object.keys(i.props).length?i.props:void 0;x(j(i.tag,z,...i.children))}break}case"attr_static":{let i=n[n.length-1];if(i)i.props[tr(t.name)]=t.value;break}case"attr_field":{let i=n[n.length-1];if(i)i.props[tr(t.name)]=o[t.idx];break}case"attr_spread":{let i=n[n.length-1],z=o[t.idx];if(i&&z&&typeof z==="object")Object.assign(i.props,z);break}case"text":x(t.value);break;case"field":{let i=o[t.idx];if(Array.isArray(i))for(let z of i)x(z);else x(i);break}}if(u.length===1&&u[0]instanceof Node)return u[0];let w=document.createDocumentFragment();return q(w,u),w}function c(r,o,n){return()=>r()?o():n?n():null}function ir(r){if(!r)return"Unknown date";let o=new Date(r);if(Number.isNaN(o.getTime()))return r;return o.toLocaleString()}function F(r){return r.source||"huggingface"}function A(r){return r?.paper?.publishedAt||r?.publishedAt}function H(r){let o=A(r);if(!o)return 0;let n=new Date(o).getTime();return Number.isFinite(n)?n:0}function D(r){let o=r?.paper?.upvotes??r?.upvotes??0;return Number.isFinite(o)?o:0}function U(r){let o=r?.numComments??0;return Number.isFinite(o)?o:0}function X(r){return r?.paper?.id||r?.id||"unknown"}function d(r){return r?.paper?.title||r?.title||"Untitled paper"}function C(r){return r?.paper?.ai_summary||r?.summary||r?.paper?.summary||"No summary available."}function m(r){if(r?.arxiv?.absUrl)return r.arxiv.absUrl;return`https://arxiv.org/abs/${X(r)}`}function M(r){return String(r||"").replace(/\s+/g," ").trim()}function yr(r){let o=String(r||"").trim();if(!o)return"";return o.match(/\/abs\/(.+)$/)?.[1]||o}function J(r,o){let n=r.getElementsByTagName(o)[0];return M(n?.textContent||"")}function br(r){return r==="vote"?"trending":"publishedAt"}async function wr(r,o,n){let x=M(o||"cat:cs.AI OR cat:cs.LG")||"cat:cs.AI OR cat:cs.LG",w=n==="newest"?"submittedDate":"lastUpdatedDate",t=n==="oldest"?"ascending":"descending",i=`https://export.arxiv.org/api/query?search_query=${encodeURIComponent(x)}&start=0&max_results=${Math.max(1,r)}&sortBy=${w}&sortOrder=${t}`,z=await fetch(i);if(!z.ok)throw Error(`arXiv HTTP ${z.status}`);let p=await z.text(),y=new DOMParser().parseFromString(p,"application/xml");if(y.querySelector("parsererror"))throw Error("arXiv feed parse error");return Array.from(y.getElementsByTagName("entry")).map(($)=>{let rr=J($,"id"),L=yr(rr),Ir=J($,"title"),Fr=J($,"summary"),Hr=J($,"published")||J($,"updated"),Ur=Array.from($.getElementsByTagName("author")).map((N)=>J(N,"name")).filter(Boolean),Sr=Array.from($.getElementsByTagName("link")).find((N)=>N.getAttribute("title")==="pdf")?.getAttribute("href")||"",Br=($.getElementsByTagName("arxiv:primary_category")[0]||$.getElementsByTagName("primary_category")[0])?.getAttribute("term")||"";return{source:"arxiv",id:L,title:Ir,summary:Fr,publishedAt:Hr,upvotes:0,numComments:0,arxiv:{absUrl:rr||`https://arxiv.org/abs/${L}`,pdfUrl:Sr||`https://arxiv.org/pdf/${L}.pdf`,primaryCategory:Br,authors:Ur}}})}async function gr(r,o){let n=br(o),u=await fetch(`https://huggingface.co/api/daily_papers?limit=${r}&sort=${n}`);if(!u.ok)throw Error(`HF HTTP ${u.status}`);let x=await u.json();return(Array.isArray(x)?x:[]).map((w)=>({...w,source:"huggingface"}))}async function a(r,o){let n=String(r||"").trim();if(!n)throw Error("Missing paper id");if(o[n])return o[n];let u=await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(n)}`);if(!u.ok)throw Error(`HTTP ${u.status}`);let x=await u.json(),w={id:x?.id||n,title:x?.title||"",summary:x?.summary||"",aiSummary:x?.ai_summary||"",keywords:Array.isArray(x?.ai_keywords)?x.ai_keywords:[],authors:Array.isArray(x?.authors)?x.authors.map((t)=>t?.name).filter(Boolean):[],upvotes:Number(x?.upvotes||0),publishedAt:x?.publishedAt||"",projectPage:x?.projectPage||"",githubRepo:x?.githubRepo||"",githubStars:Number(x?.githubStars||0),links:{huggingFace:`https://huggingface.co/papers/${x?.id||n}`,arxiv:`https://arxiv.org/abs/${x?.id||n}`}};return o[n]=w,w}{let r=document.createElement("style");r.textContent=`:root {
+var F=null,O=null,Ir=new Set,Dr=0;class or{_value;_subscribers=new Set;constructor(r){this._value=r}get value(){if(F)this._subscribers.add(F),F.dependencies.add(this);return this._value}set value(r){if(Object.is(this._value,r))return;this._value=r;for(let t of[...this._subscribers])if(Dr>0)Ir.add(t);else t.execute()}peek(){return this._value}}function b(r){let t=new or(r),o=(...e)=>{if(e.length===0)return t.value;t.value=e[0]};return Object.defineProperty(o,"value",{get:()=>t.value,set:(e)=>{t.value=e}}),o.peek=()=>t.peek(),o}function rr(r){for(let t of r.dependencies)t._subscribers.delete(r);r.dependencies.clear();for(let t of r.cleanups)t();r.cleanups=[]}function h(r){let t,o={dependencies:new Set,cleanups:[],execute(){if(rr(o),t)t();let e=F,n=O;F=o,O=o.cleanups;try{t=r()}finally{F=e,O=n}}};return o.execute(),()=>{if(rr(o),t)t()}}function W(r,t,...o){let e=r,n=[],y,i=r.indexOf("#"),d=r.indexOf("."),g=Math.min(i>=0?i:1/0,d>=0?d:1/0);if(g<1/0){e=r.slice(0,g)||"div";let a=r.slice(g).split(/(?=[.#])/);for(let x of a)if(x[0]===".")n.push(x.slice(1));else if(x[0]==="#")y=x.slice(1)}let p=document.createElement(e);if(y)p.id=y;if(n.length)p.classList.add(...n);if(t)for(let[u,a]of Object.entries(t))if(u==="className")if(typeof a==="function")h(()=>{p.className=[n.join(" "),a()].filter(Boolean).join(" ")});else if(n.length)p.className=n.join(" ")+" "+a;else p.className=a;else if(u==="style"){if(typeof a==="string")p.style.cssText=a;else if(typeof a==="object")for(let[x,s]of Object.entries(a))if(typeof s==="function")h(()=>{p.style[x]=s()});else p.style[x]=s}else if(u==="ref"){if(typeof a==="function")a(p)}else if(u.startsWith("on")){let x=u.slice(2).toLowerCase();p.addEventListener(x,a)}else if(typeof a==="function"&&!u.startsWith("on"))h(()=>{let x=a();if(x==null||x===!1)p.removeAttribute(u);else p.setAttribute(u,String(x))});else if(a==null||a===!1);else if(a===!0)p.setAttribute(u,"");else p.setAttribute(u,String(a));return H(p,o),p}function H(r,t){for(let o of t){if(o==null||o===!1||o===!0)continue;if(Array.isArray(o))H(r,o);else if(typeof o==="function"){let e=document.createComment(""),n=document.createComment("");r.appendChild(e),r.appendChild(n),h(()=>{let y=o();while(e.nextSibling&&e.nextSibling!==n)e.nextSibling.remove();let i=$r(y);n.parentNode.insertBefore(i,n)})}else if(o instanceof Node)r.appendChild(o);else r.appendChild(document.createTextNode(String(o)))}}function $r(r){if(r==null||r===!1||r===!0)return document.createTextNode("");if(r instanceof Node)return r;if(Array.isArray(r)){let t=document.createDocumentFragment();return H(t,r),t}return document.createTextNode(String(r))}function v(r,t){let o=t||document.getElementById("app");if(!o)throw Error("Mount target not found");o.appendChild(r)}var zr=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,Y=null;function Sr(r){if(!zr.test(r))return r;if(!Y)Y=document.createElement("textarea");return Y.innerHTML=r,Y.value}var tr=new WeakMap;function m(r,...t){let o=tr.get(r);if(!o)o=Fr(r),tr.set(r,o);return o(t)}var R=0,nr=1,U=2,N=3;function Fr(r){let t=[],o=R,e="",n="",y="",i="",d=!1;function g(u){if(e)t.push(u?{t:"open_close",tag:e}:{t:"open",tag:e});e="",d=!1}function p(){if(n)t.push({t:"attr_static",name:n,value:y||n}),n="",y=""}for(let u=0;u<r.length;u++){let a=r[u];for(let x=0;x<a.length;x++){let s=a[x];if(o===R)if(s==="<")if(a[x+1]==="!"&&a[x+2]==="-"&&a[x+3]==="-"){let c=a.indexOf("-->",x+4);if(c!==-1)x=c+2;else x=a.length-1}else if(a[x+1]==="/"){let c=a.indexOf(">",x);if(c!==-1)x=c,t.push({t:"close"})}else o=nr,e="",d=!1;else{let c=s;while(x+1<a.length&&a[x+1]!=="<")c+=a[++x];if(c=c.replace(/^\s+|\s+$/g," "),c&&c!==" ")t.push({t:"text",value:Sr(c)})}else if(o===nr)if(s==="/"&&e==="");else if(/\s/.test(s)){if(e)t.push({t:"open",tag:e}),e="",o=U}else if(s===">")g(d),o=R;else if(s==="/")d=!0;else e+=s;else if(o===U)if(s==="=")o=N,y="",i="";else if(s==="/"||s===">")if(p(),s===">"){if(d)t.push({t:"close"}),d=!1;o=R}else d=!0;else if(/\s/.test(s)){if(n)p()}else n+=s;else if(o===N)if(!i&&(s==='"'||s==="'"))i=s;else if(!i&&/\s/.test(s))p(),o=U;else if(s===i)p(),o=U,i="";else if(!i&&(s===">"||s==="/"))if(p(),s===">"){if(d)t.push({t:"close"}),d=!1;o=R}else d=!0;else y+=s}if(u<r.length-1){if(o===R)t.push({t:"field",idx:u});else if(o===N){let x=n;n="",y="",i="",t.push({t:"attr_field",name:x,idx:u}),o=U}else if(o===U)if(n)t.push({t:"attr_static",name:n,value:n}),n="",t.push({t:"attr_spread",idx:u});else t.push({t:"attr_spread",idx:u})}}return(u)=>Ur(t,u)}var Rr={class:"className",for:"htmlFor"};function er(r){return Rr[r]||r}function Ur(r,t){let o=[],e=[];function n(i){if(o.length)o[o.length-1].children.push(i);else e.push(i)}for(let i of r)switch(i.t){case"open":o.push({tag:i.tag,children:[],props:{}});break;case"open_close":n(W(i.tag,null));break;case"close":{let d=o.pop();if(d){let g=Object.keys(d.props).length?d.props:void 0;n(W(d.tag,g,...d.children))}break}case"attr_static":{let d=o[o.length-1];if(d)d.props[er(i.name)]=i.value;break}case"attr_field":{let d=o[o.length-1];if(d)d.props[er(i.name)]=t[i.idx];break}case"attr_spread":{let d=o[o.length-1],g=t[i.idx];if(d&&g&&typeof g==="object")Object.assign(d.props,g);break}case"text":n(i.value);break;case"field":{let d=t[i.idx];if(Array.isArray(d))for(let g of d)n(g);else n(d);break}}if(e.length===1&&e[0]instanceof Node)return e[0];let y=document.createDocumentFragment();return H(y,e),y}function V(r,t,o){return()=>r()?t():o?o():null}function ir(r){if(!r)return"Unknown date";let t=new Date(r);if(Number.isNaN(t.getTime()))return r;return t.toLocaleString()}function f(r){return r.source||"huggingface"}function Z(r){return r?.paper?.publishedAt||r?.publishedAt}function P(r){let t=Z(r);if(!t)return 0;let o=new Date(t).getTime();return Number.isFinite(o)?o:0}function I(r){let t=r?.paper?.upvotes??r?.upvotes??0;return Number.isFinite(t)?t:0}function w(r){let t=r?.numComments??0;return Number.isFinite(t)?t:0}function D(r){return r?.paper?.id||r?.id||"unknown"}function $(r){return r?.paper?.title||r?.title||"Untitled paper"}function A(r){return r?.paper?.ai_summary||r?.summary||r?.paper?.summary||"No summary available."}function _(r){if(r?.arxiv?.absUrl)return r.arxiv.absUrl;return`https://arxiv.org/abs/${D(r)}`}function L(r){return String(r||"").replace(/\s+/g," ").trim()}function pr(r){let t=String(r||"").trim();if(!t)return"";return t.match(/\/abs\/(.+)$/)?.[1]||t}function z(r,t){let o=r.getElementsByTagName(t)[0];return L(o?.textContent||"")}function ar(r){return r==="vote"?"trending":"publishedAt"}async function ur(r,t,o){let n=L(t||"cat:cs.AI OR cat:cs.LG")||"cat:cs.AI OR cat:cs.LG",y=o==="newest"?"submittedDate":"lastUpdatedDate",i=o==="oldest"?"ascending":"descending",d=`https://export.arxiv.org/api/query?search_query=${encodeURIComponent(n)}&start=0&max_results=${Math.max(1,r)}&sortBy=${y}&sortOrder=${i}`,g=await fetch(d);if(!g.ok)throw Error(`arXiv HTTP ${g.status}`);let p=await g.text(),a=new DOMParser().parseFromString(p,"application/xml");if(a.querySelector("parsererror"))throw Error("arXiv feed parse error");return Array.from(a.getElementsByTagName("entry")).map((c)=>{let M=z(c,"id"),K=pr(M),mr=z(c,"title"),br=z(c,"summary"),fr=z(c,"published")||z(c,"updated"),wr=Array.from(c.getElementsByTagName("author")).map((T)=>z(T,"name")).filter(Boolean),Pr=Array.from(c.getElementsByTagName("link")).find((T)=>T.getAttribute("title")==="pdf")?.getAttribute("href")||"",hr=(c.getElementsByTagName("arxiv:primary_category")[0]||c.getElementsByTagName("primary_category")[0])?.getAttribute("term")||"";return{source:"arxiv",id:K,title:mr,summary:br,publishedAt:fr,upvotes:0,numComments:0,arxiv:{absUrl:M||`https://arxiv.org/abs/${K}`,pdfUrl:Pr||`https://arxiv.org/pdf/${K}.pdf`,primaryCategory:hr,authors:wr}}})}async function dr(r,t){let o=ar(t),e=await fetch(`https://huggingface.co/api/daily_papers?limit=${r}&sort=${o}`);if(!e.ok)throw Error(`HF HTTP ${e.status}`);let n=await e.json();return(Array.isArray(n)?n:[]).map((y)=>({...y,source:"huggingface"}))}async function C(r,t){let o=String(r||"").trim();if(!o)throw Error("Missing paper id");if(t[o])return t[o];let e=await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(o)}`);if(!e.ok)throw Error(`HTTP ${e.status}`);let n=await e.json(),y={id:n?.id||o,title:n?.title||"",summary:n?.summary||"",aiSummary:n?.ai_summary||"",keywords:Array.isArray(n?.ai_keywords)?n.ai_keywords:[],authors:Array.isArray(n?.authors)?n.authors.map((i)=>i?.name).filter(Boolean):[],upvotes:Number(n?.upvotes||0),publishedAt:n?.publishedAt||"",projectPage:n?.projectPage||"",githubRepo:n?.githubRepo||"",githubStars:Number(n?.githubStars||0),links:{huggingFace:`https://huggingface.co/papers/${n?.id||o}`,arxiv:`https://arxiv.org/abs/${n?.id||o}`}};return t[o]=y,y}function xr(r){let t=window.yaar?.app;if(!t)return;let{getPapers:o,getSourcePapers:e,getRecommendations:n,setRecommendations:y,loadPapers:i,requestRecommendationsFromAgent:d,paperDetailsCache:g}=r;t.register({appId:"recent-papers",name:"Recent Papers",state:{papers:{description:"Current filtered paper list loaded in the UI",handler:()=>o().map((p)=>({id:D(p),source:f(p),title:$(p),summary:A(p),upvotes:I(p),comments:w(p)}))},recommendations:{description:"Current recommended papers",handler:()=>n()},paperDetailsCache:{description:"Cached detailed paper data fetched by paper id",handler:()=>g}},commands:{refresh:{description:"Reload papers from selected sources",params:{type:"object",properties:{}},handler:async()=>{return await i(),{ok:!0,count:o().length}}},recommendTop2Today:{description:"Ask the AI agent to recommend 2 papers from current context",params:{type:"object",properties:{}},handler:async()=>{if(!e().length)await i();return d("app-command"),{ok:!0,queued:!0,candidateCount:o().length}}},fetchPaperDetails:{description:"Fetch detailed summary/content metadata for one Hugging Face paper by id",params:{type:"object",properties:{id:{type:"string"}},required:["id"]},handler:async(p)=>{return{ok:!0,detail:await C(p.id,g)}}},fetchPaperDetailsBatch:{description:"Fetch detailed summary/content metadata for multiple Hugging Face paper ids",params:{type:"object",properties:{ids:{type:"array",items:{type:"string"}}},required:["ids"]},handler:async(p)=>{let u=Array.isArray(p.ids)?p.ids.filter(Boolean).slice(0,20):[],a=[];for(let x of u)try{a.push(await C(x,g))}catch(s){a.push({id:x,error:s?.message||String(s)})}return{ok:!0,count:a.length,details:a}}},setRecommendations:{description:"Set AI-generated recommendations to display in the UI",params:{type:"object",properties:{recommendations:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},reason:{type:"string"},upvotes:{type:"number"},comments:{type:"number"},source:{type:"string"},url:{type:"string"}},required:["id","title","reason"]}}},required:["recommendations"]},handler:async(p)=>{return y((p.recommendations||[]).slice(0,2).map((u)=>({id:String(u.id||""),title:String(u.title||"Untitled paper"),reason:String(u.reason||""),upvotes:Number(u.upvotes||0),comments:Number(u.comments||0),source:u.source||"arxiv",url:String(u.url||"")}))),{ok:!0,count:n().length}}}}})}{let r=document.createElement("style");r.textContent=`:root {
   color-scheme: dark;
-  --bg: #0f1117; --panel: #161a22; --muted: #9aa3b2; --text: #e7ecf3;
-  --accent: #6ea8fe; --border: #2a3140; --good: #9ad08f;
+  --bg: #0f1117;
+  --panel: #161a22;
+  --muted: #9aa3b2;
+  --text: #e7ecf3;
+  --accent: #6ea8fe;
+  --border: #2a3140;
+  --good: #9ad08f;
 }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); overflow-y: auto; }
-.wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
-.top { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-bottom: 14px; }
-h1 { margin:0; font-size: 20px; }
-.spacer { flex:1; }
-.muted { color: var(--muted); font-size: 13px; }
-input, button, select { background: #202838; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font: inherit; }
-button { cursor: pointer; }
-button:hover { border-color: #3b4660; }
-input { min-width: 270px; }
-.recommend-btn { border-color: #385995; }
-.recommend-box { margin-top: 10px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #141a25; }
-.recommend-title { margin: 0 0 8px; color: var(--good); font-size: 14px; }
-.recommend-item { margin: 0 0 8px; font-size: 13px; color: #d5deea; }
-.recommend-item:last-child { margin-bottom: 0; }
-.recommend-item a { color: var(--accent); text-decoration: none; }
-.recommend-item a:hover { text-decoration: underline; }
-.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-.card-inner { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
-.thumb { width: 100%; height: 100%; min-height: 130px; object-fit: cover; background: #11151f; }
-.content { padding: 12px 14px 14px 0; }
-.title { margin: 0 0 8px; font-size: 17px; line-height: 1.3; }
-.title a { color: var(--text); text-decoration: none; }
-.title a:hover { color: var(--accent); text-decoration: underline; }
-.meta { display:flex; gap:10px; flex-wrap:wrap; color: var(--muted); font-size: 12px; margin-bottom: 8px; }
-.summary { margin: 0; color: #cdd6e3; font-size: 14px; line-height: 1.45; }
-.links { margin-top: 10px; display:flex; gap:10px; flex-wrap: wrap; }
-.links a { color: var(--accent); font-size: 13px; text-decoration: none; }
-.links a:hover { text-decoration: underline; }
-.tag { display:inline-block; padding:2px 8px; border:1px solid var(--border); border-radius:99px; font-size:11px; }
-.empty { padding: 24px; text-align:center; border: 1px dashed var(--border); border-radius: 12px; color: var(--muted); }
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-y: auto;
+}
+.wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.top {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.spacer {
+  flex: 1;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+input,
+button,
+select {
+  background: #202838;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:hover {
+  border-color: #3b4660;
+}
+input {
+  min-width: 270px;
+}
+.recommend-btn {
+  border-color: #385995;
+}
+.recommend-box {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #141a25;
+}
+.recommend-title {
+  margin: 0 0 8px;
+  color: var(--good);
+  font-size: 14px;
+}
+.recommend-item {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #d5deea;
+}
+.recommend-item:last-child {
+  margin-bottom: 0;
+}
+.recommend-item a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.recommend-item a:hover {
+  text-decoration: underline;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-inner {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 12px;
+}
+.thumb {
+  width: 100%;
+  height: 100%;
+  min-height: 130px;
+  object-fit: cover;
+  background: #11151f;
+}
+.content {
+  padding: 12px 14px 14px 0;
+}
+.title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  line-height: 1.3;
+}
+.title a {
+  color: var(--text);
+  text-decoration: none;
+}
+.title a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.summary {
+  margin: 0;
+  color: #cdd6e3;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.links {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.links a {
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+}
+.links a:hover {
+  text-decoration: underline;
+}
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 11px;
+}
+.empty {
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+}
 @media (max-width: 760px) {
-  .card-inner { grid-template-columns: 1fr; }
-  .content { padding: 0 12px 12px 12px; }
-  .thumb { min-height: 180px; }
-  input { min-width: 100%; }
+  .card-inner {
+    grid-template-columns: 1fr;
+  }
+  .content {
+    padding: 0 12px 12px 12px;
+  }
+  .thumb {
+    min-height: 180px;
+  }
+  input {
+    min-width: 100%;
+  }
 }
-`,document.head.appendChild(r)}var K=I([]),B=I([]),Q=I([]),R=I(!1),V=I(""),k=I("huggingface"),l=I(20),e=I("all"),h=I("newest"),_=I("cat:cs.AI OR cat:cs.LG"),s={};function $r(){let r=[...K()],o=e(),n=h();if(o!=="all"){let u=Number(o);if(Number.isFinite(u)&&u>0){let x=Date.now()-u*24*60*60*1000;r=r.filter((w)=>H(w)>=x)}}if(n==="newest")r.sort((u,x)=>H(x)-H(u));else if(n==="oldest")r.sort((u,x)=>H(u)-H(x));else if(n==="vote")r.sort((u,x)=>{let w=D(x)-D(u);if(w!==0)return w;let t=U(x)-U(u);if(t!==0)return t;return H(x)-H(u)});else if(n==="comments")r.sort((u,x)=>U(x)-U(u));else if(n==="title")r.sort((u,x)=>d(u).localeCompare(d(x)));B(r)}async function S(){if(R())return;R(!0),V("");try{let r=l(),o=k(),n=[],u=[];if(o==="huggingface"||o==="both"){let x=o==="both"?Math.ceil(r/2):r;n=await gr(x,h())}if(o==="arxiv"||o==="both"){let x=o==="both"?Math.floor(r/2)||1:r;u=await wr(x,_(),h())}K([...n,...u]),$r()}catch(r){K([]),B([]),V(r?.message||String(r))}finally{R(!1)}}function zr(r){let o=B(),n=l(),u={event:"recent-papers:recommend-2",source:r,date:new Date().toISOString(),context:{mode:k(),arxivQuery:_(),limit:n,dayRange:e(),sortBy:h(),visibleCount:o.length},papers:o.slice(0,Math.max(1,n)).map((x)=>({id:X(x),title:d(x),source:F(x),summary:x?.summary||x?.paper?.summary||"",aiSummary:x?.paper?.ai_summary||"",upvotes:D(x),comments:U(x),publishedAt:A(x),authors:F(x)==="arxiv"?x?.arxiv?.authors||[]:(x?.paper?.authors||[]).map((w)=>w?.name).filter(Boolean),links:{huggingFace:`https://huggingface.co/papers/${X(x)}`,arxiv:m(x)}}))};window.yaar?.app?.sendInteraction?.(u)}function Pr(r){let o=F(r),n=X(r),u=d(r),x=C(r),w=A(r),t=r?.organization?.fullname||r?.organization?.name||r?.arxiv?.primaryCategory,i=U(r),z=D(r),p=o==="huggingface"?r?.thumbnail||"https://huggingface.co/front/assets/huggingface_logo-noborder.svg":"https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg",g=m(r);return P`
+`,document.head.appendChild(r)}var G=b([]),B=b([]),j=b([]),q=b(!1),X=b(""),Q=b("huggingface"),E=b(20),l=b("all"),J=b("newest"),k=b("cat:cs.AI OR cat:cs.LG"),Br={};function sr(){let r=[...G()],t=l(),o=J();if(t!=="all"){let e=Number(t);if(Number.isFinite(e)&&e>0){let n=Date.now()-e*24*60*60*1000;r=r.filter((y)=>P(y)>=n)}}if(o==="newest")r.sort((e,n)=>P(n)-P(e));else if(o==="oldest")r.sort((e,n)=>P(e)-P(n));else if(o==="vote")r.sort((e,n)=>{let y=I(n)-I(e);if(y!==0)return y;let i=w(n)-w(e);if(i!==0)return i;return P(n)-P(e)});else if(o==="comments")r.sort((e,n)=>w(n)-w(e));else if(o==="title")r.sort((e,n)=>$(e).localeCompare($(n)));B(r)}async function S(){if(q())return;q(!0),X("");try{let r=E(),t=Q(),o=[],e=[];if(t==="huggingface"||t==="both"){let n=t==="both"?Math.ceil(r/2):r;o=await dr(n,J())}if(t==="arxiv"||t==="both"){let n=t==="both"?Math.floor(r/2)||1:r;e=await ur(n,k(),J())}G([...o,...e]),sr()}catch(r){G([]),B([]),X(r?.message||String(r))}finally{q(!1)}}function gr(r){let t=B(),o=E(),e={event:"recent-papers:recommend-2",source:r,date:new Date().toISOString(),context:{mode:Q(),arxivQuery:k(),limit:o,dayRange:l(),sortBy:J(),visibleCount:t.length},papers:t.slice(0,Math.max(1,o)).map((n)=>({id:D(n),title:$(n),source:f(n),summary:n?.summary||n?.paper?.summary||"",aiSummary:n?.paper?.ai_summary||"",upvotes:I(n),comments:w(n),publishedAt:Z(n),authors:f(n)==="arxiv"?n?.arxiv?.authors||[]:(n?.paper?.authors||[]).map((y)=>y?.name).filter(Boolean),links:{huggingFace:`https://huggingface.co/papers/${D(n)}`,arxiv:_(n)}}))};window.yaar?.app?.sendInteraction?.(e)}function cr(r){let t=f(r),o=D(r),e=$(r),n=A(r),y=Z(r),i=r?.organization?.fullname||r?.organization?.name||r?.arxiv?.primaryCategory,d=w(r),g=I(r),p=t==="huggingface"?r?.thumbnail||"https://huggingface.co/front/assets/huggingface_logo-noborder.svg":"https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg",u=_(r);return m`
     <article class="card">
       <div class="card-inner">
         <img class="thumb" src="${p}" alt="thumbnail" loading="lazy" />
         <div class="content">
-          <h2 class="title"><a href="${g}" target="_blank" rel="noreferrer">${u}</a></h2>
+          <h2 class="title"><a href="${u}" target="_blank" rel="noreferrer">${e}</a></h2>
           <div class="meta">
-            <span class="tag">${o==="huggingface"?"Hugging Face":"arXiv"}</span>
-            <span>🗓 ${ir(w)}</span>
-            <span>👍 ${z}</span>
-            <span>💬 ${i} comments</span>
-            ${t?P`<span>🏷 ${t}</span>`:""}
+            <span class="tag">${t==="huggingface"?"Hugging Face":"arXiv"}</span>
+            <span>🗓 ${ir(y)}</span>
+            <span>👍 ${g}</span>
+            <span>💬 ${d} comments</span>
+            ${i?m`<span>🏷 ${i}</span>`:""}
           </div>
-          <p class="summary">${x}</p>
+          <p class="summary">${n}</p>
           <div class="links">
-            ${o==="huggingface"?P`<a href="https://huggingface.co/papers/${n}" target="_blank" rel="noreferrer">Hugging Face</a>`:""}
-            <a href="${g}" target="_blank" rel="noreferrer">arXiv</a>
-            ${r?.arxiv?.pdfUrl?P`<a href="${r.arxiv.pdfUrl}" target="_blank" rel="noreferrer">PDF</a>`:""}
+            ${t==="huggingface"?m`<a href="https://huggingface.co/papers/${o}" target="_blank" rel="noreferrer">Hugging Face</a>`:""}
+            <a href="${u}" target="_blank" rel="noreferrer">arXiv</a>
+            ${r?.arxiv?.pdfUrl?m`<a href="${r.arxiv.pdfUrl}" target="_blank" rel="noreferrer">PDF</a>`:""}
           </div>
         </div>
       </div>
     </article>
-  `}function fr(r,o){return P`
+  `}function yr(r,t){return m`
     <section style="margin-top: 12px;">
-      <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${r} (${o.length})</h3>
-      ${o.length===0?P`<div class="empty">No papers available for this source.</div>`:P`<div class="grid">${o.map((n)=>Pr(n))}</div>`}
+      <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${r} (${t.length})</h3>
+      ${t.length===0?m`<div class="empty">No papers available for this source.</div>`:m`<div class="grid">${t.map((o)=>cr(o))}</div>`}
     </section>
-  `}E(P`
+  `}v(m`
   <div class="wrap y-app">
     <div class="top">
       <h1>📚 Recent Papers</h1>
@@ -166,21 +316,21 @@ input { min-width: 270px; }
       <div class="spacer"></div>
 
       <label class="muted">Source</label>
-      <select onChange=${(r)=>{k(r.target.value),S()}}>
+      <select onChange=${(r)=>{Q(r.target.value),S()}}>
         <option value="huggingface" selected>Hugging Face</option>
         <option value="arxiv">arXiv</option>
         <option value="both">Both</option>
       </select>
 
       <label class="muted">Limit</label>
-      <select onChange=${(r)=>{l(Number(r.target.value)),S()}}>
+      <select onChange=${(r)=>{E(Number(r.target.value)),S()}}>
         <option value="10">10</option>
         <option value="20" selected>20</option>
         <option value="40">40</option>
       </select>
 
       <label class="muted">Days</label>
-      <select onChange=${(r)=>{e(r.target.value),$r()}}>
+      <select onChange=${(r)=>{l(r.target.value),sr()}}>
         <option value="all" selected>All</option>
         <option value="1">1 day</option>
         <option value="3">3 days</option>
@@ -190,7 +340,7 @@ input { min-width: 270px; }
       </select>
 
       <label class="muted">Sort</label>
-      <select onChange=${(r)=>{h(r.target.value),S()}}>
+      <select onChange=${(r)=>{J(r.target.value),S()}}>
         <option value="newest" selected>Newest</option>
         <option value="oldest">Oldest</option>
         <option value="vote">Most votes</option>
@@ -200,23 +350,23 @@ input { min-width: 270px; }
 
       <input
         placeholder="arXiv query (e.g. all:transformer OR cat:cs.AI)"
-        ref=${(r)=>{r.value=_()}}
-        onInput=${(r)=>_(r.target.value)}
+        ref=${(r)=>{r.value=k()}}
+        onInput=${(r)=>k(r.target.value)}
         onKeyDown=${(r)=>{if(r.key==="Enter")S()}}
       />
 
-      <button class="recommend-btn" onClick=${()=>zr("button")}>Recommend 2 papers</button>
+      <button class="recommend-btn" onClick=${()=>gr("button")}>Recommend 2 papers</button>
       <button onClick=${()=>S()}>Refresh</button>
     </div>
 
-    <div class="muted">${()=>{if(R())return"Loading papers...";if(V())return`Failed to load papers: ${V()}`;let r=B(),o=K(),n=r.filter((x)=>F(x)==="huggingface").length,u=r.filter((x)=>F(x)==="arxiv").length;return`Showing ${r.length} of ${o.length} papers (HF ${n} • arXiv ${u}) • Last updated ${new Date().toLocaleTimeString()}`}}</div>
+    <div class="muted">${()=>{if(q())return"Loading papers...";if(X())return`Failed to load papers: ${X()}`;let r=B(),t=G(),o=r.filter((n)=>f(n)==="huggingface").length,e=r.filter((n)=>f(n)==="arxiv").length;return`Showing ${r.length} of ${t.length} papers (HF ${o} • arXiv ${e}) • Last updated ${new Date().toLocaleTimeString()}`}}</div>
 
-    ${c(()=>Q().length>0,()=>P`
+    ${V(()=>j().length>0,()=>m`
         <div class="recommend-box">
           <h3 class="recommend-title">🤖 Today's 2 recommended papers</h3>
-          ${()=>Q().map((r,o)=>P`
+          ${()=>j().map((r,t)=>m`
             <p class="recommend-item">
-              <strong>${o+1}.</strong>
+              <strong>${t+1}.</strong>
               <a href="${r.url||`https://arxiv.org/abs/${r.id}`}" target="_blank" rel="noreferrer">${r.title}</a>
               — ${r.reason} (👍 ${r.upvotes}, 💬 ${r.comments})
             </p>
@@ -225,10 +375,10 @@ input { min-width: 270px; }
       `)}
 
     <div style="margin-top: 10px;">
-      ${()=>{if(R())return P``;let r=B();if(r.length===0)return P`<div class="empty">No papers available for this filter.</div>`;if(k()==="both"){let n=r.filter((x)=>F(x)==="huggingface"),u=r.filter((x)=>F(x)==="arxiv");return P`${fr("Hugging Face Papers",n)}${fr("arXiv Papers",u)}`}return P`<div class="grid">${r.map((n)=>Pr(n))}</div>`}}
+      ${()=>{if(q())return m``;let r=B();if(r.length===0)return m`<div class="empty">No papers available for this filter.</div>`;if(Q()==="both"){let o=r.filter((n)=>f(n)==="huggingface"),e=r.filter((n)=>f(n)==="arxiv");return m`${yr("Hugging Face Papers",o)}${yr("arXiv Papers",e)}`}return m`<div class="grid">${r.map((o)=>cr(o))}</div>`}}
     </div>
   </div>
-`);var pr=window.yaar?.app;if(pr)pr.register({appId:"recent-papers",name:"Recent Papers",state:{papers:{description:"Current filtered paper list loaded in the UI",handler:()=>B().map((r)=>({id:X(r),source:F(r),title:d(r),summary:C(r),upvotes:D(r),comments:U(r)}))},recommendations:{description:"Current recommended papers",handler:()=>Q()},paperDetailsCache:{description:"Cached detailed paper data fetched by paper id",handler:()=>s}},commands:{refresh:{description:"Reload papers from selected sources",params:{type:"object",properties:{}},handler:async()=>{return await S(),{ok:!0,count:B().length}}},recommendTop2Today:{description:"Ask the AI agent to recommend 2 papers from current context",params:{type:"object",properties:{}},handler:async()=>{if(!K().length)await S();return zr("app-command"),{ok:!0,queued:!0,candidateCount:B().length}}},fetchPaperDetails:{description:"Fetch detailed summary/content metadata for one Hugging Face paper by id",params:{type:"object",properties:{id:{type:"string"}},required:["id"]},handler:async(r)=>{return{ok:!0,detail:await a(r.id,s)}}},fetchPaperDetailsBatch:{description:"Fetch detailed summary/content metadata for multiple Hugging Face paper ids",params:{type:"object",properties:{ids:{type:"array",items:{type:"string"}}},required:["ids"]},handler:async(r)=>{let o=Array.isArray(r.ids)?r.ids.filter(Boolean).slice(0,20):[],n=[];for(let u of o)try{n.push(await a(u,s))}catch(x){n.push({id:u,error:x?.message||String(x)})}return{ok:!0,count:n.length,details:n}}},setRecommendations:{description:"Set AI-generated recommendations to display in the UI",params:{type:"object",properties:{recommendations:{type:"array",items:{type:"object",properties:{id:{type:"string"},title:{type:"string"},reason:{type:"string"},upvotes:{type:"number"},comments:{type:"number"},source:{type:"string"},url:{type:"string"}},required:["id","title","reason"]}}},required:["recommendations"]},handler:async(r)=>{return Q((r.recommendations||[]).slice(0,2).map((o)=>({id:String(o.id||""),title:String(o.title||"Untitled paper"),reason:String(o.reason||""),upvotes:Number(o.upvotes||0),comments:Number(o.comments||0),source:o.source||"arxiv",url:String(o.url||"")}))),{ok:!0,count:Q().length}}}}});S();
+`);xr({getPapers:()=>B(),getSourcePapers:()=>G(),getRecommendations:()=>j(),setRecommendations:(r)=>j(r),loadPapers:S,requestRecommendationsFromAgent:gr,paperDetailsCache:Br});S();
 
 </script>
 </body>

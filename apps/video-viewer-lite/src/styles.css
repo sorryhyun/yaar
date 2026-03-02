@@ -1,0 +1,128 @@
+:root {
+  --yaar-bg: #f7fbff;
+  --yaar-bg-surface: #ffffffcc;
+  --yaar-bg-surface-hover: #eef4ff;
+  --yaar-text: #1d2a3a;
+  --yaar-text-muted: #5f6f85;
+  --yaar-text-dim: #8b949e;
+  --yaar-border: #d8e3f0;
+  --yaar-accent: #1769e0;
+  --yaar-accent-hover: #0f57c2;
+  --yaar-shadow: 0 10px 30px rgba(23, 105, 224, 0.12);
+  --yaar-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--yaar-text);
+  background:
+    radial-gradient(1200px 500px at 20% -20%, #dcebff 0%, transparent 70%),
+    radial-gradient(900px 500px at 110% 120%, #d8e8ff 0%, transparent 60%),
+    linear-gradient(145deg, #f7fbff, #eef4ff);
+}
+
+.app {
+  min-height: 100%;
+  padding: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.shell {
+  width: min(980px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--yaar-border);
+  border-radius: 18px;
+  background: var(--yaar-bg-surface);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--yaar-shadow);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.title h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.status {
+  font-size: 0.9rem;
+  color: var(--yaar-text-muted);
+  min-height: 1.2em;
+  word-break: break-word;
+}
+.status.ok {
+  color: #0a7f43;
+}
+.status.err {
+  color: #b42318;
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, auto));
+  gap: 8px;
+  align-items: center;
+  justify-content: start;
+  flex-wrap: wrap;
+}
+
+.video-wrap {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--yaar-border);
+  background: #0b1220;
+}
+
+video {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 560px);
+  background: #000;
+}
+iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: #000;
+}
+
+.is-hidden {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .input-row {
+    grid-template-columns: 1fr;
+  }
+  .controls {
+    grid-template-columns: repeat(3, minmax(0, auto));
+  }
+}

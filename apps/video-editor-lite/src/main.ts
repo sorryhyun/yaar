@@ -1,240 +1,408 @@
-import { createEditorController } from './editor/controller';
+import { effect } from '@bundled/yaar';
+import { EditorStore } from './editor/state';
+import { createEditorUI } from './editor/ui';
+import { renderEditor } from './editor/render';
+import { loadPrefs, savePrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './editor/prefs';
+import type { EditorPrefs } from './editor/prefs';
+import { parseNumber, clamp } from './editor/utils/time';
+import type { Composition } from './core/types';
+import { DEFAULT_CONFIG } from './core/types';
+import { createScene } from './core/scene-registry';
+import type { SceneProps } from './core/scene-registry';
+import { createFileBrowser } from './editor/file-browser';
+import { createEditMode } from './editor/edit-mode';
+import { createCreatorMode } from './editor/creator-mode';
+import { setupKeyboardShortcuts } from './editor/keyboard';
+import { getDefaultPropsForType } from './editor/scene-defaults';
+import { normalizeStoragePath, toStorageUrl, DEFAULT_STORAGE_LIST_PATH } from './editor/storage-utils';
+import { registerProtocol } from './protocol';
 
-type AppProtocolStateEntry = {
-  description: string;
-  handler: () => unknown | Promise<unknown>;
+// Register all scene types (side-effect imports)
+import './scenes/solid';
+import './scenes/text';
+import './scenes/shape';
+import './scenes/image';
+import './scenes/video-clip';
+
+const store = new EditorStore();
+const ui = createEditorUI(document.body, store);
+let prefs: EditorPrefs = { ...DEFAULT_PREFS };
+
+const persistPrefs = (patch: Partial<EditorPrefs>): void => {
+  prefs = { ...prefs, ...patch };
+  void savePrefs(prefs);
 };
 
-type AppProtocolCommandEntry = {
-  description: string;
-  params: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-    additionalProperties?: boolean;
-  };
-  handler: (params: Record<string, unknown>) => unknown | Promise<unknown>;
+// Create sub-controllers
+const editMode = createEditMode(ui, store, {
+  getPrefs: () => prefs,
+  persistPrefs,
+});
+
+const creatorMode = createCreatorMode(ui, store);
+
+const fileBrowser = createFileBrowser(ui, {
+  persistPrefs,
+  onFileSelect: (storageUrl, storagePath) => editMode.loadSourceUrl(storageUrl, storagePath),
+});
+
+setupKeyboardShortcuts(store, editMode, creatorMode);
+
+// === Event listeners: Edit mode ===
+
+ui.loadUrlButton.addEventListener('click', () => {
+  void editMode.loadSourceUrl(ui.urlInput.value);
+});
+
+ui.urlInput.addEventListener('change', () => {
+  persistPrefs({ lastUrl: ui.urlInput.value.trim() });
+});
+
+ui.refreshFilesButton.addEventListener('click', () => {
+  void fileBrowser.refresh();
+});
+
+ui.storagePathInput.addEventListener('change', () => {
+  const nextPath = normalizeStoragePath(ui.storagePathInput.value) || DEFAULT_STORAGE_LIST_PATH;
+  ui.storagePathInput.value = nextPath;
+  persistPrefs({ lastStorageListPath: nextPath });
+  void fileBrowser.refresh();
+});
+
+ui.fileSearch.addEventListener('input', () => {
+  fileBrowser.applyFilter();
+});
+
+ui.pickFileButton.addEventListener('click', async () => {
+  const pickedFromStorage = await editMode.tryPickStorageVideo();
+  if (pickedFromStorage) return;
+  ui.fileInput.click();
+});
+
+ui.fileInput.addEventListener('change', () => {
+  const file = ui.fileInput.files?.[0];
+  if (!file) return;
+  editMode.setFromFile(file);
+});
+
+ui.video.addEventListener('loadedmetadata', () => {
+  store.setDuration(ui.video.duration || 0);
+  ui.video.playbackRate = store.getState().playbackRate;
+});
+
+ui.video.addEventListener('timeupdate', () => {
+  store.setCurrentTime(ui.video.currentTime || 0);
+  const state = store.getState();
+  if (state.loopPreview && ui.video.currentTime >= state.trimEnd) {
+    ui.video.currentTime = state.trimStart;
+    void ui.video.play();
+  }
+});
+
+ui.video.addEventListener('play', () => { store.setPlaying(true); });
+ui.video.addEventListener('pause', () => { store.setPlaying(false); });
+
+ui.startRange.addEventListener('input', () => {
+  editMode.applyTrimStart(parseNumber(ui.startRange.value));
+});
+
+ui.endRange.addEventListener('input', () => {
+  editMode.applyTrimEnd(parseNumber(ui.endRange.value));
+});
+
+ui.startInput.addEventListener('change', () => {
+  editMode.applyTrimStart(parseNumber(ui.startInput.value));
+});
+
+ui.endInput.addEventListener('change', () => {
+  editMode.applyTrimEnd(parseNumber(ui.endInput.value));
+});
+
+ui.speedSelect.addEventListener('change', () => {
+  const nextRate = parseNumber(ui.speedSelect.value);
+  if (!ALLOWED_PLAYBACK_RATES.has(nextRate)) {
+    ui.speedSelect.value = String(store.getState().playbackRate);
+    return;
+  }
+  ui.video.playbackRate = nextRate;
+  store.setPlaybackRate(nextRate);
+  persistPrefs({ playbackRate: nextRate });
+});
+
+ui.loopButton.addEventListener('click', async () => {
+  const state = store.getState();
+  const nextLoop = !state.loopPreview;
+  store.setLoopPreview(nextLoop);
+  persistPrefs({ loopPreview: nextLoop });
+  if (nextLoop) {
+    ui.video.currentTime = state.trimStart;
+    await ui.video.play().catch(() => undefined);
+    return;
+  }
+  ui.video.pause();
+});
+
+ui.exportButton.addEventListener('click', () => {
+  void editMode.exportTrimmedSegment();
+});
+
+// === Event listeners: Mode toggle ===
+
+ui.editTabButton.addEventListener('click', () => {
+  store.setMode('edit');
+  const player = creatorMode.getPreviewPlayer();
+  if (player) {
+    player.pause();
+    store.setCreatorPlaying(false);
+  }
+});
+
+ui.createTabButton.addEventListener('click', () => {
+  store.setMode('create');
+  creatorMode.ensureComposition();
+  creatorMode.syncPlayerToComposition();
+});
+
+// === Event listeners: Creator mode ===
+
+ui.creatorPlayButton.addEventListener('click', () => {
+  creatorMode.handleCreatorPlayPause();
+});
+
+ui.creatorExportButton.addEventListener('click', () => {
+  void creatorMode.handleCreatorExport();
+});
+
+ui.creatorFrameSlider.addEventListener('input', () => {
+  const frame = parseNumber(ui.creatorFrameSlider.value);
+  if (Number.isNaN(frame)) return;
+  const player = creatorMode.getPreviewPlayer();
+  if (player) {
+    player.pause();
+    store.setCreatorPlaying(false);
+    player.seek(frame);
+  }
+  store.setCreatorFrame(frame);
+});
+
+ui.addSceneButton.addEventListener('click', () => {
+  const type = ui.addSceneSelect.value;
+  creatorMode.addSceneToComposition(type);
+});
+
+ui.scenePanel.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const deleteId = target.dataset.deleteSceneId;
+  if (deleteId) {
+    store.removeScene(deleteId);
+    creatorMode.syncPlayerToComposition();
+    return;
+  }
+  const item = target.closest<HTMLElement>('.scene-item');
+  if (item?.dataset.sceneId) {
+    store.setSelectedScene(item.dataset.sceneId);
+  }
+});
+
+ui.timelineTrack.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  if (target.dataset.sceneId) {
+    store.setSelectedScene(target.dataset.sceneId);
+  }
+});
+
+const handleCompSettingChange = (): void => {
+  const w = parseNumber(ui.compWidthInput.value);
+  const h = parseNumber(ui.compHeightInput.value);
+  const fps = parseNumber(ui.compFpsInput.value);
+  const dur = parseNumber(ui.compDurationInput.value);
+  const patch: Record<string, number> = {};
+  if (!Number.isNaN(w) && w >= 100) patch.width = w;
+  if (!Number.isNaN(h) && h >= 100) patch.height = h;
+  if (!Number.isNaN(fps) && fps >= 1) patch.fps = fps;
+  if (!Number.isNaN(dur) && dur >= 1) patch.durationInFrames = dur;
+  if (Object.keys(patch).length) {
+    store.updateCompositionConfig(patch);
+    creatorMode.syncPlayerToComposition();
+  }
 };
 
-type YaarAppApi = {
-  register: (manifest: {
-    appId: string;
-    name: string;
-    state: Record<string, AppProtocolStateEntry>;
-    commands: Record<string, AppProtocolCommandEntry>;
-  }) => void;
-};
+ui.compWidthInput.addEventListener('change', handleCompSettingChange);
+ui.compHeightInput.addEventListener('change', handleCompSettingChange);
+ui.compFpsInput.addEventListener('change', handleCompSettingChange);
+ui.compDurationInput.addEventListener('change', handleCompSettingChange);
 
-const controller = createEditorController(document.body);
+// === Async initialization from prefs ===
+(async () => {
+  prefs = await loadPrefs();
+  ui.urlInput.value = prefs.lastUrl;
+  ui.storagePathInput.value = normalizeStoragePath(prefs.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
+  ui.video.playbackRate = prefs.playbackRate;
+  store.setPlaybackRate(prefs.playbackRate);
+  store.setLoopPreview(prefs.loopPreview);
+  void fileBrowser.refresh();
+})();
 
-const appApi = (window as { yaar?: { app?: unknown } }).yaar?.app as YaarAppApi | undefined;
-if (appApi && typeof appApi.register === 'function') {
-  appApi.register({
-    appId: 'video-editor-lite',
-    name: 'Video Editor Lite',
-    state: {
-      currentSource: {
-        description: 'Current media source information.',
-        handler: () => controller.getCurrentSource(),
-      },
-      playbackState: {
-        description: 'Playback status including play/pause, loop preview, and rate.',
-        handler: () => controller.getPlaybackState(),
-      },
-      timeline: {
-        description: 'Current playback time and total duration in seconds.',
-        handler: () => controller.getTimeline(),
-      },
-      trimRange: {
-        description: 'Current trim in/out range and selected duration in seconds.',
-        handler: () => controller.getTrimRange(),
-      },
+effect(() => { renderEditor(ui, store.getState()); });
+
+window.addEventListener('beforeunload', () => {
+  editMode.releaseActiveObjectUrl();
+  creatorMode.destroy();
+});
+
+// === App Protocol API ===
+registerProtocol({
+  getCurrentSource: () => {
+    const state = store.getState();
+    return {
+      sourceKind: state.sourceKind,
+      sourceValue: state.sourceValue,
+      objectUrl: state.objectUrl,
+    };
+  },
+  getPlaybackState: () => {
+    const state = store.getState();
+    return {
+      playing: state.playing,
+      paused: ui.video.paused,
+      playbackRate: state.playbackRate,
+      loopPreview: state.loopPreview,
+    };
+  },
+  getTimeline: () => {
+    const state = store.getState();
+    return {
+      currentTime: state.currentTime,
+      duration: state.duration,
+    };
+  },
+  getTrimRange: () => {
+    const state = store.getState();
+    return {
+      trimStart: state.trimStart,
+      trimEnd: state.trimEnd,
+      selectedDuration: Math.max(0, state.trimEnd - state.trimStart),
+    };
+  },
+  loadSource: (params) => {
+    const urlParam = typeof params.url === 'string' ? params.url.trim() : '';
+    const pathParam = typeof params.path === 'string' ? normalizeStoragePath(params.path) : '';
+    if (!urlParam && !pathParam) {
+      throw new Error('Provide either "url" or "path".');
+    }
+    const targetUrl = urlParam || toStorageUrl(pathParam);
+    const loaded = editMode.loadSourceUrl(targetUrl, pathParam || null);
+    if (!loaded) {
+      throw new Error('Unable to load source.');
+    }
+    return { ok: true as const, source: targetUrl };
+  },
+  play: async () => {
+    await ui.video.play();
+    return { ok: true as const };
+  },
+  pause: () => {
+    ui.video.pause();
+    return { ok: true as const };
+  },
+  seek: (time) => {
+    if (!Number.isFinite(time)) {
+      throw new Error('time must be a number.');
+    }
+    const duration = ui.video.duration || store.getState().duration || 0;
+    if (duration <= 0) {
+      throw new Error('Load a video before seeking.');
+    }
+    ui.video.currentTime = clamp(time, 0, duration);
+    return { ok: true as const, currentTime: ui.video.currentTime };
+  },
+  setPlaybackRate: (rate) => {
+    if (!ALLOWED_PLAYBACK_RATES.has(rate)) {
+      throw new Error('Unsupported playback rate.');
+    }
+    ui.video.playbackRate = rate;
+    store.setPlaybackRate(rate);
+    persistPrefs({ playbackRate: rate });
+    return { ok: true as const, playbackRate: rate };
+  },
+
+  // Creator mode API
+  createComposition: (params) => {
+    const config = {
+      width: params.width ?? DEFAULT_CONFIG.width,
+      height: params.height ?? DEFAULT_CONFIG.height,
+      fps: params.fps ?? DEFAULT_CONFIG.fps,
+      durationInFrames: params.durationInFrames ?? DEFAULT_CONFIG.durationInFrames,
+    };
+    const comp: Composition = { config, scenes: [] };
+    store.setComposition(comp);
+    store.setMode('create');
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const, config };
+  },
+
+  addScene: (params) => {
+    const id = creatorMode.addSceneToComposition(params.type, params.from, params.durationInFrames, params.props);
+    return { ok: true as const, sceneId: id };
+  },
+
+  updateScene: (params) => {
+    const state = store.getState();
+    if (!state.composition) throw new Error('No composition.');
+    const existing = state.composition.scenes.find((s) => s.id === params.id);
+    if (!existing) throw new Error(`Scene "${params.id}" not found.`);
+    const from = params.from ?? existing.from;
+    const dur = params.durationInFrames ?? existing.durationInFrames;
+    const mergedProps = { ...getDefaultPropsForType(existing.type), ...params.props };
+    const updated = createScene(existing.type, existing.id, from, dur, mergedProps);
+    store.updateScene(params.id, updated);
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  removeScene: (params) => {
+    store.removeScene(params.id);
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  reorderScenes: (params) => {
+    store.reorderScenes(params.ids);
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  getComposition: () => {
+    const state = store.getState();
+    if (!state.composition) return { composition: null };
+    return {
       composition: {
-        description: 'Current composition state including config and scenes.',
-        handler: () => controller.getComposition(),
+        config: { ...state.composition.config },
+        scenes: state.composition.scenes.map((s) => ({
+          id: s.id,
+          type: s.type,
+          from: s.from,
+          durationInFrames: s.durationInFrames,
+          render: s.render,
+        })),
       },
-    },
-    commands: {
-      loadSource: {
-        description: 'Load a media source by direct URL or storage path.',
-        params: {
-          type: 'object',
-          properties: {
-            url: { type: 'string' },
-            path: { type: 'string', description: 'Path under /api/storage/.' },
-          },
-          additionalProperties: false,
-        },
-        handler: (params) =>
-          controller.loadSource({
-            url: typeof params.url === 'string' ? params.url : undefined,
-            path: typeof params.path === 'string' ? params.path : undefined,
-          }),
-      },
-      play: {
-        description: 'Start playback (edit mode: video, create mode: composition preview).',
-        params: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        handler: async () => controller.play(),
-      },
-      pause: {
-        description: 'Pause playback.',
-        params: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        handler: () => controller.pause(),
-      },
-      seek: {
-        description: 'Seek to an absolute playback time in seconds.',
-        params: {
-          type: 'object',
-          properties: {
-            time: { type: 'number', minimum: 0 },
-          },
-          required: ['time'],
-          additionalProperties: false,
-        },
-        handler: (params) => {
-          const time = typeof params.time === 'number' ? params.time : Number.NaN;
-          return controller.seek(time);
-        },
-      },
-      setPlaybackRate: {
-        description: 'Set playback speed. Allowed values: 0.5, 1, 1.5, 2.',
-        params: {
-          type: 'object',
-          properties: {
-            rate: { type: 'number', enum: [0.5, 1, 1.5, 2] },
-          },
-          required: ['rate'],
-          additionalProperties: false,
-        },
-        handler: (params) => {
-          const rate = typeof params.rate === 'number' ? params.rate : Number.NaN;
-          return controller.setPlaybackRate(rate);
-        },
-      },
-      createComposition: {
-        description: 'Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).',
-        params: {
-          type: 'object',
-          properties: {
-            width: { type: 'number', description: 'Canvas width in pixels' },
-            height: { type: 'number', description: 'Canvas height in pixels' },
-            fps: { type: 'number', description: 'Frames per second' },
-            durationInFrames: { type: 'number', description: 'Total composition length in frames' },
-          },
-          additionalProperties: false,
-        },
-        handler: (params) =>
-          controller.createComposition({
-            width: typeof params.width === 'number' ? params.width : undefined,
-            height: typeof params.height === 'number' ? params.height : undefined,
-            fps: typeof params.fps === 'number' ? params.fps : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
-          }),
-      },
-      addScene: {
-        description: 'Add a scene to the composition. Types: solid, text, shape, image, video-clip.',
-        params: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: ['solid', 'text', 'shape', 'image', 'video-clip'] },
-            from: { type: 'number', description: 'Start frame (default: 0)' },
-            durationInFrames: { type: 'number', description: 'Scene duration in frames' },
-            props: {
-              type: 'object',
-              description: 'Scene-specific properties. solid: {color, colorEnd, gradient}. text: {text, fontSize, fontFamily, color, x, y, align, animation, shadow}. shape: {shape, x, y, width, height, radius, color, strokeColor, keyframes}. image: {src, fit, kenBurns}. video-clip: {src, trimStart, trimEnd}.',
-            },
-          },
-          required: ['type'],
-          additionalProperties: false,
-        },
-        handler: (params) =>
-          controller.addScene({
-            type: params.type as string,
-            from: typeof params.from === 'number' ? params.from : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
-            props: typeof params.props === 'object' && params.props ? (params.props as Record<string, unknown>) : undefined,
-          }),
-      },
-      updateScene: {
-        description: 'Update an existing scene by ID.',
-        params: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            from: { type: 'number' },
-            durationInFrames: { type: 'number' },
-            props: { type: 'object', description: 'Updated scene properties (merged with defaults).' },
-          },
-          required: ['id'],
-          additionalProperties: false,
-        },
-        handler: (params) =>
-          controller.updateScene({
-            id: params.id as string,
-            from: typeof params.from === 'number' ? params.from : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
-            props: typeof params.props === 'object' && params.props ? (params.props as Record<string, unknown>) : undefined,
-          }),
-      },
-      removeScene: {
-        description: 'Remove a scene by ID.',
-        params: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-          },
-          required: ['id'],
-          additionalProperties: false,
-        },
-        handler: (params) => controller.removeScene({ id: params.id as string }),
-      },
-      reorderScenes: {
-        description: 'Reorder scenes by providing an array of IDs in the desired order.',
-        params: {
-          type: 'object',
-          properties: {
-            ids: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['ids'],
-          additionalProperties: false,
-        },
-        handler: (params) => controller.reorderScenes({ ids: params.ids as string[] }),
-      },
-      preview: {
-        description: 'Switch to Create mode and start playing the composition preview.',
-        params: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        handler: () => controller.preview(),
-      },
-      exportVideo: {
-        description: 'Export the composition as a WebM video file.',
-        params: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        handler: async () => controller.exportVideo(),
-      },
-      getComposition: {
-        description: 'Get the current composition state.',
-        params: {
-          type: 'object',
-          properties: {},
-          additionalProperties: false,
-        },
-        handler: () => controller.getComposition(),
-      },
-    },
-  });
-}
+    };
+  },
+
+  preview: () => {
+    store.setMode('create');
+    creatorMode.ensureComposition();
+    creatorMode.syncPlayerToComposition();
+    const player = creatorMode.getPreviewPlayer();
+    if (player) {
+      player.play();
+      store.setCreatorPlaying(true);
+    }
+    return { ok: true as const };
+  },
+
+  exportVideo: async () => {
+    await creatorMode.handleCreatorExport();
+    return { ok: true as const };
+  },
+});

@@ -3,10 +3,6 @@
   "name": "RSS Reader",
   "description": "RSS feed reader with reactive UI",
   "run": "static/index.html",
-  "windowStyle": {
-    "width": "900px",
-    "height": "650px"
-  },
   "appProtocol": true,
   "capture": "dom",
   "protocol": {

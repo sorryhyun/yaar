@@ -3,16 +3,13 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Bun](https://img.shields.io/badge/Bun_≥1.1-F9F1E1?logo=bun&logoColor=black)](https://bun.sh/)
-[![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
-[![Zustand](https://img.shields.io/badge/Zustand-433E38?logo=react&logoColor=white)](https://zustand.docs.pmnd.rs/)
-[![Zod](https://img.shields.io/badge/Zod_v4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/)
-[![WebSocket](https://img.shields.io/badge/WebSocket-010101?logo=socketdotio&logoColor=white)](#)
 [![MCP](https://img.shields.io/badge/MCP-F26922?logo=anthropic&logoColor=white)](https://modelcontextprotocol.io/)
 [![Claude Agent SDK](https://img.shields.io/badge/Claude_Agent_SDK-D97757?logo=anthropic&logoColor=white)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk)
-[![pnpm](https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
+[한국어](./README.md)
+
+> **Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
 
 User actions like button clicks, drawing, and typing are sent not to a program, but to an AI. The AI interprets the user's intent and dynamically creates windows, tables, forms, and visualizations.
 
@@ -34,35 +31,39 @@ On startup, the program automatically creates `storage/, config/, apps/, session
 
 ### 1. AI Interprets and Renders
 
-The AI responds by **directly creating UI**. It opens "windows" or displays "messages" in the browser to respond to user actions. Users can type in the input field at the bottom center, paste images, drag and drop, click buttons on screen, right-click to send instructions to a specific window, or **Alt + left-click drag to draw** and send it to the AI. For convenience, actions like drag-selecting multiple apps or typing are not sent to the AI immediately.
+The AI responds by **directly creating UI**.
+
+It opens "windows" or displays "messages" in the browser to respond to user actions. Users can type in the input field at the bottom center, paste images, drag and drop, click buttons on screen, right-click to send instructions to a specific window, drag a selected area to a specific app, or **right-click drag to draw** and send it to the AI. For convenience, actions like drag-selecting multiple apps or typing are not sent to the AI immediately.
+
+Most user actions are first saved as context. When you click a button or send a message, all accumulated context is included and sent to the AI. When the AI responds, **your instructions + context and the AI's response are recorded**, so when you give the same instruction later, the AI is offered the option to **reuse that response**, performing the same task much faster than before.
+
+Records are stored in `config/reload-cache/` and can be managed at any time.
 
 
-### 2. Smart Context
+### 2. App Development
 
-Most user actions are first saved as context. When you click a button or send a message, all accumulated context is included and sent to the AI. When the AI responds, **your instructions + context and the AI's response are recorded**, so when you give the same instruction later, the AI is offered the option to **reuse that response**, performing the same task much faster than before. Records are stored in `config/reload-cache/` and can be managed at any time.
+Sometimes you need pre-built programs. Since essential apps like the storage folder and browser are needed, YAAR operates a separate YAAR Market website. Currently, **only a small number of apps made by me are listed, and users cannot upload, so there are no security concerns.**
 
-
-### 3. App Development
-
-Sometimes you need pre-built programs. Since essential apps like the storage folder and browser are needed, YAAR operates a separate YAAR Market website. Currently, **only a small number of apps made by me are listed, and users cannot upload, so there are no security concerns.** Tell the AI "install essential apps" and it will install browser, storage folder, spreadsheet, word processor, etc. from the market.
+Tell the AI "install essential apps" and it will install browser, storage folder, spreadsheet, word processor, etc. from the market.
 
 You may also want to develop apps yourself, so YAAR supports programming capabilities. Various libraries are bundled, so you can develop the apps you need and deploy them to the desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox. The development environment is strictly configured, so there are minimal security concerns even when letting the AI develop autonomously.
 
 See the [App Development Guide](./docs/app-development.md) for details.
 
+### 3. Remote Access
 
-### 4. Remote Access
+Running with `make claude` or `make codex`, or using the bundled executable (`.exe`), automatically enables remote mode. A one-time auth token is generated at server startup, and a connection URL and QR code are printed to the terminal. The QR code encodes a URL in the form `http://<LAN IP>:<PORT>/#remote=<token>` — scanning it with your phone camera handles token authentication automatically and connects you right away. SSH mode is launched automatically so it can be used from external networks, but prior setup such as `ssh-keygen` is required.
 
-Running with `make claude` or `make codex`, or using the bundled executable (`.exe`), automatically enables remote mode. A one-time auth token is generated at server startup, and a connection URL and QR code are printed to the terminal. The QR code encodes a URL in the form `http://<LAN IP>:<PORT>/#remote=<token>` — scanning it with your phone camera handles token authentication automatically and connects you right away.
-
-Devices on the same network (phone, tablet, another PC) can connect without any extra setup. For access over the public internet, you can set up port forwarding on your router, but since HTTPS is not supported natively, using a tunneling service like Cloudflare Tunnel is recommended. See the [Remote Access Guide](./docs/remote_mode.md) for details.
+See the [Remote Access Guide](./docs/remote_mode.md) for details.
 
 
 ## Getting Started
 
 Codex or Claude Code user authentication is required. The program cannot be used without it.
 
-For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar.exe` from the Releases tab. You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
+For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar.exe` from the Releases tab.
+
+You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
 
 For other users, clone this repository, install [Bun](https://bun.sh/) and pnpm, then run `pnpm install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
 
