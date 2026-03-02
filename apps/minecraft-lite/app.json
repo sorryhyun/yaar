@@ -1,5 +1,6 @@
 {
   "icon": "⛏️",
   "name": "Minecraft Lite",
-  "run": "static/index.html"
+  "run": "static/index.html",
+  "capture": "canvas"
 }

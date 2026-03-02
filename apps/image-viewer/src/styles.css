@@ -1,0 +1,103 @@
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.toolbar {
+  flex-wrap: wrap;
+}
+.main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+}
+.sidebar {
+  border-right: 1px solid var(--yaar-border);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.thumbs {
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.thumb {
+  width: 100%;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text);
+  padding: 6px;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+.thumb.active {
+  border-color: var(--yaar-accent);
+  box-shadow: 0 0 0 1px var(--yaar-accent) inset;
+}
+.thumb img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: var(--yaar-radius);
+  display: block;
+  margin-bottom: 6px;
+}
+.viewer-wrap {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+}
+.viewer-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(var(--cols), minmax(180px, 1fr));
+}
+.viewer-single {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+}
+.viewer-single .panel {
+  width: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.panel {
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  background: var(--yaar-bg-surface);
+  overflow: hidden;
+}
+.panel-head {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--yaar-text);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg);
+}
+.panel img {
+  width: 100%;
+  height: min(65vh, 520px);
+  object-fit: contain;
+  background: var(--yaar-bg);
+  display: block;
+}
+.viewer-single .panel img {
+  height: 100%;
+  max-height: none;
+}
+.empty {
+  border: 1px dashed var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  padding: 30px;
+  text-align: center;
+}
+.status {
+  padding: 8px 12px;
+  border-top: 1px solid var(--yaar-border);
+}

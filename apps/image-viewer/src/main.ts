@@ -1,15 +1,8 @@
 export {};
-
-const root = document.getElementById('app') ?? document.body;
-
-type ImageItem = {
-  id: number;
-  name: string;
-  source: string;
-  path?: string;
-};
-
-type LayoutMode = 'single' | 'grid';
+import { signal, html, mount, show } from '@bundled/yaar';
+import './styles.css';
+import { ImageItem, LayoutMode } from './types';
+import { setupProtocol } from './protocol';
 
 type YaarStorage = {
   list: (dirPath?: string) => Promise<Array<{ path: string; isDirectory: boolean }>>;
@@ -25,169 +18,20 @@ const yaar: any = (window as any).yaar ?? {};
 const storage: YaarStorage | undefined = yaar.storage;
 const appApi: AppApi | undefined = yaar.app;
 
-let images: ImageItem[] = [];
-let selectedIds = new Set<number>();
+// signals
+const images = signal<ImageItem[]>([]);
+const selectedIds = signal(new Set<number>());
+const mode = signal<LayoutMode>('grid');
+const columns = signal(3);
+const status = signal('Ready.');
 let nextId = 1;
-let mode: LayoutMode = 'grid';
-let columns = 3;
 
-root.innerHTML = `
-<style>
-  .app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
-  .toolbar { flex-wrap: wrap; }
-  .main { min-height: 0; display: grid; grid-template-columns: 260px 1fr; }
-  .sidebar {
-    border-right: 1px solid var(--yaar-border); min-height: 0;
-    display: grid; grid-template-rows: auto 1fr;
-  }
-  .thumbs { padding: 8px; display: grid; gap: 8px; align-content: start; }
-  .thumb {
-    width: 100%; border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius);
-    background: var(--yaar-bg-surface); color: var(--yaar-text); padding: 6px; text-align: left;
-    font-size: 11px; cursor: pointer;
-  }
-  .thumb.active { border-color: var(--yaar-accent); box-shadow: 0 0 0 1px var(--yaar-accent) inset; }
-  .thumb img { width: 100%; height: 100px; object-fit: cover; border-radius: var(--yaar-radius); display: block; margin-bottom: 6px; }
-  .viewer-wrap {
-    min-height: 0;
-    overflow: auto;
-    padding: 10px;
-    display: flex;
-  }
-  #viewer { width: 100%; min-height: 0; }
-  .viewer-grid {
-    display: grid; gap: 10px;
-    grid-template-columns: repeat(var(--cols), minmax(180px, 1fr));
-  }
-  .viewer-single {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-  }
-  .viewer-single .panel {
-    width: 100%;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-  .panel {
-    border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); background: var(--yaar-bg-surface);
-    overflow: hidden;
-  }
-  .panel-head {
-    padding: 8px 10px; font-size: 12px; color: var(--yaar-text);
-    border-bottom: 1px solid var(--yaar-border); background: var(--yaar-bg);
-  }
-  .panel img {
-    width: 100%;
-    height: min(65vh, 520px);
-    object-fit: contain;
-    background: var(--yaar-bg);
-    display: block;
-  }
-  .viewer-single .panel img {
-    height: 100%;
-    max-height: none;
-  }
-  .empty {
-    border: 1px dashed var(--yaar-border); border-radius: var(--yaar-radius-lg);
-    padding: 30px; text-align: center;
-  }
-  .status { padding: 8px 12px; border-top: 1px solid var(--yaar-border); }
-</style>
-<div class="app y-app">
-  <div class="toolbar y-flex y-gap-2 y-p-2 y-surface y-border-b">
-    <input id="fileInput" type="file" accept="image/*" multiple />
-    <button id="loadStorageBtn" class="y-btn y-btn-sm">Load storage images</button>
-    <button id="gridBtn" class="y-btn y-btn-sm">Grid</button>
-    <button id="singleBtn" class="y-btn y-btn-sm">Single</button>
-    <label class="y-text-sm">Cols <input id="colsInput" type="number" min="1" max="8" value="3" style="width:64px" class="y-input" /></label>
-    <button id="clearBtn" class="y-btn y-btn-sm y-btn-danger">Clear</button>
-  </div>
-  <div class="main">
-    <aside class="sidebar">
-      <div class="side-head y-p-2 y-text-xs y-text-muted y-border-b">Loaded Images</div>
-      <div id="thumbs" class="thumbs y-scroll"></div>
-    </aside>
-    <div class="viewer-wrap"><div id="viewer"></div></div>
-  </div>
-  <div id="status" class="status y-text-xs y-text-muted">Ready.</div>
-</div>
-`;
+let fileInputEl!: HTMLInputElement;
+let colsInputEl!: HTMLInputElement;
 
-const fileInput = document.getElementById('fileInput') as HTMLInputElement;
-const loadStorageBtn = document.getElementById('loadStorageBtn') as HTMLButtonElement;
-const gridBtn = document.getElementById('gridBtn') as HTMLButtonElement;
-const singleBtn = document.getElementById('singleBtn') as HTMLButtonElement;
-const colsInput = document.getElementById('colsInput') as HTMLInputElement;
-const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
-const thumbsEl = document.getElementById('thumbs') as HTMLDivElement;
-const viewerEl = document.getElementById('viewer') as HTMLDivElement;
-const statusEl = document.getElementById('status') as HTMLDivElement;
-
-function setStatus(msg: string) {
-  statusEl.textContent = msg;
-}
-
+// helpers
 function baseName(path: string) {
   return path.split('/').pop() || path;
-}
-
-function renderThumbs() {
-  thumbsEl.innerHTML = '';
-  if (!images.length) {
-    thumbsEl.innerHTML = '<div class="empty">No images loaded.</div>';
-    return;
-  }
-  for (const item of images) {
-    const btn = document.createElement('button');
-    const active = selectedIds.has(item.id) ? ' active' : '';
-    btn.className = `thumb${active}`;
-    btn.innerHTML = `<img src="${item.source}" alt="${item.name}"/><div>${item.name}</div>`;
-    btn.onclick = () => {
-      if (mode === 'single') {
-        selectedIds = new Set([item.id]);
-      } else {
-        if (selectedIds.has(item.id)) selectedIds.delete(item.id);
-        else selectedIds.add(item.id);
-        if (!selectedIds.size) selectedIds.add(item.id);
-      }
-      renderAll();
-      appApi?.sendInteraction({ event: 'select_images', ids: [...selectedIds] });
-    };
-    thumbsEl.appendChild(btn);
-  }
-}
-
-function renderViewer() {
-  viewerEl.innerHTML = '';
-  if (!images.length) {
-    viewerEl.innerHTML = '<div class="empty">Load files or send images via App Protocol.</div>';
-    return;
-  }
-
-  let showItems = images;
-  if (selectedIds.size) showItems = images.filter((x) => selectedIds.has(x.id));
-  if (mode === 'single') showItems = showItems.length ? [showItems[0]] : [images[0]];
-
-  const container = document.createElement('div');
-  container.className = mode === 'single' ? 'viewer-single' : 'viewer-grid';
-  if (mode === 'grid') {
-    container.style.setProperty('--cols', String(Math.max(1, columns)));
-  }
-
-  for (const item of showItems) {
-    const panel = document.createElement('div');
-    panel.className = 'panel';
-    panel.innerHTML = `<div class="panel-head">${item.name}</div><img src="${item.source}" alt="${item.name}"/>`;
-    container.appendChild(panel);
-  }
-  viewerEl.appendChild(container);
-}
-
-function renderAll() {
-  renderThumbs();
-  renderViewer();
-  setStatus(`${images.length} image(s) loaded · mode=${mode}${mode === 'grid' ? ` · cols=${columns}` : ''}`);
 }
 
 function normalizeInputImage(input: { name?: string; path?: string; url?: string; dataUrl?: string }): ImageItem | null {
@@ -202,15 +46,16 @@ function normalizeInputImage(input: { name?: string; path?: string; url?: string
 }
 
 function setImages(items: ImageItem[], replace = true) {
-  images = replace ? items : [...images, ...items];
-  if (images.length) selectedIds = new Set([images[0].id]);
-  else selectedIds = new Set();
-  renderAll();
+  const next = replace ? items : [...images(), ...items];
+  images(next);
+  if (next.length) selectedIds(new Set([next[0].id]));
+  else selectedIds(new Set());
+  status(`${next.length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
 }
 
 async function loadStoragePaths(paths: string[], replace = false) {
   if (!storage?.url) {
-    setStatus('Storage API unavailable.');
+    status('Storage API unavailable.');
     return;
   }
   const loaded = paths.map((p) => ({ id: nextId++, name: baseName(p), source: storage.url(p), path: p }));
@@ -219,7 +64,7 @@ async function loadStoragePaths(paths: string[], replace = false) {
 
 async function loadAllStorageImages() {
   if (!storage?.list || !storage?.url) {
-    setStatus('Storage API unavailable.');
+    status('Storage API unavailable.');
     return;
   }
   const entries = await storage.list('');
@@ -227,11 +72,34 @@ async function loadAllStorageImages() {
     .filter((e) => !e.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(e.path))
     .map((e) => e.path);
   await loadStoragePaths(paths, true);
-  setStatus(`Loaded ${paths.length} image(s) from storage.`);
+  status(`Loaded ${paths.length} image(s) from storage.`);
 }
 
-fileInput.addEventListener('change', async () => {
-  const files = [...(fileInput.files || [])];
+function getShowItems(): ImageItem[] {
+  const imgs = images();
+  const sel = selectedIds();
+  let showItems = imgs;
+  if (sel.size) showItems = imgs.filter((x) => sel.has(x.id));
+  if (mode() === 'single') showItems = showItems.length ? [showItems[0]] : imgs.length ? [imgs[0]] : [];
+  return showItems;
+}
+
+function selectImage(item: ImageItem) {
+  const sel = selectedIds();
+  if (mode() === 'single') {
+    selectedIds(new Set([item.id]));
+  } else {
+    const next = new Set(sel);
+    if (next.has(item.id)) next.delete(item.id);
+    else next.add(item.id);
+    if (!next.size) next.add(item.id);
+    selectedIds(next);
+  }
+
+}
+
+async function handleFileChange() {
+  const files = [...(fileInputEl.files || [])];
   if (!files.length) return;
 
   const toDataUrl = (file: File) =>
@@ -248,159 +116,86 @@ fileInput.addEventListener('change', async () => {
     loaded.push({ id: nextId++, name: file.name, source: dataUrl });
   }
   setImages(loaded, true);
-  appApi?.sendInteraction({ event: 'loaded_local_files', count: loaded.length });
-});
 
-loadStorageBtn.onclick = () => loadAllStorageImages();
-gridBtn.onclick = () => { mode = 'grid'; renderAll(); };
-singleBtn.onclick = () => { mode = 'single'; renderAll(); };
-colsInput.onchange = () => {
-  columns = Math.max(1, Math.min(8, Number(colsInput.value) || 3));
-  colsInput.value = String(columns);
-  renderAll();
-};
-clearBtn.onclick = () => setImages([], true);
+}
 
-renderAll();
+mount(html`
+  <div class="app y-app">
+    <div class="toolbar y-flex y-gap-2 y-p-2 y-surface y-border-b">
+      <input
+        ref=${(el: HTMLInputElement) => { fileInputEl = el; }}
+        type="file"
+        accept="image/*"
+        multiple
+        onchange=${() => handleFileChange()}
+      />
+      <button class="y-btn y-btn-sm" onClick=${() => loadAllStorageImages()}>Load storage images</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { mode('grid'); status(`${images().length} image(s) loaded · mode=grid · cols=${columns()}`); }}>Grid</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { mode('single'); status(`${images().length} image(s) loaded · mode=single`); }}>Single</button>
+      <label class="y-text-sm">Cols <input
+        ref=${(el: HTMLInputElement) => { colsInputEl = el; }}
+        type="number"
+        min="1"
+        max="8"
+        defaultValue="3"
+        style="width:64px"
+        class="y-input"
+        onchange=${() => {
+          const v = Math.max(1, Math.min(8, Number(colsInputEl.value) || 3));
+          colsInputEl.value = String(v);
+          columns(v);
+          status(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${v}` : ''}`);
+        }}
+      /></label>
+      <button class="y-btn y-btn-sm y-btn-danger" onClick=${() => setImages([], true)}>Clear</button>
+    </div>
+    <div class="main">
+      <aside class="sidebar">
+        <div class="side-head y-p-2 y-text-xs y-text-muted y-border-b">Loaded Images</div>
+        <div class="thumbs y-scroll">
+          ${show(() => images().length === 0, () => html`<div class="empty">No images loaded.</div>`)}
+          ${() => images().map(item => html`
+            <button class=${() => 'thumb' + (selectedIds().has(item.id) ? ' active' : '')} onClick=${() => selectImage(item)}>
+              <img src="${item.source}" alt="${item.name}"/>
+              <div>${item.name}</div>
+            </button>
+          `)}
+        </div>
+      </aside>
+      <div class="viewer-wrap">
+        <div style="width:100%;min-height:0;">
+          ${show(() => images().length === 0, () => html`<div class="empty">Load files or send images via App Protocol.</div>`)}
+          ${show(() => images().length > 0, () => html`
+            <div
+              class=${() => mode() === 'single' ? 'viewer-single' : 'viewer-grid'}
+              style=${() => mode() === 'grid' ? `--cols:${Math.max(1, columns())}` : ''}
+            >
+              ${() => getShowItems().map(item => html`
+                <div class="panel">
+                  <div class="panel-head">${item.name}</div>
+                  <img src="${item.source}" alt="${item.name}"/>
+                </div>
+              `)}
+            </div>
+          `)}
+        </div>
+      </div>
+    </div>
+    <div class="status y-text-xs y-text-muted">${() => status()}</div>
+  </div>
+`);
 
 if (appApi) {
-  appApi.register({
-    appId: 'image-viewer',
-    name: 'Image Viewer',
-    state: {
-      images: {
-        description: 'List of loaded images',
-        handler: () => images.map(({ id, name, path }) => ({ id, name, path: path || null })),
-      },
-      selectedIds: {
-        description: 'Currently selected image IDs',
-        handler: () => [...selectedIds],
-      },
-      layout: {
-        description: 'Current layout mode and columns',
-        handler: () => ({ mode, columns }),
-      },
-    },
-    commands: {
-      setImages: {
-        description: 'Replace images with a new set. Accepts URL/dataUrl/path+url.',
-        params: {
-          type: 'object',
-          properties: {
-            images: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  path: { type: 'string' },
-                  url: { type: 'string' },
-                  dataUrl: { type: 'string' },
-                },
-              },
-            },
-          },
-          required: ['images'],
-        },
-        handler: (p: { images: Array<{ name?: string; path?: string; url?: string; dataUrl?: string }> }) => {
-          const normalized = p.images.map(normalizeInputImage).filter(Boolean) as ImageItem[];
-          setImages(normalized, true);
-          return { ok: true, count: normalized.length };
-        },
-      },
-      addImages: {
-        description: 'Append multiple images in one call.',
-        params: {
-          type: 'object',
-          properties: {
-            images: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  path: { type: 'string' },
-                  url: { type: 'string' },
-                  dataUrl: { type: 'string' },
-                },
-              },
-            },
-          },
-          required: ['images'],
-        },
-        handler: (p: { images: Array<{ name?: string; path?: string; url?: string; dataUrl?: string }> }) => {
-          const normalized = p.images.map(normalizeInputImage).filter(Boolean) as ImageItem[];
-          setImages(normalized, false);
-          return { ok: true, count: normalized.length };
-        },
-      },
-      openStoragePaths: {
-        description: 'Load multiple storage file paths at once.',
-        params: {
-          type: 'object',
-          properties: {
-            paths: { type: 'array', items: { type: 'string' } },
-            replace: { type: 'boolean' },
-          },
-          required: ['paths'],
-        },
-        handler: async (p: { paths: string[]; replace?: boolean }) => {
-          await loadStoragePaths(p.paths, p.replace ?? false);
-          return { ok: true, count: p.paths.length };
-        },
-      },
-      loadStorageAll: {
-        description: 'Load all image files from storage root.',
-        params: { type: 'object', properties: {} },
-        handler: async () => {
-          await loadAllStorageImages();
-          return { ok: true, count: images.length };
-        },
-      },
-      setLayout: {
-        description: 'Set viewer layout mode and columns.',
-        params: {
-          type: 'object',
-          properties: {
-            mode: { type: 'string', enum: ['single', 'grid'] },
-            columns: { type: 'number' },
-          },
-          required: ['mode'],
-        },
-        handler: (p: { mode: LayoutMode; columns?: number }) => {
-          mode = p.mode;
-          if (typeof p.columns === 'number') {
-            columns = Math.max(1, Math.min(8, Math.floor(p.columns)));
-            colsInput.value = String(columns);
-          }
-          renderAll();
-          return { ok: true, layout: { mode, columns } };
-        },
-      },
-      selectImages: {
-        description: 'Select images by IDs.',
-        params: {
-          type: 'object',
-          properties: {
-            ids: { type: 'array', items: { type: 'number' } },
-          },
-          required: ['ids'],
-        },
-        handler: (p: { ids: number[] }) => {
-          selectedIds = new Set(p.ids.filter((id) => images.some((img) => img.id === id)));
-          if (!selectedIds.size && images.length) selectedIds = new Set([images[0].id]);
-          renderAll();
-          return { ok: true, selectedIds: [...selectedIds] };
-        },
-      },
-      clear: {
-        description: 'Clear all loaded images.',
-        params: { type: 'object', properties: {} },
-        handler: () => {
-          setImages([], true);
-          return { ok: true };
-        },
-      },
-    },
+  setupProtocol(appApi, {
+    images,
+    selectedIds,
+    mode,
+    columns,
+    status,
+    getColsInputEl: () => colsInputEl,
+    setImages,
+    normalizeInputImage,
+    loadStoragePaths,
+    loadAllStorageImages,
   });
 }

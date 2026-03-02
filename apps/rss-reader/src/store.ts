@@ -1,6 +1,6 @@
-import { Feed, Article } from './types';
+import { signal } from '@bundled/yaar';
+import type { Feed, Article } from './types';
 
-// ---- Backward-compatible fallback feeds (used only if no source file/state exists) ----
 export const FALLBACK_FEEDS: Feed[] = [
   { id: 'hn', name: 'Hacker News', url: 'https://news.ycombinator.com/rss' },
   { id: 'bbc', name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
@@ -8,14 +8,21 @@ export const FALLBACK_FEEDS: Feed[] = [
   { id: 'verge', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
 ];
 
-// ---- Shared Mutable Store ----
-export const store = {
-  feeds: [] as Feed[],
-  readArticleIds: [] as string[],
-  selectedFeedId: 'all' as string | null,
-  articles: {} as Record<string, Article[]>,
-  loadingFeeds: new Set<string>(),
-  errorFeeds: {} as Record<string, string>,
-  selectedArticle: null as Article | null,
-  unreadCounts: {} as Record<string, number>,
-};
+export const feeds = signal<Feed[]>([]);
+export const readArticleIds = signal<string[]>([]);
+export const selectedFeedId = signal<string>('all');
+export const articles = signal<Record<string, Article[]>>({});
+export const loadingFeedIds = signal<string[]>([]);
+export const errorFeeds = signal<Record<string, string>>({});
+export const selectedArticle = signal<Article | null>(null);
+export const unreadCounts = signal<Record<string, number>>({});
+
+// Toast
+export const toastMsg = signal<{ text: string; type: 'info' | 'error' | 'success' } | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastMsg({ text: message, type });
+  toastTimer = setTimeout(() => toastMsg(null), 2500);
+}

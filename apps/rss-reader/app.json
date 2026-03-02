@@ -1,11 +1,71 @@
 {
   "icon": "📰",
   "name": "RSS Reader",
-  "description": "Follow RSS/Atom feeds and read news articles",
+  "description": "RSS feed reader with reactive UI",
   "run": "static/index.html",
   "windowStyle": {
     "width": "900px",
     "height": "650px"
   },
-  "appProtocol": true
+  "appProtocol": true,
+  "capture": "dom",
+  "protocol": {
+    "state": {
+      "unreadCount": {
+        "description": "Total unread article count"
+      },
+      "feeds": {
+        "description": "All feeds with unread counts"
+      },
+      "articles": {
+        "description": "Current visible articles (max 50)"
+      },
+      "selectedArticle": {
+        "description": "Currently selected article or null"
+      }
+    },
+    "commands": {
+      "refresh": {
+        "description": "Refresh all feeds",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "markAllRead": {
+        "description": "Mark all visible articles as read",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "selectFeed": {
+        "description": "Select a feed by ID",
+        "params": {
+          "type": "object",
+          "properties": {
+            "feedId": {
+              "type": "string"
+            }
+          },
+          "required": ["feedId"]
+        }
+      },
+      "addFeed": {
+        "description": "Add a new feed by URL",
+        "params": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": ["url"]
+        }
+      }
+    }
+  }
 }

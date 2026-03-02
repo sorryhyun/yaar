@@ -1,5 +1,5 @@
-import { AppState, Feed } from './types';
-import { FALLBACK_FEEDS, store } from './store';
+import type { AppState, Feed } from './types';
+import { FALLBACK_FEEDS, feeds, readArticleIds } from './store';
 import { extractDomainName } from './utils';
 
 declare const yaar: {
@@ -13,10 +13,7 @@ declare const yaar: {
 };
 
 const STATE_PATH = 'rss-reader/feeds.json';
-const FEED_SOURCE_PATHS = [
-  'rss-reader/feeds.txt',
-  'rss-reader/feed-sources.txt',
-];
+const FEED_SOURCE_PATHS = ['rss-reader/feeds.txt', 'rss-reader/feed-sources.txt'];
 
 function hashToId(input: string): string {
   let hash = 5381;
@@ -28,46 +25,28 @@ function hashToId(input: string): string {
 }
 
 function parseFeedSourcesText(text: string): Feed[] {
-  const feeds: Feed[] = [];
+  const result: Feed[] = [];
   const seenUrls = new Set<string>();
-  const lines = text.split(/\r?\n/);
-
-  for (const rawLine of lines) {
+  for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#')) continue;
-
-    let name = '';
-    let url = '';
-
+    let name = '', url = '';
     const pipeIdx = line.indexOf('|');
-    if (pipeIdx > 0) {
-      name = line.slice(0, pipeIdx).trim();
-      url = line.slice(pipeIdx + 1).trim();
-    } else {
+    if (pipeIdx > 0) { name = line.slice(0, pipeIdx).trim(); url = line.slice(pipeIdx + 1).trim(); }
+    else {
       const commaIdx = line.indexOf(',');
       if (commaIdx > 0 && /^https?:\/\//i.test(line.slice(commaIdx + 1).trim())) {
-        name = line.slice(0, commaIdx).trim();
-        url = line.slice(commaIdx + 1).trim();
-      } else {
-        url = line;
-      }
+        name = line.slice(0, commaIdx).trim(); url = line.slice(commaIdx + 1).trim();
+      } else { url = line; }
     }
-
     try {
       const normalized = new URL(url).toString();
       if (seenUrls.has(normalized)) continue;
       seenUrls.add(normalized);
-      feeds.push({
-        id: hashToId(normalized),
-        name: name || extractDomainName(normalized),
-        url: normalized,
-      });
-    } catch {
-      // Ignore invalid source line
-    }
+      result.push({ id: hashToId(normalized), name: name || extractDomainName(normalized), url: normalized });
+    } catch { /* ignore */ }
   }
-
-  return feeds;
+  return result;
 }
 
 async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
@@ -75,49 +54,30 @@ async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
     try {
       const text = await yaar.storage.read(path, { as: 'text' });
       const parsed = parseFeedSourcesText(String(text || ''));
-      if (parsed.length > 0) {
-        return parsed;
-      }
-    } catch {
-      // Missing source file is expected on first run
-    }
+      if (parsed.length > 0) return parsed;
+    } catch { /* missing file ok */ }
   }
-
   return null;
 }
 
 export async function loadState(): Promise<void> {
   let saved: AppState | null = null;
-
   try {
     const data = await yaar.storage.read(STATE_PATH, { as: 'json' });
-    if (data && typeof data === 'object') {
-      saved = data as AppState;
-    }
-  } catch {
-    // Use defaults
-  }
+    if (data && typeof data === 'object') saved = data as AppState;
+  } catch { /* use defaults */ }
 
   const sourceFeeds = await loadFeedsFromSourceFile();
-  if (sourceFeeds && sourceFeeds.length > 0) {
-    store.feeds = sourceFeeds;
-  } else if (saved?.feeds && saved.feeds.length > 0) {
-    store.feeds = saved.feeds;
-  } else {
-    store.feeds = [...FALLBACK_FEEDS];
-  }
+  if (sourceFeeds && sourceFeeds.length > 0) feeds(sourceFeeds);
+  else if (saved?.feeds && saved.feeds.length > 0) feeds(saved.feeds);
+  else feeds([...FALLBACK_FEEDS]);
 
-  store.readArticleIds = saved?.readArticleIds || [];
+  readArticleIds(saved?.readArticleIds || []);
 }
 
 export async function saveState(): Promise<void> {
   try {
-    const state: AppState = {
-      feeds: store.feeds,
-      readArticleIds: store.readArticleIds,
-    };
+    const state: AppState = { feeds: feeds(), readArticleIds: readArticleIds() };
     await yaar.storage.save(STATE_PATH, JSON.stringify(state));
-  } catch (e) {
-    console.error('Failed to save state:', e);
-  }
+  } catch (e) { console.error('Failed to save state:', e); }
 }

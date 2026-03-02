@@ -2,7 +2,7 @@
   "id": "rss-reader",
   "name": "RSS Reader",
   "icon": "📰",
-  "description": "Follow RSS/Atom feeds and read news articles",
+  "description": "RSS feed reader with reactive UI",
   "version": "1.0.0",
   "author": "YAAR"
 }
