@@ -114,6 +114,7 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 
 | 라이브러리 | import 경로 | 용도 |
 |-----------|------------|------|
+| yaar | `@bundled/yaar` | 반응형 UI (signal, html, mount, show, createResource 등) |
 | uuid | `@bundled/uuid` | ID 생성 |
 | lodash | `@bundled/lodash` | 유틸리티 (debounce, cloneDeep, groupBy 등) |
 | date-fns | `@bundled/date-fns` | 날짜 처리 |
@@ -154,8 +155,10 @@ import anime from '@bundled/anime';
 ```typescript
 export {};
 
-const root = document.getElementById('app');
-// ...
+import { signal, html, mount } from '@bundled/yaar';
+
+const count = signal(0);
+mount(html`<button onClick=${() => count(count() + 1)}>Clicked ${() => count()} times</button>`);
 ```
 
 `@bundled/*` 라이브러리를 import하는 경우 이미 모듈로 인식되므로 별도 추가 불필요.
@@ -208,7 +211,8 @@ apps/falling-blocks/
 ├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
 ├── index.html      # 컴파일된 단일 HTML
 └── src/            # 소스 코드 (keepSource: true)
-    └── main.ts
+    ├── main.ts
+    └── styles.css
 ```
 
 ### API 기반 앱
@@ -245,27 +249,34 @@ iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 `window.yaar.app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다. SDK 스크립트는 iframe에 자동 주입됩니다.
 
 ```typescript
-window.yaar.app.register({
-  appId: 'my-app',
-  name: 'My App',
-  state: {
-    items: {
-      description: '현재 아이템 목록',
-      handler: () => [...items],
-    },
-  },
-  commands: {
-    addItem: {
-      description: '아이템 추가. Params: { text: string }',
-      params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-      handler: (p: { text: string }) => {
-        items.push(p.text);
-        render();
-        return { ok: true };
+// src/protocol.ts
+import { items } from './store';
+
+export function registerProtocol() {
+  const appApi = (window as any).yaar?.app;
+  if (!appApi) return;
+
+  appApi.register({
+    appId: 'my-app',
+    name: 'My App',
+    state: {
+      items: {
+        description: '현재 아이템 목록',
+        handler: () => [...items()],  // 시그널 읽기, 복사본 반환
       },
     },
-  },
-});
+    commands: {
+      addItem: {
+        description: '아이템 추가. Params: { text: string }',
+        params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+        handler: (p: { text: string }) => {
+          items([...items(), p.text]);  // 불변 시그널 쓰기, render() 불필요
+          return { ok: true };
+        },
+      },
+    },
+  });
+}
 ```
 
 ### MCP 도구
@@ -428,6 +439,7 @@ Available via `@bundled/*` imports — no npm install needed:
 
 | Library | Import Path | Purpose |
 |---------|------------|---------|
+| yaar | `@bundled/yaar` | Reactive UI (signal, html, mount, show, createResource, etc.) |
 | uuid | `@bundled/uuid` | ID generation |
 | lodash | `@bundled/lodash` | Utilities (debounce, cloneDeep, groupBy, etc.) |
 | date-fns | `@bundled/date-fns` | Date handling |
@@ -468,8 +480,10 @@ Every app's `src/main.ts` must include `export {};` at the top of the file. Beca
 ```typescript
 export {};
 
-const root = document.getElementById('app');
-// ...
+import { signal, html, mount } from '@bundled/yaar';
+
+const count = signal(0);
+mount(html`<button onClick=${() => count(count() + 1)}>Clicked ${() => count()} times</button>`);
 ```
 
 If you already `import` from `@bundled/*` or other modules, the file is already a module and no extra `export {};` is needed.
@@ -522,7 +536,8 @@ apps/falling-blocks/
 ├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
 ├── index.html      # Compiled single HTML
 └── src/            # Source code (keepSource: true)
-    └── main.ts
+    ├── main.ts
+    └── styles.css
 ```
 
 ### API-based Apps
@@ -559,27 +574,34 @@ Iframe App → postMessage → WebSocket → MCP tool returns
 Call `window.yaar.app.register()` with state handlers and command handlers. The SDK script is auto-injected into iframes.
 
 ```typescript
-window.yaar.app.register({
-  appId: 'my-app',
-  name: 'My App',
-  state: {
-    items: {
-      description: 'Current list of items',
-      handler: () => [...items],
-    },
-  },
-  commands: {
-    addItem: {
-      description: 'Add an item. Params: { text: string }',
-      params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-      handler: (p: { text: string }) => {
-        items.push(p.text);
-        render();
-        return { ok: true };
+// src/protocol.ts
+import { items } from './store';
+
+export function registerProtocol() {
+  const appApi = (window as any).yaar?.app;
+  if (!appApi) return;
+
+  appApi.register({
+    appId: 'my-app',
+    name: 'My App',
+    state: {
+      items: {
+        description: 'Current list of items',
+        handler: () => [...items()],  // read signal, return copy
       },
     },
-  },
-});
+    commands: {
+      addItem: {
+        description: 'Add an item. Params: { text: string }',
+        params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+        handler: (p: { text: string }) => {
+          items([...items(), p.text]);  // immutable signal write, no render() needed
+          return { ok: true };
+        },
+      },
+    },
+  });
+}
 ```
 
 ### MCP Tools

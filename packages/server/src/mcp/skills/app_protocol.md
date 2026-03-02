@@ -6,11 +6,14 @@ To make a deployed app controllable by the agent — so it can read app state an
 
 ## Registration
 
-Call `register()` **at the end of main.ts** after all DOM setup is complete. Always guard with a null check:
+Put the registration in `src/protocol.ts` and call it from main.ts inside `onMount()`. Always guard with a null check:
 
 ```ts
-const appApi = (window as any).yaar?.app;
-if (appApi) {
+// src/protocol.ts
+export function registerProtocol() {
+  const appApi = (window as any).yaar?.app;
+  if (!appApi) return;
+
   appApi.register({
     appId: 'my-app',
     name: 'My App',
@@ -28,11 +31,11 @@ State keys expose read-only snapshots. Handlers are called on-demand when the ag
 state: {
   items: {
     description: 'All items as an array',
-    handler: () => [...items],  // return a copy, not the original
+    handler: () => [...items()],  // read signal, return a copy
   },
   selection: {
     description: 'Currently selected item id or null',
-    handler: () => selectedId,
+    handler: () => selectedId(),  // read signal
   },
 }
 ```
@@ -58,17 +61,16 @@ commands: {
       required: ['title'],
     },
     handler: (p: { title: string; priority?: number }) => {
-      items.push({ id: nextId++, title: p.title, priority: p.priority ?? 0 });
-      render();
-      return { ok: true, id: nextId - 1 };
+      const id = nextId++;
+      items([...items(), { id, title: p.title, priority: p.priority ?? 0 }]);
+      return { ok: true, id };
     },
   },
   clear: {
     description: 'Remove all items',
     params: { type: 'object', properties: {} },
     handler: () => {
-      items.length = 0;
-      render();
+      items([]);
       return { ok: true };
     },
   },

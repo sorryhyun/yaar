@@ -67,7 +67,8 @@ describe('window create tool — iframe embed failure', () => {
     const result = await createHandler({
       windowId: 'test-win',
       title: 'Blocked Site',
-      content: { renderer: 'iframe', content: 'https://example.com' },
+      renderer: 'iframe',
+      content: 'https://example.com',
     });
 
     expect(result.isError).toBe(true);
@@ -86,7 +87,8 @@ describe('window create tool — iframe embed failure', () => {
     const result = await createHandler({
       windowId: 'test-win',
       title: 'Good Site',
-      content: { renderer: 'iframe', content: 'https://embed.example.com' },
+      renderer: 'iframe',
+      content: 'https://embed.example.com',
     });
 
     expect(result.isError).toBeUndefined();
@@ -99,7 +101,8 @@ describe('window create tool — iframe embed failure', () => {
     const result = await createHandler({
       windowId: 'test-win',
       title: 'Slow Site',
-      content: { renderer: 'iframe', content: 'https://slow.example.com' },
+      renderer: 'iframe',
+      content: 'https://slow.example.com',
     });
 
     // null feedback means timeout — treat as success (no error detected)
@@ -111,7 +114,8 @@ describe('window create tool — iframe embed failure', () => {
     const result = await createHandler({
       windowId: 'md-win',
       title: 'Markdown',
-      content: { renderer: 'markdown', content: '# Hello' },
+      renderer: 'markdown',
+      content: '# Hello',
     });
 
     expect(mockEmitActionWithFeedback).not.toHaveBeenCalled();

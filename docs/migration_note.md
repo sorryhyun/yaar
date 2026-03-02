@@ -14,7 +14,7 @@ Traditional apps use imperative DOM manipulation — `document.createElement`, `
 
 ## Migration Patterns
 
-### 1. Style injection → `css`
+### 1. Style injection → CSS file import
 
 **Before:**
 ```ts
@@ -29,14 +29,17 @@ document.head.appendChild(style);
 
 **After:**
 ```ts
-import { css } from '@bundled/yaar';
-
-css`
-  .sidebar { width: 240px; border-right: 1px solid var(--yaar-border); }
-  .item { padding: var(--yaar-sp-2); cursor: pointer; }
-  .item:hover { background: var(--yaar-bg-surface); }
-`;
+import './styles.css';
 ```
+
+```css
+/* src/styles.css */
+.sidebar { width: 240px; border-right: 1px solid var(--yaar-border); }
+.item { padding: var(--yaar-sp-2); cursor: pointer; }
+.item:hover { background: var(--yaar-bg-surface); }
+```
+
+The build plugin converts `.css` imports into runtime `<style>` injection automatically. For small inline snippets, the `css` template tag from `@bundled/yaar` still works.
 
 ### 2. Mutable state + render() → Signals
 
@@ -381,20 +384,22 @@ loadDir();
 
 ### After: File Browser (yaar)
 
+```css
+/* src/styles.css */
+.toolbar { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid var(--yaar-border); }
+.file-row { display: flex; padding: 8px; cursor: pointer; }
+.file-row:hover { background: var(--yaar-bg-surface); }
+```
+
 ```ts
 export {};
-import { signal, html, css, mount, show, createResource, onMount } from '@bundled/yaar';
+import { signal, html, mount, show, createResource, onMount } from '@bundled/yaar';
+import './styles.css';
 
 interface FileEntry { path: string; name: string; isDirectory: boolean; size: number; }
 
 const yaar = (window as any).yaar;
 const storage = yaar?.storage;
-
-css`
-  .toolbar { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid var(--yaar-border); }
-  .file-row { display: flex; padding: 8px; cursor: pointer; }
-  .file-row:hover { background: var(--yaar-bg-surface); }
-`;
 
 const currentPath = signal('/');
 const entries = signal<FileEntry[]>([]);
@@ -436,7 +441,7 @@ mount(html`
 
 | Traditional Pattern | Yaar Equivalent |
 |---|---|
-| `document.createElement('style')` | `css\`...\`` |
+| `document.createElement('style')` | `import './styles.css'` (or `css\`...\`` for small snippets) |
 | `el.innerHTML = \`...\`` | `html\`...\`` |
 | `document.createElement(tag)` | `h(tag, props, ...children)` or `html\`<tag>...\`` |
 | `el.addEventListener('click', fn)` | `onClick=\${fn}` in html template |

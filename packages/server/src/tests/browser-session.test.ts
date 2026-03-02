@@ -14,10 +14,11 @@ const FAKE_IMAGE_BASE64 = Buffer.from('fake-image').toString('base64');
  * vi.hoisted() ensures these variables exist before the vi.mock factory runs,
  * since vi.mock is hoisted to the top of the file by vitest.
  */
-const { mockSend, mockWaitForEvent, mockClose } = vi.hoisted(() => ({
+const { mockSend, mockWaitForEvent, mockClose, mockOn } = vi.hoisted(() => ({
   mockSend: vi.fn(),
   mockWaitForEvent: vi.fn(),
   mockClose: vi.fn(),
+  mockOn: vi.fn(),
 }));
 
 vi.mock('../lib/browser/cdp.js', () => ({
@@ -26,6 +27,7 @@ vi.mock('../lib/browser/cdp.js', () => ({
       send: mockSend,
       waitForEvent: mockWaitForEvent,
       close: mockClose,
+      on: mockOn,
     }),
   },
 }));
@@ -131,8 +133,9 @@ describe('BrowserSession', () => {
       url: 'https://example.com/page',
     });
 
-    // Waited for load event with 30s timeout
-    expect(mockWaitForEvent).toHaveBeenCalledWith('Page.loadEventFired', 30_000);
+    // Waited for DOMContentLoaded then load event with 15s timeout
+    expect(mockWaitForEvent).toHaveBeenCalledWith('Page.domContentEventFired', 15_000);
+    expect(mockWaitForEvent).toHaveBeenCalledWith('Page.loadEventFired', 15_000);
 
     // Screenshot was captured
     expect(mockSend).toHaveBeenCalledWith('Page.captureScreenshot', {

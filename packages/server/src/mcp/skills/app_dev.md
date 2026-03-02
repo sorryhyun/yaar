@@ -21,6 +21,20 @@ If the app uses App Protocol, put the `.register()` call in `src/protocol.ts`. T
 
 If `main.ts` has no `import` statements, add `export {};` at the top so TypeScript treats it as a module (prevents variable name collisions across apps).
 
+## Recommended File Structure
+
+```
+src/
+├── main.ts          # Entry point: mount(), onMount(), top-level wiring
+├── styles.css       # All CSS (imported via `import './styles.css'`)
+├── protocol.ts      # App Protocol registration (if using App Protocol)
+├── store.ts         # Signals and shared state
+├── types.ts         # Type definitions
+└── helpers.ts       # Pure utility functions
+```
+
+Split code across files — avoid putting everything in `main.ts`. Import CSS via `import './styles.css'` rather than using inline `css` tags (except for the smallest snippets).
+
 ## Bundled Libraries
 
 Available via `@bundled/*` imports (no npm install needed):
@@ -114,6 +128,8 @@ import {
 | `show(when, content, fallback?)` | Reactive conditional rendering — returns a reactive child |
 | `createResource(fetcher, opts?)` | Async data with `.loading`, `.error`, `.refetch()` signals |
 | `Toast.show(msg, type?, duration?)` | Toast notification (info/success/error) |
+
+**CSS:** Prefer `import './styles.css'` over inline `css` tags for all but the smallest snippets. The bundler handles CSS imports automatically.
 
 **Example: Todo App**
 
