@@ -111,6 +111,26 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
 }
 
 /**
+ * Bun plugin that converts `.css` file imports into JS modules
+ * that inject a <style> element at runtime.
+ */
+export function cssFilePlugin(): { name: string; setup: (build: any) => void } {
+  return {
+    name: 'css-file-loader',
+    setup(build: any) {
+      build.onLoad({ filter: /\.css$/ }, async (args: any) => {
+        const css = await Bun.file(args.path).text();
+        const escaped = css.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+        return {
+          contents: `{const s=document.createElement('style');s.textContent=\`${escaped}\`;document.head.appendChild(s);}`,
+          loader: 'js',
+        };
+      });
+    },
+  };
+}
+
+/**
  * Get the list of available bundled libraries.
  */
 export function getAvailableBundledLibraries(): string[] {

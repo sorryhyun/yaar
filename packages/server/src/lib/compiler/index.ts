@@ -7,7 +7,7 @@
 
 import { mkdir, stat, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
-import { bundledLibraryPluginBun } from './plugins.js';
+import { bundledLibraryPluginBun, cssFilePlugin } from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
 import {
@@ -126,7 +126,7 @@ async function compileWithBun(entryPoint: string, minify: boolean): Promise<stri
     minify,
     format: 'esm',
     target: 'browser',
-    plugins: [bundledLibraryPluginBun()],
+    plugins: [bundledLibraryPluginBun(), cssFilePlugin()],
   });
 
   if (!result.success) {
@@ -141,6 +141,24 @@ async function compileWithBun(entryPoint: string, minify: boolean): Promise<stri
     throw new Error(`Bun.build() produced no output for ${entryPoint}`);
   }
   return await output.text();
+}
+
+/**
+ * Extract protocol manifest from src/main.ts or src/protocol.ts.
+ */
+async function extractProtocolFromDir(
+  srcDir: string,
+): Promise<ReturnType<typeof extractProtocolFromSource>> {
+  for (const file of ['main.ts', 'protocol.ts']) {
+    try {
+      const source = await Bun.file(join(srcDir, file)).text();
+      const protocol = extractProtocolFromSource(source);
+      if (protocol) return protocol;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 /**
@@ -181,10 +199,10 @@ export async function compileTypeScript(
     // Write to dist/index.html
     await Bun.write(outputPath, htmlContent);
 
-    // Extract app protocol manifest from source (best-effort)
+    // Extract app protocol manifest from source (best-effort).
+    // Check main.ts first, then scan all src/*.ts files for .register() calls.
     try {
-      const sourceCode = await Bun.file(entryPoint).text();
-      const protocol = extractProtocolFromSource(sourceCode);
+      const protocol = await extractProtocolFromDir(join(sandboxPath, 'src'));
       if (protocol) {
         await Bun.write(join(distDir, 'protocol.json'), JSON.stringify(protocol, null, 2));
       }

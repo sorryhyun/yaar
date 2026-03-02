@@ -148,13 +148,13 @@ function extractObjectProp(body: string, propName: string): object | null {
  */
 function* iterateTopLevelKeys(body: string): Generator<[string, string]> {
   // Match key: { at the top level of the body
+  // Supports bare identifiers (navigate) and quoted keys ('current-path', "select-file")
   let pos = 0;
   while (pos < body.length) {
-    // Skip whitespace and commas
-    const keyMatch = body.slice(pos).match(/^\s*,?\s*(\w+)\s*:\s*\{/);
+    const keyMatch = body.slice(pos).match(/^\s*,?\s*(?:(['"])([^'"]+)\1|(\w+))\s*:\s*\{/);
     if (!keyMatch || keyMatch.index === undefined) break;
 
-    const keyName = keyMatch[1];
+    const keyName = keyMatch[2] ?? keyMatch[3]; // quoted group or bare group
     const bracePos = pos + keyMatch.index + keyMatch[0].length - 1; // points to {
     const blockContent = extractBlock(body, bracePos);
     if (blockContent === null) break;
