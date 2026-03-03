@@ -2,7 +2,7 @@
   "id": "falling-blocks",
   "name": "Falling Blocks",
   "icon": "🟦",
-  "description": "Canvas-based Tetris game with reactive UI via @bundled/yaar signals",
+  "description": "Canvas-based Tetris game with reactive UI via @bundled/solid-js signals",
   "version": "1.0.0",
   "author": "YAAR"
 }

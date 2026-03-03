@@ -4,11 +4,7 @@
  * Each @bundled/foo import is resolved at build time by the Bun plugin in
  * plugins.ts. This file provides the corresponding TypeScript type mappings
  * so apps get full type-checking against upstream package types.
- *
- * @bundled/yaar is declared separately in yaar.d.ts (custom runtime).
  */
-
-/// <reference path="./yaar.d.ts" />
 
 // ── Reactivity ───────────────────────────────────────────────────────────────
 

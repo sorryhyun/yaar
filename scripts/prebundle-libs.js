@@ -16,9 +16,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const outDir = join(rootDir, 'dist', 'bundled-libs');
 
-// Same map as plugins.ts — import name → npm package (null = internal)
+// Same map as plugins.ts — import name → npm package
 const BUNDLED_LIBRARIES = {
-  'yaar': null,
   'solid-js': 'solid-js',
   'solid-js/html': 'solid-js/html',
   'solid-js/web': 'solid-js/web',
@@ -42,11 +41,6 @@ const BUNDLED_LIBRARIES = {
   'prismjs': 'prismjs',
 };
 
-// Internal library source paths (relative to resolveDir)
-const INTERNAL_SOURCES = {
-  'yaar': join(rootDir, 'packages', 'server', 'src', 'lib', 'yaar-runtime', 'index.ts'),
-};
-
 const resolveDir = join(rootDir, 'packages', 'server');
 
 mkdirSync(outDir, { recursive: true });
@@ -56,11 +50,9 @@ console.log(`Pre-bundling ${Object.keys(BUNDLED_LIBRARIES).length} libraries int
 const results = await Promise.allSettled(
   Object.entries(BUNDLED_LIBRARIES).map(async ([name, pkg]) => {
     const outfile = join(outDir, `${name}.js`);
-    const isInternal = pkg === null;
-    const entryPoint = isInternal ? INTERNAL_SOURCES[name] : pkg;
     try {
       await esbuild.build({
-        entryPoints: [entryPoint],
+        entryPoints: [pkg],
         bundle: true,
         format: 'esm',
         target: ['es2020'],
@@ -70,10 +62,10 @@ const results = await Promise.allSettled(
         logLevel: 'warning',
         absWorkingDir: resolveDir,
       });
-      console.log(`  ✓ ${name} (${isInternal ? 'internal' : pkg})`);
+      console.log(`  ✓ ${name} (${pkg})`);
       return { name, success: true };
     } catch (err) {
-      console.error(`  ✗ ${name} (${isInternal ? 'internal' : pkg}): ${err.message}`);
+      console.error(`  ✗ ${name} (${pkg}): ${err.message}`);
       return { name, success: false, error: err.message };
     }
   })

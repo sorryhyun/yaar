@@ -25,8 +25,7 @@ const CONDITIONAL_EXPORT_LIBS = ['solid-js', 'solid-js/web', 'solid-js/html'];
  * These libraries are installed as devDependencies and bundled into apps.
  * `null` = internal library (resolved from server source, not npm).
  */
-export const BUNDLED_LIBRARIES: Record<string, string | null> = {
-  yaar: null,
+export const BUNDLED_LIBRARIES: Record<string, string> = {
   'solid-js': 'solid-js',
   'solid-js/html': 'solid-js/html',
   'solid-js/web': 'solid-js/web',
@@ -108,12 +107,6 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
-        // Internal libraries resolve to real file paths so Bun follows relative imports
-        if (BUNDLED_LIBRARIES[libName] === null) {
-          const internalPath = join(PLUGIN_DIR, '..', `${libName}-runtime`, 'index.ts');
-          return { path: internalPath };
-        }
-
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
@@ -126,7 +119,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
         // (Bun.resolveSync uses runtime/node conditions which gives SSR builds
         // for packages like solid-js), then fall back to Bun.resolveSync for
         // packages without conditional exports.
-        const npmName = BUNDLED_LIBRARIES[libName]!;
+        const npmName = BUNDLED_LIBRARIES[libName];
         const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
         if (browserPath) return { path: browserPath };
 

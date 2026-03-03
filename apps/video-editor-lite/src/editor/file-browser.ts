@@ -1,4 +1,6 @@
-import { html, signal, mount } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import type { EditorUI } from './ui';
 import type { EditorPrefs } from './prefs';
 import {
@@ -21,12 +23,12 @@ export function createFileBrowser(
     onFileSelect(storageUrl: string, storagePath: string): boolean;
   },
 ): FileBrowser {
-  const allFiles = signal<string[]>([]);
-  const filterQuery = signal('');
+  const [allFiles, setAllFiles] = createSignal<string[]>([]);
+  const [filterQuery, setFilterQuery] = createSignal('');
   let activeItem: HTMLElement | null = null;
 
   // Mount the reactive file list into the fileList container
-  mount(html`
+  render(() => html`
     <div>
       ${() => {
         const query = filterQuery().toLowerCase();
@@ -64,16 +66,16 @@ export function createFileBrowser(
         });
       }}
     </div>
-  `, ui.fileList);
+  `, ui.fileList as HTMLElement);
 
   const applyFilter = (): void => {
-    filterQuery(ui.fileSearch.value.trim());
+    setFilterQuery(ui.fileSearch.value.trim());
   };
 
   const refresh = async (): Promise<void> => {
     const storageApi = getStorageApi();
     if (!storageApi) {
-      allFiles([]);
+      setAllFiles([]);
       ui.fileListStatus.textContent = 'Storage API unavailable in this environment.';
       return;
     }
@@ -88,11 +90,11 @@ export function createFileBrowser(
     try {
       const storageVideos = await collectStorageVideoPaths(storageApi, basePath);
       storageVideos.sort((a, b) => a.localeCompare(b));
-      allFiles([...storageVideos]);
-      filterQuery(ui.fileSearch.value.trim());
+      setAllFiles([...storageVideos]);
+      setFilterQuery(ui.fileSearch.value.trim());
       ui.fileListStatus.textContent = `Found ${storageVideos.length} video file${storageVideos.length === 1 ? '' : 's'} in ${basePath}.`;
     } catch {
-      allFiles([]);
+      setAllFiles([]);
       ui.fileListStatus.textContent = `Unable to list files in ${basePath}.`;
     } finally {
       ui.refreshFilesButton.disabled = false;

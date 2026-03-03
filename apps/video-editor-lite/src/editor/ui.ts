@@ -1,4 +1,6 @@
-import { html, mount, effect } from '@bundled/yaar';
+import { createEffect } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import type { EditorStore } from './state';
 import './styles.css';
 
@@ -115,7 +117,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
   let creatorErrorLabel!: HTMLDivElement;
 
   // ─── Template ─────────────────────────────────────────────────────────────
-  mount(html`
+  render(() => html`
     <div ref=${(el: HTMLDivElement) => { root = el; }} class="editor-root">
 
       <!-- ═══ SIDEBAR ═══ -->
@@ -331,11 +333,11 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
       </main>
     </div>
-  `, parent);
+  `, parent as HTMLElement);
 
   // Reactive mode switching — more reliable than attribute bindings on style/class
-  effect(() => {
-    const isEdit = store.mode() === 'edit';
+  createEffect(() => {
+    const isEdit = store.mode[0]() === 'edit';
     sidebarEditSection.style.display = isEdit ? '' : 'none';
     sidebarCreateSection.style.display = isEdit ? 'none' : '';
     editContainer.style.display = isEdit ? '' : 'none';
