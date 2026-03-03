@@ -1,6 +1,6 @@
-import { html, show } from '@bundled/yaar';
+import html from '@bundled/solid-js/html';
 import {
-  chartPanelOpen, chartTitleText,
+  chartPanelOpen, setChartPanelOpen, chartTitleText,
   statsPanelOpen, statsRows, statsRangeLabel,
   refs,
 } from '../state';
@@ -13,7 +13,7 @@ export function createChartPanel() {
         <strong>${() => chartTitleText()}</strong>
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
           destroyChart();
-          chartPanelOpen(false);
+          setChartPanelOpen(false);
         }} title="Close chart">&#x2715;</button>
       </div>
       <canvas ref=${(el: HTMLCanvasElement) => { refs.chartCanvas = el; }} id="chartCanvas" height="180"></canvas>
@@ -24,7 +24,7 @@ export function createChartPanel() {
 export function createStatsPanel() {
   return html`
     <div class=${() => `statsPanel${statsPanelOpen() ? ' open' : ''}`}>
-      ${show(() => statsPanelOpen(), () => html`
+      ${() => statsPanelOpen() ? html`
         <div class="chartPanelHead">
           <strong>Selection Stats</strong>
           <span>${() => statsRangeLabel()}</span>
@@ -37,7 +37,7 @@ export function createStatsPanel() {
             </div>
           `)}
         </div>
-      `)}
+      ` : ''}
     </div>
   `;
 }

@@ -1,4 +1,5 @@
-import { html, mount } from '@bundled/yaar';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { statsText, saveStateText, focusMode, setEditorEl, setDocTitleEl, setFileInputEl, setFormatBlockEl, editorEl } from './state';
 import { exec, refreshStats, installKeyboardShortcuts } from './editor';
@@ -18,7 +19,7 @@ import {
 import { registerAppProtocol } from './protocol';
 
 // ── Mount
-mount(html`
+render(() => html`
   <div class=${() => 'app-shell' + (focusMode() ? ' focus-mode' : '')}>
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
@@ -31,7 +32,7 @@ mount(html`
           placeholder="Untitled Document"
           maxlength="100"
           ref=${(el: HTMLInputElement) => { setDocTitleEl(el); }}
-          onInput=${() => { saveStateText('Editing title…'); autoSave(); }}
+          onInput=${() => { autoSave(); }}
         />
       </div>
     </div>
@@ -105,7 +106,7 @@ mount(html`
       <span>${() => saveStateText()}</span>
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ref fires synchronously during mount — all elements are ready
 loadDoc().then(() => editorEl.focus());

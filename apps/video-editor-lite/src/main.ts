@@ -1,4 +1,4 @@
-import { effect } from '@bundled/yaar';
+import { createEffect } from '@bundled/solid-js';
 import { EditorStore } from './editor/state';
 import { createEditorUI } from './editor/ui';
 import { renderEditor } from './editor/render';
@@ -222,9 +222,9 @@ ui.scenePropsPanel.addEventListener('change', (e) => {
   const target = e.target as HTMLInputElement | HTMLSelectElement;
   const prop = target.dataset.prop;
   if (!prop) return;
-  const sceneId = store.selectedSceneId();
+  const sceneId = store.selectedSceneId[0]();
   if (!sceneId) return;
-  const comp = store.composition();
+  const comp = store.composition[0]();
   if (!comp) return;
   const scene = comp.scenes.find((s) => s.id === sceneId);
   if (!scene) return;
@@ -282,7 +282,7 @@ ui.compDurationInput.addEventListener('change', handleCompSettingChange);
   void fileBrowser.refresh();
 })();
 
-effect(() => { renderEditor(ui, store.getState()); });
+createEffect(() => { renderEditor(ui, store.getState()); });
 
 window.addEventListener('beforeunload', () => {
   editMode.releaseActiveObjectUrl();

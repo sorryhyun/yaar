@@ -1,4 +1,4 @@
-import { signal } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
 import type { EditorState, EditorMode, TrimPatch } from './types';
 import type { Composition, Scene } from '../core/types';
 import { clamp } from './utils/time';
@@ -7,161 +7,161 @@ const EPSILON = 0.01;
 
 export class EditorStore {
   // Public signals — readable directly from templates
-  readonly mode = signal<EditorMode>('edit');
-  readonly sourceKind = signal<'url' | 'file' | null>(null);
-  readonly sourceValue = signal('');
-  readonly objectUrl = signal<string | null>(null);
-  readonly duration = signal(0);
-  readonly trimStart = signal(0);
-  readonly trimEnd = signal(0);
-  readonly currentTime = signal(0);
-  readonly playbackRate = signal(1);
-  readonly loopPreview = signal(false);
-  readonly playing = signal(false);
-  readonly exporting = signal(false);
-  readonly exportProgress = signal(0);
-  readonly exportMessage = signal<string | null>(null);
-  readonly error = signal<string | null>(null);
-  readonly composition = signal<Composition | null>(null);
-  readonly selectedSceneId = signal<string | null>(null);
-  readonly creatorPlaying = signal(false);
-  readonly creatorFrame = signal(0);
+  readonly mode = createSignal<EditorMode>('edit');
+  readonly sourceKind = createSignal<'url' | 'file' | null>(null);
+  readonly sourceValue = createSignal('');
+  readonly objectUrl = createSignal<string | null>(null);
+  readonly duration = createSignal(0);
+  readonly trimStart = createSignal(0);
+  readonly trimEnd = createSignal(0);
+  readonly currentTime = createSignal(0);
+  readonly playbackRate = createSignal(1);
+  readonly loopPreview = createSignal(false);
+  readonly playing = createSignal(false);
+  readonly exporting = createSignal(false);
+  readonly exportProgress = createSignal(0);
+  readonly exportMessage = createSignal<string | null>(null);
+  readonly error = createSignal<string | null>(null);
+  readonly composition = createSignal<Composition | null>(null);
+  readonly selectedSceneId = createSignal<string | null>(null);
+  readonly creatorPlaying = createSignal(false);
+  readonly creatorFrame = createSignal(0);
 
   // Backward-compat snapshot (used by callers that still call getState())
   getState(): EditorState {
     return {
-      mode: this.mode(),
-      sourceKind: this.sourceKind(),
-      sourceValue: this.sourceValue(),
-      objectUrl: this.objectUrl(),
-      duration: this.duration(),
-      trimStart: this.trimStart(),
-      trimEnd: this.trimEnd(),
-      currentTime: this.currentTime(),
-      playbackRate: this.playbackRate(),
-      loopPreview: this.loopPreview(),
-      playing: this.playing(),
-      exporting: this.exporting(),
-      exportProgress: this.exportProgress(),
-      exportMessage: this.exportMessage(),
-      error: this.error(),
-      composition: this.composition(),
-      selectedSceneId: this.selectedSceneId(),
-      creatorPlaying: this.creatorPlaying(),
-      creatorFrame: this.creatorFrame(),
+      mode: this.mode[0](),
+      sourceKind: this.sourceKind[0](),
+      sourceValue: this.sourceValue[0](),
+      objectUrl: this.objectUrl[0](),
+      duration: this.duration[0](),
+      trimStart: this.trimStart[0](),
+      trimEnd: this.trimEnd[0](),
+      currentTime: this.currentTime[0](),
+      playbackRate: this.playbackRate[0](),
+      loopPreview: this.loopPreview[0](),
+      playing: this.playing[0](),
+      exporting: this.exporting[0](),
+      exportProgress: this.exportProgress[0](),
+      exportMessage: this.exportMessage[0](),
+      error: this.error[0](),
+      composition: this.composition[0](),
+      selectedSceneId: this.selectedSceneId[0](),
+      creatorPlaying: this.creatorPlaying[0](),
+      creatorFrame: this.creatorFrame[0](),
     };
   }
 
   setMode(mode: EditorMode): void {
-    this.mode(mode);
-    this.error(null);
-    this.exportMessage(null);
+    this.mode[1](mode);
+    this.error[1](null);
+    this.exportMessage[1](null);
   }
 
   setSource(kind: 'url' | 'file', sourceValue: string, objectUrl: string | null): void {
-    this.sourceKind(kind);
-    this.sourceValue(sourceValue);
-    this.objectUrl(objectUrl);
-    this.duration(0);
-    this.trimStart(0);
-    this.trimEnd(0);
-    this.currentTime(0);
-    this.exporting(false);
-    this.exportProgress(0);
-    this.exportMessage(null);
-    this.error(null);
+    this.sourceKind[1](kind);
+    this.sourceValue[1](sourceValue);
+    this.objectUrl[1](objectUrl);
+    this.duration[1](0);
+    this.trimStart[1](0);
+    this.trimEnd[1](0);
+    this.currentTime[1](0);
+    this.exporting[1](false);
+    this.exportProgress[1](0);
+    this.exportMessage[1](null);
+    this.error[1](null);
   }
 
   setDuration(duration: number): void {
     const n = Number.isFinite(duration) && duration > 0 ? duration : 0;
-    this.duration(n);
-    this.trimStart(0);
-    this.trimEnd(n);
-    this.currentTime(0);
-    this.exporting(false);
-    this.exportProgress(0);
-    this.exportMessage(null);
-    this.error(null);
+    this.duration[1](n);
+    this.trimStart[1](0);
+    this.trimEnd[1](n);
+    this.currentTime[1](0);
+    this.exporting[1](false);
+    this.exportProgress[1](0);
+    this.exportMessage[1](null);
+    this.error[1](null);
   }
 
   setCurrentTime(currentTime: number): void {
-    this.currentTime(clamp(currentTime, 0, this.duration() || 0));
+    this.currentTime[1](clamp(currentTime, 0, this.duration[0]() || 0));
   }
 
-  setPlaying(playing: boolean): void { this.playing(playing); }
-  setLoopPreview(loopPreview: boolean): void { this.loopPreview(loopPreview); }
-  setPlaybackRate(playbackRate: number): void { this.playbackRate(playbackRate); }
+  setPlaying(playing: boolean): void { this.playing[1](playing); }
+  setLoopPreview(loopPreview: boolean): void { this.loopPreview[1](loopPreview); }
+  setPlaybackRate(playbackRate: number): void { this.playbackRate[1](playbackRate); }
 
   setTrim(patch: TrimPatch): boolean {
-    const duration = this.duration();
-    if (duration <= 0) { this.error('Load a video first.'); return false; }
-    const nextStart = patch.trimStart ?? this.trimStart();
-    const nextEnd = patch.trimEnd ?? this.trimEnd();
+    const duration = this.duration[0]();
+    if (duration <= 0) { this.error[1]('Load a video first.'); return false; }
+    const nextStart = patch.trimStart ?? this.trimStart[0]();
+    const nextEnd = patch.trimEnd ?? this.trimEnd[0]();
     const clampedStart = clamp(nextStart, 0, duration);
     const clampedEnd = clamp(nextEnd, 0, duration);
     if (clampedStart >= clampedEnd - EPSILON) {
-      this.error('Trim start must be less than trim end.');
+      this.error[1]('Trim start must be less than trim end.');
       return false;
     }
-    this.trimStart(clampedStart);
-    this.trimEnd(clampedEnd);
-    this.error(null);
+    this.trimStart[1](clampedStart);
+    this.trimEnd[1](clampedEnd);
+    this.error[1](null);
     return true;
   }
 
   setExportState(patch: { exporting?: boolean; exportProgress?: number; exportMessage?: string | null }): void {
-    if (patch.exporting !== undefined) this.exporting(patch.exporting);
-    if (patch.exportProgress !== undefined) this.exportProgress(patch.exportProgress);
-    if (patch.exportMessage !== undefined) this.exportMessage(patch.exportMessage ?? null);
+    if (patch.exporting !== undefined) this.exporting[1](patch.exporting);
+    if (patch.exportProgress !== undefined) this.exportProgress[1](patch.exportProgress);
+    if (patch.exportMessage !== undefined) this.exportMessage[1](patch.exportMessage ?? null);
   }
 
-  clearExportMessage(): void { if (this.exportMessage()) this.exportMessage(null); }
-  clearError(): void { if (this.error()) this.error(null); }
+  clearExportMessage(): void { if (this.exportMessage[0]()) this.exportMessage[1](null); }
+  clearError(): void { if (this.error[0]()) this.error[1](null); }
 
   setComposition(composition: Composition | null): void {
-    this.composition(composition);
-    this.selectedSceneId(null);
-    this.creatorFrame(0);
+    this.composition[1](composition);
+    this.selectedSceneId[1](null);
+    this.creatorFrame[1](0);
   }
 
   addScene(scene: Scene): void {
-    const comp = this.composition();
+    const comp = this.composition[0]();
     if (!comp) return;
-    this.composition({ ...comp, scenes: [...comp.scenes, scene] });
-    this.selectedSceneId(scene.id);
+    this.composition[1]({ ...comp, scenes: [...comp.scenes, scene] });
+    this.selectedSceneId[1](scene.id);
   }
 
   removeScene(id: string): void {
-    const comp = this.composition();
+    const comp = this.composition[0]();
     if (!comp) return;
-    this.composition({ ...comp, scenes: comp.scenes.filter((s) => s.id !== id) });
-    if (this.selectedSceneId() === id) this.selectedSceneId(null);
+    this.composition[1]({ ...comp, scenes: comp.scenes.filter((s) => s.id !== id) });
+    if (this.selectedSceneId[0]() === id) this.selectedSceneId[1](null);
   }
 
   updateScene(id: string, updatedScene: Scene): void {
-    const comp = this.composition();
+    const comp = this.composition[0]();
     if (!comp) return;
-    this.composition({ ...comp, scenes: comp.scenes.map((s) => (s.id === id ? updatedScene : s)) });
+    this.composition[1]({ ...comp, scenes: comp.scenes.map((s) => (s.id === id ? updatedScene : s)) });
   }
 
   reorderScenes(ids: string[]): void {
-    const comp = this.composition();
+    const comp = this.composition[0]();
     if (!comp) return;
     const sceneMap = new Map(comp.scenes.map((s) => [s.id, s]));
     const reordered = ids.map((id) => sceneMap.get(id)).filter(Boolean) as Scene[];
     for (const scene of comp.scenes) {
       if (!ids.includes(scene.id)) reordered.push(scene);
     }
-    this.composition({ ...comp, scenes: reordered });
+    this.composition[1]({ ...comp, scenes: reordered });
   }
 
-  setSelectedScene(id: string | null): void { this.selectedSceneId(id); }
-  setCreatorPlaying(playing: boolean): void { this.creatorPlaying(playing); }
-  setCreatorFrame(frame: number): void { this.creatorFrame(frame); }
+  setSelectedScene(id: string | null): void { this.selectedSceneId[1](id); }
+  setCreatorPlaying(playing: boolean): void { this.creatorPlaying[1](playing); }
+  setCreatorFrame(frame: number): void { this.creatorFrame[1](frame); }
 
   updateCompositionConfig(patch: { width?: number; height?: number; fps?: number; durationInFrames?: number }): void {
-    const comp = this.composition();
+    const comp = this.composition[0]();
     if (!comp) return;
-    this.composition({ ...comp, config: { ...comp.config, ...patch } });
+    this.composition[1]({ ...comp, config: { ...comp.config, ...patch } });
   }
 }

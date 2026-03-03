@@ -1,4 +1,6 @@
-import { signal, html, mount, effect } from '@bundled/yaar';
+import { createSignal, createEffect } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { saveDeck, loadDeck } from './storage';
 import { normalizeAspectRatio, parseAspectRatio, RATIO_PRESETS, type RatioPreset } from './aspect-ratio';
@@ -14,10 +16,10 @@ import { registerProtocol } from './protocol';
 let deck = normalizeDeck(newDeck());
 
 // === Signals for reactive UI ===
-const deckVer = signal(0);        // bumps on content changes (thumbs + canvas update)
-const activeIndexVer = signal(0); // bumps on slide switch (editor panel rebuilds)
-const dirty = signal(false);
-const lastSavedAt = signal(Date.now());
+const [deckVer, setDeckVer] = createSignal(0);        // bumps on content changes (thumbs + canvas update)
+const [activeIndexVer, setActiveIndexVer] = createSignal(0); // bumps on slide switch (editor panel rebuilds)
+const [dirty, setDirty] = createSignal(false);
+const [lastSavedAt, setLastSavedAt] = createSignal(Date.now());
 
 // === Presenting state (kept mutable) ===
 let presenting = false;
@@ -32,8 +34,8 @@ let filterQueryValue = '';
 let canvasEl!: HTMLDivElement;
 
 // === Helpers ===
-function bumpDeck() { deckVer(deckVer() + 1); }
-function bumpActiveIndex() { activeIndexVer(activeIndexVer() + 1); }
+function bumpDeck() { setDeckVer(deckVer() + 1); }
+function bumpActiveIndex() { setActiveIndexVer(activeIndexVer() + 1); }
 
 function clampActive() {
   if (deck.activeIndex < 0) deck.activeIndex = 0;
@@ -45,17 +47,17 @@ function activeSlide(): Slide {
   return deck.slides[deck.activeIndex];
 }
 
-const debouncedSave = debounce(() => { dirty(false); lastSavedAt(Date.now()); void saveDeck(deck); }, 700);
+const debouncedSave = debounce(() => { setDirty(false); setLastSavedAt(Date.now()); void saveDeck(deck); }, 700);
 
 function markDirty() {
-  dirty(true);
+  setDirty(true);
   debouncedSave();
 }
 
 function persist(showToast = false) {
   void saveDeck(deck);
-  dirty(false);
-  lastSavedAt(Date.now());
+  setDirty(false);
+  setLastSavedAt(Date.now());
   if (showToast) flash('Saved');
 }
 
@@ -346,7 +348,7 @@ function exportPdf() {
 }
 
 // === Mount the app ===
-mount(html`
+render(() => html`
   <div class="root">
     <!-- Topbar -->
     <div class="topbar">
@@ -412,10 +414,10 @@ mount(html`
       </div>
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
-// === Reactive canvas update via effect ===
-effect(() => {
+// === Reactive canvas update via createEffect ===
+createEffect(() => {
   deckVer(); // track any deck content changes
   if (!canvasEl) return;
   canvasEl.innerHTML = renderSlideHtml(activeSlide(), deck.themeId, deck.fontSize);

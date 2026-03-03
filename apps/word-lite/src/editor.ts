@@ -1,10 +1,10 @@
 import { countTextStats } from './utils';
-import { editorEl, statsText, focusMode, saveStateText, fileInputEl, docTitleEl } from './state';
+import { editorEl, focusMode, setFocusMode, setStatsText, setSaveStateText, fileInputEl, docTitleEl } from './state';
 
 export const refreshStats = () => {
   const { words, chars } = countTextStats(editorEl?.innerText || '');
   const readMins = words === 0 ? 0 : Math.max(1, Math.ceil(words / 200));
-  statsText(`${words} words • ${chars} chars • ${readMins} min read`);
+  setStatsText(`${words} words • ${chars} chars • ${readMins} min read`);
 };
 
 export const exec = (cmd: string, value?: string) => {
@@ -19,8 +19,8 @@ export function installKeyboardShortcuts(
 ) {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && focusMode()) {
-      focusMode(false);
-      saveStateText('Focus mode disabled');
+      setFocusMode(false);
+      setSaveStateText('Focus mode disabled');
       return;
     }
     if (!e.ctrlKey && !e.metaKey) return;
@@ -35,7 +35,7 @@ export function installKeyboardShortcuts(
       editorEl.innerHTML = '<p></p>';
       docTitleEl.value = 'Untitled Document';
       refreshStats();
-      saveStateText('Unsaved new document');
+      setSaveStateText('Unsaved new document');
       editorEl.focus();
     }
   });

@@ -1,4 +1,6 @@
-import { signal, computed, css, html, mount, show } from "@bundled/yaar";
+import { createSignal, createMemo } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import { createComment, createPost, fetchComments, fetchPost, fetchPosts, votePost } from "./api";
 import type { Comment, Post } from "./types";
 import "./styles.css";
@@ -7,16 +9,16 @@ type SortMode = "latest" | "top" | "discussed";
 type ComposerMode = "post" | "comment";
 
 // ── Signals ──────────────────────────────────────────────────────────────────
-const posts = signal<Post[]>([]);
-const nextCursor = signal<string | null>(null);
-const selectedPostId = signal<string | null>(null);
-const comments = signal<Comment[]>([]);
-const loading = signal(false);
-const busyAction = signal(false);
-const filter = signal("");
-const sort = signal<SortMode>("latest");
-const composerMode = signal<ComposerMode>("post");
-const statusText = signal("Ready.");
+const [posts, setPosts] = createSignal<Post[]>([]);
+const [nextCursor, setNextCursor] = createSignal<string | null>(null);
+const [selectedPostId, setSelectedPostId] = createSignal<string | null>(null);
+const [comments, setComments] = createSignal<Comment[]>([]);
+const [loading, setLoading] = createSignal(false);
+const [busyAction, setBusyAction] = createSignal(false);
+const [filter, setFilter] = createSignal("");
+const [sort, setSort] = createSignal<SortMode>("latest");
+const [composerMode, setComposerMode] = createSignal<ComposerMode>("post");
+const [statusText, setStatusText] = createSignal("Ready.");
 
 // ── Element refs ──────────────────────────────────────────────────────────────
 let searchInputEl: HTMLInputElement | null = null;
@@ -58,7 +60,7 @@ function fmtPostMeta(post: Post): string {
 }
 
 // ── Derived ───────────────────────────────────────────────────────────────────
-const getVisiblePosts = computed(() => {
+const getVisiblePosts = createMemo(() => {
   const q = filter().trim().toLowerCase();
   const filtered = q
     ? posts().filter((p) => `${p.title} ${p.content}`.toLowerCase().includes(q))
@@ -71,7 +73,7 @@ const getVisiblePosts = computed(() => {
   return filtered;
 });
 
-const selectedPost = computed(() => {
+const selectedPost = createMemo(() => {
   const id = selectedPostId();
   if (!id) return null;
   return posts().find((p) => p.id === id) ?? null;
@@ -80,28 +82,28 @@ const selectedPost = computed(() => {
 // ── Business logic ────────────────────────────────────────────────────────────
 async function loadFeed(reset = false) {
   if (loading()) return;
-  loading(true);
-  statusText("Loading feed...");
+  setLoading(true);
+  setStatusText("Loading feed...");
 
   try {
     const cursor = reset ? null : nextCursor();
     const res = await fetchPosts(20, cursor);
 
     const selectedBefore = selectedPostId();
-    posts(reset ? res.posts : [...posts(), ...res.posts]);
-    nextCursor(res.nextCursor);
+    setPosts(reset ? res.posts : [...posts(), ...res.posts]);
+    setNextCursor(res.nextCursor);
 
     if (reset && posts().length) {
       const stillExists = selectedBefore && posts().some((p) => p.id === selectedBefore);
-      selectedPostId(stillExists ? selectedBefore : posts()[0].id);
+      setSelectedPostId(stillExists ? selectedBefore : posts()[0].id);
       await loadSelectedPost();
     }
 
-    statusText(`Feed loaded (${posts().length} posts).`);
+    setStatusText(`Feed loaded (${posts().length} posts).`);
   } catch (err) {
-    statusText(`Feed error: ${(err as Error).message}`);
+    setStatusText(`Feed error: ${(err as Error).message}`);
   } finally {
-    loading(false);
+    setLoading(false);
   }
 }
 
@@ -109,7 +111,7 @@ async function loadSelectedPost() {
   const id = selectedPostId();
   if (!id) return;
 
-  statusText("Loading post...");
+  setStatusText("Loading post...");
 
   try {
     const [post, fetchedComments] = await Promise.all([fetchPost(id), fetchComments(id)]);
@@ -118,18 +120,18 @@ async function loadSelectedPost() {
     if (idx >= 0) {
       const updated = [...posts()];
       updated[idx] = { ...updated[idx], ...post };
-      posts(updated);
+      setPosts(updated);
     }
-    comments(fetchedComments);
+    setComments(fetchedComments);
 
-    statusText("Post loaded.");
+    setStatusText("Post loaded.");
   } catch (err) {
-    statusText(`Post error: ${(err as Error).message}`);
+    setStatusText(`Post error: ${(err as Error).message}`);
   }
 }
 
 async function selectPost(postId: string) {
-  selectedPostId(postId);
+  setSelectedPostId(postId);
   await loadSelectedPost();
 }
 
@@ -137,17 +139,17 @@ async function handleVote(type: "up" | "down") {
   const id = selectedPostId();
   if (!id || busyAction()) return;
 
-  busyAction(true);
-  statusText(`Submitting ${type}vote with PoW...`);
+  setBusyAction(true);
+  setStatusText(`Submitting ${type}vote with PoW...`);
 
   try {
     await votePost(id, type);
     await loadSelectedPost();
-    statusText(`${type}vote submitted.`);
+    setStatusText(`${type}vote submitted.`);
   } catch (err) {
-    statusText(`Vote failed: ${(err as Error).message}`);
+    setStatusText(`Vote failed: ${(err as Error).message}`);
   } finally {
-    busyAction(false);
+    setBusyAction(false);
   }
 }
 
@@ -159,34 +161,34 @@ async function handleCreatePost() {
   const content = postContentEl?.value.trim() ?? "";
 
   if (!title || !content) {
-    statusText("Please fill title and content.");
+    setStatusText("Please fill title and content.");
     return;
   }
 
-  busyAction(true);
-  statusText("Creating post with PoW...");
+  setBusyAction(true);
+  setStatusText("Creating post with PoW...");
 
   try {
     const post = await createPost({ nickname, title, content });
-    posts([post, ...posts()]);
-    selectedPostId(post.id);
-    comments([]);
+    setPosts([post, ...posts()]);
+    setSelectedPostId(post.id);
+    setComments([]);
 
     if (postTitleEl) postTitleEl.value = "";
     if (postContentEl) postContentEl.value = "";
 
-    statusText("Post published.");
+    setStatusText("Post published.");
   } catch (err) {
-    statusText(`Create post failed: ${(err as Error).message}`);
+    setStatusText(`Create post failed: ${(err as Error).message}`);
   } finally {
-    busyAction(false);
+    setBusyAction(false);
   }
 }
 
 async function handleCreateComment() {
   const id = selectedPostId();
   if (!id) {
-    statusText("Select a post first.");
+    setStatusText("Select a post first.");
     return;
   }
   if (busyAction()) return;
@@ -195,27 +197,27 @@ async function handleCreateComment() {
   const content = commentContentEl?.value.trim() ?? "";
 
   if (!content) {
-    statusText("Please write a comment.");
+    setStatusText("Please write a comment.");
     return;
   }
 
-  busyAction(true);
-  statusText("Creating comment with PoW...");
+  setBusyAction(true);
+  setStatusText("Creating comment with PoW...");
 
   try {
     await createComment(id, { nickname, content });
     if (commentContentEl) commentContentEl.value = "";
     await loadSelectedPost();
-    statusText("Comment published.");
+    setStatusText("Comment published.");
   } catch (err) {
-    statusText(`Create comment failed: ${(err as Error).message}`);
+    setStatusText(`Create comment failed: ${(err as Error).message}`);
   } finally {
-    busyAction(false);
+    setBusyAction(false);
   }
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
-mount(html`
+render(() => html`
   <div id="layout">
     <!-- Left panel: post list -->
     <aside class="panel y-scroll">
@@ -230,7 +232,7 @@ mount(html`
           placeholder="Filter by title or content..."
           ref=${(el: HTMLInputElement) => { searchInputEl = el; }}
           disabled=${() => loading() || busyAction()}
-          onInput=${(e: Event) => { filter((e.target as HTMLInputElement).value); }}
+          onInput=${(e: Event) => { setFilter((e.target as HTMLInputElement).value); }}
         />
       </div>
       <div class="toolbar row">
@@ -239,7 +241,7 @@ mount(html`
           style="max-width: 145px;"
           ref=${(el: HTMLSelectElement) => { sortSelectEl = el; }}
           disabled=${() => loading() || busyAction()}
-          onChange=${(e: Event) => { sort((e.target as HTMLSelectElement).value as SortMode); }}
+          onChange=${(e: Event) => { setSort((e.target as HTMLSelectElement).value as SortMode); }}
         >
           <option value="latest">Latest</option>
           <option value="top">Top score</option>
@@ -260,10 +262,7 @@ mount(html`
         ${() => `${getVisiblePosts().length} visible / ${posts().length} loaded`}
       </div>
       <div class="post-list">
-        ${show(
-          () => getVisiblePosts().length === 0,
-          () => html`<div class="y-text-sm y-text-muted">No matching posts.</div>`
-        )}
+        ${() => getVisiblePosts().length === 0 ? html`<div class="y-text-sm y-text-muted">No matching posts.</div>` : ''}
         ${() => getVisiblePosts().map(post => html`
           <article
             class=${() => "post-item" + (selectedPostId() === post.id ? " active" : "")}
@@ -291,13 +290,8 @@ mount(html`
 
       <!-- Post view -->
       <section class="post-view y-scroll">
-        ${show(
-          () => !selectedPostId(),
-          () => html`<div class="y-text-sm y-text-muted">Pick a post from the list to read and vote.</div>`
-        )}
-        ${show(
-          () => !!selectedPostId(),
-          () => html`
+        ${() => !selectedPostId() ? html`<div class="y-text-sm y-text-muted">Pick a post from the list to read and vote.</div>` : ''}
+        ${() => !!selectedPostId() ? html`
             <article class="y-card">
               <div class="title">${() => selectedPost()?.title ?? ""}</div>
               <div class="y-text-sm y-text-muted">${() => selectedPost() ? fmtPostMeta(selectedPost()!) : ""}</div>
@@ -317,10 +311,7 @@ mount(html`
             </article>
             <section class="y-card comments">
               <div class="title">Comments (${() => comments().length})</div>
-              ${show(
-                () => comments().length === 0,
-                () => html`<div class="y-text-sm y-text-muted">No comments.</div>`
-              )}
+              ${() => comments().length === 0 ? html`<div class="y-text-sm y-text-muted">No comments.</div>` : ''}
               ${() => comments().map(c => html`
                 <div class="comment">
                   <div class="y-text-sm y-text-muted">${c.author?.nickname ?? "돌쇠"}${c.created_at ? " · " + relativeTime(c.created_at) : ""}</div>
@@ -328,8 +319,7 @@ mount(html`
                 </div>
               `)}
             </section>
-          `
-        )}
+          ` : ''}
       </section>
 
       <!-- Composer -->
@@ -337,18 +327,16 @@ mount(html`
         <div class="row" style="margin-bottom:8px;">
           <button
             class=${() => composerMode() === "post" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
-            onClick=${() => composerMode("post")}
+            onClick=${() => setComposerMode("post")}
           >New Post</button>
           <button
             class=${() => composerMode() === "comment" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
             disabled=${() => !selectedPostId()}
-            onClick=${() => composerMode("comment")}
+            onClick=${() => setComposerMode("comment")}
           >New Comment</button>
         </div>
 
-        ${show(
-          () => composerMode() === "post",
-          () => html`
+        ${() => composerMode() === "post" ? html`
             <div class="y-card">
               <div class="title">Create post</div>
               <div class="row" style="margin-bottom:8px;">
@@ -381,12 +369,9 @@ mount(html`
                 >Publish Post</button>
               </div>
             </div>
-          `
-        )}
+          ` : ''}
 
-        ${show(
-          () => composerMode() === "comment",
-          () => html`
+        ${() => composerMode() === "comment" ? html`
             <div class="y-card">
               <div class="title">Create comment</div>
               <div class="y-text-sm y-text-muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
@@ -413,15 +398,14 @@ mount(html`
                 >Publish Comment</button>
               </div>
             </div>
-          `
-        )}
+          ` : ''}
       </section>
 
       <!-- Status bar -->
       <div class="status">${statusText}</div>
     </main>
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ── App Protocol ──────────────────────────────────────────────────────────────
 void loadFeed(true);
@@ -513,7 +497,7 @@ if (appApi) {
           const updated = [...posts()];
           if (idx >= 0) updated[idx] = { ...updated[idx], ...post };
           else updated.unshift(post);
-          posts(updated);
+          setPosts(updated);
           return { ok: true, post };
         },
       },
@@ -528,7 +512,7 @@ if (appApi) {
           if (!postId) throw new Error("No postId provided and no post selected");
           const fetchedComments = await fetchComments(postId);
           if (selectedPostId() === postId) {
-            comments(fetchedComments);
+            setComments(fetchedComments);
           }
           return { ok: true, postId, count: fetchedComments.length, comments: fetchedComments };
         },
@@ -546,17 +530,17 @@ if (appApi) {
         },
         handler: async (p: { nickname: string; title: string; content: string }) => {
           const jobId = `post-${Date.now().toString(36)}`;
-          statusText(`Queued createPost (${jobId})...`);
+          setStatusText(`Queued createPost (${jobId})...`);
 
           void (async () => {
             try {
               const post = await createPost(p);
-              posts([post, ...posts()]);
-              selectedPostId(post.id);
-              comments([]);
-              statusText(`Post created via app protocol (${jobId}).`);
+              setPosts([post, ...posts()]);
+              setSelectedPostId(post.id);
+              setComments([]);
+              setStatusText(`Post created via app protocol (${jobId}).`);
             } catch (err) {
-              statusText(`Create post failed (${jobId}): ${(err as Error).message}`);
+              setStatusText(`Create post failed (${jobId}): ${(err as Error).message}`);
             }
           })();
 
@@ -580,7 +564,7 @@ if (appApi) {
           if (!postId) throw new Error("No postId provided and no post selected");
 
           const jobId = `comment-${Date.now().toString(36)}`;
-          statusText(`Queued createComment (${jobId})...`);
+          setStatusText(`Queued createComment (${jobId})...`);
 
           void (async () => {
             try {
@@ -592,9 +576,9 @@ if (appApi) {
               if (selectedPostId() === postId) {
                 await loadSelectedPost();
               }
-              statusText(`Comment created via app protocol (${jobId}).`);
+              setStatusText(`Comment created via app protocol (${jobId}).`);
             } catch (err) {
-              statusText(`Create comment failed (${jobId}): ${(err as Error).message}`);
+              setStatusText(`Create comment failed (${jobId}): ${(err as Error).message}`);
             }
           })();
 
@@ -616,15 +600,15 @@ if (appApi) {
           if (!postId) throw new Error("No postId provided and no post selected");
 
           const jobId = `vote-${Date.now().toString(36)}`;
-          statusText(`Queued vote (${jobId})...`);
+          setStatusText(`Queued vote (${jobId})...`);
 
           void (async () => {
             try {
               await votePost(postId, p.type);
               if (selectedPostId() === postId) await loadSelectedPost();
-              statusText(`Vote completed via app protocol (${jobId}).`);
+              setStatusText(`Vote completed via app protocol (${jobId}).`);
             } catch (err) {
-              statusText(`Vote failed (${jobId}): ${(err as Error).message}`);
+              setStatusText(`Vote failed (${jobId}): ${(err as Error).message}`);
             }
           })();
 
@@ -639,7 +623,7 @@ if (appApi) {
           required: ["query"],
         },
         handler: async (p: { query: string }) => {
-          filter(p.query);
+          setFilter(p.query);
           if (searchInputEl) searchInputEl.value = p.query;
           return { ok: true, filter: filter() };
         },
@@ -652,7 +636,7 @@ if (appApi) {
           required: ["mode"],
         },
         handler: async (p: { mode: SortMode }) => {
-          sort(p.mode);
+          setSort(p.mode);
           if (sortSelectEl) sortSelectEl.value = p.mode;
           return { ok: true, sort: sort() };
         },

@@ -1,6 +1,6 @@
-import { html } from '@bundled/yaar';
+import html from '@bundled/solid-js/html';
 import {
-  chartPanelOpen, refs, mutable,
+  chartPanelOpen, setChartPanelOpen, refs, mutable,
   applyStyleToSelection, toggleStyle,
   undo, redo,
   setIoStatus, serializeWorkbook, tryImportWorkbook,
@@ -44,7 +44,7 @@ export function createToolbar() {
         <button class="y-btn y-btn-sm" onClick=${() => renderSelectionChart()} title="Create chart from selection" aria-label="Chart Selection">&#x1F4CA;</button>
         <button class="y-btn y-btn-sm" onClick=${() => renderSelectionStats()} title="Selection statistics" aria-label="Selection Statistics">&#x3A3;</button>
         <select ref=${(el: HTMLSelectElement) => { refs.chartTypeSel = el; }} title="Chart type"
-          onChange=${() => { if (chartPanelOpen()) renderSelectionChart(); }}>
+          onChange=${() => { if (chartPanelOpen()) renderSelectionChart(); }} >
           <option value="bar">Bar</option>
           <option value="line">Line</option>
           <option value="pie">Pie</option>

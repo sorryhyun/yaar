@@ -8,8 +8,8 @@ import { selectionChartPoints } from './chart-utils';
 import {
   mutable, refs,
   cells,
-  chartPanelOpen, chartTitleText,
-  statsRows, statsRangeLabel, statsPanelOpen,
+  chartPanelOpen, setChartPanelOpen, chartTitleText, setChartTitleText,
+  statsRows, setStatsRows, statsRangeLabel, setStatsRangeLabel, statsPanelOpen, setStatsPanelOpen,
   setIoStatus,
   formulaEngine,
 } from './state';
@@ -96,8 +96,8 @@ export function renderSelectionChart() {
   const rangeLabel = mutable.selectionStart === mutable.selectionEnd
     ? mutable.selected
     : `${mutable.selectionStart}:${mutable.selectionEnd}`;
-  chartTitleText(`${rangeLabel} (${points.length} pts)`);
-  chartPanelOpen(true);
+  setChartTitleText(`${rangeLabel} (${points.length} pts)`);
+  setChartPanelOpen(true);
   setIoStatus(`Rendered ${chartType} chart from selection.`);
 }
 
@@ -123,11 +123,11 @@ export function renderSelectionStats() {
     { label: 'Max', value: fmt(max(numeric) ?? 0) },
   ];
 
-  statsRows(rows);
+  setStatsRows(rows);
   const rangeLabel = mutable.selectionStart === mutable.selectionEnd
     ? mutable.selected
     : `${mutable.selectionStart}:${mutable.selectionEnd}`;
-  statsRangeLabel(rangeLabel);
-  statsPanelOpen(true);
+  setStatsRangeLabel(rangeLabel);
+  setStatsPanelOpen(true);
   setIoStatus('Computed stats for selected range.');
 }

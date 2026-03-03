@@ -1,4 +1,5 @@
-import { html, mount } from '@bundled/yaar';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import {
   storageApi, autosavePath,
@@ -16,14 +17,14 @@ import { createGrid, buildSheet, applyFill } from './ui/grid';
 import { registerAppProtocol } from './protocol';
 
 // ── Mount ─────────────────────────────────────────────────────────────
-mount(html`
+render(() => html`
   <div class="wrap">
     ${createToolbar()}
     ${createChartPanel()}
     ${createStatsPanel()}
     ${createGrid()}
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ── Build grid imperatively (refs are set after mount) ─────────────────
 buildSheet();

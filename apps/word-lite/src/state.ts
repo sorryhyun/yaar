@@ -1,9 +1,9 @@
-import { signal } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
 
 // ── Reactive signals
-export const statsText = signal('0 words • 0 chars • 0 min read');
-export const saveStateText = signal('Not saved');
-export const focusMode = signal(false);
+export const [statsText, setStatsText] = createSignal('0 words • 0 chars • 0 min read');
+export const [saveStateText, setSaveStateText] = createSignal('Not saved');
+export const [focusMode, setFocusMode] = createSignal(false);
 
 // ── DOM refs (assigned during mount via ref=)
 export let editorEl!: HTMLElement;

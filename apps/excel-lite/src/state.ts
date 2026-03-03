@@ -1,4 +1,4 @@
-import { signal, Toast } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
 import { format } from '@bundled/date-fns';
 import { debounce } from '@bundled/lodash';
 import { createFormulaEngine } from './formula-utils';
@@ -9,12 +9,12 @@ import { getStyleForRef, normalizeStyle } from './style-utils';
 import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
 
 // ── UI Signals ────────────────────────────────────────────────────────
-export const chartPanelOpen = signal(false);
-export const chartTitleText = signal('Selection Chart');
+export const [chartPanelOpen, setChartPanelOpen] = createSignal(false);
+export const [chartTitleText, setChartTitleText] = createSignal('Selection Chart');
 export interface StatRow { label: string; value: string; }
-export const statsRows = signal<StatRow[]>([]);
-export const statsRangeLabel = signal('');
-export const statsPanelOpen = signal(false);
+export const [statsRows, setStatsRows] = createSignal<StatRow[]>([]);
+export const [statsRangeLabel, setStatsRangeLabel] = createSignal('');
+export const [statsPanelOpen, setStatsPanelOpen] = createSignal(false);
 
 // ── Shared mutable state object ───────────────────────────────────────
 // All mutable primitives and DOM refs live here so any module can
@@ -67,10 +67,19 @@ export function getRaw(ref: string): string {
 
 export const formulaEngine = createFormulaEngine(getRaw);
 
+// ── Toast helper ──────────────────────────────────────────────────────
+function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info', ms = 3000) {
+  const el = document.createElement('div');
+  el.className = `y-toast y-toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+
 // ── IO Status ─────────────────────────────────────────────────────────
 export function setIoStatus(message: string, isError = false) {
   const timeStr = format(new Date(), 'HH:mm:ss');
-  Toast.show(`[${timeStr}] ${message}`, isError ? 'error' : 'success', isError ? 4200 : 2400);
+  showToast(`[${timeStr}] ${message}`, isError ? 'error' : 'success', isError ? 4200 : 2400);
 }
 
 export function storagePath() {

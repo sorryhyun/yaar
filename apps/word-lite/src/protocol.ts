@@ -1,5 +1,5 @@
 import { countTextStats, nowLabel } from './utils';
-import { editorEl, docTitleEl, saveStateText } from './state';
+import { editorEl, docTitleEl, saveStateText, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 import {
   saveDoc,
@@ -51,7 +51,7 @@ export function registerAppProtocol() {
         },
         handler: (p: { html: string }) => {
           setEditorFromHtml(p.html || '<p></p>');
-          saveStateText('Updated via app protocol');
+          setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -65,7 +65,7 @@ export function registerAppProtocol() {
         },
         handler: (p: { title: string }) => {
           docTitleEl.value = (p.title || '').trim() || 'Untitled Document';
-          saveStateText('Updated via app protocol');
+          setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -79,7 +79,7 @@ export function registerAppProtocol() {
         },
         handler: (p: { text: string }) => {
           setEditorFromPlainText(p.text || '');
-          saveStateText('Updated via app protocol');
+          setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -103,7 +103,7 @@ export function registerAppProtocol() {
           para.innerHTML = escaped;
           editorEl.appendChild(para);
           refreshStats();
-          saveStateText('Updated via app protocol');
+          setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -117,7 +117,7 @@ export function registerAppProtocol() {
         },
         handler: (p: { html: string }) => {
           appendHtmlFragment(p.html || '');
-          saveStateText('Updated via app protocol');
+          setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
         },
@@ -144,7 +144,7 @@ export function registerAppProtocol() {
         handler: (p: { docs: BatchDocInput[] }) => {
           const docs = Array.isArray(p.docs) ? p.docs : [];
           setEditorFromHtml(docsToMergedHtml(docs));
-          saveStateText(`Loaded ${docs.length} document(s) via app protocol`);
+          setSaveStateText(`Loaded ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { ok: true, count: docs.length };
         },
@@ -171,7 +171,7 @@ export function registerAppProtocol() {
         handler: (p: { docs: BatchDocInput[] }) => {
           const docs = Array.isArray(p.docs) ? p.docs : [];
           appendHtmlFragment(docsToMergedHtml(docs));
-          saveStateText(`Appended ${docs.length} document(s) via app protocol`);
+          setSaveStateText(`Appended ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { ok: true, count: docs.length };
         },
@@ -189,7 +189,7 @@ export function registerAppProtocol() {
           const title = getTitle();
           const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
           await storage.save(p.path, htmlContent);
-          saveStateText(`Saved to storage: ${p.path}`);
+          setSaveStateText(`Saved to storage: ${p.path}`);
           return { ok: true, path: p.path, savedAt: nowLabel() };
         },
       },
@@ -233,7 +233,7 @@ export function registerAppProtocol() {
             setEditorFromHtml(merged);
           }
 
-          saveStateText(`Loaded ${loadedDocs.length} file(s) from storage`);
+          setSaveStateText(`Loaded ${loadedDocs.length} file(s) from storage`);
           saveDoc();
           return { ok: true, count: loadedDocs.length, paths: candidatePaths, mode };
         },
@@ -292,7 +292,7 @@ export function registerAppProtocol() {
           editorEl.innerHTML = '<p></p>';
           docTitleEl.value = 'Untitled Document';
           refreshStats();
-          saveStateText('Unsaved new document');
+          setSaveStateText('Unsaved new document');
           return { ok: true };
         },
       },

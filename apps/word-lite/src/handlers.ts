@@ -1,5 +1,5 @@
 import { downloadBlob, downloadFile, nowLabel, createDocxBlob } from './utils';
-import { editorEl, docTitleEl, fileInputEl, focusMode, saveStateText } from './state';
+import { editorEl, docTitleEl, fileInputEl, focusMode, setFocusMode, setSaveStateText } from './state';
 import { exec, refreshStats } from './editor';
 import {
   saveDoc,
@@ -10,7 +10,7 @@ import {
 
 export const handleEditorInput = () => {
   refreshStats();
-  saveStateText('Editing…');
+  setSaveStateText('Editing…');
   autoSave();
 };
 
@@ -25,15 +25,15 @@ export const handleNew = () => {
   editorEl.innerHTML = '<p></p>';
   docTitleEl.value = 'Untitled Document';
   refreshStats();
-  saveStateText('Unsaved new document');
+  setSaveStateText('Unsaved new document');
   editorEl.focus();
 };
 
 export const handleOpen = () => { fileInputEl.value = ''; fileInputEl.click(); };
 
 export const handleFocus = () => {
-  focusMode(!focusMode());
-  saveStateText(focusMode() ? 'Focus mode enabled' : 'Focus mode disabled');
+  setFocusMode(!focusMode());
+  setSaveStateText(focusMode() ? 'Focus mode enabled' : 'Focus mode disabled');
 };
 
 export const handleExportTxt = () =>
@@ -48,7 +48,7 @@ export const handleExportHtml = () => {
 export const handleExportDocx = () => {
   const blob = createDocxBlob(getTitle(), editorEl.innerText || '');
   downloadBlob(`${exportBaseName()}.docx`, blob);
-  saveStateText(`Exported .docx at ${nowLabel()}`);
+  setSaveStateText(`Exported .docx at ${nowLabel()}`);
 };
 
 export const handleFileChange = async () => {
@@ -67,7 +67,7 @@ export const handleFileChange = async () => {
   }
   docTitleEl.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
   refreshStats();
-  saveStateText(`Opened ${file.name}`);
+  setSaveStateText(`Opened ${file.name}`);
   saveDoc();
 };
 

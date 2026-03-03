@@ -1,4 +1,6 @@
-import { signal, html, mount, show, onMount } from '@bundled/yaar';
+import { createSignal, onMount } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 
 type Mode = 'viewer' | 'export';
@@ -17,14 +19,13 @@ type YaarStorage = {
 };
 
 // --- Signals ---
-const mode = signal<Mode>('viewer');
-const pdfStatus = signal('No PDF loaded.');
-const globalStatus = signal('Ready');
-const storageDir = signal('');
-const storageEntries = signal<{ value: string; label: string; kind: string }[]>([]);
-const isDragging = signal(false);
-const hasPdf = signal(false);
-const storageDirDisplay = signal('Storage: /');
+const [mode, setMode] = createSignal<Mode>('viewer');
+const [pdfStatus, setPdfStatus] = createSignal('No PDF loaded.');
+const [globalStatus, setGlobalStatus] = createSignal('Ready');
+const [storageDir, setStorageDir] = createSignal('');
+const [isDragging, setIsDragging] = createSignal(false);
+const [hasPdf, setHasPdf] = createSignal(false);
+const [storageDirDisplay, setStorageDirDisplay] = createSignal('Storage: /');
 
 // --- Refs ---
 let fileInputEl: HTMLInputElement;
@@ -68,29 +69,29 @@ function revokeCurrentPdfUrl() {
 function showPdfUrl(url: string, label: string) {
   revokeCurrentPdfUrl();
   currentPdfUrl = url;
-  hasPdf(true);
+  setHasPdf(true);
   pdfFrameEl.src = url;
-  pdfStatus(`Loaded: ${label}`);
-  globalStatus('PDF loaded');
+  setPdfStatus(`Loaded: ${label}`);
+  setGlobalStatus('PDF loaded');
 }
 
 function clearPdf() {
   revokeCurrentPdfUrl();
-  hasPdf(false);
+  setHasPdf(false);
   pdfFrameEl.src = '';
-  pdfStatus('No PDF loaded.');
-  globalStatus('Viewer cleared');
+  setPdfStatus('No PDF loaded.');
+  setGlobalStatus('Viewer cleared');
 }
 
 async function openFromStorage(path: string) {
   const clean = cleanStoragePath(path);
   if (!clean) {
-    pdfStatus('Select a PDF file from storage first.');
+    setPdfStatus('Select a PDF file from storage first.');
     return;
   }
   const storage = getStorage();
   if (!storage) {
-    pdfStatus('Storage API unavailable in this app context.');
+    setPdfStatus('Storage API unavailable in this app context.');
     return;
   }
   try {
@@ -100,7 +101,7 @@ async function openFromStorage(path: string) {
     showPdfUrl(url, clean);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    pdfStatus(`Failed to read storage file: ${msg}`);
+    setPdfStatus(`Failed to read storage file: ${msg}`);
   }
 }
 
@@ -117,14 +118,14 @@ function setStorageListPlaceholder(message: string) {
 async function loadStorageList(dir = storageDir()) {
   const storage = getStorage();
   if (!storage) {
-    storageDirDisplay('Storage unavailable');
+    setStorageDirDisplay('Storage unavailable');
     setStorageListPlaceholder('Storage API unavailable');
     return;
   }
 
   const cleanDir = cleanStoragePath(dir);
-  storageDir(cleanDir);
-  storageDirDisplay(`Storage: ${cleanDir ? `/${cleanDir}` : '/'}`);
+  setStorageDir(cleanDir);
+  setStorageDirDisplay(`Storage: ${cleanDir ? `/${cleanDir}` : '/'}`);
 
   setStorageListPlaceholder('Loading...');
   try {
@@ -177,7 +178,7 @@ async function handleStorageSelection() {
   const kind = selected.dataset.kind;
   if (kind === 'up' || selected.value === '__up__') {
     const up = parentDir(storageDir());
-    storageDir(up);
+    setStorageDir(up);
     await loadStorageList(up);
     return;
   }
@@ -186,13 +187,13 @@ async function handleStorageSelection() {
   if (!path) return;
 
   if (kind === 'dir') {
-    storageDir(path);
+    setStorageDir(path);
     await loadStorageList(path);
     return;
   }
 
   if (!path.toLowerCase().endsWith('.pdf')) {
-    pdfStatus('Selected file is not a PDF.');
+    setPdfStatus('Selected file is not a PDF.');
     return;
   }
 
@@ -224,32 +225,32 @@ function renderPreview() {
 async function saveHtmlSnapshot() {
   const storage = getStorage();
   if (!storage) {
-    globalStatus('Storage API unavailable');
+    setGlobalStatus('Storage API unavailable');
     return;
   }
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const path = `pdf-viewer/exports/export-${ts}.html`;
   await storage.save(path, printAreaEl.innerHTML || '<p></p>');
-  globalStatus(`Saved HTML: ${path}`);
+  setGlobalStatus(`Saved HTML: ${path}`);
 }
 
 // --- Mount ---
-mount(html`
+render(() => html`
   <div class="wrap">
     <div class="top">
       <button
         class=${() => 'y-btn y-btn-sm' + (mode() === 'viewer' ? ' active' : '')}
-        onClick=${() => { mode('viewer'); globalStatus('Viewer mode'); }}
+        onClick=${() => { setMode('viewer'); setGlobalStatus('Viewer mode'); }}
       >PDF Viewer</button>
       <button
         class=${() => 'y-btn y-btn-sm' + (mode() === 'export' ? ' active' : '')}
-        onClick=${() => { mode('export'); globalStatus('Export mode'); }}
+        onClick=${() => { setMode('export'); setGlobalStatus('Export mode'); }}
       >Export to PDF</button>
       <div class="spacer"></div>
       <span class="y-text-sm y-text-muted">${() => globalStatus()}</span>
     </div>
 
-    ${show(() => mode() === 'viewer', () => html`
+    ${() => mode() === 'viewer' ? html`
       <div class="pane viewer-pane">
         <div class="viewer-controls">
           <input
@@ -266,7 +267,7 @@ mount(html`
           <div class="storage-browser">
             <button class="y-btn y-btn-sm" onClick=${async () => {
               const up = parentDir(storageDir());
-              storageDir(up);
+              setStorageDir(up);
               await loadStorageList(up);
             }}>Up</button>
             <button class="y-btn y-btn-sm" onClick=${() => loadStorageList(storageDir())}>Refresh</button>
@@ -281,34 +282,34 @@ mount(html`
           </div>
           <span class="y-text-sm y-text-muted">${() => pdfStatus()}</span>
         </div>
-        ${show(() => !hasPdf(), () => html`
+        ${() => !hasPdf() ? html`
           <div
             class=${() => 'drop' + (isDragging() ? ' drag' : '')}
-            onDragover=${(e: DragEvent) => { e.preventDefault(); isDragging(true); }}
-            onDragleave=${() => isDragging(false)}
+            onDragover=${(e: DragEvent) => { e.preventDefault(); setIsDragging(true); }}
+            onDragleave=${() => setIsDragging(false)}
             onDrop=${(e: DragEvent) => {
               e.preventDefault();
-              isDragging(false);
+              setIsDragging(false);
               const file = e.dataTransfer?.files?.[0];
               if (!file) return;
               if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-                pdfStatus('Only PDF files are supported.');
+                setPdfStatus('Only PDF files are supported.');
                 return;
               }
               showPdfUrl(URL.createObjectURL(file), file.name);
             }}
           >Drop a PDF file here, or use the file picker above.</div>
-        `)}
-        ${show(() => hasPdf(), () => html`
+        ` : ''}
+        ${() => hasPdf() ? html`
           <iframe
             class="viewer-frame"
             ref=${(el: HTMLIFrameElement) => { pdfFrameEl = el; }}
           ></iframe>
-        `)}
+        ` : ''}
       </div>
-    `)}
+    ` : ''}
 
-    ${show(() => mode() === 'export', () => html`
+    ${() => mode() === 'export' ? html`
       <div class="pane export-pane">
         <div class="export-left">
           <h3 style="margin: 0 0 8px;">Content</h3>
@@ -320,15 +321,15 @@ mount(html`
         </div>
         <div class="export-right">
           <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-            <button class="y-btn y-btn-sm" onClick=${() => { renderPreview(); globalStatus('Preview updated'); }}>Refresh Preview</button>
-            <button class="y-btn y-btn-sm y-btn-primary" onClick=${() => { renderPreview(); globalStatus('Opening print dialog... choose Save as PDF'); window.print(); }}>Export PDF</button>
+            <button class="y-btn y-btn-sm" onClick=${() => { renderPreview(); setGlobalStatus('Preview updated'); }}>Refresh Preview</button>
+            <button class="y-btn y-btn-sm y-btn-primary" onClick=${() => { renderPreview(); setGlobalStatus('Opening print dialog... choose Save as PDF'); window.print(); }}>Export PDF</button>
             <button class="y-btn y-btn-sm" onClick=${async () => {
               renderPreview();
               try {
                 await saveHtmlSnapshot();
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
-                globalStatus(`Save failed: ${msg}`);
+                setGlobalStatus(`Save failed: ${msg}`);
               }
             }}>Save HTML to Storage</button>
           </div>
@@ -339,9 +340,9 @@ mount(html`
           ></div>
         </div>
       </div>
-    `)}
+    ` : ''}
   </div>
-`);
+`, document.getElementById('app')!);
 
 onMount(() => {
   // Initialise after DOM is ready

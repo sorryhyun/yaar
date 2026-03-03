@@ -1,4 +1,4 @@
-import { html } from '@bundled/yaar';
+import html from '@bundled/solid-js/html';
 import { COLS, ROWS } from '../constants';
 import { colLabel, key as cellKey, parseRef, rangeRect } from '../ref-utils';
 import { computeFillDestination, sourceForDestination } from '../fill-utils';

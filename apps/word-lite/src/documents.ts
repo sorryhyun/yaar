@@ -1,5 +1,5 @@
 import { nowLabel, sanitizeFilename } from './utils';
-import { editorEl, docTitleEl, saveStateText } from './state';
+import { editorEl, docTitleEl, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 import { debounce } from './utils';
 
@@ -13,7 +13,7 @@ export const exportBaseName = () => sanitizeFilename(getTitle());
 export const saveDoc = async () => {
   const payload = { html: editorEl?.innerHTML || '', title: getTitle(), savedAt: Date.now() };
   await yaarStorage?.save(STORAGE_KEY, JSON.stringify(payload));
-  saveStateText(`Saved at ${nowLabel()}`);
+  setSaveStateText(`Saved at ${nowLabel()}`);
 };
 
 export const autoSave = debounce(() => saveDoc(), 550);
@@ -29,11 +29,11 @@ export const loadDoc = async () => {
       editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
       docTitleEl.value = 'Untitled Document';
     }
-    saveStateText('Loaded saved draft');
+    setSaveStateText('Loaded saved draft');
   } else {
     editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
     docTitleEl.value = 'Untitled Document';
-    saveStateText('New document');
+    setSaveStateText('New document');
   }
   refreshStats();
 };
