@@ -7,7 +7,7 @@
 
 import { mkdir, stat, unlink } from 'fs/promises';
 import { join, resolve } from 'path';
-import { bundledLibraryPluginBun, cssFilePlugin } from './plugins.js';
+import { bundledLibraryPluginBun, cssFilePlugin, solidHtmlClosingTagPlugin } from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
 import {
@@ -126,7 +126,7 @@ async function compileWithBun(entryPoint: string, minify: boolean): Promise<stri
     minify,
     format: 'esm',
     target: 'browser',
-    plugins: [bundledLibraryPluginBun(), cssFilePlugin()],
+    plugins: [bundledLibraryPluginBun(), cssFilePlugin(), solidHtmlClosingTagPlugin()],
   });
 
   if (!result.success) {

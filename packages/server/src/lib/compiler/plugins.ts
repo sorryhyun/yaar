@@ -209,6 +209,34 @@ export function cssFilePlugin(): { name: string; setup: (build: any) => void } {
 }
 
 /**
+ * Bun plugin that strips expressions from closing component tags in
+ * solid-js/html tagged template literals.
+ *
+ * `</${Show}>` produces an extra expression that the html runtime parser
+ * never consumes, shifting all subsequent expression indices by 1 and
+ * causing crashes. Replacing `</${X}>` with `</>` in source removes the
+ * extra expression slot before Bun bundles.
+ *
+ * This is safe because solid-js/html's parser ignores closing tag names —
+ * it only uses level-decrement, never matching open/close tag names.
+ */
+export function solidHtmlClosingTagPlugin(): { name: string; setup: (build: any) => void } {
+  return {
+    name: 'solid-html-closing-tag-fix',
+    setup(build: any) {
+      build.onLoad({ filter: /\.tsx?$/ }, async (args: any) => {
+        const text = await Bun.file(args.path).text();
+        if (!text.includes('</${')) return undefined; // fast skip
+        return {
+          contents: text.replace(/<\/\$\{([^}]+)\}>/g, '</>'),
+          loader: args.path.endsWith('.tsx') ? 'tsx' : 'ts',
+        };
+      });
+    },
+  };
+}
+
+/**
  * Get the list of available bundled libraries.
  */
 export function getAvailableBundledLibraries(): string[] {
