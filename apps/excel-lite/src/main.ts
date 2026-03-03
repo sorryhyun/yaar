@@ -1,7 +1,6 @@
-import { html, mount, show } from '@bundled/yaar';
+import { html, mount } from '@bundled/yaar';
 import './styles.css';
 import {
-  ioStatusVisible, ioStatusText, ioStatusIsError,
   storageApi, autosavePath,
   cells, mutable, refs,
   setIoStatus, tryImportWorkbook,
@@ -20,12 +19,6 @@ import { registerAppProtocol } from './protocol';
 mount(html`
   <div class="wrap">
     ${createToolbar()}
-    ${show(() => ioStatusVisible(), () => html`
-      <div class="io-status"
-        style=${() => `color:${ioStatusIsError() ? '#b42318' : '#374151'};border-color:${ioStatusIsError() ? '#f6b5ad' : '#d8e1ef'}`}>
-        ${() => ioStatusText()}
-      </div>
-    `)}
     ${createChartPanel()}
     ${createStatsPanel()}
     ${createGrid()}

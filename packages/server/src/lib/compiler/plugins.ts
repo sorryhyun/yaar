@@ -65,12 +65,30 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           const internalPath = join(PLUGIN_DIR, '..', `${libName}-runtime`, 'index.ts');
           return { path: internalPath };
         }
+
+        // Strategy 1: embedded libs (production exe)
+        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
+          | Record<string, string>
+          | undefined;
+        if (embeddedLibs?.[libName]) {
+          return { path: libName, namespace: NAMESPACE };
+        }
+
+        // Strategy 3: node_modules (dev) — resolve to real filesystem path so
+        // Bun can follow relative imports within the library (e.g. THREE.js
+        // imports ./three.core.js from three.module.js).
+        try {
+          const resolved = Bun.resolveSync(BUNDLED_LIBRARIES[libName]!, PLUGIN_DIR);
+          return { path: resolved };
+        } catch {
+          // fall through to namespace for disk-based resolution
+        }
+
         return { path: libName, namespace: NAMESPACE };
       });
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
         const libName = args.path;
-        const actualModule = BUNDLED_LIBRARIES[libName];
 
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
@@ -90,19 +108,9 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           return { contents, loader: 'js' };
         }
 
-        // Strategy 3: node_modules (dev non-exe) — resolve from server package
-        try {
-          const resolved = Bun.resolveSync(actualModule!, PLUGIN_DIR);
-          const contents = await Bun.file(resolved).text();
-          return { contents, loader: 'js' };
-        } catch {
-          // fall through to error
-        }
-
         throw new Error(
           `Bundled library "${libName}" not found. ` +
-            `Looked for embedded lib, disk file at ${diskPath}, ` +
-            `and node_modules resolution from ${PLUGIN_DIR}. ` +
+            `Looked for embedded lib and disk file at ${diskPath}. ` +
             `Ensure the library is installed as a devDependency.`,
         );
       });

@@ -46,7 +46,7 @@ Sometimes you need pre-built programs. Since essential apps like the storage fol
 
 Tell the AI "install essential apps" and it will install browser, storage folder, spreadsheet, word processor, etc. from the market.
 
-You may also want to develop apps yourself, so YAAR supports programming capabilities. Various libraries are bundled, so you can develop the apps you need and deploy them to the desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox. The development environment is strictly configured, so there are minimal security concerns even when letting the AI develop autonomously.
+You may also want to develop apps yourself, so YAAR supports programming capabilities. Various libraries are bundled, so you can develop the apps you need and deploy them to the desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies. The development environment is strictly configured, so there are minimal security concerns even when letting the AI develop autonomously.
 
 See the [App Development Guide](./docs/app-development.md) for details.
 

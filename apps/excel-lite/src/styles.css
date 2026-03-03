@@ -224,19 +224,6 @@ td.fill-preview {
   font-size: 12px;
   display: none;
 }
-.io-status {
-  position: fixed;
-  right: 18px;
-  bottom: 14px;
-  z-index: 30;
-  font-size: 12px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--yaar-border);
-  background: rgba(255, 255, 255, 0.95);
-  color: var(--yaar-text);
-  box-shadow: var(--yaar-shadow);
-}
 @media (max-width: 1200px) {
   #formulaInput,
   #storagePathInput {

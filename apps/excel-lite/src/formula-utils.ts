@@ -22,6 +22,7 @@ export function createFormulaEngine(getRaw: GetRawFn) {
     try {
       let safe = expr.toUpperCase();
 
+      // SUM(range)
       safe = safe.replace(/SUM\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
         return String(
           expandRange(a, b).reduce((acc, ref) => {
@@ -29,6 +30,46 @@ export function createFormulaEngine(getRaw: GetRawFn) {
             return acc + (Number.isFinite(v) ? v : 0);
           }, 0)
         );
+      });
+
+      // AVERAGE(range)
+      safe = safe.replace(/AVERAGE\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
+        const vals = expandRange(a, b)
+          .map(ref => evalCell(ref, new Set(seen)))
+          .filter(v => Number.isFinite(v));
+        return String(vals.length ? vals.reduce((acc, v) => acc + v, 0) / vals.length : 0);
+      });
+
+      // COUNT(range) - counts cells with numeric values
+      safe = safe.replace(/COUNT\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
+        const count = expandRange(a, b)
+          .filter(ref => Number.isFinite(evalCell(ref, new Set(seen))))
+          .length;
+        return String(count);
+      });
+
+      // COUNTA(range) - counts non-empty cells
+      safe = safe.replace(/COUNTA\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
+        const count = expandRange(a, b)
+          .filter(ref => getRaw(ref).trim() !== '')
+          .length;
+        return String(count);
+      });
+
+      // MIN(range)
+      safe = safe.replace(/\bMIN\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
+        const vals = expandRange(a, b)
+          .map(ref => evalCell(ref, new Set(seen)))
+          .filter(v => Number.isFinite(v));
+        return String(vals.length ? Math.min(...vals) : 0);
+      });
+
+      // MAX(range)
+      safe = safe.replace(/\bMAX\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (_, a, b) => {
+        const vals = expandRange(a, b)
+          .map(ref => evalCell(ref, new Set(seen)))
+          .filter(v => Number.isFinite(v));
+        return String(vals.length ? Math.max(...vals) : 0);
       });
 
       safe = safe.replace(/\b([A-Z]+\d+)\b/g, (_, ref) => {

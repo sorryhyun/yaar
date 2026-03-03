@@ -1,4 +1,6 @@
-import { signal } from '@bundled/yaar';
+import { signal, Toast } from '@bundled/yaar';
+import { format } from '@bundled/date-fns';
+import { debounce } from '@bundled/lodash';
 import { createFormulaEngine } from './formula-utils';
 import { cloneMap } from './data-utils';
 import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
@@ -7,9 +9,6 @@ import { getStyleForRef, normalizeStyle } from './style-utils';
 import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
 
 // ── UI Signals ────────────────────────────────────────────────────────
-export const ioStatusText = signal('');
-export const ioStatusVisible = signal(false);
-export const ioStatusIsError = signal(false);
 export const chartPanelOpen = signal(false);
 export const chartTitleText = signal('Selection Chart');
 export interface StatRow { label: string; value: string; }
@@ -45,7 +44,6 @@ export const mutable = {
   isFillDragging: false,
   fillSource: null as Rect | null,
   fillTarget: null as string | null,
-  ioStatusTimer: undefined as number | undefined,
 };
 
 // ── Mutable Data Stores ───────────────────────────────────────────────
@@ -69,31 +67,10 @@ export function getRaw(ref: string): string {
 
 export const formulaEngine = createFormulaEngine(getRaw);
 
-// ── Helpers ───────────────────────────────────────────────────────────
-function format(date: Date, pattern: string) {
-  if (pattern !== 'HH:mm:ss') return date.toISOString();
-  const p2 = (n: number) => String(n).padStart(2, '0');
-  return `${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}`;
-}
-
-function debounce<T extends (...args: any[]) => any>(fn: T, wait = 300) {
-  let t: number | null = null;
-  return (...args: Parameters<T>) => {
-    if (t) clearTimeout(t);
-    t = window.setTimeout(() => fn(...args), wait);
-  };
-}
-
 // ── IO Status ─────────────────────────────────────────────────────────
 export function setIoStatus(message: string, isError = false) {
-  ioStatusText(`[${format(new Date(), 'HH:mm:ss')}] ${message}`);
-  ioStatusIsError(isError);
-  ioStatusVisible(true);
-
-  if (mutable.ioStatusTimer) window.clearTimeout(mutable.ioStatusTimer);
-  mutable.ioStatusTimer = window.setTimeout(() => {
-    ioStatusVisible(false);
-  }, isError ? 4200 : 2400);
+  const timeStr = format(new Date(), 'HH:mm:ss');
+  Toast.show(`[${timeStr}] ${message}`, isError ? 'error' : 'success', isError ? 4200 : 2400);
 }
 
 export function storagePath() {

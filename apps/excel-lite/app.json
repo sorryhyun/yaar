@@ -90,5 +90,5 @@
   },
   "appProtocol": true,
   "description": "A lightweight spreadsheet app with formula support, charting, and XLSX import/export.",
-  "capture": "dom"
+  "capture": "canvas"
 }
