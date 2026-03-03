@@ -27,7 +27,7 @@ class TextScene implements Scene {
   type = 'text';
   from: number;
   durationInFrames: number;
-  private props: TextProps;
+  props: TextProps;
 
   constructor(id: string, from: number, durationInFrames: number, props: TextProps) {
     this.id = id;

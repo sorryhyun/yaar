@@ -13,7 +13,7 @@ class SolidScene implements Scene {
   type = 'solid';
   from: number;
   durationInFrames: number;
-  private props: SolidProps;
+  props: SolidProps;
 
   constructor(id: string, from: number, durationInFrames: number, props: SolidProps) {
     this.id = id;
@@ -25,7 +25,7 @@ class SolidScene implements Scene {
   render(ctx: CanvasRenderingContext2D, frame: number, config: VideoConfig): void {
     const { color = '#000000', colorEnd, gradient } = this.props;
 
-    if (gradient && gradient.colors.length >= 2) {
+    if (gradient && Array.isArray(gradient.colors) && gradient.colors.length >= 2) {
       const angle = gradient.angle ?? 0;
       const rad = (angle * Math.PI) / 180;
       const cx = config.width / 2;

@@ -21,17 +21,23 @@ export class CompositionRenderer {
 
   renderFrame(ctx: CanvasRenderingContext2D, frameNumber: number): void {
     const { config, scenes } = this.composition;
-
-    // Clear canvas
     ctx.clearRect(0, 0, config.width, config.height);
-
-    // Render active scenes in order (later = on top)
     for (const scene of scenes) {
       const sceneEnd = scene.from + scene.durationInFrames;
       if (frameNumber >= scene.from && frameNumber < sceneEnd) {
         const relativeFrame = frameNumber - scene.from;
         ctx.save();
-        scene.render(ctx, relativeFrame, config);
+        try {
+          scene.render(ctx, relativeFrame, config);
+        } catch (e) {
+          // Draw an error indicator instead of crashing
+          ctx.fillStyle = 'rgba(255,0,0,0.3)';
+          ctx.fillRect(0, 0, config.width, config.height);
+          ctx.fillStyle = '#fff';
+          ctx.font = '24px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`Scene error: ${scene.type}`, config.width / 2, config.height / 2);
+        }
         ctx.restore();
       }
     }

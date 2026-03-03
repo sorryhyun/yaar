@@ -2,7 +2,7 @@
   "id": "video-editor-lite",
   "name": "Video Editor Lite",
   "icon": "🎬",
-  "description": "Trim, edit and compose video. Full-height sidebar layout with mode toggle, file browser with search, and composition settings.",
+  "description": "Lightweight video editor with trim/export (Edit mode) and composition builder (Create mode) supporting text, shapes, solid fills, images, and video clips.",
   "version": "1.2.0",
   "author": "YAAR"
 }

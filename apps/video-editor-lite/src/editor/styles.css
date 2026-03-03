@@ -512,6 +512,44 @@ progress {
   z-index: 10;
 }
 
+/* Scene properties panel */
+.scene-props-panel {
+  margin-top: 6px;
+  border-top: 1px solid #cddae2;
+  padding-top: 4px;
+}
+
+.props-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.props-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.props-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #5a7688;
+  display: block;
+}
+
+.props-field .sb-input {
+  padding: 5px 6px;
+  font-size: 11px;
+}
+
+.props-field input[type='color'] {
+  padding: 2px 4px;
+  height: 30px;
+  cursor: pointer;
+}
+
 @media (max-width: 580px) {
   .sidebar {
     width: 200px;
@@ -520,6 +558,9 @@ progress {
     grid-template-columns: 1fr;
   }
   .comp-grid {
+    grid-template-columns: 1fr;
+  }
+  .props-grid {
     grid-template-columns: 1fr;
   }
 }

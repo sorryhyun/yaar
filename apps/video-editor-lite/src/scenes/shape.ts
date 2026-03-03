@@ -66,7 +66,7 @@ class ShapeScene implements Scene {
   type = 'shape';
   from: number;
   durationInFrames: number;
-  private props: ShapeProps;
+  props: ShapeProps;
 
   constructor(id: string, from: number, durationInFrames: number, props: ShapeProps) {
     this.id = id;

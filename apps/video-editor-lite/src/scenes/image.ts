@@ -39,7 +39,7 @@ class ImageScene implements Scene {
   type = 'image';
   from: number;
   durationInFrames: number;
-  private props: ImageProps;
+  props: ImageProps;
 
   constructor(id: string, from: number, durationInFrames: number, props: ImageProps) {
     this.id = id;

@@ -33,9 +33,12 @@ export interface EditorUI {
   durationLabel: HTMLDivElement;
   shortcutsLabel: HTMLDivElement;
   errorLabel: HTMLDivElement;
+  addSceneFromInput: HTMLInputElement;
+  addSceneDurInput: HTMLInputElement;
   addSceneSelect: HTMLSelectElement;
   addSceneButton: HTMLButtonElement;
   scenePanel: HTMLDivElement;
+  scenePropsPanel: HTMLDivElement;
   compWidthInput: HTMLInputElement;
   compHeightInput: HTMLInputElement;
   compFpsInput: HTMLInputElement;
@@ -90,9 +93,12 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
   let durationLabel!: HTMLDivElement;
   let shortcutsLabel!: HTMLDivElement;
   let errorLabel!: HTMLDivElement;
+  let addSceneFromInput!: HTMLInputElement;
+  let addSceneDurInput!: HTMLInputElement;
   let addSceneSelect!: HTMLSelectElement;
   let addSceneButton!: HTMLButtonElement;
   let scenePanel!: HTMLDivElement;
+  let scenePropsPanel!: HTMLDivElement;
   let compWidthInput!: HTMLInputElement;
   let compHeightInput!: HTMLInputElement;
   let compFpsInput!: HTMLInputElement;
@@ -189,6 +195,18 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
             <hr class="sb-divider" />
             <div class="sb-title">Add Scene</div>
+            <div class="comp-grid" style="margin-bottom:6px;">
+              <div>
+                <label>Start Frame</label>
+                <input ref=${(el: HTMLInputElement) => { addSceneFromInput = el; }}
+                       type="number" value="0" min="0" step="1" class="sb-input" placeholder="0" />
+              </div>
+              <div>
+                <label>Duration</label>
+                <input ref=${(el: HTMLInputElement) => { addSceneDurInput = el; }}
+                       type="number" min="1" step="1" class="sb-input" placeholder="auto" />
+              </div>
+            </div>
             <div class="sb-row">
               <select ref=${(el: HTMLSelectElement) => { addSceneSelect = el; }}
                       class="sb-input" style="flex:1;min-width:0;">
@@ -205,6 +223,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             <hr class="sb-divider" />
             <div class="sb-title">Scenes</div>
             <div ref=${(el: HTMLDivElement) => { scenePanel = el; }} class="scene-list"></div>
+            <div ref=${(el: HTMLDivElement) => { scenePropsPanel = el; }} class="scene-props-panel"></div>
           </div>
 
         </div>
@@ -336,7 +355,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
     speedSelect, loopButton, exportButton,
     exportProgress, exportStatusLabel,
     timeLabel, durationLabel, shortcutsLabel, errorLabel,
-    addSceneSelect, addSceneButton, scenePanel,
+    addSceneFromInput, addSceneDurInput, addSceneSelect, addSceneButton, scenePanel, scenePropsPanel,
     compWidthInput, compHeightInput, compFpsInput, compDurationInput,
     createContainer, compositionCanvas,
     timelineBar, timelineTrack,

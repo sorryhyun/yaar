@@ -43,7 +43,7 @@ class VideoClipScene implements Scene {
   type = 'video-clip';
   from: number;
   durationInFrames: number;
-  private props: VideoClipProps;
+  props: VideoClipProps;
 
   constructor(id: string, from: number, durationInFrames: number, props: VideoClipProps) {
     this.id = id;

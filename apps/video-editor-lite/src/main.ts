@@ -5,15 +5,15 @@ import { renderEditor } from './editor/render';
 import { loadPrefs, savePrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './editor/prefs';
 import type { EditorPrefs } from './editor/prefs';
 import { parseNumber, clamp } from './editor/utils/time';
-import type { Composition } from './core/types';
+import type { Composition, Scene } from './core/types';
 import { DEFAULT_CONFIG } from './core/types';
 import { createScene } from './core/scene-registry';
 import type { SceneProps } from './core/scene-registry';
+import { getDefaultPropsForType } from './editor/scene-defaults';
 import { createFileBrowser } from './editor/file-browser';
 import { createEditMode } from './editor/edit-mode';
 import { createCreatorMode } from './editor/creator-mode';
 import { setupKeyboardShortcuts } from './editor/keyboard';
-import { getDefaultPropsForType } from './editor/scene-defaults';
 import { normalizeStoragePath, toStorageUrl, DEFAULT_STORAGE_LIST_PATH } from './editor/storage-utils';
 import { registerProtocol } from './protocol';
 
@@ -187,7 +187,10 @@ ui.creatorFrameSlider.addEventListener('input', () => {
 
 ui.addSceneButton.addEventListener('click', () => {
   const type = ui.addSceneSelect.value;
-  creatorMode.addSceneToComposition(type);
+  const fromVal = parseInt(ui.addSceneFromInput.value, 10) || 0;
+  const durRaw = parseInt(ui.addSceneDurInput.value, 10);
+  const dur = (durRaw > 0) ? durRaw : undefined; // undefined = auto
+  creatorMode.addSceneToComposition(type, fromVal, dur);
 });
 
 ui.scenePanel.addEventListener('click', (e) => {
@@ -209,6 +212,42 @@ ui.timelineTrack.addEventListener('click', (e) => {
   if (target.dataset.sceneId) {
     store.setSelectedScene(target.dataset.sceneId);
   }
+});
+
+function getCurrentSceneProps(scene: Scene): SceneProps {
+  return (scene as any).props ?? getDefaultPropsForType(scene.type);
+}
+
+ui.scenePropsPanel.addEventListener('change', (e) => {
+  const target = e.target as HTMLInputElement | HTMLSelectElement;
+  const prop = target.dataset.prop;
+  if (!prop) return;
+  const sceneId = store.selectedSceneId();
+  if (!sceneId) return;
+  const comp = store.composition();
+  if (!comp) return;
+  const scene = comp.scenes.find((s) => s.id === sceneId);
+  if (!scene) return;
+
+  let value: string | number = target.value;
+  if ((target as HTMLInputElement).type === 'number' || (target as HTMLInputElement).type === 'range') {
+    value = parseFloat(value as string);
+  }
+
+  if (prop === 'from') {
+    const newFrom = Math.max(0, parseInt(String(value), 10) || 0);
+    const updated = createScene(scene.type, scene.id, newFrom, scene.durationInFrames, getCurrentSceneProps(scene));
+    store.updateScene(sceneId, updated);
+  } else if (prop === 'durationInFrames') {
+    const newDur = Math.max(1, parseInt(String(value), 10) || 1);
+    const updated = createScene(scene.type, scene.id, scene.from, newDur, getCurrentSceneProps(scene));
+    store.updateScene(sceneId, updated);
+  } else {
+    const currentProps = getCurrentSceneProps(scene);
+    const updated = createScene(scene.type, scene.id, scene.from, scene.durationInFrames, { ...currentProps, [prop]: value });
+    store.updateScene(sceneId, updated);
+  }
+  creatorMode.syncPlayerToComposition();
 });
 
 const handleCompSettingChange = (): void => {
