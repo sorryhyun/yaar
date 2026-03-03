@@ -329,7 +329,8 @@ export class ContextPool implements PoolContext {
    * Shared teardown logic used by both reset() and cleanup().
    * Clears queues, interrupts agents, waits for inflight tasks, disposes agents.
    */
-  private async teardown(): Promise<void> {
+  private async teardown(options?: { closeWindows?: boolean }): Promise<void> {
+    const closeWindows = options?.closeWindows ?? true;
     // 1. Clear queues so no new tasks start from dequeue
     this.mainQueues.forEach((q) => q.clear());
     this.mainQueues.clear();
@@ -363,14 +364,16 @@ export class ContextPool implements PoolContext {
       console.error('[ContextPool] Teardown: agentPool.cleanup failed:', err);
     }
 
-    // 6. Close all tracked windows on the frontend
-    const openWindows = this.windowState.listWindows();
-    if (openWindows.length > 0) {
-      const closeActions = openWindows.map((win) => ({
-        type: 'window.close' as const,
-        windowId: win.id,
-      }));
-      await this.sendEvent({ type: ServerEventType.ACTIONS, actions: closeActions });
+    // 6. Close all tracked windows on the frontend (skip during reset — frontend preserves windows)
+    if (closeWindows) {
+      const openWindows = this.windowState.listWindows();
+      if (openWindows.length > 0) {
+        const closeActions = openWindows.map((win) => ({
+          type: 'window.close' as const,
+          windowId: win.id,
+        }));
+        await this.sendEvent({ type: ServerEventType.ACTIONS, actions: closeActions });
+      }
     }
 
     // 7. Clear remaining state
@@ -397,7 +400,7 @@ export class ContextPool implements PoolContext {
       activeMonitorIds.push('monitor-0');
     }
 
-    await this.teardown();
+    await this.teardown({ closeWindows: false });
 
     // Dispose pooled Codex providers (AppServer process stays alive)
     try {
