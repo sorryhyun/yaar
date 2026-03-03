@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mersoom</title>
+<title>App</title>
 <style>
 @font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
 @font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
@@ -87,24 +87,101 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var O=null,p=null,W0=new Set,H0=0;class d{_value;_subscribers=new Set;constructor(z){this._value=z}get value(){if(O)this._subscribers.add(O),O.dependencies.add(this);return this._value}set value(z){if(Object.is(this._value,z))return;this._value=z;for(let Y of[...this._subscribers])if(H0>0)W0.add(Y);else Y.execute()}peek(){return this._value}}function L(z){let Y=new d(z),Z=(...G)=>{if(G.length===0)return Y.value;Y.value=G[0]};return Object.defineProperty(Z,"value",{get:()=>Y.value,set:(G)=>{Y.value=G}}),Z.peek=()=>Y.peek(),Z}function I(z){let Y=new d(void 0),Z={dependencies:new Set,cleanups:[],execute(){n(Z);let X=O;O=Z;try{Y._value=z();for(let U of[...Y._subscribers])if(H0>0)W0.add(U);else U.execute()}finally{O=X}}},G=O;O=Z;try{Y._value=z()}finally{O=G}let $=()=>Y.value;return Object.defineProperty($,"value",{get:()=>Y.value}),$.peek=()=>Y.peek(),$}function n(z){for(let Y of z.dependencies)Y._subscribers.delete(z);z.dependencies.clear();for(let Y of z.cleanups)Y();z.cleanups=[]}function x(z){let Y,Z={dependencies:new Set,cleanups:[],execute(){if(n(Z),Y)Y();let G=O,$=p;O=Z,p=Z.cleanups;try{Y=z()}finally{O=G,p=$}}};return Z.execute(),()=>{if(n(Z),Y)Y()}}function h(z,Y,...Z){let G=z,$=[],X,U=z.indexOf("#"),W=z.indexOf("."),V=Math.min(U>=0?U:1/0,W>=0?W:1/0);if(V<1/0){G=z.slice(0,V)||"div";let H=z.slice(V).split(/(?=[.#])/);for(let Q of H)if(Q[0]===".")$.push(Q.slice(1));else if(Q[0]==="#")X=Q.slice(1)}let R=document.createElement(G);if(X)R.id=X;if($.length)R.classList.add(...$);if(Y)for(let[K,H]of Object.entries(Y))if(K==="className")if(typeof H==="function")x(()=>{R.className=[$.join(" "),H()].filter(Boolean).join(" ")});else if($.length)R.className=$.join(" ")+" "+H;else R.className=H;else if(K==="style"){if(typeof H==="string")R.style.cssText=H;else if(typeof H==="object")for(let[Q,F]of Object.entries(H))if(typeof F==="function")x(()=>{R.style[Q]=F()});else R.style[Q]=F}else if(K==="ref"){if(typeof H==="function")H(R)}else if(K.startsWith("on")){let Q=K.slice(2).toLowerCase();R.addEventListener(Q,H)}else if(typeof H==="function"&&!K.startsWith("on"))x(()=>{let Q=H();if(Q==null||Q===!1)R.removeAttribute(K);else R.setAttribute(K,String(Q))});else if(H==null||H===!1);else if(H===!0)R.setAttribute(K,"");else R.setAttribute(K,String(H));return P(R,Z),R}function P(z,Y){for(let Z of Y){if(Z==null||Z===!1||Z===!0)continue;if(Array.isArray(Z))P(z,Z);else if(typeof Z==="function"){let G=document.createComment(""),$=document.createComment("");z.appendChild(G),z.appendChild($),x(()=>{let X=Z();while(G.nextSibling&&G.nextSibling!==$)G.nextSibling.remove();let U=O0(X);$.parentNode.insertBefore(U,$)})}else if(Z instanceof Node)z.appendChild(Z);else z.appendChild(document.createTextNode(String(Z)))}}function O0(z){if(z==null||z===!1||z===!0)return document.createTextNode("");if(z instanceof Node)return z;if(Array.isArray(z)){let Y=document.createDocumentFragment();return P(Y,z),Y}return document.createTextNode(String(z))}function c(z,Y){let Z=Y||document.getElementById("app");if(!Z)throw Error("Mount target not found");Z.appendChild(z)}var D0=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,f=null;function j0(z){if(!D0.test(z))return z;if(!f)f=document.createElement("textarea");return f.innerHTML=z,f.value}var Q0=new WeakMap;function j(z,...Y){let Z=Q0.get(z);if(!Z)Z=y0(z),Q0.set(z,Z);return Z(Y)}var N=0,J0=1,v=2,l=3;function y0(z){let Y=[],Z=N,G="",$="",X="",U="",W=!1;function V(K){if(G)Y.push(K?{t:"open_close",tag:G}:{t:"open",tag:G});G="",W=!1}function R(){if($)Y.push({t:"attr_static",name:$,value:X||$}),$="",X=""}for(let K=0;K<z.length;K++){let H=z[K];for(let Q=0;Q<H.length;Q++){let F=H[Q];if(Z===N)if(F==="<")if(H[Q+1]==="!"&&H[Q+2]==="-"&&H[Q+3]==="-"){let S=H.indexOf("-->",Q+4);if(S!==-1)Q=S+2;else Q=H.length-1}else if(H[Q+1]==="/"){let S=H.indexOf(">",Q);if(S!==-1)Q=S,Y.push({t:"close"})}else Z=J0,G="",W=!1;else{let S=F;while(Q+1<H.length&&H[Q+1]!=="<")S+=H[++Q];if(S=S.replace(/^\s+|\s+$/g," "),S&&S!==" ")Y.push({t:"text",value:j0(S)})}else if(Z===J0)if(F==="/"&&G==="");else if(/\s/.test(F)){if(G)Y.push({t:"open",tag:G}),G="",Z=v}else if(F===">")V(W),Z=N;else if(F==="/")W=!0;else G+=F;else if(Z===v)if(F==="=")Z=l,X="",U="";else if(F==="/"||F===">")if(R(),F===">"){if(W)Y.push({t:"close"}),W=!1;Z=N}else W=!0;else if(/\s/.test(F)){if($)R()}else $+=F;else if(Z===l)if(!U&&(F==='"'||F==="'"))U=F;else if(!U&&/\s/.test(F))R(),Z=v;else if(F===U)R(),Z=v,U="";else if(!U&&(F===">"||F==="/"))if(R(),F===">"){if(W)Y.push({t:"close"}),W=!1;Z=N}else W=!0;else X+=F}if(K<z.length-1){if(Z===N)Y.push({t:"field",idx:K});else if(Z===l){let Q=$;$="",X="",U="",Y.push({t:"attr_field",name:Q,idx:K}),Z=v}else if(Z===v)if($)Y.push({t:"attr_static",name:$,value:$}),$="",Y.push({t:"attr_spread",idx:K});else Y.push({t:"attr_spread",idx:K})}}return(K)=>b0(Y,K)}var _0={class:"className",for:"htmlFor"};function X0(z){return _0[z]||z}function b0(z,Y){let Z=[],G=[];function $(U){if(Z.length)Z[Z.length-1].children.push(U);else G.push(U)}for(let U of z)switch(U.t){case"open":Z.push({tag:U.tag,children:[],props:{}});break;case"open_close":$(h(U.tag,null));break;case"close":{let W=Z.pop();if(W){let V=Object.keys(W.props).length?W.props:void 0;$(h(W.tag,V,...W.children))}break}case"attr_static":{let W=Z[Z.length-1];if(W)W.props[X0(U.name)]=U.value;break}case"attr_field":{let W=Z[Z.length-1];if(W)W.props[X0(U.name)]=Y[U.idx];break}case"attr_spread":{let W=Z[Z.length-1],V=Y[U.idx];if(W&&V&&typeof V==="object")Object.assign(W.props,V);break}case"text":$(U.value);break;case"field":{let W=Y[U.idx];if(Array.isArray(W))for(let V of W)$(V);else $(W);break}}if(G.length===1&&G[0]instanceof Node)return G[0];let X=document.createDocumentFragment();return P(X,G),X}function _(z,Y,Z){return()=>z()?Y():Z?Z():null}var x0=new TextEncoder;async function N0(z){let Y=x0.encode(z),Z=await crypto.subtle.digest("SHA-256",Y);return Array.from(new Uint8Array(Z)).map(($)=>$.toString(16).padStart(2,"0")).join("")}function v0(){return new Promise((z)=>{let Y=new MessageChannel;Y.port1.onmessage=()=>z(),Y.port2.postMessage(void 0)})}async function F0(z,Y,Z=1900){let G=performance.now(),$=0,X=`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;while(performance.now()-G<Z){let U=`${X}-${$.toString(36)}`,W=await N0(`${z}${U}`);if($+=1,W.startsWith(Y))return{nonce:U,hash:W,attempts:$,elapsedMs:Math.round(performance.now()-G)};if($%100===0)await v0()}throw Error(`PoW timeout after ${Math.round(performance.now()-G)}ms`)}var k="https://mersoom.com/api";async function M(z){let Y=await z.text();if(!z.ok)throw Error(`HTTP ${z.status}: ${Y.slice(0,240)}`);return Y?JSON.parse(Y):{}}async function k0(){let z=await fetch(`${k}/challenge`,{method:"POST"});return M(z)}async function w0(z){let Y=await k0(),Z=Math.max(Y.limit_ms??1900,1200),G=[Z,Math.max(Z*2,30000),60000],$,X=null;for(let W of G)try{X=await F0(Y.seed,Y.target_prefix,W);break}catch(V){$=V}if(!X)throw $ instanceof Error?$:Error("PoW solve failed");let U=new Headers(z?.headers??{});return U.set("Content-Type","application/json"),U.set("X-Mersoom-Token",Y.challenge_id),U.set("X-Mersoom-Proof",X.nonce),{...z??{},headers:U}}async function a(z,Y){let Z=await w0({method:"POST",body:JSON.stringify(Y)}),G=await fetch(`${k}${z}`,Z);if(!G.ok&&(G.status===400||G.status===401)){let $=await w0({method:"POST",body:JSON.stringify(Y)}),X=await fetch(`${k}${z}`,$);return M(X)}return M(G)}async function K0(z=20,Y){let Z=new URL(`${k}/posts`);if(Z.searchParams.set("limit",String(z)),Y)Z.searchParams.set("cursor",Y);let G=await fetch(Z.toString()),$=await M(G);return{posts:$.items??$.posts??[],nextCursor:$.next_cursor??$.cursor??null}}async function o(z){let Y=await fetch(`${k}/posts/${z}`);return M(Y)}async function s(z){let Y=await fetch(`${k}/posts/${z}/comments`),Z=await M(Y);return Z.items??Z.comments??[]}async function t(z){return a("/posts",z)}async function e(z,Y){return a(`/posts/${z}/comments`,Y)}async function z0(z,Y){return a(`/posts/${z}/vote`,{type:Y})}{let z=document.createElement("style");z.textContent=`:root { color-scheme: dark; }
-body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--yaar-bg); color: var(--yaar-text); height: 100dvh; overflow: hidden; }
-#layout { display: grid; grid-template-columns: 340px 1fr; height: 100dvh; min-height: 0; }
-.panel { border-right: 1px solid var(--yaar-border); overflow: auto; min-height: 0; }
-.panel-right { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; overflow: hidden; }
-.toolbar, .post-actions { padding: 12px; border-bottom: 1px solid var(--yaar-border); }
-.composer { padding: 12px; border-top: 1px solid var(--yaar-border); }
-.post-list { padding: 8px; }
-.post-item { padding: 10px; border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg); margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-.post-item:hover, .post-item.active { border-color: var(--yaar-accent); background: var(--yaar-bg-surface); }
-.title { font-weight: 700; margin-bottom: 6px; }
-.post-view { padding: 14px; overflow: auto; min-height: 0; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-textarea { min-height: 88px; resize: vertical; width: 100%; }
-.comments { margin-top: 8px; }
-.comment { border-top: 1px solid var(--yaar-border); padding: 8px 0; white-space: pre-wrap; }
-.status { padding: 6px 12px; border-top: 1px solid var(--yaar-border); font-size: 12px; color: var(--yaar-accent); }
-.pill { border: 1px solid var(--yaar-border); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+var O=null,p=null,W0=new Set,H0=0;class d{_value;_subscribers=new Set;constructor(z){this._value=z}get value(){if(O)this._subscribers.add(O),O.dependencies.add(this);return this._value}set value(z){if(Object.is(this._value,z))return;this._value=z;for(let Y of[...this._subscribers])if(H0>0)W0.add(Y);else Y.execute()}peek(){return this._value}}function L(z){let Y=new d(z),Z=(...G)=>{if(G.length===0)return Y.value;Y.value=G[0]};return Object.defineProperty(Z,"value",{get:()=>Y.value,set:(G)=>{Y.value=G}}),Z.peek=()=>Y.peek(),Z}function I(z){let Y=new d(void 0),Z={dependencies:new Set,cleanups:[],execute(){n(Z);let X=O;O=Z;try{Y._value=z();for(let U of[...Y._subscribers])if(H0>0)W0.add(U);else U.execute()}finally{O=X}}},G=O;O=Z;try{Y._value=z()}finally{O=G}let $=()=>Y.value;return Object.defineProperty($,"value",{get:()=>Y.value}),$.peek=()=>Y.peek(),$}function n(z){for(let Y of z.dependencies)Y._subscribers.delete(z);z.dependencies.clear();for(let Y of z.cleanups)Y();z.cleanups=[]}function x(z){let Y,Z={dependencies:new Set,cleanups:[],execute(){if(n(Z),Y)Y();let G=O,$=p;O=Z,p=Z.cleanups;try{Y=z()}finally{O=G,p=$}}};return Z.execute(),()=>{if(n(Z),Y)Y()}}function h(z,Y,...Z){let G=z,$=[],X,U=z.indexOf("#"),W=z.indexOf("."),V=Math.min(U>=0?U:1/0,W>=0?W:1/0);if(V<1/0){G=z.slice(0,V)||"div";let H=z.slice(V).split(/(?=[.#])/);for(let Q of H)if(Q[0]===".")$.push(Q.slice(1));else if(Q[0]==="#")X=Q.slice(1)}let R=document.createElement(G);if(X)R.id=X;if($.length)R.classList.add(...$);if(Y)for(let[K,H]of Object.entries(Y))if(K==="className")if(typeof H==="function")x(()=>{R.className=[$.join(" "),H()].filter(Boolean).join(" ")});else if($.length)R.className=$.join(" ")+" "+H;else R.className=H;else if(K==="style"){if(typeof H==="string")R.style.cssText=H;else if(typeof H==="object")for(let[Q,F]of Object.entries(H))if(typeof F==="function")x(()=>{R.style[Q]=F()});else R.style[Q]=F}else if(K==="ref"){if(typeof H==="function")H(R)}else if(K.startsWith("on")){let Q=K.slice(2).toLowerCase();R.addEventListener(Q,H)}else if(typeof H==="function"&&!K.startsWith("on"))x(()=>{let Q=H();if(Q==null||Q===!1)R.removeAttribute(K);else R.setAttribute(K,String(Q))});else if(H==null||H===!1);else if(H===!0)R.setAttribute(K,"");else R.setAttribute(K,String(H));return P(R,Z),R}function P(z,Y){for(let Z of Y){if(Z==null||Z===!1||Z===!0)continue;if(Array.isArray(Z))P(z,Z);else if(typeof Z==="function"){let G=document.createComment(""),$=document.createComment("");z.appendChild(G),z.appendChild($),x(()=>{let X=Z();while(G.nextSibling&&G.nextSibling!==$)G.nextSibling.remove();let U=O0(X);$.parentNode.insertBefore(U,$)})}else if(Z instanceof Node)z.appendChild(Z);else z.appendChild(document.createTextNode(String(Z)))}}function O0(z){if(z==null||z===!1||z===!0)return document.createTextNode("");if(z instanceof Node)return z;if(Array.isArray(z)){let Y=document.createDocumentFragment();return P(Y,z),Y}return document.createTextNode(String(z))}function c(z,Y){let Z=Y||document.getElementById("app");if(!Z)throw Error("Mount target not found");Z.appendChild(z)}var D0=/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/,f=null;function j0(z){if(!D0.test(z))return z;if(!f)f=document.createElement("textarea");return f.innerHTML=z,f.value}var Q0=new WeakMap;function j(z,...Y){let Z=Q0.get(z);if(!Z)Z=y0(z),Q0.set(z,Z);return Z(Y)}var N=0,J0=1,v=2,l=3;function y0(z){let Y=[],Z=N,G="",$="",X="",U="",W=!1;function V(K){if(G)Y.push(K?{t:"open_close",tag:G}:{t:"open",tag:G});G="",W=!1}function R(){if($)Y.push({t:"attr_static",name:$,value:X||$}),$="",X=""}for(let K=0;K<z.length;K++){let H=z[K];for(let Q=0;Q<H.length;Q++){let F=H[Q];if(Z===N)if(F==="<")if(H[Q+1]==="!"&&H[Q+2]==="-"&&H[Q+3]==="-"){let S=H.indexOf("-->",Q+4);if(S!==-1)Q=S+2;else Q=H.length-1}else if(H[Q+1]==="/"){let S=H.indexOf(">",Q);if(S!==-1)Q=S,Y.push({t:"close"})}else Z=J0,G="",W=!1;else{let S=F;while(Q+1<H.length&&H[Q+1]!=="<")S+=H[++Q];if(S=S.replace(/^\s+|\s+$/g," "),S&&S!==" ")Y.push({t:"text",value:j0(S)})}else if(Z===J0)if(F==="/"&&G==="");else if(/\s/.test(F)){if(G)Y.push({t:"open",tag:G}),G="",Z=v}else if(F===">")V(W),Z=N;else if(F==="/")W=!0;else G+=F;else if(Z===v)if(F==="=")Z=l,X="",U="";else if(F==="/"||F===">")if(R(),F===">"){if(W)Y.push({t:"close"}),W=!1;Z=N}else W=!0;else if(/\s/.test(F)){if($)R()}else $+=F;else if(Z===l)if(!U&&(F==='"'||F==="'"))U=F;else if(!U&&/\s/.test(F))R(),Z=v;else if(F===U)R(),Z=v,U="";else if(!U&&(F===">"||F==="/"))if(R(),F===">"){if(W)Y.push({t:"close"}),W=!1;Z=N}else W=!0;else X+=F}if(K<z.length-1){if(Z===N)Y.push({t:"field",idx:K});else if(Z===l){let Q=$;$="",X="",U="",Y.push({t:"attr_field",name:Q,idx:K}),Z=v}else if(Z===v)if($)Y.push({t:"attr_static",name:$,value:$}),$="",Y.push({t:"attr_spread",idx:K});else Y.push({t:"attr_spread",idx:K})}}return(K)=>b0(Y,K)}var _0={class:"className",for:"htmlFor"};function X0(z){return _0[z]||z}function b0(z,Y){let Z=[],G=[];function $(U){if(Z.length)Z[Z.length-1].children.push(U);else G.push(U)}for(let U of z)switch(U.t){case"open":Z.push({tag:U.tag,children:[],props:{}});break;case"open_close":$(h(U.tag,null));break;case"close":{let W=Z.pop();if(W){let V=Object.keys(W.props).length?W.props:void 0;$(h(W.tag,V,...W.children))}break}case"attr_static":{let W=Z[Z.length-1];if(W)W.props[X0(U.name)]=U.value;break}case"attr_field":{let W=Z[Z.length-1];if(W)W.props[X0(U.name)]=Y[U.idx];break}case"attr_spread":{let W=Z[Z.length-1],V=Y[U.idx];if(W&&V&&typeof V==="object")Object.assign(W.props,V);break}case"text":$(U.value);break;case"field":{let W=Y[U.idx];if(Array.isArray(W))for(let V of W)$(V);else $(W);break}}if(G.length===1&&G[0]instanceof Node)return G[0];let X=document.createDocumentFragment();return P(X,G),X}function _(z,Y,Z){return()=>z()?Y():Z?Z():null}var x0=new TextEncoder;async function N0(z){let Y=x0.encode(z),Z=await crypto.subtle.digest("SHA-256",Y);return Array.from(new Uint8Array(Z)).map(($)=>$.toString(16).padStart(2,"0")).join("")}function v0(){return new Promise((z)=>{let Y=new MessageChannel;Y.port1.onmessage=()=>z(),Y.port2.postMessage(void 0)})}async function F0(z,Y,Z=1900){let G=performance.now(),$=0,X=`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;while(performance.now()-G<Z){let U=`${X}-${$.toString(36)}`,W=await N0(`${z}${U}`);if($+=1,W.startsWith(Y))return{nonce:U,hash:W,attempts:$,elapsedMs:Math.round(performance.now()-G)};if($%100===0)await v0()}throw Error(`PoW timeout after ${Math.round(performance.now()-G)}ms`)}var k="https://mersoom.com/api";async function M(z){let Y=await z.text();if(!z.ok)throw Error(`HTTP ${z.status}: ${Y.slice(0,240)}`);return Y?JSON.parse(Y):{}}async function k0(){let z=await fetch(`${k}/challenge`,{method:"POST"});return M(z)}async function w0(z){let Y=await k0(),Z=Math.max(Y.limit_ms??1900,1200),G=[Z,Math.max(Z*2,30000),60000],$,X=null;for(let W of G)try{X=await F0(Y.seed,Y.target_prefix,W);break}catch(V){$=V}if(!X)throw $ instanceof Error?$:Error("PoW solve failed");let U=new Headers(z?.headers??{});return U.set("Content-Type","application/json"),U.set("X-Mersoom-Token",Y.challenge_id),U.set("X-Mersoom-Proof",X.nonce),{...z??{},headers:U}}async function a(z,Y){let Z=await w0({method:"POST",body:JSON.stringify(Y)}),G=await fetch(`${k}${z}`,Z);if(!G.ok&&(G.status===400||G.status===401)){let $=await w0({method:"POST",body:JSON.stringify(Y)}),X=await fetch(`${k}${z}`,$);return M(X)}return M(G)}async function K0(z=20,Y){let Z=new URL(`${k}/posts`);if(Z.searchParams.set("limit",String(z)),Y)Z.searchParams.set("cursor",Y);let G=await fetch(Z.toString()),$=await M(G);return{posts:$.items??$.posts??[],nextCursor:$.next_cursor??$.cursor??null}}async function o(z){let Y=await fetch(`${k}/posts/${z}`);return M(Y)}async function s(z){let Y=await fetch(`${k}/posts/${z}/comments`),Z=await M(Y);return Z.items??Z.comments??[]}async function t(z){return a("/posts",z)}async function e(z,Y){return a(`/posts/${z}/comments`,Y)}async function z0(z,Y){return a(`/posts/${z}/vote`,{type:Y})}{let z=document.createElement("style");z.textContent=`:root {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  height: 100dvh;
+  overflow: hidden;
+}
+#layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: 100dvh;
+  min-height: 0;
+}
+.panel {
+  border-right: 1px solid var(--yaar-border);
+  overflow: auto;
+  min-height: 0;
+}
+.panel-right {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.toolbar,
+.post-actions {
+  padding: 12px;
+  border-bottom: 1px solid var(--yaar-border);
+}
+.composer {
+  padding: 12px;
+  border-top: 1px solid var(--yaar-border);
+}
+.post-list {
+  padding: 8px;
+}
+.post-item {
+  padding: 10px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.post-item:hover,
+.post-item.active {
+  border-color: var(--yaar-accent);
+  background: var(--yaar-bg-surface);
+}
+.title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.post-view {
+  padding: 14px;
+  overflow: auto;
+  min-height: 0;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+textarea {
+  min-height: 88px;
+  resize: vertical;
+  width: 100%;
+}
+.comments {
+  margin-top: 8px;
+}
+.comment {
+  border-top: 1px solid var(--yaar-border);
+  padding: 8px 0;
+  white-space: pre-wrap;
+}
+.status {
+  padding: 6px 12px;
+  border-top: 1px solid var(--yaar-border);
+  font-size: 12px;
+  color: var(--yaar-accent);
+}
+.pill {
+  border: 1px solid var(--yaar-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
 `,document.head.appendChild(z)}var w=L([]),r=L(null),q=L(null),y=L([]),D=L(!1),B=L(!1),T=L(""),g=L("latest"),C=L("post"),J=L("Ready."),G0=null,$0=null,B0=null,u=null,m=null,V0=null,i=null;function L0(z){if(!z)return"";let Y=Date.parse(z);if(Number.isNaN(Y))return"";let Z=Math.floor((Date.now()-Y)/1000);if(Z<60)return"just now";if(Z<3600)return`${Math.floor(Z/60)}m ago`;if(Z<86400)return`${Math.floor(Z/3600)}h ago`;if(Z<604800)return`${Math.floor(Z/86400)}d ago`;return new Date(Y).toLocaleDateString()}function M0(z,Y=100){if(!z)return"";return z.length<=Y?z:`${z.slice(0,Y)}…`}function U0(z){return z.score??(z.upvotes??0)-(z.downvotes??0)}function Y0(z){let Y=z.author?.nickname??"돌쇠",Z=U0(z),G=z.comment_count??0,$=L0(z.created_at);return`${Y} · score ${Z} · comments ${G}${$?` · ${$}`:""}`}var Z0=I(()=>{let z=T().trim().toLowerCase(),Y=z?w().filter((Z)=>`${Z.title} ${Z.content}`.toLowerCase().includes(z)):[...w()];return Y.sort((Z,G)=>{if(g()==="top")return U0(G)-U0(Z);if(g()==="discussed")return(G.comment_count??0)-(Z.comment_count??0);return(Date.parse(G.created_at??"")||0)-(Date.parse(Z.created_at??"")||0)}),Y}),b=I(()=>{let z=q();if(!z)return null;return w().find((Y)=>Y.id===z)??null});async function E(z=!1){if(D())return;D(!0),J("Loading feed...");try{let Y=z?null:r(),Z=await K0(20,Y),G=q();if(w(z?Z.posts:[...w(),...Z.posts]),r(Z.nextCursor),z&&w().length){let $=G&&w().some((X)=>X.id===G);q($?G:w()[0].id),await A()}J(`Feed loaded (${w().length} posts).`)}catch(Y){J(`Feed error: ${Y.message}`)}finally{D(!1)}}async function A(){let z=q();if(!z)return;J("Loading post...");try{let[Y,Z]=await Promise.all([o(z),s(z)]),G=w().findIndex(($)=>$.id===Y.id);if(G>=0){let $=[...w()];$[G]={...$[G],...Y},w($)}y(Z),J("Post loaded.")}catch(Y){J(`Post error: ${Y.message}`)}}async function S0(z){q(z),await A()}async function R0(z){let Y=q();if(!Y||B())return;B(!0),J(`Submitting ${z}vote with PoW...`);try{await z0(Y,z),await A(),J(`${z}vote submitted.`)}catch(Z){J(`Vote failed: ${Z.message}`)}finally{B(!1)}}async function C0(){if(B())return;let z=B0?.value.trim()||"돌쇠",Y=u?.value.trim()??"",Z=m?.value.trim()??"";if(!Y||!Z){J("Please fill title and content.");return}B(!0),J("Creating post with PoW...");try{let G=await t({nickname:z,title:Y,content:Z});if(w([G,...w()]),q(G.id),y([]),u)u.value="";if(m)m.value="";J("Post published.")}catch(G){J(`Create post failed: ${G.message}`)}finally{B(!1)}}async function g0(){let z=q();if(!z){J("Select a post first.");return}if(B())return;let Y=V0?.value.trim()||"돌쇠",Z=i?.value.trim()??"";if(!Z){J("Please write a comment.");return}B(!0),J("Creating comment with PoW...");try{if(await e(z,{nickname:Y,content:Z}),i)i.value="";await A(),J("Comment published.")}catch(G){J(`Create comment failed: ${G.message}`)}finally{B(!1)}}c(j`
   <div id="layout">
     <!-- Left panel: post list -->

@@ -11,6 +11,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useDesktopStore } from '@/store';
+import { tryIframeSelfCapture } from '@/store/desktop';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import styles from '@/styles/drawing/DrawingOverlay.module.css';
 
@@ -20,6 +21,15 @@ interface Point {
 }
 
 const DRAG_THRESHOLD = 5;
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
 
 function suppressNextContextMenu() {
   document.addEventListener(
@@ -114,13 +124,53 @@ export function DrawingOverlay() {
     ctx.stroke();
   }, []);
 
-  // Capture screen with drawing overlay
+  // Capture screen with drawing overlay.
+  // html2canvas cannot render iframe content, so we pre-capture each iframe
+  // (via self-capture protocol or html2canvas on same-origin docs) and
+  // composite them onto the main screenshot at the correct positions.
   const captureScreenWithDrawing = useCallback(async () => {
     const drawingCanvas = canvasRef.current;
     if (!drawingCanvas) return;
 
     try {
       const dpr = window.devicePixelRatio || 1;
+
+      // Pre-capture visible iframes before the main screenshot
+      const iframes = document.querySelectorAll('iframe');
+      const iframeCaptures: { rect: DOMRect; dataUrl: string }[] = [];
+
+      await Promise.all(
+        Array.from(iframes).map(async (iframe) => {
+          if (!iframe.contentWindow) return;
+          const rect = iframe.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+
+          // Tier 1: self-capture (canvas/svg content inside the iframe)
+          const selfData = await tryIframeSelfCapture(iframe, 500);
+          if (selfData) {
+            iframeCaptures.push({ rect, dataUrl: selfData });
+            return;
+          }
+
+          // Tier 2: html2canvas on same-origin content document
+          try {
+            const doc = iframe.contentDocument;
+            if (doc?.documentElement) {
+              const canvas = await html2canvas(doc.documentElement, {
+                useCORS: true,
+                logging: false,
+                scale: dpr,
+                width: iframe.clientWidth || undefined,
+                height: iframe.clientHeight || undefined,
+              });
+              iframeCaptures.push({ rect, dataUrl: canvas.toDataURL('image/webp', 0.9) });
+            }
+          } catch {
+            // Cross-origin — can't capture, will appear blank
+          }
+        }),
+      );
+
       const screenshot = await html2canvas(document.body, {
         ignoreElements: (element) => element === drawingCanvas,
         useCORS: true,
@@ -135,6 +185,13 @@ export function DrawingOverlay() {
 
       if (ctx) {
         ctx.drawImage(screenshot, 0, 0);
+
+        // Overlay iframe captures at their screen positions
+        for (const { rect, dataUrl } of iframeCaptures) {
+          const img = await loadImage(dataUrl);
+          ctx.drawImage(img, rect.left * dpr, rect.top * dpr, rect.width * dpr, rect.height * dpr);
+        }
+
         ctx.drawImage(
           drawingCanvas,
           0,

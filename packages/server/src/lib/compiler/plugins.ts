@@ -6,11 +6,19 @@
  * In dev mode, resolves from node_modules via Bun.resolveSync().
  */
 
+import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 /** Directory of this file — inside packages/server, where devDependencies are installed. */
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Libraries with browser/node conditional exports that need consistent resolution.
+ * Bare imports of these from within bundled code must resolve to the same path as
+ * the @bundled/* aliased imports to prevent duplicate module copies.
+ */
+const CONDITIONAL_EXPORT_LIBS = ['solid-js', 'solid-js/web', 'solid-js/html'];
 
 /**
  * Map of @bundled/* import names to actual npm module paths.
@@ -43,13 +51,50 @@ export const BUNDLED_LIBRARIES: Record<string, string | null> = {
 };
 
 /**
+ * Resolve a npm package to its browser entry point by reading package.json exports.
+ *
+ * Bun.resolveSync() uses runtime (node/bun) conditions, which for packages like
+ * solid-js resolves to the SSR build (dist/server.js) instead of the browser build
+ * (dist/solid.js). This helper reads the exports map and picks the browser condition.
+ */
+function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
+  // Split 'solid-js/web' → pkg='solid-js', subpath='./web'
+  const parts = npmName.split('/');
+  const isScoped = npmName.startsWith('@');
+  const pkgName = isScoped ? parts.slice(0, 2).join('/') : parts[0];
+  const subpath =
+    parts.length > (isScoped ? 2 : 1) ? './' + parts.slice(isScoped ? 2 : 1).join('/') : '.';
+
+  try {
+    const pkgJsonPath = Bun.resolveSync(`${pkgName}/package.json`, fromDir);
+    const pkgDir = dirname(pkgJsonPath);
+    const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+
+    const exportEntry = pkgJson.exports?.[subpath];
+    if (!exportEntry) return null;
+
+    // Prefer browser > default import condition
+    const browser = exportEntry.browser;
+    if (browser) {
+      const entry = typeof browser === 'string' ? browser : (browser.import ?? browser.default);
+      if (entry) return join(pkgDir, entry);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Bun plugin that resolves @bundled/* imports.
  *
  * Resolution strategies (in order):
  * 1. **Embedded** (exe): Libraries embedded via `with { type: "file" }`,
  *    available as globalThis.__YAAR_BUNDLED_LIBS = { 'uuid': '/$bunfs/...', ... }.
  * 2. **Disk**: Libraries read from `bundled-libs/` directory next to the exe (fallback).
- * 3. **node_modules** (dev): Resolves from PLUGIN_DIR via Bun.resolveSync().
+ * 3. **node_modules** (dev): Resolves browser entry from package.json exports,
+ *    falling back to Bun.resolveSync() for packages without conditional exports.
  */
 export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
   return {
@@ -77,17 +122,39 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           return { path: libName, namespace: NAMESPACE };
         }
 
-        // Strategy 3: node_modules (dev) — resolve to real filesystem path so
-        // Bun can follow relative imports within the library (e.g. THREE.js
-        // imports ./three.core.js from three.module.js).
+        // Strategy 3: node_modules (dev) — first try browser-aware resolution
+        // (Bun.resolveSync uses runtime/node conditions which gives SSR builds
+        // for packages like solid-js), then fall back to Bun.resolveSync for
+        // packages without conditional exports.
+        const npmName = BUNDLED_LIBRARIES[libName]!;
+        const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
+        if (browserPath) return { path: browserPath };
+
         try {
-          const resolved = Bun.resolveSync(BUNDLED_LIBRARIES[libName]!, PLUGIN_DIR);
+          const resolved = Bun.resolveSync(npmName, PLUGIN_DIR);
           return { path: resolved };
         } catch {
           // fall through to namespace for disk-based resolution
         }
 
         return { path: libName, namespace: NAMESPACE };
+      });
+
+      // Intercept bare solid-js imports from within bundled libraries (e.g.,
+      // solid-js/html imports solid-js/web, solid-js/web imports solid-js).
+      // Without this, Bun's default resolver may pick different paths (e.g., dev
+      // builds or symlinked paths) causing duplicate module copies with separate
+      // reactive runtimes that break solid-js's signal tracking.
+      build.onResolve({ filter: /^solid-js(\/|$)/ }, (args: any) => {
+        const libName = args.path as string;
+        if (!CONDITIONAL_EXPORT_LIBS.includes(libName)) return undefined;
+        const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
+        if (browserPath) return { path: browserPath };
+        try {
+          return { path: Bun.resolveSync(libName, PLUGIN_DIR) };
+        } catch {
+          return undefined;
+        }
       });
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
