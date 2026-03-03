@@ -1,5 +1,7 @@
 export {};
-import { signal, html, mount, show } from '@bundled/yaar';
+import { createSignal, Show, For } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { ImageItem, LayoutMode } from './types';
 import { setupProtocol } from './protocol';
@@ -19,11 +21,11 @@ const storage: YaarStorage | undefined = yaar.storage;
 const appApi: AppApi | undefined = yaar.app;
 
 // signals
-const images = signal<ImageItem[]>([]);
-const selectedIds = signal(new Set<number>());
-const mode = signal<LayoutMode>('grid');
-const columns = signal(3);
-const status = signal('Ready.');
+const [images, setImages_] = createSignal<ImageItem[]>([]);
+const [selectedIds, setSelectedIds] = createSignal(new Set<number>());
+const [mode, setMode] = createSignal<LayoutMode>('grid');
+const [columns, setColumns] = createSignal(3);
+const [status, setStatus] = createSignal('Ready.');
 let nextId = 1;
 
 let fileInputEl!: HTMLInputElement;
@@ -47,15 +49,15 @@ function normalizeInputImage(input: { name?: string; path?: string; url?: string
 
 function setImages(items: ImageItem[], replace = true) {
   const next = replace ? items : [...images(), ...items];
-  images(next);
-  if (next.length) selectedIds(new Set([next[0].id]));
-  else selectedIds(new Set());
-  status(`${next.length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
+  setImages_(() => next);
+  if (next.length) setSelectedIds(new Set([next[0].id]));
+  else setSelectedIds(new Set<number>());
+  setStatus(`${next.length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
 }
 
 async function loadStoragePaths(paths: string[], replace = false) {
   if (!storage?.url) {
-    status('Storage API unavailable.');
+    setStatus('Storage API unavailable.');
     return;
   }
   const loaded = paths.map((p) => ({ id: nextId++, name: baseName(p), source: storage.url(p), path: p }));
@@ -64,7 +66,7 @@ async function loadStoragePaths(paths: string[], replace = false) {
 
 async function loadAllStorageImages() {
   if (!storage?.list || !storage?.url) {
-    status('Storage API unavailable.');
+    setStatus('Storage API unavailable.');
     return;
   }
   const entries = await storage.list('');
@@ -72,7 +74,7 @@ async function loadAllStorageImages() {
     .filter((e) => !e.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(e.path))
     .map((e) => e.path);
   await loadStoragePaths(paths, true);
-  status(`Loaded ${paths.length} image(s) from storage.`);
+  setStatus(`Loaded ${paths.length} image(s) from storage.`);
 }
 
 function getShowItems(): ImageItem[] {
@@ -87,15 +89,14 @@ function getShowItems(): ImageItem[] {
 function selectImage(item: ImageItem) {
   const sel = selectedIds();
   if (mode() === 'single') {
-    selectedIds(new Set([item.id]));
+    setSelectedIds(new Set([item.id]));
   } else {
     const next = new Set(sel);
     if (next.has(item.id)) next.delete(item.id);
     else next.add(item.id);
     if (!next.size) next.add(item.id);
-    selectedIds(next);
+    setSelectedIds(next);
   }
-
 }
 
 async function handleFileChange() {
@@ -116,10 +117,9 @@ async function handleFileChange() {
     loaded.push({ id: nextId++, name: file.name, source: dataUrl });
   }
   setImages(loaded, true);
-
 }
 
-mount(html`
+render(() => html`
   <div class="app y-app">
     <div class="toolbar y-flex y-gap-2 y-p-2 y-surface y-border-b">
       <input
@@ -130,21 +130,21 @@ mount(html`
         onchange=${() => handleFileChange()}
       />
       <button class="y-btn y-btn-sm" onClick=${() => loadAllStorageImages()}>Load storage images</button>
-      <button class="y-btn y-btn-sm" onClick=${() => { mode('grid'); status(`${images().length} image(s) loaded · mode=grid · cols=${columns()}`); }}>Grid</button>
-      <button class="y-btn y-btn-sm" onClick=${() => { mode('single'); status(`${images().length} image(s) loaded · mode=single`); }}>Single</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { setMode('grid'); setStatus(`${images().length} image(s) loaded · mode=grid · cols=${columns()}`); }}>Grid</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { setMode('single'); setStatus(`${images().length} image(s) loaded · mode=single`); }}>Single</button>
       <label class="y-text-sm">Cols <input
         ref=${(el: HTMLInputElement) => { colsInputEl = el; }}
         type="number"
         min="1"
         max="8"
-        defaultValue="3"
+        value="3"
         style="width:64px"
         class="y-input"
         onchange=${() => {
           const v = Math.max(1, Math.min(8, Number(colsInputEl.value) || 3));
           colsInputEl.value = String(v);
-          columns(v);
-          status(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${v}` : ''}`);
+          setColumns(v);
+          setStatus(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${v}` : ''}`);
         }}
       /></label>
       <button class="y-btn y-btn-sm y-btn-danger" onClick=${() => setImages([], true)}>Clear</button>
@@ -153,45 +153,54 @@ mount(html`
       <aside class="sidebar">
         <div class="side-head y-p-2 y-text-xs y-text-muted y-border-b">Loaded Images</div>
         <div class="thumbs y-scroll">
-          ${show(() => images().length === 0, () => html`<div class="empty">No images loaded.</div>`)}
-          ${() => images().map(item => html`
+          <${Show} when=${() => images().length === 0}>
+            <div class="empty">No images loaded.</div>
+          </${Show}>
+          <${For} each=${images}>${(item: ImageItem) => html`
             <button class=${() => 'thumb' + (selectedIds().has(item.id) ? ' active' : '')} onClick=${() => selectImage(item)}>
               <img src="${item.source}" alt="${item.name}"/>
               <div>${item.name}</div>
             </button>
-          `)}
+          `}</${For}>
         </div>
       </aside>
       <div class="viewer-wrap">
         <div style="width:100%;min-height:0;">
-          ${show(() => images().length === 0, () => html`<div class="empty">Load files or send images via App Protocol.</div>`)}
-          ${show(() => images().length > 0, () => html`
+          <${Show} when=${() => images().length === 0}>
+            <div class="empty">Load files or send images via App Protocol.</div>
+          </${Show}>
+          <${Show} when=${() => images().length > 0}>
             <div
               class=${() => mode() === 'single' ? 'viewer-single' : 'viewer-grid'}
               style=${() => mode() === 'grid' ? `--cols:${Math.max(1, columns())}` : ''}
             >
-              ${() => getShowItems().map(item => html`
+              <${For} each=${getShowItems}>${(item: ImageItem) => html`
                 <div class="panel">
                   <div class="panel-head">${item.name}</div>
                   <img src="${item.source}" alt="${item.name}"/>
                 </div>
-              `)}
+              `}</${For}>
             </div>
-          `)}
+          </${Show}>
         </div>
       </div>
     </div>
     <div class="status y-text-xs y-text-muted">${() => status()}</div>
   </div>
-`);
+`, document.getElementById('app')!);
 
 if (appApi) {
   setupProtocol(appApi, {
     images,
+    setImages_,
     selectedIds,
+    setSelectedIds,
     mode,
+    setMode,
     columns,
+    setColumns,
     status,
+    setStatus,
     getColsInputEl: () => colsInputEl,
     setImages,
     normalizeInputImage,

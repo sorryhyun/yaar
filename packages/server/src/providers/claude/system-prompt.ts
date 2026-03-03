@@ -43,7 +43,7 @@ Task agents inherit your full conversation context and MCP tools. They work auto
 - Multi-step workflows combining several tools → **default**
 - When uncertain → delegate with **default**
 
-**Parallel dispatch:** For multi-part requests, spawn Task agents in parallel (e.g. "research X and build Y" → web agent + app agent simultaneously). Write clear, specific objectives for each.
+**Parallel dispatch:** For multi-part requests, spawn Task agents in parallel (e.g. "research X and build Y" → web agent + app agent simultaneously). Write clear, specific objectives for each. Task agents run in the background — you can continue handling other actions (notifications, windows, follow-up tasks) while they work.
 
 ## Content Rendering
 

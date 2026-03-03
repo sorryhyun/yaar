@@ -1,4 +1,4 @@
-import { signal } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
 import type { Feed, Article } from './types';
 
 export const FALLBACK_FEEDS: Feed[] = [
@@ -8,21 +8,21 @@ export const FALLBACK_FEEDS: Feed[] = [
   { id: 'verge', name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' },
 ];
 
-export const feeds = signal<Feed[]>([]);
-export const readArticleIds = signal<string[]>([]);
-export const selectedFeedId = signal<string>('all');
-export const articles = signal<Record<string, Article[]>>({});
-export const loadingFeedIds = signal<string[]>([]);
-export const errorFeeds = signal<Record<string, string>>({});
-export const selectedArticle = signal<Article | null>(null);
-export const unreadCounts = signal<Record<string, number>>({});
+export const [feeds, setFeeds] = createSignal<Feed[]>([]);
+export const [readArticleIds, setReadArticleIds] = createSignal<string[]>([]);
+export const [selectedFeedId, setSelectedFeedId] = createSignal<string>('all');
+export const [articles, setArticles] = createSignal<Record<string, Article[]>>({});
+export const [loadingFeedIds, setLoadingFeedIds] = createSignal<string[]>([]);
+export const [errorFeeds, setErrorFeeds] = createSignal<Record<string, string>>({});
+export const [selectedArticle, setSelectedArticle] = createSignal<Article | null>(null);
+export const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
 
 // Toast
-export const toastMsg = signal<{ text: string; type: 'info' | 'error' | 'success' } | null>(null);
+export const [toastMsg, setToastMsg] = createSignal<{ text: string; type: 'info' | 'error' | 'success' } | null>(null);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
   if (toastTimer) clearTimeout(toastTimer);
-  toastMsg({ text: message, type });
-  toastTimer = setTimeout(() => toastMsg(null), 2500);
+  setToastMsg({ text: message, type });
+  toastTimer = setTimeout(() => setToastMsg(null), 2500);
 }

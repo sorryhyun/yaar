@@ -1,4 +1,6 @@
-import { signal, html, mount, show } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 
 // --- Types and constants ---
@@ -169,12 +171,12 @@ function pointsForLines(lines: number, level: number): number {
 
 // --- Display signals ---
 
-const scoreS = signal(0);
-const hiS = signal(0);
-const linesS = signal(0);
-const levelS = signal(0);
-const pausedS = signal(false);
-const gameOverS = signal(false);
+const [scoreS, setScoreS] = createSignal(0);
+const [hiS, setHiS] = createSignal(0);
+const [linesS, setLinesS] = createSignal(0);
+const [levelS, setLevelS] = createSignal(0);
+const [pausedS, setPausedS] = createSignal(false);
+const [gameOverS, setGameOverS] = createSignal(false);
 
 // --- Canvas refs (set synchronously via ref callbacks in html template) ---
 
@@ -217,7 +219,7 @@ async function loadHi(): Promise<void> {
   if (storage) {
     try {
       const saved = await storage.read('falling-blocks/hi.json', { as: 'json' });
-      if (saved && typeof saved.hi === 'number') { hi = saved.hi; hiS(hi); }
+      if (saved && typeof saved.hi === 'number') { hi = saved.hi; setHiS(hi); }
     } catch { /* no save yet */ }
   }
 }
@@ -225,17 +227,17 @@ async function loadHi(): Promise<void> {
 // --- State update helpers ---
 
 function updateStats(): void {
-  scoreS(score); hiS(hi); linesS(lines); levelS(level);
+  setScoreS(score); setHiS(hi); setLinesS(lines); setLevelS(level);
 }
 
 function updateOverlay(): void {
-  gameOverS(gameOver); pausedS(paused);
+  setGameOverS(gameOver); setPausedS(paused);
 }
 
 function updateHi(): void {
   if (score > hi) {
     hi = score;
-    hiS(hi);
+    setHiS(hi);
     void saveHi();
   }
 }
@@ -418,7 +420,7 @@ function clearCanvas(g: CanvasRenderingContext2D, w: number, h: number): void {
   g.fillRect(0, 0, w, h);
 }
 
-function render(): void {
+function drawFrame(): void {
   clearCanvas(ctx, COLS * BLOCK, ROWS * BLOCK);
 
   // subtle grid
@@ -499,7 +501,7 @@ function step(time: number): void {
     }
   }
 
-  render();
+  drawFrame();
   requestAnimationFrame(step);
 }
 
@@ -541,13 +543,12 @@ window.addEventListener('resize', () => {
 
 // --- Mount reactive UI ---
 
-mount(html`
+render(() => html`
   <div id="app">
     <div style="position:relative">
       <canvas ref=${(el: HTMLCanvasElement) => { canvas = el; ctx = el.getContext('2d')!; }} />
-      ${show(
-        () => gameOverS() || pausedS(),
-        () => html`
+      ${() => (gameOverS() || pausedS())
+        ? html`
           <div class="overlay">
             <div class="overlayBox">
               ${() => gameOverS()
@@ -557,7 +558,8 @@ mount(html`
             </div>
           </div>
         `
-      )}
+        : null
+      }
     </div>
     <div class="panel">
       <div class="title y-text-sm y-font-mono">Falling Blocks</div>
@@ -588,9 +590,9 @@ mount(html`
       <div class="help y-text-xs y-text-muted">←/→ move • ↑ rotate • ↓ soft drop • Space hard drop • C hold • P pause • R restart</div>
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
-// refs are ready synchronously after mount
+// refs are ready synchronously after render
 void loadHi();
 fit();
 updateStats();

@@ -1,16 +1,65 @@
 export {};
-import { html, mount, show } from '@bundled/yaar';
+import { For, Show } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
-import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody } from './state';
+import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody, setStatusText, storage } from './state';
 import { basename, formatSize, getFileIcon } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
 
+// ── Toast helper ──────────────────────────────────────────────────────
+
+function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
+    background:${type === 'error' ? 'var(--yaar-error,#f85149)' : 'var(--yaar-success,#3fb950)'};
+    color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;
+    z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;
+    opacity:1;transition:opacity 0.3s;
+  `;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, ms);
+}
+
+// ── Upload ────────────────────────────────────────────────────────────
+
+let uploadInput: HTMLInputElement;
+
+function openUploadDialog() {
+  uploadInput?.click();
+}
+
+async function handleUpload(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  setStatusText(`Uploading ${files.length} file(s)…`);
+  try {
+    for (const file of files) {
+      const path = currentPath() ? `${currentPath()}/${file.name}` : file.name;
+      const buf = await file.arrayBuffer();
+      await (storage as any).save(path, buf);
+    }
+    input.value = '';
+    navigate(currentPath());
+    showToast(`Uploaded ${files.length} file${files.length !== 1 ? 's' : ''}`, 'success');
+  } catch {
+    setStatusText('Upload failed');
+    showToast('Upload failed', 'error');
+  }
+}
+
 // ── Template ──────────────────────────────────────────────────────────
 
-mount(html`
+const App = () => html`
   <div class="toolbar y-flex-between">
     <div class="breadcrumb">
       ${() => {
@@ -36,10 +85,16 @@ mount(html`
         (e.target as HTMLSelectElement).value = '';
       }}>
       <option value="">Mounts</option>
-      ${() => mountAliases().map(alias => html`<option value="${alias}">${alias}</option>`)}
+      <${For} each=${mountAliases}>
+        ${(alias: string) => html`<option value="${alias}">${alias}</option>`}
+      <//>
     </select>
     <button class="toolbar-btn y-btn y-btn-sm" onClick=${openMountDialog} title="Request mount folder">Mount...</button>
     <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(currentPath())} title="Refresh">&#x21BB;</button>
+    <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">&#x2B06; Upload</button>
+    <input type="file" id="upload-input" multiple style="display:none"
+      ref=${(el: HTMLInputElement) => { uploadInput = el; }}
+      onChange=${handleUpload} />
   </div>
 
   <div class="main">
@@ -47,48 +102,52 @@ mount(html`
       ${() => {
         const list = entries();
         if (list.length === 0) return html`<div class="empty">This folder is empty</div>`;
-        return list.map(entry => {
-          const name = basename(entry.path);
-          return html`
-            <div
-              class=${() => `file-row${selectedFile() === entry.path ? ' selected' : ''}`}
-              draggable="true"
-              onClick=${(e: MouseEvent) => {
-                if ((e.target as HTMLElement).closest('.file-actions')) return;
-                if (entry.isDirectory) navigate(entry.path);
-                else selectFile(entry);
-              }}
-              onDblclick=${(e: MouseEvent) => {
-                if ((e.target as HTMLElement).closest('.file-actions')) return;
-                if (!entry.isDirectory) requestOpenByAgent(entry);
-              }}
-              onDragstart=${(e: DragEvent) => handleDragStart(e, entry)}
-              onDragend=${(e: DragEvent) => handleDragEnd(e)}
-            >
-              <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
-              <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
-              <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
-              <span class="file-actions">
-                ${!entry.isDirectory ? html`
-                  <button title="Open in new tab" onClick=${(e: MouseEvent) => {
-                    e.stopPropagation();
-                    window.open((window as any).yaar?.storage?.url(entry.path), '_blank');
-                  }}>&#x21D7;</button>
-                ` : ''}
-                <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
-                  e.stopPropagation();
-                  if (!confirm(`Delete "${name}"?`)) return;
-                  try {
-                    await (window as any).yaar?.storage?.remove(entry.path);
-                    navigate(currentPath());
-                  } catch {
-                    statusText(`Failed to delete ${name}`);
-                  }
-                }}>&#x1F5D1;</button>
-              </span>
-            </div>
-          `;
-        });
+        return html`
+          <${For} each=${entries}>
+            ${(entry: import('./types').StorageEntry) => {
+              const name = basename(entry.path);
+              return html`
+                <div
+                  class=${() => `file-row${selectedFile() === entry.path ? ' selected' : ''}`}
+                  draggable="true"
+                  onClick=${(e: MouseEvent) => {
+                    if ((e.target as HTMLElement).closest('.file-actions')) return;
+                    if (entry.isDirectory) navigate(entry.path);
+                    else selectFile(entry);
+                  }}
+                  onDblclick=${(e: MouseEvent) => {
+                    if ((e.target as HTMLElement).closest('.file-actions')) return;
+                    if (!entry.isDirectory) requestOpenByAgent(entry);
+                  }}
+                  onDragstart=${(e: DragEvent) => handleDragStart(e, entry)}
+                  onDragend=${(e: DragEvent) => handleDragEnd(e)}
+                >
+                  <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
+                  <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
+                  <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
+                  <span class="file-actions">
+                    <${Show} when=${() => !entry.isDirectory}>
+                      <button title="Open in new tab" onClick=${(e: MouseEvent) => {
+                        e.stopPropagation();
+                        window.open((window as any).yaar?.storage?.url(entry.path), '_blank');
+                      }}>&#x21D7;</button>
+                    <//>
+                    <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
+                      e.stopPropagation();
+                      if (!confirm(`Delete "${name}"?`)) return;
+                      try {
+                        await (window as any).yaar?.storage?.remove(entry.path);
+                        navigate(currentPath());
+                      } catch {
+                        setStatusText(`Failed to delete ${name}`);
+                      }
+                    }}>&#x1F5D1;</button>
+                  </span>
+                </div>
+              `;
+            }}
+          <//>
+        `;
       }}
     </div>
 
@@ -102,7 +161,7 @@ mount(html`
     </div>
   </div>
 
-  ${show(() => showModal(), () => html`
+  <${Show} when=${showModal}>
     <div class="modal-overlay" onClick=${(e: MouseEvent) => {
       if (e.target === e.currentTarget) closeMountDialog();
     }}>
@@ -128,10 +187,12 @@ mount(html`
         </form>
       </div>
     </div>
-  `)}
+  <//>
 
   <div class="statusbar y-text-xs y-text-muted">${() => statusText()}</div>
-`);
+`;
+
+render(App, document.getElementById('app')!);
 
 // ── App Protocol & Init ────────────────────────────────────────────────
 

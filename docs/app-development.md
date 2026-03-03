@@ -114,7 +114,7 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 
 | 라이브러리 | import 경로 | 용도 |
 |-----------|------------|------|
-| yaar | `@bundled/yaar` | 반응형 UI (signal, html, mount, show, createResource 등) |
+| solid-js | `@bundled/solid-js` | 반응형 UI (createSignal, createEffect, Show, For 등) |
 | uuid | `@bundled/uuid` | ID 생성 |
 | lodash | `@bundled/lodash` | 유틸리티 (debounce, cloneDeep, groupBy 등) |
 | date-fns | `@bundled/date-fns` | 날짜 처리 |
@@ -155,10 +155,12 @@ import anime from '@bundled/anime';
 ```typescript
 export {};
 
-import { signal, html, mount } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 
-const count = signal(0);
-mount(html`<button onClick=${() => count(count() + 1)}>Clicked ${() => count()} times</button>`);
+const [count, setCount] = createSignal(0);
+render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => count()} times</button>`, document.getElementById('app')!);
 ```
 
 `@bundled/*` 라이브러리를 import하는 경우 이미 모듈로 인식되므로 별도 추가 불필요.
@@ -439,7 +441,7 @@ Available via `@bundled/*` imports — no npm install needed:
 
 | Library | Import Path | Purpose |
 |---------|------------|---------|
-| yaar | `@bundled/yaar` | Reactive UI (signal, html, mount, show, createResource, etc.) |
+| solid-js | `@bundled/solid-js` | Reactive UI (createSignal, createEffect, Show, For, etc.) |
 | uuid | `@bundled/uuid` | ID generation |
 | lodash | `@bundled/lodash` | Utilities (debounce, cloneDeep, groupBy, etc.) |
 | date-fns | `@bundled/date-fns` | Date handling |
@@ -480,10 +482,12 @@ Every app's `src/main.ts` must include `export {};` at the top of the file. Beca
 ```typescript
 export {};
 
-import { signal, html, mount } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 
-const count = signal(0);
-mount(html`<button onClick=${() => count(count() + 1)}>Clicked ${() => count()} times</button>`);
+const [count, setCount] = createSignal(0);
+render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => count()} times</button>`, document.getElementById('app')!);
 ```
 
 If you already `import` from `@bundled/*` or other modules, the file is already a module and no extra `export {};` is needed.

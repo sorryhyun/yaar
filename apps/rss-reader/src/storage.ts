@@ -1,5 +1,5 @@
 import type { AppState, Feed } from './types';
-import { FALLBACK_FEEDS, feeds, readArticleIds } from './store';
+import { FALLBACK_FEEDS, feeds, setFeeds, readArticleIds, setReadArticleIds } from './store';
 import { extractDomainName } from './utils';
 
 declare const yaar: {
@@ -68,11 +68,11 @@ export async function loadState(): Promise<void> {
   } catch { /* use defaults */ }
 
   const sourceFeeds = await loadFeedsFromSourceFile();
-  if (sourceFeeds && sourceFeeds.length > 0) feeds(sourceFeeds);
-  else if (saved?.feeds && saved.feeds.length > 0) feeds(saved.feeds);
-  else feeds([...FALLBACK_FEEDS]);
+  if (sourceFeeds && sourceFeeds.length > 0) setFeeds(sourceFeeds);
+  else if (saved?.feeds && saved.feeds.length > 0) setFeeds(saved.feeds);
+  else setFeeds([...FALLBACK_FEEDS]);
 
-  readArticleIds(saved?.readArticleIds || []);
+  setReadArticleIds(saved?.readArticleIds || []);
 }
 
 export async function saveState(): Promise<void> {

@@ -44,7 +44,7 @@ Available via `@bundled/*` imports (no npm install needed):
 Example:
 ```ts
 import { v4 as uuid } from '@bundled/uuid';
-import anime from '@bundled/anime';
+import { animate, createTimeline } from '@bundled/anime';
 import { format } from '@bundled/date-fns';
 ```
 
@@ -87,71 +87,48 @@ All compiled apps automatically include shared CSS custom properties (`--yaar-*`
 
 Override any token in your app: `:root { --yaar-accent: #ff6b6b; }`
 
-## `@bundled/yaar` — Reactive DOM Library
+## `@bundled/solid-js` — Reactive DOM Library
 
-Tiny reactive library for building apps without manual DOM manipulation.
+Standard [Solid.js](https://www.solidjs.com/) for reactive UI. Three import paths:
 
 ```ts
-import {
-  signal, computed, effect, batch,
-  onMount, onCleanup, untrack,
-  h, html, css, mount, list, show, createResource, Toast,
-} from '@bundled/yaar';
+import { createSignal, createEffect, createMemo, batch, onMount, onCleanup, Show, For } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 ```
 
-**Reactivity:**
+**CSS:** Prefer `import './styles.css'` over inline styles. The bundler handles CSS imports automatically.
 
-| Function | Description |
-|----------|-------------|
-| `signal(initial)` | Reactive value. `sig()` reads, `sig(val)` writes, `sig.value`, `sig.peek()` |
-| `computed(fn)` | Derived signal, auto-recomputes on dependency change |
-| `effect(fn)` | Side effect, re-runs on tracked signal change. Returns dispose. `fn` may return a cleanup. |
-| `batch(fn)` | Batch signal writes into one update |
-| `onCleanup(fn)` | Register cleanup within current effect (called on re-run or dispose) |
-| `onMount(fn)` | Run once after current synchronous code completes (DOM ready) |
-| `untrack(fn)` | Read signals inside `fn` without creating dependencies |
+**Toast notifications:** Use the `y-toast` CSS class directly — no library function needed:
 
-**DOM & Templates:**
-
-| Function | Description |
-|----------|-------------|
-| `html\`...\`` | Tagged template for declarative DOM. Supports `class`, `on*` events, `ref=${(el) => ...}`, reactive `${() => val}` children. **Preferred over `h()`.** |
-| `css\`...\`` | Inject a `<style>` element. Use `--yaar-*` tokens freely. |
-| `h(tag, props?, ...children)` | Hyperscript. Tag supports `.class#id`. Lower-level alternative to `html`. |
-| `mount(element, container?)` | Append to `#app` (default) |
-| `list(container, items$, renderFn, key?)` | Reactive list with key-based reconciliation |
-
-**Conditional & Async:**
-
-| Function | Description |
-|----------|-------------|
-| `show(when, content, fallback?)` | Reactive conditional rendering — returns a reactive child |
-| `createResource(fetcher, opts?)` | Async data with `.loading`, `.error`, `.refetch()` signals |
-| `Toast.show(msg, type?, duration?)` | Toast notification (info/success/error) |
-
-**CSS:** Prefer `import './styles.css'` over inline `css` tags for all but the smallest snippets. The bundler handles CSS imports automatically.
+```ts
+function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info', ms = 3000) {
+  const el = document.createElement('div');
+  el.className = `y-toast y-toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms);
+}
+```
 
 **Example: Todo App**
 
 ```ts
-import { signal, html, css, mount, show, onMount, Toast } from '@bundled/yaar';
-
-css`
-  .todo-item { display: flex; align-items: center; justify-content: space-between; }
-  .done { text-decoration: line-through; opacity: 0.5; }
-`;
+import { createSignal, For } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
+import './styles.css';
 
 type Todo = { id: number; text: string; done: boolean };
-const todos = signal<Todo[]>([]);
+const [todos, setTodos] = createSignal<Todo[]>([]);
 let nextId = 1;
 
 function addTodo(text: string) {
-  todos([...todos(), { id: nextId++, text, done: false }]);
-  Toast.show('Added!', 'success');
+  setTodos(prev => [...prev, { id: nextId++, text, done: false }]);
 }
 
 function toggle(id: number) {
-  todos(todos().map(t => t.id === id ? { ...t, done: !t.done } : t));
+  setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
 }
 
 const handleKey = (e: KeyboardEvent) => {
@@ -162,45 +139,24 @@ const handleKey = (e: KeyboardEvent) => {
   }
 };
 
-mount(html`
+render(() => html`
   <div class="y-app y-p-3 y-gap-3">
     <h2 class="y-text-lg">Todos</h2>
     <input class="y-input" placeholder="What needs doing?" onKeydown=${handleKey} />
-    ${() => todos().map(todo => html`
+    <${For} each=${todos}>${(todo: Todo) => html`
       <div class="y-card todo-item">
         <span class=${() => todo.done ? 'done' : ''}>${todo.text}</span>
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => toggle(todo.id)}>
           ${todo.done ? '↩' : '✓'}
         </button>
       </div>
-    `)}
+    `}</${For}>
     <div class="y-text-sm y-text-muted">${() => {
       const done = todos().filter(t => t.done).length;
       return `${done}/${todos().length} completed`;
     }}</div>
   </div>
-`);
-```
-
-**Example: Async Data**
-
-```ts
-import { html, css, mount, show, createResource } from '@bundled/yaar';
-
-const posts = createResource(() =>
-  fetch('https://jsonplaceholder.typicode.com/posts?_limit=10').then(r => r.json())
-);
-
-mount(html`
-  <div class="y-app y-p-3">
-    <h2 class="y-text-lg">Posts</h2>
-    ${show(() => posts.loading(), () => html`<div class="y-spinner"></div>`)}
-    ${show(() => !!posts.error(), () => html`<div class="y-text-error">${() => posts.error()?.message}</div>`)}
-    ${() => posts()?.map((p: any) => html`
-      <div class="y-card"><strong>${p.title}</strong></div>
-    `)}
-  </div>
-`);
+`, document.getElementById('app')!);
 ```
 
 ## Storage API

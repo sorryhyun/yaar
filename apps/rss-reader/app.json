@@ -1,7 +1,7 @@
 {
   "icon": "📰",
   "name": "RSS Reader",
-  "description": "RSS feed reader with reactive UI",
+  "description": "Multi-feed RSS reader with resizable panels, article view, and unread tracking",
   "run": "static/index.html",
   "appProtocol": true,
   "capture": "dom",

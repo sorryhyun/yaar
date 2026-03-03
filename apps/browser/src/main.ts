@@ -3,7 +3,9 @@
  * Subscribes to SSE (/api/browser/{sessionId}/events) for real-time updates.
  * App Protocol is registered in ./protocol.ts.
  */
-import { signal, html, mount, show, onMount, onCleanup } from '@bundled/yaar';
+import { createSignal, onMount, onCleanup } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import { registerBrowserProtocol } from './protocol';
 import './styles.css';
 
@@ -30,11 +32,11 @@ if (rawInitialUrl) {
 
 // ── Reactive State ────────────────────────────────────────────────────
 
-const currentUrl = signal(parsedInitialUrl);
-const pageTitle = signal('');
-const loading = signal(false);
-const showScreenshot = signal(false);
-const placeholderText = signal(
+const [currentUrl, setCurrentUrl] = createSignal(parsedInitialUrl);
+const [pageTitle, setPageTitle] = createSignal('');
+const [loading, setLoading] = createSignal(false);
+const [showScreenshot, setShowScreenshot] = createSignal(false);
+const [placeholderText, setPlaceholderText] = createSignal(
   sessionId ? 'Waiting for navigation...' : 'No active browser session.'
 );
 
@@ -71,28 +73,28 @@ let screenshotEl!: HTMLImageElement;
 function refreshScreenshot(fresh = false) {
   const ts = Date.now();
   const src = `/api/browser/${sessionId}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`;
-  loading(true);
+  setLoading(true);
 
   screenshotEl.onload = () => {
-    showScreenshot(true);
-    loading(false);
+    setShowScreenshot(true);
+    setLoading(false);
   };
   screenshotEl.onerror = () => {
-    loading(false);
+    setLoading(false);
   };
   screenshotEl.src = src;
 }
 
 function updateUrlBar(url: string, title?: string) {
-  currentUrl(url);
-  if (title !== undefined) pageTitle(title);
+  setCurrentUrl(url);
+  if (title !== undefined) setPageTitle(title);
 }
 
 function clearDisplay() {
-  showScreenshot(false);
+  setShowScreenshot(false);
   updateUrlBar('about:blank');
-  pageTitle('');
-  placeholderText('Browser closed.');
+  setPageTitle('');
+  setPlaceholderText('Browser closed.');
 }
 
 // ── Event handlers ────────────────────────────────────────────────────
@@ -141,7 +143,7 @@ onMount(() => {
 
   evtSource.onmessage = (e) => {
     if (sseErrorCount > 0) {
-      placeholderText(sessionId ? 'Waiting for navigation...' : 'No active browser session.');
+      setPlaceholderText(sessionId ? 'Waiting for navigation...' : 'No active browser session.');
     }
     sseErrorCount = 0;
     try {
@@ -159,13 +161,13 @@ onMount(() => {
   evtSource.onerror = () => {
     sseErrorCount++;
     if (sseErrorCount === 1) {
-      placeholderText('Reconnecting...');
-      showScreenshot(false);
+      setPlaceholderText('Reconnecting...');
+      setShowScreenshot(false);
     }
     if (sseErrorCount >= MAX_SSE_ERRORS) {
       evtSource.close();
-      placeholderText('Connection lost. Session may have ended.');
-      showScreenshot(false);
+      setPlaceholderText('Connection lost. Session may have ended.');
+      setShowScreenshot(false);
     }
   };
 
@@ -174,7 +176,7 @@ onMount(() => {
 
 // ── Render ────────────────────────────────────────────────────────────
 
-mount(html`
+render(() => html`
   <div class="browser-chrome y-app">
     <div class="url-bar y-flex y-gap-2 y-px-2 y-surface y-border-b">
       <button class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back"
@@ -193,16 +195,16 @@ mount(html`
     </div>
     <div class="screenshot-area">
       <div class=${() => loading() ? 'loading-bar active' : 'loading-bar'}></div>
-      ${show(() => !showScreenshot(), () => html`
+      ${() => !showScreenshot() ? html`
         <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div>
-      `)}
+      ` : null}
       <img
         ref=${(el: HTMLImageElement) => { screenshotEl = el; }}
         style=${() => showScreenshot() ? '' : 'display:none'}
         alt="Browser screenshot" />
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ── App Protocol ──────────────────────────────────────────────────────
 

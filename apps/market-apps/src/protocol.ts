@@ -6,8 +6,11 @@
 
 import {
   marketApps,
+  setMarketApps,
   installedApps,
+  setInstalledApps,
   statusText,
+  setStatusText,
   lastUpdated,
   loading,
   apiBase,
@@ -86,9 +89,9 @@ if (appApi) {
           },
         },
         handler: (p: { marketApps?: ListedApp[]; installedApps?: InstalledApp[]; status?: string }) => {
-          if (p.marketApps) marketApps(p.marketApps);
-          if (p.installedApps) installedApps(p.installedApps);
-          if (p.status) statusText(p.status);
+          if (p.marketApps) setMarketApps(p.marketApps);
+          if (p.installedApps) setInstalledApps(p.installedApps);
+          if (p.status) setStatusText(p.status);
           touch();
           return { ok: true, marketCount: marketApps().length, installedCount: installedApps().length };
         },
@@ -109,8 +112,8 @@ if (appApi) {
         description: 'Clear all app data',
         params: { type: 'object', properties: {} },
         handler: () => {
-          marketApps([]);
-          installedApps([]);
+          setMarketApps([]);
+          setInstalledApps([]);
           setStatus('Cleared');
           return { ok: true };
         },

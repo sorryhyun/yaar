@@ -1,5 +1,7 @@
 export {};
-import { signal, html, mount, show } from '@bundled/yaar';
+import { createSignal, For } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import type { DailyPaperItem, Recommendation } from './types';
 import {
   getComments, getPublishedAt, getPublishedMs, getSource, getUpvotes,
@@ -10,16 +12,16 @@ import { registerProtocol } from './protocol';
 import './styles.css';
 
 // ── Signals ──────────────────────────────────────────────────────────────────
-const sourcePapers = signal<DailyPaperItem[]>([]);
-const papers = signal<DailyPaperItem[]>([]);
-const recommendations = signal<Recommendation[]>([]);
-const loading = signal(false);
-const errorMsg = signal('');
-const sourceMode = signal<'huggingface' | 'arxiv' | 'both'>('huggingface');
-const limitVal = signal(20);
-const dayRange = signal('all');
-const sortBy = signal('newest');
-const arxivQuery = signal('cat:cs.AI OR cat:cs.LG');
+const [sourcePapers, setSourcePapers] = createSignal<DailyPaperItem[]>([]);
+const [papers, setPapers] = createSignal<DailyPaperItem[]>([]);
+const [recommendations, setRecommendations] = createSignal<Recommendation[]>([]);
+const [loading, setLoading] = createSignal(false);
+const [errorMsg, setErrorMsg] = createSignal('');
+const [sourceMode, setSourceMode] = createSignal<'huggingface' | 'arxiv' | 'both'>('huggingface');
+const [limitVal, setLimitVal] = createSignal(20);
+const [dayRange, setDayRange] = createSignal('all');
+const [sortBy, setSortBy] = createSignal('newest');
+const [arxivQuery, setArxivQuery] = createSignal('cat:cs.AI OR cat:cs.LG');
 const paperDetailsCache: Record<string, import('./types').PaperDetails> = {};
 
 // ── Logic ────────────────────────────────────────────────────────────────────
@@ -48,13 +50,13 @@ function applyFiltersAndSort() {
   else if (sb === 'comments') result.sort((a, b) => getComments(b) - getComments(a));
   else if (sb === 'title') result.sort((a, b) => paperTitle(a).localeCompare(paperTitle(b)));
 
-  papers(result);
+  setPapers(result);
 }
 
 async function loadPapers() {
   if (loading()) return;
-  loading(true);
-  errorMsg('');
+  setLoading(true);
+  setErrorMsg('');
   try {
     const lim = limitVal();
     const mode = sourceMode();
@@ -70,14 +72,14 @@ async function loadPapers() {
       arxivItems = await fetchArxivPapers(axLimit, arxivQuery(), sortBy());
     }
 
-    sourcePapers([...hfItems, ...arxivItems]);
+    setSourcePapers([...hfItems, ...arxivItems]);
     applyFiltersAndSort();
   } catch (err: any) {
-    sourcePapers([]);
-    papers([]);
-    errorMsg(err?.message || String(err));
+    setSourcePapers([]);
+    setPapers([]);
+    setErrorMsg(err?.message || String(err));
   } finally {
-    loading(false);
+    setLoading(false);
   }
 }
 
@@ -118,7 +120,8 @@ function requestRecommendationsFromAgent(source: 'button' | 'app-command') {
 }
 
 // ── Components ────────────────────────────────────────────────────────────────
-function PaperCard(item: DailyPaperItem) {
+function PaperCard(props: { item: DailyPaperItem }) {
+  const item = props.item;
   const source = getSource(item);
   const id = paperId(item);
   const title = paperTitle(item);
@@ -157,20 +160,20 @@ function PaperCard(item: DailyPaperItem) {
   `;
 }
 
-function Section(title: string, items: DailyPaperItem[]) {
+function Section(props: { title: string; items: DailyPaperItem[] }) {
   return html`
     <section style="margin-top: 12px;">
-      <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${title} (${items.length})</h3>
-      ${items.length === 0
+      <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${props.title} (${props.items.length})</h3>
+      ${props.items.length === 0
         ? html`<div class="empty">No papers available for this source.</div>`
-        : html`<div class="grid">${items.map((item) => PaperCard(item))}</div>`
+        : html`<div class="grid"><${For} each=${props.items}>${(item: DailyPaperItem) => html`<${PaperCard} item=${item} />`}</${For}></div>`
       }
     </section>
   `;
 }
 
 // ── Mount ────────────────────────────────────────────────────────────────────
-mount(html`
+render(() => html`
   <div class="wrap y-app">
     <div class="top">
       <h1>📚 Recent Papers</h1>
@@ -178,21 +181,21 @@ mount(html`
       <div class="spacer"></div>
 
       <label class="muted">Source</label>
-      <select onChange=${(e: Event) => { sourceMode((e.target as HTMLSelectElement).value as any); loadPapers(); }}>
+      <select onChange=${(e: Event) => { setSourceMode((e.target as HTMLSelectElement).value as any); loadPapers(); }}>
         <option value="huggingface" selected>Hugging Face</option>
         <option value="arxiv">arXiv</option>
         <option value="both">Both</option>
       </select>
 
       <label class="muted">Limit</label>
-      <select onChange=${(e: Event) => { limitVal(Number((e.target as HTMLSelectElement).value)); loadPapers(); }}>
+      <select onChange=${(e: Event) => { setLimitVal(Number((e.target as HTMLSelectElement).value)); loadPapers(); }}>
         <option value="10">10</option>
         <option value="20" selected>20</option>
         <option value="40">40</option>
       </select>
 
       <label class="muted">Days</label>
-      <select onChange=${(e: Event) => { dayRange((e.target as HTMLSelectElement).value); applyFiltersAndSort(); }}>
+      <select onChange=${(e: Event) => { setDayRange((e.target as HTMLSelectElement).value); applyFiltersAndSort(); }}>
         <option value="all" selected>All</option>
         <option value="1">1 day</option>
         <option value="3">3 days</option>
@@ -202,7 +205,7 @@ mount(html`
       </select>
 
       <label class="muted">Sort</label>
-      <select onChange=${(e: Event) => { sortBy((e.target as HTMLSelectElement).value); loadPapers(); }}>
+      <select onChange=${(e: Event) => { setSortBy((e.target as HTMLSelectElement).value); loadPapers(); }}>
         <option value="newest" selected>Newest</option>
         <option value="oldest">Oldest</option>
         <option value="vote">Most votes</option>
@@ -212,8 +215,8 @@ mount(html`
 
       <input
         placeholder="arXiv query (e.g. all:transformer OR cat:cs.AI)"
-        ref=${(el: HTMLInputElement) => { el.value = arxivQuery(); }}
-        onInput=${(e: Event) => arxivQuery((e.target as HTMLInputElement).value)}
+        value=${arxivQuery()}
+        onInput=${(e: Event) => setArxivQuery((e.target as HTMLInputElement).value)}
         onKeyDown=${(e: KeyboardEvent) => { if (e.key === 'Enter') loadPapers(); }}
       />
 
@@ -230,21 +233,18 @@ mount(html`
       return `Showing ${p.length} of ${sp.length} papers (HF ${hfCount} • arXiv ${arxivCount}) • Last updated ${new Date().toLocaleTimeString()}`;
     }}</div>
 
-    ${show(
-      () => recommendations().length > 0,
-      () => html`
-        <div class="recommend-box">
-          <h3 class="recommend-title">🤖 Today's 2 recommended papers</h3>
-          ${() => recommendations().map((r, i) => html`
-            <p class="recommend-item">
-              <strong>${i + 1}.</strong>
-              <a href="${r.url || `https://arxiv.org/abs/${r.id}`}" target="_blank" rel="noreferrer">${r.title}</a>
-              — ${r.reason} (👍 ${r.upvotes}, 💬 ${r.comments})
-            </p>
-          `)}
-        </div>
-      `
-    )}
+    ${() => recommendations().length > 0 ? html`
+      <div class="recommend-box">
+        <h3 class="recommend-title">🤖 Today's 2 recommended papers</h3>
+        ${() => recommendations().map((r, i) => html`
+          <p class="recommend-item">
+            <strong>${i + 1}.</strong>
+            <a href="${r.url || `https://arxiv.org/abs/${r.id}`}" target="_blank" rel="noreferrer">${r.title}</a>
+            — ${r.reason} (👍 ${r.upvotes}, 💬 ${r.comments})
+          </p>
+        `)}
+      </div>
+    ` : ''}
 
     <div style="margin-top: 10px;">
       ${() => {
@@ -255,20 +255,23 @@ mount(html`
         if (mode === 'both') {
           const hf = p.filter((x) => getSource(x) === 'huggingface');
           const arxiv = p.filter((x) => getSource(x) === 'arxiv');
-          return html`${Section('Hugging Face Papers', hf)}${Section('arXiv Papers', arxiv)}`;
+          return html`
+            <${Section} title="Hugging Face Papers" items=${hf} />
+            <${Section} title="arXiv Papers" items=${arxiv} />
+          `;
         }
-        return html`<div class="grid">${p.map((item) => PaperCard(item))}</div>`;
+        return html`<div class="grid"><${For} each=${p}>${(item: DailyPaperItem) => html`<${PaperCard} item=${item} />`}</${For}></div>`;
       }}
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ── App Protocol ──────────────────────────────────────────────────────────────
 registerProtocol({
   getPapers: () => papers(),
   getSourcePapers: () => sourcePapers(),
   getRecommendations: () => recommendations(),
-  setRecommendations: (recs) => recommendations(recs),
+  setRecommendations: (recs) => setRecommendations(recs),
   loadPapers,
   requestRecommendationsFromAgent,
   paperDetailsCache,

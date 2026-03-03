@@ -70,3 +70,7 @@ export function buildDragMetadata(entry: StorageEntry) {
     storageUri: toStorageUri(entry.path),
   };
 }
+
+export function isMarkdown(name: string): boolean {
+  return ['md', 'mdx', 'markdown'].includes(name.split('.').pop()?.toLowerCase() || '');
+}

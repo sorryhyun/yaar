@@ -1,6 +1,6 @@
 export {};
 import type { StorageEntry } from './types';
-import { appApi, statusText } from './state';
+import { appApi, setStatusText } from './state';
 import { basename, getExtension, buildDragMetadata } from './helpers';
 
 export function safeSetDragData(dt: DataTransfer, type: string, value: string) {
@@ -19,7 +19,7 @@ export function requestOpenByAgent(entry: StorageEntry) {
     extension,
     isDirectory: entry.isDirectory,
   });
-  statusText(`Requested agent open: ${name}`);
+  setStatusText(`Requested agent open: ${name}`);
 }
 
 export function handleDragStart(e: DragEvent, entry: StorageEntry) {

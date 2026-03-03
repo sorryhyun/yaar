@@ -1,4 +1,6 @@
-import { signal, html, mount, onMount } from '@bundled/yaar';
+import { createSignal, onMount } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import './protocol.js';
 
@@ -33,13 +35,13 @@ const DEFAULT_MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
 
 // ── Signals (reactive state) ─────────────────────────────────────────────────
 
-export const activeTab = signal<'market' | 'installed'>('market');
-export const marketApps = signal<ListedApp[]>([]);
-export const installedApps = signal<InstalledApp[]>([]);
-export const statusText = signal('Waiting for data…');
-export const lastUpdated = signal('');
-export const loading = signal(false);
-export const apiBase = signal('');
+export const [activeTab, setActiveTab] = createSignal<'market' | 'installed'>('market');
+export const [marketApps, setMarketApps] = createSignal<ListedApp[]>([]);
+export const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
+export const [statusText, setStatusText] = createSignal('Waiting for data…');
+export const [lastUpdated, setLastUpdated] = createSignal('');
+export const [loading, setLoading] = createSignal(false);
+export const [apiBase, setApiBase] = createSignal('');
 
 // ── Pure helper functions ────────────────────────────────────────────────────
 
@@ -151,11 +153,11 @@ function timeNow() {
 }
 
 export function touch() {
-  lastUpdated(timeNow());
+  setLastUpdated(timeNow());
 }
 
 export function setStatus(next: string, stamp = true) {
-  statusText(next);
+  setStatusText(next);
   if (stamp) touch();
 }
 
@@ -167,17 +169,17 @@ function hasInstalled(appId: string) {
 function markInstalledSignal(app: { id: string; name: string }, installed: boolean) {
   if (installed) {
     if (!installedApps().some((a) => sameAppId(a.id, app.id))) {
-      installedApps([...installedApps(), { id: app.id, name: app.name }]);
+      setInstalledApps([...installedApps(), { id: app.id, name: app.name }]);
     }
   } else {
-    installedApps(installedApps().filter((a) => !sameAppId(a.id, app.id)));
+    setInstalledApps(installedApps().filter((a) => !sameAppId(a.id, app.id)));
   }
-  marketApps(marketApps().map((m) => (sameAppId(m.id, app.id) ? { ...m, installed } : m)));
+  setMarketApps(marketApps().map((m) => (sameAppId(m.id, app.id) ? { ...m, installed } : m)));
 }
 
 export function setDomain(nextDomain: string) {
   const d = normalizeDomain(nextDomain);
-  apiBase(d);
+  setApiBase(d);
   const storage = (window as any).yaar?.storage;
   if (storage) {
     if (d) void storage.save(STORAGE_DOMAIN_KEY, d);
@@ -274,7 +276,7 @@ export async function refreshData() {
     return;
   }
 
-  loading(true);
+  setLoading(true);
   setStatus('Refreshing…', false);
 
   try {
@@ -285,64 +287,64 @@ export async function refreshData() {
     if (typeof yaarAny?.os?.action === 'function') {
       try {
         const localInstalled = await yaarAny.os.action('apps:list', {});
-        installedApps(parseInstalledAny(localInstalled));
+        setInstalledApps(parseInstalledAny(localInstalled));
         setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps (apps:list)`);
       } catch {
-        installedApps([]);
+        setInstalledApps([]);
         setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
       }
     } else {
       const localApiInstalled = await getInstalledFromLocalApi();
-      installedApps(localApiInstalled);
+      setInstalledApps(localApiInstalled);
       setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
     }
 
-    marketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
+    setMarketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
   } catch (err: any) {
     setStatus(`Refresh failed: ${err?.message || String(err)}`);
   } finally {
-    loading(false);
+    setLoading(false);
   }
 }
 
 async function installApp(app: ListedApp) {
   try {
-    loading(true);
+    setLoading(true);
     setStatus(`Installing ${app.name}…`, false);
 
     const hostMode = await hostAction('install', app);
     if (hostMode === 'os-action') {
       markInstalledSignal(app, true);
       setStatus(`Installed ${app.name} via apps:market_get`);
-      loading(false);
+      setLoading(false);
       return;
     }
 
     setStatus(`Install request sent for ${app.name} (waiting for agent)`);
-    loading(false);
+    setLoading(false);
   } catch (err: any) {
-    loading(false);
+    setLoading(false);
     setStatus(`Install failed: ${err?.message || String(err)}`);
   }
 }
 
 async function uninstallApp(app: InstalledApp) {
   try {
-    loading(true);
+    setLoading(true);
     setStatus(`Uninstalling ${app.name}…`, false);
 
     const hostMode = await hostAction('uninstall', app);
     if (hostMode === 'os-action') {
       markInstalledSignal(app, false);
       setStatus(`Uninstalled ${app.name} via apps:market_delete`);
-      loading(false);
+      setLoading(false);
       return;
     }
 
     setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
-    loading(false);
+    setLoading(false);
   } catch (err: any) {
-    loading(false);
+    setLoading(false);
     setStatus(`Uninstall failed: ${err?.message || String(err)}`);
   }
 }
@@ -367,7 +369,7 @@ function card(title: string, subtitle: string, buttonLabel: string, onClick: () 
 
 // ── Mount reactive UI ────────────────────────────────────────────────────────
 
-mount(html`
+render(() => html`
   <div class="y-app">
     <!-- Header -->
     <div class="y-flex-between y-gap-2 y-border-b y-surface" style="padding:14px 16px">
@@ -391,11 +393,11 @@ mount(html`
     <div class="y-flex y-gap-2 y-border-b y-surface" style="padding:10px 16px">
       <button
         class=${() => activeTab() === 'market' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm'}
-        onClick=${() => activeTab('market')}
+        onClick=${() => setActiveTab('market')}
       >${() => `Marketplace (${marketApps().length})`}</button>
       <button
         class=${() => activeTab() === 'installed' ? 'y-btn y-btn-sm y-btn-primary' : 'y-btn y-btn-sm'}
-        onClick=${() => activeTab('installed')}
+        onClick=${() => setActiveTab('installed')}
       >${() => `Installed (${installedApps().length})`}</button>
     </div>
 
@@ -428,7 +430,7 @@ mount(html`
       }}
     </div>
   </div>
-`);
+`, document.getElementById('app')!);
 
 // ── Async initialization ─────────────────────────────────────────────────────
 
@@ -450,7 +452,7 @@ onMount(async () => {
   }
 
   if (!domain) domain = DEFAULT_MARKET_DOMAIN;
-  apiBase(domain);
+  setApiBase(domain);
 
   if (domain) {
     void refreshData();

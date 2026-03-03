@@ -1,5 +1,5 @@
 export {};
-import { signal } from '@bundled/yaar';
+import { createSignal } from '@bundled/solid-js';
 import type { StorageEntry, StorageSDK, AppSDK } from './types';
 
 // ── Runtime SDK references ─────────────────────────────────────────────
@@ -8,16 +8,16 @@ export const storage = yaar?.storage!;
 export const appApi = yaar?.app;
 
 // ── Signals ───────────────────────────────────────────────────────────
-export const currentPath = signal('');
-export const entries = signal<StorageEntry[]>([]);
-export const mountAliases = signal<string[]>([]);
-export const selectedFile = signal<string | null>(null);
-export const previewContent = signal<string | null>(null);
-export const showPreview = signal(false);
-export const showModal = signal(false);
-export const statusText = signal('Ready');
-export const previewTitleText = signal('Preview');
-export const previewMetaText = signal('');
+export const [currentPath, setCurrentPath] = createSignal('');
+export const [entries, setEntries] = createSignal<StorageEntry[]>([]);
+export const [mountAliases, setMountAliases] = createSignal<string[]>([]);
+export const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
+export const [previewContent, setPreviewContent] = createSignal<string | null>(null);
+export const [showPreview, setShowPreview] = createSignal(false);
+export const [showModal, setShowModal] = createSignal(false);
+export const [statusText, setStatusText] = createSignal('Ready');
+export const [previewTitleText, setPreviewTitleText] = createSignal('Preview');
+export const [previewMetaText, setPreviewMetaText] = createSignal('');
 
 // ── DOM refs ──────────────────────────────────────────────────────────
 export let elMountAlias!: HTMLInputElement;

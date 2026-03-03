@@ -2,7 +2,7 @@
   "id": "image-viewer",
   "name": "Image Viewer",
   "icon": "🖼️",
-  "description": "View and manage images. Supports grid/single layout, storage loading, and App Protocol commands.",
+  "description": "View and manage images with grid and single-image layout modes",
   "version": "1.0.1",
   "author": "YAAR"
 }

@@ -1,15 +1,17 @@
 export {};
-import { signal, html, mount, onMount, onCleanup } from '@bundled/yaar';
+import { createSignal, onMount, onCleanup } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import './styles.css';
 
 // ─── Signals ─────────────────────────────────────────────────────────────────
-const isYouTubeMode = signal(false);
-const statusText = signal('No source loaded.');
-const statusKind = signal<'ok' | 'err' | 'info'>('info');
-const timeMeta = signal('00:00 / 00:00');
-const isPlaying = signal(false);
-const isMuted = signal(false);
-const controlsDisabled = signal(true);
+const [isYouTubeMode, setIsYouTubeMode] = createSignal(false);
+const [statusText, setStatusText] = createSignal('No source loaded.');
+const [statusKind, setStatusKind] = createSignal<'ok' | 'err' | 'info'>('info');
+const [timeMeta, setTimeMeta] = createSignal('00:00 / 00:00');
+const [isPlaying, setIsPlaying] = createSignal(false);
+const [isMuted, setIsMuted] = createSignal(false);
+const [controlsDisabled, setControlsDisabled] = createSignal(true);
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 let playerEl!: HTMLVideoElement;
@@ -36,18 +38,18 @@ const formatTime = (value: number): string => {
 };
 
 const setStatus = (text: string, kind: 'ok' | 'err' | 'info' = 'info'): void => {
-  statusText(text);
-  statusKind(kind);
+  setStatusText(text);
+  setStatusKind(kind);
 };
 
 const updateTimeMeta = (): void => {
   if (isYouTubeMode()) {
-    timeMeta('YouTube embed');
+    setTimeMeta('YouTube embed');
     return;
   }
   const current = formatTime(playerEl.currentTime || 0);
   const duration = formatTime(playerEl.duration || 0);
-  timeMeta(`${current} / ${duration}`);
+  setTimeMeta(`${current} / ${duration}`);
 };
 
 const cleanupObjectUrl = (): void => {
@@ -59,9 +61,9 @@ const cleanupObjectUrl = (): void => {
 
 // ─── Source loading ────────────────────────────────────────────────────────────
 const loadVideoSource = (src: string, label: string): void => {
-  isYouTubeMode(false);
+  setIsYouTubeMode(false);
   ytPlayerEl.src = '';
-  controlsDisabled(false);
+  setControlsDisabled(false);
   playerEl.src = src;
   sourceLabel = label;
   playerEl.load();
@@ -70,15 +72,15 @@ const loadVideoSource = (src: string, label: string): void => {
 };
 
 const loadYouTubeSource = (embedUrl: string, label: string): void => {
-  isYouTubeMode(true);
+  setIsYouTubeMode(true);
   playerEl.pause();
   playerEl.removeAttribute('src');
   playerEl.load();
   ytPlayerEl.src = embedUrl;
   sourceLabel = label;
-  controlsDisabled(true);
-  isPlaying(false);
-  isMuted(false);
+  setControlsDisabled(true);
+  setIsPlaying(false);
+  setIsMuted(false);
   updateTimeMeta();
   setStatus(`Loaded: ${label} (YouTube embed)`, 'ok');
 };
@@ -196,21 +198,21 @@ const handleSpeedChange = (): void => {
 const handleMute = (): void => {
   if (isYouTubeMode()) return;
   playerEl.muted = !playerEl.muted;
-  isMuted(playerEl.muted);
+  setIsMuted(playerEl.muted);
 };
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 onMount(() => {
   playerEl.addEventListener('loadedmetadata', () => {
     updateTimeMeta();
-    isPlaying(!playerEl.paused);
-    isMuted(playerEl.muted);
+    setIsPlaying(!playerEl.paused);
+    setIsMuted(playerEl.muted);
     setStatus(`Loaded: ${sourceLabel}`, 'ok');
   });
   playerEl.addEventListener('timeupdate', updateTimeMeta);
-  playerEl.addEventListener('play', () => { isPlaying(true); });
-  playerEl.addEventListener('pause', () => { isPlaying(false); });
-  playerEl.addEventListener('volumechange', () => { isMuted(playerEl.muted); });
+  playerEl.addEventListener('play', () => { setIsPlaying(true); });
+  playerEl.addEventListener('pause', () => { setIsPlaying(false); });
+  playerEl.addEventListener('volumechange', () => { setIsMuted(playerEl.muted); });
   playerEl.addEventListener('error', () => {
     setStatus('Could not load this video source. Check URL, CORS, or file format.', 'err');
   });
@@ -221,7 +223,7 @@ onMount(() => {
 });
 
 // ─── Template ─────────────────────────────────────────────────────────────────
-mount(html`
+render(() => html`
   <div class="app">
     <section class="shell">
       <div class="title">
@@ -302,4 +304,4 @@ mount(html`
       </div>
     </section>
   </div>
-`);
+`, document.getElementById('app')!);

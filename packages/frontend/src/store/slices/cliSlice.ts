@@ -13,6 +13,10 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
   toggleCliMode: () =>
     set((state) => {
       state.cliMode = !state.cliMode;
+      // Auto-open agent panel when entering CLI mode
+      if (state.cliMode) {
+        state.agentPanelOpen = true;
+      }
     }),
 
   addCliEntry: (entry) =>

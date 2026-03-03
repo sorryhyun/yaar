@@ -11,7 +11,8 @@ export interface ProtocolActions {
 }
 
 function getTotalUnread(): number {
-  return Object.values(unreadCounts()).reduce((a, b) => a + b, 0);
+  const vals = Object.values(unreadCounts()) as number[];
+  return vals.reduce((a, b) => a + b, 0);
 }
 
 function getCurrentArticles(): Article[] {

@@ -1,14 +1,28 @@
 export {};
-import { storage, currentPath, entries, selectedFile, previewContent, showPreview, statusText, previewTitleText, previewMetaText, elPreviewBody } from './state';
-import { basename, formatSize, isImage, isPreviewable, getFileIcon } from './helpers';
+import { marked } from '@bundled/marked';
+import Prism from '@bundled/prismjs';
+import { storage, currentPath, setCurrentPath, entries, setEntries, selectedFile, setSelectedFile, setPreviewContent, setShowPreview, setStatusText, setPreviewTitleText, setPreviewMetaText, elPreviewBody } from './state';
+import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
 
+const EXT_LANG: Record<string, string> = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
+  py: 'python', css: 'css', scss: 'scss',
+  html: 'html', xml: 'xml', svg: 'xml',
+  json: 'json', yaml: 'yaml', yml: 'yaml',
+  sh: 'bash', bash: 'bash', zsh: 'bash',
+  sql: 'sql', toml: 'toml', rs: 'rust',
+  go: 'go', java: 'java', c: 'c', cpp: 'cpp',
+  cs: 'csharp', rb: 'ruby', php: 'php',
+};
+
 export async function navigate(path: string) {
-  currentPath(path);
-  selectedFile(null);
-  previewContent(null);
-  showPreview(false);
-  statusText('Loading...');
+  setCurrentPath(path);
+  setSelectedFile(null);
+  setPreviewContent(null);
+  setShowPreview(false);
+  setStatusText('Loading...');
   try {
     await refreshMountAliases();
     const fetched = await storage.list(path);
@@ -16,40 +30,64 @@ export async function navigate(path: string) {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return basename(a.path).localeCompare(basename(b.path));
     });
-    entries(fetched);
+    setEntries(() => fetched);
     const dirs = fetched.filter((e) => e.isDirectory).length;
     const files = fetched.length - dirs;
-    statusText(`${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`);
+    setStatusText(`${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`);
   } catch {
-    entries([]);
-    statusText('Error loading directory');
+    setEntries(() => []);
+    setStatusText('Error loading directory');
   }
 }
 
 export async function selectFile(entry: import('./types').StorageEntry) {
   const name = basename(entry.path);
-  selectedFile(entry.path);
-  previewContent(null);
-  previewTitleText(name);
-  previewMetaText(formatSize(entry.size));
-  showPreview(true);
+  setSelectedFile(entry.path);
+  setPreviewContent(null);
+  setPreviewTitleText(name);
+  setPreviewMetaText(formatSize(entry.size));
+  setShowPreview(true);
 
-  elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Loading...</span>';
+  elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Loading…</span>';
 
   if (isImage(name)) {
-    elPreviewBody.innerHTML = `<img src="${storage.url(entry.path)}" alt="${name}" />`;
+    elPreviewBody.innerHTML = `<img src="${storage.url(entry.path)}" alt="${name}" style="max-width:100%;border-radius:var(--yaar-radius)" />`;
+    return;
+  }
+
+  const ext = getExtension(name);
+
+  if (isMarkdown(name)) {
+    try {
+      const content = await storage.read(entry.path, { as: 'text' });
+      setPreviewContent(content);
+      const htmlContent = marked.parse(content) as string;
+      elPreviewBody.innerHTML = `<div class="md-preview">${htmlContent}</div>`;
+    } catch {
+      elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
+    }
     return;
   }
 
   if (isPreviewable(name)) {
     try {
       const content = await storage.read(entry.path, { as: 'text' });
-      previewContent(content);
-      const escaped = content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      elPreviewBody.innerHTML = `<pre>${escaped}</pre>`;
+      setPreviewContent(content);
+
+      const lang = EXT_LANG[ext] || 'clike';
+      const grammar = (Prism.languages as any)[lang] || Prism.languages.clike;
+
+      let highlighted: string;
+      if (grammar) {
+        highlighted = Prism.highlight(content, grammar, lang);
+      } else {
+        highlighted = content
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+      }
+
+      elPreviewBody.innerHTML = `<pre class="code-preview language-${lang}"><code class="language-${lang}">${highlighted}</code></pre>`;
     } catch {
       elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
     }
@@ -57,10 +95,10 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   }
 
   elPreviewBody.innerHTML = `
-    <div style="text-align:center;padding:20px">
-      <div style="font-size:32px;margin-bottom:8px">${getFileIcon(name, false)}</div>
-      <div style="color:var(--yaar-text-muted);margin-bottom:12px">No preview available</div>
-      <button class="toolbar-btn" id="open-external">Open in browser</button>
+    <div style="text-align:center;padding:24px 20px">
+      <div style="font-size:36px;margin-bottom:10px">${getFileIcon(name, false)}</div>
+      <div style="color:var(--yaar-text-muted);margin-bottom:14px;font-size:12px">No preview available</div>
+      <button class="toolbar-btn" id="open-external" style="font-size:12px">Open in browser tab ↗</button>
     </div>
   `;
   document.getElementById('open-external')?.addEventListener('click', () => {
@@ -69,7 +107,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 }
 
 export function closePreview() {
-  selectedFile(null);
-  previewContent(null);
-  showPreview(false);
+  setSelectedFile(null);
+  setPreviewContent(null);
+  setShowPreview(false);
 }

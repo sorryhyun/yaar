@@ -1,4 +1,6 @@
-import { signal, html, mount, show, onMount, onCleanup } from '@bundled/yaar';
+import { createSignal, onMount, onCleanup, Show } from '@bundled/solid-js';
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
 import { registerDockProtocol } from './protocol';
 import './styles.css';
 
@@ -20,21 +22,21 @@ function wmoEmoji(code: number): string {
 }
 
 // ── Signals ─────────────────────────────────────────────────────
-const timeStr = signal('');
-const dateStr = signal('');
-const nowIso = signal('');
+const [timeStr, setTimeStr] = createSignal('');
+const [dateStr, setDateStr] = createSignal('');
+const [nowIso, setNowIso] = createSignal('');
 
-const weatherIcon = signal('🌡️');
-const weatherTemp = signal('--°');
-const weatherCity = signal('');
+const [weatherIcon, setWeatherIcon] = createSignal('🌡️');
+const [weatherTemp, setWeatherTemp] = createSignal('--°');
+const [weatherCity, setWeatherCity] = createSignal('');
 
-const notifCount = signal(0);
+const [notifCount, setNotifCount] = createSignal(0);
 
-const showPanel = signal(false);
-const panelOpacity = signal(0.45);
-const panelBlurPx = signal(10);
+const [showPanel, setShowPanel] = createSignal(false);
+const [panelOpacity, setPanelOpacity] = createSignal(0.45);
+const [panelBlurPx, setPanelBlurPx] = createSignal(10);
 
-// ── Panel style (reactive — no panelRef/applyAppearance needed) ──
+// ── Panel style (reactive) ───────────────────────────────────────
 function panelStyle(): string {
   if (!showPanel()) {
     return [
@@ -59,13 +61,13 @@ function panelStyle(): string {
 // ── Clock ────────────────────────────────────────────────────────
 function renderNow() {
   const now = new Date();
-  nowIso(now.toISOString());
-  timeStr(now.toLocaleTimeString([], {
+  setNowIso(now.toISOString());
+  setTimeStr(now.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   }));
-  dateStr(now.toLocaleDateString([], {
+  setDateStr(now.toLocaleDateString([], {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
@@ -88,9 +90,9 @@ async function fetchWeather(lat: number, lon: number, city: string) {
     const data = await res.json();
     const temp = Math.round(data.current.temperature_2m);
     const code = data.current.weather_code as number;
-    weatherIcon(wmoEmoji(code));
-    weatherTemp(`${temp}°C`);
-    weatherCity(city);
+    setWeatherIcon(wmoEmoji(code));
+    setWeatherTemp(`${temp}°C`);
+    setWeatherCity(city);
   } catch (_) {
     // silently keep previous state
   }
@@ -133,58 +135,62 @@ async function initWeather() {
   );
 }
 
-// ── Lifecycle (registered before mount per migration guide) ──────
-onMount(() => {
-  // Clock — tick every second
-  renderNow();
-  const clockTimer = setInterval(renderNow, 1000);
-  onCleanup(() => clearInterval(clockTimer));
+// ── App Component ────────────────────────────────────────────────
+function App() {
+  // Lifecycle
+  onMount(() => {
+    // Clock — tick every second
+    renderNow();
+    const clockTimer = setInterval(renderNow, 1000);
+    onCleanup(() => clearInterval(clockTimer));
 
-  // Weather — initial fetch + refresh every 15 min
-  initWeather();
-  const weatherTimer = setInterval(initWeather, 15 * 60 * 1000);
-  onCleanup(() => clearInterval(weatherTimer));
+    // Weather — initial fetch + refresh every 15 min
+    initWeather();
+    const weatherTimer = setInterval(initWeather, 15 * 60 * 1000);
+    onCleanup(() => clearInterval(weatherTimer));
 
-  // Notifications subscription
-  const notifApi = (window as any).yaar?.notifications;
-  if (notifApi) {
-    notifApi.onChange((items: unknown[]) => {
-      notifCount(items.length);
-    });
-  }
-});
+    // Notifications subscription
+    const notifApi = (window as any).yaar?.notifications;
+    if (notifApi) {
+      notifApi.onChange((items: unknown[]) => {
+        setNotifCount(items.length);
+      });
+    }
+  });
 
-// ── DOM ──────────────────────────────────────────────────────────
-mount(html`
-  <div class="panel" style=${() => panelStyle()}>
-    <div class="weather-section">
-      <span class="weather-icon">${() => weatherIcon()}</span>
-      <span class="weather-temp">${() => weatherTemp()}</span>
-      ${show(() => weatherCity() !== '', () => html`
-        <span class="weather-city">${() => weatherCity()}</span>
-      `)}
+  return html`
+    <div class="panel" style=${() => panelStyle()}>
+      <div class="weather-section">
+        <span class="weather-icon">${() => weatherIcon()}</span>
+        <span class="weather-temp">${() => weatherTemp()}</span>
+        <${Show} when=${() => weatherCity() !== ''}>
+          <span class="weather-city">${() => weatherCity()}</span>
+        </${Show}>
+      </div>
+
+      <span class="sep">|</span>
+
+      <div class="notif-section">
+        <span class=${() => 'notif-icon' + (notifCount() > 0 ? '' : ' notif-muted')}>🔔</span>
+        <${Show} when=${() => notifCount() > 0}>
+          <span class="notif-count">${() => String(notifCount())}</span>
+        </${Show}>
+      </div>
+
+      <span class="sep">|</span>
+
+      <div class="clock-section">
+        <div class="time">${() => timeStr()}</div>
+        <div class="date">${() => dateStr()}</div>
+      </div>
     </div>
+  `;
+}
 
-    <span class="sep">|</span>
-
-    <div class="notif-section">
-      <span class=${() => 'notif-icon' + (notifCount() > 0 ? '' : ' notif-muted')}>🔔</span>
-      ${show(() => notifCount() > 0, () => html`
-        <span class="notif-count">${() => String(notifCount())}</span>
-      `)}
-    </div>
-
-    <span class="sep">|</span>
-
-    <div class="clock-section">
-      <div class="time">${() => timeStr()}</div>
-      <div class="date">${() => dateStr()}</div>
-    </div>
-  </div>
-`);
+// ── Mount ────────────────────────────────────────────────────────
+render(() => html`<${App} />`, document.getElementById('app')!);
 
 // ── App Protocol ─────────────────────────────────────────────────
-
 registerDockProtocol({
   getNowIso:       () => nowIso(),
   getTimeStr:      () => timeStr(),
@@ -195,9 +201,9 @@ registerDockProtocol({
   getShowPanel:    () => showPanel(),
   getPanelOpacity: () => panelOpacity(),
   getPanelBlurPx:  () => panelBlurPx(),
-  setShowPanel:    (v) => showPanel(v),
-  setPanelOpacity: (v) => panelOpacity(v),
-  setPanelBlurPx:  (v) => panelBlurPx(v),
+  setShowPanel:    (v) => setShowPanel(v),
+  setPanelOpacity: (v) => setPanelOpacity(v),
+  setPanelBlurPx:  (v) => setPanelBlurPx(v),
   renderNow,
   initWeather,
 });

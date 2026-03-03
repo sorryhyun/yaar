@@ -19,6 +19,9 @@ const outDir = join(rootDir, 'dist', 'bundled-libs');
 // Same map as plugins.ts — import name → npm package (null = internal)
 const BUNDLED_LIBRARIES = {
   'yaar': null,
+  'solid-js': 'solid-js',
+  'solid-js/html': 'solid-js/html',
+  'solid-js/web': 'solid-js/web',
   'uuid': 'uuid',
   'lodash': 'lodash-es',
   'date-fns': 'date-fns',

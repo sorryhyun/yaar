@@ -2,7 +2,7 @@
   "id": "rss-reader",
   "name": "RSS Reader",
   "icon": "📰",
-  "description": "RSS feed reader with reactive UI",
+  "description": "Multi-feed RSS reader with resizable panels, article view, and unread tracking",
   "version": "1.0.0",
   "author": "YAAR"
 }

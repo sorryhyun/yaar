@@ -19,6 +19,9 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
  */
 export const BUNDLED_LIBRARIES: Record<string, string | null> = {
   yaar: null,
+  'solid-js': 'solid-js',
+  'solid-js/html': 'solid-js/html',
+  'solid-js/web': 'solid-js/web',
   uuid: 'uuid',
   lodash: 'lodash-es',
   'date-fns': 'date-fns',
@@ -142,5 +145,5 @@ export function cssFilePlugin(): { name: string; setup: (build: any) => void } {
  * Get the list of available bundled libraries.
  */
 export function getAvailableBundledLibraries(): string[] {
-  return Object.keys(BUNDLED_LIBRARIES);
+  return Object.keys(BUNDLED_LIBRARIES).filter((k) => !k.includes('/'));
 }

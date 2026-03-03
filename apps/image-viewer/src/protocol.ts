@@ -4,15 +4,17 @@ type AppApi = {
   register: (manifest: any) => void;
 };
 
-type ReadableSignal<T> = () => T;
-type WritableSignal<T> = ReadableSignal<T> & ((val: T) => void);
-
 type ProtocolDeps = {
-  images: WritableSignal<ImageItem[]>;
-  selectedIds: WritableSignal<Set<number>>;
-  mode: WritableSignal<LayoutMode>;
-  columns: WritableSignal<number>;
-  status: WritableSignal<string>;
+  images: () => ImageItem[];
+  setImages_: (val: ImageItem[]) => void;
+  selectedIds: () => Set<number>;
+  setSelectedIds: (val: Set<number>) => void;
+  mode: () => LayoutMode;
+  setMode: (val: LayoutMode) => void;
+  columns: () => number;
+  setColumns: (val: number) => void;
+  status: () => string;
+  setStatus: (val: string) => void;
   getColsInputEl: () => HTMLInputElement | undefined;
   setImages: (items: ImageItem[], replace?: boolean) => void;
   normalizeInputImage: (input: { name?: string; path?: string; url?: string; dataUrl?: string }) => ImageItem | null;
@@ -24,9 +26,13 @@ export function setupProtocol(appApi: AppApi, deps: ProtocolDeps): void {
   const {
     images,
     selectedIds,
+    setSelectedIds,
     mode,
+    setMode,
     columns,
+    setColumns,
     status,
+    setStatus,
     getColsInputEl,
     setImages,
     normalizeInputImage,
@@ -138,14 +144,14 @@ export function setupProtocol(appApi: AppApi, deps: ProtocolDeps): void {
           required: ['mode'],
         },
         handler: (p: { mode: LayoutMode; columns?: number }) => {
-          mode(p.mode);
+          setMode(p.mode);
           if (typeof p.columns === 'number') {
             const c = Math.max(1, Math.min(8, Math.floor(p.columns)));
-            columns(c);
+            setColumns(c);
             const colsInputEl = getColsInputEl();
             if (colsInputEl) colsInputEl.value = String(c);
           }
-          status(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
+          setStatus(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
           return { ok: true, layout: { mode: mode(), columns: columns() } };
         },
       },
@@ -162,7 +168,7 @@ export function setupProtocol(appApi: AppApi, deps: ProtocolDeps): void {
           const imgs = images();
           const valid = new Set(p.ids.filter((id) => imgs.some((img) => img.id === id)));
           if (!valid.size && imgs.length) valid.add(imgs[0].id);
-          selectedIds(valid);
+          setSelectedIds(valid);
           return { ok: true, selectedIds: [...selectedIds()] };
         },
       },

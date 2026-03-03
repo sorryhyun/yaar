@@ -10,6 +10,20 @@
 
 /// <reference path="./yaar.d.ts" />
 
+// ── Reactivity ───────────────────────────────────────────────────────────────
+
+declare module '@bundled/solid-js' {
+  export * from 'solid-js';
+}
+
+declare module '@bundled/solid-js/html' {
+  export { default } from 'solid-js/html';
+}
+
+declare module '@bundled/solid-js/web' {
+  export * from 'solid-js/web';
+}
+
 // CSS module imports
 declare module '*.css' {}
 
@@ -35,7 +49,41 @@ declare module '@bundled/clsx' {
 // ── Animation ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/anime' {
-  export * from 'animejs';
+  // animejs v4 — named exports only, no default export.
+  // Use: import { animate, createTimeline } from '@bundled/anime'
+  export {
+    animate,
+    createTimeline,
+    createAnimatable,
+    createDraggable,
+    createScope,
+    onScroll,
+    engine,
+    easings,
+    utils,
+    svg,
+    text,
+    waapi,
+    cubicBezier,
+    steps,
+    linear,
+    irregular,
+    createSpring,
+    spring,
+    createTimer,
+    createLayout,
+    Timer,
+    JSAnimation,
+    Timeline,
+    Animatable,
+    Draggable,
+    Scope,
+    ScrollObserver,
+    Spring,
+    AutoLayout,
+    WAAPIAnimation,
+    scrollContainers,
+  } from 'animejs';
 }
 
 // ── 3D Graphics ─────────────────────────────────────────────────────────────

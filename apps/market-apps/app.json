@@ -1,7 +1,7 @@
 {
-  "icon": "🛒",
+  "icon": "🛍️",
   "name": "Market Apps",
-  "description": "Browse and install apps from marketplace",
+  "description": "Browse and manage marketplace apps",
   "run": "static/index.html",
   "appProtocol": true,
   "protocol": {

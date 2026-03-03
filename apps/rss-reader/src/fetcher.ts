@@ -1,6 +1,7 @@
 import type { Feed, Article } from './types';
 import {
-  feeds, loadingFeedIds, errorFeeds, articles, unreadCounts, readArticleIds, showToast
+  feeds, loadingFeedIds, setLoadingFeedIds, errorFeeds, setErrorFeeds,
+  articles, setArticles, unreadCounts, setUnreadCounts, readArticleIds, showToast
 } from './store';
 import { stripHtml, extractFirstImage } from './utils';
 
@@ -46,10 +47,10 @@ export async function fetchAllFeeds(): Promise<void> {
   const localErrors: Record<string, string> = {};
 
   const promises = feeds().map(async (feed) => {
-    loadingFeedIds([...loadingFeedIds(), feed.id]);
+    setLoadingFeedIds([...loadingFeedIds(), feed.id]);
     const ef = { ...errorFeeds() };
     ef[feed.id] = '';
-    errorFeeds(ef);
+    setErrorFeeds(ef);
 
     try {
       const items = await fetchFeed(feed);
@@ -60,36 +61,36 @@ export async function fetchAllFeeds(): Promise<void> {
       localArticles[feed.id] = [];
       localUnreadCounts[feed.id] = 0;
     } finally {
-      loadingFeedIds(loadingFeedIds().filter(id => id !== feed.id));
+      setLoadingFeedIds(loadingFeedIds().filter(id => id !== feed.id));
     }
   });
 
   await Promise.allSettled(promises);
-  articles(localArticles);
-  unreadCounts(localUnreadCounts);
-  errorFeeds({ ...errorFeeds(), ...localErrors });
+  setArticles(localArticles);
+  setUnreadCounts(localUnreadCounts);
+  setErrorFeeds({ ...errorFeeds(), ...localErrors });
   isRefreshing = false;
 }
 
 export async function fetchSingleFeed(feed: Feed): Promise<void> {
-  loadingFeedIds([...loadingFeedIds(), feed.id]);
+  setLoadingFeedIds([...loadingFeedIds(), feed.id]);
   const ef = { ...errorFeeds() };
   ef[feed.id] = '';
-  errorFeeds(ef);
+  setErrorFeeds(ef);
 
   try {
     const items = await fetchFeed(feed);
-    articles({ ...articles(), [feed.id]: items });
-    unreadCounts({
+    setArticles({ ...articles(), [feed.id]: items });
+    setUnreadCounts({
       ...unreadCounts(),
       [feed.id]: items.filter(a => !readArticleIds().includes(a.id)).length,
     });
   } catch (e: any) {
-    errorFeeds({ ...errorFeeds(), [feed.id]: e.message || 'Failed to load' });
-    articles({ ...articles(), [feed.id]: [] });
-    unreadCounts({ ...unreadCounts(), [feed.id]: 0 });
+    setErrorFeeds({ ...errorFeeds(), [feed.id]: e.message || 'Failed to load' });
+    setArticles({ ...articles(), [feed.id]: [] });
+    setUnreadCounts({ ...unreadCounts(), [feed.id]: 0 });
     showToast(`Failed to load: ${feed.name}`, 'error');
   } finally {
-    loadingFeedIds(loadingFeedIds().filter(id => id !== feed.id));
+    setLoadingFeedIds(loadingFeedIds().filter(id => id !== feed.id));
   }
 }
