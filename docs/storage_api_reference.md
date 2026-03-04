@@ -11,13 +11,15 @@ PROJECT_ROOT/
 ├── storage/                     # Persistent user files (git-ignored)
 │   ├── temp/                    # Dropped images (auto WebP conversion)
 │   ├── files/                   # Uploaded files
+│   ├── mounts/                  # Virtual — maps to host directories
 │   └── {app-specific}/          # App data
 └── config/                      # Configuration (git-ignored)
-    ├── credentials/{appId}.json # App credentials
+    ├── {appId}.json             # App credentials / config
+    ├── mounts.json              # Mount definitions
     ├── permissions.json         # Saved permission decisions
     ├── settings.json            # User settings
     ├── shortcuts.json           # Desktop shortcuts
-    └── reload-cache/            # Per-session fingerprint cache
+    └── hooks.json               # Event-driven hooks
 ```
 
 Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environment variable.
@@ -26,70 +28,138 @@ Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environme
 
 ## MCP Tools
 
-Registered in the `storage` MCP namespace. Full tool names: `mcp__storage__read`, `mcp__storage__write`, `mcp__storage__list`, `mcp__storage__delete`.
+File I/O tools are registered in the **`basic`** MCP namespace. All tools accept URI-style paths with `storage://` or `sandbox://` schemes. Only the `storage://` scheme is covered here.
 
-**Source:** `packages/server/src/mcp/storage/index.ts`
+**Source:** `packages/server/src/mcp/basic/`
 
 ### `read`
 
-Read a file from storage.
+Read a file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | `string` | yes | Path relative to `storage/` |
+| `uri` | `string` | yes | File URI (e.g. `storage://docs/readme.txt`) |
+| `lineNumbers` | `boolean` | no | Prepend line numbers to each line (default: `false`) |
 
-**Returns (text files):** File content as a UTF-8 string.
+**Returns (text files):** File content, optionally with line numbers. When `lineNumbers=true`, output matches `read` format used by `edit` in line mode.
 
-**Returns (PDF files):** A summary string (`"PDF with N page(s)"` or `"PDF preview (first 3 of N pages)"`) plus base64 PNG images of up to 3 pages. The tool instructs the agent to display PDFs via an iframe window pointing at `/api/storage/<path>` rather than rendering content as markdown.
+**Returns (PDF files):** A summary string plus base64 PNG images of up to 3 pages. Includes a hint to display the PDF via an iframe window with `storage://` protocol.
 
-**Errors:** Path traversal detected, file not found.
+**Returns (image files):** Base64-encoded image content with MIME type.
+
+**Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
+
+**Errors:** Path traversal detected, file not found, cannot read a directory.
 
 ### `write`
 
-Write a file to storage.
+Write a file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | `string` | yes | Path relative to `storage/` |
+| `uri` | `string` | yes | File URI (e.g. `storage://docs/file.txt`) |
 | `content` | `string` | yes | Content to write |
 
-Parent directories are created automatically. Overwrites existing files.
+Parent directories are created automatically. Overwrites existing files. Fails on read-only mounts.
 
-**Returns:** `"Written to {path}"`
+**Returns:** `"Written to storage://{path}"`
 
 ### `list`
 
-List files and directories.
+List directory contents by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | `string` | no | Directory path relative to `storage/` (defaults to root) |
+| `uri` | `string` | yes | Directory URI (e.g. `storage://`, `storage://docs`) |
 
-**Returns:** Formatted list with directory/file emoji prefixes. Directories are sorted first, then alphabetically by name. Returns `"Directory is empty"` for empty or nonexistent directories.
+Returns emoji-prefixed listing (📁 directories, 📄 files). Directories sorted first, then alphabetically. Mounted directories appear as virtual entries under `storage://mounts/`.
 
-Each entry includes: `path`, `isDirectory`, `size` (bytes), `modifiedAt` (ISO timestamp).
+**Returns:** Formatted list or `"Directory is empty"`.
 
 ### `delete`
 
-Delete a single file.
+Delete a single file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `path` | `string` | yes | Path relative to `storage/` |
+| `uri` | `string` | yes | File URI (e.g. `storage://docs/draft.txt`) |
 
-Does not support recursive directory deletion. Fails if the file does not exist.
+Does not support recursive directory deletion. Fails on read-only mounts.
 
-**Returns:** `"Deleted {path}"`
+**Returns:** `"Deleted storage://{path}"`
+
+### `edit`
+
+Apply an edit to a file by URI. Two modes:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `uri` | `string` | yes | File URI (e.g. `storage://docs/readme.txt`) |
+| `old_string` | `string` | no | Exact text to find (must be unique). Omit to use line mode. |
+| `new_string` | `string` | yes | Replacement text |
+| `start_line` | `number` | no | First line to replace (1-based). Requires line mode. |
+| `end_line` | `number` | no | Last line to replace (1-based, inclusive). Defaults to `start_line`. |
+
+**String mode** (`old_string` + `new_string`): Finds the exact match and replaces it. The match must be unique in the file.
+
+**Line mode** (`start_line` + `new_string`): Replaces lines `start_line..end_line`. Line numbers are 1-based, matching the output of `read` with `lineNumbers=true`.
+
+Cannot mix both modes.
+
+**Returns:** `"Edited storage://{path}"`
+
+---
+
+## Mount System
+
+Host directories can be mounted at `storage://mounts/{alias}/` via the `system` MCP config tools.
+
+**Source:** `packages/server/src/storage/mounts.ts`, `packages/server/src/mcp/system/config-mounts.ts`
+
+### Mount a directory
+
+```
+set_config(section: "mounts", content: { alias, hostPath, readOnly? })
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `alias` | `string` | Mount name. Must match `/^[a-z][a-z0-9-]{0,49}$/`. Reserved: `temp`, `files`, `credentials`, `mounts`. |
+| `hostPath` | `string` | Absolute path to an existing directory. Cannot be inside the storage directory. |
+| `readOnly` | `boolean` | Optional, defaults to `false`. |
+
+Requires user permission dialog. Config persisted in `config/mounts.json`.
+
+### List mounts
+
+```
+get_config(section: "mounts")
+```
+
+Returns `{ mounts: MountEntry[] }`.
+
+### Unmount
+
+```
+remove_config(section: "mounts", id: "{alias}")
+```
+
+### Mount behavior
+
+- Mounted directories appear as `storage://mounts/{alias}/...` in all tools (read, write, list, delete, edit)
+- The virtual `mounts/` directory is injected into storage root listings when mounts exist
+- Path traversal protection ensures resolved paths stay within the mount
+- Read-only mounts reject write, delete, and edit operations
 
 ---
 
 ## REST API
 
-**Source:** `packages/server/src/http/routes/files.ts` (storage section)
+**Source:** `packages/server/src/http/routes/files.ts`
 
 Base URL: `/api/storage/{filePath}`
 
-All paths are relative to the storage directory. Path traversal is blocked (HTTP 403).
+All paths are relative to the storage directory. Path traversal is blocked (HTTP 403). Read-only mounts block POST and DELETE (HTTP 403).
 
 ### GET — Serve file
 
@@ -97,9 +167,9 @@ All paths are relative to the storage directory. Path traversal is blocked (HTTP
 GET /api/storage/documents/report.pdf
 ```
 
-Returns the raw file with `Content-Type` inferred from the extension (see [MIME types](#mime-types) below). Returns `Cache-Control: no-cache`.
+Returns the raw file with `Content-Type` inferred from the extension (see [MIME types](#mime-types)). Returns `Cache-Control: no-cache`.
 
-**Status codes:** 200 (file content), 404 (not found), 403 (path traversal).
+**Status codes:** 200, 404 (not found), 403 (path traversal).
 
 ### GET — List directory
 
@@ -137,7 +207,7 @@ DELETE /api/storage/documents/old.pdf
 
 **Response:** `{ "ok": true, "path": "documents/old.pdf" }`
 
-**Status codes:** 200, 404 (not found), 403 (path traversal).
+**Status codes:** 200, 404 (not found), 403 (path traversal or read-only mount).
 
 ---
 
@@ -157,7 +227,7 @@ Renders a single PDF page as a PNG image at 1.5× scale via poppler.
 
 ## Types
 
-**Source:** `packages/server/src/storage/types.ts`
+**Source:** `packages/server/src/storage/types.ts`, `packages/server/src/storage/mounts.ts`
 
 ```typescript
 interface StorageEntry {
@@ -199,6 +269,18 @@ interface StorageImageContent {
   mimeType: string;
   pageNumber?: number;
 }
+
+interface MountEntry {
+  alias: string;
+  hostPath: string;      // Absolute path
+  readOnly: boolean;
+  createdAt: string;     // ISO 8601
+}
+
+interface ResolvedPath {
+  absolutePath: string;
+  readOnly: boolean;
+}
 ```
 
 ---
@@ -211,30 +293,31 @@ Core functions used by both MCP tools and REST routes:
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `storageRead` | `(filePath: string) → Promise<StorageReadResult>` | Read file; converts PDFs to images (max 3 pages) |
-| `storageWrite` | `(filePath: string, content: string \| Buffer) → Promise<StorageWriteResult>` | Write file; creates parent dirs |
-| `storageList` | `(dirPath?: string) → Promise<StorageListResult>` | List directory; returns empty list for missing dirs |
-| `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete single file |
+| `storageRead` | `(filePath: string) → Promise<StorageReadResult>` | Read file; converts PDFs to images (max 3 pages), images to base64, text with line numbers |
+| `storageWrite` | `(filePath: string, content: string \| Buffer) → Promise<StorageWriteResult>` | Write file; creates parent dirs; respects read-only mounts |
+| `storageList` | `(dirPath?: string) → Promise<StorageListResult>` | List directory; injects virtual `mounts/` entry at root |
+| `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete single file; respects read-only mounts |
 | `ensureStorageDir` | `() → Promise<void>` | Create `storage/` if missing |
+| `resolvePath` | `(filePath: string) → ResolvedPath \| null` | Resolve storage-relative path; checks mounts first, then default storage dir |
 | `configRead` | `(filePath: string) → Promise<StorageReadResult>` | Read from `config/` directory |
 | `configWrite` | `(filePath: string, content: string) → Promise<StorageWriteResult>` | Write to `config/` directory |
 
-### Path Validation
+### Path Resolution
 
-All operations normalize the path and verify it resolves within the storage (or config) directory:
+All operations resolve paths in order:
 
-```typescript
-function validatePath(filePath: string): string | null {
-  const normalizedPath = normalize(join(STORAGE_DIR, filePath));
-  const relativePath = relative(STORAGE_DIR, normalizedPath);
-  if (relativePath.startsWith('..') || relativePath.includes('..')) {
-    return null;  // path traversal blocked
-  }
-  return normalizedPath;
-}
-```
+1. **Mount check** — if path starts with `mounts/{alias}/...`, resolve against the mount's `hostPath`
+2. **Default** — resolve against `STORAGE_DIR`
+3. **Traversal check** — reject if resolved path escapes the target directory
 
-Blocked patterns: `../../etc/passwd`, absolute paths, `dir/../../../secret`.
+### File Type Handling
+
+| File Type | Behavior |
+|-----------|----------|
+| Text files (`.txt`, `.md`, `.ts`, `.json`, etc.) | Read as UTF-8, line-numbered output |
+| PDF (`.pdf`) | Convert first 3 pages to PNG via poppler |
+| Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content |
+| Other binary | Return explanation message, point to REST API |
 
 ---
 
@@ -292,15 +375,17 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 ### Iframe SDK
 
-Apps running inside iframes can access storage via `window.yaar.storage`:
+**Source:** `packages/shared/src/capture-helper.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
-| Method | Description |
-|--------|-------------|
-| `list(path)` | List directory contents |
-| `read(path, opts?)` | Read file content |
-| `save(path, content)` | Write file content |
-| `remove(path)` | Delete file |
-| `url(path)` | Get the HTTP URL: `/api/storage/{path}` |
+Apps running inside iframes get `window.yaar.storage` injected automatically:
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `save` | `(path, data) → Promise<{ok, path}>` | Write file. Accepts `string`, `Blob`, `ArrayBuffer`, `Uint8Array`. |
+| `read` | `(path, options?) → Promise<*>` | Read file. `options.as`: `'text'`, `'json'`, `'blob'`, `'arraybuffer'`, or `'auto'` (default, guesses from Content-Type). |
+| `list` | `(dirPath?) → Promise<StorageEntry[]>` | List directory contents. |
+| `remove` | `(path) → Promise<{ok, path}>` | Delete file. |
+| `url` | `(path) → string` | Get the HTTP URL: `/api/storage/{path}`. |
 
 ---
 
@@ -337,9 +422,9 @@ Stored at `config/permissions.json`. Records "allow" / "deny" decisions for MCP 
 | `checkPermission(toolName, context?)` | Look up a saved decision |
 | `savePermission(toolName, decision, context?)` | Persist a decision |
 
-### App Credentials
+### App Config
 
-Stored at `config/credentials/{appId}.json`. Managed via the `apps_read_config` and `apps_write_config` MCP tools. Old credential locations (`apps/{appId}/credentials.json`, `storage/credentials/{appId}.json`) are auto-migrated on first read.
+Stored at `config/{appId}.json`. Managed via `set_config(section: "app")`, `get_config(section: "app")`, and `remove_config` MCP tools.
 
 ---
 
