@@ -2,6 +2,7 @@ import { createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import type { EditorStore } from './state';
+import { sectionIn } from './anim-utils';
 import './styles.css';
 
 export interface EditorUI {
@@ -336,14 +337,35 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
   `, parent as HTMLElement);
 
   // Reactive mode switching — more reliable than attribute bindings on style/class
+  let _prevMode: string | null = null;
   createEffect(() => {
     const isEdit = store.mode[0]() === 'edit';
-    sidebarEditSection.style.display = isEdit ? '' : 'none';
-    sidebarCreateSection.style.display = isEdit ? 'none' : '';
-    editContainer.style.display = isEdit ? '' : 'none';
-    createContainer.style.display = isEdit ? 'none' : '';
+    const modeStr = isEdit ? 'edit' : 'create';
+    const switching = _prevMode !== null && _prevMode !== modeStr;
+
     editTabButton.classList.toggle('active', isEdit);
     createTabButton.classList.toggle('active', !isEdit);
+
+    if (isEdit) {
+      sidebarCreateSection.style.display = 'none';
+      createContainer.style.display = 'none';
+      sidebarEditSection.style.display = '';
+      editContainer.style.display = '';
+      if (switching) {
+        sectionIn(sidebarEditSection);
+        sectionIn(editContainer);
+      }
+    } else {
+      sidebarEditSection.style.display = 'none';
+      editContainer.style.display = 'none';
+      sidebarCreateSection.style.display = '';
+      createContainer.style.display = '';
+      if (switching) {
+        sectionIn(sidebarCreateSection);
+        sectionIn(createContainer);
+      }
+    }
+    _prevMode = modeStr;
   });
 
   return {

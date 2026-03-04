@@ -47,8 +47,9 @@ body {
   background: #e6f0f5;
   color: #4d6879;
   transition:
-    background 0.15s,
-    color 0.15s;
+    background 0.2s,
+    color 0.2s,
+    transform 0.1s;
 }
 
 .sidebar-mode-toggle button.active {
@@ -510,6 +511,7 @@ progress {
   background: #ff4444;
   pointer-events: none;
   z-index: 10;
+  transition: left 34ms linear;
 }
 
 /* Scene properties panel */
@@ -563,4 +565,38 @@ progress {
   .props-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.sidebar-mode-toggle button:active {
+  transform: scale(0.96);
+}
+
+.scene-item {
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.1s;
+}
+
+.scene-item.selected {
+  animation: scene-select-flash 0.3s ease-out;
+}
+
+@keyframes scene-select-flash {
+  0% {
+    background: #c8e2ef;
+  }
+  40% {
+    background: #a8d0e8;
+  }
+  100% {
+    background: #d8eaf3;
+  }
+}
+
+.timeline-block {
+  transition:
+    left 0.1s ease-out,
+    width 0.1s ease-out,
+    border-color 0.1s;
 }

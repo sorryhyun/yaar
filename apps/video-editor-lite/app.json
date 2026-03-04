@@ -212,5 +212,5 @@
       }
     }
   },
-  "capture": "dom"
+  "capture": "canvas"
 }

@@ -45,29 +45,35 @@ declare module '@bundled/clsx' {
 // ── Animation ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/anime' {
-  // animejs v4 — named exports only, no default export.
-  // Use: import { animate, createTimeline } from '@bundled/anime'
+  // animejs v4 — explicit allowlist of named exports (no default export).
+  // Only v4 APIs listed here pass typecheck. v3 patterns (default import, anime()) are blocked.
+  // Use: import { animate, createTimeline, stagger } from '@bundled/anime'
   export {
+    // Core
     animate,
+    stagger,
     createTimeline,
+    createTimer,
+    createSpring,
     createAnimatable,
     createDraggable,
     createScope,
+    createLayout,
     onScroll,
     engine,
+    // Namespaces
     easings,
     utils,
     svg,
     text,
     waapi,
+    // Easing creators
     cubicBezier,
     steps,
     linear,
     irregular,
-    createSpring,
     spring,
-    createTimer,
-    createLayout,
+    // Types (classes)
     Timer,
     JSAnimation,
     Timeline,

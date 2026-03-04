@@ -2,6 +2,8 @@ import type { EditorUI } from './ui';
 import type { EditorState } from './types';
 import type { Scene } from '../core/types';
 import { formatTime } from './utils/time';
+import { animate } from '@bundled/anime';
+import { fadeIn, staggerIn, fadeOutRemove, popIn } from './anim-utils';
 
 export const SCENE_COLORS: Record<string, string> = {
   solid: '#4a7c59',
@@ -11,11 +13,15 @@ export const SCENE_COLORS: Record<string, string> = {
   'video-clip': '#8b3a3a',
 };
 
+// ── Persistent state for diff-based rendering ──────────────────────────────
+let _playhead: HTMLDivElement | null = null;
+let _timelineBlocks = new Map<string, HTMLDivElement>();
+let _sceneItems = new Map<string, HTMLDivElement>();
+let _sceneEmptyEl: HTMLDivElement | null = null;
+// ──────────────────────────────────────────────────────────────────────────
+
 export function renderEditor(ui: EditorUI, state: EditorState): void {
   const isEdit = state.mode === 'edit';
-
-  // NOTE: mode toggle active classes and section show/hide are now
-  // handled reactively by the signal bindings in ui.ts template.
 
   if (isEdit) {
     const hasDuration = state.duration > 0;
@@ -49,10 +55,18 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
     return;
   }
 
-  // Create mode
+  // ── Create mode ──────────────────────────────────────────────────────────
   const comp = state.composition;
+
   if (!comp) {
     ui.creatorFrameLabel.textContent = 'No composition';
+    // Clear persistent state
+    for (const el of _sceneItems.values()) el.remove();
+    _sceneItems.clear();
+    _sceneEmptyEl = null;
+    for (const el of _timelineBlocks.values()) el.remove();
+    _timelineBlocks.clear();
+    _playhead = null;
     ui.scenePanel.innerHTML = '<div class="storage-empty">No scenes yet. Add one above.</div>';
     ui.timelineTrack.innerHTML = '';
     return;
@@ -75,10 +89,36 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
   if (document.activeElement !== ui.compFpsInput) ui.compFpsInput.value = String(comp.config.fps);
   if (document.activeElement !== ui.compDurationInput) ui.compDurationInput.value = String(comp.config.durationInFrames);
 
-  // Timeline
-  ui.timelineTrack.innerHTML = '';
+  // ── Timeline (diff-based) ─────────────────────────────────────────────────
+  const currentSceneIds = new Set(comp.scenes.map((s) => s.id));
+
+  // Remove deleted blocks
+  for (const [id, blockEl] of [..._timelineBlocks.entries()]) {
+    if (!currentSceneIds.has(id)) {
+      _timelineBlocks.delete(id);
+      animate_opacity_out(blockEl);
+    }
+  }
+
+  // Ensure playhead exists (create before blocks so it's at back, we'll re-append it at end)
+  if (!_playhead || !ui.timelineTrack.contains(_playhead)) {
+    _playhead = document.createElement('div');
+    _playhead.className = 'timeline-playhead';
+    ui.timelineTrack.appendChild(_playhead);
+  }
+
+  // Update / create timeline blocks
   for (const scene of comp.scenes) {
-    const block = document.createElement('div');
+    let block = _timelineBlocks.get(scene.id);
+    const isNew = !block;
+
+    if (!block) {
+      block = document.createElement('div');
+      block.dataset.sceneId = scene.id;
+      ui.timelineTrack.insertBefore(block, _playhead);
+      _timelineBlocks.set(scene.id, block);
+    }
+
     block.className = 'timeline-block' + (scene.id === state.selectedSceneId ? ' selected' : '');
     const leftPct = (scene.from / totalFrames) * 100;
     const widthPct = (scene.durationInFrames / totalFrames) * 100;
@@ -86,55 +126,111 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
     block.style.width = `${widthPct}%`;
     block.style.background = SCENE_COLORS[scene.type] ?? '#555';
     block.textContent = scene.type;
-    block.dataset.sceneId = scene.id;
-    ui.timelineTrack.appendChild(block);
+
+    if (isNew) popIn(block);
   }
 
-  const playhead = document.createElement('div');
-  playhead.className = 'timeline-playhead';
-  playhead.style.left = `${(state.creatorFrame / totalFrames) * 100}%`;
-  ui.timelineTrack.appendChild(playhead);
+  // Move playhead to end so it renders on top
+  ui.timelineTrack.appendChild(_playhead);
+  _playhead.style.left = `${(state.creatorFrame / totalFrames) * 100}%`;
 
-  // Scene list
-  ui.scenePanel.innerHTML = '';
-  if (!comp.scenes.length) {
-    ui.scenePanel.innerHTML = '<div class="storage-empty">No scenes yet. Add one above.</div>';
-  } else {
-    for (const scene of comp.scenes) {
-      const item = document.createElement('div');
-      item.className = 'scene-item' + (scene.id === state.selectedSceneId ? ' selected' : '');
-      item.dataset.sceneId = scene.id;
-
-      const colorDot = document.createElement('div');
-      colorDot.className = 'scene-color';
-      colorDot.style.background = SCENE_COLORS[scene.type] ?? '#555';
-
-      const info = document.createElement('div');
-      info.className = 'scene-info';
-      const name = document.createElement('div');
-      name.className = 'scene-name';
-      name.textContent = `${scene.type} (${scene.id.slice(0, 6)})`;
-      const range = document.createElement('div');
-      range.className = 'scene-range';
-      range.textContent = `Frame ${scene.from} – ${scene.from + scene.durationInFrames}`;
-      info.append(name, range);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'scene-delete';
-      deleteBtn.textContent = '✕';
-      deleteBtn.type = 'button';
-      deleteBtn.dataset.deleteSceneId = scene.id;
-
-      item.append(colorDot, info, deleteBtn);
-      ui.scenePanel.appendChild(item);
+  // ── Scene list (diff-based) ───────────────────────────────────────────────
+  // Remove deleted scenes
+  for (const [id, itemEl] of [..._sceneItems.entries()]) {
+    if (!currentSceneIds.has(id)) {
+      _sceneItems.delete(id);
+      fadeOutRemove(itemEl);
     }
   }
 
-  // Scene properties panel
+  // Empty state
+  if (comp.scenes.length === 0) {
+    if (!_sceneEmptyEl || !ui.scenePanel.contains(_sceneEmptyEl)) {
+      _sceneEmptyEl = document.createElement('div');
+      _sceneEmptyEl.className = 'storage-empty';
+      _sceneEmptyEl.textContent = 'No scenes yet. Add one above.';
+      ui.scenePanel.appendChild(_sceneEmptyEl);
+      fadeIn(_sceneEmptyEl);
+    }
+  } else {
+    if (_sceneEmptyEl && ui.scenePanel.contains(_sceneEmptyEl)) {
+      _sceneEmptyEl.remove();
+      _sceneEmptyEl = null;
+    }
+  }
+
+  // Add/update scenes
+  const newItems: HTMLElement[] = [];
+  for (const scene of comp.scenes) {
+    let item = _sceneItems.get(scene.id);
+    const isNew = !item;
+
+    if (!item) {
+      item = createSceneListItem(scene);
+      ui.scenePanel.appendChild(item);
+      _sceneItems.set(scene.id, item);
+      newItems.push(item);
+    }
+
+    // Update selected class
+    item.className = 'scene-item' + (scene.id === state.selectedSceneId ? ' selected' : '');
+    // Update range display
+    const rangeEl = item.querySelector('.scene-range') as HTMLElement | null;
+    if (rangeEl) {
+      rangeEl.textContent = `Frame ${scene.from} – ${scene.from + scene.durationInFrames}`;
+    }
+  }
+
+  // Reorder DOM to match comp.scenes order
+  for (const scene of comp.scenes) {
+    const el = _sceneItems.get(scene.id);
+    if (el) ui.scenePanel.appendChild(el); // moves existing elements
+  }
+
+  if (newItems.length > 0) staggerIn(newItems);
+
+  // ── Scene properties panel ───────────────────────────────────────────────
   const selectedScene = state.selectedSceneId
     ? comp.scenes.find((s) => s.id === state.selectedSceneId) ?? null
     : null;
   renderScenePropsPanel(ui.scenePropsPanel, selectedScene);
+}
+
+// Quick opacity-out removal helper (internal, no translate)
+function animate_opacity_out(el: HTMLElement): void {
+  animate(el, { opacity: [1, 0], duration: 150 }).then(() => el.remove());
+}
+
+function createSceneListItem(scene: Scene): HTMLDivElement {
+  const item = document.createElement('div');
+  item.className = 'scene-item';
+  item.dataset.sceneId = scene.id;
+
+  const colorDot = document.createElement('div');
+  colorDot.className = 'scene-color';
+  colorDot.style.background = SCENE_COLORS[scene.type] ?? '#555';
+
+  const info = document.createElement('div');
+  info.className = 'scene-info';
+
+  const name = document.createElement('div');
+  name.className = 'scene-name';
+  name.textContent = `${scene.type} (${scene.id.slice(0, 6)})`;
+
+  const range = document.createElement('div');
+  range.className = 'scene-range';
+  range.textContent = `Frame ${scene.from} – ${scene.from + scene.durationInFrames}`;
+
+  info.append(name, range);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'scene-delete';
+  deleteBtn.textContent = '✕';
+  deleteBtn.type = 'button';
+  deleteBtn.dataset.deleteSceneId = scene.id;
+
+  item.append(colorDot, info, deleteBtn);
+  return item;
 }
 
 function makeField(label: string, inputEl: HTMLElement): HTMLDivElement {
@@ -192,7 +288,6 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
   grid.className = 'props-grid';
   panelEl.appendChild(grid);
 
-  // Common: from and durationInFrames
   grid.appendChild(makeField('Start Frame', makeInput('number', scene.from, 'from', { min: '0', step: '1' } as Partial<HTMLInputElement>)));
   grid.appendChild(makeField('Duration (frames)', makeInput('number', scene.durationInFrames, 'durationInFrames', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
 
@@ -209,6 +304,9 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
       { value: 'typewriter', label: 'Typewriter' },
       { value: 'scale', label: 'Scale' },
       { value: 'spring', label: 'Spring' },
+      { value: 'glitch', label: 'Glitch' },
+      { value: 'blurIn', label: 'Blur In' },
+      { value: 'bounce', label: 'Bounce' },
     ];
     const textInput = document.createElement('input');
     textInput.type = 'text';
