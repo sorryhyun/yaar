@@ -202,7 +202,7 @@ The protocol is **fully bidirectional**. The server can send JSON-RPC **requests
 
 ```
 Server → Client (request):
-{"id": 42, "method": "item/commandExecution/requestApproval", "params": {"command": "pnpm test"}}
+{"id": 42, "method": "item/commandExecution/requestApproval", "params": {"command": "bun test"}}
 
 Client → Server (response):
 {"id": 42, "result": {"decision": "accept"}}

@@ -5,10 +5,10 @@ React + Zustand + Vite frontend that renders the YAAR desktop.
 ## Commands
 
 ```bash
-pnpm dev                    # Start dev server (proxies /ws and /api to localhost:8000)
-pnpm build                  # Build for production
-pnpm vitest                 # Run tests in watch mode
-pnpm vitest run             # Run tests once
+bun run dev                    # Start dev server (proxies /ws and /api to localhost:8000)
+bun run build                  # Build for production
+bun run vitest                 # Run tests in watch mode
+bun run vitest run             # Run tests once
 ```
 
 ## Code Style

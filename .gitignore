@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.pnpm-debug.log*
 
 # Build outputs
 dist/

@@ -1,7 +1,7 @@
 /**
  * Performance benchmarks for CPU-bound server utilities.
  *
- * Run with: pnpm --filter @yaar/tests bench
+ * Run with: bun run --filter @yaar/tests bench
  */
 
 import { bench, describe } from 'vitest';

@@ -27,7 +27,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // Regular tests only — bench files are run via `pnpm bench` separately
+    // Regular tests only — bench files are run via `bun run bench` separately
     include: ['src/**/*.test.ts'],
   },
   resolve: {

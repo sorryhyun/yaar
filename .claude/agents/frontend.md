@@ -57,5 +57,5 @@ Flat array with CSS grid layout (no recursive trees — designed for LLM simplic
 2. WebSocket event types must stay in sync with `events.ts`
 3. No XSS vectors in HTML/iframe renderers
 4. Store isolation in tests (reset in `beforeEach`)
-5. Run `pnpm --filter @yaar/frontend vitest run` after changes
-6. Run `pnpm typecheck` for cross-package type safety
+5. Run `bun run --filter @yaar/frontend vitest run` after changes
+6. Run `bun run typecheck` for cross-package type safety

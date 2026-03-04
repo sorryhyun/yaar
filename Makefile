@@ -25,47 +25,47 @@ codex-dev:
 
 # Run server only
 server:
-	pnpm --filter @yaar/server dev
+	bun run --filter @yaar/server dev
 
 # Run frontend only
 frontend:
-	pnpm --filter @yaar/frontend dev
+	bun run --filter @yaar/frontend dev
 
 # Install all dependencies
 install:
-	pnpm install
+	bun install
 
 # Lint all packages
 lint:
-	pnpm -r lint
+	bun run --filter '*' lint
 
 # Build all packages
 build:
-	pnpm -r build
+	bun run --filter '*' build
 
 # Run all tests
 test:
-	pnpm -r test
+	bun run --filter '*' test
 
 # Run frontend tests
 test-frontend:
-	pnpm --filter @yaar/frontend test
+	bun run --filter @yaar/frontend test
 
 # Run server tests
 test-server:
-	pnpm --filter @yaar/server test
+	bun run --filter @yaar/server test
 
 # Run shared tests
 test-shared:
-	pnpm --filter @yaar/shared test
+	bun run --filter @yaar/shared test
 
 # Run integration/security tests (packages/tests/)
 test-integration:
-	pnpm --filter @yaar/tests test
+	bun run --filter @yaar/tests test
 
 # Run performance benchmarks (packages/tests/src/benchmarks/)
 bench:
-	pnpm --filter @yaar/tests bench
+	bun run --filter @yaar/tests bench
 
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by ESM resolution
@@ -74,7 +74,7 @@ codex-types:
 
 # Build standalone executables (yaar-{claude,codex}.exe with bundled-libs embedded)
 build-exe: codex-types
-	pnpm build:exe
+	bun run build:exe
 
 # Clean generated files
 clean:

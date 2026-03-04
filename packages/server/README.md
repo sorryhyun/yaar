@@ -5,11 +5,11 @@ WebSocket server that connects AI providers (Claude, Codex) to the YAAR frontend
 ## Quick start
 
 ```bash
-pnpm dev          # Start with file watching (bun --watch)
-pnpm build        # Build for production
-pnpm test         # Run tests
-pnpm typecheck    # Type check
-pnpm lint         # Lint
+bun run dev          # Start with file watching (bun --watch)
+bun run build        # Build for production
+bun run test         # Run tests
+bun run typecheck    # Type check
+bun run lint         # Lint
 ```
 
 ## Environment variables

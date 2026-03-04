@@ -66,5 +66,5 @@ Implementing `AITransport` interface:
 2. Verify WebSocket event contracts stay in sync with `events.ts`
 3. Check agent lifecycle correctness (dispose on disconnect, semaphore limits)
 4. Validate context tape branching for window forks
-5. Run `pnpm --filter @yaar/server vitest run` after changes
-6. Run `pnpm typecheck` to verify cross-package type safety
+5. Run `bun run --filter @yaar/server vitest run` after changes
+6. Run `bun run typecheck` to verify cross-package type safety

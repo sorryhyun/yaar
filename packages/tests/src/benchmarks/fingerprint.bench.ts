@@ -6,7 +6,7 @@
  * entries via a linear similarity scan.  Small regressions here multiply by
  * the number of cache entries, so throughput matters.
  *
- * Run with: pnpm --filter @yaar/tests bench
+ * Run with: bun run --filter @yaar/tests bench
  */
 
 import { bench, describe } from 'vitest';

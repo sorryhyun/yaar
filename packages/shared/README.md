@@ -18,10 +18,10 @@ import { type OSAction, ServerEventType, ClientEventType } from '@yaar/shared';
 ## Development
 
 ```bash
-pnpm build       # Compile TypeScript
-pnpm dev         # Watch mode
-pnpm test        # Run tests
-pnpm typecheck   # Type check without emitting
+bun run build       # Compile TypeScript
+bun run dev         # Watch mode
+bun run test        # Run tests
+bun run typecheck   # Type check without emitting
 ```
 
 Build this package before starting the server or frontend — `make dev` handles this automatically.

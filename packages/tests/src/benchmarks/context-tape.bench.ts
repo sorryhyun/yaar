@@ -6,7 +6,7 @@
  * rate limits and is checked/updated on every OS action emitted by a
  * background monitor.  Both are purely in-memory with no I/O.
  *
- * Run with: pnpm --filter @yaar/tests bench
+ * Run with: bun run --filter @yaar/tests bench
  */
 
 import { bench, describe } from 'vitest';

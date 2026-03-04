@@ -14,7 +14,7 @@ fi
 
 # Build shared package first (needed by other packages)
 echo "Building shared package..."
-pnpm --filter @yaar/shared build
+bun run --filter @yaar/shared build
 
 # Cleanup function
 cleanup() {
@@ -66,7 +66,7 @@ wait_for_server() {
 
 # Start server first
 echo "Starting server..."
-PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" pnpm --filter @yaar/server dev 2>&1 &
+PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server dev 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -76,7 +76,7 @@ wait_for_server
 if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ]; then
   # Remote mode: build frontend and serve from server (single port 8000)
   echo "Building frontend for remote mode..."
-  pnpm --filter @yaar/frontend build
+  bun run --filter @yaar/frontend build
   FRONTEND_PID=""
 
   echo ""
@@ -87,7 +87,7 @@ if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ]; then
 else
   # Dev mode: start Vite dev server
   echo "Starting frontend..."
-  pnpm --filter @yaar/frontend dev 2>&1 &
+  bun run --filter @yaar/frontend dev 2>&1 &
   FRONTEND_PID=$!
 
   echo ""

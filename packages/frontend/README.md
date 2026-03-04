@@ -5,11 +5,11 @@ React desktop UI for YAAR. Renders AI-generated windows, handles user input, and
 ## Quick start
 
 ```bash
-pnpm dev          # Dev server at localhost:5173 (proxies /ws and /api to server)
-pnpm build        # Production build
-pnpm test         # Run tests
-pnpm typecheck    # Type check
-pnpm lint         # Lint
+bun run dev          # Dev server at localhost:5173 (proxies /ws and /api to server)
+bun run build        # Production build
+bun run test         # Run tests
+bun run typecheck    # Type check
+bun run lint         # Lint
 ```
 
 ## Stack

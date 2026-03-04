@@ -1,6 +1,6 @@
 dist/
 node_modules/
-pnpm-lock.yaml
+bun.lock
 *.md
 packages/server/src/lib/bundled-types/
 storage/

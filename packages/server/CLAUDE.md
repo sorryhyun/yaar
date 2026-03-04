@@ -5,8 +5,8 @@ TypeScript WebSocket server with pluggable AI providers.
 ## Commands
 
 ```bash
-pnpm dev                    # Start server with Bun (--watch)
-pnpm build                  # Build for production
+bun run dev                    # Start server with Bun (--watch)
+bun run build                  # Build for production
 ```
 
 ## Environment Variables

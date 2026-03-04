@@ -13,16 +13,16 @@ You run tests, type checks, and linting after code changes and report the result
 
 ```bash
 # Unit tests (per package)
-pnpm --filter @yaar/frontend vitest run        # Frontend tests
+bun run --filter @yaar/frontend vitest run        # Frontend tests
 packages/server/node_modules/.bin/vitest run --config packages/server/vitest.config.ts  # Server tests (from repo root)
-pnpm --filter @yaar/shared vitest run           # Shared tests
+bun run --filter @yaar/shared vitest run           # Shared tests
 
 # Targeted tests (match pattern)
-pnpm --filter @yaar/frontend vitest run store   # Only store tests
+bun run --filter @yaar/frontend vitest run store   # Only store tests
 packages/server/node_modules/.bin/vitest run --config packages/server/vitest.config.ts agents  # Only agent tests
 
 # Type checking (all packages)
-pnpm typecheck
+bun run typecheck
 
 # Linting
 make lint
@@ -49,5 +49,5 @@ If all tests pass, say so briefly with the count.
 
 - Frontend tests use jsdom environment and Testing Library
 - Server tests may need environment variables (check test setup files)
-- `pnpm typecheck` runs `tsc --noEmit` across all packages — catches cross-package type errors
+- `bun run typecheck` runs `tsc --noEmit` across all packages — catches cross-package type errors
 - If a test is flaky (passes on retry), note it as flaky

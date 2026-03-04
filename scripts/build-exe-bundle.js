@@ -72,7 +72,7 @@ try {
   frontendFiles = collectFiles(frontendDist);
 } catch {
   console.error(`Frontend dist not found at ${frontendDist}`);
-  console.error('Run "pnpm build" first.');
+  console.error('Run "bun run build" first.');
   process.exit(1);
 }
 
@@ -89,7 +89,7 @@ if (existsSync(bundledLibsDir)) {
     .map(f => ({ name: basename(f, '.js'), absPath: join(bundledLibsDir, f) }));
   console.log(`Embedding ${bundledLibFiles.length} bundled libraries...`);
 } else {
-  console.warn('Warning: dist/bundled-libs/ not found. Run "pnpm build:exe:libs" first.');
+  console.warn('Warning: dist/bundled-libs/ not found. Run "bun run build:exe:libs" first.');
   console.warn('Bundled exe will not be able to resolve @bundled/* imports at runtime.');
 }
 

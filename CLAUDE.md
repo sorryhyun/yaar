@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notifications, etc.).
 
 **Prerequisites:**
-- Bun >= 1.1 (server runtime)
-- pnpm >= 10
+- Bun >= 1.1 (runtime and package manager)
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 **SDKs:**
@@ -18,34 +17,34 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 ## Commands
 
 ```bash
-pnpm install                     # Install all dependencies
+bun install                      # Install all dependencies
 make dev                         # Start with auto-detected provider (opens at localhost:5173)
 make claude                      # Start with Claude provider (REMOTE=1, serves from port 8000)
 make codex                       # Start with Codex provider (REMOTE=1, serves from port 8000)
 make claude-dev                  # Claude provider without MCP auth (local dev)
 make codex-dev                   # Codex provider without MCP auth (local dev)
 make build                       # Build all packages
-pnpm typecheck                   # Type check all packages
+bun run typecheck                # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
 make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
-pnpm format                      # Format all files with Prettier
-pnpm format:check                # Check formatting without writing
+bun run format                   # Format all files with Prettier
+bun run format:check             # Check formatting without writing
 
 # Run individual packages
 make server                                  # Start server only
 make frontend                                # Start frontend only
 
 # Testing
-pnpm --filter @yaar/frontend test                 # Run all frontend tests
-pnpm --filter @yaar/frontend exec vitest run store  # Run tests matching "store"
-pnpm --filter @yaar/server test                    # Run all server tests
-pnpm --filter @yaar/shared test                    # Run all shared tests
+bun run --filter @yaar/frontend test                 # Run all frontend tests
+bun run --filter @yaar/frontend exec vitest run store  # Run tests matching "store"
+bun run --filter @yaar/server test                    # Run all server tests
+bun run --filter @yaar/shared test                    # Run all shared tests
 
 # Standalone executable (requires Bun)
-pnpm build:exe                   # Build Windows executable
-pnpm build:exe:bundle:linux      # Build Linux executable
-pnpm build:exe:bundle:macos      # Build macOS executable
+bun run build:exe                # Build Windows executable
+bun run build:exe:bundle:linux   # Build Linux executable
+bun run build:exe:bundle:macos   # Build macOS executable
 ```
 
 ## Environment Variables
@@ -80,7 +79,6 @@ yaar/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
 │   ├── server/        # TypeScript WebSocket server
 │   └── frontend/      # React frontend
-├── pnpm-workspace.yaml
 └── package.json
 ```
 
@@ -150,7 +148,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
 - Git branch: uses `master` (not `main`)
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
-- **CI** (`.github/workflows/ci.yml`): install → build shared → typecheck → test (runs on push/PR to master)
+- **CI** (`.github/workflows/ci.yml`): `bun install` → build shared → typecheck → test (runs on push/PR to master)
 
 ## Code Style
 

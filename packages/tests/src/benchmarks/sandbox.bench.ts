@@ -9,7 +9,7 @@
  * transform called synchronously before the VM is involved; regressions there
  * add latency to every sandbox invocation.
  *
- * Run with: pnpm --filter @yaar/tests bench
+ * Run with: bun run --filter @yaar/tests bench
  */
 
 import { bench, describe } from 'vitest';

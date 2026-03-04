@@ -5,20 +5,23 @@
   "type": "module",
   "description": "Reactive AI interface where the AI decides what to show and do next",
   "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "./scripts/dev.sh",
-    "dev:server": "pnpm --filter @yaar/server dev",
-    "dev:frontend": "pnpm --filter @yaar/frontend dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
-    "test:frontend": "pnpm --filter @yaar/frontend test",
-    "test:server": "pnpm --filter @yaar/server test",
-    "test:shared": "pnpm --filter @yaar/shared test",
+    "dev:server": "bun run --filter @yaar/server dev",
+    "dev:frontend": "bun run --filter @yaar/frontend dev",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "lint": "bun run --filter '*' lint",
+    "test": "bun run --filter '*' test",
+    "test:frontend": "bun run --filter @yaar/frontend test",
+    "test:server": "bun run --filter @yaar/server test",
+    "test:shared": "bun run --filter @yaar/shared test",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules dist",
-    "build:exe": "pnpm build:exe:prepare && pnpm build:exe:libs && pnpm build:exe:bundle",
-    "build:exe:prepare": "pnpm -r build",
+    "build:exe": "bun run build:exe:prepare && bun run build:exe:libs && bun run build:exe:bundle",
+    "build:exe:prepare": "bun run --filter '*' build",
     "build:exe:libs": "bun scripts/prebundle-libs.js",
     "build:exe:bundle": "bun scripts/build-exe-bundle.js --target windows",
     "build:exe:bundle:linux": "bun scripts/build-exe-bundle.js --target linux",
@@ -29,17 +32,19 @@
     "prepare": "husky"
   },
   "engines": {
-    "pnpm": ">=10",
     "bun": ">=1.1.22"
   },
+  "trustedDependencies": [
+    "canvas"
+  ],
   "lint-staged": {
     "packages/server/src/**/*.{ts,js}": [
       "prettier --write",
-      "pnpm --filter @yaar/server exec eslint --fix"
+      "eslint --fix"
     ],
     "packages/frontend/src/**/*.{ts,tsx,js,jsx}": [
       "prettier --write",
-      "pnpm --filter @yaar/frontend exec eslint --fix"
+      "eslint --fix"
     ],
     "packages/shared/src/**/*.{ts,js}": [
       "prettier --write"

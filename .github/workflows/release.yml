@@ -13,36 +13,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - uses: oven-sh/setup-bun@v2
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
 
-      - uses: oven-sh/setup-bun@v2
-
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
 
       - name: Build all packages
-        run: pnpm -r build
+        run: bun run --filter '*' build
 
       - name: Prebundle libraries
-        run: pnpm build:exe:libs
+        run: bun run build:exe:libs
 
       - name: Build Windows executable
-        run: pnpm build:exe:bundle
+        run: bun run build:exe:bundle
 
       - name: Build Linux executable
         run: |
-          pnpm build:exe:bundle:linux
+          bun run build:exe:bundle:linux
           mv dist/yaar dist/yaar-linux
 
       - name: Build macOS executable
         run: |
-          pnpm build:exe:bundle:macos
+          bun run build:exe:bundle:macos
           mv dist/yaar dist/yaar-macos
 
       - name: Upload assets
