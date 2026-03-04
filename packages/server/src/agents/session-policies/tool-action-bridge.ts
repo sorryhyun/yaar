@@ -45,6 +45,6 @@ export class ToolActionBridge {
       agentId: uiAgentId,
       monitorId,
     });
-    await this.getLogger()?.logAction(action, uiAgentId);
+    this.getLogger()?.logAction(action, uiAgentId);
   }
 }

@@ -85,7 +85,7 @@ export class StreamToEventMapper {
           agentId: this.role,
           monitorId: this.monitorId,
         });
-        await this.logger?.logToolUse(
+        this.logger?.logToolUse(
           message.toolName ?? 'unknown',
           message.toolInput,
           message.toolUseId,
@@ -116,7 +116,7 @@ export class StreamToEventMapper {
           agentId: this.role,
           monitorId: this.monitorId,
         });
-        await this.logger?.logToolResult(
+        this.logger?.logToolResult(
           message.toolName ?? 'tool',
           message.content,
           message.toolUseId,
@@ -129,7 +129,7 @@ export class StreamToEventMapper {
           await this.onSessionId(message.sessionId);
         }
         if (this.state.responseText) {
-          await this.logger?.logAssistantMessage(this.state.responseText, this.role, this.source);
+          this.logger?.logAssistantMessage(this.state.responseText, this.role, this.source);
           await this.logger?.updateLastActivity();
           this.onContextMessage?.('assistant', this.state.responseText);
         }
@@ -180,7 +180,7 @@ export class StreamToEventMapper {
     // Log only the new thinking text since last flush (handles multiple thinking blocks)
     const newText = this.state.thinkingText.slice(this.lastFlushedThinkingLength);
     if (newText) {
-      await this.logger?.logThinking(newText, this.role);
+      this.logger?.logThinking(newText, this.role);
     }
 
     this.lastFlushedThinkingLength = this.state.thinkingText.length;

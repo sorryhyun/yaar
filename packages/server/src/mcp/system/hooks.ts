@@ -33,20 +33,32 @@ interface HooksFile {
 
 const HOOKS_PATH = 'hooks.json';
 
+let cachedHooksFile: HooksFile | null = null;
+
 async function loadHooksFile(): Promise<HooksFile> {
+  if (cachedHooksFile) return cachedHooksFile;
+
   const result = await configRead(HOOKS_PATH);
   if (result.success && result.content) {
     try {
-      return JSON.parse(result.content) as HooksFile;
+      cachedHooksFile = JSON.parse(result.content) as HooksFile;
+      return cachedHooksFile;
     } catch {
       // Corrupted file, start fresh
     }
   }
-  return { hooks: [], idCounter: 0 };
+  cachedHooksFile = { hooks: [], idCounter: 0 };
+  return cachedHooksFile;
 }
 
 async function saveHooksFile(data: HooksFile): Promise<void> {
   await configWrite(HOOKS_PATH, JSON.stringify(data, null, 2));
+  cachedHooksFile = data;
+}
+
+/** Reset the in-memory cache (for testing). */
+export function _resetHooksCache(): void {
+  cachedHooksFile = null;
 }
 
 /**

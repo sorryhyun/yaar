@@ -49,12 +49,11 @@
     ]
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.25.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "node-poppler-win32": "1.0.2",
     "prettier": "^3.8.1",
-    "vitest": "^4.0.18",
-    "xlsx": "^0.18.5"
+    "vitest": "^4.0.18"
   }
 }

@@ -8,5 +8,9 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["*/src/**/*.ts", "../packages/server/src/lib/bundled-types/index.d.ts"]
+  "include": [
+    "*/src/**/*.ts",
+    "../packages/server/src/lib/bundled-types/index.d.ts",
+    "../packages/server/src/lib/bundled-types/yaar.d.ts"
+  ]
 }

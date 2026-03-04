@@ -45,26 +45,32 @@ function getPermissionKey(toolName: string, context?: string): string {
   return context ? `${toolName}:${context}` : toolName;
 }
 
+let cachedPermissions: PermissionsFile | null = null;
+
 /**
- * Load permissions from disk.
+ * Load permissions from disk (cached after first read).
  */
 async function loadPermissions(): Promise<PermissionsFile> {
+  if (cachedPermissions) return cachedPermissions;
+
   try {
     const content = await Bun.file(getPermissionsPath()).text();
-    return JSON.parse(content) as PermissionsFile;
+    cachedPermissions = JSON.parse(content) as PermissionsFile;
   } catch {
     // File doesn't exist or is invalid, return empty
-    return {};
+    cachedPermissions = {};
   }
+  return cachedPermissions;
 }
 
 /**
- * Save permissions to disk.
+ * Save permissions to disk and update cache.
  */
 async function savePermissions(permissions: PermissionsFile): Promise<void> {
   const filePath = getPermissionsPath();
   await mkdir(dirname(filePath), { recursive: true });
   await Bun.write(filePath, JSON.stringify(permissions, null, 2));
+  cachedPermissions = permissions;
 }
 
 /**

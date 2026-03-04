@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared codex-types
+.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
 
 # Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
 CODEX_BIN ?= codex
@@ -58,6 +58,14 @@ test-server:
 # Run shared tests
 test-shared:
 	pnpm --filter @yaar/shared test
+
+# Run integration/security tests (packages/tests/)
+test-integration:
+	pnpm --filter @yaar/tests test
+
+# Run performance benchmarks (packages/tests/src/benchmarks/)
+bench:
+	pnpm --filter @yaar/tests bench
 
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by ESM resolution

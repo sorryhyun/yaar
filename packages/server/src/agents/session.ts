@@ -280,7 +280,7 @@ export class AgentSession {
     const fullContent = content;
 
     // Log user message with role identifier and source
-    await this.sessionLogger?.logUserMessage(fullContent, role, options.source);
+    this.sessionLogger?.logUserMessage(fullContent, role, options.source);
     onContextMessage?.('user', fullContent);
 
     try {
@@ -337,7 +337,7 @@ export class AgentSession {
           const canonical = options.canonicalAgent;
           if (canonical) {
             try {
-              await this.sessionLogger?.logThreadId(canonical, sessionId);
+              this.sessionLogger?.logThreadId(canonical, sessionId);
             } catch (err) {
               console.warn(`[AgentSession] Failed to persist thread ID for ${canonical}:`, err);
             }

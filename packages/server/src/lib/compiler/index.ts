@@ -253,6 +253,7 @@ export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckRe
       },
       skipLibCheck: true,
     },
+    files: [join(BUNDLED_TYPES_DIR, 'yaar.d.ts')],
     include: ['src/**/*.ts'],
   };
 

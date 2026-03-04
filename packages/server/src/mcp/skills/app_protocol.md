@@ -11,10 +11,9 @@ Put the registration in `src/protocol.ts` and call it from main.ts inside `onMou
 ```ts
 // src/protocol.ts
 export function registerProtocol() {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!window.yaar?.app) return;
 
-  appApi.register({
+  window.yaar.app.register({
     appId: 'my-app',
     name: 'My App',
     state: { /* ... */ },

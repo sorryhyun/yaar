@@ -438,7 +438,7 @@ export class LiveSession {
         const logger = this.pool?.getSessionLogger();
 
         for (const interaction of event.interactions) {
-          await logger?.logInteraction(interaction);
+          logger?.logInteraction(interaction);
 
           switch (interaction.type) {
             case 'window.close':
@@ -467,8 +467,8 @@ export class LiveSession {
                 };
                 this.windowState.handleAction(moveAction);
                 this.windowState.handleAction(resizeAction);
-                await logger?.logAction(moveAction);
-                await logger?.logAction(resizeAction);
+                logger?.logAction(moveAction);
+                logger?.logAction(resizeAction);
               }
               break;
           }
@@ -547,6 +547,9 @@ export class LiveSession {
     // Force-clear any pending requests/dialogs/app-requests for this session
     // so awaiting tools unblock immediately instead of waiting for timeouts.
     actionEmitter.clearPendingForSession(this.sessionId);
+
+    // Flush buffered session logs before tearing down the pool
+    await this.pool?.getSessionLogger()?.dispose();
 
     if (this.pool) {
       await this.pool.cleanup();

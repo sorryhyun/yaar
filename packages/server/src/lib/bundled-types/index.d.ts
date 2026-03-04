@@ -134,7 +134,7 @@ declare module '@bundled/d3' {
 // ── Documents & Code ────────────────────────────────────────────────────────
 
 declare module '@bundled/xlsx' {
-  export * from 'xlsx';
+  export * from '@e965/xlsx';
 }
 
 declare module '@bundled/marked' {

@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
-import { loadHooks, addHook, removeHook, getHooksByEvent } from '../mcp/system/hooks.js';
+import {
+  loadHooks,
+  addHook,
+  removeHook,
+  getHooksByEvent,
+  _resetHooksCache,
+} from '../mcp/system/hooks.js';
 
 // Use a temporary config directory for tests
 const TEST_CONFIG_DIR = join(import.meta.dirname, '__test-config__');
@@ -38,6 +44,7 @@ vi.mock('../../src/storage/storage-manager.js', async () => {
 
 describe('hooks storage', () => {
   beforeEach(async () => {
+    _resetHooksCache();
     await mkdir(TEST_CONFIG_DIR, { recursive: true });
   });
 

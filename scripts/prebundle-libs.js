@@ -29,7 +29,7 @@ const BUNDLED_LIBRARIES = {
   'konva': 'konva',
   'three': 'three',
   'cannon-es': 'cannon-es',
-  'xlsx': 'xlsx',
+  'xlsx': '@e965/xlsx',
   'chart.js': 'chart.js',
   'd3': 'd3',
   'matter-js': 'matter-js',

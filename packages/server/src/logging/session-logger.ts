@@ -6,6 +6,9 @@ import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';
 
+const LOG_FLUSH_MS = 200;
+const METADATA_FLUSH_MS = 300;
+
 /**
  * Generate a unique session ID based on timestamp.
  */
@@ -60,6 +63,12 @@ export async function createSession(provider: string): Promise<SessionInfo> {
 export class SessionLogger {
   private sessionInfo: SessionInfo;
 
+  // Write buffer: accumulates JSONL lines per file, flushed on a debounced timer
+  private writeBuffer = new Map<string, string[]>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private metadataTimer: ReturnType<typeof setTimeout> | null = null;
+  private metadataDirty = false;
+
   constructor(sessionInfo: SessionInfo) {
     this.sessionInfo = sessionInfo;
   }
@@ -89,18 +98,19 @@ export class SessionLogger {
     const agentFilename = agentId.replace(/[^a-zA-Z0-9-_]/g, '_');
     await Bun.write(join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`), '');
 
-    // Update metadata
-    await this.saveMetadata();
+    // Update metadata (debounced)
+    this.scheduleMetadataSave();
   }
 
   /**
    * Append a structured entry to both global and per-agent logs.
+   * Buffered — actual writes happen on debounced flush.
    */
-  private async appendEntry(
+  private appendEntry(
     type: string,
     agentId: string | undefined,
     fields: Record<string, unknown>,
-  ): Promise<void> {
+  ): void {
     const agent = agentId ?? 'main-monitor-0';
     const parentAgentId = this.sessionInfo.metadata.agents[agent]?.parentAgentId ?? null;
     const entry = {
@@ -111,22 +121,86 @@ export class SessionLogger {
       ...fields,
     };
 
-    // Append to global messages log
-    await appendFile(
-      join(this.sessionInfo.directory, 'messages.jsonl'),
-      JSON.stringify(entry) + '\n',
-    );
+    const line = JSON.stringify(entry) + '\n';
 
-    // Append to per-agent JSONL
+    // Buffer global messages log
+    const globalPath = join(this.sessionInfo.directory, 'messages.jsonl');
+    this.bufferLine(globalPath, line);
+
+    // Buffer per-agent JSONL
     const agentFilename = agent.replace(/[^a-zA-Z0-9-_]/g, '_');
-    try {
-      await appendFile(
-        join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`),
-        JSON.stringify(entry) + '\n',
-      );
-    } catch {
-      // Agent file might not exist yet
+    const agentPath = join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`);
+    this.bufferLine(agentPath, line);
+
+    this.scheduleFlush();
+  }
+
+  private bufferLine(filePath: string, line: string): void {
+    let lines = this.writeBuffer.get(filePath);
+    if (!lines) {
+      lines = [];
+      this.writeBuffer.set(filePath, lines);
     }
+    lines.push(line);
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flush().catch((err) => {
+        console.error('[SessionLogger] Flush failed:', err);
+      });
+    }, LOG_FLUSH_MS);
+  }
+
+  /**
+   * Flush all buffered log lines to disk.
+   */
+  async flush(): Promise<void> {
+    if (this.writeBuffer.size === 0 && !this.metadataDirty) return;
+
+    // Snapshot and clear the buffer
+    const entries = [...this.writeBuffer.entries()];
+    this.writeBuffer.clear();
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    // Write each file's accumulated lines in a single appendFile call
+    const writes = entries.map(([filePath, lines]) =>
+      appendFile(filePath, lines.join('')).catch(() => {
+        // Agent file might not exist yet
+      }),
+    );
+    await Promise.all(writes);
+
+    // Also flush metadata if dirty
+    if (this.metadataDirty) {
+      this.metadataDirty = false;
+      if (this.metadataTimer) {
+        clearTimeout(this.metadataTimer);
+        this.metadataTimer = null;
+      }
+      await this.saveMetadataToDisk();
+    }
+  }
+
+  /**
+   * Flush all pending writes and clean up timers. Call on session cleanup.
+   */
+  async dispose(): Promise<void> {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.metadataTimer) {
+      clearTimeout(this.metadataTimer);
+      this.metadataTimer = null;
+    }
+    this.metadataDirty = true; // force metadata write
+    await this.flush();
   }
 
   /**
@@ -145,51 +219,43 @@ export class SessionLogger {
     return path.join(' → ');
   }
 
-  async logUserMessage(
-    content: string,
-    agentId: string | undefined,
-    source?: ContextSource,
-  ): Promise<void> {
-    await this.appendEntry('user', agentId, { content, ...(source ? { source } : {}) });
+  logUserMessage(content: string, agentId: string | undefined, source?: ContextSource): void {
+    this.appendEntry('user', agentId, { content, ...(source ? { source } : {}) });
   }
 
-  async logAssistantMessage(
-    content: string,
-    agentId: string | undefined,
-    source?: ContextSource,
-  ): Promise<void> {
-    await this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
+  logAssistantMessage(content: string, agentId: string | undefined, source?: ContextSource): void {
+    this.appendEntry('assistant', agentId, { content, ...(source ? { source } : {}) });
   }
 
-  async logThinking(content: string, agentId?: string): Promise<void> {
-    await this.appendEntry('thinking', agentId, { content });
+  logThinking(content: string, agentId?: string): void {
+    this.appendEntry('thinking', agentId, { content });
   }
 
-  async logToolUse(
+  logToolUse(
     toolName: string,
     toolInput: unknown,
     toolUseId: string | undefined,
     agentId?: string,
-  ): Promise<void> {
-    await this.appendEntry('tool_use', agentId, { toolName, toolInput, toolUseId });
+  ): void {
+    this.appendEntry('tool_use', agentId, { toolName, toolInput, toolUseId });
   }
 
-  async logToolResult(
+  logToolResult(
     toolName: string,
     content: string | undefined,
     toolUseId: string | undefined,
     agentId?: string,
-  ): Promise<void> {
-    await this.appendEntry('tool_result', agentId, { toolName, content, toolUseId });
+  ): void {
+    this.appendEntry('tool_result', agentId, { toolName, content, toolUseId });
   }
 
-  async logAction(action: OSAction, agentId?: string): Promise<void> {
-    await this.appendEntry('action', agentId, { action });
+  logAction(action: OSAction, agentId?: string): void {
+    this.appendEntry('action', agentId, { action });
   }
 
-  async logInteraction(interaction: UserInteraction): Promise<void> {
+  logInteraction(interaction: UserInteraction): void {
     const compact = formatCompactInteraction(interaction);
-    await this.appendEntry('interaction', undefined, {
+    this.appendEntry('interaction', undefined, {
       interaction: compact,
       source: 'user',
       windowId: interaction.windowId,
@@ -199,26 +265,42 @@ export class SessionLogger {
   /**
    * Persist a thread ID for a canonical agent name.
    */
-  async logThreadId(canonicalAgent: string, threadId: string): Promise<void> {
+  logThreadId(canonicalAgent: string, threadId: string): void {
     if (!this.sessionInfo.metadata.threadIds) {
       this.sessionInfo.metadata.threadIds = {};
     }
     this.sessionInfo.metadata.threadIds[canonicalAgent] = threadId;
-    await this.saveMetadata();
+    this.scheduleMetadataSave();
   }
 
   /**
-   * Update the last activity timestamp.
+   * Update the last activity timestamp. Also forces a flush.
    */
   async updateLastActivity(): Promise<void> {
     this.sessionInfo.metadata.lastActivity = new Date().toISOString();
-    await this.saveMetadata();
+    this.metadataDirty = true;
+    await this.flush();
   }
 
   /**
-   * Save metadata to disk.
+   * Schedule a debounced metadata save.
    */
-  private async saveMetadata(): Promise<void> {
+  private scheduleMetadataSave(): void {
+    this.metadataDirty = true;
+    if (this.metadataTimer) return;
+    this.metadataTimer = setTimeout(() => {
+      this.metadataTimer = null;
+      this.metadataDirty = false;
+      this.saveMetadataToDisk().catch((err) => {
+        console.error('[SessionLogger] Metadata save failed:', err);
+      });
+    }, METADATA_FLUSH_MS);
+  }
+
+  /**
+   * Write metadata to disk immediately.
+   */
+  private async saveMetadataToDisk(): Promise<void> {
     await Bun.write(
       join(this.sessionInfo.directory, 'metadata.json'),
       JSON.stringify(this.sessionInfo.metadata, null, 2),
