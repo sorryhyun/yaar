@@ -87,7 +87,7 @@ MCP tools are syscalls. 8 namespaced HTTP endpoints on the same server (`/mcp/{n
 | `storage` | Filesystem API | `mount`, `unmount`, `list_mounts` |
 | `apps` | Package manager | `list`, `load_skill`, `read_config`, `write_config`, marketplace |
 | `user` | stdin/stdout | `ask`, `request` (prompt user for input) |
-| `dev` | Compiler toolchain | `compile`, `compile_component`, `typecheck`, `deploy`, `clone`, `write_json` |
+| `dev` | Compiler toolchain | `compile`, `typecheck`, `deploy`, `clone` |
 | `basic` | File I/O | `read`, `write`, `list`, `delete`, `edit` (URI-style: `sandbox://`, `storage://`) |
 | `browser` | Network stack | `open`, `click`, `type`, `press`, `scroll`, `screenshot`, `extract`, `navigate`, `hover`, `wait_for`, `close` |
 

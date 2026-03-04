@@ -441,7 +441,7 @@ session_logs/
 | `mcp/window-state.ts` | WindowStateRegistry — 세션별 열린 윈도우 추적 |
 | `mcp/domains.ts` | HTTP 도구 및 샌드박스 fetch용 도메인 허용 목록 |
 | `mcp/skills/` | `skill` 도구를 통한 동적 참조 문서 (app_dev, sandbox, components, host_api, app_protocol) |
-| `mcp/dev/` | 앱 개발 도구 (compile, compile_component, typecheck, deploy, clone, write_json) |
+| `mcp/dev/` | 앱 개발 도구 (compile, typecheck, deploy, clone) |
 | `mcp/basic/` | 통합 파일 I/O 도구 (read, write, list, delete, edit — `sandbox://`, `storage://` URI 사용) |
 | `mcp/browser/` | CDP 브라우저 자동화 도구 (open, click, type, press, scroll, screenshot, extract, close) |
 | `mcp/user/` | 유저 프롬프트 도구 (ask, request) |

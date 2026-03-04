@@ -93,7 +93,7 @@ src/
 │   ├── browser/       # open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome required)
 │   ├── basic/         # read, write, list, delete, edit (URI-style: sandbox://, storage://)
 │   │   ├── uri.ts (URI parser), index.ts
-│   └── dev/           # compile, compile_component, typecheck, deploy, clone, write_json
+│   └── dev/           # compile, typecheck, deploy, clone
 │       ├── compile.ts, deploy.ts, helpers.ts
 ├── reload/            # Fingerprint-based action cache (cache.ts, fingerprint.ts, tools.ts, types.ts)
 ├── logging/           # Session logging (write), reading, context restore, and window restore
@@ -232,7 +232,7 @@ Tools are organized into domain folders under `mcp/`, each with an `index.ts` th
 | `storage/` | storage | mount, unmount, list_mounts |
 | `apps/` | apps | list, load_skill, set_app_badge, market_list, market_get, market_delete |
 | `user/` | user | ask, request |
-| `dev/` | dev | compile, compile_component, typecheck, deploy, clone, write_json |
+| `dev/` | dev | compile, typecheck, deploy, clone |
 | `basic/` | basic | read, write, list, delete, edit (URI-style paths: `sandbox://`, `storage://`) |
 | `browser/` | browser | open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome/Edge required) |
 | `reload/` | system | reload_cached, list_reload_options |
