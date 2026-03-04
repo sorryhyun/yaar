@@ -13,6 +13,7 @@ import {
   handleExportTxt,
   handleExportHtml,
   handleExportDocx,
+  handleExportMd,
   handleFileChange,
   handleEditorClick,
 } from './handlers';
@@ -77,6 +78,7 @@ render(() => html`
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportTxt}>.txt</button>
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportHtml}>.html</button>
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportDocx}>.docx</button>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleExportMd}>.md</button>
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${handleFocus}>Focus</button>
       </div>
     </div>
@@ -94,7 +96,7 @@ render(() => html`
       ></article>
       <input
         type="file"
-        accept=".txt,.html,.htm"
+        accept=".txt,.html,.htm,.docx,.md"
         style="display:none"
         ref=${(el: HTMLInputElement) => { setFileInputEl(el); }}
         onChange=${handleFileChange}

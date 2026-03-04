@@ -178,6 +178,32 @@ input {
   border-radius: 12px;
   color: var(--muted);
 }
+.chart-btn {
+  border-color: #2d4a6b;
+}
+.chart-panel {
+  background: var(--yaar-bg-surface, #161b22);
+  border: 1px solid var(--yaar-border, #30363d);
+  border-radius: 8px;
+  padding: 10px 14px 14px;
+  margin: 8px 0;
+}
+.chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--yaar-text, #e6edf3);
+}
+.chart-wrap {
+  height: 160px;
+  position: relative;
+}
+.chart-wrap canvas {
+  width: 100% !important;
+}
 @media (max-width: 760px) {
   .card-inner {
     grid-template-columns: 1fr;

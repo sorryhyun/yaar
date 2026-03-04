@@ -2,7 +2,7 @@
   "id": "word-lite",
   "name": "Word Lite",
   "icon": "📝",
-  "description": "Lightweight document editor with App Protocol batch document and storage read support",
+  "description": "Lightweight document editor with DOCX/Markdown import, rich text editing, and storage persistence",
   "version": "1.0.0",
   "author": "YAAR"
 }

@@ -1,3 +1,5 @@
+import mammoth from '@bundled/mammoth';
+import { marked } from '@bundled/marked';
 import { downloadBlob, downloadFile, nowLabel, createDocxBlob } from './utils';
 import { editorEl, docTitleEl, fileInputEl, focusMode, setFocusMode, setSaveStateText } from './state';
 import { exec, refreshStats } from './editor';
@@ -51,13 +53,43 @@ export const handleExportDocx = () => {
   setSaveStateText(`Exported .docx at ${nowLabel()}`);
 };
 
+export const handleExportMd = () => {
+  const title = getTitle();
+  const text = editorEl.innerText || '';
+  downloadFile(`${exportBaseName()}.md`, `# ${title}\n\n${text}`, 'text/markdown;charset=utf-8');
+};
+
 export const handleFileChange = async () => {
   const file = fileInputEl?.files?.[0];
   if (!file) return;
-  const text = await file.text();
-  if (/\.html?$/i.test(file.name)) {
+
+  if (/\.docx$/i.test(file.name)) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      editorEl.innerHTML = result.value || '<p></p>';
+    } catch (err) {
+      editorEl.innerHTML = '<p>Failed to parse .docx file.</p>';
+    }
+  } else if (/\.md$/i.test(file.name)) {
+    try {
+      const text = await file.text();
+      const html = await marked.parse(text);
+      editorEl.innerHTML = html;
+    } catch (err) {
+      const text = await file.text();
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+      editorEl.innerHTML = `<p>${escaped}</p>`;
+    }
+  } else if (/\.html?$/i.test(file.name)) {
+    const text = await file.text();
     editorEl.innerHTML = text;
   } else {
+    const text = await file.text();
     const escaped = text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -65,6 +97,7 @@ export const handleFileChange = async () => {
       .replace(/\n/g, '<br>');
     editorEl.innerHTML = `<p>${escaped}</p>`;
   }
+
   docTitleEl.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
   refreshStats();
   setSaveStateText(`Opened ${file.name}`);

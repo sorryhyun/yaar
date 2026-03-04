@@ -213,6 +213,13 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 
 Common mistakes to avoid when building apps:
 
+- **Don't use empty `html` template literals** — `html``\`` (empty tagged template) crashes Solid.js at runtime (`Cannot read properties of undefined (reading 'name')`). The html parser produces 0 nodes and then tries to access `nodes[0].name`. Use `null` instead:
+  ```ts
+  // BAD — crashes at runtime
+  if (loading()) return html``;
+  // GOOD
+  if (loading()) return null;
+  ```
 - **Don't guess API endpoints** — Only use endpoints from `skill("host_api")`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `set_config(section: "app")`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.

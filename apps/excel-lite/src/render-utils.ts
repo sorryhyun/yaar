@@ -36,16 +36,22 @@ export function renderSelectionChart() {
     return;
   }
 
-  const chartType = (refs.chartTypeSel?.value ?? 'bar') as 'bar' | 'line' | 'pie';
+  const chartType = (refs.chartTypeSel?.value ?? 'bar') as 'bar' | 'line' | 'pie' | 'doughnut' | 'scatter';
   selectionChart?.destroy();
 
   const labels = points.map((p) => p.label);
-  const data = points.map((p) => p.value);
+  const values = points.map((p) => p.value);
 
   const colors = [
     '#2a6df6', '#60a5fa', '#93c5fd', '#3b82f6',
     '#1d4ed8', '#bfdbfe', '#dbeafe', '#2563eb',
   ];
+
+  // Scatter uses {x, y} point objects; other types use flat value arrays
+  const isScatter = chartType === 'scatter';
+  const scatterData = isScatter ? values.map((v, i) => ({ x: i, y: v })) : values;
+
+  const isRound = chartType === 'pie' || chartType === 'doughnut';
 
   selectionChart = new Chart(refs.chartCanvas!, {
     type: chartType,
@@ -54,14 +60,14 @@ export function renderSelectionChart() {
       datasets: [
         {
           label: chartType.charAt(0).toUpperCase() + chartType.slice(1) + ' Chart',
-          data,
+          data: scatterData,
           borderColor: '#2a6df6',
-          backgroundColor: chartType === 'pie' ? colors : 'rgba(42, 109, 246, 0.35)',
-          borderWidth: chartType === 'pie' ? 1 : 2,
+          backgroundColor: isRound ? colors : 'rgba(42, 109, 246, 0.35)',
+          borderWidth: isRound ? 1 : 2,
           fill: chartType === 'line',
           tension: 0.3,
           pointBackgroundColor: '#2a6df6',
-          pointRadius: chartType === 'line' ? 4 : 0,
+          pointRadius: (chartType === 'line' || isScatter) ? 4 : 0,
           pointHoverRadius: 6,
         },
       ],
@@ -71,7 +77,7 @@ export function renderSelectionChart() {
       maintainAspectRatio: false,
       animation: { duration: 400, easing: 'easeInOutQuart' },
       plugins: {
-        legend: { display: chartType === 'pie', position: 'bottom' },
+        legend: { display: isRound, position: 'bottom' },
         tooltip: {
           enabled: true,
           callbacks: {
@@ -79,7 +85,7 @@ export function renderSelectionChart() {
           },
         },
       },
-      scales: chartType !== 'pie' ? {
+      scales: !isRound ? {
         x: {
           grid: { color: 'rgba(0,0,0,0.05)' },
           ticks: { font: { size: 11 }, maxRotation: 45 },

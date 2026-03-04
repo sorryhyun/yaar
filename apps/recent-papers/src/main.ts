@@ -1,5 +1,5 @@
 export {};
-import { createSignal, For } from '@bundled/solid-js';
+import { createSignal, createEffect, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import type { DailyPaperItem, Recommendation } from './types';
@@ -9,6 +9,7 @@ import {
 } from './paper-utils';
 import { fetchArxivPapers, fetchHfPapers } from './data';
 import { registerProtocol } from './protocol';
+import { renderActivityChart, destroyChart } from './chart';
 import './styles.css';
 
 // ── Signals ──────────────────────────────────────────────────────────────────
@@ -22,6 +23,8 @@ const [limitVal, setLimitVal] = createSignal(20);
 const [dayRange, setDayRange] = createSignal('all');
 const [sortBy, setSortBy] = createSignal('newest');
 const [arxivQuery, setArxivQuery] = createSignal('cat:cs.AI OR cat:cs.LG');
+const [chartOpen, setChartOpen] = createSignal(false);
+let chartCanvasRef: HTMLCanvasElement | undefined;
 const paperDetailsCache: Record<string, import('./types').PaperDetails> = {};
 
 // ── Logic ────────────────────────────────────────────────────────────────────
@@ -118,6 +121,16 @@ function requestRecommendationsFromAgent(source: 'button' | 'app-command') {
   };
   (window as any).yaar?.app?.sendInteraction?.(payload);
 }
+
+// ── Chart Effect ──────────────────────────────────────────────────────────────
+createEffect(() => {
+  if (!chartOpen()) return;
+  papers(); // track papers changes
+  // Wait one tick for canvas to be mounted
+  setTimeout(() => {
+    if (chartCanvasRef) renderActivityChart(chartCanvasRef, papers());
+  }, 0);
+});
 
 // ── Components ────────────────────────────────────────────────────────────────
 function PaperCard(props: { item: DailyPaperItem }) {
@@ -221,6 +234,11 @@ render(() => html`
       />
 
       <button class="recommend-btn" onClick=${() => requestRecommendationsFromAgent('button')}>Recommend 2 papers</button>
+      <button class="chart-btn" onClick=${() => {
+        const newOpen = !chartOpen();
+        setChartOpen(newOpen);
+        if (!newOpen) destroyChart();
+      }}>📊 ${() => chartOpen() ? 'Hide Chart' : 'Activity Chart'}</button>
       <button onClick=${() => loadPapers()}>Refresh</button>
     </div>
 
@@ -232,6 +250,18 @@ render(() => html`
       const arxivCount = p.filter((x) => getSource(x) === 'arxiv').length;
       return `Showing ${p.length} of ${sp.length} papers (HF ${hfCount} • arXiv ${arxivCount}) • Last updated ${new Date().toLocaleTimeString()}`;
     }}</div>
+
+    ${() => chartOpen() ? html`
+      <div class="chart-panel">
+        <div class="chart-head">
+          <span>📊 Publication Activity</span>
+          <span class="muted">${() => papers().length} papers</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas ref=${(el: HTMLCanvasElement) => { chartCanvasRef = el; }} height="160"></canvas>
+        </div>
+      </div>
+    ` : ''}
 
     ${() => recommendations().length > 0 ? html`
       <div class="recommend-box">
@@ -248,7 +278,7 @@ render(() => html`
 
     <div style="margin-top: 10px;">
       ${() => {
-        if (loading()) return html``;
+        if (loading()) return null;
         const p = papers();
         if (p.length === 0) return html`<div class="empty">No papers available for this filter.</div>`;
         const mode = sourceMode();

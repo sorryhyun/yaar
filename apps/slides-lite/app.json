@@ -1,7 +1,7 @@
 {
   "icon": "🎞️",
   "name": "Slides Lite",
-  "description": "Reactive slide deck editor with yaar.storage persistence",
+  "description": "Reactive slide deck editor with yaar.storage persistence, full Markdown (marked) and code syntax highlighting (Prism)",
   "run": "static/index.html",
   "protocol": {
     "state": {

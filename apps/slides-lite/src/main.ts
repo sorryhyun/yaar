@@ -1,6 +1,7 @@
 import { createSignal, createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import Prism from '@bundled/prismjs';
 import './styles.css';
 import { saveDeck, loadDeck } from './storage';
 import { normalizeAspectRatio, parseAspectRatio, RATIO_PRESETS, type RatioPreset } from './aspect-ratio';
@@ -281,10 +282,12 @@ function renderPresent() {
     </div>
   `;
   document.body.appendChild(wrap);
+  Prism.highlightAllUnder(wrap);
 
   const rerender = () => {
     const slot = wrap.querySelector('#presentSlideWrap') as HTMLDivElement;
     slot.innerHTML = renderSlideHtml(deck.slides[presentIndex], deck.themeId, deck.fontSize);
+    Prism.highlightAllUnder(slot);
     (wrap.querySelector('#presentProgress') as HTMLDivElement).style.width = `${((presentIndex + 1) / deck.slides.length) * 100}%`;
     (wrap.querySelector('#presentCounter') as HTMLSpanElement).textContent = `${presentIndex + 1} / ${deck.slides.length}`;
     (slot.querySelector('.slide') as HTMLElement | null)?.animate(
@@ -421,6 +424,7 @@ createEffect(() => {
   deckVer(); // track any deck content changes
   if (!canvasEl) return;
   canvasEl.innerHTML = renderSlideHtml(activeSlide(), deck.themeId, deck.fontSize);
+  Prism.highlightAllUnder(canvasEl);
   // Apply aspect ratio and animate slide-in
   const slideEl = canvasEl.querySelector('.slide') as HTMLElement | null;
   if (slideEl) {

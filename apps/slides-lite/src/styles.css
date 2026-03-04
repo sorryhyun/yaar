@@ -255,3 +255,55 @@ select {
   background: #38bdf8;
   transition: width 0.15s linear;
 }
+
+/* Prism code highlighting - dark theme */
+pre[class*='language-'],
+code[class*='language-'] {
+  color: #cdd9e5;
+  background: #1e2a38;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  border-radius: 8px;
+}
+pre[class*='language-'] {
+  padding: 12px 14px;
+  overflow: auto;
+  margin: 8px 0;
+}
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6a7f8e;
+}
+.token.keyword,
+.token.tag,
+.token.selector {
+  color: #f97583;
+}
+.token.string,
+.token.attr-value {
+  color: #9ecbff;
+}
+.token.number,
+.token.boolean {
+  color: #f8c555;
+}
+.token.function {
+  color: #b392f0;
+}
+.token.operator,
+.token.punctuation {
+  color: #cdd9e5;
+}
+.token.property,
+.token.attr-name {
+  color: #79b8ff;
+}
+.token.class-name,
+.token.constant {
+  color: #ffab70;
+}
+.token.builtin {
+  color: #56d364;
+}

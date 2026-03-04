@@ -48,6 +48,8 @@ export function createToolbar() {
           <option value="bar">Bar</option>
           <option value="line">Line</option>
           <option value="pie">Pie</option>
+          <option value="doughnut">Doughnut</option>
+          <option value="scatter">Scatter</option>
         </select>
         <input id="storagePathInput" ref=${(el: HTMLInputElement) => { refs.storagePathInput = el; }} title="Storage path" value="excel-lite/sheet.xlsx" />
       </div>

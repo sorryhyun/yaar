@@ -89,6 +89,6 @@
     }
   },
   "appProtocol": true,
-  "description": "A lightweight spreadsheet app with formula support, charting, and XLSX import/export.",
-  "capture": "canvas"
+  "description": "Lightweight spreadsheet with 30+ formulas (IF, ROUND, STDEV, CONCAT, text/date functions), charting, and XLSX import/export",
+  "capture": "dom"
 }
