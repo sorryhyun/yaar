@@ -34,9 +34,12 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
     consumeGestureMessages,
   } = useDesktopStore();
 
+  // Single subscription for all pending-queue drains
   useEffect(() => {
     const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingFeedback.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+      if (wsManager.ws?.readyState !== WebSocket.OPEN) return;
+
+      if (state.pendingFeedback.length > 0) {
         const feedback = consumePendingFeedback();
         for (const item of feedback) {
           send({
@@ -52,16 +55,8 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           });
         }
       }
-    });
-    return unsubscribe;
-  }, [consumePendingFeedback, send]);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (
-        state.pendingAppProtocolResponses.length > 0 &&
-        wsManager.ws?.readyState === WebSocket.OPEN
-      ) {
+      if (state.pendingAppProtocolResponses.length > 0) {
         const items = consumePendingAppProtocolResponses();
         for (const item of items) {
           send({
@@ -72,13 +67,8 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           });
         }
       }
-    });
-    return unsubscribe;
-  }, [consumePendingAppProtocolResponses, send]);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingAppProtocolReady.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+      if (state.pendingAppProtocolReady.length > 0) {
         const windowIds = consumeAppProtocolReady();
         for (const windowId of windowIds) {
           send({
@@ -87,13 +77,8 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           });
         }
       }
-    });
-    return unsubscribe;
-  }, [consumeAppProtocolReady, send]);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingAppInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+      if (state.pendingAppInteractions.length > 0) {
         const items = consumePendingAppInteractions();
         for (const item of items) {
           const messageId = generateMessageId();
@@ -105,13 +90,8 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           });
         }
       }
-    });
-    return unsubscribe;
-  }, [consumePendingAppInteractions, send]);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingInteractions.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+      if (state.pendingInteractions.length > 0) {
         const interactions = consumePendingInteractions();
         if (interactions.length > 0) {
           const unscopedInteractions = interactions.map((i) =>
@@ -120,13 +100,8 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
         }
       }
-    });
-    return unsubscribe;
-  }, [consumePendingInteractions, send]);
 
-  useEffect(() => {
-    const unsubscribe = useDesktopStore.subscribe((state) => {
-      if (state.pendingGestureMessages.length > 0 && wsManager.ws?.readyState === WebSocket.OPEN) {
+      if (state.pendingGestureMessages.length > 0) {
         const messages = consumeGestureMessages();
         for (const content of messages) {
           const messageId = generateMessageId();
@@ -137,8 +112,18 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
       }
     });
     return unsubscribe;
-  }, [consumeGestureMessages, send, addCliEntry]);
+  }, [
+    send,
+    addCliEntry,
+    consumePendingFeedback,
+    consumePendingAppProtocolResponses,
+    consumeAppProtocolReady,
+    consumePendingAppInteractions,
+    consumePendingInteractions,
+    consumeGestureMessages,
+  ]);
 
+  // Separate subscription for window-unlock → queued action replay
   useEffect(() => {
     let previousWindows = useDesktopStore.getState().windows;
     const consumeQueuedActions = useDesktopStore.getState().consumeQueuedActions;

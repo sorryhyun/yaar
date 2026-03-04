@@ -1,9 +1,8 @@
 /**
- * HtmlRenderer - Renders trusted HTML content.
- *
- * WARNING: Only use for trusted content. This renders raw HTML.
+ * HtmlRenderer - Renders HTML content with DOMPurify sanitization.
  */
-import { memo } from 'react';
+import DOMPurify from 'dompurify';
+import { memo, useMemo } from 'react';
 import styles from '@/styles/window/renderers.module.css';
 
 interface HtmlRendererProps {
@@ -11,7 +10,8 @@ interface HtmlRendererProps {
 }
 
 function HtmlRenderer({ data }: HtmlRendererProps) {
-  return <div className={styles.html} dangerouslySetInnerHTML={{ __html: data }} />;
+  const sanitized = useMemo(() => DOMPurify.sanitize(data), [data]);
+  return <div className={styles.html} dangerouslySetInnerHTML={{ __html: sanitized }} />;
 }
 
 export const MemoizedHtmlRenderer = memo(HtmlRenderer);

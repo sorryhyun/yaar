@@ -23,8 +23,6 @@ import type {
 import { toWindowKey } from './helpers';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
-import html2canvas from 'html2canvas';
-
 // Import all slice creators
 import {
   createWindowsSlice,
@@ -52,6 +50,20 @@ import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
 import { applyUserPromptAction } from './slices/userPromptsSlice';
+
+/**
+ * Get the target origin for postMessage to an iframe.
+ * srcdoc/about:blank iframes have a "null" origin, requiring '*'.
+ */
+function getIframeTargetOrigin(iframe: HTMLIFrameElement): string {
+  try {
+    const origin = iframe.contentWindow?.origin;
+    if (origin && origin !== 'null') return origin;
+  } catch {
+    // Cross-origin access blocked
+  }
+  return '*';
+}
 
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
@@ -82,7 +94,10 @@ export function tryIframeSelfCapture(
     }
 
     window.addEventListener('message', handler);
-    iframe.contentWindow?.postMessage({ type: 'yaar:capture-request', requestId }, '*');
+    iframe.contentWindow?.postMessage(
+      { type: 'yaar:capture-request', requestId },
+      getIframeTargetOrigin(iframe),
+    );
   });
 }
 
@@ -131,6 +146,7 @@ async function captureWindow(windowId: string, requestId: string) {
       try {
         const doc = iframe.contentDocument;
         if (doc?.documentElement) {
+          const { default: html2canvas } = await import('html2canvas');
           const canvas = await html2canvas(doc.documentElement, {
             useCORS: true,
             logging: false,
@@ -155,6 +171,7 @@ async function captureWindow(windowId: string, requestId: string) {
     }
 
     // Tier 3: html2canvas on the window frame element
+    const { default: html2canvas } = await import('html2canvas');
     const canvas = await html2canvas(el, {
       useCORS: true,
       logging: false,
@@ -276,14 +293,18 @@ function handleAppProtocolRequest(
       }
       response = { kind: 'command', result: e.data.result, error: e.data.error };
     } else {
-      return;
+      console.warn(`[AppProtocol] Unknown response type: ${type}`);
+      response = {
+        kind: request.kind,
+        error: `Unknown response type: ${type}`,
+      } as AppProtocolResponse;
     }
 
     useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response });
   }
 
   window.addEventListener('message', handler);
-  iframe.contentWindow.postMessage(msg, '*');
+  iframe.contentWindow.postMessage(msg, getIframeTargetOrigin(iframe));
 }
 
 export { handleAppProtocolRequest };
@@ -572,7 +593,10 @@ function initNotificationBroadcaster() {
     const items = Object.values(prev);
     const iframes = document.querySelectorAll<HTMLIFrameElement>(`[${WINDOW_ID_DATA_ATTR}] iframe`);
     for (const iframe of iframes) {
-      iframe.contentWindow?.postMessage({ type: 'yaar:notifications-update', items }, '*');
+      iframe.contentWindow?.postMessage(
+        { type: 'yaar:notifications-update', items },
+        getIframeTargetOrigin(iframe),
+      );
     }
   });
 }

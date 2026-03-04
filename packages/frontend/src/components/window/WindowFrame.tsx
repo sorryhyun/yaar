@@ -8,6 +8,7 @@ import { useComponentAction } from '@/contexts/ComponentActionContext';
 import { WindowCallbackProvider } from '@/contexts/WindowCallbackContext';
 import type { WindowModel } from '@/types/state';
 import { MemoizedContentRenderer } from './ContentRenderer';
+import { RendererErrorBoundary } from './RendererErrorBoundary';
 import { LockOverlay } from './LockOverlay';
 import { SnapPreview } from './SnapPreview';
 import { SelectionActionInput } from './SelectionActionInput';
@@ -327,11 +328,13 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
         }}
       >
         <WindowCallbackProvider callbacks={windowCallbacks}>
-          <MemoizedContentRenderer
-            content={window.content}
-            windowId={windowId}
-            requestId={window.requestId}
-          />
+          <RendererErrorBoundary>
+            <MemoizedContentRenderer
+              content={window.content}
+              windowId={windowId}
+              requestId={window.requestId}
+            />
+          </RendererErrorBoundary>
         </WindowCallbackProvider>
         {window.locked && <LockOverlay queuedCount={queuedCount} />}
         {!isFocused && window.content.renderer === 'iframe' && (

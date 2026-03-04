@@ -12,10 +12,10 @@ export interface RemoteConnection {
   token: string;
 }
 
-/** Get saved remote connection from localStorage. */
+/** Get saved remote connection from sessionStorage. */
 export function getRemoteConnection(): RemoteConnection | null {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = sessionStorage.getItem(STORAGE_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored);
     if (parsed?.serverUrl && parsed?.token) return parsed;
@@ -25,14 +25,14 @@ export function getRemoteConnection(): RemoteConnection | null {
   }
 }
 
-/** Save remote connection to localStorage. */
+/** Save remote connection to sessionStorage (cleared when tab closes). */
 export function setRemoteConnection(conn: RemoteConnection): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conn));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(conn));
 }
 
 /** Clear saved remote connection. */
 export function clearRemoteConnection(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(STORAGE_KEY);
 }
 
 /** Parse connection from URL hash fragment (#remote=<token>). */
