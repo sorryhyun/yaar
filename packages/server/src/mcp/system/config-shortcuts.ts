@@ -13,87 +13,67 @@ import {
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 
-export const shortcutSetFields = {
-  shortcutId: z
-    .string()
-    .optional()
-    .describe('(shortcuts) Shortcut ID — if provided, updates existing; if absent, creates new'),
-  icon: z.string().optional().describe('(shortcuts) Emoji icon or storage image path'),
-  iconType: z
-    .enum(['emoji', 'image'])
-    .optional()
-    .describe('(shortcuts) Icon type (default: emoji)'),
-  shortcutType: z
-    .enum(['file', 'url', 'action', 'app', 'skill'])
-    .optional()
-    .describe('(shortcuts) Shortcut type'),
-  target: z
-    .string()
-    .optional()
-    .describe('(shortcuts) Storage path (file), URL (url), or action identifier (action)'),
-  osActions: z
-    .array(z.record(z.string(), z.unknown()))
-    .optional()
-    .describe(
-      '(shortcuts) OS Actions to execute client-side on click (bypasses AI). Each object needs a "type" field.',
-    ),
-  skill: z
-    .string()
-    .optional()
-    .describe(
-      '(shortcuts) Skill/macro instructions — sent to AI when the shortcut is clicked (type "skill")',
-    ),
-};
+export const shortcutContentSchema = z.object({
+  id: z.string().optional(),
+  label: z.string().optional(),
+  icon: z.string().optional(),
+  iconType: z.enum(['emoji', 'image']).optional(),
+  shortcutType: z.enum(['file', 'url', 'action', 'app', 'skill']).optional(),
+  target: z.string().optional(),
+  osActions: z.array(z.record(z.string(), z.unknown())).optional(),
+  skill: z.string().optional(),
+});
 
-export const shortcutRemoveFields = {
-  shortcutId: z.string().optional().describe('The shortcut ID to remove'),
-};
+export async function handleSetShortcut(content: Record<string, unknown>) {
+  const result = shortcutContentSchema.safeParse(content);
+  if (!result.success) return error(`Invalid shortcuts content: ${result.error.message}`);
 
-export async function handleSetShortcut(args: Record<string, any>) {
-  if (args.shortcutId) {
+  const data = result.data;
+
+  if (data.id) {
     // Update existing shortcut
     const updates: Record<string, unknown> = {};
-    if (args.label !== undefined) updates.label = args.label;
-    if (args.icon !== undefined) updates.icon = args.icon;
-    if (args.iconType !== undefined) updates.iconType = args.iconType;
-    if (args.shortcutType !== undefined) updates.type = args.shortcutType;
-    if (args.target !== undefined) updates.target = args.target;
-    if (args.osActions !== undefined) updates.osActions = args.osActions;
-    if (args.skill !== undefined) updates.skill = args.skill;
+    if (data.label !== undefined) updates.label = data.label;
+    if (data.icon !== undefined) updates.icon = data.icon;
+    if (data.iconType !== undefined) updates.iconType = data.iconType;
+    if (data.shortcutType !== undefined) updates.type = data.shortcutType;
+    if (data.target !== undefined) updates.target = data.target;
+    if (data.osActions !== undefined) updates.osActions = data.osActions;
+    if (data.skill !== undefined) updates.skill = data.skill;
     if (Object.keys(updates).length === 0) {
       return error('No updates provided.');
     }
-    const updated = await updateShortcut(args.shortcutId, updates);
+    const updated = await updateShortcut(data.id, updates);
     if (!updated) {
-      return error(`Shortcut "${args.shortcutId}" not found.`);
+      return error(`Shortcut "${data.id}" not found.`);
     }
     actionEmitter.emitAction({
       type: 'desktop.updateShortcut',
-      shortcutId: args.shortcutId,
+      shortcutId: data.id,
       updates,
     });
-    return ok(`Shortcut "${args.shortcutId}" updated.`);
+    return ok(`Shortcut "${data.id}" updated.`);
   }
 
   // Create new shortcut
-  if (args.shortcutType === 'skill') {
-    if (!args.label || !args.icon || !args.skill) {
+  if (data.shortcutType === 'skill') {
+    if (!data.label || !data.icon || !data.skill) {
       return error('skill shortcuts require label, icon, and skill fields.');
     }
-  } else if (!args.label || !args.icon || !args.shortcutType || !args.target) {
+  } else if (!data.label || !data.icon || !data.shortcutType || !data.target) {
     return error(
       'shortcuts section requires label, icon, shortcutType, and target fields to create.',
     );
   }
   const shortcut: DesktopShortcut = {
     id: `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    label: args.label!,
-    icon: args.icon!,
-    iconType: args.iconType,
-    type: args.shortcutType!,
-    target: args.target || '',
-    osActions: args.osActions as DesktopShortcut['osActions'],
-    ...(args.skill && { skill: args.skill }),
+    label: data.label!,
+    icon: data.icon!,
+    iconType: data.iconType,
+    type: data.shortcutType!,
+    target: data.target || '',
+    osActions: data.osActions as DesktopShortcut['osActions'],
+    ...(data.skill && { skill: data.skill }),
     createdAt: Date.now(),
   };
   await addShortcut(shortcut);

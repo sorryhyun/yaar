@@ -2,7 +2,6 @@
  * Config section: app — per-app configuration (credentials, preferences, etc.).
  *
  * Each app's config is stored at config/{appId}.json as a flat JSON object.
- * Replaces the old apps_read_config / apps_write_config tools.
  */
 
 import { z } from 'zod';
@@ -14,30 +13,19 @@ import {
   listAppConfigs,
 } from '../../mcp/apps/config.js';
 
-export const appSetFields = {
-  appId: z.string().optional().describe('(app) App ID (folder name in apps/)'),
-  appConfig: z
-    .record(z.string(), z.any())
-    .optional()
-    .describe('(app) Config key-value pairs to merge into the app config'),
-};
+export const appContentSchema = z.object({
+  appId: z.string(),
+  config: z.record(z.string(), z.any()),
+});
 
-export const appRemoveFields = {
-  appId: z.string().optional().describe('App ID whose config to remove'),
-  appConfigKey: z
-    .string()
-    .optional()
-    .describe('Specific key to remove (omit to delete entire app config)'),
-};
+export async function handleSetApp(content: Record<string, unknown>) {
+  const result = appContentSchema.safeParse(content);
+  if (!result.success) return error(`Invalid app content: ${result.error.message}`);
 
-export async function handleSetApp(args: Record<string, any>) {
-  if (!args.appId || !args.appConfig) {
-    return error('app section requires appId and appConfig fields.');
-  }
-
-  const result = await writeAppConfig(args.appId, args.appConfig);
-  if (!result.success) return error(result.error!);
-  return ok(`Config updated for app "${args.appId}".`);
+  const { appId, config } = result.data;
+  const writeResult = await writeAppConfig(appId, config);
+  if (!writeResult.success) return error(writeResult.error!);
+  return ok(`Config updated for app "${appId}".`);
 }
 
 export async function handleGetApp(appId?: string) {

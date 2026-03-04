@@ -7,70 +7,41 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok, error } from '../utils.js';
-import {
-  hookSetFields,
-  hookRemoveFields,
-  handleSetHook,
-  handleGetHooks,
-  handleRemoveHook,
-} from './config-hooks.js';
-import { settingsSetFields, handleSetSettings, handleGetSettings } from './config-settings.js';
-import {
-  shortcutSetFields,
-  shortcutRemoveFields,
-  handleSetShortcut,
-  handleGetShortcuts,
-  handleRemoveShortcut,
-} from './config-shortcuts.js';
-import {
-  mountSetFields,
-  mountRemoveFields,
-  handleSetMount,
-  handleGetMounts,
-  handleRemoveMount,
-} from './config-mounts.js';
-import {
-  appSetFields,
-  appRemoveFields,
-  handleSetApp,
-  handleGetApp,
-  handleRemoveApp,
-} from './config-app.js';
+import { ok } from '../utils.js';
+import { handleSetHook, handleGetHooks, handleRemoveHook } from './config-hooks.js';
+import { handleSetSettings, handleGetSettings } from './config-settings.js';
+import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from './config-shortcuts.js';
+import { handleSetMount, handleGetMounts, handleRemoveMount } from './config-mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from './config-app.js';
 
 const CONFIG_SECTIONS = ['hooks', 'settings', 'shortcuts', 'mounts', 'app'] as const;
+const REMOVABLE_SECTIONS = ['hooks', 'shortcuts', 'mounts', 'app'] as const;
 
 export function registerConfigTools(server: McpServer): void {
   server.registerTool(
     'set_config',
     {
       description:
-        'Update configuration. Use section "hooks" for automated hooks, "settings" for user settings, "shortcuts" for desktop shortcuts, "mounts" for host directories, or "app" for per-app config (credentials, preferences).',
+        'Update configuration. Load skill(topic: "config") for content schema reference.',
       inputSchema: {
         section: z.enum(CONFIG_SECTIONS).describe('Config section to update'),
-        label: z
-          .string()
-          .optional()
-          .describe('(hooks/shortcuts) Human-readable description shown in permission dialog'),
-        ...hookSetFields,
-        ...settingsSetFields,
-        ...shortcutSetFields,
-        ...mountSetFields,
-        ...appSetFields,
+        content: z
+          .record(z.string(), z.unknown())
+          .describe('Section-specific content object — see skill(topic: "config") for schema'),
       },
     },
     async (args) => {
       switch (args.section) {
         case 'settings':
-          return handleSetSettings(args);
+          return handleSetSettings(args.content);
         case 'shortcuts':
-          return handleSetShortcut(args);
+          return handleSetShortcut(args.content);
         case 'mounts':
-          return handleSetMount(args);
+          return handleSetMount(args.content);
         case 'hooks':
-          return handleSetHook(args);
+          return handleSetHook(args.content);
         case 'app':
-          return handleSetApp(args);
+          return handleSetApp(args.content);
       }
     },
   );
@@ -116,20 +87,27 @@ export function registerConfigTools(server: McpServer): void {
   server.registerTool(
     'remove_config',
     {
-      description: 'Remove a registered hook, desktop shortcut, mount, or app config by its ID.',
+      description: 'Remove a config entry. Load skill(topic: "config") for details.',
       inputSchema: {
-        ...hookRemoveFields,
-        ...shortcutRemoveFields,
-        ...mountRemoveFields,
-        ...appRemoveFields,
+        section: z.enum(REMOVABLE_SECTIONS).describe('Config section'),
+        id: z.string().describe('Entry ID (hook ID, shortcut ID, mount alias, or app ID)'),
+        key: z
+          .string()
+          .optional()
+          .describe('(app only) Remove a single key instead of entire config'),
       },
     },
     async (args) => {
-      if (args.appId) return handleRemoveApp(args.appId, args.appConfigKey);
-      if (args.mountAlias) return handleRemoveMount(args.mountAlias);
-      if (args.shortcutId) return handleRemoveShortcut(args.shortcutId);
-      if (args.hookId) return handleRemoveHook(args.hookId);
-      return error('Provide hookId, shortcutId, mountAlias, or appId.');
+      switch (args.section) {
+        case 'hooks':
+          return handleRemoveHook(args.id);
+        case 'shortcuts':
+          return handleRemoveShortcut(args.id);
+        case 'mounts':
+          return handleRemoveMount(args.id);
+        case 'app':
+          return handleRemoveApp(args.id, args.key);
+      }
     },
   );
 }

@@ -3,23 +3,23 @@
  */
 
 import { z } from 'zod';
-import { ok } from '../utils.js';
+import { ok, error } from '../utils.js';
 import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
 import { actionEmitter } from '../action-emitter.js';
 
-export const settingsSetFields = {
-  language: z
-    .enum(LANGUAGE_CODES as unknown as [string, ...string[]])
-    .optional()
-    .describe('(settings) Language code (e.g., "en", "ko", "ja")'),
-  onboardingCompleted: z.boolean().optional().describe('(settings) Mark onboarding as completed'),
-};
+export const settingsContentSchema = z.object({
+  language: z.enum(LANGUAGE_CODES as unknown as [string, ...string[]]).optional(),
+  onboardingCompleted: z.boolean().optional(),
+});
 
-export async function handleSetSettings(args: Record<string, any>) {
+export async function handleSetSettings(content: Record<string, unknown>) {
+  const result = settingsContentSchema.safeParse(content);
+  if (!result.success) return error(`Invalid settings content: ${result.error.message}`);
+
   const partial: Record<string, unknown> = {};
-  if (args.language !== undefined) partial.language = args.language;
-  if (args.onboardingCompleted !== undefined)
-    partial.onboardingCompleted = args.onboardingCompleted;
+  if (result.data.language !== undefined) partial.language = result.data.language;
+  if (result.data.onboardingCompleted !== undefined)
+    partial.onboardingCompleted = result.data.onboardingCompleted;
   const settings = await updateSettings(partial as any);
   actionEmitter.emitAction({ type: 'desktop.refreshApps' });
   return ok(JSON.stringify(settings, null, 2));

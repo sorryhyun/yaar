@@ -35,6 +35,8 @@ import componentsMd from './components.md' with { type: 'text' };
 import hostApiMd from './host_api.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
 import appProtocolMd from './app_protocol.md' with { type: 'text' };
+// @ts-expect-error: Bun text import
+import configMd from './config.md' with { type: 'text' };
 
 const TOPICS: Record<string, string> = {
   app_dev: appDevMd,
@@ -42,6 +44,7 @@ const TOPICS: Record<string, string> = {
   components: componentsMd,
   host_api: hostApiMd,
   app_protocol: appProtocolMd,
+  config: configMd,
 };
 
 export { SKILL_TOOL_NAMES } from './names.js';
