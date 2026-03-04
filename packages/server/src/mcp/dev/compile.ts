@@ -1,14 +1,12 @@
 /**
- * App development compile tools - compile and compile_component.
+ * App development compile tools - compile and typecheck.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { mkdir, stat } from 'fs/promises';
-import { join } from 'path';
+import { stat } from 'fs/promises';
 import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
-import { componentLayoutSchema } from '@yaar/shared';
 
 export function registerCompileTools(server: McpServer): void {
   // compile - Compile sandbox TypeScript to HTML
@@ -63,79 +61,6 @@ export function registerCompileTools(server: McpServer): void {
           2,
         ),
       );
-    },
-  );
-
-  // compile_component - Write a .yaarcomponent.json file to sandbox
-  server.registerTool(
-    'compile_component',
-    {
-      description:
-        'Create a .yaarcomponent.json file in a sandbox. This lets you define reusable component window layouts that get deployed alongside the app. After deploy, the AI can load them via create_component(jsonfile="{appId}/{filename}").',
-      inputSchema: {
-        sandboxId: z.string().describe('Sandbox ID to write the component file into'),
-        filename: z
-          .string()
-          .describe(
-            'Filename (e.g., "dashboard.yaarcomponent.json"). Must end with .yaarcomponent.json.',
-          ),
-        components: z
-          .array(z.record(z.string(), z.unknown()))
-          .describe('Flat array of UI components (same format as create_component)'),
-        cols: z
-          .union([z.array(z.number()), z.number()])
-          .optional()
-          .describe('Column layout'),
-        gap: z.enum(['none', 'sm', 'md', 'lg']).optional().describe('Spacing between components'),
-      },
-    },
-    async (args) => {
-      const { sandboxId, filename } = args;
-
-      if (!filename.endsWith('.yaarcomponent.json')) {
-        return error('Filename must end with .yaarcomponent.json');
-      }
-      if (filename.includes('/') || filename.includes('..')) {
-        return error('Filename must not contain path separators.');
-      }
-      if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
-      }
-
-      const layout = {
-        components: args.components,
-        ...(args.cols !== undefined && { cols: args.cols }),
-        ...(args.gap !== undefined && { gap: args.gap }),
-      };
-
-      // Validate against component layout schema
-      const result = componentLayoutSchema.safeParse(layout);
-      if (!result.success) {
-        return error(`Invalid component layout: ${result.error.message}`);
-      }
-
-      const sandboxPath = getSandboxPath(sandboxId);
-      const fullPath = join(sandboxPath, filename);
-
-      try {
-        await mkdir(sandboxPath, { recursive: true });
-        await Bun.write(fullPath, JSON.stringify(result.data, null, 2));
-
-        return ok(
-          JSON.stringify(
-            {
-              sandboxId,
-              filename,
-              message: `Component file written to sandbox/${sandboxId}/${filename}. It will be deployed alongside the app.`,
-            },
-            null,
-            2,
-          ),
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        return error(msg);
-      }
     },
   );
 

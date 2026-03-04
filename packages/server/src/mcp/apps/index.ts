@@ -6,15 +6,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
 import { listApps, loadAppSkill } from './discovery.js';
-import { readAppConfig, writeAppConfig } from './config.js';
 import { registerBadgeTool } from './badge.js';
 import { registerMarketTools } from './market.js';
 
 export const APPS_TOOL_NAMES = [
   'mcp__apps__list',
   'mcp__apps__load_skill',
-  'mcp__apps__read_config',
-  'mcp__apps__write_config',
   'mcp__apps__set_app_badge',
   'mcp__apps__market_list',
   'mcp__apps__market_get',
@@ -30,7 +27,7 @@ export function registerAppsTools(server: McpServer): void {
     'list',
     {
       description:
-        'List all available apps in the local directory "apps/". Returns app ID, name, and whether it has SKILL.md and credentials.',
+        'List all available apps in the local directory "apps/". Returns app ID, name, and whether it has SKILL.md and config.',
     },
     async () => {
       const apps = await listApps();
@@ -42,7 +39,7 @@ export function registerAppsTools(server: McpServer): void {
       const lines = apps.map((app) => {
         const flags = [];
         if (app.hasSkill) flags.push('skill');
-        if (app.hasCredentials) flags.push('credentials');
+        if (app.hasConfig) flags.push('config');
         if (app.appProtocol) flags.push('app-protocol');
         if (app.createShortcut === false) flags.push('no-shortcut');
         const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
@@ -110,77 +107,6 @@ export function registerAppsTools(server: McpServer): void {
       }
 
       return ok(skill);
-    },
-  );
-
-  // apps_read_config - Read app config file
-  server.registerTool(
-    'read_config',
-    {
-      description:
-        'Read a configuration file from an app. For credentials.json, reads from config/credentials/{appId}.json. Other files read from apps/{appId}/. Returns parsed JSON if valid, otherwise returns raw content.',
-      inputSchema: {
-        appId: z.string().describe('The app ID (folder name in apps/)'),
-        filename: z.string().optional().describe('Config filename (default: credentials.json)'),
-      },
-    },
-    async (args) => {
-      const result = await readAppConfig(args.appId, args.filename);
-
-      if (!result.success) {
-        return error(result.error!);
-      }
-
-      // Format content based on type
-      if (typeof result.content === 'object') {
-        return ok(JSON.stringify(result.content, null, 2));
-      }
-      return ok(String(result.content));
-    },
-  );
-
-  // apps_write_config - Write app config file
-  server.registerTool(
-    'write_config',
-    {
-      description:
-        'Write a configuration file for an app. For credentials.json, writes to config/credentials/{appId}.json. Other files write to apps/{appId}/. Content will be stored as JSON.',
-      inputSchema: {
-        appId: z.string().describe('The app ID (folder name in apps/)'),
-        filename: z.string().describe('Config filename (e.g., credentials.json)'),
-        content: z
-          .union([z.record(z.string(), z.any()), z.string()])
-          .describe('JSON object to write. Must be a JSON object, not a string.'),
-      },
-    },
-    async (args) => {
-      // Normalize content: if agent sent a string, parse it as JSON
-      let content: Record<string, unknown>;
-      if (typeof args.content === 'string') {
-        try {
-          const parsed = JSON.parse(args.content);
-          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-            return error(
-              'content must be a JSON object (e.g. {"key": "value"}), not a primitive or array.',
-            );
-          }
-          content = parsed;
-        } catch {
-          return error(
-            'content must be a JSON object (e.g. {"key": "value"}), not a plain string.',
-          );
-        }
-      } else {
-        content = args.content;
-      }
-
-      const result = await writeAppConfig(args.appId, args.filename, content);
-
-      if (!result.success) {
-        return error(result.error!);
-      }
-
-      return ok(`Successfully wrote ${args.filename} for app "${args.appId}".`);
     },
   );
 }

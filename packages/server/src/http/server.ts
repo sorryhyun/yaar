@@ -64,7 +64,7 @@ export function createFetchHandler() {
     const authResponse = checkHttpAuth(req, url);
     if (authResponse) return withCors(authResponse, corsHeaders);
 
-    // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/storage, /mcp/apps)
+    // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/apps, /mcp/basic, ...)
     const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);
     if (mcpMatch && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
       const serverName = mcpMatch[1] as McpServerName;

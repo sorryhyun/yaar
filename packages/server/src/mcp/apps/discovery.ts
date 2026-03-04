@@ -5,7 +5,7 @@
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { PROJECT_ROOT } from '../../config.js';
-import { hasCredentials } from './config.js';
+import { hasConfig } from './config.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
@@ -23,7 +23,7 @@ export interface AppInfo {
   icon?: string;
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
-  hasCredentials: boolean;
+  hasConfig: boolean;
   createShortcut?: boolean;
   run?: string; // Resolved iframe URL for app:// protocol (e.g. /api/apps/{id}/static/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
@@ -60,7 +60,7 @@ export async function listApps(): Promise<AppInfo[]> {
       }
 
       // Check for credentials (in either location)
-      const appHasCredentials = await hasCredentials(appId);
+      const appHasConfig = await hasConfig(appId);
 
       // Check for compiled app (index.html)
       let isCompiled = false;
@@ -149,7 +149,7 @@ export async function listApps(): Promise<AppInfo[]> {
         icon,
         iconType,
         hasSkill,
-        hasCredentials: appHasCredentials,
+        hasConfig: appHasConfig,
         ...(createShortcut === false && { createShortcut: false }),
         ...(resolvedRun && { run: resolvedRun }),
         isCompiled,

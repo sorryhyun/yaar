@@ -7,10 +7,10 @@
 
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
-import { STORAGE_TOOL_NAMES } from '../mcp/storage/index.js';
 import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
 import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
 import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
+import { BASIC_TOOL_NAMES } from '../mcp/basic/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/browser/index.js';
@@ -74,7 +74,7 @@ const profiles: Record<string, AgentProfile> = {
       'mcp__system__run_js',
       ...BROWSER_TOOL_NAMES,
       ...WINDOW_TOOL_NAMES,
-      ...STORAGE_TOOL_NAMES,
+      ...BASIC_TOOL_NAMES,
       ...APPS_ALL_TOOLS,
       ...RELOAD_TOOL_NAMES,
       ...DEV_TOOL_NAMES,
@@ -91,7 +91,7 @@ const profiles: Record<string, AgentProfile> = {
       ...HTTP_TOOL_NAMES,
       ...BROWSER_TOOL_NAMES,
       ...WINDOW_TOOL_NAMES,
-      ...STORAGE_TOOL_NAMES,
+      ...BASIC_TOOL_NAMES,
     ],
   },
 
@@ -99,12 +99,7 @@ const profiles: Record<string, AgentProfile> = {
     id: 'code',
     description: 'Code execution, computation, scripting via JavaScript sandbox',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: [
-      ...INFO_TOOLS,
-      'mcp__system__run_js',
-      ...WINDOW_TOOL_NAMES,
-      ...STORAGE_TOOL_NAMES,
-    ],
+    allowedTools: [...INFO_TOOLS, 'mcp__system__run_js', ...WINDOW_TOOL_NAMES, ...BASIC_TOOL_NAMES],
   },
 
   app: {
@@ -117,7 +112,7 @@ const profiles: Record<string, AgentProfile> = {
       ...HTTP_TOOL_NAMES,
       ...APPS_ALL_TOOLS,
       ...WINDOW_TOOL_NAMES,
-      ...STORAGE_TOOL_NAMES,
+      ...BASIC_TOOL_NAMES,
       ...DEV_TOOL_NAMES,
     ],
   },
@@ -147,7 +142,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
     'mcp__system__run_js',
     ...BROWSER_TOOL_NAMES,
     ...WINDOW_TOOL_NAMES,
-    ...STORAGE_TOOL_NAMES,
+    ...BASIC_TOOL_NAMES,
     ...APPS_ALL_TOOLS,
     ...RELOAD_TOOL_NAMES,
     ...DEV_TOOL_NAMES,

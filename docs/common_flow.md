@@ -440,7 +440,8 @@ Each log entry includes `agentId` for filtering:
 | `mcp/window-state.ts` | WindowStateRegistry — tracks open windows per session |
 | `mcp/domains.ts` | Domain allowlist for HTTP tools and sandbox fetch |
 | `mcp/skills/` | Dynamic reference docs via `skill` tool (app_dev, sandbox, components, host_api, app_protocol) |
-| `mcp/dev/` | App development tools (write_ts, read_ts, apply_diff_ts, compile, compile_component, typecheck, deploy, clone, write_json) |
+| `mcp/dev/` | App development tools (compile, compile_component, typecheck, deploy, clone, write_json) |
+| `mcp/basic/` | Unified file I/O tools (read, write, list, delete, edit via `sandbox://` and `storage://` URIs) |
 | `mcp/browser/` | Browser automation tools via CDP (open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close) |
 | `mcp/user/` | User prompt tools (ask, request) |
 | `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |

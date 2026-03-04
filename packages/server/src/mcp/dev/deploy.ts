@@ -1,5 +1,5 @@
 /**
- * App development deploy tools - deploy, clone, write_json.
+ * App development deploy tools - deploy, clone.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -10,9 +10,8 @@ import { ok, error } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
-import { componentLayoutSchema } from '@yaar/shared';
 import type { AppManifest } from '@yaar/shared';
-import { toDisplayName, generateSandboxId, generateSkillMd, regenerateSkillMd } from './helpers.js';
+import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
@@ -166,9 +165,7 @@ export function registerDeployTools(server: McpServer): void {
       }
 
       if (!hasCompiledApp && componentFiles.length === 0) {
-        return error(
-          'Nothing to deploy. Run compile first or create component files with compile_component.',
-        );
+        return error('Nothing to deploy. Run compile first.');
       }
 
       // Read existing app.json and manifest.json for merging (preserves fields not in deploy args)
@@ -351,7 +348,7 @@ export function registerDeployTools(server: McpServer): void {
     'clone',
     {
       description:
-        "Clone an existing deployed app's source into a sandbox for editing. Use write_ts or apply_diff_ts to modify, then compile and deploy back to the SAME appId to update the app in-place.",
+        "Clone an existing deployed app's source into a sandbox for editing. Use write or edit to modify, then compile and deploy back to the SAME appId to update the app in-place.",
       inputSchema: {
         appId: z.string().describe('The app ID to clone (folder name in apps/)'),
       },
@@ -395,7 +392,7 @@ export function registerDeployTools(server: McpServer): void {
               sandboxId,
               appId,
               files: fileList,
-              message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "src/main.ts" with write_ts or apply_diff_ts, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
+              message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "sandbox://${sandboxId}/src/main.ts" with write or edit, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
             },
             null,
             2,
@@ -404,74 +401,6 @@ export function registerDeployTools(server: McpServer): void {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         return error(`Failed to clone app: ${msg}`);
-      }
-    },
-  );
-
-  // write_json - Write a JSON file directly to a deployed app
-  server.registerTool(
-    'write_json',
-    {
-      description:
-        'Write a JSON file directly to a deployed app directory. Use this for .yaarcomponent.json files or other JSON data. For .yaarcomponent.json files, content is validated against the component layout schema. Also regenerates SKILL.md to include the new component in the Launch section.',
-      inputSchema: {
-        appId: z.string().describe('The app ID (folder name in apps/)'),
-        filename: z.string().describe('Filename (e.g., "dashboard.yaarcomponent.json")'),
-        content: z.record(z.string(), z.unknown()).describe('JSON content to write'),
-      },
-    },
-    async (args) => {
-      const { appId, filename, content } = args;
-
-      // Validate app ID
-      if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-        return error('Invalid app ID.');
-      }
-
-      // Validate filename
-      if (filename.includes('/') || filename.includes('..')) {
-        return error('Filename must not contain path separators.');
-      }
-
-      const appPath = join(APPS_DIR, appId);
-
-      // Check app exists
-      try {
-        await stat(appPath);
-      } catch {
-        return error(`App "${appId}" not found. Deploy it first.`);
-      }
-
-      // Validate against component schema if it's a component file
-      if (filename.endsWith('.yaarcomponent.json')) {
-        const result = componentLayoutSchema.safeParse(content);
-        if (!result.success) {
-          return error(`Invalid component layout: ${result.error.message}`);
-        }
-      }
-
-      try {
-        await Bun.write(join(appPath, filename), JSON.stringify(content, null, 2));
-
-        // Regenerate SKILL.md if a component file was added
-        if (filename.endsWith('.yaarcomponent.json')) {
-          await regenerateSkillMd(appId, appPath);
-        }
-
-        return ok(
-          JSON.stringify(
-            {
-              appId,
-              filename,
-              message: `Written ${filename} to apps/${appId}/`,
-            },
-            null,
-            2,
-          ),
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        return error(msg);
       }
     },
   );

@@ -12,7 +12,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Process table | `AgentPool` | `agents/agent-pool.ts` |
 | Process types | Main (init), window (daemon), ephemeral (one-shot) | `agents/profiles.ts` |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | `agents/context-pool-policies/` |
-| Syscalls | 7 MCP tool namespaces | `mcp/server.ts` |
+| Syscalls | 8 MCP tool namespaces | `mcp/server.ts` |
 | Instruction set | System prompt (~108 lines) | `providers/claude/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | `lifecycle.ts` |
 | Filesystem | `storage/` + mount system | `storage/storage-manager.ts`, `storage/mounts.ts` |
@@ -78,16 +78,17 @@ The primary monitor is never throttled.
 
 ## Syscalls (MCP Tools)
 
-MCP tools are syscalls. 7 namespaced HTTP endpoints on the same server (`/mcp/{namespace}`):
+MCP tools are syscalls. 8 namespaced HTTP endpoints on the same server (`/mcp/{namespace}`):
 
 | Namespace | OS analogy | Key tools |
 |---|---|---|
 | `system` | Core syscalls | `get_info`, `memorize`, `relay_to_main`, config, HTTP, sandbox, reload |
 | `window` | Window manager API | `create`, `update`, `close`, `lock`, `list`, `show_notification` |
-| `storage` | Filesystem API | `read`, `write`, `list`, `delete`, `mount`, `unmount`, `list_mounts` |
+| `storage` | Filesystem API | `mount`, `unmount`, `list_mounts` |
 | `apps` | Package manager | `list`, `load_skill`, `read_config`, `write_config`, marketplace |
 | `user` | stdin/stdout | `ask`, `request` (prompt user for input) |
-| `dev` | Compiler toolchain | `read_ts`, `write_ts`, `compile`, `typecheck`, `deploy` |
+| `dev` | Compiler toolchain | `compile`, `compile_component`, `typecheck`, `deploy`, `clone`, `write_json` |
+| `basic` | File I/O | `read`, `write`, `list`, `delete`, `edit` (URI-style: `sandbox://`, `storage://`) |
 | `browser` | Network stack | `open`, `click`, `type`, `press`, `scroll`, `screenshot`, `extract`, `navigate`, `hover`, `wait_for`, `close` |
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
@@ -122,7 +123,7 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
  3. (bundled exe) mkdirs        ← apps/, sandbox/, config/
  4. (remote mode) genToken      ← generate remote access token
  5. initSessionHub()            ← create singleton SessionHub
- 6. initMcpServer()             ← register 7 MCP namespaces + bearer token
+ 6. initMcpServer()             ← register 8 MCP namespaces + bearer token
  7. ensureAppShortcut() × N     ← sync desktop shortcuts for installed apps
  8. initWarmPool()              ← detect provider, pre-initialize instances
  9. Session restore             ← reload prior windows + context from logs

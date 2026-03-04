@@ -158,9 +158,12 @@ export function registerMarketTools(server: McpServer): void {
       // Remove the app directory
       await rm(appDir, { recursive: true, force: true });
 
-      // Remove credentials if they exist
-      const credPath = join(getConfigDir(), 'credentials', `${appId}.json`);
-      await unlink(credPath).catch(() => {});
+      // Remove app config if it exists
+      const configPath = join(getConfigDir(), `${appId}.json`);
+      await unlink(configPath).catch(() => {});
+      // Also clean up old credentials location
+      const oldCredPath = join(getConfigDir(), 'credentials', `${appId}.json`);
+      await unlink(oldCredPath).catch(() => {});
 
       // Refresh desktop apps
       actionEmitter.emitAction({ type: 'desktop.refreshApps' });

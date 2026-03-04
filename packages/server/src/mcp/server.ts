@@ -16,10 +16,10 @@ import { runWithAgentContext } from '../agents/session.js';
 import { getSessionHub } from '../session/live-session.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
-import { registerStorageTools, STORAGE_TOOL_NAMES } from './storage/index.js';
 import { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
 import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
 import { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
+import { registerBasicTools, BASIC_TOOL_NAMES } from './basic/index.js';
 import { registerSkillTools, SKILL_TOOL_NAMES } from './skills/index.js';
 import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import type { WindowStateRegistry } from './window-state.js';
@@ -28,15 +28,7 @@ import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES, isBrowserAvailable } from './browser/index.js';
 
 /** MCP server categories. */
-export const MCP_SERVERS = [
-  'system',
-  'window',
-  'storage',
-  'apps',
-  'user',
-  'dev',
-  'browser',
-] as const;
+export const MCP_SERVERS = ['system', 'window', 'apps', 'user', 'dev', 'basic', 'browser'] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
 /**
@@ -102,9 +94,6 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
     case 'window':
       registerWindowTools(server, getWindowState);
       break;
-    case 'storage':
-      registerStorageTools(server);
-      break;
     case 'apps':
       registerAppsTools(server);
       break;
@@ -113,6 +102,9 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
       break;
     case 'dev':
       registerAppDevTools(server);
+      break;
+    case 'basic':
+      registerBasicTools(server);
       break;
     case 'browser':
       await registerBrowserTools(server);
@@ -288,10 +280,10 @@ export function getToolNames(): string[] {
     ...SKILL_TOOL_NAMES,
     ...HTTP_TOOL_NAMES,
     ...WINDOW_TOOL_NAMES,
-    ...STORAGE_TOOL_NAMES,
     ...APPS_TOOL_NAMES,
     ...USER_TOOL_NAMES,
     ...DEV_TOOL_NAMES,
+    ...BASIC_TOOL_NAMES,
     ...RELOAD_TOOL_NAMES,
     ...(isBrowserAvailable() ? BROWSER_TOOL_NAMES : []),
   ];

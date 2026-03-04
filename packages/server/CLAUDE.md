@@ -73,7 +73,7 @@ src/
 │   └── codex/                 # CodexProvider, AppServer, JsonRpcWsClient, RawWebSocket, auth, types, message-mapper
 ├── mcp/               # MCP server, domain-organized tools, action emitter
 │   ├── index.ts       # Module re-exports
-│   ├── server.ts      # MCP server init, tool registration, request handling, token (7 namespaces)
+│   ├── server.ts      # MCP server init, tool registration, request handling, token (8 namespaces)
 │   ├── action-emitter.ts  # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts    # WindowStateRegistry — per-session window state tracking
 │   ├── utils.ts       # ok(), okWithImages() response helpers
@@ -82,17 +82,19 @@ src/
 │   ├── skills/        # skill tool — loads reference docs (app_dev, sandbox, components, host_api, app_protocol)
 │   ├── window/        # create, create_component, update, update_component, close, lock/unlock, list, view, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
-│   ├── storage/       # read, write, list, delete, mount, unmount, list_mounts
+│   ├── storage/       # mount, unmount, list_mounts
 │   ├── http/          # http_get, http_post, request_allowing_domain (curl.ts, request.ts, permission.ts)
-│   ├── apps/          # list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete
+│   ├── apps/          # list, load_skill, set_app_badge, market_list, market_get, market_delete
 │   │   ├── discovery.ts (listApps, loadAppSkill — used by API routes)
-│   │   ├── config.ts (credentials, read/write config)
+│   │   ├── config.ts (per-app config at config/{appId}.json — used by system config-app.ts)
 │   │   ├── badge.ts (set_app_badge)
 │   │   └── market.ts (marketplace: list, get, delete)
 │   ├── user/          # ask, request (user prompt tools — live on the `user` MCP server)
 │   ├── browser/       # open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome required)
-│   └── dev/           # write_ts, apply_diff_ts, read_ts, compile, compile_component, typecheck, deploy, clone, write_json
-│       ├── write.ts, read.ts, compile.ts, deploy.ts, helpers.ts
+│   ├── basic/         # read, write, list, delete, edit (URI-style: sandbox://, storage://)
+│   │   ├── uri.ts (URI parser), index.ts
+│   └── dev/           # compile, compile_component, typecheck, deploy, clone, write_json
+│       ├── compile.ts, deploy.ts, helpers.ts
 ├── reload/            # Fingerprint-based action cache (cache.ts, fingerprint.ts, tools.ts, types.ts)
 ├── logging/           # Session logging (write), reading, context restore, and window restore
 │   └── session_logs stored at PROJECT_ROOT/session_logs/{sessionId}/
@@ -219,18 +221,19 @@ Codex settings: `approval_policy=on-request`, `model_reasoning_effort=medium`, `
 
 ## Tools (MCP)
 
-Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. `mcp/server.ts` wires them to the correct MCP server namespace. There are 7 MCP namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`.
+Tools are organized into domain folders under `mcp/`, each with an `index.ts` that exports a `register*Tools()` function. `mcp/server.ts` wires them to the correct MCP server namespace. There are 8 MCP namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`.
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_info (+ optional envVar), memorize, set_config (hooks/settings/shortcuts), get_config, remove_config, relay_to_main, run_js |
+| `system/` | system | get_info (+ optional envVar), memorize, set_config (hooks/settings/shortcuts/mounts/app), get_config, remove_config, relay_to_main, run_js |
 | `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
 | `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |
-| `storage/` | storage | read, write, list, delete, mount, unmount, list_mounts |
-| `apps/` | apps | list, load_skill, read_config, write_config, set_app_badge, market_list, market_get, market_delete |
+| `storage/` | storage | mount, unmount, list_mounts |
+| `apps/` | apps | list, load_skill, set_app_badge, market_list, market_get, market_delete |
 | `user/` | user | ask, request |
-| `dev/` | dev | write_ts, apply_diff_ts, read_ts, compile, compile_component, typecheck, deploy, clone, write_json |
+| `dev/` | dev | compile, compile_component, typecheck, deploy, clone, write_json |
+| `basic/` | basic | read, write, list, delete, edit (URI-style paths: `sandbox://`, `storage://`) |
 | `browser/` | browser | open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome/Edge required) |
 | `reload/` | system | reload_cached, list_reload_options |
 

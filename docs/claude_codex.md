@@ -166,7 +166,7 @@ Codex warmup starts the child process and establishes a dedicated WebSocket conn
 
 ## MCP Integration
 
-Both providers connect to the same 7 MCP tool servers (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`), but configure them differently:
+Both providers connect to the same 8 MCP tool servers (`system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`), but configure them differently:
 
 ### Claude
 
@@ -194,7 +194,7 @@ codex app-server \
   -c mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN \
   -c mcp_servers.window.url=http://127.0.0.1:8000/mcp/window \
   -c mcp_servers.window.bearer_token_env_var=YAAR_MCP_TOKEN \
-  ... (all 7 namespaces)
+  ... (all 8 namespaces)
 ```
 
 The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than directly in headers.

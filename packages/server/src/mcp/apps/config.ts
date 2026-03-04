@@ -1,26 +1,31 @@
 /**
- * App configuration - read/write config files and credential management.
+ * App configuration — read/write per-app config stored at config/{appId}.json.
+ *
+ * Each app gets a single JSON file containing all its config (credentials,
+ * preferences, etc.). Old credential locations are auto-migrated on first read.
  */
 
-import { stat, mkdir, unlink } from 'fs/promises';
-import { join } from 'path';
+import { stat, mkdir, unlink, readdir } from 'fs/promises';
+import { join, basename } from 'path';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../../config.js';
 
-const APPS_DIR = join(PROJECT_ROOT, 'apps');
+function getAppConfigPath(appId: string): string {
+  return join(getConfigDir(), `${appId}.json`);
+}
 
-// Centralized credentials location under config/
-function getCredentialsDir(): string {
+// ── Legacy paths (for migration) ────────────────────────────────────
+
+function getOldCredentialsDir(): string {
   return join(getConfigDir(), 'credentials');
 }
 
-function getCredentialsPath(appId: string): string {
-  return join(getCredentialsDir(), `${appId}.json`);
+function getOldCredentialsPath(appId: string): string {
+  return join(getOldCredentialsDir(), `${appId}.json`);
 }
 
-// Old credentials locations (for migration)
-function getOldCredentialsPath(appId: string): string {
-  return join(APPS_DIR, appId, 'credentials.json');
+function getOldAppCredentialsPath(appId: string): string {
+  return join(PROJECT_ROOT, 'apps', appId, 'credentials.json');
 }
 
 function getLegacyStorageCredentialsPath(appId: string): string {
@@ -28,28 +33,74 @@ function getLegacyStorageCredentialsPath(appId: string): string {
 }
 
 /**
- * Check if credentials exist for an app (in either location).
+ * Migrate credentials from old locations to config/{appId}.json.
+ * Checks (in order): config/credentials/{appId}.json, storage/credentials/, apps/{appId}/.
  */
-export async function hasCredentials(appId: string): Promise<boolean> {
-  // Check current location first
+async function migrateIfNeeded(appId: string): Promise<void> {
+  const newPath = getAppConfigPath(appId);
+
+  // Already has new-format config — skip
   try {
-    await stat(getCredentialsPath(appId));
-    return true;
+    await stat(newPath);
+    return;
   } catch {
-    // Not in current location
+    // Not yet migrated
   }
 
-  // Check legacy storage/credentials/ location
+  const legacyPaths = [
+    getOldCredentialsPath(appId),
+    getLegacyStorageCredentialsPath(appId),
+    getOldAppCredentialsPath(appId),
+  ];
+
+  for (const oldPath of legacyPaths) {
+    try {
+      await stat(oldPath);
+    } catch {
+      continue;
+    }
+
+    // Found old credentials — migrate
+    try {
+      await mkdir(getConfigDir(), { recursive: true });
+      const content = await Bun.file(oldPath).text();
+      await Bun.write(newPath, content);
+      await unlink(oldPath);
+      console.log(`[Apps] Migrated config for ${appId} → config/${appId}.json`);
+    } catch (err) {
+      console.error(`[Apps] Failed to migrate config for ${appId}:`, err);
+    }
+    return;
+  }
+}
+
+/**
+ * Check if an app has any config (in current or legacy locations).
+ */
+export async function hasConfig(appId: string): Promise<boolean> {
+  try {
+    await stat(getAppConfigPath(appId));
+    return true;
+  } catch {
+    /* not in new location */
+  }
+
+  try {
+    await stat(getOldCredentialsPath(appId));
+    return true;
+  } catch {
+    /* not in old config/credentials/ */
+  }
+
   try {
     await stat(getLegacyStorageCredentialsPath(appId));
     return true;
   } catch {
-    // Not in legacy storage location
+    /* not in storage/credentials/ */
   }
 
-  // Check old apps/{appId}/credentials.json location
   try {
-    await stat(getOldCredentialsPath(appId));
+    await stat(getOldAppCredentialsPath(appId));
     return true;
   } catch {
     return false;
@@ -57,129 +108,129 @@ export async function hasCredentials(appId: string): Promise<boolean> {
 }
 
 /**
- * Migrate credentials from old location to new location.
- * Returns true if migration happened, false if already migrated or no credentials.
- */
-async function migrateCredentials(appId: string): Promise<boolean> {
-  const newPath = getCredentialsPath(appId);
-
-  // Check if already in current location
-  try {
-    await stat(newPath);
-    return false; // Already migrated
-  } catch {
-    // Not in current location, continue
-  }
-
-  // Try legacy locations in order: storage/credentials/ first, then apps/{appId}/
-  const legacyPaths = [getLegacyStorageCredentialsPath(appId), getOldCredentialsPath(appId)];
-
-  for (const oldPath of legacyPaths) {
-    try {
-      await stat(oldPath);
-    } catch {
-      continue; // Not in this location
-    }
-
-    // Found credentials, migrate them
-    try {
-      await mkdir(getCredentialsDir(), { recursive: true });
-      const content = await Bun.file(oldPath).text();
-      await Bun.write(newPath, content);
-      await unlink(oldPath);
-      console.log(`[Apps] Migrated credentials for ${appId} to config/credentials/`);
-      return true;
-    } catch (err) {
-      console.error(`[Apps] Failed to migrate credentials for ${appId}:`, err);
-      return false;
-    }
-  }
-
-  return false; // No credentials to migrate
-}
-
-/**
- * Read a config file from an app.
- * For credentials.json, uses the centralized config/credentials/ location.
- * For other files, uses the app folder.
+ * Read an app's config. Auto-migrates from legacy locations.
  */
 export async function readAppConfig(
   appId: string,
-  filename: string = 'credentials.json',
 ): Promise<{ success: boolean; content?: unknown; error?: string }> {
   try {
-    // Prevent directory traversal
-    if (filename.includes('..') || filename.startsWith('/')) {
-      return { success: false, error: 'Invalid filename' };
-    }
-
-    let configPath: string;
-
-    // Handle credentials specially - use centralized location
-    if (filename === 'credentials.json') {
-      // Try migration first
-      await migrateCredentials(appId);
-      configPath = getCredentialsPath(appId);
-    } else {
-      // Other config files stay in app folder
-      configPath = join(APPS_DIR, appId, filename);
-    }
-
-    const content = await Bun.file(configPath).text();
-
-    // Try to parse as JSON
+    await migrateIfNeeded(appId);
+    const content = await Bun.file(getAppConfigPath(appId)).text();
     try {
       return { success: true, content: JSON.parse(content) };
     } catch {
-      // Return as string if not valid JSON
       return { success: true, content };
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
     if (error.includes('ENOENT')) {
-      return { success: false, error: `File not found: ${filename}` };
+      return { success: false, error: `No config found for app "${appId}".` };
     }
     return { success: false, error };
   }
 }
 
 /**
- * Write a config file to an app.
- * For credentials.json, uses the centralized config/credentials/ location.
- * For other files, uses the app folder.
+ * Write (merge) config for an app. Merges the provided keys into the
+ * existing config object, creating the file if it doesn't exist.
  */
 export async function writeAppConfig(
   appId: string,
-  filename: string,
-  content: unknown,
+  config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Prevent directory traversal
-    if (filename.includes('..') || filename.startsWith('/')) {
-      return { success: false, error: 'Invalid filename' };
+    await migrateIfNeeded(appId);
+    await mkdir(getConfigDir(), { recursive: true });
+
+    const configPath = getAppConfigPath(appId);
+
+    // Read existing config to merge
+    let existing: Record<string, unknown> = {};
+    try {
+      const raw = await Bun.file(configPath).text();
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        existing = parsed;
+      }
+    } catch {
+      // File doesn't exist or isn't valid JSON — start fresh
     }
 
-    let configPath: string;
-
-    // Handle credentials specially - use centralized location
-    if (filename === 'credentials.json') {
-      // Ensure credentials directory exists
-      await mkdir(getCredentialsDir(), { recursive: true });
-      configPath = getCredentialsPath(appId);
-    } else {
-      // Other config files stay in app folder
-      const appPath = join(APPS_DIR, appId);
-      await mkdir(appPath, { recursive: true });
-      configPath = join(appPath, filename);
-    }
-
-    // Write content as JSON if object, otherwise as string
-    const data = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-    await Bun.write(configPath, data);
-
+    const merged = { ...existing, ...config };
+    await Bun.write(configPath, JSON.stringify(merged, null, 2));
     return { success: true };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error };
   }
+}
+
+/**
+ * Remove an app's config (or a specific key within it).
+ */
+export async function removeAppConfig(
+  appId: string,
+  key?: string,
+): Promise<{ success: boolean; error?: string }> {
+  const configPath = getAppConfigPath(appId);
+
+  try {
+    if (!key) {
+      // Remove entire config file
+      await unlink(configPath);
+      return { success: true };
+    }
+
+    // Remove specific key
+    const raw = await Bun.file(configPath).text();
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) {
+      return { success: false, error: 'Config is not a JSON object.' };
+    }
+    if (!(key in parsed)) {
+      return { success: false, error: `Key "${key}" not found in app "${appId}" config.` };
+    }
+    delete parsed[key];
+    await Bun.write(configPath, JSON.stringify(parsed, null, 2));
+    return { success: true };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Unknown error';
+    if (error.includes('ENOENT')) {
+      return { success: false, error: `No config found for app "${appId}".` };
+    }
+    return { success: false, error };
+  }
+}
+
+/**
+ * List all app configs (reads config/*.json, excluding system config files).
+ */
+export async function listAppConfigs(): Promise<Record<string, unknown>> {
+  const configDir = getConfigDir();
+  const systemFiles = new Set([
+    'hooks.json',
+    'settings.json',
+    'shortcuts.json',
+    'permissions.json',
+    'mounts.json',
+    'curl_allowed_domains.yaml',
+  ]);
+
+  const result: Record<string, unknown> = {};
+  try {
+    const entries = await readdir(configDir);
+    for (const entry of entries) {
+      if (!entry.endsWith('.json') || systemFiles.has(entry)) continue;
+      const appId = basename(entry, '.json');
+      try {
+        const raw = await Bun.file(join(configDir, entry)).text();
+        result[appId] = JSON.parse(raw);
+      } catch {
+        // Skip unreadable files
+      }
+    }
+  } catch {
+    // Config dir doesn't exist yet
+  }
+  return result;
 }

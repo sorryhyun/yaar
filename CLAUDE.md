@@ -110,7 +110,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-6. **MCP tools**: 7 namespaced MCP endpoints (`system`, `window`, `storage`, `apps`, `user`, `dev`, `browser`) served via a single HTTP server using `@modelcontextprotocol/sdk`.
+6. **MCP tools**: 8 namespaced MCP endpoints (`system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`) served via a single HTTP server using `@modelcontextprotocol/sdk`.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
 8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
@@ -220,7 +220,7 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
    - Available actions
    - Example workflows
 3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
-4. (Optional) Use `apps_write_config` to store credentials (saved to `config/credentials/myapp.json`, git-ignored)
+4. (Optional) Use `set_config(section: "app", appId, appConfig)` to store credentials (saved to `config/{appId}.json`, git-ignored)
 
 ### Apps Tools (MCP)
 
@@ -228,12 +228,15 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 |------|-------------|
 | `apps_list` | List all available apps |
 | `apps_load_skill` | Load SKILL.md for an app |
-| `apps_read_config` | Read config file (credentials.json reads from `config/credentials/{appId}.json`) |
-| `apps_write_config` | Write config file (credentials.json writes to `config/credentials/{appId}.json`) |
 | `apps_set_app_badge` | Set badge count on a desktop app icon |
 | `apps_market_list` | List apps available in the marketplace |
 | `apps_market_get` | Download and install an app from the marketplace |
 | `apps_market_delete` | Uninstall an app and its credentials |
+
+App config (credentials, preferences) is managed via `system` config tools:
+- `set_config(section: "app", appId, appConfig)` — merge config into `config/{appId}.json`
+- `get_config(section: "app", appId?)` — read app config
+- `remove_config(appId, appConfigKey?)` — remove app config key or entire file
 
 ### Example: GitHub Manager App
 
@@ -242,10 +245,10 @@ apps/github-manager/
 ├── SKILL.md           # API docs, auth flow, example usage
 └── app.json           # { "icon": "🐙", "name": "GitHub Manager", "protocol": {...} }
 
-config/credentials/
+config/
 └── github-manager.json  # { "api_key": "ghp_xxx" } (git-ignored)
 ```
 
 When user clicks the GitHub Manager icon, the AI loads `SKILL.md` and can then help with repos, issues, etc.
 
-**Note:** Old credentials at `apps/{appId}/credentials.json` or `storage/credentials/{appId}.json` are automatically migrated to `config/credentials/{appId}.json` on first read.
+**Note:** Old credentials at `config/credentials/{appId}.json`, `apps/{appId}/credentials.json`, or `storage/credentials/{appId}.json` are automatically migrated to `config/{appId}.json` on first read.

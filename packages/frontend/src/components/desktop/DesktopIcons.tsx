@@ -17,7 +17,7 @@ interface AppInfo {
   icon?: string;
   iconType?: 'emoji' | 'image';
   hasSkill: boolean;
-  hasCredentials: boolean;
+  hasConfig: boolean;
   run?: string;
   variant?: 'standard' | 'widget' | 'panel';
   dockEdge?: 'top' | 'bottom';

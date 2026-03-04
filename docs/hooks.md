@@ -44,7 +44,7 @@ Hooks are stored in `config/hooks.json`. This file is git-ignored and managed ei
 The `filter.toolName` field narrows which tool calls trigger the hook:
 
 - **Single tool:** `"toolName": "apps:clone"`
-- **Multiple tools:** `"toolName": ["apps:write_ts", "apps:apply_diff_ts"]`
+- **Multiple tools:** `"toolName": ["basic:write", "basic:edit"]`
 - **Omitted:** Hook fires on every tool call
 
 Tool names use the `namespace:name` format (e.g., `apps:compile`, `window:create`).
@@ -56,7 +56,7 @@ An example config at `docs/example_hooks.json` demonstrates a 4-stage progress w
 | Stage | Trigger Tool | Progress | Status |
 |-------|-------------|----------|--------|
 | Clone | `apps:clone` | 10% | "Cloning..." |
-| Write | `apps:write_ts`, `apps:apply_diff_ts` | 50% | "Writing code..." |
+| Write | `basic:write`, `basic:edit` | 50% | "Writing code..." |
 | Compile | `apps:compile` | 80% | "Compiling..." |
 | Deploy | `apps:deploy` | 100% | "Deployed!" |
 

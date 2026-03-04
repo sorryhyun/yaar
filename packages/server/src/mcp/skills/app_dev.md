@@ -3,12 +3,12 @@
 ## Workflow
 
 To create a new app from scratch:
-1. `write_ts(path: "src/main.ts", content: "...")` — creates a new sandbox, returns sandboxId
+1. `write(uri: "sandbox:///src/main.ts", content: "...")` — creates a new sandbox (triple slash = new sandbox), returns `{ sandboxId }`
 2. `deploy(sandbox: sandboxId, appId: "my-app")` — auto-compiles, installs to `apps/`, appears on desktop
 
 To edit an existing app:
 1. `clone(appId)` — copies source into a new sandbox, returns sandboxId
-2. Edit with `write_ts` or `apply_diff_ts` using that sandboxId
+2. Edit with `edit(uri: "sandbox://{sandboxId}/path", old_string, new_string)` or `write` for full replacement
 3. `deploy` back to the same appId
 
 Optional: use `compile(sandbox)` separately if you want a preview URL before deploying.
@@ -214,7 +214,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 Common mistakes to avoid when building apps:
 
 - **Don't guess API endpoints** — Only use endpoints from `skill("host_api")`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
-- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `apps_write_config`.
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `set_config(section: "app")`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
@@ -224,7 +224,7 @@ Common mistakes to avoid when building apps:
 ```
 Option A: API-based app (preferred for API wrappers)
   apps/github/SKILL.md → describes GitHub API, auth flow
-  User provides PAT → stored via apps_write_config
+  User provides PAT → stored via set_config(section: "app")
   AI calls GitHub API via http_get/http_post → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)

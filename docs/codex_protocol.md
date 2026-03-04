@@ -230,7 +230,7 @@ codex app-server \
   -c 'features.apply_patch_freeform=false' \
   -c 'features.multi_agent=true' \
   -c 'features.collaboration_modes=true' \  # Subagent delegation
-  # MCP servers (YAAR's 7 namespaced servers)
+  # MCP servers (YAAR's 8 namespaced servers)
   -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
   -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
   -c 'mcp_servers.window.url=http://127.0.0.1:8000/mcp/window' \
