@@ -18,6 +18,7 @@ export {
   buildYaarUri,
   isYaarUri,
   resolveContentUri,
+  parseContentPath,
   extractAppId,
   parseFileUri,
   buildFileUri,

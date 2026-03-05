@@ -78,6 +78,9 @@ export function extractAppId(uri: string): string | null {
 
 // ============ File-operation URIs ============
 
+/** Sandbox IDs are numeric timestamps (e.g. Date.now().toString()). */
+const SANDBOX_ID_RE = /^\d+$/;
+
 export type ParsedFileUri =
   | { authority: 'storage'; path: string }
   | { authority: 'sandbox'; sandboxId: string; path: string }
@@ -85,6 +88,8 @@ export type ParsedFileUri =
 
 /**
  * Parse a file-operation URI (yaar://, storage://, sandbox://).
+ *
+ * Sandbox IDs must be numeric timestamps or "new" (for new sandbox creation).
  *
  *   yaar://storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
  *   yaar://sandbox/123/src/main.ts    → { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
@@ -104,6 +109,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
       const slashIdx = parsed.path.indexOf('/');
       if (slashIdx === -1) {
         // yaar://sandbox/{sandboxId} — root
+        if (!SANDBOX_ID_RE.test(parsed.path)) return null;
         return { authority: 'sandbox', sandboxId: parsed.path, path: '' };
       }
       const first = parsed.path.slice(0, slashIdx);
@@ -111,6 +117,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
       if (first === 'new') {
         return { authority: 'sandbox', sandboxId: null, path: rest };
       }
+      if (!SANDBOX_ID_RE.test(first)) return null;
       return { authority: 'sandbox', sandboxId: first, path: rest };
     }
     return null; // apps authority not a file URI
@@ -132,15 +139,43 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
     }
     const slashIdx = rest.indexOf('/');
     if (slashIdx === -1) {
+      if (!SANDBOX_ID_RE.test(rest)) return null;
       return { authority: 'sandbox', sandboxId: rest, path: '' };
     }
+    const id = rest.slice(0, slashIdx);
+    if (!SANDBOX_ID_RE.test(id)) return null;
     return {
       authority: 'sandbox',
-      sandboxId: rest.slice(0, slashIdx),
+      sandboxId: id,
       path: rest.slice(slashIdx + 1),
     };
   }
 
+  return null;
+}
+
+/**
+ * Parse an API pathname back into a ParsedFileUri.
+ * Reverse of resolveContentUri() for storage/sandbox paths.
+ *
+ *   /api/storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
+ *   /api/sandbox/123/src/main.ts    → { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
+ */
+export function parseContentPath(pathname: string): ParsedFileUri | null {
+  if (pathname.startsWith('/api/storage/')) {
+    return { authority: 'storage', path: pathname.slice('/api/storage/'.length) };
+  }
+  if (pathname.startsWith('/api/sandbox/')) {
+    const rest = pathname.slice('/api/sandbox/'.length);
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx === -1) {
+      if (!SANDBOX_ID_RE.test(rest)) return null;
+      return { authority: 'sandbox', sandboxId: rest, path: '' };
+    }
+    const id = rest.slice(0, slashIdx);
+    if (!SANDBOX_ID_RE.test(id)) return null;
+    return { authority: 'sandbox', sandboxId: id, path: rest.slice(slashIdx + 1) };
+  }
   return null;
 }
 

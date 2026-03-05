@@ -9,7 +9,7 @@ import { ok, error } from '../utils.js';
 import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageList } from '../../storage/index.js';
-import { listFiles, validateSandboxId, validateSandboxPath } from './helpers.js';
+import { listFiles, validateSandboxPath } from './helpers.js';
 
 export function registerListTool(server: McpServer): void {
   server.registerTool(
@@ -51,9 +51,6 @@ export function registerListTool(server: McpServer): void {
       }
 
       // sandbox
-      const idErr = validateSandboxId(parsed.sandboxId);
-      if (idErr) return error(idErr);
-
       const sandboxPath = getSandboxPath(parsed.sandboxId);
 
       try {

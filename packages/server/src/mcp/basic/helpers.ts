@@ -21,14 +21,6 @@ export async function listFiles(dir: string, base: string): Promise<string[]> {
   return files;
 }
 
-/** Validate sandbox ID is a numeric timestamp. */
-export function validateSandboxId(id: string): string | null {
-  if (!/^\d+$/.test(id)) {
-    return 'Invalid sandbox ID. Must be a numeric timestamp returned by write or clone.';
-  }
-  return null;
-}
-
 /** Common path validation for sandbox. */
 export function validateSandboxPath(path: string, sandboxPath: string): string | null {
   if (path.includes('..') || path.startsWith('/')) {

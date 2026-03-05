@@ -10,7 +10,7 @@ import { ok, error } from '../utils.js';
 import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageDelete } from '../../storage/index.js';
-import { validateSandboxId, validateSandboxPath } from './helpers.js';
+import { validateSandboxPath } from './helpers.js';
 
 export function registerDeleteTool(server: McpServer): void {
   server.registerTool(
@@ -43,8 +43,6 @@ export function registerDeleteTool(server: McpServer): void {
       }
 
       // sandbox
-      const idErr = validateSandboxId(parsed.sandboxId);
-      if (idErr) return error(idErr);
       if (!parsed.path) return error('Provide a file path to delete.');
 
       const sandboxPath = getSandboxPath(parsed.sandboxId);

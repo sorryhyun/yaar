@@ -9,7 +9,7 @@ import { ok, error } from '../utils.js';
 import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageRead, storageWrite } from '../../storage/index.js';
-import { validateSandboxId, validateSandboxPath } from './helpers.js';
+import { validateSandboxPath } from './helpers.js';
 
 export function registerEditTool(server: McpServer): void {
   server.registerTool(
@@ -87,8 +87,6 @@ export function registerEditTool(server: McpServer): void {
         }
       } else {
         // sandbox
-        const idErr = validateSandboxId(parsed.sandboxId);
-        if (idErr) return error(idErr);
         if (!parsed.path) return error('Provide a file path to edit.');
 
         const sandboxPath = getSandboxPath(parsed.sandboxId);

@@ -8,6 +8,7 @@ import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePath, type EndpointMeta } from '../utils.js';
 import { resolvePath } from '../../storage/storage-manager.js';
+import { parseContentPath } from '@yaar/shared';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -232,11 +233,13 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
   }
 
   // Serve sandbox files (for previewing compiled apps)
-  // URL format: /api/sandbox/{sandboxId}/{path}
-  const sandboxMatch = url.pathname.match(/^\/api\/sandbox\/(\d+)\/(.+)$/);
-  if (sandboxMatch && req.method === 'GET') {
-    const sandboxId = sandboxMatch[1];
-    const filePath = decodeURIComponent(sandboxMatch[2]);
+  const sandboxParsed =
+    url.pathname.startsWith('/api/sandbox/') && req.method === 'GET'
+      ? parseContentPath(decodeURIComponent(url.pathname))
+      : null;
+  if (sandboxParsed?.authority === 'sandbox' && sandboxParsed.sandboxId && sandboxParsed.path) {
+    const sandboxId = sandboxParsed.sandboxId;
+    const filePath = sandboxParsed.path;
 
     const sandboxDir = join(PROJECT_ROOT, 'sandbox', sandboxId);
     const normalizedPath = safePath(sandboxDir, filePath);
@@ -341,8 +344,11 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
   }
 
   // Storage API — GET (read/list), POST (write), DELETE
-  if (url.pathname.startsWith('/api/storage/')) {
-    const filePath = decodeURIComponent(url.pathname.slice('/api/storage/'.length));
+  const storageParsed = url.pathname.startsWith('/api/storage/')
+    ? parseContentPath(decodeURIComponent(url.pathname))
+    : null;
+  if (storageParsed?.authority === 'storage') {
+    const filePath = storageParsed.path;
 
     const resolved = resolvePath(filePath);
     if (!resolved) {

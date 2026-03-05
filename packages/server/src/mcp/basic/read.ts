@@ -10,7 +10,7 @@ import { ok, okWithImages, error } from '../utils.js';
 import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageRead } from '../../storage/index.js';
-import { validateSandboxId, validateSandboxPath } from './helpers.js';
+import { validateSandboxPath } from './helpers.js';
 
 export function registerReadTool(server: McpServer): void {
   server.registerTool(
@@ -79,9 +79,6 @@ export function registerReadTool(server: McpServer): void {
       }
 
       // sandbox scheme
-      const idErr = validateSandboxId(parsed.sandboxId);
-      if (idErr) return error(idErr);
-
       const sandboxPath = getSandboxPath(parsed.sandboxId);
 
       if (!parsed.path) {

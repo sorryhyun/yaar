@@ -11,7 +11,7 @@ import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { generateSandboxId } from '../dev/helpers.js';
 import { storageWrite } from '../../storage/index.js';
-import { validateSandboxId, validateSandboxPath } from './helpers.js';
+import { validateSandboxPath } from './helpers.js';
 
 export function registerWriteTool(server: McpServer): void {
   server.registerTool(
@@ -53,8 +53,6 @@ export function registerWriteTool(server: McpServer): void {
         sandboxId = generateSandboxId();
         path = parsed.path;
       } else {
-        const idErr = validateSandboxId(parsed.sandboxId);
-        if (idErr) return error(idErr);
         if (!parsed.path) return error('Provide a file path within the sandbox.');
         sandboxId = parsed.sandboxId;
         path = parsed.path;
