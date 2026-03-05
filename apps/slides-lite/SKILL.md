@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "slides-lite",
+  uri: "slides-lite",
   title: "Slides Lite",
   renderer: "iframe",
   content: "yaar://apps/slides-lite"

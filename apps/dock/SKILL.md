@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "dock",
+  uri: "dock",
   title: "Dock",
   renderer: "iframe",
   content: "yaar://apps/dock"

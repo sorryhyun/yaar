@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "storage",
+  uri: "storage",
   title: "Storage",
   renderer: "iframe",
   content: "yaar://apps/storage"

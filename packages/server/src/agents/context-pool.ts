@@ -381,7 +381,9 @@ export class ContextPool implements PoolContext {
     this.timeline.clear();
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
-    this.windowState.clear();
+    if (closeWindows) {
+      this.windowState.clear();
+    }
     this.budgetPolicy.clear();
   }
 

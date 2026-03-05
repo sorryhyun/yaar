@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "rss-reader",
+  uri: "rss-reader",
   title: "RSS Reader",
   renderer: "iframe",
   content: "yaar://apps/rss-reader"

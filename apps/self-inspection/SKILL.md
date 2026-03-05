@@ -19,11 +19,11 @@ If localhost is not in the allowed domains list, use `request_allowing_domain({ 
 Open 5 windows simultaneously using different renderers, verify all exist, then close all:
 
 ```
-create({ windowId: "si-mr-md", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
-create({ windowId: "si-mr-html", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
-create({ windowId: "si-mr-text", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
-create_component({ windowId: "si-mr-comp", title: "Test: Component", width: 300, height: 200, components: [{ type: "text", content: "Component DSL", variant: "heading" }, { type: "badge", label: "OK", variant: "success" }, { type: "progress", value: 75, label: "Progress" }] })
-create({ windowId: "si-mr-tbl", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { headers: ["Col A", "Col B"], rows: [["1", "2"], ["3", "4"]] } })
+create({ uri: "si-mr-md", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
+create({ uri: "si-mr-html", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
+create({ uri: "si-mr-text", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
+create_component({ uri: "si-mr-comp", title: "Test: Component", width: 300, height: 200, components: [{ type: "text", content: "Component DSL", variant: "heading" }, { type: "badge", label: "OK", variant: "success" }, { type: "progress", value: 75, label: "Progress" }] })
+create({ uri: "si-mr-tbl", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { headers: ["Col A", "Col B"], rows: [["1", "2"], ["3", "4"]] } })
 ```
 
 Then verify:
@@ -33,11 +33,11 @@ list()   # all 5 windows should appear: si-mr-md, si-mr-html, si-mr-text, si-mr-
 
 **PASS** if all 5 windows appear in the list. Then close all:
 ```
-close({ windowId: "si-mr-md" })
-close({ windowId: "si-mr-html" })
-close({ windowId: "si-mr-text" })
-close({ windowId: "si-mr-comp" })
-close({ windowId: "si-mr-tbl" })
+close({ uri: "si-mr-md" })
+close({ uri: "si-mr-html" })
+close({ uri: "si-mr-text" })
+close({ uri: "si-mr-comp" })
+close({ uri: "si-mr-tbl" })
 ```
 
 ### 2. Window Content Update Operations
@@ -45,14 +45,14 @@ close({ windowId: "si-mr-tbl" })
 Create a markdown window and test all update operations:
 
 ```
-create({ windowId: "si-update", title: "Update Test", renderer: "markdown", content: "Line 1" })
-update({ windowId: "si-update", operation: "append", content: "\nLine 2" })
-view({ windowId: "si-update" })          # should contain "Line 1\nLine 2"
-update({ windowId: "si-update", operation: "prepend", content: "Line 0\n" })
-view({ windowId: "si-update" })          # should contain "Line 0\nLine 1\nLine 2"
-update({ windowId: "si-update", operation: "replace", content: "Replaced." })
-view({ windowId: "si-update" })          # should contain only "Replaced."
-close({ windowId: "si-update" })
+create({ uri: "si-update", title: "Update Test", renderer: "markdown", content: "Line 1" })
+update({ uri: "si-update", operation: "append", content: "\nLine 2" })
+view({ uri: "si-update" })          # should contain "Line 1\nLine 2"
+update({ uri: "si-update", operation: "prepend", content: "Line 0\n" })
+view({ uri: "si-update" })          # should contain "Line 0\nLine 1\nLine 2"
+update({ uri: "si-update", operation: "replace", content: "Replaced." })
+view({ uri: "si-update" })          # should contain only "Replaced."
+close({ uri: "si-update" })
 ```
 
 **PASS** if each `view()` returns the expected content after each operation.
@@ -60,19 +60,19 @@ close({ windowId: "si-update" })
 ### 3. Window Lock/Unlock
 
 ```
-create({ windowId: "si-lock", title: "Lock Test", renderer: "text", content: "Locked window test." })
-lock({ windowId: "si-lock", agentId: "si-tester" })
+create({ uri: "si-lock", title: "Lock Test", renderer: "text", content: "Locked window test." })
+lock({ uri: "si-lock", agentId: "si-tester" })
 ```
 Attempt to update the locked window — it should return a lock error or feedback:
 ```
-update({ windowId: "si-lock", operation: "replace", content: "Should fail." })
+update({ uri: "si-lock", operation: "replace", content: "Should fail." })
 ```
 Then unlock and update successfully:
 ```
-unlock({ windowId: "si-lock", agentId: "si-tester" })
-update({ windowId: "si-lock", operation: "replace", content: "Unlocked and updated." })
-view({ windowId: "si-lock" })            # should contain "Unlocked and updated."
-close({ windowId: "si-lock" })
+unlock({ uri: "si-lock", agentId: "si-tester" })
+update({ uri: "si-lock", operation: "replace", content: "Unlocked and updated." })
+view({ uri: "si-lock" })            # should contain "Unlocked and updated."
+close({ uri: "si-lock" })
 ```
 
 **PASS** if locked update is rejected and unlocked update succeeds.
@@ -83,7 +83,7 @@ Create a component window with a form and ask the user to fill it:
 
 ```
 create_component({
-  windowId: "si-form",
+  uri: "si-form",
   title: "Form Test",
   width: 400, height: 300,
   components: [
@@ -100,7 +100,7 @@ Tell the user: "Please fill out the form and click **Submit**."
 When you receive the `COMPONENT_ACTION` event with form data, read the submitted values and close the window.
 **PASS** if form data is received with `username` and `color` fields.
 ```
-close({ windowId: "si-form" })
+close({ uri: "si-form" })
 ```
 
 ### 5. App Protocol Round-Trip (Excel)
@@ -108,35 +108,35 @@ close({ windowId: "si-form" })
 Open Excel Lite, query its manifest, write cells, read them back, verify data integrity:
 
 ```
-create({ windowId: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ uri: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
 Wait for App Protocol ready, then:
 ```
-app_query({ windowId: "si-excel", stateKey: "manifest" })
+app_query({ uri: "si-excel" })
 ```
 Verify manifest contains `setCells` command and `cells` state key.
 
 Write test data:
 ```
-app_command({ windowId: "si-excel", command: "setCells", params: { cells: { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
+app_command({ uri: "yaar://monitor-0/si-excel/commands/setCells", params: { cells: { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
 ```
 
 Read back:
 ```
-app_query({ windowId: "si-excel", stateKey: "cells" })
+app_query({ uri: "yaar://monitor-0/si-excel/state/cells" })
 ```
 Verify cells A1="Name", B1="Score", A2="Alice", B2="95", A3="Bob", B3="87".
 
 Test clearRange:
 ```
-app_command({ windowId: "si-excel", command: "clearRange", params: { start: "A3", end: "B3" } })
-app_query({ windowId: "si-excel", stateKey: "cells" })
+app_command({ uri: "yaar://monitor-0/si-excel/commands/clearRange", params: { start: "A3", end: "B3" } })
+app_query({ uri: "yaar://monitor-0/si-excel/state/cells" })
 ```
 Verify A3 and B3 are now empty/missing, but A1-B2 still intact.
 
 ```
-close({ windowId: "si-excel" })
+close({ uri: "si-excel" })
 ```
 
 **PASS** if all read-back values match expectations.
@@ -146,17 +146,17 @@ close({ windowId: "si-excel" })
 Open Word Lite, set content, read it back:
 
 ```
-create({ windowId: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+create({ uri: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
 ```
 
 Wait for ready, then:
 ```
-app_command({ windowId: "si-word", command: "setTitle", params: { title: "Self Inspection Test" } })
-app_command({ windowId: "si-word", command: "setHtml", params: { html: "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
-app_query({ windowId: "si-word", stateKey: "title" })   # should be "Self Inspection Test"
-app_query({ windowId: "si-word", stateKey: "stats" })    # should have words > 0
-app_query({ windowId: "si-word", stateKey: "text" })     # should contain "self-inspection test"
-close({ windowId: "si-word" })
+app_command({ uri: "yaar://monitor-0/si-word/commands/setTitle", params: { title: "Self Inspection Test" } })
+app_command({ uri: "yaar://monitor-0/si-word/commands/setHtml", params: { html: "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
+app_query({ uri: "yaar://monitor-0/si-word/state/title" })   # should be "Self Inspection Test"
+app_query({ uri: "yaar://monitor-0/si-word/state/stats" })    # should have words > 0
+app_query({ uri: "yaar://monitor-0/si-word/state/text" })     # should contain "self-inspection test"
+close({ uri: "si-word" })
 ```
 
 **PASS** if title, stats, and text match expectations.
@@ -172,19 +172,19 @@ read({ path: "_si-test-data.json" })     # verify JSON is readable
 
 Open Excel and import:
 ```
-create({ windowId: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ uri: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
 ```
-app_command({ windowId: "si-cross", command: "importWorkbook", params: { data: <parsed JSON from storage read> } })
-app_query({ windowId: "si-cross", stateKey: "cells" })
+app_command({ uri: "yaar://monitor-0/si-cross/commands/importWorkbook", params: { data: <parsed JSON from storage read> } })
+app_query({ uri: "yaar://monitor-0/si-cross/state/cells" })
 ```
 Verify A1="Product", B2="9.99".
 
 Cleanup:
 ```
-close({ windowId: "si-cross" })
+close({ uri: "si-cross" })
 delete({ path: "_si-test-data.json" })
 ```
 
@@ -220,9 +220,9 @@ Verify "si-dev-test" appears in the app list.
 
 **Step 5 — Open and verify:**
 ```
-create({ windowId: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "yaar://apps/si-dev-test" })
+create({ uri: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "yaar://apps/si-dev-test" })
 list()    # verify window exists
-close({ windowId: "si-dev-verify" })
+close({ uri: "si-dev-verify" })
 ```
 
 **Step 6 — Cleanup (delete the test app):**
@@ -284,7 +284,7 @@ Create a component window, then replace its entire layout:
 
 ```
 create_component({
-  windowId: "si-comp-upd",
+  uri: "si-comp-upd",
   title: "Component Update Test",
   width: 350, height: 200,
   components: [
@@ -297,7 +297,7 @@ create_component({
 Update the components:
 ```
 update_component({
-  windowId: "si-comp-upd",
+  uri: "si-comp-upd",
   components: [
     { type: "text", content: "Version 2", variant: "heading" },
     { type: "progress", value: 100, label: "Complete", variant: "success" },
@@ -307,7 +307,7 @@ update_component({
 ```
 
 ```
-close({ windowId: "si-comp-upd" })
+close({ uri: "si-comp-upd" })
 ```
 
 **PASS** if update_component succeeds without error.
@@ -334,31 +334,31 @@ delete({ path: "_si-test-dir/sub/file3.txt" })
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
-create({ windowId: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
-create({ windowId: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
-create({ windowId: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
+create({ uri: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ uri: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+create({ uri: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:
 
 ```
-app_command({ windowId: "si-multi-excel", command: "setCells", params: { cells: { "A1": "Multi-app test" } } })
-app_command({ windowId: "si-multi-word", command: "setHtml", params: { html: "<p>Multi-app test</p>" } })
-app_command({ windowId: "si-multi-img", command: "setLayout", params: { mode: "grid", columns: 3 } })
+app_command({ uri: "yaar://monitor-0/si-multi-excel/commands/setCells", params: { cells: { "A1": "Multi-app test" } } })
+app_command({ uri: "yaar://monitor-0/si-multi-word/commands/setHtml", params: { html: "<p>Multi-app test</p>" } })
+app_command({ uri: "yaar://monitor-0/si-multi-img/commands/setLayout", params: { mode: "grid", columns: 3 } })
 ```
 
 Query each to verify:
 ```
-app_query({ windowId: "si-multi-excel", stateKey: "cells" })    # A1 = "Multi-app test"
-app_query({ windowId: "si-multi-word", stateKey: "text" })      # contains "Multi-app test"
-app_query({ windowId: "si-multi-img", stateKey: "layout" })     # mode = "grid"
+app_query({ uri: "yaar://monitor-0/si-multi-excel/state/cells" })    # A1 = "Multi-app test"
+app_query({ uri: "yaar://monitor-0/si-multi-word/state/text" })      # contains "Multi-app test"
+app_query({ uri: "yaar://monitor-0/si-multi-img/state/layout" })     # mode = "grid"
 ```
 
 Close all:
 ```
-close({ windowId: "si-multi-excel" })
-close({ windowId: "si-multi-word" })
-close({ windowId: "si-multi-img" })
+close({ uri: "si-multi-excel" })
+close({ uri: "si-multi-word" })
+close({ uri: "si-multi-img" })
 ```
 
 **PASS** if all 3 apps respond correctly to commands and queries simultaneously.
@@ -371,7 +371,7 @@ After all checks, create a markdown window with the results:
 
 ```
 create({
-  windowId: "self-inspection-report",
+  uri: "self-inspection-report",
   title: "Self Inspection Report",
   width: 700, height: 700,
   renderer: "markdown",

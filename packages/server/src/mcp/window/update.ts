@@ -16,6 +16,7 @@ import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
 import { getAgentId } from '../../agents/session.js';
+import { resolveWindowId } from './resolve-window.js';
 
 export function registerUpdateTools(
   server: McpServer,
@@ -28,7 +29,7 @@ export function registerUpdateTools(
       description:
         'Update display window content with text operations. For component windows, use update_component instead.',
       inputSchema: {
-        windowId: z.string().describe('ID of the window to update'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
         operation: z
           .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
           .describe('The operation to perform on the content'),
@@ -44,16 +45,18 @@ export function registerUpdateTools(
       },
     },
     async (args) => {
-      if (!getWindowState().hasWindow(args.windowId)) {
+      const windowId = resolveWindowId(args.uri);
+
+      if (!getWindowState().hasWindow(windowId)) {
         return error(
-          `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+          `Window "${windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
         );
       }
 
-      const lockedBy = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      const lockedBy = getWindowState().isLockedByOther(windowId, getAgentId());
       if (lockedBy) {
         return error(
-          `Window "${args.windowId}" is locked by agent "${lockedBy}". Cannot update until unlocked.`,
+          `Window "${windowId}" is locked by agent "${lockedBy}". Cannot update until unlocked.`,
         );
       }
 
@@ -84,7 +87,7 @@ export function registerUpdateTools(
 
       const osAction = {
         type: 'window.updateContent' as const,
-        windowId: args.windowId,
+        windowId,
         operation,
         renderer,
       };
@@ -93,17 +96,17 @@ export function registerUpdateTools(
 
       if (feedback && !feedback.success) {
         return error(
-          `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
+          `Window "${windowId}" is locked by another agent. Cannot update until unlocked.`,
         );
       }
 
       if (feedback?.locked) {
         return ok(
-          `Updated window "${args.windowId}". Window is currently locked - use unlock when done.`,
+          `Updated window "${windowId}". Window is currently locked - use unlock when done.`,
         );
       }
 
-      return ok(`Updated window "${args.windowId}" (${args.operation})`);
+      return ok(`Updated window "${windowId}" (${args.operation})`);
     },
   );
 
@@ -113,7 +116,7 @@ export function registerUpdateTools(
     {
       description: 'Replace the components in a component window.',
       inputSchema: {
-        windowId: z.string().describe('ID of the component window to update'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
         components: z.array(componentSchema).describe('New flat array of UI components'),
         cols: colsSchema
           .optional()
@@ -124,16 +127,18 @@ export function registerUpdateTools(
       },
     },
     async (args) => {
-      if (!getWindowState().hasWindow(args.windowId)) {
+      const windowId = resolveWindowId(args.uri);
+
+      if (!getWindowState().hasWindow(windowId)) {
         return error(
-          `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+          `Window "${windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
         );
       }
 
-      const lockedBy2 = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      const lockedBy2 = getWindowState().isLockedByOther(windowId, getAgentId());
       if (lockedBy2) {
         return error(
-          `Window "${args.windowId}" is locked by agent "${lockedBy2}". Cannot update until unlocked.`,
+          `Window "${windowId}" is locked by agent "${lockedBy2}". Cannot update until unlocked.`,
         );
       }
 
@@ -145,7 +150,7 @@ export function registerUpdateTools(
 
       const osAction = {
         type: 'window.updateContent' as const,
-        windowId: args.windowId,
+        windowId,
         operation: { op: 'replace' as const, data: layoutData },
         renderer: 'component' as const,
       };
@@ -154,17 +159,17 @@ export function registerUpdateTools(
 
       if (feedback && !feedback.success) {
         return error(
-          `Window "${args.windowId}" is locked by another agent. Cannot update until unlocked.`,
+          `Window "${windowId}" is locked by another agent. Cannot update until unlocked.`,
         );
       }
 
       if (feedback?.locked) {
         return ok(
-          `Updated component window "${args.windowId}". Window is currently locked - use unlock when done.`,
+          `Updated component window "${windowId}". Window is currently locked - use unlock when done.`,
         );
       }
 
-      return ok(`Updated component window "${args.windowId}"`);
+      return ok(`Updated component window "${windowId}"`);
     },
   );
 }

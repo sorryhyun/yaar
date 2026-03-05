@@ -50,7 +50,7 @@ function generateLaunchSection(
     parts.push(`Open this app in an iframe window:
 \`\`\`
 create({
-  windowId: "${appId}",
+  uri: "${appId}",
   title: "${appName}",
   renderer: "iframe",
   content: "yaar://apps/${appId}"
@@ -62,7 +62,7 @@ create({
     for (const f of componentFiles) {
       const windowName = f.replace('.yaarcomponent.json', '');
       parts.push(
-        `\`create_component(jsonfile="${appId}/${f}", windowId="${appId}-${windowName}", title="${appName}")\``,
+        `\`create_component(jsonfile="${appId}/${f}", uri="${appId}-${windowName}", title="${appName}")\``,
       );
     }
   }
@@ -109,10 +109,10 @@ This app supports the App Protocol for programmatic interaction.
 
 ### Discover capabilities
 \`\`\`
-app_query({ windowId: "${appId}", stateKey: "manifest" })
+app_query({ uri: "${appId}" })
 \`\`\`
 
-Use \`app_query\` with stateKey \`"manifest"\` to discover available state queries and commands, then use \`app_query\` and \`app_command\` to interact with the app.
+Use \`app_query\` with a bare window URI/ID to discover available state queries and commands, then use \`app_query\` and \`app_command\` with resource URIs to interact with the app.
 `;
   }
 

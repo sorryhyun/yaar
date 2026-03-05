@@ -65,7 +65,7 @@ describe('window create tool — iframe embed failure', () => {
     });
 
     const result = await createHandler({
-      windowId: 'test-win',
+      uri: 'test-win',
       title: 'Blocked Site',
       renderer: 'iframe',
       content: 'https://example.com',
@@ -85,7 +85,7 @@ describe('window create tool — iframe embed failure', () => {
     });
 
     const result = await createHandler({
-      windowId: 'test-win',
+      uri: 'test-win',
       title: 'Good Site',
       renderer: 'iframe',
       content: 'https://embed.example.com',
@@ -99,7 +99,7 @@ describe('window create tool — iframe embed failure', () => {
     mockEmitActionWithFeedback.mockResolvedValue(null);
 
     const result = await createHandler({
-      windowId: 'test-win',
+      uri: 'test-win',
       title: 'Slow Site',
       renderer: 'iframe',
       content: 'https://slow.example.com',
@@ -112,7 +112,7 @@ describe('window create tool — iframe embed failure', () => {
 
   it('does not use emitActionWithFeedback for non-iframe renderers', async () => {
     const result = await createHandler({
-      windowId: 'md-win',
+      uri: 'md-win',
       title: 'Markdown',
       renderer: 'markdown',
       content: '# Hello',

@@ -31,8 +31,7 @@ Read state from an iframe app or discover its capabilities.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `windowId` | `string` | yes | Window containing the iframe app |
-| `stateKey` | `string` | yes | State key to read. Use `"manifest"` to discover all keys and commands. |
+| `uri` | `string` | yes | Window URI (`yaar://{monitorId}/{windowId}`) for manifest, or resource URI (`yaar://{monitorId}/{windowId}/state/{key}`) for a specific state key. |
 
 **Behavior:**
 1. Validates the window exists and uses the `iframe` renderer.
@@ -49,8 +48,7 @@ Execute a command on an iframe app.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `windowId` | `string` | yes | Window containing the iframe app |
-| `command` | `string` | yes | Command name (e.g., `"setCells"`, `"addItem"`) |
+| `uri` | `string` | yes | Command resource URI (`yaar://{monitorId}/{windowId}/commands/{name}`) |
 | `params` | `Record<string, unknown>` | no | Parameters as described in the manifest |
 
 **Behavior:**
@@ -63,7 +61,7 @@ Execute a command on an iframe app.
 
 ## Manifest
 
-An `AppManifest` describes what the app can do. The agent retrieves it by calling `app_query(windowId, "manifest")`.
+An `AppManifest` describes what the app can do. The agent retrieves it by calling `app_query` with a bare window URI (e.g., `yaar://monitor-0/win-sheet`).
 
 ```typescript
 interface AppManifest {
@@ -335,7 +333,7 @@ window.yaar.app.register({
 Agent interaction:
 
 ```
-app_query(windowId: "sheet", stateKey: "manifest")  → discover capabilities
-app_query(windowId: "sheet", stateKey: "cells")      → read current state
-app_command(windowId: "sheet", command: "setCells", params: { cells: { "A1": "100" } })
+app_query({ uri: "yaar://monitor-0/sheet" })                          → discover capabilities (manifest)
+app_query({ uri: "yaar://monitor-0/sheet/state/cells" })              → read current state
+app_command({ uri: "yaar://monitor-0/sheet/commands/setCells", params: { cells: { "A1": "100" } } })
 ```

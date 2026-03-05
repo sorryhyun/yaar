@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "video-editor-lite",
+  uri: "video-editor-lite",
   title: "Video Editor Lite",
   renderer: "iframe",
   content: "yaar://apps/video-editor-lite"

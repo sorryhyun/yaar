@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "minecraft-lite",
+  uri: "minecraft-lite",
   title: "Minecraft Lite",
   renderer: "iframe",
   content: "yaar://apps/minecraft-lite"

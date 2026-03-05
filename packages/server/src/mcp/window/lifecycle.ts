@@ -11,6 +11,7 @@ import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
 import { getAgentId } from '../../agents/session.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+import { resolveWindowId } from './resolve-window.js';
 
 export function registerLifecycleTools(
   server: McpServer,
@@ -22,33 +23,35 @@ export function registerLifecycleTools(
     {
       description: 'Close a window on the YAAR desktop',
       inputSchema: {
-        windowId: z.string().describe('ID of the window to close'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
       },
     },
     async (args) => {
-      if (!getWindowState().hasWindow(args.windowId)) {
-        return error(`Window "${args.windowId}" does not exist or was already closed.`);
+      const windowId = resolveWindowId(args.uri);
+
+      if (!getWindowState().hasWindow(windowId)) {
+        return error(`Window "${windowId}" does not exist or was already closed.`);
       }
 
-      const lockedBy = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      const lockedBy = getWindowState().isLockedByOther(windowId, getAgentId());
       if (lockedBy) {
         return error(
-          `Window "${args.windowId}" is locked by agent "${lockedBy}". Cannot close until unlocked.`,
+          `Window "${windowId}" is locked by agent "${lockedBy}". Cannot close until unlocked.`,
         );
       }
 
       const osAction: OSAction = {
         type: 'window.close',
-        windowId: args.windowId,
+        windowId,
       };
 
       const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
 
       if (feedback && !feedback.success) {
-        return error(`Failed to close window "${args.windowId}": ${feedback.error}`);
+        return error(`Failed to close window "${windowId}": ${feedback.error}`);
       }
 
-      return ok(`Closed window "${args.windowId}"`);
+      return ok(`Closed window "${windowId}"`);
     },
   );
 
@@ -59,25 +62,25 @@ export function registerLifecycleTools(
       description:
         'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
       inputSchema: {
-        windowId: z.string().describe('ID of the window to lock'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
         agentId: z.string().describe('Unique identifier for the agent acquiring the lock'),
       },
     },
     async (args) => {
-      if (!getWindowState().hasWindow(args.windowId)) {
-        return error(
-          `Window "${args.windowId}" does not exist. Cannot lock a non-existent window.`,
-        );
+      const windowId = resolveWindowId(args.uri);
+
+      if (!getWindowState().hasWindow(windowId)) {
+        return error(`Window "${windowId}" does not exist. Cannot lock a non-existent window.`);
       }
 
       const osAction: OSAction = {
         type: 'window.lock',
-        windowId: args.windowId,
+        windowId,
         agentId: args.agentId,
       };
 
       actionEmitter.emitAction(osAction);
-      return ok(`Locked window "${args.windowId}"`);
+      return ok(`Locked window "${windowId}"`);
     },
   );
 
@@ -88,7 +91,7 @@ export function registerLifecycleTools(
       description:
         'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
       inputSchema: {
-        windowId: z.string().describe('ID of the window to unlock'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
         agentId: z
           .string()
           .describe(
@@ -97,27 +100,27 @@ export function registerLifecycleTools(
       },
     },
     async (args) => {
-      if (!getWindowState().hasWindow(args.windowId)) {
-        return error(
-          `Window "${args.windowId}" does not exist. Cannot unlock a non-existent window.`,
-        );
+      const windowId = resolveWindowId(args.uri);
+
+      if (!getWindowState().hasWindow(windowId)) {
+        return error(`Window "${windowId}" does not exist. Cannot unlock a non-existent window.`);
       }
 
-      const lockedBy = getWindowState().isLockedByOther(args.windowId, args.agentId);
+      const lockedBy = getWindowState().isLockedByOther(windowId, args.agentId);
       if (lockedBy) {
         return error(
-          `Window "${args.windowId}" is locked by agent "${lockedBy}", not "${args.agentId}". Only the locking agent can unlock.`,
+          `Window "${windowId}" is locked by agent "${lockedBy}", not "${args.agentId}". Only the locking agent can unlock.`,
         );
       }
 
       const osAction: OSAction = {
         type: 'window.unlock',
-        windowId: args.windowId,
+        windowId,
         agentId: args.agentId,
       };
 
       actionEmitter.emitAction(osAction);
-      return ok(`Unlocked window "${args.windowId}"`);
+      return ok(`Unlocked window "${windowId}"`);
     },
   );
 
@@ -163,7 +166,7 @@ export function registerLifecycleTools(
       description:
         'View a window. Default mode returns content. Use mode "manifest" for app-protocol iframe windows to discover state keys and commands with URIs.',
       inputSchema: {
-        windowId: z.string().describe('ID of the window to view'),
+        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
         mode: z
           .enum(['content', 'manifest'])
           .optional()
@@ -177,21 +180,22 @@ export function registerLifecycleTools(
       },
     },
     async (args) => {
-      const win = getWindowState().getWindow(args.windowId);
+      const windowId = resolveWindowId(args.uri);
+      const win = getWindowState().getWindow(windowId);
 
       if (!win) {
-        return error(`Window "${args.windowId}" not found. Use list to see available windows.`);
+        return error(`Window "${windowId}" not found. Use list to see available windows.`);
       }
 
       // Manifest mode: fetch and return the app-protocol manifest with URIs
       if (args.mode === 'manifest') {
         if (!win.appProtocol || win.content.renderer !== 'iframe') {
           return error(
-            `Window "${args.windowId}" is not an app-protocol iframe. Use default mode instead.`,
+            `Window "${windowId}" is not an app-protocol iframe. Use default mode instead.`,
           );
         }
         const response = await actionEmitter.emitAppProtocolRequest(
-          args.windowId,
+          windowId,
           { kind: 'manifest' },
           5000,
         );
@@ -220,7 +224,7 @@ export function registerLifecycleTools(
       if (args.includeImage) {
         const osAction: OSAction = {
           type: 'window.capture',
-          windowId: args.windowId,
+          windowId,
         };
 
         const feedback = await actionEmitter.emitActionWithFeedback(osAction, 5000);

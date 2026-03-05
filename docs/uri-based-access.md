@@ -70,20 +70,20 @@ yaar://{monitorId}/{windowId}/commands/{name}   → execute app command
 | `yaar://monitor-0/win-excel/state/cells` | Read the "cells" state from excel app |
 | `yaar://monitor-0/win-excel/commands/save` | Execute the "save" command on excel app |
 
-These URIs are accepted by the `app_query` and `app_command` MCP tools via their `uri` parameter, as an alternative to the flat `windowId` + `stateKey`/`command` form:
+These URIs are used by the `app_query` and `app_command` MCP tools via their `uri` parameter:
 
 ```typescript
-// URI form
+// Resource URI to read a specific state key
 app_query({ uri: "yaar://monitor-0/win-excel/state/cells" })
-
-// Equivalent flat form (backward compatible)
-app_query({ windowId: "win-excel", stateKey: "cells" })
 
 // Bare window URI returns the manifest
 app_query({ uri: "yaar://monitor-0/win-excel" })
+
+// Command resource URI to execute a command
+app_command({ uri: "yaar://monitor-0/win-excel/commands/save" })
 ```
 
-**Discovery via `view` tool:** Use `view({ windowId, mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with URIs for each state key and command. The agent can then use these URIs directly with `app_query` and `app_command`.
+**Discovery via `view` tool:** Use `view({ uri: "yaar://monitor-0/win-excel", mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with URIs for each state key and command. The agent can then use these URIs directly with `app_query` and `app_command`.
 
 ---
 
@@ -95,7 +95,7 @@ The AI uses yaar:// URIs in the `create` tool's `content` parameter:
 
 ```
 create({
-  windowId: "excel-lite",
+  uri: "yaar://monitor-0/excel-lite",
   title: "Excel Lite",
   renderer: "iframe",
   content: "yaar://apps/excel-lite"
@@ -106,7 +106,7 @@ The server resolves the URI to an API path before sending the action to the fron
 
 ```
 create({
-  windowId: "report",
+  uri: "yaar://monitor-0/report",
   title: "Q4 Report",
   renderer: "iframe",
   content: "yaar://storage/reports/q4.pdf"

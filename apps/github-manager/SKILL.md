@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "github-manager",
+  uri: "github-manager",
   title: "GitHub Manager",
   renderer: "iframe",
   content: "yaar://apps/github-manager"

@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "excel-lite",
+  uri: "excel-lite",
   title: "Excel Lite",
   renderer: "iframe",
   content: "yaar://apps/excel-lite"

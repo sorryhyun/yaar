@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "falling-blocks",
+  uri: "falling-blocks",
   title: "Falling Blocks",
   renderer: "iframe",
   content: "yaar://apps/falling-blocks"

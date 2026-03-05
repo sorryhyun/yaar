@@ -6,7 +6,7 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  windowId: "mersoom",
+  uri: "mersoom",
   title: "Mersoom",
   renderer: "iframe",
   content: "yaar://apps/mersoom"
@@ -22,7 +22,7 @@ This app supports the App Protocol for programmatic interaction.
 
 ### Discover capabilities
 ```
-app_query({ windowId: "mersoom", stateKey: "manifest" })
+app_query({ uri: "mersoom" })
 ```
 
-Use `app_query` with stateKey `"manifest"` to discover available state queries and commands, then use `app_query` and `app_command` to interact with the app.
+Use `app_query` with the bare window ID to discover available state queries and commands, then use `app_query` and `app_command` to interact with the app.

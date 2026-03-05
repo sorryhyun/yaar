@@ -19,6 +19,7 @@ import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { resolveContentUri, extractAppId } from '@yaar/shared';
+import { resolveWindowId } from './resolve-window.js';
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
@@ -48,7 +49,11 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window for displaying content (markdown, HTML, text, table, or iframe). For interactive UI with buttons/forms, use create_component instead. For PDF files, use iframe renderer with src="/api/storage/<path>" to leverage the browser\'s built-in PDF viewer.',
       inputSchema: {
-        windowId: z.string().describe('Unique identifier for the window'),
+        uri: z
+          .string()
+          .describe(
+            'Window URI or ID for the new window (e.g., "yaar://monitor-0/win-id" or "win-id")',
+          ),
         title: z.string().describe('Window title'),
         renderer: displayRendererSchema.describe(
           'Content renderer type: markdown, html, text, table, or iframe',
@@ -71,6 +76,7 @@ export function registerCreateTools(server: McpServer): void {
       },
     },
     async (args) => {
+      const windowId = resolveWindowId(args.uri);
       const renderer = args.renderer as string;
       let data = args.content as string | { headers: string[]; rows: string[][] };
 
@@ -92,7 +98,7 @@ export function registerCreateTools(server: McpServer): void {
 
       const osAction: OSAction = {
         type: 'window.create',
-        windowId: args.windowId,
+        windowId,
         title: args.title,
         bounds: {
           x: args.x ?? 100,
@@ -119,16 +125,14 @@ export function registerCreateTools(server: McpServer): void {
           const hint = isNotFound
             ? ' If this is an app, use load_skill to learn how to use it.'
             : ' The site likely blocks embedding.';
-          return error(
-            `Failed to embed iframe in window "${args.windowId}": ${feedback.error}.${hint}`,
-          );
+          return error(`Failed to embed iframe in window "${windowId}": ${feedback.error}.${hint}`);
         }
 
-        return ok(`Created window "${args.windowId}" with embedded iframe`);
+        return ok(`Created window "${windowId}" with embedded iframe`);
       }
 
       actionEmitter.emitAction(osAction);
-      return ok(`Created window "${args.windowId}"`);
+      return ok(`Created window "${windowId}"`);
     },
   );
 
@@ -139,7 +143,11 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid.',
       inputSchema: {
-        windowId: z.string().describe('Unique identifier for the window'),
+        uri: z
+          .string()
+          .describe(
+            'Window URI or ID for the new window (e.g., "yaar://monitor-0/win-id" or "win-id")',
+          ),
         title: z.string().describe('Window title'),
         jsonfile: z
           .string()
@@ -172,6 +180,7 @@ export function registerCreateTools(server: McpServer): void {
       },
     },
     async (args) => {
+      const windowId = resolveWindowId(args.uri);
       let layoutData: ComponentLayout;
 
       if (args.jsonfile) {
@@ -213,7 +222,7 @@ export function registerCreateTools(server: McpServer): void {
 
       const osAction: OSAction = {
         type: 'window.create',
-        windowId: args.windowId,
+        windowId,
         title: args.title,
         bounds: {
           x: args.x ?? 100,
@@ -233,7 +242,7 @@ export function registerCreateTools(server: McpServer): void {
       };
 
       actionEmitter.emitAction(osAction);
-      return ok(`Created component window "${args.windowId}"`);
+      return ok(`Created component window "${windowId}"`);
     },
   );
 }

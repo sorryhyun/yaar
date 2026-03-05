@@ -3,6 +3,8 @@
  *
  * Verifies window validation, appProtocol readiness checks, manifest queries,
  * state queries, command execution, and error/timeout handling.
+ *
+ * All tools use URI-only addressing (no windowId/stateKey/command flat forms).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -66,9 +68,9 @@ describe('app_query', () => {
     vi.clearAllMocks();
   });
 
-  it('returns error when window not found', async () => {
+  it('returns error when window not found (bare ID)', async () => {
     setup();
-    const result = await queryHandler({ windowId: 'missing', stateKey: 'foo' });
+    const result = await queryHandler({ uri: 'missing' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Window "missing" not found');
   });
@@ -77,7 +79,7 @@ describe('app_query', () => {
     setup({
       'win-1': { content: { renderer: 'markdown', data: '# hi' }, appProtocol: true },
     });
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'foo' });
+    const result = await queryHandler({ uri: 'win-1' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('not an iframe app');
   });
@@ -88,7 +90,7 @@ describe('app_query', () => {
     });
     mockWaitForAppReady.mockResolvedValue(false);
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'foo' });
+    const result = await queryHandler({ uri: 'win-1' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('App did not register');
     expect(mockWaitForAppReady).toHaveBeenCalledWith('win-1', 5000);
@@ -103,12 +105,12 @@ describe('app_query', () => {
       data: { count: 42 },
     });
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'count' });
+    const result = await queryHandler({ uri: 'yaar://monitor-0/win-1/state/count' });
     expect(mockWaitForAppReady).not.toHaveBeenCalled();
     expect(result.isError).toBeUndefined();
   });
 
-  it('returns manifest on successful manifest query', async () => {
+  it('returns manifest on bare window URI', async () => {
     setup({
       'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
     });
@@ -118,10 +120,25 @@ describe('app_query', () => {
       manifest,
     });
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'manifest' });
+    const result = await queryHandler({ uri: 'yaar://monitor-0/win-1' });
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(result.content[0].text)).toEqual(manifest);
     expect(mockEmitAppProtocolRequest).toHaveBeenCalledWith('win-1', { kind: 'manifest' }, 5000);
+  });
+
+  it('returns manifest on plain window ID (fallback)', async () => {
+    setup({
+      'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
+    });
+    const manifest = { stateKeys: ['cells'] };
+    mockEmitAppProtocolRequest.mockResolvedValue({
+      kind: 'manifest',
+      manifest,
+    });
+
+    const result = await queryHandler({ uri: 'win-1' });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual(manifest);
   });
 
   it('returns error on manifest timeout', async () => {
@@ -130,7 +147,7 @@ describe('app_query', () => {
     });
     mockEmitAppProtocolRequest.mockResolvedValue(null);
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'manifest' });
+    const result = await queryHandler({ uri: 'win-1' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('manifest request (timeout)');
   });
@@ -144,12 +161,12 @@ describe('app_query', () => {
       error: 'manifest not available',
     });
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'manifest' });
+    const result = await queryHandler({ uri: 'win-1' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe('manifest not available');
   });
 
-  it('returns data on successful state query', async () => {
+  it('returns data on successful state query via resource URI', async () => {
     setup({
       'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
     });
@@ -159,7 +176,7 @@ describe('app_query', () => {
       data,
     });
 
-    const result = await queryHandler({ windowId: 'win-1', stateKey: 'rows' });
+    const result = await queryHandler({ uri: 'yaar://monitor-0/win-1/state/rows' });
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(result.content[0].text)).toEqual(data);
     expect(mockEmitAppProtocolRequest).toHaveBeenCalledWith(
@@ -167,6 +184,16 @@ describe('app_query', () => {
       { kind: 'query', stateKey: 'rows' },
       5000,
     );
+  });
+
+  it('returns error when resource URI points to a command', async () => {
+    setup({
+      'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
+    });
+
+    const result = await queryHandler({ uri: 'yaar://monitor-0/win-1/commands/save' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Use app_command instead');
   });
 });
 
@@ -190,9 +217,16 @@ describe('app_command', () => {
     vi.clearAllMocks();
   });
 
+  it('returns error for invalid command URI', async () => {
+    setup();
+    const result = await commandHandler({ uri: 'win-1' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Invalid command URI');
+  });
+
   it('returns error when window not found', async () => {
     setup();
-    const result = await commandHandler({ windowId: 'missing', command: 'doStuff' });
+    const result = await commandHandler({ uri: 'yaar://monitor-0/missing/commands/doStuff' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Window "missing" not found');
   });
@@ -208,8 +242,7 @@ describe('app_command', () => {
     });
 
     const result = await commandHandler({
-      windowId: 'win-1',
-      command: 'setCells',
+      uri: 'yaar://monitor-0/win-1/commands/setCells',
       params: { range: 'A1:B2' },
     });
 
@@ -228,7 +261,7 @@ describe('app_command', () => {
     });
     mockEmitAppProtocolRequest.mockResolvedValue(null);
 
-    const result = await commandHandler({ windowId: 'win-1', command: 'doStuff' });
+    const result = await commandHandler({ uri: 'yaar://monitor-0/win-1/commands/doStuff' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('did not respond (timeout)');
   });
@@ -242,7 +275,7 @@ describe('app_command', () => {
       error: 'unknown command',
     });
 
-    const result = await commandHandler({ windowId: 'win-1', command: 'badCmd' });
+    const result = await commandHandler({ uri: 'yaar://monitor-0/win-1/commands/badCmd' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe('unknown command');
   });

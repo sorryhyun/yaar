@@ -289,14 +289,14 @@ export function registerProtocol() {
 | `app_query` | 상태 키로 앱의 구조화된 데이터 읽기 (`"manifest"`로 매니페스트 조회) |
 | `app_command` | 앱에 명령 실행 |
 
-에이전트는 먼저 `app_query`에 stateKey `"manifest"`를 사용하여 앱이 지원하는 기능을 확인한 뒤, `app_query`와 `app_command`로 상호작용합니다.
+에이전트는 먼저 `app_query`에 bare window URI를 사용하여 앱이 지원하는 기능(매니페스트)을 확인한 뒤, `app_query`와 `app_command`로 상호작용합니다.
 
 ### 예시: Excel Lite
 
 ```
-app_query({ windowId: "excel-lite", stateKey: "manifest" })
-app_query({ windowId: "excel-lite", stateKey: "cells" })
-app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
+app_query({ uri: "yaar://monitor-0/excel-lite" })
+app_query({ uri: "yaar://monitor-0/excel-lite/state/cells" })
+app_command({ uri: "yaar://monitor-0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
 ## 자격 증명 관리
@@ -607,14 +607,14 @@ export function registerProtocol() {
 | `app_query` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
 | `app_command` | Execute a command on the app |
 
-The agent first calls `app_query` with stateKey `"manifest"` to discover capabilities, then uses `app_query` and `app_command` to interact.
+The agent first calls `app_query` with a bare window URI to discover capabilities (manifest), then uses `app_query` and `app_command` with resource URIs to interact.
 
 ### Example: Excel Lite
 
 ```
-app_query({ windowId: "excel-lite", stateKey: "manifest" })
-app_query({ windowId: "excel-lite", stateKey: "cells" })
-app_command({ windowId: "excel-lite", command: "setCells", params: { cells: { "A1": "Hello" } } })
+app_query({ uri: "yaar://monitor-0/excel-lite" })
+app_query({ uri: "yaar://monitor-0/excel-lite/state/cells" })
+app_command({ uri: "yaar://monitor-0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
 ## Credential Management

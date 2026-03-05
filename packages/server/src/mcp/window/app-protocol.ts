@@ -1,18 +1,19 @@
 /**
- * App Protocol tools - agent ↔ iframe app communication.
+ * App Protocol tools - agent <-> iframe app communication.
  *
- * Provides MCP tools for discovering app capabilities (manifest),
- * reading app state (query), and executing app commands (command).
+ * Provides MCP tools for reading app state (query) and executing app commands (command).
+ * Both tools use URI-only addressing.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppProtocolRequest } from '@yaar/shared';
-import { parseWindowUri, parseWindowResourceUri } from '@yaar/shared';
+import { parseWindowResourceUri } from '@yaar/shared';
 import { z } from 'zod';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+import { resolveWindowId } from './resolve-window.js';
 
 export function registerAppProtocolTools(
   server: McpServer,
@@ -23,20 +24,12 @@ export function registerAppProtocolTools(
     'app_query',
     {
       description:
-        'Read structured state from an iframe app. Accepts either a URI or windowId + stateKey.',
+        'Read structured state from an iframe app. Use a resource URI for state, or a bare window URI for the manifest.',
       inputSchema: {
         uri: z
           .string()
-          .optional()
           .describe(
-            'Window resource URI (e.g., "yaar://monitor-0/win-excel/state/cells"). Alternative to windowId + stateKey. A bare window URI returns the manifest.',
-          ),
-        windowId: z.string().optional().describe('ID of the window containing the iframe app'),
-        stateKey: z
-          .string()
-          .optional()
-          .describe(
-            'The state key to query. Use "manifest" to discover available state keys and commands.',
+            'Window resource URI (e.g., "yaar://monitor-0/win-excel/state/cells") or bare window URI/ID for manifest.',
           ),
       },
     },
@@ -44,24 +37,15 @@ export function registerAppProtocolTools(
       let windowId: string;
       let stateKey: string;
 
-      if (args.uri) {
-        const resource = parseWindowResourceUri(args.uri);
-        if (resource) {
-          if (resource.resourceType !== 'state')
-            return error('URI points to a command. Use app_command instead.');
-          windowId = resource.windowId;
-          stateKey = resource.key;
-        } else {
-          const win = parseWindowUri(args.uri);
-          if (!win) return error('Invalid URI format.');
-          windowId = win.windowId;
-          stateKey = 'manifest';
-        }
+      const resource = parseWindowResourceUri(args.uri);
+      if (resource) {
+        if (resource.resourceType !== 'state')
+          return error('URI points to a command. Use app_command instead.');
+        windowId = resource.windowId;
+        stateKey = resource.key;
       } else {
-        if (!args.windowId || !args.stateKey)
-          return error('Provide either uri or windowId + stateKey.');
-        windowId = args.windowId;
-        stateKey = args.stateKey;
+        windowId = resolveWindowId(args.uri);
+        stateKey = 'manifest';
       }
 
       const win = getWindowState().getWindow(windowId);
@@ -111,20 +95,11 @@ export function registerAppProtocolTools(
   server.registerTool(
     'app_command',
     {
-      description:
-        'Execute a command on an iframe app. Accepts either a URI or windowId + command.',
+      description: 'Execute a command on an iframe app via a command URI.',
       inputSchema: {
         uri: z
           .string()
-          .optional()
-          .describe(
-            'Window command URI (e.g., "yaar://monitor-0/win-excel/commands/save"). Alternative to windowId + command.',
-          ),
-        windowId: z.string().optional().describe('ID of the window containing the iframe app'),
-        command: z
-          .string()
-          .optional()
-          .describe('The command name to execute (e.g., "setCells", "selectCell")'),
+          .describe('Window command URI (e.g., "yaar://monitor-0/win-excel/commands/save").'),
         params: z
           .record(z.string(), z.unknown())
           .optional()
@@ -132,21 +107,11 @@ export function registerAppProtocolTools(
       },
     },
     async (args) => {
-      let windowId: string;
-      let command: string;
-
-      if (args.uri) {
-        const resource = parseWindowResourceUri(args.uri);
-        if (!resource || resource.resourceType !== 'commands')
-          return error('Invalid command URI. Expected yaar://{monitor}/{window}/commands/{name}.');
-        windowId = resource.windowId;
-        command = resource.key;
-      } else {
-        if (!args.windowId || !args.command)
-          return error('Provide either uri or windowId + command.');
-        windowId = args.windowId;
-        command = args.command;
-      }
+      const resource = parseWindowResourceUri(args.uri);
+      if (!resource || resource.resourceType !== 'commands')
+        return error('Invalid command URI. Expected yaar://{monitor}/{window}/commands/{name}.');
+      const { windowId } = resource;
+      const command = resource.key;
 
       const win = getWindowState().getWindow(windowId);
       if (!win) return error(`Window "${windowId}" not found.`);
