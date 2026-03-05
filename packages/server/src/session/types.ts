@@ -2,10 +2,10 @@
  * Session types for multi-client session support.
  */
 
-import type { OSAction } from '@yaar/shared';
+import type { OSAction, SessionId } from '@yaar/shared';
 
-/** Unique session identifier. */
-export type SessionId = string;
+// Re-export from shared for backward compatibility
+export type { SessionId } from '@yaar/shared';
 
 /** Snapshot of current session state for new connections. */
 export interface SessionSnapshot {

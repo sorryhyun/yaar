@@ -18,13 +18,13 @@ export function registerWriteTool(server: McpServer): void {
     'write',
     {
       description:
-        'Write a file by URI. Supports sandbox:// and storage:// schemes.\n' +
-        'Use sandbox:///path to create a new sandbox automatically.',
+        'Write a file by URI (yaar://storage/... or yaar://sandbox/...).\n' +
+        'Use yaar://sandbox/new/path to create a new sandbox automatically.',
       inputSchema: {
         uri: z
           .string()
           .describe(
-            'File URI. Examples: sandbox://123/src/main.ts, sandbox:///src/main.ts (new sandbox), storage://docs/file.txt',
+            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://sandbox/new/src/main.ts (new sandbox), yaar://storage/docs/file.txt',
           ),
         content: z.string().describe('Content to write'),
       },
@@ -41,7 +41,7 @@ export function registerWriteTool(server: McpServer): void {
         if (!parsed.path) return error('Cannot write to storage root. Provide a file path.');
         const result = await storageWrite(parsed.path, args.content);
         if (!result.success) return error(result.error!);
-        return ok(`Written to storage://${parsed.path}`);
+        return ok(`Written to yaar://storage/${parsed.path}`);
       }
 
       // sandbox or sandbox-new
@@ -69,7 +69,7 @@ export function registerWriteTool(server: McpServer): void {
         await Bun.write(fullPath, args.content);
         return ok(
           JSON.stringify(
-            { sandboxId, path, message: `Written to sandbox://${sandboxId}/${path}` },
+            { sandboxId, path, message: `Written to yaar://sandbox/${sandboxId}/${path}` },
             null,
             2,
           ),

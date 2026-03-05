@@ -23,7 +23,9 @@ export function registerEditTool(server: McpServer): void {
       inputSchema: {
         uri: z
           .string()
-          .describe('File URI. Examples: sandbox://123/src/main.ts, storage://docs/readme.txt'),
+          .describe(
+            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://storage/docs/readme.txt',
+          ),
         old_string: z
           .string()
           .optional()
@@ -142,7 +144,7 @@ export function registerEditTool(server: McpServer): void {
       if (parsed.scheme === 'storage') {
         const result = await storageWrite(parsed.path, newContent);
         if (!result.success) return error(result.error!);
-        return ok(`Edited storage://${parsed.path}`);
+        return ok(`Edited yaar://storage/${parsed.path}`);
       }
 
       // sandbox
@@ -153,7 +155,7 @@ export function registerEditTool(server: McpServer): void {
           {
             sandboxId: parsed.sandboxId,
             path: parsed.path,
-            message: `Edited sandbox://${parsed.sandboxId}/${parsed.path}`,
+            message: `Edited yaar://sandbox/${parsed.sandboxId}/${parsed.path}`,
           },
           null,
           2,

@@ -16,11 +16,13 @@ export function registerDeleteTool(server: McpServer): void {
   server.registerTool(
     'delete',
     {
-      description: 'Delete a file by URI. Supports sandbox:// and storage:// schemes.',
+      description: 'Delete a file by URI (yaar://storage/... or yaar://sandbox/...).',
       inputSchema: {
         uri: z
           .string()
-          .describe('File URI. Examples: sandbox://123/src/old.ts, storage://docs/draft.txt'),
+          .describe(
+            'File URI. Examples: yaar://sandbox/123/src/old.ts, yaar://storage/docs/draft.txt',
+          ),
       },
     },
     async (args) => {
@@ -39,7 +41,7 @@ export function registerDeleteTool(server: McpServer): void {
         if (!parsed.path) return error('Provide a file path to delete.');
         const result = await storageDelete(parsed.path);
         if (!result.success) return error(result.error!);
-        return ok(`Deleted storage://${parsed.path}`);
+        return ok(`Deleted yaar://storage/${parsed.path}`);
       }
 
       // sandbox
@@ -53,7 +55,7 @@ export function registerDeleteTool(server: McpServer): void {
 
       try {
         await unlink(fullPath);
-        return ok(`Deleted sandbox://${parsed.sandboxId}/${parsed.path}`);
+        return ok(`Deleted yaar://sandbox/${parsed.sandboxId}/${parsed.path}`);
       } catch {
         return error(`File not found: ${parsed.path}`);
       }

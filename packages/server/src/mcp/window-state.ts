@@ -15,16 +15,10 @@ import type {
   WindowState,
   AppProtocolRequest,
 } from '@yaar/shared';
+import { buildWindowKey } from '@yaar/shared';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
-
-/**
- * Build a scoped key from monitorId and rawId.
- */
-function scopedKey(monitorId: string, rawId: string): string {
-  return `${monitorId}/${rawId}`;
-}
 
 /**
  * Window state registry for one connection/session.
@@ -65,7 +59,7 @@ export class WindowStateRegistry {
    * Determine the internal key for a given action windowId + monitorId.
    */
   private actionKey(rawId: string, monitorId?: string): string {
-    if (monitorId) return scopedKey(monitorId, rawId);
+    if (monitorId) return buildWindowKey(monitorId, rawId);
     // Backward compat: try to find an existing scoped key for this raw ID
     const resolved = this.resolve(rawId);
     return resolved ? resolved[0] : rawId;
@@ -76,7 +70,7 @@ export class WindowStateRegistry {
 
     switch (action.type) {
       case 'window.create': {
-        const key = monitorId ? scopedKey(monitorId, action.windowId) : action.windowId;
+        const key = monitorId ? buildWindowKey(monitorId, action.windowId) : action.windowId;
         this.windows.set(key, {
           id: key,
           title: action.title,

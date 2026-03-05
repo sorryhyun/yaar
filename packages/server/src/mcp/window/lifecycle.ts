@@ -5,10 +5,12 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { OSAction } from '@yaar/shared';
+import { buildWindowUri, parseWindowKey } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
 import { getAgentId } from '../../agents/session.js';
+import { enrichManifestWithUris } from './manifest-utils.js';
 
 export function registerLifecycleTools(
   server: McpServer,
@@ -133,18 +135,22 @@ export function registerLifecycleTools(
         return ok('No windows are currently open.');
       }
 
-      const windowList = windows.map((win) => ({
-        id: win.id,
-        title: win.title,
-        position: `(${win.bounds.x}, ${win.bounds.y})`,
-        size: `${win.bounds.w}x${win.bounds.h}`,
-        renderer: win.content.renderer,
-        locked: win.locked,
-        lockedBy: win.lockedBy,
-        ...(win.appProtocol ? { appProtocol: true } : {}),
-        ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
-        ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
-      }));
+      const windowList = windows.map((win) => {
+        const parsed = parseWindowKey(win.id);
+        return {
+          id: win.id,
+          ...(parsed ? { uri: buildWindowUri(parsed.monitorId, parsed.windowId) } : {}),
+          title: win.title,
+          position: `(${win.bounds.x}, ${win.bounds.y})`,
+          size: `${win.bounds.w}x${win.bounds.h}`,
+          renderer: win.content.renderer,
+          locked: win.locked,
+          lockedBy: win.lockedBy,
+          ...(win.appProtocol ? { appProtocol: true } : {}),
+          ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
+          ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
+        };
+      });
 
       return ok(JSON.stringify(windowList, null, 2));
     },
@@ -155,9 +161,15 @@ export function registerLifecycleTools(
     'view',
     {
       description:
-        'View the content of a specific window by its ID. Returns the window title, content renderer type, and current content. Optionally capture a screenshot of the rendered window.',
+        'View a window. Default mode returns content. Use mode "manifest" for app-protocol iframe windows to discover state keys and commands with URIs.',
       inputSchema: {
         windowId: z.string().describe('ID of the window to view'),
+        mode: z
+          .enum(['content', 'manifest'])
+          .optional()
+          .describe(
+            '"content" (default): window content and metadata. "manifest": app-protocol manifest with state/command URIs (iframe apps only).',
+          ),
         includeImage: z
           .boolean()
           .optional()
@@ -171,6 +183,27 @@ export function registerLifecycleTools(
         return error(`Window "${args.windowId}" not found. Use list to see available windows.`);
       }
 
+      // Manifest mode: fetch and return the app-protocol manifest with URIs
+      if (args.mode === 'manifest') {
+        if (!win.appProtocol || win.content.renderer !== 'iframe') {
+          return error(
+            `Window "${args.windowId}" is not an app-protocol iframe. Use default mode instead.`,
+          );
+        }
+        const response = await actionEmitter.emitAppProtocolRequest(
+          args.windowId,
+          { kind: 'manifest' },
+          5000,
+        );
+        if (!response || response.kind !== 'manifest')
+          return error('App did not respond to manifest request (timeout).');
+        if (response.error) return error(response.error);
+        const manifest = response.manifest;
+        if (manifest) enrichManifestWithUris(manifest, win.id);
+        return ok(JSON.stringify({ id: win.id, title: win.title, manifest }, null, 2));
+      }
+
+      // Default content mode
       const windowInfo = {
         id: win.id,
         title: win.title,

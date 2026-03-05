@@ -17,13 +17,15 @@ export function registerReadTool(server: McpServer): void {
     'read',
     {
       description:
-        'Read a file by URI. Supports sandbox:// and storage:// schemes.\n' +
-        'For PDF files in storage, returns page count — display via iframe with storage:// protocol.\n' +
+        'Read a file by URI (yaar://storage/... or yaar://sandbox/...).\n' +
+        'For PDF files in storage, returns page count — display via iframe.\n' +
         'Set lineNumbers=true for numbered output (useful before calling edit with line mode).',
       inputSchema: {
         uri: z
           .string()
-          .describe('File URI. Examples: sandbox://123/src/main.ts, storage://docs/readme.txt'),
+          .describe(
+            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://storage/docs/readme.txt',
+          ),
         lineNumbers: z
           .boolean()
           .optional()
@@ -53,7 +55,7 @@ export function registerReadTool(server: McpServer): void {
         if (result.images && result.images.length > 0) {
           const isPdf = result.totalPages != null;
           const hint = isPdf
-            ? `\n\nTo display this PDF, create an iframe window with content="storage://${parsed.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`
+            ? `\n\nTo display this PDF, create an iframe window with content="yaar://storage/${parsed.path}" — the browser's built-in PDF viewer will render it. Do NOT try to describe or recreate the content in markdown.`
             : '';
           return okWithImages(
             result.content! + hint,

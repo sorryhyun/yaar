@@ -26,7 +26,7 @@ export function registerCreateSandboxTools(server: McpServer): void {
         JSON.stringify(
           {
             sandboxId,
-            message: `Sandbox ${sandboxId} created. Write files using paths like "sandbox://${sandboxId}/src/main.ts", then compile and deploy.`,
+            message: `Sandbox ${sandboxId} created. Write files using paths like "yaar://sandbox/${sandboxId}/src/main.ts", then compile and deploy.`,
           },
           null,
           2,

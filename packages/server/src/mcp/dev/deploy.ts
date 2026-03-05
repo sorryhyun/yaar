@@ -391,7 +391,7 @@ export function registerDeployTools(server: McpServer): void {
               sandboxId,
               appId,
               files: fileList,
-              message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "sandbox://${sandboxId}/src/main.ts" with write or edit, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
+              message: `Cloned "${appId}" source into sandbox ${sandboxId}. Files are under src/. Use paths like "yaar://sandbox/${sandboxId}/src/main.ts" with write or edit, then compile and deploy back to appId="${appId}" to update the app in-place. Prefer splitting code into separate files (e.g., src/utils.ts, src/components.ts) and importing them from src/main.ts rather than putting everything in one file.`,
             },
             null,
             2,

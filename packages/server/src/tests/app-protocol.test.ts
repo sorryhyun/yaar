@@ -38,7 +38,7 @@ function createMockServer() {
 function createMockWindowState(windows: Record<string, any> = {}) {
   const commands: any[] = [];
   return {
-    getWindow: vi.fn((id: string) => windows[id] ?? null),
+    getWindow: vi.fn((id: string) => (windows[id] ? { id, ...windows[id] } : null)),
     recordAppCommand: vi.fn((windowId: string, req: any) => {
       commands.push({ windowId, req });
     }),

@@ -54,14 +54,36 @@ yaar://{monitorId}/{windowId}
 | `yaar://monitor-0/win-storage` | The storage window on the default monitor |
 | `yaar://monitor-1/win-excel` | The excel window on monitor 1 |
 
-This is the same format used by `scopedKey()` (server) and `toWindowKey()` (frontend) for window state lookups. The `yaar://` prefix formalizes it as a URI — today this is used internally for keying; in the future it could extend to address app state and commands:
+This is the same format used by `scopedKey()` (server) and `toWindowKey()` (frontend) for window state lookups. The `yaar://` prefix formalizes it as a URI.
+
+#### Window Resource URIs
+
+Window URIs extend with sub-paths to address app state and commands:
 
 ```
-yaar://monitor-0/win-excel/state/cells/A1    -> read cell value (future)
-yaar://monitor-0/win-excel/commands/save      -> execute command (future)
+yaar://{monitorId}/{windowId}/state/{key}      → read app state
+yaar://{monitorId}/{windowId}/commands/{name}   → execute app command
 ```
 
-This extension would give the current `app_query` / `app_command` tools a URI-addressable substrate, enabling REST-style routing through window resources.
+| Example | Meaning |
+|---------|---------|
+| `yaar://monitor-0/win-excel/state/cells` | Read the "cells" state from excel app |
+| `yaar://monitor-0/win-excel/commands/save` | Execute the "save" command on excel app |
+
+These URIs are accepted by the `app_query` and `app_command` MCP tools via their `uri` parameter, as an alternative to the flat `windowId` + `stateKey`/`command` form:
+
+```typescript
+// URI form
+app_query({ uri: "yaar://monitor-0/win-excel/state/cells" })
+
+// Equivalent flat form (backward compatible)
+app_query({ windowId: "win-excel", stateKey: "cells" })
+
+// Bare window URI returns the manifest
+app_query({ uri: "yaar://monitor-0/win-excel" })
+```
+
+**Discovery via `view` tool:** Use `view({ windowId, mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with URIs for each state key and command. The agent can then use these URIs directly with `app_query` and `app_command`.
 
 ---
 
@@ -215,13 +237,27 @@ isYaarUri('yaar://apps/excel-lite')
 ### Window Helpers
 
 ```typescript
-import { buildWindowUri, parseWindowUri } from '@yaar/shared';
+import {
+  buildWindowUri,
+  parseWindowUri,
+  buildWindowResourceUri,
+  parseWindowResourceUri,
+} from '@yaar/shared';
 
 buildWindowUri('monitor-0', 'win-storage')
 // -> 'yaar://monitor-0/win-storage'
 
 parseWindowUri('yaar://monitor-0/win-storage')
 // -> { monitorId: 'monitor-0', windowId: 'win-storage' }
+
+parseWindowUri('yaar://monitor-0/win-excel/state/cells')
+// -> { monitorId: 'monitor-0', windowId: 'win-excel', subPath: 'state/cells' }
+
+buildWindowResourceUri('monitor-0', 'win-excel', 'state', 'cells')
+// -> 'yaar://monitor-0/win-excel/state/cells'
+
+parseWindowResourceUri('yaar://monitor-0/win-excel/state/cells')
+// -> { monitorId: 'monitor-0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
 ```
 
 ---

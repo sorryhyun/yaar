@@ -7,7 +7,7 @@ import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePath, type EndpointMeta } from '../utils.js';
 import { resolvePath } from '../../storage/storage-manager.js';
-import { parseContentPath } from '@yaar/shared';
+import { parseContentPath, type ParsedContentPath } from '@yaar/shared';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -222,145 +222,125 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
   }
 
-  // Serve sandbox files (for previewing compiled apps)
-  const sandboxParsed =
-    url.pathname.startsWith('/api/sandbox/') && req.method === 'GET'
-      ? parseContentPath(decodeURIComponent(url.pathname))
-      : null;
-  if (sandboxParsed?.authority === 'sandbox' && sandboxParsed.sandboxId && sandboxParsed.path) {
-    const sandboxId = sandboxParsed.sandboxId;
-    const filePath = sandboxParsed.path;
-
-    const sandboxDir = join(PROJECT_ROOT, 'sandbox', sandboxId);
-    const normalizedPath = safePath(sandboxDir, filePath);
-    if (!normalizedPath) {
-      return errorResponse('Access denied', 403);
-    }
-
-    try {
-      const content = Buffer.from(await Bun.file(normalizedPath).arrayBuffer());
-      const ext = extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      const headers: Record<string, string> = {
-        'Content-Type': contentType,
-        'Cache-Control': 'no-cache',
-      };
-      if (ext === '.html') {
-        headers['Content-Security-Policy'] = "connect-src 'self'";
-      }
-      const body = maybeGzip(req, headers, content);
-      return new Response(body, { headers });
-    } catch {
-      return errorResponse('File not found', 404);
-    }
-  }
-
-  // Serve app static files (for deployed apps)
-  const appParsed = url.pathname.startsWith('/api/apps/')
-    ? parseContentPath(decodeURIComponent(url.pathname))
-    : null;
-  if (appParsed?.authority === 'apps' && req.method === 'GET') {
-    const appId = appParsed.appId;
-    const filePath = appParsed.path;
-
-    const appsDir = join(PROJECT_ROOT, 'apps', appId);
-    const normalizedPath = safePath(appsDir, filePath);
-    if (!normalizedPath) {
-      return errorResponse('Access denied', 403);
-    }
-
-    try {
-      const content = Buffer.from(await Bun.file(normalizedPath).arrayBuffer());
-      const ext = extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      const headers: Record<string, string> = {
-        'Content-Type': contentType,
-        'Cache-Control': 'no-cache',
-      };
-      if (ext === '.html') {
-        headers['Content-Security-Policy'] = "connect-src 'self'";
-      }
-      const body = maybeGzip(req, headers, content);
-      return new Response(body, { headers });
-    } catch {
-      return errorResponse('File not found', 404);
-    }
-  }
-
-  // Storage API — GET (read/list), POST (write), DELETE
-  const storageParsed = url.pathname.startsWith('/api/storage/')
-    ? parseContentPath(decodeURIComponent(url.pathname))
-    : null;
-  if (storageParsed?.authority === 'storage') {
-    const filePath = storageParsed.path;
-
-    const resolved = resolvePath(filePath);
-    if (!resolved) {
-      return errorResponse('Access denied', 403);
-    }
-
-    // GET — serve file or list directory
-    if (req.method === 'GET') {
-      // Directory listing mode
-      if (url.searchParams.get('list') === 'true') {
-        const result = await storageList(filePath);
-        if (!result.success) {
-          return errorResponse(result.error ?? 'List failed');
-        }
-        return jsonResponse(result.entries);
-      }
-
-      // Serve file (zero-copy via Bun.file())
-      try {
-        const file = Bun.file(resolved.absolutePath);
-        if (!(await file.exists())) {
-          return errorResponse('File not found', 404);
-        }
-        const ext = extname(filePath).toLowerCase();
-        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-        return new Response(file, {
-          headers: {
-            'Content-Type': contentType,
-            'Cache-Control': 'no-cache',
-          },
-        });
-      } catch {
-        return errorResponse('File not found', 404);
-      }
-    }
-
-    // POST — write file
-    if (req.method === 'POST') {
-      if (resolved.readOnly) {
-        return errorResponse('Mount is read-only', 403);
-      }
-      try {
-        const body = await req.arrayBuffer();
-        if (body.byteLength > MAX_UPLOAD_SIZE) {
-          return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
-        }
-        const result = await storageWrite(filePath, Buffer.from(body));
-        if (!result.success) {
-          return errorResponse(result.error ?? 'Write failed');
-        }
-        return jsonResponse({ ok: true, path: result.path });
-      } catch {
-        return errorResponse('Write failed');
-      }
-    }
-
-    // DELETE — remove file
-    if (req.method === 'DELETE') {
-      if (resolved.readOnly) {
-        return errorResponse('Mount is read-only', 403);
-      }
-      const result = await storageDelete(filePath);
-      if (!result.success) {
-        return errorResponse(result.error ?? 'Delete failed');
-      }
-      return jsonResponse({ ok: true, path: result.path });
+  // Content routes — sandbox, apps, storage (unified via parseContentPath)
+  const parsed = parseContentPath(decodeURIComponent(url.pathname));
+  if (parsed) {
+    switch (parsed.authority) {
+      case 'sandbox':
+        return handleSandbox(req, parsed);
+      case 'apps':
+        return handleApps(req, parsed);
+      case 'storage':
+        return handleStorage(req, url, parsed);
     }
   }
 
   return null;
+}
+
+/** Serve sandbox files (for previewing compiled apps). */
+async function handleSandbox(
+  req: Request,
+  parsed: Extract<ParsedContentPath, { authority: 'sandbox' }>,
+): Promise<Response | null> {
+  if (req.method !== 'GET' || !parsed.sandboxId || !parsed.path) return null;
+
+  const sandboxDir = join(PROJECT_ROOT, 'sandbox', parsed.sandboxId);
+  const normalizedPath = safePath(sandboxDir, parsed.path);
+  if (!normalizedPath) return errorResponse('Access denied', 403);
+
+  return serveStaticFile(req, normalizedPath, parsed.path);
+}
+
+/** Serve app static files (for deployed apps). */
+async function handleApps(
+  req: Request,
+  parsed: Extract<ParsedContentPath, { authority: 'apps' }>,
+): Promise<Response | null> {
+  if (req.method !== 'GET') return null;
+
+  const appsDir = join(PROJECT_ROOT, 'apps', parsed.appId);
+  const normalizedPath = safePath(appsDir, parsed.path);
+  if (!normalizedPath) return errorResponse('Access denied', 403);
+
+  return serveStaticFile(req, normalizedPath, parsed.path);
+}
+
+/** Storage API — GET (read/list), POST (write), DELETE. */
+async function handleStorage(
+  req: Request,
+  url: URL,
+  parsed: Extract<ParsedContentPath, { authority: 'storage' }>,
+): Promise<Response | null> {
+  const filePath = parsed.path;
+  const resolved = resolvePath(filePath);
+  if (!resolved) return errorResponse('Access denied', 403);
+
+  if (req.method === 'GET') {
+    if (url.searchParams.get('list') === 'true') {
+      const result = await storageList(filePath);
+      if (!result.success) return errorResponse(result.error ?? 'List failed');
+      return jsonResponse(result.entries);
+    }
+
+    try {
+      const file = Bun.file(resolved.absolutePath);
+      if (!(await file.exists())) return errorResponse('File not found', 404);
+      const ext = extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      return new Response(file, {
+        headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache' },
+      });
+    } catch {
+      return errorResponse('File not found', 404);
+    }
+  }
+
+  if (req.method === 'POST') {
+    if (resolved.readOnly) return errorResponse('Mount is read-only', 403);
+    try {
+      const body = await req.arrayBuffer();
+      if (body.byteLength > MAX_UPLOAD_SIZE) {
+        return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
+      }
+      const result = await storageWrite(filePath, Buffer.from(body));
+      if (!result.success) return errorResponse(result.error ?? 'Write failed');
+      return jsonResponse({ ok: true, path: result.path });
+    } catch {
+      return errorResponse('Write failed');
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    if (resolved.readOnly) return errorResponse('Mount is read-only', 403);
+    const result = await storageDelete(filePath);
+    if (!result.success) return errorResponse(result.error ?? 'Delete failed');
+    return jsonResponse({ ok: true, path: result.path });
+  }
+
+  return null;
+}
+
+/** Serve a static file with gzip and CSP for HTML. */
+async function serveStaticFile(
+  req: Request,
+  absolutePath: string,
+  filePath: string,
+): Promise<Response> {
+  try {
+    const content = Buffer.from(await Bun.file(absolutePath).arrayBuffer());
+    const ext = extname(filePath).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const headers: Record<string, string> = {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-cache',
+    };
+    if (ext === '.html') {
+      headers['Content-Security-Policy'] = "connect-src 'self'";
+    }
+    const body = maybeGzip(req, headers, content);
+    return new Response(body, { headers });
+  } catch {
+    return errorResponse('File not found', 404);
+  }
 }
