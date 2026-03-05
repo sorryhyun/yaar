@@ -1,7 +1,7 @@
 {
   "icon": "🐙",
   "name": "GitHub Manager",
-  "run": "static/index.html",
+  "run": "index.html",
   "protocol": {
     "state": {
       "viewer": {

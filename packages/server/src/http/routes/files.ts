@@ -2,7 +2,6 @@
  * File-serving routes — PDF render, sandbox, app static, storage files.
  */
 
-import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
@@ -11,12 +10,6 @@ import { resolvePath } from '../../storage/storage-manager.js';
 import { parseContentPath } from '@yaar/shared';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
-  {
-    method: 'GET',
-    path: '/api/apps/{appId}/icon',
-    response: 'image',
-    description: 'App icon image',
-  },
   {
     method: 'GET',
     path: '/api/apps/{appId}/{path}',
@@ -85,9 +78,6 @@ function maybeGzip(
   headers['Content-Encoding'] = 'gzip';
   return Bun.gzipSync(new Uint8Array(body));
 }
-
-/** Supported image extensions for app icons */
-const ICON_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg']);
 
 export async function handleFileRoutes(req: Request, url: URL): Promise<Response | null> {
   // Serve browser screenshot
@@ -265,59 +255,13 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
   }
 
-  // Serve app icon image
-  // URL format: /api/apps/{appId}/icon
-  const appIconMatch = url.pathname.match(/^\/api\/apps\/([a-z][a-z0-9-]*)\/icon$/);
-  if (appIconMatch && req.method === 'GET') {
-    const appId = appIconMatch[1];
-    const appDir = join(PROJECT_ROOT, 'apps', appId);
-
-    const validated = safePath(PROJECT_ROOT, join('apps', appId));
-    if (!validated) {
-      return errorResponse('Access denied', 403);
-    }
-
-    try {
-      const files = await readdir(appDir);
-      let iconFile: string | undefined;
-      for (const file of files) {
-        const lower = file.toLowerCase();
-        const dotIdx = lower.lastIndexOf('.');
-        if (dotIdx === -1) continue;
-        const baseName = lower.slice(0, dotIdx);
-        const ext = lower.slice(dotIdx);
-        if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.has(ext)) {
-          iconFile = file;
-          break;
-        }
-      }
-
-      if (!iconFile) {
-        return errorResponse('Icon not found', 404);
-      }
-
-      const iconPath = join(appDir, iconFile);
-      const ext = extname(iconFile).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      return new Response(Bun.file(iconPath), {
-        headers: {
-          'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=3600',
-        },
-      });
-    } catch {
-      return errorResponse('Icon not found', 404);
-    }
-  }
-
   // Serve app static files (for deployed apps)
-  // URL format: /api/apps/{appId}/{path} (also accepts /static/ or /dist/ prefix)
-  const appStaticMatch = url.pathname.match(
-    /^\/api\/apps\/([a-z][a-z0-9-]*)\/(?:(?:static|dist)\/)?(.+\..+)$/,
-  );
-  if (appStaticMatch && req.method === 'GET') {
-    const appId = appStaticMatch[1];
-    const filePath = decodeURIComponent(appStaticMatch[2]);
+  const appParsed = url.pathname.startsWith('/api/apps/')
+    ? parseContentPath(decodeURIComponent(url.pathname))
+    : null;
+  if (appParsed?.authority === 'apps' && req.method === 'GET') {
+    const appId = appParsed.appId;
+    const filePath = appParsed.path;
 
     const appsDir = join(PROJECT_ROOT, 'apps', appId);
     const normalizedPath = safePath(appsDir, filePath);

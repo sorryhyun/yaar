@@ -2,7 +2,7 @@
   "icon": "📁",
   "name": "Storage",
   "description": "Visual file manager for YAAR storage",
-  "run": "static/index.html",
+  "run": "index.html",
   "createShortcut": false,
   "appProtocol": true,
   "protocol": {

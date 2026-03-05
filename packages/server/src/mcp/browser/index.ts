@@ -155,7 +155,7 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
             bounds: { x: 80, y: 60, w: 900, h: 650 },
             content: {
               renderer: 'iframe',
-              data: `/api/apps/browser/static/index.html?sessionId=${sessionId}`,
+              data: `/api/apps/browser/index.html?sessionId=${sessionId}`,
             },
           };
 

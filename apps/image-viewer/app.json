@@ -2,7 +2,7 @@
   "icon": "🖼️",
   "name": "Image Viewer",
   "description": "View and manage images with grid and single-image layout modes",
-  "run": "static/index.html",
+  "run": "index.html",
   "protocol": {
     "state": {
       "images": {

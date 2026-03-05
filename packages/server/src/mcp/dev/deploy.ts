@@ -236,7 +236,7 @@ export function registerDeployTools(server: McpServer): void {
         metadata.icon = resolvedIcon;
         metadata.name = displayName;
         if (description !== undefined) metadata.description = description;
-        if (hasCompiledApp) metadata.run = 'static/index.html';
+        if (hasCompiledApp) metadata.run = 'index.html';
         if (createShortcut !== undefined) {
           if (createShortcut === false) metadata.createShortcut = false;
           else delete metadata.createShortcut;

@@ -13,6 +13,7 @@ export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 export {
   type YaarAuthority,
   type ParsedYaarUri,
+  type ParsedContentPath,
   type ParsedFileUri,
   parseYaarUri,
   buildYaarUri,

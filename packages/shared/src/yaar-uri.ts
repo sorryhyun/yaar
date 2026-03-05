@@ -43,7 +43,7 @@ export function isYaarUri(uri: string): boolean {
 /**
  * Resolve a yaar:// URI to an API path.
  *
- *   yaar://apps/{appId}           → /api/apps/{appId}/static/index.html
+ *   yaar://apps/{appId}           → /api/apps/{appId}/index.html
  *   yaar://apps/{appId}/{subpath} → /api/apps/{appId}/{subpath}
  *   yaar://storage/{path}         → /api/storage/{path}
  *   yaar://sandbox/{id}/{path}    → /api/sandbox/{id}/{path}
@@ -54,7 +54,7 @@ export function resolveContentUri(uri: string): string | null {
   switch (parsed.authority) {
     case 'apps': {
       const slashIdx = parsed.path.indexOf('/');
-      if (slashIdx === -1) return `/api/apps/${parsed.path}/static/index.html`;
+      if (slashIdx === -1) return `/api/apps/${parsed.path}/index.html`;
       return `/api/apps/${parsed.path}`;
     }
     case 'storage':
@@ -80,6 +80,14 @@ export function extractAppId(uri: string): string | null {
 
 /** Sandbox IDs are numeric timestamps (e.g. Date.now().toString()). */
 const SANDBOX_ID_RE = /^\d+$/;
+
+export type ParsedContentPath =
+  | { authority: 'storage'; path: string }
+  | { authority: 'sandbox'; sandboxId: string; path: string }
+  | { authority: 'apps'; appId: string; path: string };
+
+/** App IDs are kebab-case: starts with lowercase letter, then lowercase letters, digits, or hyphens. */
+const APP_ID_RE = /^[a-z][a-z0-9-]*$/;
 
 export type ParsedFileUri =
   | { authority: 'storage'; path: string }
@@ -155,13 +163,14 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
 }
 
 /**
- * Parse an API pathname back into a ParsedFileUri.
- * Reverse of resolveContentUri() for storage/sandbox paths.
+ * Parse an API pathname back into a ParsedContentPath.
+ * Reverse of resolveContentUri() for storage/sandbox/apps paths.
  *
  *   /api/storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
  *   /api/sandbox/123/src/main.ts    → { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
+ *   /api/apps/dock/index.html       → { authority: 'apps', appId: 'dock', path: 'index.html' }
  */
-export function parseContentPath(pathname: string): ParsedFileUri | null {
+export function parseContentPath(pathname: string): ParsedContentPath | null {
   if (pathname.startsWith('/api/storage/')) {
     return { authority: 'storage', path: pathname.slice('/api/storage/'.length) };
   }
@@ -175,6 +184,16 @@ export function parseContentPath(pathname: string): ParsedFileUri | null {
     const id = rest.slice(0, slashIdx);
     if (!SANDBOX_ID_RE.test(id)) return null;
     return { authority: 'sandbox', sandboxId: id, path: rest.slice(slashIdx + 1) };
+  }
+  if (pathname.startsWith('/api/apps/')) {
+    const rest = pathname.slice('/api/apps/'.length);
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx === -1) return null; // No path after appId
+    const appId = rest.slice(0, slashIdx);
+    if (!APP_ID_RE.test(appId)) return null;
+    const path = rest.slice(slashIdx + 1);
+    if (!path) return null; // Empty path after slash
+    return { authority: 'apps', appId, path };
   }
   return null;
 }

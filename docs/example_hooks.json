@@ -107,7 +107,7 @@
           "bounds": { "x": 0, "y": 0, "w": 300, "h": 48 },
           "content": {
             "renderer": "iframe",
-            "data": "/api/apps/dock/static/index.html"
+            "data": "/api/apps/dock/index.html"
           },
           "frameless": true,
           "windowStyle": { "position": "fixed", "top": 0, "right": 0 }

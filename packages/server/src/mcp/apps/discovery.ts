@@ -26,7 +26,7 @@ export interface AppInfo {
   hasSkill: boolean;
   hasConfig: boolean;
   createShortcut?: boolean;
-  run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/static/index.html)
+  run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   protocol?: Pick<AppManifest, 'state' | 'commands'>; // Static manifest for discovery
@@ -117,7 +117,7 @@ export async function listApps(): Promise<AppInfo[]> {
           const baseName = lower.slice(0, dotIdx);
           const ext = lower.slice(dotIdx);
           if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.includes(ext)) {
-            icon = `/api/apps/${appId}/icon`;
+            icon = `/api/apps/${appId}/${file}`;
             iconType = 'image';
             break;
           }

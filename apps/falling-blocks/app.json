@@ -1,7 +1,7 @@
 {
   "icon": "🟦",
   "name": "Falling Blocks",
-  "run": "static/index.html",
+  "run": "index.html",
   "description": "Canvas-based Tetris game with reactive UI via @bundled/solid-js signals",
   "capture": "canvas"
 }

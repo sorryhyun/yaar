@@ -1,6 +1,6 @@
 {
   "icon": "📄",
   "name": "PDF Viewer",
-  "run": "static/index.html",
+  "run": "index.html",
   "capture": "dom"
 }

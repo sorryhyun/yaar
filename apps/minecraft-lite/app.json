@@ -1,7 +1,7 @@
 {
   "icon": "⛏️",
   "name": "Minecraft Lite",
-  "run": "static/index.html",
+  "run": "index.html",
   "capture": "canvas",
   "description": "3D Minecraft-style game with Three.js — explore, build, craft, and fight mobs"
 }

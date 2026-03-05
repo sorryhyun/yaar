@@ -2,7 +2,7 @@
   "icon": "🌐",
   "name": "Browser",
   "description": "Live browser with SSE screenshot streaming and navigation controls",
-  "run": "static/index.html",
+  "run": "index.html",
   "createShortcut": false,
   "appProtocol": true,
   "protocol": {

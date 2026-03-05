@@ -2,7 +2,7 @@
   "icon": "🎬",
   "name": "Video Editor Lite",
   "description": "Lightweight video editor with trim/export (Edit mode) and composition builder (Create mode) supporting text, shapes, solid fills, images, and video clips.",
-  "run": "static/index.html",
+  "run": "index.html",
   "appProtocol": true,
   "protocol": {
     "state": {

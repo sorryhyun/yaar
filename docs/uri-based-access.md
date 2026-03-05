@@ -22,12 +22,12 @@ yaar://{authority}/{path}
 
 | Authority | Example | Resolves to |
 |-----------|---------|-------------|
-| `apps` | `yaar://apps/excel-lite` | `/api/apps/excel-lite/static/index.html` |
-| `apps` | `yaar://apps/excel-lite/static/index.html` | `/api/apps/excel-lite/static/index.html` |
+| `apps` | `yaar://apps/excel-lite` | `/api/apps/excel-lite/index.html` |
+| `apps` | `yaar://apps/excel-lite/index.html` | `/api/apps/excel-lite/index.html` |
 | `storage` | `yaar://storage/documents/report.pdf` | `/api/storage/documents/report.pdf` |
 | `sandbox` | `yaar://sandbox/17123456/src/main.ts` | `/api/sandbox/17123456/src/main.ts` |
 
-For `yaar://apps/{appId}` (no subpath), the default entry point `static/index.html` is appended automatically.
+For `yaar://apps/{appId}` (no subpath), the default entry point `index.html` is appended automatically.
 
 ### File-Operation URIs
 
@@ -120,7 +120,7 @@ The `/api/apps` endpoint returns `run` fields as yaar:// URIs:
 }
 ```
 
-Apps with custom `run` paths in `app.json` (e.g., `"run": "static/index.html"`) get `yaar://apps/{appId}/static/index.html`. Absolute paths (starting with `/`) are returned as-is.
+Apps with custom `run` paths in `app.json` (e.g., `"run": "index.html"`) get `yaar://apps/{appId}/index.html`. Absolute paths (starting with `/`) are returned as-is.
 
 ---
 
@@ -134,7 +134,7 @@ Content URIs are resolved via `resolveContentUri()` in `@yaar/shared`:
 import { resolveContentUri } from '@yaar/shared';
 
 resolveContentUri('yaar://apps/excel-lite')
-// -> '/api/apps/excel-lite/static/index.html'
+// -> '/api/apps/excel-lite/index.html'
 
 resolveContentUri('yaar://storage/docs/file.txt')
 // -> '/api/storage/docs/file.txt'
@@ -147,9 +147,28 @@ Resolution points:
 - **Server** (`mcp/window/create.ts`): resolves URIs in iframe content before emitting OS actions
 - **Frontend** (`lib/api.ts`): `resolveAssetUrl()` resolves URIs and adds remote-mode auth
 
+### Reverse Resolution (API path → parsed)
+
+`parseContentPath()` parses API pathnames back into structured objects. Used by HTTP route handlers to unify routing for all content types:
+
+```typescript
+import { parseContentPath } from '@yaar/shared';
+
+parseContentPath('/api/storage/docs/file.txt')
+// -> { authority: 'storage', path: 'docs/file.txt' }
+
+parseContentPath('/api/sandbox/123/src/main.ts')
+// -> { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
+
+parseContentPath('/api/apps/dock/index.html')
+// -> { authority: 'apps', appId: 'dock', path: 'index.html' }
+```
+
+Returns `ParsedContentPath` — a union of `storage`, `sandbox`, and `apps` variants. App IDs are validated as kebab-case (`/^[a-z][a-z0-9-]*$/`).
+
 ### File-Operation Parsing
 
-File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`:
+File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`. This is separate from `parseContentPath()` — it handles `yaar://` URIs (not API paths) and includes sandbox creation (`sandboxId: null`):
 
 ```typescript
 import { parseFileUri, buildFileUri } from '@yaar/shared';
@@ -211,10 +230,11 @@ parseWindowUri('yaar://monitor-0/win-storage')
 
 | File | Role |
 |------|------|
-| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window) |
+| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window), `ParsedContentPath` |
+| `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
 | `packages/server/src/mcp/basic/uri.ts` | Thin adapter over `parseFileUri()` for basic MCP tools |
 | `packages/server/src/mcp/window/create.ts` | Server-side URI resolution for iframe content |
-| `packages/server/src/mcp/apps/discovery.ts` | `run` field generation as yaar:// URIs |
+| `packages/server/src/mcp/apps/discovery.ts` | `run` field and icon path generation as yaar:// URIs |
 | `packages/server/src/storage/shortcuts.ts` | Shortcut creation with yaar:// targets |
 | `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
 | `packages/frontend/src/components/desktop/DesktopIcons.tsx` | Shortcut click handling via `extractAppId()` |
