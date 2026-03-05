@@ -18,6 +18,31 @@ export const APPS_TOOL_NAMES = [
   'mcp__apps__market_delete',
 ] as const;
 
+/**
+ * Convert a JSON Schema object into a concise human-readable signature.
+ * e.g. { html: string (required), mode?: "replace" | "append" }
+ */
+function schemaToSignature(schema: Record<string, unknown>): string {
+  if (schema.type !== 'object' || !schema.properties) return JSON.stringify(schema);
+  const props = schema.properties as Record<string, Record<string, unknown>>;
+  const required = new Set((schema.required as string[]) ?? []);
+  const parts = Object.entries(props).map(([key, prop]) => {
+    const opt = required.has(key) ? '' : '?';
+    return `${key}${opt}: ${propType(prop)}`;
+  });
+  return `{ ${parts.join(', ')} }`;
+}
+
+function propType(prop: Record<string, unknown>): string {
+  if (prop.enum) return (prop.enum as unknown[]).map((v) => JSON.stringify(v)).join(' | ');
+  if (prop.type === 'array') {
+    const items = prop.items as Record<string, unknown> | undefined;
+    if (items?.type === 'object') return `Array<${schemaToSignature(items)}>`;
+    return `${items?.type ?? 'unknown'}[]`;
+  }
+  return (prop.type as string) ?? 'unknown';
+}
+
 export function registerAppsTools(server: McpServer): void {
   registerBadgeTool(server);
   registerMarketTools(server);
@@ -94,8 +119,11 @@ export function registerAppsTools(server: McpServer): void {
             '### Commands\n' +
               Object.entries(commands)
                 .map(([k, v]) => {
-                  let line = `- \`${k}\` — ${v.description}`;
-                  if (v.params) line += `\n  Params: \`${JSON.stringify(v.params)}\``;
+                  // Strip trailing "Params: ..." from description to avoid duplication
+                  const desc = v.description.replace(/\.?\s*Params:\s*.+$/, '');
+                  let line = `- \`${k}\` — ${desc}`;
+                  if (v.params)
+                    line += `\n  Params: ${schemaToSignature(v.params as Record<string, unknown>)}`;
                   return line;
                 })
                 .join('\n'),

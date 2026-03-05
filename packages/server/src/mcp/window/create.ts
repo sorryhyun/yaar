@@ -19,8 +19,19 @@ import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { resolveContentUri, extractAppId, buildWindowUri } from '@yaar/shared';
-import { resolveWindowId } from './resolve-window.js';
 import { getMonitorId } from '../../agents/session.js';
+
+/** Derive a window ID from appId, name, or title. */
+function deriveWindowId(appId?: string, name?: string, title?: string): string {
+  if (appId) return appId;
+  const source = name ?? title ?? '';
+  // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse, trim
+  const slug = source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return slug || `win-${Date.now().toString(36)}`;
+}
 
 /** Format a window identifier for tool feedback — full URI when monitor context is available. */
 function formatWindowRef(windowId: string): string {
@@ -56,7 +67,12 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window for displaying content (markdown, HTML, text, table, or iframe). For interactive UI with buttons/forms, use create_component instead. For PDF files, use iframe renderer with src="/api/storage/<path>" to leverage the browser\'s built-in PDF viewer.',
       inputSchema: {
-        uri: z.string(),
+        name: z
+          .string()
+          .optional()
+          .describe(
+            'Window identifier (e.g. "news", "editor"). Auto-derived from appId or title if omitted.',
+          ),
         title: z.string().describe('Window title'),
         renderer: displayRendererSchema.describe(
           'Content renderer type: markdown, html, text, table, or iframe',
@@ -79,7 +95,11 @@ export function registerCreateTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const windowId = resolveWindowId(args.uri);
+      const windowId = deriveWindowId(
+        args.appId as string | undefined,
+        args.name as string | undefined,
+        args.title,
+      );
       const renderer = args.renderer as string;
       let data = args.content as string | { headers: string[]; rows: string[][] };
 
@@ -146,7 +166,12 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid.',
       inputSchema: {
-        uri: z.string(),
+        name: z
+          .string()
+          .optional()
+          .describe(
+            'Window identifier (e.g. "settings", "dashboard"). Auto-derived from appId or title if omitted.',
+          ),
         title: z.string().describe('Window title'),
         jsonfile: z
           .string()
@@ -179,7 +204,11 @@ export function registerCreateTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const windowId = resolveWindowId(args.uri);
+      const windowId = deriveWindowId(
+        args.appId as string | undefined,
+        args.name as string | undefined,
+        args.title,
+      );
       let layoutData: ComponentLayout;
 
       if (args.jsonfile) {
