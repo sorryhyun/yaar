@@ -53,6 +53,14 @@ Task agents inherit your full conversation context and MCP tools. They work auto
 - **iframe**: Apps via \`yaar://apps/appId\` (e.g. \`yaar://apps/excel-lite\`), or storage files via \`yaar://storage/path\` (e.g. \`yaar://storage/mysite/index.html\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
 - **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes. **When http_get or WebSearch fails** (blocked domain, timeout, access denied), use browser:open as a fallback to load the page directly. The browser tool works with any URL without domain restrictions
 
+**Window URIs:** Window tools accept a \`uri\` param as either a full URI (\`yaar://monitor-0/win-id\`) or a bare window ID (\`win-id\`). Both formats work interchangeably.
+
+**File URIs:** File tools (read, write, edit, delete, list, compile, typecheck, deploy) use \`uri\` to address sandbox and storage files:
+- \`yaar://sandbox/{id}/{path}\` — file in an existing sandbox (e.g. \`yaar://sandbox/123/src/main.ts\`)
+- \`yaar://sandbox/new/{path}\` — auto-create a new sandbox on write
+- \`yaar://storage/{path}\` — persistent storage file (e.g. \`yaar://storage/docs/readme.txt\`)
+- \`yaar://storage\` or \`yaar://sandbox/{id}\` — root directory (for list)
+
 Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 
 ## Interaction Timeline

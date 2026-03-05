@@ -80,7 +80,7 @@ src/
 │   ├── domains.ts     # Domain allowlist for HTTP/sandbox fetch
 │   ├── system/        # get_info (with optional envVar), memorize, set_config, get_config, remove_config, relay_to_main, run_js
 │   ├── skills/        # skill tool — loads reference docs (app_dev, sandbox, components, host_api, app_protocol)
-│   ├── window/        # create, create_component, update, update_component, close, lock/unlock, list, view, notifications, app protocol
+│   ├── window/        # create, create_component, update, update_component, manage (close/lock/unlock), list, view, info, notifications, app protocol
 │   │   ├── create.ts, update.ts, lifecycle.ts, notification.ts, app-protocol.ts
 │   ├── storage/       # mount, unmount, list_mounts
 │   ├── http/          # http_get, http_post, request_allowing_domain (curl.ts, request.ts, permission.ts)
@@ -228,7 +228,7 @@ Tools are organized into domain folders under `mcp/`, each with an `index.ts` th
 | `system/` | system | get_info (+ optional envVar), memorize, set_config (hooks/settings/shortcuts/mounts/app), get_config, remove_config, relay_to_main, run_js |
 | `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
-| `window/` | window | create, create_component, update, update_component, close, lock, unlock, list, view, show_notification, dismiss_notification, app_query, app_command |
+| `window/` | window | create, create_component, update, update_component, manage (close/lock/unlock), list, view, info, show_notification, dismiss_notification, app_query, app_command |
 | `storage/` | storage | mount, unmount, list_mounts |
 | `apps/` | apps | list, load_skill, set_app_badge, market_list, market_get, market_delete |
 | `user/` | user | ask, request |

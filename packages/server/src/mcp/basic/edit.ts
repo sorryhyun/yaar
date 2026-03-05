@@ -21,11 +21,7 @@ export function registerEditTool(server: McpServer): void {
         '2. Line mode: provide start_line + new_string (replaces lines start_line..end_line)\n' +
         'Line numbers are 1-based, matching the output of read with lineNumbers=true.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://storage/docs/readme.txt',
-          ),
+        uri: z.string(),
         old_string: z
           .string()
           .optional()

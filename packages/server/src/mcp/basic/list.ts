@@ -19,11 +19,7 @@ export function registerListTool(server: McpServer): void {
         'List directory contents by URI (yaar://storage/... or yaar://sandbox/...).\n' +
         'Use yaar://sandbox/{sandboxId} to list sandbox root, or yaar://storage to list storage root.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'Directory URI. Examples: yaar://sandbox/123, yaar://sandbox/123/src, yaar://storage, yaar://storage/docs',
-          ),
+        uri: z.string(),
       },
     },
     async (args) => {

@@ -1,5 +1,5 @@
 /**
- * Window lifecycle tools - close, lock, unlock, list, view.
+ * Window lifecycle tools - manage (close/lock/unlock), list, view, info.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -10,117 +10,82 @@ import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
 import { getAgentId } from '../../agents/session.js';
-import { enrichManifestWithUris } from './manifest-utils.js';
 import { resolveWindowId } from './resolve-window.js';
 
 export function registerLifecycleTools(
   server: McpServer,
   getWindowState: () => WindowStateRegistry,
 ): void {
-  // close_window
+  // manage — close, lock, or unlock a window
   server.registerTool(
-    'close',
-    {
-      description: 'Close a window on the YAAR desktop',
-      inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
-      },
-    },
-    async (args) => {
-      const windowId = resolveWindowId(args.uri);
-
-      if (!getWindowState().hasWindow(windowId)) {
-        return error(`Window "${windowId}" does not exist or was already closed.`);
-      }
-
-      const lockedBy = getWindowState().isLockedByOther(windowId, getAgentId());
-      if (lockedBy) {
-        return error(
-          `Window "${windowId}" is locked by agent "${lockedBy}". Cannot close until unlocked.`,
-        );
-      }
-
-      const osAction: OSAction = {
-        type: 'window.close',
-        windowId,
-      };
-
-      const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
-
-      if (feedback && !feedback.success) {
-        return error(`Failed to close window "${windowId}": ${feedback.error}`);
-      }
-
-      return ok(`Closed window "${windowId}"`);
-    },
-  );
-
-  // lock_window
-  server.registerTool(
-    'lock',
+    'manage',
     {
       description:
-        'Lock a window to prevent other agents from modifying its content. Only the locking agent can modify or unlock the window.',
+        'Manage a window: close it, lock it (prevent other agents from modifying), or unlock it (only the locking agent can unlock).',
       inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
-        agentId: z.string().describe('Unique identifier for the agent acquiring the lock'),
+        uri: z.string(),
+        action: z.enum(['close', 'lock', 'unlock']).describe('Action to perform on the window'),
       },
     },
     async (args) => {
       const windowId = resolveWindowId(args.uri);
+      const agentId = getAgentId();
 
       if (!getWindowState().hasWindow(windowId)) {
-        return error(`Window "${windowId}" does not exist. Cannot lock a non-existent window.`);
+        return error(`Window "${windowId}" does not exist.`);
       }
 
-      const osAction: OSAction = {
-        type: 'window.lock',
-        windowId,
-        agentId: args.agentId,
-      };
+      const lockedBy = getWindowState().isLockedByOther(windowId, agentId);
 
-      actionEmitter.emitAction(osAction);
-      return ok(`Locked window "${windowId}"`);
-    },
-  );
+      switch (args.action) {
+        case 'close': {
+          if (lockedBy) {
+            return error(
+              `Window "${windowId}" is locked by agent "${lockedBy}". Cannot close until unlocked.`,
+            );
+          }
+          const feedback = await actionEmitter.emitActionWithFeedback(
+            { type: 'window.close', windowId } satisfies OSAction,
+            500,
+          );
+          if (feedback && !feedback.success) {
+            return error(`Failed to close window "${windowId}": ${feedback.error}`);
+          }
+          return ok(`Closed window "${windowId}"`);
+        }
 
-  // unlock_window
-  server.registerTool(
-    'unlock',
-    {
-      description:
-        'Unlock a previously locked window. Only the agent that locked the window can unlock it.',
-      inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
-        agentId: z
-          .string()
-          .describe(
-            'Unique identifier for the agent releasing the lock (must match the locking agent)',
-          ),
-      },
-    },
-    async (args) => {
-      const windowId = resolveWindowId(args.uri);
+        case 'lock': {
+          if (!agentId) {
+            return error('Cannot determine agent identity. Lock requires an agent context.');
+          }
+          if (lockedBy) {
+            return error(`Window "${windowId}" is already locked by agent "${lockedBy}".`);
+          }
+          actionEmitter.emitAction({
+            type: 'window.lock',
+            windowId,
+            agentId,
+          } satisfies OSAction);
+          return ok(`Locked window "${windowId}"`);
+        }
 
-      if (!getWindowState().hasWindow(windowId)) {
-        return error(`Window "${windowId}" does not exist. Cannot unlock a non-existent window.`);
+        case 'unlock': {
+          if (!agentId) {
+            return error('Cannot determine agent identity. Unlock requires an agent context.');
+          }
+          if (lockedBy) {
+            return error(
+              `Window "${windowId}" is locked by agent "${lockedBy}". Only the locking agent can unlock.`,
+            );
+          }
+          actionEmitter.emitAction({
+            type: 'window.unlock',
+            windowId,
+            agentId,
+          } satisfies OSAction);
+          return ok(`Unlocked window "${windowId}"`);
+        }
       }
-
-      const lockedBy = getWindowState().isLockedByOther(windowId, args.agentId);
-      if (lockedBy) {
-        return error(
-          `Window "${windowId}" is locked by agent "${lockedBy}", not "${args.agentId}". Only the locking agent can unlock.`,
-        );
-      }
-
-      const osAction: OSAction = {
-        type: 'window.unlock',
-        windowId,
-        agentId: args.agentId,
-      };
-
-      actionEmitter.emitAction(osAction);
-      return ok(`Unlocked window "${windowId}"`);
     },
   );
 
@@ -163,16 +128,9 @@ export function registerLifecycleTools(
   server.registerTool(
     'view',
     {
-      description:
-        'View a window. Default mode returns content. Use mode "manifest" for app-protocol iframe windows to discover state keys and commands with URIs.',
+      description: "View a window's content and metadata.",
       inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
-        mode: z
-          .enum(['content', 'manifest'])
-          .optional()
-          .describe(
-            '"content" (default): window content and metadata. "manifest": app-protocol manifest with state/command URIs (iframe apps only).',
-          ),
+        uri: z.string(),
         includeImage: z
           .boolean()
           .optional()
@@ -187,27 +145,6 @@ export function registerLifecycleTools(
         return error(`Window "${windowId}" not found. Use list to see available windows.`);
       }
 
-      // Manifest mode: fetch and return the app-protocol manifest with URIs
-      if (args.mode === 'manifest') {
-        if (!win.appProtocol || win.content.renderer !== 'iframe') {
-          return error(
-            `Window "${windowId}" is not an app-protocol iframe. Use default mode instead.`,
-          );
-        }
-        const response = await actionEmitter.emitAppProtocolRequest(
-          windowId,
-          { kind: 'manifest' },
-          5000,
-        );
-        if (!response || response.kind !== 'manifest')
-          return error('App did not respond to manifest request (timeout).');
-        if (response.error) return error(response.error);
-        const manifest = response.manifest;
-        if (manifest) enrichManifestWithUris(manifest, win.id);
-        return ok(JSON.stringify({ id: win.id, title: win.title, manifest }, null, 2));
-      }
-
-      // Default content mode
       const windowInfo = {
         id: win.id,
         title: win.title,
@@ -240,6 +177,39 @@ export function registerLifecycleTools(
       }
 
       return ok(JSON.stringify(windowInfo, null, 2));
+    },
+  );
+
+  // info — lightweight lock/ownership check
+  server.registerTool(
+    'info',
+    {
+      description:
+        'Get quick info about a window: lock status, which agent locked it, and whether you are the lock owner.',
+      inputSchema: {
+        uri: z.string(),
+      },
+    },
+    async (args) => {
+      const windowId = resolveWindowId(args.uri);
+      const win = getWindowState().getWindow(windowId);
+
+      if (!win) {
+        return error(`Window "${windowId}" not found. Use list to see available windows.`);
+      }
+
+      const agentId = getAgentId();
+      const info = {
+        id: win.id,
+        title: win.title,
+        renderer: win.content.renderer,
+        ...(win.appProtocol ? { appProtocol: true } : {}),
+        locked: win.locked,
+        lockedBy: win.lockedBy ?? null,
+        isOwner: win.locked && agentId ? win.lockedBy === agentId : false,
+      };
+
+      return ok(JSON.stringify(info, null, 2));
     },
   );
 }

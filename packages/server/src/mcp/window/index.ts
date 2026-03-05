@@ -1,5 +1,5 @@
 /**
- * Window tools - create, update, close, toast, lock/unlock, list, view.
+ * Window tools - create, update, manage (close/lock/unlock), list, view, info, notifications, app protocol.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,11 +15,10 @@ export const WINDOW_TOOL_NAMES = [
   'mcp__window__create_component',
   'mcp__window__update',
   'mcp__window__update_component',
-  'mcp__window__close',
-  'mcp__window__lock',
-  'mcp__window__unlock',
+  'mcp__window__manage',
   'mcp__window__list',
   'mcp__window__view',
+  'mcp__window__info',
   'mcp__window__show_notification',
   'mcp__window__dismiss_notification',
   'mcp__window__app_query',

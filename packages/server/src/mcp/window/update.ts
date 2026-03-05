@@ -29,7 +29,7 @@ export function registerUpdateTools(
       description:
         'Update display window content with text operations. For component windows, use update_component instead.',
       inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
+        uri: z.string(),
         operation: z
           .enum(['append', 'prepend', 'replace', 'insertAt', 'clear'])
           .describe('The operation to perform on the content'),
@@ -116,7 +116,7 @@ export function registerUpdateTools(
     {
       description: 'Replace the components in a component window.',
       inputSchema: {
-        uri: z.string().describe('Window URI or ID (e.g., "yaar://monitor-0/win-id" or "win-id")'),
+        uri: z.string(),
         components: z.array(componentSchema).describe('New flat array of UI components'),
         cols: colsSchema
           .optional()

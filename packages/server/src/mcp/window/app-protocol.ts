@@ -29,7 +29,7 @@ export function registerAppProtocolTools(
         uri: z
           .string()
           .describe(
-            'Window resource URI (e.g., "yaar://monitor-0/win-excel/state/cells") or bare window URI/ID for manifest.',
+            'Window URI with state path (e.g., ".../state/cells"), or bare URI for manifest.',
           ),
       },
     },
@@ -97,9 +97,7 @@ export function registerAppProtocolTools(
     {
       description: 'Execute a command on an iframe app via a command URI.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe('Window command URI (e.g., "yaar://monitor-0/win-excel/commands/save").'),
+        uri: z.string().describe('Window URI with command path (e.g., ".../commands/save").'),
         params: z
           .record(z.string(), z.unknown())
           .optional()

@@ -13,6 +13,7 @@ import { actionEmitter } from '../action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import { parseUri } from '../basic/uri.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -23,7 +24,7 @@ export function registerDeployTools(server: McpServer): void {
     {
       description: 'Deploy a sandbox as a desktop app. Auto-compiles if not already compiled.',
       inputSchema: {
-        sandbox: z.string().describe('Sandbox ID to deploy'),
+        uri: z.string(),
         appId: z.string().describe('App ID (lowercase with hyphens)'),
         name: z.string().optional().describe('Display name'),
         description: z.string().optional().describe('Brief description of what the app does'),
@@ -69,8 +70,17 @@ export function registerDeployTools(server: McpServer): void {
       },
     },
     async (args) => {
+      let parsed;
+      try {
+        parsed = parseUri(args.uri);
+      } catch (e) {
+        return error((e as Error).message);
+      }
+      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+        return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
+      }
+
       const {
-        sandbox: sandboxId,
         appId,
         name,
         description,
@@ -88,11 +98,7 @@ export function registerDeployTools(server: McpServer): void {
         windowStyle,
         capture,
       } = args;
-
-      // Validate sandbox ID
-      if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
-      }
+      const sandboxId = parsed.sandboxId;
 
       // Validate app ID (lowercase, hyphens allowed, no special chars)
       if (!/^[a-z][a-z0-9-]*$/.test(appId)) {

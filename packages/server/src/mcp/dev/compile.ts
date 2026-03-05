@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { stat } from 'fs/promises';
 import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
+import { parseUri } from '../basic/uri.js';
 
 export function registerCompileTools(server: McpServer): void {
   // compile - Compile sandbox TypeScript to HTML
@@ -16,7 +17,7 @@ export function registerCompileTools(server: McpServer): void {
       description:
         'Compile TypeScript from a sandbox to a bundled HTML file. Entry point is src/main.ts. Returns a preview URL for viewing the app.',
       inputSchema: {
-        sandbox: z.string().describe('Sandbox ID to compile'),
+        uri: z.string(),
         entry: z
           .string()
           .optional()
@@ -25,13 +26,18 @@ export function registerCompileTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const { sandbox: sandboxId, title } = args;
+      const { title } = args;
 
-      // Validate sandbox ID (must be numeric timestamp)
-      if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
+      let parsed;
+      try {
+        parsed = parseUri(args.uri);
+      } catch (e) {
+        return error((e as Error).message);
       }
-
+      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+        return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
+      }
+      const sandboxId = parsed.sandboxId;
       const sandboxPath = getSandboxPath(sandboxId);
 
       // Check sandbox exists
@@ -71,16 +77,20 @@ export function registerCompileTools(server: McpServer): void {
       description:
         'Run TypeScript type checking on sandbox code (loose mode, no emit). Returns diagnostics if there are type errors.',
       inputSchema: {
-        sandbox: z.string().describe('Sandbox ID to type-check'),
+        uri: z.string(),
       },
     },
     async (args) => {
-      const { sandbox: sandboxId } = args;
-
-      if (!/^\d+$/.test(sandboxId)) {
-        return error('Invalid sandbox ID. Must be a numeric timestamp.');
+      let parsed;
+      try {
+        parsed = parseUri(args.uri);
+      } catch (e) {
+        return error((e as Error).message);
       }
-
+      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+        return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
+      }
+      const sandboxId = parsed.sandboxId;
       const sandboxPath = getSandboxPath(sandboxId);
 
       try {

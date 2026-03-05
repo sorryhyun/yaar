@@ -252,7 +252,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
           actionAgentId,
           reqId,
           key,
-          'Window is currently locked by another agent. Use unlock_window to release the lock before updating.',
+          'Window is currently locked by another agent. Use manage with action "unlock" to release the lock before updating.',
         )
       )
         break;

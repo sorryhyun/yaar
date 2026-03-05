@@ -21,11 +21,7 @@ export function registerWriteTool(server: McpServer): void {
         'Write a file by URI (yaar://storage/... or yaar://sandbox/...).\n' +
         'Use yaar://sandbox/new/path to create a new sandbox automatically.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://sandbox/new/src/main.ts (new sandbox), yaar://storage/docs/file.txt',
-          ),
+        uri: z.string(),
         content: z.string().describe('Content to write'),
       },
     },

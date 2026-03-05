@@ -18,11 +18,7 @@ export function registerDeleteTool(server: McpServer): void {
     {
       description: 'Delete a file by URI (yaar://storage/... or yaar://sandbox/...).',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'File URI. Examples: yaar://sandbox/123/src/old.ts, yaar://storage/docs/draft.txt',
-          ),
+        uri: z.string(),
       },
     },
     async (args) => {

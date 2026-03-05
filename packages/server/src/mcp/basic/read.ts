@@ -21,11 +21,7 @@ export function registerReadTool(server: McpServer): void {
         'For PDF files in storage, returns page count — display via iframe.\n' +
         'Set lineNumbers=true for numbered output (useful before calling edit with line mode).',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'File URI. Examples: yaar://sandbox/123/src/main.ts, yaar://storage/docs/readme.txt',
-          ),
+        uri: z.string(),
         lineNumbers: z
           .boolean()
           .optional()

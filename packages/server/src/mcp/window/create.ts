@@ -49,11 +49,7 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window for displaying content (markdown, HTML, text, table, or iframe). For interactive UI with buttons/forms, use create_component instead. For PDF files, use iframe renderer with src="/api/storage/<path>" to leverage the browser\'s built-in PDF viewer.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'Window URI or ID for the new window (e.g., "yaar://monitor-0/win-id" or "win-id")',
-          ),
+        uri: z.string(),
         title: z.string().describe('Window title'),
         renderer: displayRendererSchema.describe(
           'Content renderer type: markdown, html, text, table, or iframe',
@@ -143,11 +139,7 @@ export function registerCreateTools(server: McpServer): void {
       description:
         'Create a window with interactive UI components (buttons, forms, inputs, etc). Components are a flat array laid out with CSS grid.',
       inputSchema: {
-        uri: z
-          .string()
-          .describe(
-            'Window URI or ID for the new window (e.g., "yaar://monitor-0/win-id" or "win-id")',
-          ),
+        uri: z.string(),
         title: z.string().describe('Window title'),
         jsonfile: z
           .string()
