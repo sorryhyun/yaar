@@ -106,6 +106,27 @@ export function runWithAgentContext<T>(
   );
 }
 
+/**
+ * Build a scope context section so the agent knows its place in the hierarchy.
+ * - Main agents: scoped to a monitor, use bare window IDs
+ * - Window agents: scoped to a specific window within a monitor
+ */
+function buildScopeSection(role: string, monitorId?: string): string {
+  // Window agent: role is "window-{windowId}" or "window-{windowId}/{actionId}"
+  const windowMatch = role.match(/^window-(.+?)(?:\/|$)/);
+  if (windowMatch) {
+    const windowId = windowMatch[1];
+    return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`${monitorId ? ` on \`${monitorId}\`` : ''}. Your actions are limited to this window. Use the bare window ID \`${windowId}\` in tool calls — do not include a monitor prefix.`;
+  }
+
+  // Main/ephemeral agent with monitorId
+  if (monitorId) {
+    return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. All windows you create live under this monitor automatically. Use bare window IDs (e.g. \`my-window\`) — do not include the monitor prefix.`;
+  }
+
+  return '';
+}
+
 async function loadMemory(): Promise<string> {
   const result = await configRead('memory.md');
   if (!result.success || !result.content?.trim()) {
@@ -303,8 +324,9 @@ export class AgentSession {
         buildEnvironmentSection(this.provider.providerType),
       ]);
       const basePrompt = options.systemPromptOverride ?? this.provider.systemPrompt;
+      const scopeSection = buildScopeSection(role, options.monitorId);
       const transportOptions: TransportOptions = {
-        systemPrompt: basePrompt + environment + memory,
+        systemPrompt: basePrompt + scopeSection + environment + memory,
         sessionId: sessionIdToUse,
         forkSession: options.forkSession,
         resumeThread,

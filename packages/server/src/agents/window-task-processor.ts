@@ -130,6 +130,7 @@ export class WindowTaskProcessor {
         source,
         interactions: task.interactions,
         messageId: task.messageId,
+        monitorId: task.monitorId,
         canonicalAgent: canonicalWindow,
         resumeSessionId,
         allowedTools: getToolNames(), // Excludes Task — window agents must not spawn subagents

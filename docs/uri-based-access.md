@@ -56,6 +56,8 @@ yaar://{monitorId}/{windowId}
 
 This is the same format used by `scopedKey()` (server) and `toWindowKey()` (frontend) for window state lookups. The `yaar://` prefix formalizes it as a URI.
 
+**Agent-facing simplification:** Agents are always scoped to a single monitor and cannot create windows on other monitors. The system prompt instructs agents to use bare window IDs (e.g. `win-storage`) — the server's `resolveWindowId()` strips any monitor prefix the agent might include, and `WindowStateRegistry` adds the correct monitor scope automatically via `actionEmitter.currentMonitorId`.
+
 #### Window Resource URIs
 
 Window URIs extend with sub-paths to address app state and commands:
@@ -70,20 +72,17 @@ yaar://{monitorId}/{windowId}/commands/{name}   → execute app command
 | `yaar://monitor-0/win-excel/state/cells` | Read the "cells" state from excel app |
 | `yaar://monitor-0/win-excel/commands/save` | Execute the "save" command on excel app |
 
-These URIs are used by the `app_query` and `app_command` MCP tools via their `uri` parameter:
+These URIs are used by the `app_query` and `app_command` MCP tools via their `uri` parameter. Agents can use either full URIs or bare window IDs — the server resolves the monitor automatically:
 
 ```typescript
-// Resource URI to read a specific state key
+// Full URI (works but unnecessary — agent is already scoped)
 app_query({ uri: "yaar://monitor-0/win-excel/state/cells" })
 
-// Bare window URI returns the manifest
-app_query({ uri: "yaar://monitor-0/win-excel" })
-
-// Command resource URI to execute a command
-app_command({ uri: "yaar://monitor-0/win-excel/commands/save" })
+// Bare window ID (preferred — agent doesn't need to know its monitor)
+app_query({ uri: "win-excel", key: "cells" })
 ```
 
-**Discovery via `view` tool:** Use `view({ uri: "yaar://monitor-0/win-excel", mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with URIs for each state key and command. The agent can then use these URIs directly with `app_query` and `app_command`.
+**Discovery via `view` tool:** Use `view({ uri: "win-excel", mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with available state keys and commands.
 
 ---
 
@@ -91,22 +90,22 @@ app_command({ uri: "yaar://monitor-0/win-excel/commands/save" })
 
 ### Window Content
 
-The AI uses yaar:// URIs in the `create` tool's `content` parameter:
+The AI uses bare window IDs in the `create` tool's `uri` parameter, and `yaar://` URIs for content:
 
 ```
 create({
-  uri: "yaar://monitor-0/excel-lite",
+  uri: "excel-lite",
   title: "Excel Lite",
   renderer: "iframe",
   content: "yaar://apps/excel-lite"
 })
 ```
 
-The server resolves the URI to an API path before sending the action to the frontend. Storage files work the same way:
+The server resolves the content URI to an API path before sending the action to the frontend, and scopes the window to the agent's monitor automatically. Storage files work the same way:
 
 ```
 create({
-  uri: "yaar://monitor-0/report",
+  uri: "report",
   title: "Q4 Report",
   renderer: "iframe",
   content: "yaar://storage/reports/q4.pdf"
