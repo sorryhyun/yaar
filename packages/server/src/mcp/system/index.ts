@@ -8,6 +8,7 @@ import { registerConfigTools } from './config.js';
 import { registerRelayTools } from './relay.js';
 import { registerSandboxTools } from './sandbox.js';
 import { registerCreateSandboxTools } from './create-sandbox.js';
+import { registerNotificationTools } from './notification.js';
 
 export const SYSTEM_TOOL_NAMES = [
   'mcp__system__get_info',
@@ -18,6 +19,7 @@ export const SYSTEM_TOOL_NAMES = [
   'mcp__system__relay_to_main',
   'mcp__system__run_js',
   'mcp__system__create_sandbox',
+  'mcp__system__show_notification',
 ] as const;
 
 export function registerSystemTools(server: McpServer): void {
@@ -26,4 +28,5 @@ export function registerSystemTools(server: McpServer): void {
   registerRelayTools(server);
   registerSandboxTools(server);
   registerCreateSandboxTools(server);
+  registerNotificationTools(server);
 }

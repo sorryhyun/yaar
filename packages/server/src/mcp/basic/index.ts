@@ -2,9 +2,9 @@
  * Basic MCP namespace — unified file I/O tools (read, write, list, delete, edit).
  *
  * All tools accept URI-style paths:
- *   sandbox://{sandboxId}/{path}  — sandbox file
- *   sandbox:///{path}             — new sandbox (write/edit only)
- *   storage://{path}              — persistent storage file
+ *   yaar://sandbox/{sandboxId}/{path}  — sandbox file
+ *   yaar://sandbox/new/{path}          — new sandbox (write/edit only)
+ *   yaar://storage/{path}              — persistent storage file
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';

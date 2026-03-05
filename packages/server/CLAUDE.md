@@ -91,7 +91,7 @@ src/
 │   │   └── market.ts (marketplace: list, get, delete)
 │   ├── user/          # ask, request (user prompt tools — live on the `user` MCP server)
 │   ├── browser/       # open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome required)
-│   ├── basic/         # read, write, list, delete, edit (URI-style: sandbox://, storage://)
+│   ├── basic/         # read, write, list, delete, edit (URI-style: yaar://storage/, yaar://sandbox/)
 │   │   ├── uri.ts (URI parser), index.ts
 │   └── dev/           # compile, typecheck, deploy, clone
 │       ├── compile.ts, deploy.ts, helpers.ts
@@ -225,15 +225,15 @@ Tools are organized into domain folders under `mcp/`, each with an `index.ts` th
 
 | Domain | MCP Server | Tools |
 |--------|-----------|-------|
-| `system/` | system | get_info (+ optional envVar), memorize, set_config (hooks/settings/shortcuts/mounts/app), get_config, remove_config, relay_to_main, run_js |
+| `system/` | system | get_info (+ optional envVar), memorize, set_config (hooks/settings/shortcuts/mounts/app), get_config, remove_config, relay_to_main, run_js, show_notification |
 | `skills/` | system | skill (loads reference docs: app_dev, sandbox, components, host_api, app_protocol) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
-| `window/` | window | create, create_component, update, update_component, manage (close/lock/unlock), list, view, info, show_notification, dismiss_notification, app_query, app_command |
+| `window/` | window | create, create_component, update, update_component, manage (close/lock/unlock), list, view, info, app_query, app_command |
 | `storage/` | storage | mount, unmount, list_mounts |
 | `apps/` | apps | list, load_skill, set_app_badge, market_list, market_get, market_delete |
 | `user/` | user | ask, request |
 | `dev/` | dev | compile, typecheck, deploy, clone |
-| `basic/` | basic | read, write, list, delete, edit (URI-style paths: `sandbox://`, `storage://`) |
+| `basic/` | basic | read, write, list, delete, edit (URI-style paths: `yaar://storage/`, `yaar://sandbox/`) |
 | `browser/` | browser | open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close (conditional — Chrome/Edge required) |
 | `reload/` | system | reload_cached, list_reload_options |
 

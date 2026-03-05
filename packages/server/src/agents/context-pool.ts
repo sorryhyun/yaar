@@ -48,7 +48,6 @@ const MAX_QUEUE_SIZE = 10;
  * Implements PoolContext so processors can access shared state and policies.
  */
 export class ContextPool implements PoolContext {
-  private sessionId: SessionId;
   private logSessionId: string | null = null;
 
   // ── PoolContext fields (readonly for processors) ───────────────────
@@ -85,7 +84,6 @@ export class ContextPool implements PoolContext {
     restoredContext: ContextMessage[] = [],
     savedThreadIds?: Record<string, string>,
   ) {
-    this.sessionId = sessionId;
     this.broadcastFn = broadcast;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);

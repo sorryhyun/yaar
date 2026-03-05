@@ -78,7 +78,7 @@ Desktop shortcuts. If `id` is provided, updates an existing shortcut; otherwise 
 
 ### Section: `mounts`
 
-Host directory mounts exposed via `storage://mounts/{alias}/`.
+Host directory mounts exposed via `yaar://storage/mounts/{alias}/`.
 
 ```json
 {

@@ -51,7 +51,7 @@ export function getExtension(name: string): string {
 
 export function toStorageUri(path: string): string {
   const cleaned = path.split('/').map((part) => encodeURIComponent(part)).join('/');
-  return `storage://${cleaned}`;
+  return `yaar://storage/${cleaned}`;
 }
 
 export function buildDragMetadata(entry: StorageEntry) {

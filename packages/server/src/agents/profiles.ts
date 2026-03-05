@@ -25,6 +25,7 @@ export interface AgentProfile {
 // ── Composite tool sets (for profile readability) ─────────────────
 
 const INFO_TOOLS = ['mcp__system__get_info', ...SKILL_TOOL_NAMES] as const;
+const NOTIFICATION_TOOL = 'mcp__system__show_notification';
 const APPS_ALL_TOOLS = APPS_TOOL_NAMES;
 
 // ── Task agent system prompt ────────────────────────────────────────
@@ -69,6 +70,7 @@ const profiles: Record<string, AgentProfile> = {
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
+      NOTIFICATION_TOOL,
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
       'mcp__system__run_js',
@@ -87,6 +89,7 @@ const profiles: Record<string, AgentProfile> = {
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
+      NOTIFICATION_TOOL,
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
       ...BROWSER_TOOL_NAMES,
@@ -99,7 +102,13 @@ const profiles: Record<string, AgentProfile> = {
     id: 'code',
     description: 'Code execution, computation, scripting via JavaScript sandbox',
     systemPrompt: TASK_AGENT_PROMPT,
-    allowedTools: [...INFO_TOOLS, 'mcp__system__run_js', ...WINDOW_TOOL_NAMES, ...BASIC_TOOL_NAMES],
+    allowedTools: [
+      NOTIFICATION_TOOL,
+      ...INFO_TOOLS,
+      'mcp__system__run_js',
+      ...WINDOW_TOOL_NAMES,
+      ...BASIC_TOOL_NAMES,
+    ],
   },
 
   app: {
@@ -108,6 +117,7 @@ const profiles: Record<string, AgentProfile> = {
     systemPrompt: TASK_AGENT_PROMPT,
     allowedTools: [
       'WebSearch',
+      NOTIFICATION_TOOL,
       ...INFO_TOOLS,
       ...HTTP_TOOL_NAMES,
       ...APPS_ALL_TOOLS,
@@ -137,6 +147,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
     // Native subagent spawner (Claude SDK Task tool)
     'Task',
     'WebSearch',
+    NOTIFICATION_TOOL,
     ...INFO_TOOLS,
     ...HTTP_TOOL_NAMES,
     'mcp__system__run_js',

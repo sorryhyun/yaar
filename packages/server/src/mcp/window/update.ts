@@ -11,12 +11,18 @@ import {
   displayDataSchema,
   componentSchema,
 } from '@yaar/shared';
+import { buildWindowUri } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
-import { getAgentId } from '../../agents/session.js';
+import { getAgentId, getMonitorId } from '../../agents/session.js';
 import { resolveWindowId } from './resolve-window.js';
+
+function formatWindowRef(windowId: string): string {
+  const monitorId = getMonitorId();
+  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
+}
 
 export function registerUpdateTools(
   server: McpServer,
@@ -106,7 +112,7 @@ export function registerUpdateTools(
         );
       }
 
-      return ok(`Updated window "${windowId}" (${args.operation})`);
+      return ok(`Updated window "${formatWindowRef(windowId)}" (${args.operation})`);
     },
   );
 
@@ -169,7 +175,7 @@ export function registerUpdateTools(
         );
       }
 
-      return ok(`Updated component window "${windowId}"`);
+      return ok(`Updated component window "${formatWindowRef(windowId)}"`);
     },
   );
 }

@@ -95,16 +95,20 @@ export type ParsedFileUri =
   | { authority: 'sandbox'; sandboxId: null; path: string };
 
 /**
- * Parse a file-operation URI (yaar://, storage://, sandbox://).
+ * Parse a file-operation URI.
  *
+ * Primary format: yaar://storage/{path}, yaar://sandbox/{id}/{path}, yaar://sandbox/new/{path}
  * Sandbox IDs must be numeric timestamps or "new" (for new sandbox creation).
  *
  *   yaar://storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
+ *   yaar://storage/                   → { authority: 'storage', path: '' }
  *   yaar://sandbox/123/src/main.ts    → { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
  *   yaar://sandbox/new/src/main.ts    → { authority: 'sandbox', sandboxId: null, path: 'src/main.ts' }
- *   storage://docs/file.txt           → { authority: 'storage', path: 'docs/file.txt' }  (legacy)
- *   sandbox://123/src/main.ts         → { authority: 'sandbox', sandboxId: '123', ... }  (legacy)
- *   sandbox:///src/main.ts            → { authority: 'sandbox', sandboxId: null, ... }   (legacy)
+ *
+ * Legacy forms (still accepted for backward compat):
+ *   storage://docs/file.txt           → { authority: 'storage', path: 'docs/file.txt' }
+ *   sandbox://123/src/main.ts         → { authority: 'sandbox', sandboxId: '123', ... }
+ *   sandbox:///src/main.ts            → { authority: 'sandbox', sandboxId: null, ... }
  */
 export function parseFileUri(uri: string): ParsedFileUri | null {
   // yaar:// scheme

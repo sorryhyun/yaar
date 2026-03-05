@@ -28,7 +28,7 @@ Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environme
 
 ## MCP Tools
 
-File I/O tools are registered in the **`basic`** MCP namespace. All tools accept URI-style paths with `storage://` or `sandbox://` schemes. Only the `storage://` scheme is covered here.
+File I/O tools are registered in the **`basic`** MCP namespace. All tools accept URI-style paths with `yaar://storage/` or `yaar://sandbox/` schemes. Only the `yaar://storage/` scheme is covered here.
 
 **Source:** `packages/server/src/mcp/basic/`
 
@@ -38,12 +38,12 @@ Read a file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `storage://docs/readme.txt`) |
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/readme.txt`) |
 | `lineNumbers` | `boolean` | no | Prepend line numbers to each line (default: `false`) |
 
 **Returns (text files):** File content, optionally with line numbers. When `lineNumbers=true`, output matches `read` format used by `edit` in line mode.
 
-**Returns (PDF files):** A summary string plus base64 PNG images of up to 3 pages. Includes a hint to display the PDF via an iframe window with `storage://` protocol.
+**Returns (PDF files):** A summary string plus base64 PNG images of up to 3 pages. Includes a hint to display the PDF via an iframe window with `yaar://storage/` protocol.
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
@@ -57,12 +57,12 @@ Write a file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `storage://docs/file.txt`) |
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/file.txt`) |
 | `content` | `string` | yes | Content to write |
 
 Parent directories are created automatically. Overwrites existing files. Fails on read-only mounts.
 
-**Returns:** `"Written to storage://{path}"`
+**Returns:** `"Written to yaar://storage/{path}"`
 
 ### `list`
 
@@ -70,9 +70,9 @@ List directory contents by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | Directory URI (e.g. `storage://`, `storage://docs`) |
+| `uri` | `string` | yes | Directory URI (e.g. `yaar://storage/`, `yaar://storage/docs`) |
 
-Returns emoji-prefixed listing (📁 directories, 📄 files). Directories sorted first, then alphabetically. Mounted directories appear as virtual entries under `storage://mounts/`.
+Returns emoji-prefixed listing (📁 directories, 📄 files). Directories sorted first, then alphabetically. Mounted directories appear as virtual entries under `yaar://storage/mounts/`.
 
 **Returns:** Formatted list or `"Directory is empty"`.
 
@@ -82,11 +82,11 @@ Delete a single file by URI.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `storage://docs/draft.txt`) |
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/draft.txt`) |
 
 Does not support recursive directory deletion. Fails on read-only mounts.
 
-**Returns:** `"Deleted storage://{path}"`
+**Returns:** `"Deleted yaar://storage/{path}"`
 
 ### `edit`
 
@@ -94,7 +94,7 @@ Apply an edit to a file by URI. Two modes:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `storage://docs/readme.txt`) |
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/readme.txt`) |
 | `old_string` | `string` | no | Exact text to find (must be unique). Omit to use line mode. |
 | `new_string` | `string` | yes | Replacement text |
 | `start_line` | `number` | no | First line to replace (1-based). Requires line mode. |
@@ -106,13 +106,13 @@ Apply an edit to a file by URI. Two modes:
 
 Cannot mix both modes.
 
-**Returns:** `"Edited storage://{path}"`
+**Returns:** `"Edited yaar://storage/{path}"`
 
 ---
 
 ## Mount System
 
-Host directories can be mounted at `storage://mounts/{alias}/` via the `system` MCP config tools.
+Host directories can be mounted at `yaar://storage/mounts/{alias}/` via the `system` MCP config tools.
 
 **Source:** `packages/server/src/storage/mounts.ts`, `packages/server/src/mcp/system/config-mounts.ts`
 
@@ -146,7 +146,7 @@ remove_config(section: "mounts", id: "{alias}")
 
 ### Mount behavior
 
-- Mounted directories appear as `storage://mounts/{alias}/...` in all tools (read, write, list, delete, edit)
+- Mounted directories appear as `yaar://storage/mounts/{alias}/...` in all tools (read, write, list, delete, edit)
 - The virtual `mounts/` directory is injected into storage root listings when mounts exist
 - Path traversal protection ensures resolved paths stay within the mount
 - Read-only mounts reject write, delete, and edit operations

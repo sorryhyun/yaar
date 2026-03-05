@@ -7,13 +7,39 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppProtocolRequest } from '@yaar/shared';
-import { parseWindowResourceUri } from '@yaar/shared';
+import { parseWindowResourceUri, type ParsedWindowResourceUri } from '@yaar/shared';
 import { z } from 'zod';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { resolveWindowId } from './resolve-window.js';
+
+/**
+ * Resource path pattern for bare URIs without yaar:// prefix.
+ * Matches: {windowId}/{resourceType}/{key}
+ *      or: monitor-X/{windowId}/{resourceType}/{key}
+ */
+const BARE_RESOURCE_RE = /^(?:monitor-[^/]+\/)?([^/]+)\/(state|commands)\/(.+)$/;
+
+/**
+ * Parse a window resource URI, with fallback for bare paths.
+ * Handles both `yaar://monitor-0/win/commands/save` and `win/commands/save`.
+ */
+function parseResourceUri(uri: string): ParsedWindowResourceUri | null {
+  return parseWindowResourceUri(uri) ?? parseBareResourceUri(uri);
+}
+
+function parseBareResourceUri(uri: string): ParsedWindowResourceUri | null {
+  const match = uri.match(BARE_RESOURCE_RE);
+  if (!match) return null;
+  return {
+    monitorId: '', // not needed — resolveWindowId handles lookup
+    windowId: match[1],
+    resourceType: match[2] as 'state' | 'commands',
+    key: match[3],
+  };
+}
 
 export function registerAppProtocolTools(
   server: McpServer,
@@ -37,7 +63,7 @@ export function registerAppProtocolTools(
       let windowId: string;
       let stateKey: string;
 
-      const resource = parseWindowResourceUri(args.uri);
+      const resource = parseResourceUri(args.uri);
       if (resource) {
         if (resource.resourceType !== 'state')
           return error('URI points to a command. Use app_command instead.');
@@ -105,9 +131,11 @@ export function registerAppProtocolTools(
       },
     },
     async (args) => {
-      const resource = parseWindowResourceUri(args.uri);
+      const resource = parseResourceUri(args.uri);
       if (!resource || resource.resourceType !== 'commands')
-        return error('Invalid command URI. Expected yaar://{monitor}/{window}/commands/{name}.');
+        return error(
+          'Invalid command URI. Expected {window}/commands/{name} or yaar://{monitor}/{window}/commands/{name}.',
+        );
       const { windowId } = resource;
       const command = resource.key;
 

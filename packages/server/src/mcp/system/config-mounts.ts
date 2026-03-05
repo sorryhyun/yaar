@@ -21,7 +21,7 @@ export async function handleSetMount(content: Record<string, unknown>) {
   const roLabel = readOnly ? ' (read-only)' : '';
   const confirmed = await actionEmitter.showPermissionDialog(
     'Mount Directory',
-    `Mount "${hostPath}" as storage://mounts/${alias}/${roLabel}?`,
+    `Mount "${hostPath}" as yaar://storage/mounts/${alias}/${roLabel}?`,
     'storage_mount',
     hostPath,
   );

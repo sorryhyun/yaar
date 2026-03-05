@@ -45,7 +45,8 @@ export function registerWriteTool(server: McpServer): void {
       let path: string;
 
       if (parsed.scheme === 'sandbox-new') {
-        if (!parsed.path) return error('Provide a file path (e.g. sandbox:///src/main.ts).');
+        if (!parsed.path)
+          return error('Provide a file path (e.g. yaar://sandbox/new/src/main.ts).');
         sandboxId = generateSandboxId();
         path = parsed.path;
       } else {

@@ -196,7 +196,7 @@ Test the full app development pipeline:
 
 **Step 1 — Write source:**
 ```
-write({ uri: "sandbox:///src/main.ts", content: "document.body.innerHTML = '<h1 id=\"si-test\">Self Inspection Dev Test</h1><p>Compiled and deployed successfully.</p>'; document.body.style.cssText = 'font-family:system-ui;padding:24px;';" })
+write({ uri: "yaar://sandbox/src/main.ts", content: "document.body.innerHTML = '<h1 id=\"si-test\">Self Inspection Dev Test</h1><p>Compiled and deployed successfully.</p>'; document.body.style.cssText = 'font-family:system-ui;padding:24px;';" })
 ```
 Record the returned `sandboxId`.
 

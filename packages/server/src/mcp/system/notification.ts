@@ -1,5 +1,5 @@
 /**
- * Window notification tools - show_notification, dismiss_notification.
+ * Notification tool - show_notification.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -9,7 +9,6 @@ import { actionEmitter } from '../action-emitter.js';
 import { ok } from '../utils.js';
 
 export function registerNotificationTools(server: McpServer): void {
-  // show_notification
   server.registerTool(
     'show_notification',
     {
@@ -33,26 +32,6 @@ export function registerNotificationTools(server: McpServer): void {
 
       actionEmitter.emitAction(osAction);
       return ok(`Notification "${args.title}" shown`);
-    },
-  );
-
-  // dismiss_notification
-  server.registerTool(
-    'dismiss_notification',
-    {
-      description: 'Dismiss a notification by ID',
-      inputSchema: {
-        id: z.string().describe('Notification ID to dismiss'),
-      },
-    },
-    async (args) => {
-      const osAction: OSAction = {
-        type: 'notification.dismiss',
-        id: args.id,
-      };
-
-      actionEmitter.emitAction(osAction);
-      return ok(`Notification ${args.id} dismissed`);
     },
   );
 }

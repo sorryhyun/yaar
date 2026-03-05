@@ -38,7 +38,9 @@ export function registerReadTool(server: McpServer): void {
       }
 
       if (parsed.scheme === 'sandbox-new') {
-        return error('Cannot read from sandbox:/// (new sandbox). Provide a sandbox ID.');
+        return error(
+          'Cannot read from a new sandbox (yaar://sandbox/new/...). Provide a sandbox ID.',
+        );
       }
 
       if (parsed.scheme === 'storage') {

@@ -18,8 +18,15 @@ import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { resolveContentUri, extractAppId } from '@yaar/shared';
+import { resolveContentUri, extractAppId, buildWindowUri } from '@yaar/shared';
 import { resolveWindowId } from './resolve-window.js';
+import { getMonitorId } from '../../agents/session.js';
+
+/** Format a window identifier for tool feedback — full URI when monitor context is available. */
+function formatWindowRef(windowId: string): string {
+  const monitorId = getMonitorId();
+  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
+}
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
 const colsInner = z.union([z.array(z.number().min(0)).min(1), z.coerce.number().int().min(1)]);
@@ -124,11 +131,11 @@ export function registerCreateTools(server: McpServer): void {
           return error(`Failed to embed iframe in window "${windowId}": ${feedback.error}.${hint}`);
         }
 
-        return ok(`Created window "${windowId}" with embedded iframe`);
+        return ok(`Created window "${formatWindowRef(windowId)}" with embedded iframe`);
       }
 
       actionEmitter.emitAction(osAction);
-      return ok(`Created window "${windowId}"`);
+      return ok(`Created window "${formatWindowRef(windowId)}"`);
     },
   );
 
@@ -234,7 +241,7 @@ export function registerCreateTools(server: McpServer): void {
       };
 
       actionEmitter.emitAction(osAction);
-      return ok(`Created component window "${windowId}"`);
+      return ok(`Created component window "${formatWindowRef(windowId)}"`);
     },
   );
 }

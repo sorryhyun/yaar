@@ -65,7 +65,7 @@ const App = () => html`
       ${() => {
         const parts = currentPath() ? currentPath().split('/').filter(Boolean) : [];
         const crumbs: any[] = [
-          html`<button onClick=${() => navigate('')}>storage://</button>`
+          html`<button onClick=${() => navigate('')}>yaar://storage/</button>`
         ];
         let accumulated = '';
         for (const part of parts) {

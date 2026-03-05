@@ -20,15 +20,24 @@ vi.mock('../mcp/action-emitter.js', () => ({
   },
 }));
 
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { WindowStateRegistry } from '../mcp/window-state.js';
 import { registerAppProtocolTools } from '../mcp/window/app-protocol.js';
 
 /**
  * Minimal mock of McpServer that captures registered tool handlers.
  */
+interface ToolResult {
+  isError?: boolean;
+  content: { text: string }[];
+}
+
+type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
+
 function createMockServer() {
-  const tools = new Map<string, { handler: (args: any) => Promise<any> }>();
+  const tools = new Map<string, { handler: ToolHandler }>();
   return {
-    registerTool(name: string, _schema: any, handler: (args: any) => Promise<any>) {
+    registerTool(name: string, _schema: unknown, handler: ToolHandler) {
       tools.set(name, { handler });
     },
     getHandler(name: string) {
@@ -37,11 +46,11 @@ function createMockServer() {
   };
 }
 
-function createMockWindowState(windows: Record<string, any> = {}) {
-  const commands: any[] = [];
+function createMockWindowState(windows: Record<string, unknown> = {}) {
+  const commands: { windowId: string; req: unknown }[] = [];
   return {
-    getWindow: vi.fn((id: string) => (windows[id] ? { id, ...windows[id] } : null)),
-    recordAppCommand: vi.fn((windowId: string, req: any) => {
+    getWindow: vi.fn((id: string) => (windows[id] ? { id, ...(windows[id] as object) } : null)),
+    recordAppCommand: vi.fn((windowId: string, req: unknown) => {
       commands.push({ windowId, req });
     }),
     _commands: commands,
@@ -53,12 +62,15 @@ function createMockWindowState(windows: Record<string, any> = {}) {
 // ---------------------------------------------------------------------------
 describe('app_query', () => {
   let server: ReturnType<typeof createMockServer>;
-  let queryHandler: (args: any) => Promise<any>;
+  let queryHandler: ToolHandler;
 
-  function setup(windows: Record<string, any> = {}) {
+  function setup(windows: Record<string, unknown> = {}) {
     server = createMockServer();
     const state = createMockWindowState(windows);
-    registerAppProtocolTools(server as any, () => state as any);
+    registerAppProtocolTools(
+      server as unknown as McpServer,
+      () => state as unknown as WindowStateRegistry,
+    );
     queryHandler = server.getHandler('app_query')!;
     expect(queryHandler).toBeDefined();
     return state;
@@ -186,6 +198,24 @@ describe('app_query', () => {
     );
   });
 
+  it('returns data on bare {windowId}/state/{key} URI', async () => {
+    setup({
+      'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
+    });
+    mockEmitAppProtocolRequest.mockResolvedValue({
+      kind: 'query',
+      data: { value: 'test' },
+    });
+
+    const result = await queryHandler({ uri: 'win-1/state/value' });
+    expect(result.isError).toBeUndefined();
+    expect(mockEmitAppProtocolRequest).toHaveBeenCalledWith(
+      'win-1',
+      { kind: 'query', stateKey: 'value' },
+      5000,
+    );
+  });
+
   it('returns error when resource URI points to a command', async () => {
     setup({
       'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
@@ -202,12 +232,15 @@ describe('app_query', () => {
 // ---------------------------------------------------------------------------
 describe('app_command', () => {
   let server: ReturnType<typeof createMockServer>;
-  let commandHandler: (args: any) => Promise<any>;
+  let commandHandler: ToolHandler;
 
-  function setup(windows: Record<string, any> = {}) {
+  function setup(windows: Record<string, unknown> = {}) {
     server = createMockServer();
     const state = createMockWindowState(windows);
-    registerAppProtocolTools(server as any, () => state as any);
+    registerAppProtocolTools(
+      server as unknown as McpServer,
+      () => state as unknown as WindowStateRegistry,
+    );
     commandHandler = server.getHandler('app_command')!;
     expect(commandHandler).toBeDefined();
     return state;
@@ -217,11 +250,54 @@ describe('app_command', () => {
     vi.clearAllMocks();
   });
 
-  it('returns error for invalid command URI', async () => {
+  it('returns error for invalid command URI (bare window ID without command path)', async () => {
     setup();
     const result = await commandHandler({ uri: 'win-1' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Invalid command URI');
+  });
+
+  it('supports bare {windowId}/commands/{name} URI', async () => {
+    setup({
+      'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
+    });
+    mockEmitAppProtocolRequest.mockResolvedValue({
+      kind: 'command',
+      result: { ok: true },
+    });
+
+    const result = await commandHandler({
+      uri: 'win-1/commands/setTitle',
+      params: { title: 'Hello' },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(mockEmitAppProtocolRequest).toHaveBeenCalledWith(
+      'win-1',
+      { kind: 'command', command: 'setTitle', params: { title: 'Hello' } },
+      5000,
+    );
+  });
+
+  it('supports monitor-prefixed bare URI without yaar://', async () => {
+    setup({
+      'win-1': { content: { renderer: 'iframe', data: 'https://example.com' }, appProtocol: true },
+    });
+    mockEmitAppProtocolRequest.mockResolvedValue({
+      kind: 'command',
+      result: { done: true },
+    });
+
+    const result = await commandHandler({
+      uri: 'monitor-0/win-1/commands/save',
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(mockEmitAppProtocolRequest).toHaveBeenCalledWith(
+      'win-1',
+      { kind: 'command', command: 'save', params: undefined },
+      5000,
+    );
   });
 
   it('returns error when window not found', async () => {

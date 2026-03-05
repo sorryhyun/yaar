@@ -3,12 +3,12 @@
 ## Workflow
 
 To create a new app from scratch:
-1. `write(uri: "sandbox:///src/main.ts", content: "...")` — creates a new sandbox (triple slash = new sandbox), returns `{ sandboxId }`
+1. `write(uri: "yaar://sandbox/new/src/main.ts", content: "...")` — creates a new sandbox, returns `{ sandboxId }`
 2. `deploy(sandbox: sandboxId, appId: "my-app")` — auto-compiles, installs to `apps/`, appears on desktop
 
 To edit an existing app:
 1. `clone(appId)` — copies source into a new sandbox, returns sandboxId
-2. Edit with `edit(uri: "sandbox://{sandboxId}/path", old_string, new_string)` or `write` for full replacement
+2. Edit with `edit(uri: "yaar://sandbox/{sandboxId}/path", old_string, new_string)` or `write` for full replacement
 3. `deploy` back to the same appId
 
 Optional: use `compile(sandbox)` separately if you want a preview URL before deploying.

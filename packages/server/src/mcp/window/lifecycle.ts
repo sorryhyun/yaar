@@ -9,8 +9,13 @@ import { buildWindowUri, parseWindowKey } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
-import { getAgentId } from '../../agents/session.js';
+import { getAgentId, getMonitorId } from '../../agents/session.js';
 import { resolveWindowId } from './resolve-window.js';
+
+function formatWindowRef(windowId: string): string {
+  const monitorId = getMonitorId();
+  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
+}
 
 export function registerLifecycleTools(
   server: McpServer,
@@ -51,7 +56,7 @@ export function registerLifecycleTools(
           if (feedback && !feedback.success) {
             return error(`Failed to close window "${windowId}": ${feedback.error}`);
           }
-          return ok(`Closed window "${windowId}"`);
+          return ok(`Closed window "${formatWindowRef(windowId)}"`);
         }
 
         case 'lock': {
@@ -66,7 +71,7 @@ export function registerLifecycleTools(
             windowId,
             agentId,
           } satisfies OSAction);
-          return ok(`Locked window "${windowId}"`);
+          return ok(`Locked window "${formatWindowRef(windowId)}"`);
         }
 
         case 'unlock': {
@@ -83,7 +88,7 @@ export function registerLifecycleTools(
             windowId,
             agentId,
           } satisfies OSAction);
-          return ok(`Unlocked window "${windowId}"`);
+          return ok(`Unlocked window "${formatWindowRef(windowId)}"`);
         }
       }
     },

@@ -441,7 +441,7 @@ Each log entry includes `agentId` for filtering:
 | `mcp/domains.ts` | Domain allowlist for HTTP tools and sandbox fetch |
 | `mcp/skills/` | Dynamic reference docs via `skill` tool (app_dev, sandbox, components, host_api, app_protocol) |
 | `mcp/dev/` | App development tools (compile, typecheck, deploy, clone) |
-| `mcp/basic/` | Unified file I/O tools (read, write, list, delete, edit via `sandbox://` and `storage://` URIs) |
+| `mcp/basic/` | Unified file I/O tools (read, write, list, delete, edit via `yaar://sandbox/` and `yaar://storage/` URIs) |
 | `mcp/browser/` | Browser automation tools via CDP (open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close) |
 | `mcp/user/` | User prompt tools (ask, request) |
 | `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |

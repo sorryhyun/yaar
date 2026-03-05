@@ -88,7 +88,7 @@ MCP tools are syscalls. 8 namespaced HTTP endpoints on the same server (`/mcp/{n
 | `apps` | Package manager | `list`, `load_skill`, `read_config`, `write_config`, marketplace |
 | `user` | stdin/stdout | `ask`, `request` (prompt user for input) |
 | `dev` | Compiler toolchain | `compile`, `typecheck`, `deploy`, `clone` |
-| `basic` | File I/O | `read`, `write`, `list`, `delete`, `edit` (URI-style: `sandbox://`, `storage://`) |
+| `basic` | File I/O | `read`, `write`, `list`, `delete`, `edit` (URI-style: `yaar://sandbox/`, `yaar://storage/`) |
 | `browser` | Network stack | `open`, `click`, `type`, `press`, `scroll`, `screenshot`, `extract`, `navigate`, `hover`, `wait_for`, `close` |
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.

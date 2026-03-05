@@ -82,8 +82,6 @@ app_query({ uri: "yaar://monitor-0/win-excel/state/cells" })
 app_query({ uri: "win-excel", key: "cells" })
 ```
 
-**Discovery via `view` tool:** Use `view({ uri: "win-excel", mode: "manifest" })` on app-protocol iframe windows to fetch the manifest with available state keys and commands.
-
 ---
 
 ## Where URIs Are Used
