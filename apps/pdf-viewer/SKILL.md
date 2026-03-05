@@ -9,7 +9,7 @@ create({
   windowId: "pdf-viewer",
   title: "PDF Viewer",
   renderer: "iframe",
-  content: "app://pdf-viewer"
+  content: "yaar://apps/pdf-viewer"
 })
 ```
 

@@ -9,7 +9,7 @@ create({
   windowId: "slides-lite",
   title: "Slides Lite",
   renderer: "iframe",
-  content: "app://slides-lite"
+  content: "yaar://apps/slides-lite"
 })
 ```
 

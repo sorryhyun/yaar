@@ -29,9 +29,33 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     response: '`{ shortcuts: DesktopShortcut[] }`',
     description: 'List desktop shortcuts',
   },
+  {
+    method: 'POST',
+    path: '/api/shortcuts',
+    response: '`{ shortcut: DesktopShortcut }`',
+    description: 'Create a desktop shortcut',
+  },
+  {
+    method: 'PATCH',
+    path: '/api/shortcuts/:id',
+    response: '`{ shortcut: DesktopShortcut }`',
+    description: 'Update a desktop shortcut',
+  },
+  {
+    method: 'DELETE',
+    path: '/api/shortcuts/:id',
+    response: '`{ ok: true }`',
+    description: 'Delete a desktop shortcut',
+  },
 ];
 import { readSettings, updateSettings } from '../../storage/settings.js';
-import { readShortcuts } from '../../storage/shortcuts.js';
+import {
+  readShortcuts,
+  addShortcut,
+  removeShortcut,
+  updateShortcut,
+} from '../../storage/shortcuts.js';
+import type { DesktopShortcut } from '@yaar/shared';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
@@ -77,6 +101,72 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     }
   }
 
+  // Create shortcut
+  if (url.pathname === '/api/shortcuts' && req.method === 'POST') {
+    try {
+      const body = await req.text();
+      if (!body.trim()) return errorResponse('Empty body', 400);
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(body);
+      } catch {
+        return errorResponse('Invalid JSON', 400);
+      }
+      if (!data.label || !data.icon || (!data.target && !data.skill)) {
+        return errorResponse('Shortcuts require label, icon, and target (or skill) fields', 400);
+      }
+      const shortcut: DesktopShortcut = {
+        id:
+          (data.id as string) || `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        label: data.label as string,
+        icon: data.icon as string,
+        iconType: data.iconType as 'emoji' | 'image' | undefined,
+        target: (data.target as string) || '',
+        osActions: data.osActions as DesktopShortcut['osActions'],
+        skill: data.skill as string | undefined,
+        createdAt: Date.now(),
+      };
+      await addShortcut(shortcut);
+      return jsonResponse({ shortcut }, 201);
+    } catch {
+      return errorResponse('Failed to create shortcut');
+    }
+  }
+
+  // Update shortcut
+  const shortcutUpdateMatch = url.pathname.match(/^\/api\/shortcuts\/([^/]+)$/);
+  if (shortcutUpdateMatch && req.method === 'PATCH') {
+    const shortcutId = decodeURIComponent(shortcutUpdateMatch[1]);
+    try {
+      const body = await req.text();
+      if (!body.trim()) return errorResponse('Empty body', 400);
+      let updates: Record<string, unknown>;
+      try {
+        updates = JSON.parse(body);
+      } catch {
+        return errorResponse('Invalid JSON', 400);
+      }
+      const updated = await updateShortcut(shortcutId, updates);
+      if (!updated) return errorResponse('Shortcut not found', 404);
+      return jsonResponse({ shortcut: updated });
+    } catch {
+      return errorResponse('Failed to update shortcut');
+    }
+  }
+
+  // Delete shortcut
+  const shortcutDeleteMatch = url.pathname.match(/^\/api\/shortcuts\/([^/]+)$/);
+  if (shortcutDeleteMatch && req.method === 'DELETE') {
+    const shortcutId = decodeURIComponent(shortcutDeleteMatch[1]);
+    try {
+      const removed = await removeShortcut(shortcutId);
+      if (!removed) return errorResponse('Shortcut not found', 404);
+      return jsonResponse({ ok: true });
+    } catch {
+      return errorResponse('Failed to delete shortcut');
+    }
+  }
+
   // Update settings
   if (url.pathname === '/api/settings' && req.method === 'PATCH') {
     try {
@@ -95,7 +185,9 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       const providerChanging =
         partial.provider !== undefined && partial.provider !== getWarmPool().getPreferredProvider();
 
-      const settings = await updateSettings(partial as any);
+      const settings = await updateSettings(
+        partial as Partial<Awaited<ReturnType<typeof readSettings>>>,
+      );
 
       // Reinitialize warm pool when provider changes
       if (providerChanging) {

@@ -53,7 +53,7 @@ create({
   windowId: "${appId}",
   title: "${appName}",
   renderer: "iframe",
-  content: "app://${appId}"
+  content: "yaar://apps/${appId}"
 })
 \`\`\``);
   }

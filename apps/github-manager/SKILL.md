@@ -9,7 +9,7 @@ create({
   windowId: "github-manager",
   title: "GitHub Manager",
   renderer: "iframe",
-  content: "app://github-manager"
+  content: "yaar://apps/github-manager"
 })
 ```
 

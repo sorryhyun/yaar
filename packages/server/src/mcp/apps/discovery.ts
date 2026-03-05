@@ -7,6 +7,7 @@ import { join } from 'path';
 import { PROJECT_ROOT } from '../../config.js';
 import { hasConfig } from './config.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
+import { buildYaarUri } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -25,7 +26,7 @@ export interface AppInfo {
   hasSkill: boolean;
   hasConfig: boolean;
   createShortcut?: boolean;
-  run?: string; // Resolved iframe URL for app:// protocol (e.g. /api/apps/{id}/static/index.html)
+  run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/static/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
   protocol?: Pick<AppManifest, 'state' | 'commands'>; // Static manifest for discovery
@@ -133,13 +134,13 @@ export async function listApps(): Promise<AppInfo[]> {
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
 
-      // Resolve run URL: explicit from app.json, or auto-detect for compiled apps
+      // Resolve run URL as yaar:// URI
       let resolvedRun: string | undefined;
       if (run) {
-        // Relative paths resolve against /api/apps/{appId}/
-        resolvedRun = run.startsWith('/') ? run : `/api/apps/${appId}/${run}`;
+        // Absolute paths stay as-is (not a yaar:// URI)
+        resolvedRun = run.startsWith('/') ? run : buildYaarUri('apps', `${appId}/${run}`);
       } else if (isCompiled) {
-        resolvedRun = `/api/apps/${appId}/static/index.html`;
+        resolvedRun = buildYaarUri('apps', appId);
       }
 
       apps.push({
@@ -197,20 +198,6 @@ export async function getAppMeta(appId: string): Promise<{
   } catch {
     return null;
   }
-}
-
-/**
- * Resolve an `app://appId` URL to the app's actual iframe URL.
- * Returns null if the URL is not an app:// protocol or the app has no run URL.
- */
-export async function resolveAppUrl(url: string): Promise<string | null> {
-  const match = url.match(/^app:\/\/(.+)/);
-  if (!match) return null;
-
-  const appId = match[1];
-  const apps = await listApps();
-  const app = apps.find((a) => a.id === appId);
-  return app?.run ?? null;
 }
 
 /**

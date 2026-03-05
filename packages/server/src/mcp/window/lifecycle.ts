@@ -8,6 +8,7 @@ import type { OSAction } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
+import { getAgentId } from '../../agents/session.js';
 
 export function registerLifecycleTools(
   server: McpServer,
@@ -25,6 +26,13 @@ export function registerLifecycleTools(
     async (args) => {
       if (!getWindowState().hasWindow(args.windowId)) {
         return error(`Window "${args.windowId}" does not exist or was already closed.`);
+      }
+
+      const lockedBy = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      if (lockedBy) {
+        return error(
+          `Window "${args.windowId}" is locked by agent "${lockedBy}". Cannot close until unlocked.`,
+        );
       }
 
       const osAction: OSAction = {
@@ -90,6 +98,13 @@ export function registerLifecycleTools(
       if (!getWindowState().hasWindow(args.windowId)) {
         return error(
           `Window "${args.windowId}" does not exist. Cannot unlock a non-existent window.`,
+        );
+      }
+
+      const lockedBy = getWindowState().isLockedByOther(args.windowId, args.agentId);
+      if (lockedBy) {
+        return error(
+          `Window "${args.windowId}" is locked by agent "${lockedBy}", not "${args.agentId}". Only the locking agent can unlock.`,
         );
       }
 

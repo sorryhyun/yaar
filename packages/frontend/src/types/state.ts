@@ -82,7 +82,6 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'er
 export interface ShortcutContextTarget {
   id: string;
   label: string;
-  type: string;
   target: string;
 }
 

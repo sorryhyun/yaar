@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
+import { extractAppId } from '@yaar/shared';
 import type { ShortcutContextTarget } from '@/store/types';
 import { toWindowKey } from '@/store/helpers';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
@@ -99,9 +100,18 @@ export function DesktopIcons({
       if (cooldownId === shortcut.id) return;
       startCooldown(shortcut.id);
 
-      // App shortcuts: use app metadata for smart handling
-      if (shortcut.type === 'app') {
-        const app = apps.find((a) => a.id === shortcut.target);
+      // App shortcuts: resolve yaar://apps/{appId} or legacy type='app'
+      const appId = extractAppId(shortcut.target);
+      if (appId) {
+        // Inline skill instructions (ad-hoc skill shortcuts)
+        if (shortcut.skill) {
+          sendMessage(
+            `<ui:click>skill: ${shortcut.label}</ui:click>\n<skill>\n${shortcut.skill}\n</skill>`,
+          );
+          return;
+        }
+
+        const app = apps.find((a) => a.id === appId);
         if (app?.run) {
           const store = useDesktopStore.getState();
           const monitorId = store.activeMonitorId;
@@ -129,26 +139,18 @@ export function DesktopIcons({
           }
           return;
         }
-        sendMessage(`<ui:click>app: ${shortcut.target}</ui:click>`);
+        sendMessage(`<ui:click>app: ${appId}</ui:click>`);
         return;
       }
 
-      // Skill shortcuts: send instructions to AI
-      if (shortcut.type === 'skill' && shortcut.skill) {
-        sendMessage(
-          `<ui:click>skill: ${shortcut.label}</ui:click>\n<skill>\n${shortcut.skill}\n</skill>`,
-        );
-        return;
-      }
-
-      // Other shortcuts: use osActions or send to AI
+      // osActions shortcuts: execute directly
       if (shortcut.osActions && shortcut.osActions.length > 0) {
         useDesktopStore.getState().applyActions(shortcut.osActions);
         return;
       }
-      sendMessage(
-        `<ui:click>shortcut: ${shortcut.id}, type: ${shortcut.type}, target: ${shortcut.target}</ui:click>`,
-      );
+
+      // URL or other: send to AI
+      sendMessage(`<ui:click>shortcut: ${shortcut.id}, target: ${shortcut.target}</ui:click>`);
     },
     [sendMessage, cooldownId, startCooldown, apps],
   );
@@ -167,55 +169,57 @@ export function DesktopIcons({
         </button>
       )}
       {/* Desktop shortcuts (includes app shortcuts) */}
-      {shortcuts.map((shortcut) => (
-        <button
-          key={shortcut.id}
-          className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
-          data-shortcut-id={shortcut.id}
-          {...(shortcut.type === 'app' ? { 'data-app-id': shortcut.target } : {})}
-          onClick={() => handleShortcutClick(shortcut)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            showShortcutContextMenu(e.clientX, e.clientY, {
-              id: shortcut.id,
-              label: shortcut.label,
-              type: shortcut.type,
-              target: shortcut.target,
-            });
-          }}
-          disabled={cooldownId === shortcut.id}
-          draggable={shortcut.type === 'app'}
-          onDragStart={
-            shortcut.type === 'app'
-              ? (e) => {
-                  e.dataTransfer.setData('application/x-yaar-app', shortcut.target);
-                  e.dataTransfer.effectAllowed = 'link';
-                }
-              : undefined
-          }
-        >
-          <span className={styles.iconWrapper}>
-            {shortcut.iconType === 'image' ? (
-              <img
-                className={styles.iconImg}
-                src={resolveAssetUrl(shortcut.icon)}
-                alt={shortcut.label}
-                draggable={false}
-              />
-            ) : (
-              <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
-            )}
-            {shortcut.type === 'app' && appBadges[shortcut.target] > 0 && (
-              <span className={styles.badge}>
-                {appBadges[shortcut.target] > 99 ? '99+' : appBadges[shortcut.target]}
-              </span>
-            )}
-            {shortcut.type !== 'app' && <span className={styles.shortcutArrow} />}
-          </span>
-          <span className={styles.iconLabel}>{shortcut.label}</span>
-        </button>
-      ))}
+      {shortcuts.map((shortcut) => {
+        const appId = extractAppId(shortcut.target);
+        return (
+          <button
+            key={shortcut.id}
+            className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
+            data-shortcut-id={shortcut.id}
+            {...(appId ? { 'data-app-id': appId } : {})}
+            onClick={() => handleShortcutClick(shortcut)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              showShortcutContextMenu(e.clientX, e.clientY, {
+                id: shortcut.id,
+                label: shortcut.label,
+                target: shortcut.target,
+              });
+            }}
+            disabled={cooldownId === shortcut.id}
+            draggable={!!appId}
+            onDragStart={
+              appId
+                ? (e) => {
+                    e.dataTransfer.setData('application/x-yaar-app', appId);
+                    e.dataTransfer.effectAllowed = 'link';
+                  }
+                : undefined
+            }
+          >
+            <span className={styles.iconWrapper}>
+              {shortcut.iconType === 'image' ? (
+                <img
+                  className={styles.iconImg}
+                  src={resolveAssetUrl(shortcut.icon)}
+                  alt={shortcut.label}
+                  draggable={false}
+                />
+              ) : (
+                <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
+              )}
+              {appId && appBadges[appId] > 0 && (
+                <span className={styles.badge}>
+                  {appBadges[appId] > 99 ? '99+' : appBadges[appId]}
+                </span>
+              )}
+              {!appId && <span className={styles.shortcutArrow} />}
+            </span>
+            <span className={styles.iconLabel}>{shortcut.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

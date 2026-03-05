@@ -24,7 +24,7 @@ A **session** is the top-level container for one complete conversation. It owns 
 
 ### Identity
 
-Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`.
+Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. See [URI-Based Resource Addressing](./uri-based-access.md).
 
 ### Multi-connection
 
@@ -69,7 +69,7 @@ Monitors enable parallel, independent AI workflows. A user can run a long backgr
 
 ### Identity
 
-Monitors use IDs like `monitor-0`, `monitor-1`, etc. The default monitor is always `monitor-0` ("Desktop 1").
+Monitors use IDs like `monitor-0`, `monitor-1`, etc. The default monitor is always `monitor-0` ("Desktop 1"). Monitors form the first segment of window URIs — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
 
 ### Frontend
 
@@ -110,7 +110,7 @@ When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen befo
 
 ## Window
 
-A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands).
+A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
 
 ### Structure
 

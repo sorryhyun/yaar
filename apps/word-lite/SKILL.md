@@ -9,7 +9,7 @@ create({
   windowId: "word-lite",
   title: "Word Lite",
   renderer: "iframe",
-  content: "app://word-lite"
+  content: "yaar://apps/word-lite"
 })
 ```
 

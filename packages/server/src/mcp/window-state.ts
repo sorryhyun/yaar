@@ -242,6 +242,19 @@ export class WindowStateRegistry {
     return this.resolve(windowId) !== undefined;
   }
 
+  /**
+   * Check if a window is locked by a different agent.
+   * Returns the locking agent's ID if locked by someone else, or null if not locked / locked by the same agent.
+   */
+  isLockedByOther(windowId: string, agentId?: string): string | null {
+    const resolved = this.resolve(windowId);
+    if (!resolved) return null;
+    const win = resolved[1];
+    if (!win.locked) return null;
+    if (agentId && win.lockedBy === agentId) return null;
+    return win.lockedBy ?? 'unknown';
+  }
+
   clear(): void {
     this.windows.clear();
     this.appCommands.clear();

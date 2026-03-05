@@ -15,6 +15,7 @@ import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
+import { getAgentId } from '../../agents/session.js';
 
 export function registerUpdateTools(
   server: McpServer,
@@ -46,6 +47,13 @@ export function registerUpdateTools(
       if (!getWindowState().hasWindow(args.windowId)) {
         return error(
           `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        );
+      }
+
+      const lockedBy = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      if (lockedBy) {
+        return error(
+          `Window "${args.windowId}" is locked by agent "${lockedBy}". Cannot update until unlocked.`,
         );
       }
 
@@ -119,6 +127,13 @@ export function registerUpdateTools(
       if (!getWindowState().hasWindow(args.windowId)) {
         return error(
           `Window "${args.windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
+        );
+      }
+
+      const lockedBy2 = getWindowState().isLockedByOther(args.windowId, getAgentId());
+      if (lockedBy2) {
+        return error(
+          `Window "${args.windowId}" is locked by agent "${lockedBy2}". Cannot update until unlocked.`,
         );
       }
 

@@ -244,11 +244,11 @@ export interface DesktopShortcut {
   label: string;
   icon: string;
   iconType?: 'emoji' | 'image';
-  type: 'file' | 'url' | 'action' | 'app' | 'skill';
+  /** URI target: yaar://apps/{id}, yaar://storage/{path}, https://..., or legacy app ID. */
   target: string;
   /** When set, clicking the shortcut executes these actions client-side without AI round-trip. */
   osActions?: OSAction[];
-  /** Skill instructions sent to AI when clicked (for type='skill'). */
+  /** Inline skill instructions sent to AI when clicked. */
   skill?: string;
   createdAt: number;
 }

@@ -9,7 +9,7 @@ create({
   windowId: "video-viewer-lite",
   title: "Video Viewer Lite",
   renderer: "iframe",
-  content: "app://video-viewer-lite"
+  content: "yaar://apps/video-viewer-lite"
 })
 ```
 

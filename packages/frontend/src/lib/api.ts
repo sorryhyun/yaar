@@ -5,6 +5,8 @@
  * In remote mode, requests are directed to a remote server with token auth.
  */
 
+import { resolveContentUri } from '@yaar/shared';
+
 const STORAGE_KEY = 'yaar-remote-connection';
 
 export interface RemoteConnection {
@@ -100,16 +102,10 @@ export function buildWsUrl(sessionId?: string | null): string {
  */
 export function resolveAssetUrl(path: string): string {
   if (!path) return path;
-  // Resolve app:// protocol → /api/apps/{appId}/static/index.html
-  const appMatch = path.match(/^app:\/\/(.+)/);
-  if (appMatch) {
-    path = `/api/apps/${appMatch[1]}/static/index.html`;
-  }
-  // Resolve storage:// protocol → /api/storage/{path}
-  const storageMatch = path.match(/^storage:\/\/(.+)/);
-  if (storageMatch) {
-    path = `/api/storage/${storageMatch[1]}`;
-  }
+  // Resolve yaar:// URIs to API paths
+  const resolved = resolveContentUri(path);
+  if (resolved) path = resolved;
+
   // Pass through absolute URLs and data/blob URLs
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
 

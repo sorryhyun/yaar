@@ -422,7 +422,7 @@ export function DesktopSurface() {
                       onClick: () => {
                         const s = contextMenu.shortcut!;
                         sendMessage(
-                          `<ui:shortcut_action action="about" shortcutId="${s.id}" label="${s.label}" type="${s.type}">User wants to know about this shortcut</ui:shortcut_action>`,
+                          `<ui:shortcut_action action="about" shortcutId="${s.id}" label="${s.label}" target="${s.target}">User wants to know about this shortcut</ui:shortcut_action>`,
                         );
                       },
                     },

@@ -18,7 +18,7 @@ export const shortcutContentSchema = z.object({
   label: z.string().optional(),
   icon: z.string().optional(),
   iconType: z.enum(['emoji', 'image']).optional(),
-  shortcutType: z.enum(['file', 'url', 'action', 'app', 'skill']).optional(),
+  /** URI target: yaar://apps/{id}, yaar://storage/{path}, https://..., etc. */
   target: z.string().optional(),
   osActions: z.array(z.record(z.string(), z.unknown())).optional(),
   skill: z.string().optional(),
@@ -36,7 +36,6 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     if (data.label !== undefined) updates.label = data.label;
     if (data.icon !== undefined) updates.icon = data.icon;
     if (data.iconType !== undefined) updates.iconType = data.iconType;
-    if (data.shortcutType !== undefined) updates.type = data.shortcutType;
     if (data.target !== undefined) updates.target = data.target;
     if (data.osActions !== undefined) updates.osActions = data.osActions;
     if (data.skill !== undefined) updates.skill = data.skill;
@@ -56,21 +55,18 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
   }
 
   // Create new shortcut
-  if (data.shortcutType === 'skill') {
-    if (!data.label || !data.icon || !data.skill) {
-      return error('skill shortcuts require label, icon, and skill fields.');
+  if (data.skill) {
+    if (!data.label || !data.icon) {
+      return error('Skill shortcuts require label and icon fields.');
     }
-  } else if (!data.label || !data.icon || !data.shortcutType || !data.target) {
-    return error(
-      'shortcuts section requires label, icon, shortcutType, and target fields to create.',
-    );
+  } else if (!data.label || !data.icon || !data.target) {
+    return error('Shortcuts require label, icon, and target (URI) fields to create.');
   }
   const shortcut: DesktopShortcut = {
     id: `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     label: data.label!,
     icon: data.icon!,
     iconType: data.iconType,
-    type: data.shortcutType!,
     target: data.target || '',
     osActions: data.osActions as DesktopShortcut['osActions'],
     ...(data.skill && { skill: data.skill }),

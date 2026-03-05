@@ -1,13 +1,11 @@
 /**
  * URI parser for the basic MCP namespace.
  *
- * Supported schemes:
- *   sandbox://{sandboxId}/{path}  → existing sandbox file
- *   sandbox:///{path}             → new sandbox (write/edit only)
- *   sandbox://{sandboxId}         → sandbox root (list only)
- *   storage://{path}              → persistent storage file
- *   storage://                    → storage root (list only)
+ * Thin adapter over parseFileUri() from @yaar/shared.
+ * Accepts yaar://, storage://, and sandbox:// URIs.
  */
+
+import { parseFileUri } from '@yaar/shared';
 
 export type ParsedUri =
   | { scheme: 'sandbox'; sandboxId: string; path: string }
@@ -23,39 +21,21 @@ export type ParsedUri =
  *   parseUri('sandbox://123')             → { scheme: 'sandbox', sandboxId: '123', path: '' }
  *   parseUri('storage://docs/file.txt')   → { scheme: 'storage', path: 'docs/file.txt' }
  *   parseUri('storage://')                → { scheme: 'storage', path: '' }
+ *   parseUri('yaar://storage/docs/f.txt') → { scheme: 'storage', path: 'docs/f.txt' }
+ *   parseUri('yaar://sandbox/123/main.ts')→ { scheme: 'sandbox', sandboxId: '123', path: 'main.ts' }
  */
 export function parseUri(uri: string): ParsedUri {
-  // Match sandbox:// or storage://
-  const match = uri.match(/^(sandbox|storage):\/\/(.*)$/);
-  if (!match) {
+  const parsed = parseFileUri(uri);
+  if (!parsed) {
     throw new Error(
-      `Invalid URI: "${uri}". Expected sandbox://{sandboxId}/{path}, sandbox:///{path}, or storage://{path}.`,
+      `Invalid URI: "${uri}". Expected yaar://storage/{path}, yaar://sandbox/{id}/{path}, sandbox://{id}/{path}, or storage://{path}.`,
     );
   }
-
-  const [, scheme, rest] = match;
-
-  if (scheme === 'storage') {
-    // storage://{path} or storage://
-    return { scheme: 'storage', path: rest };
+  if (parsed.authority === 'storage') {
+    return { scheme: 'storage', path: parsed.path };
   }
-
-  // sandbox scheme
-  if (rest.startsWith('/')) {
-    // sandbox:///{path} → new sandbox (triple slash = empty authority)
-    return { scheme: 'sandbox-new', path: rest.slice(1) };
+  if (parsed.sandboxId === null) {
+    return { scheme: 'sandbox-new', path: parsed.path };
   }
-
-  // sandbox://{sandboxId}/{path} or sandbox://{sandboxId}
-  const slashIdx = rest.indexOf('/');
-  if (slashIdx === -1) {
-    // sandbox://{sandboxId} — root listing
-    return { scheme: 'sandbox', sandboxId: rest, path: '' };
-  }
-
-  return {
-    scheme: 'sandbox',
-    sandboxId: rest.slice(0, slashIdx),
-    path: rest.slice(slashIdx + 1),
-  };
+  return { scheme: 'sandbox', sandboxId: parsed.sandboxId, path: parsed.path };
 }

@@ -10,7 +10,7 @@ import { ok, error } from '../utils.js';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../action-emitter.js';
-import type { AppManifest } from '@yaar/shared';
+import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 
@@ -307,8 +307,7 @@ export function registerDeployTools(server: McpServer): void {
               id: `app-${appId}`,
               label: displayName,
               icon: resolvedIcon,
-              type: 'app',
-              target: appId,
+              target: buildYaarUri('apps', appId),
               createdAt: Date.now(),
             },
           });

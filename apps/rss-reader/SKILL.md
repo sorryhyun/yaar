@@ -9,7 +9,7 @@ create({
   windowId: "rss-reader",
   title: "RSS Reader",
   renderer: "iframe",
-  content: "app://rss-reader"
+  content: "yaar://apps/rss-reader"
 })
 ```
 

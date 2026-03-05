@@ -45,7 +45,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   if (apps.length > 0) {
     const appLines = apps.map((a) => {
       let line = `  - **${a.name}** (${a.id}): ${a.description || 'No description'}`;
-      if (a.isCompiled) line += ` (iframe: app://${a.id})`;
+      if (a.isCompiled) line += ` (iframe: yaar://apps/${a.id})`;
       if (a.variant && a.variant !== 'standard') {
         line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
       }

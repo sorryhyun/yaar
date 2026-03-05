@@ -9,7 +9,7 @@ create({
   windowId: "storage",
   title: "Storage",
   renderer: "iframe",
-  content: "app://storage"
+  content: "yaar://apps/storage"
 })
 ```
 

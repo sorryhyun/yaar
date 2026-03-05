@@ -9,7 +9,7 @@ create({
   windowId: "market-apps",
   title: "Market Apps",
   renderer: "iframe",
-  content: "app://market-apps"
+  content: "yaar://apps/market-apps"
 })
 ```
 

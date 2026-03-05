@@ -9,7 +9,7 @@ create({
   windowId: "falling-blocks",
   title: "Falling Blocks",
   renderer: "iframe",
-  content: "app://falling-blocks"
+  content: "yaar://apps/falling-blocks"
 })
 ```
 

@@ -9,7 +9,7 @@ create({
   windowId: "excel-lite",
   title: "Excel Lite",
   renderer: "iframe",
-  content: "app://excel-lite"
+  content: "yaar://apps/excel-lite"
 })
 ```
 

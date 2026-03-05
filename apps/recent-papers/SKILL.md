@@ -9,7 +9,7 @@ create({
   windowId: "recent-papers",
   title: "Recent Papers",
   renderer: "iframe",
-  content: "app://recent-papers"
+  content: "yaar://apps/recent-papers"
 })
 ```
 

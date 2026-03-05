@@ -4,14 +4,35 @@
 
 import { configRead, configWrite } from './storage-manager.js';
 import type { DesktopShortcut } from '@yaar/shared';
+import { buildYaarUri, extractAppId } from '@yaar/shared';
 
 const SHORTCUTS_FILE = 'shortcuts.json';
+
+/** Migrate legacy shortcut format ({ type: 'app', target: 'storage' }) to URI-based. */
+function normalizeShortcut(s: DesktopShortcut): DesktopShortcut {
+  const legacy = s as DesktopShortcut & { type?: string };
+  if (!legacy.type || s.target.startsWith('yaar://') || s.target.startsWith('https://') || s.target.startsWith('http://')) {
+    return s;
+  }
+  console.warn(`[shortcuts] Migrating legacy shortcut "${s.id}" (type=${legacy.type}) to URI-based target`);
+  const { type, ...rest } = legacy;
+  switch (type) {
+    case 'app':
+    case 'skill':
+      return { ...rest, target: buildYaarUri('apps', s.target || s.id) };
+    case 'file':
+      return { ...rest, target: buildYaarUri('storage', s.target) };
+    default:
+      return rest;
+  }
+}
 
 export async function readShortcuts(): Promise<DesktopShortcut[]> {
   const result = await configRead(SHORTCUTS_FILE);
   if (!result.success || !result.content) return [];
   try {
-    return JSON.parse(result.content);
+    const shortcuts: DesktopShortcut[] = JSON.parse(result.content);
+    return shortcuts.map(normalizeShortcut);
   } catch {
     return [];
   }
@@ -63,8 +84,7 @@ export async function ensureAppShortcut(app: {
     label: app.name,
     icon: app.icon || '📦',
     ...(app.iconType && { iconType: app.iconType }),
-    type: 'app',
-    target: app.id,
+    target: buildYaarUri('apps', app.id),
     createdAt: Date.now(),
   };
   shortcuts.push(shortcut);
@@ -101,7 +121,8 @@ export async function syncAppShortcuts(
 
   // Remove shortcuts only for apps that no longer exist (not just createShortcut: false)
   const result = shortcuts.filter((s) => {
-    if (s.type === 'app' && !allAppIds.has(s.target)) {
+    const appId = extractAppId(s.target);
+    if (appId && !allAppIds.has(appId)) {
       removedIds.push(s.id);
       changed = true;
       return false;
@@ -119,8 +140,7 @@ export async function syncAppShortcuts(
         label: app.name,
         icon: app.icon || '📦',
         ...(app.iconType && { iconType: app.iconType }),
-        type: 'app',
-        target: app.id,
+        target: buildYaarUri('apps', app.id),
         createdAt: Date.now(),
       });
       changed = true;

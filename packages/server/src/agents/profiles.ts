@@ -41,7 +41,7 @@ Execute the objective using your available tools. You have full conversation con
 ## Content Rendering
 - **component**: Interactive UI with buttons, forms, layouts
 - **markdown**: Documentation, explanations, formatted text
-- **iframe**: Compiled apps via \`app://appId\`, or external websites
+- **iframe**: Apps via \`yaar://apps/appId\`, or external websites
 
 Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 

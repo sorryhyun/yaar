@@ -9,7 +9,7 @@ create({
   windowId: "browser",
   title: "Browser",
   renderer: "iframe",
-  content: "app://browser"
+  content: "yaar://apps/browser"
 })
 ```
 

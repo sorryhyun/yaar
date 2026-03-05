@@ -9,7 +9,7 @@ create({
   windowId: "minecraft-lite",
   title: "Minecraft Lite",
   renderer: "iframe",
-  content: "app://minecraft-lite"
+  content: "yaar://apps/minecraft-lite"
 })
 ```
 

@@ -10,3 +10,17 @@ export {
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
 } from './capture-helper.js';
 export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+export {
+  type YaarAuthority,
+  type ParsedYaarUri,
+  type ParsedFileUri,
+  parseYaarUri,
+  buildYaarUri,
+  isYaarUri,
+  resolveContentUri,
+  extractAppId,
+  parseFileUri,
+  buildFileUri,
+  buildWindowUri,
+  parseWindowUri,
+} from './yaar-uri.js';

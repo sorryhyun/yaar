@@ -108,7 +108,7 @@ close({ windowId: "si-form" })
 Open Excel Lite, query its manifest, write cells, read them back, verify data integrity:
 
 ```
-create({ windowId: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
+create({ windowId: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
 Wait for App Protocol ready, then:
@@ -146,7 +146,7 @@ close({ windowId: "si-excel" })
 Open Word Lite, set content, read it back:
 
 ```
-create({ windowId: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "app://word-lite" })
+create({ windowId: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
 ```
 
 Wait for ready, then:
@@ -172,7 +172,7 @@ read({ path: "_si-test-data.json" })     # verify JSON is readable
 
 Open Excel and import:
 ```
-create({ windowId: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
+create({ windowId: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
@@ -220,7 +220,7 @@ Verify "si-dev-test" appears in the app list.
 
 **Step 5 — Open and verify:**
 ```
-create({ windowId: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "app://si-dev-test" })
+create({ windowId: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "yaar://apps/si-dev-test" })
 list()    # verify window exists
 close({ windowId: "si-dev-verify" })
 ```
@@ -334,9 +334,9 @@ delete({ path: "_si-test-dir/sub/file3.txt" })
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
-create({ windowId: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "app://excel-lite" })
-create({ windowId: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "app://word-lite" })
-create({ windowId: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "app://image-viewer" })
+create({ windowId: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ windowId: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+create({ windowId: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:

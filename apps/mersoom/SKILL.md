@@ -9,7 +9,7 @@ create({
   windowId: "mersoom",
   title: "Mersoom",
   renderer: "iframe",
-  content: "app://mersoom"
+  content: "yaar://apps/mersoom"
 })
 ```
 

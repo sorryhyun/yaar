@@ -9,7 +9,7 @@ create({
   windowId: "dock",
   title: "Dock",
   renderer: "iframe",
-  content: "app://dock"
+  content: "yaar://apps/dock"
 })
 ```
 
