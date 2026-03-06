@@ -6,8 +6,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { stat } from 'fs/promises';
 import { join } from 'path';
+import { parseFileUri } from '@yaar/shared';
 import { ok, okWithImages, error } from '../utils.js';
-import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageRead } from '../../storage/index.js';
 import { validateSandboxPath } from './helpers.js';
@@ -30,20 +30,12 @@ export function registerReadTool(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
+      const parsed = parseFileUri(args.uri);
+      if (!parsed) {
+        return error('Invalid URI. Expected yaar://storage/{path} or yaar://sandbox/{id}/{path}.');
       }
 
-      if (parsed.scheme === 'sandbox-new') {
-        return error(
-          'Cannot read from a new sandbox (yaar://sandbox/new/...). Provide a sandbox ID.',
-        );
-      }
-
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         if (!parsed.path) {
           return error('Cannot read a directory. Use list instead.');
         }
@@ -78,7 +70,12 @@ export function registerReadTool(server: McpServer): void {
         return ok(result.content!);
       }
 
-      // sandbox scheme
+      // sandbox
+      if (parsed.sandboxId === null) {
+        return error(
+          'Cannot read from a new sandbox (yaar://sandbox/new/...). Provide a sandbox ID.',
+        );
+      }
       const sandboxPath = getSandboxPath(parsed.sandboxId);
 
       if (!parsed.path) {

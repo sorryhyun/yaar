@@ -14,7 +14,7 @@ import { getBrowserPool } from '../../lib/browser/index.js';
 import type { BrowserSession, PageState } from '../../lib/browser/index.js';
 import { actionEmitter } from '../action-emitter.js';
 import { getSessionId as getContextSessionId } from '../../agents/session.js';
-import { getSessionHub } from '../../session/live-session.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { isDomainAllowed, extractDomain } from '../domains.js';
 import { ok, okWithImages, error } from '../utils.js';
 

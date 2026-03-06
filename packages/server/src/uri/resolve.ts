@@ -6,7 +6,7 @@
  */
 
 import { join } from 'path';
-import { parseYaarUri, resolveContentUri } from '@yaar/shared';
+import { parseYaarUri, resolveContentUri, parseWindowUri } from '@yaar/shared';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';
@@ -23,6 +23,16 @@ export interface ResolvedResource {
   /** API path for frontend consumption */
   apiPath: string;
 }
+
+export interface ResolvedWindow {
+  kind: 'window';
+  monitorId: string;
+  windowId: string;
+  subPath?: string;
+  sourceUri: string;
+}
+
+export type ResolvedUri = ResolvedResource | ResolvedWindow;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
   const parsed = parseYaarUri(uri);
@@ -78,4 +88,25 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
       };
     }
   }
+}
+
+/**
+ * Resolve any yaar:// URI — content resources (apps, storage, sandbox) or window addresses.
+ */
+export function resolveUri(uri: string): ResolvedUri | null {
+  const resource = resolveResourceUri(uri);
+  if (resource) return resource;
+
+  const win = parseWindowUri(uri);
+  if (win) {
+    return {
+      kind: 'window',
+      monitorId: win.monitorId,
+      windowId: win.windowId,
+      subPath: win.subPath,
+      sourceUri: uri,
+    };
+  }
+
+  return null;
 }

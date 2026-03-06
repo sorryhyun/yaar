@@ -6,8 +6,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
+import { parseFileUri } from '@yaar/shared';
 import { ok, error } from '../utils.js';
-import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageDelete } from '../../storage/index.js';
 import { validateSandboxPath } from './helpers.js';
@@ -22,18 +22,12 @@ export function registerDeleteTool(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
+      const parsed = parseFileUri(args.uri);
+      if (!parsed) {
+        return error('Invalid URI. Expected yaar://storage/{path} or yaar://sandbox/{id}/{path}.');
       }
 
-      if (parsed.scheme === 'sandbox-new') {
-        return error('Cannot delete from a new sandbox. Provide a sandbox ID.');
-      }
-
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         if (!parsed.path) return error('Provide a file path to delete.');
         const result = await storageDelete(parsed.path);
         if (!result.success) return error(result.error!);
@@ -41,6 +35,9 @@ export function registerDeleteTool(server: McpServer): void {
       }
 
       // sandbox
+      if (parsed.sandboxId === null) {
+        return error('Cannot delete from a new sandbox. Provide a sandbox ID.');
+      }
       if (!parsed.path) return error('Provide a file path to delete.');
 
       const sandboxPath = getSandboxPath(parsed.sandboxId);

@@ -6,8 +6,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
+import { parseFileUri } from '@yaar/shared';
 import { ok, error } from '../utils.js';
-import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { generateSandboxId } from '../dev/helpers.js';
 import { storageWrite } from '../../storage/index.js';
@@ -26,34 +26,30 @@ export function registerWriteTool(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
+      const parsed = parseFileUri(args.uri);
+      if (!parsed) {
+        return error('Invalid URI. Expected yaar://storage/{path} or yaar://sandbox/{id}/{path}.');
       }
 
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         if (!parsed.path) return error('Cannot write to storage root. Provide a file path.');
         const result = await storageWrite(parsed.path, args.content);
         if (!result.success) return error(result.error!);
         return ok(`Written to yaar://storage/${parsed.path}`);
       }
 
-      // sandbox or sandbox-new
+      // sandbox
       let sandboxId: string;
-      let path: string;
 
-      if (parsed.scheme === 'sandbox-new') {
+      if (parsed.sandboxId === null) {
         if (!parsed.path)
           return error('Provide a file path (e.g. yaar://sandbox/new/src/main.ts).');
         sandboxId = generateSandboxId();
-        path = parsed.path;
       } else {
         if (!parsed.path) return error('Provide a file path within the sandbox.');
         sandboxId = parsed.sandboxId;
-        path = parsed.path;
       }
+      const path = parsed.path;
 
       const sandboxPath = getSandboxPath(sandboxId);
       const pathErr = validateSandboxPath(path, sandboxPath);

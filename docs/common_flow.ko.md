@@ -425,7 +425,8 @@ session_logs/
 
 | 파일 | 역할 |
 |------|------|
-| `session/live-session.ts` | LiveSession + SessionHub — 세션 생명주기, 다중 연결 |
+| `session/live-session.ts` | LiveSession — 세션 컨테이너, pool + window state + reload cache 소유 |
+| `session/session-hub.ts` | SessionHub — 활성 세션의 싱글턴 레지스트리 (create, get, evict) |
 | `agents/context-pool.ts` | ContextPool — 통합 태스크 오케스트레이션 |
 | `agents/agent-pool.ts` | AgentPool — 메인(모니터별), 임시, 윈도우, 태스크 에이전트 관리 |
 | `agents/session.ts` | AgentSession — 프로바이더 + 스트림 매핑을 가진 개별 에이전트 |

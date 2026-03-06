@@ -13,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
-import { getSessionHub } from '../session/live-session.js';
+import { getSessionHub } from '../session/session-hub.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
 import { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';

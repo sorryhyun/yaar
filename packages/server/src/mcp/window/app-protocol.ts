@@ -10,7 +10,7 @@ import type { AppProtocolRequest } from '@yaar/shared';
 import { parseWindowResourceUri, type ParsedWindowResourceUri } from '@yaar/shared';
 import { z } from 'zod';
 import { getSessionId } from '../../agents/session.js';
-import { getSessionHub } from '../../session/live-session.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';

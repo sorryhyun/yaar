@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
-import { getSessionHub } from '../../session/live-session.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { getAgentId, getSessionId, getMonitorId } from '../../agents/session.js';
 
 export function registerRelayTools(server: McpServer): void {

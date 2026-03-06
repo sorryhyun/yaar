@@ -5,8 +5,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { join } from 'path';
+import { parseFileUri } from '@yaar/shared';
 import { ok, error } from '../utils.js';
-import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageList } from '../../storage/index.js';
 import { listFiles, validateSandboxPath } from './helpers.js';
@@ -23,18 +23,12 @@ export function registerListTool(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
+      const parsed = parseFileUri(args.uri);
+      if (!parsed) {
+        return error('Invalid URI. Expected yaar://storage/{path} or yaar://sandbox/{id}/{path}.');
       }
 
-      if (parsed.scheme === 'sandbox-new') {
-        return error('Cannot list a new sandbox. Provide a sandbox ID.');
-      }
-
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         const result = await storageList(parsed.path);
         if (!result.success) return error(result.error!);
         const text =
@@ -47,6 +41,9 @@ export function registerListTool(server: McpServer): void {
       }
 
       // sandbox
+      if (parsed.sandboxId === null) {
+        return error('Cannot list a new sandbox. Provide a sandbox ID.');
+      }
       const sandboxPath = getSandboxPath(parsed.sandboxId);
 
       try {

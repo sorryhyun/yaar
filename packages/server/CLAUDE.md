@@ -43,10 +43,10 @@ src/
 │       ├── proxy.ts   # Fetch proxy route (/api/fetch) with domain allowlist enforcement
 │       └── static.ts  # Frontend static serving + SPA fallback
 ├── session/           # Session management (LiveSession, SessionHub, BroadcastCenter)
-│   ├── live-session.ts    # LiveSession — single gateway for all server→frontend events
+│   ├── live-session.ts      # LiveSession — single gateway for all server→frontend events
+│   ├── session-hub.ts       # SessionHub — singleton registry of active sessions
 │   ├── broadcast-center.ts  # BroadcastCenter — routes events to WebSocket connections
-│   ├── ws-types.ts        # YaarWebSocket type alias
-│   └── types.ts           # SessionId type, generateSessionId()
+│   └── types.ts             # SessionId, generateSessionId(), YaarWebSocket, WS_OPEN
 ├── websocket/         # WebSocket server + connection registry
 │   └── server.ts      # createWebSocketServer() with explicit options param
 ├── agents/            # Agent lifecycle, pooling, context management

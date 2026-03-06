@@ -5,8 +5,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { join } from 'path';
+import { parseFileUri } from '@yaar/shared';
 import { ok, error } from '../utils.js';
-import { parseUri } from './uri.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { storageRead, storageWrite } from '../../storage/index.js';
 import { validateSandboxPath } from './helpers.js';
@@ -54,21 +54,15 @@ export function registerEditTool(server: McpServer): void {
         return error('Provide old_string (string mode) or start_line (line mode).');
       }
 
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
-      }
-
-      if (parsed.scheme === 'sandbox-new') {
-        return error('Cannot edit a new sandbox file. Write first, then edit.');
+      const parsed = parseFileUri(args.uri);
+      if (!parsed) {
+        return error('Invalid URI. Expected yaar://storage/{path} or yaar://sandbox/{id}/{path}.');
       }
 
       // Read existing content
       let content: string;
 
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         if (!parsed.path) return error('Provide a file path to edit.');
         const readResult = await storageRead(parsed.path);
         if (!readResult.success) return error(readResult.error!);
@@ -85,6 +79,9 @@ export function registerEditTool(server: McpServer): void {
         }
       } else {
         // sandbox
+        if (parsed.sandboxId === null) {
+          return error('Cannot edit a new sandbox file. Write first, then edit.');
+        }
         if (!parsed.path) return error('Provide a file path to edit.');
 
         const sandboxPath = getSandboxPath(parsed.sandboxId);
@@ -137,14 +134,14 @@ export function registerEditTool(server: McpServer): void {
       }
 
       // Write back
-      if (parsed.scheme === 'storage') {
+      if (parsed.authority === 'storage') {
         const result = await storageWrite(parsed.path, newContent);
         if (!result.success) return error(result.error!);
         return ok(`Edited yaar://storage/${parsed.path}`);
       }
 
-      // sandbox
-      const fullPath = join(getSandboxPath(parsed.sandboxId), parsed.path);
+      // sandbox — sandboxId guaranteed non-null from read phase above
+      const fullPath = join(getSandboxPath(parsed.sandboxId!), parsed.path);
       await Bun.write(fullPath, newContent);
       return ok(
         JSON.stringify(

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { stat } from 'fs/promises';
 import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
-import { parseUri } from '../basic/uri.js';
+import { parseFileUri } from '@yaar/shared';
 
 export function registerCompileTools(server: McpServer): void {
   // compile - Compile sandbox TypeScript to HTML
@@ -28,13 +28,8 @@ export function registerCompileTools(server: McpServer): void {
     async (args) => {
       const { title } = args;
 
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
-      }
-      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+      const parsed = parseFileUri(args.uri);
+      if (!parsed || parsed.authority !== 'sandbox' || !parsed.sandboxId) {
         return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
       }
       const sandboxId = parsed.sandboxId;
@@ -81,13 +76,8 @@ export function registerCompileTools(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
-      }
-      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+      const parsed = parseFileUri(args.uri);
+      if (!parsed || parsed.authority !== 'sandbox' || !parsed.sandboxId) {
         return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
       }
       const sandboxId = parsed.sandboxId;

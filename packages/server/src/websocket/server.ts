@@ -6,7 +6,8 @@
  */
 
 import type { ServerWebSocket } from 'bun';
-import { getSessionHub, type LiveSessionOptions } from '../session/live-session.js';
+import type { LiveSessionOptions } from '../session/live-session.js';
+import { getSessionHub } from '../session/session-hub.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import { ServerEventType, type ClientEvent, type OSAction } from '@yaar/shared';

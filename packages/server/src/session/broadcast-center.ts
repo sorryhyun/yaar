@@ -10,7 +10,7 @@
 
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from './types.js';
-import { type YaarWebSocket, WS_OPEN } from './ws-types.js';
+import { type YaarWebSocket, WS_OPEN } from './types.js';
 
 export type ConnectionId = string;
 

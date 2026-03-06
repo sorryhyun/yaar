@@ -20,7 +20,7 @@ import { PROJECT_ROOT } from '../../config.js';
 import { generateIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { extractAppId, buildWindowUri } from '@yaar/shared';
-import { resolveResourceUri } from '../../uri/resolve.js';
+import { resolveResourceUri } from '../../uri/index.js';
 import { getMonitorId, getSessionId } from '../../agents/session.js';
 
 /** Derive a window ID from appId, name, or title. */

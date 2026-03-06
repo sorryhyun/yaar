@@ -21,7 +21,7 @@ import {
 } from './logging/index.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, PORT } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
-import { initSessionHub } from './session/live-session.js';
+import { initSessionHub } from './session/session-hub.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import { loadTunnelConfig, SshTunnel } from './lib/tunnel/index.js';
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BroadcastCenter } from '../session/broadcast-center.js';
 import type { ServerEvent } from '@yaar/shared';
-import type { YaarWebSocket } from '../session/ws-types.js';
+import type { YaarWebSocket } from '../session/types.js';
 
 /** Minimal mock of WebSocket */
 function createMockWs(readyState = 1 /* OPEN */) {

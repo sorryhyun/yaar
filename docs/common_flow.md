@@ -424,7 +424,8 @@ Each log entry includes `agentId` for filtering:
 
 | File | Purpose |
 |------|---------|
-| `session/live-session.ts` | LiveSession + SessionHub — session lifecycle, multi-connection |
+| `session/live-session.ts` | LiveSession — session container, owns pool + window state + reload cache |
+| `session/session-hub.ts` | SessionHub — singleton registry of active sessions (create, get, evict) |
 | `agents/context-pool.ts` | ContextPool — unified task orchestration |
 | `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, window, and task agents |
 | `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |

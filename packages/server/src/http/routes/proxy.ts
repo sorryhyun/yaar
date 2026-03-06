@@ -68,7 +68,7 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     // The iframe URL may carry a stale/restored sessionId that doesn't match
     // any current LiveSession, so we validate against the SessionHub and fall
     // back to the default session.
-    const { getSessionHub } = await import('../../session/live-session.js');
+    const { getSessionHub } = await import('../../session/session-hub.js');
     const hub = getSessionHub();
 
     let sessionId: string | undefined;

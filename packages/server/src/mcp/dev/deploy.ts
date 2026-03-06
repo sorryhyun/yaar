@@ -13,7 +13,7 @@ import { actionEmitter } from '../action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-import { parseUri } from '../basic/uri.js';
+import { parseFileUri } from '@yaar/shared';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -70,13 +70,8 @@ export function registerDeployTools(server: McpServer): void {
       },
     },
     async (args) => {
-      let parsed;
-      try {
-        parsed = parseUri(args.uri);
-      } catch (e) {
-        return error((e as Error).message);
-      }
-      if (parsed.scheme !== 'sandbox' || !parsed.sandboxId) {
+      const parsed = parseFileUri(args.uri);
+      if (!parsed || parsed.authority !== 'sandbox' || !parsed.sandboxId) {
         return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
       }
 

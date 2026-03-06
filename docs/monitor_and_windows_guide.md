@@ -48,7 +48,7 @@ Tab 3 ──┘
 | Type | Location | Purpose |
 |------|----------|---------|
 | `LiveSession` | `server/session/live-session.ts` | Session container — owns pool, window state, reload cache |
-| `SessionHub` | `server/session/live-session.ts` | Singleton registry of all active sessions |
+| `SessionHub` | `server/session/session-hub.ts` | Singleton registry of all active sessions |
 | `SessionLogger` | `server/logging/session-logger.ts` | Writes messages.jsonl to disk |
 | `SessionMetadata` | `server/logging/types.ts` | On-disk metadata (provider, agent hierarchy, thread IDs) |
 

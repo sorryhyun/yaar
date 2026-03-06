@@ -20,7 +20,7 @@ vi.mock('@yaar/server/providers/warm-pool', () => ({
 }));
 
 import { prepareWsData } from '@yaar/server/websocket/server';
-import { initSessionHub, getSessionHub } from '@yaar/server/session/live-session';
+import { initSessionHub, getSessionHub } from '@yaar/server/session/session-hub';
 
 // ── prepareWsData ──────────────────────────────────────────────────────────
 
