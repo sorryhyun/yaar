@@ -5,7 +5,7 @@ import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-a
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
 import { WindowConnectionPolicy } from '../agents/context-pool-policies/window-connection-policy.js';
 import { ContextTape } from '../agents/context.js';
-import type { Task } from '../agents/pool-context.js';
+import type { Task } from '../agents/pool-types.js';
 
 describe('MainQueuePolicy', () => {
   it('preserves FIFO ordering', () => {

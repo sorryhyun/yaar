@@ -424,3 +424,38 @@ export function isContentUpdateOperationValid(
       return false;
   }
 }
+
+/**
+ * Apply a content update operation to existing data.
+ * Shared between live window state tracking and session restore.
+ */
+export function applyContentOperation(
+  currentData: unknown,
+  operation: ContentUpdateOperation,
+): unknown {
+  switch (operation.op) {
+    case 'replace':
+      return operation.data;
+    case 'append':
+      if (typeof currentData === 'string' && typeof operation.data === 'string') {
+        return currentData + operation.data;
+      }
+      return operation.data;
+    case 'prepend':
+      if (typeof currentData === 'string' && typeof operation.data === 'string') {
+        return operation.data + currentData;
+      }
+      return operation.data;
+    case 'insertAt': {
+      if (typeof currentData === 'string' && typeof operation.data === 'string') {
+        const pos = operation.position;
+        return currentData.slice(0, pos) + operation.data + currentData.slice(pos);
+      }
+      return currentData;
+    }
+    case 'clear':
+      return '';
+    default:
+      return currentData;
+  }
+}

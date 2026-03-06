@@ -9,13 +9,8 @@
  * Key format: "monitorId/rawWindowId" (e.g., "monitor-0/win-storage").
  */
 
-import type {
-  OSAction,
-  ContentUpdateOperation,
-  WindowState,
-  AppProtocolRequest,
-} from '@yaar/shared';
-import { buildWindowKey } from '@yaar/shared';
+import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
+import { buildWindowKey, applyContentOperation } from '@yaar/shared';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
@@ -120,30 +115,7 @@ export class WindowStateRegistry {
         const key = this.actionKey(action.windowId, monitorId);
         const win = this.windows.get(key);
         if (win) {
-          const currentData = (win.content.data as string) ?? '';
-          const operation = action.operation as ContentUpdateOperation;
-
-          switch (operation.op) {
-            case 'append':
-              win.content.data = currentData + (operation.data as string);
-              break;
-            case 'prepend':
-              win.content.data = (operation.data as string) + currentData;
-              break;
-            case 'replace':
-              win.content.data = operation.data;
-              break;
-            case 'insertAt': {
-              const pos = operation.position;
-              win.content.data =
-                currentData.slice(0, pos) + (operation.data as string) + currentData.slice(pos);
-              break;
-            }
-            case 'clear':
-              win.content.data = '';
-              break;
-          }
-
+          win.content.data = applyContentOperation(win.content.data ?? '', action.operation);
           if (action.renderer) {
             win.content.renderer = action.renderer;
           }

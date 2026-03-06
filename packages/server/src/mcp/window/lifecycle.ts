@@ -5,17 +5,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { OSAction } from '@yaar/shared';
-import { buildWindowUri, parseWindowKey } from '@yaar/shared';
+import { parseWindowKey, buildWindowUri } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, okWithImages, error } from '../utils.js';
-import { getAgentId, getMonitorId } from '../../agents/session.js';
+import { getAgentId } from '../../agents/session.js';
 import { resolveWindowId } from './resolve-window.js';
-
-function formatWindowRef(windowId: string): string {
-  const monitorId = getMonitorId();
-  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
-}
+import { formatWindowRef } from './helpers.js';
 
 export function registerLifecycleTools(
   server: McpServer,

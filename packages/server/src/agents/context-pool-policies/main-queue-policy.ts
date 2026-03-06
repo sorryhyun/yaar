@@ -1,4 +1,4 @@
-import type { Task } from '../pool-context.js';
+import type { Task } from '../pool-types.js';
 
 export interface QueuedTask {
   task: Task;

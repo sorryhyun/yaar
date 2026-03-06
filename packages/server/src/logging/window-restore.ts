@@ -1,4 +1,5 @@
 import type { OSAction } from '@yaar/shared';
+import { applyContentOperation } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
 
 /**
@@ -32,47 +33,11 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
         break;
 
       case 'window.updateContent': {
-        // Apply content update to stored window
         const win = windows.get(action.windowId);
         if (win && win.type === 'window.create') {
-          // Apply the operation to the stored content
-          const currentData = win.content?.data ?? '';
-          const newRenderer = action.renderer ?? win.content?.renderer ?? 'text';
-
-          let newData: unknown = currentData;
-          switch (action.operation.op) {
-            case 'replace':
-              newData = action.operation.data;
-              break;
-            case 'append':
-              if (typeof currentData === 'string' && typeof action.operation.data === 'string') {
-                newData = currentData + action.operation.data;
-              } else {
-                newData = action.operation.data;
-              }
-              break;
-            case 'prepend':
-              if (typeof currentData === 'string' && typeof action.operation.data === 'string') {
-                newData = action.operation.data + currentData;
-              } else {
-                newData = action.operation.data;
-              }
-              break;
-            case 'clear':
-              newData = '';
-              break;
-            case 'insertAt':
-              if (typeof currentData === 'string' && typeof action.operation.data === 'string') {
-                const pos = action.operation.position ?? 0;
-                newData =
-                  currentData.slice(0, pos) + action.operation.data + currentData.slice(pos);
-              }
-              break;
-          }
-
           win.content = {
-            renderer: newRenderer,
-            data: newData,
+            renderer: action.renderer ?? win.content?.renderer ?? 'text',
+            data: applyContentOperation(win.content?.data ?? '', action.operation),
           };
         }
         break;

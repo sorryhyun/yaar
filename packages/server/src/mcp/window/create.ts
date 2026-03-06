@@ -19,26 +19,20 @@ import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { generateIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { extractAppId, buildWindowUri } from '@yaar/shared';
+import { extractAppId } from '@yaar/shared';
 import { resolveResourceUri } from '../../uri/index.js';
-import { getMonitorId, getSessionId } from '../../agents/session.js';
+import { getSessionId } from '../../agents/session.js';
+import { formatWindowRef } from './helpers.js';
 
 /** Derive a window ID from appId, name, or title. */
 function deriveWindowId(appId?: string, name?: string, title?: string): string {
   if (appId) return appId;
   const source = name ?? title ?? '';
-  // Slugify: lowercase, replace non-alphanumeric with hyphens, collapse, trim
   const slug = source
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   return slug || `win-${Date.now().toString(36)}`;
-}
-
-/** Format a window identifier for tool feedback — full URI when monitor context is available. */
-function formatWindowRef(windowId: string): string {
-  const monitorId = getMonitorId();
-  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
 }
 
 const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);

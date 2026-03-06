@@ -11,18 +11,12 @@ import {
   displayDataSchema,
   componentSchema,
 } from '@yaar/shared';
-import { buildWindowUri } from '@yaar/shared';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { gapEnum, colsSchema } from './create.js';
-import { getAgentId, getMonitorId } from '../../agents/session.js';
 import { resolveWindowId } from './resolve-window.js';
-
-function formatWindowRef(windowId: string): string {
-  const monitorId = getMonitorId();
-  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
-}
+import { formatWindowRef, checkWindowAccess } from './helpers.js';
 
 export function registerUpdateTools(
   server: McpServer,
@@ -53,18 +47,8 @@ export function registerUpdateTools(
     async (args) => {
       const windowId = resolveWindowId(args.uri);
 
-      if (!getWindowState().hasWindow(windowId)) {
-        return error(
-          `Window "${windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
-        );
-      }
-
-      const lockedBy = getWindowState().isLockedByOther(windowId, getAgentId());
-      if (lockedBy) {
-        return error(
-          `Window "${windowId}" is locked by agent "${lockedBy}". Cannot update until unlocked.`,
-        );
-      }
+      const accessError = checkWindowAccess(getWindowState(), windowId);
+      if (accessError) return accessError;
 
       const renderer = args.renderer as string | undefined;
       const data = (args.content as string | { headers: string[]; rows: string[][] }) ?? '';
@@ -135,18 +119,8 @@ export function registerUpdateTools(
     async (args) => {
       const windowId = resolveWindowId(args.uri);
 
-      if (!getWindowState().hasWindow(windowId)) {
-        return error(
-          `Window "${windowId}" does not exist. It may have been removed by a reset. Use list to see available windows, or create a new one.`,
-        );
-      }
-
-      const lockedBy2 = getWindowState().isLockedByOther(windowId, getAgentId());
-      if (lockedBy2) {
-        return error(
-          `Window "${windowId}" is locked by agent "${lockedBy2}". Cannot update until unlocked.`,
-        );
-      }
+      const accessError2 = checkWindowAccess(getWindowState(), windowId);
+      if (accessError2) return accessError2;
 
       const layoutData: ComponentLayout = {
         components: args.components as ComponentLayout['components'],

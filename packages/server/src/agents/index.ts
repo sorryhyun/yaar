@@ -9,13 +9,15 @@
  * - ContextTape: Hierarchical conversation context management
  * - PoolContext: Shared interface for ContextPool processors
  * - MainTaskProcessor, WindowTaskProcessor: Extracted processors
+ * - Turn helpers: buildReloadContext, runAgentTurn, createBudgetOutputCallback
  */
 
 export * from './session.js';
 export * from './limiter.js';
 export * from './context.js';
 export * from './agent-pool.js';
-export * from './pool-context.js';
+export * from './pool-types.js';
 export * from './context-pool.js';
 export * from './main-task-processor.js';
 export * from './window-task-processor.js';
+export * from './turn-helpers.js';

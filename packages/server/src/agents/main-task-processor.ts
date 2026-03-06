@@ -6,9 +6,10 @@
  */
 
 import { ServerEventType } from '@yaar/shared';
-import type { PoolContext, Task } from './pool-context.js';
+import type { PoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
 import { getDeveloperAllowedTools } from './profiles.js';
+import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -90,41 +91,14 @@ export class MainTaskProcessor {
   async processMainTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = task.monitorId ?? 'monitor-0';
     const mainRole = `main-${monitorId}-${task.messageId}`;
-    agent.currentRole = mainRole;
-    agent.lastUsed = Date.now();
 
-    // Set output tracking callback for budget policy with output budget enforcement
-    agent.session.setOutputCallback((bytes) => {
-      this.ctx.budgetPolicy.recordOutput(monitorId, bytes);
-      if (!this.ctx.budgetPolicy.checkOutputBudget(monitorId)) {
-        console.warn(
-          `[ContextPool] Monitor ${monitorId} exceeded output budget — interrupting agent`,
-        );
-        agent.session.interrupt().catch((err) => {
-          console.error(`[ContextPool] Failed to interrupt agent for ${monitorId}:`, err);
-        });
-      }
-    });
-
-    await this.ctx.sendEvent({
-      type: ServerEventType.MESSAGE_ACCEPTED,
-      messageId: task.messageId,
-      agentId: mainRole,
-    });
+    agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
 
     console.log(
       `[ContextPool] Processing main task ${task.messageId} with main agent ${agent.id} (monitor: ${monitorId})`,
     );
 
-    // Build prompt with callback injection
-    const windowSnapshot = this.ctx.windowState.listWindows();
-    const openWindowsContext = this.ctx.contextAssembly.formatOpenWindows(
-      windowSnapshot.map((w) => w.id),
-    );
-    const fp = this.ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
-    const reloadPrefix = this.ctx.reloadPolicy.formatReloadOptions(
-      this.ctx.reloadPolicy.findMatches(fp, 3),
-    );
+    const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const mainContext = this.ctx.contextAssembly.buildMainPrompt(task.content, {
       interactions: task.interactions,
       openWindows: openWindowsContext,
@@ -141,28 +115,22 @@ export class MainTaskProcessor {
     const resumeSessionId = this.ctx.savedThreadIds?.[canonicalMain];
     delete this.ctx.savedThreadIds?.[canonicalMain];
 
-    await agent.session.handleMessage(mainContext.prompt, {
-      role: agent.currentRole!,
+    await runAgentTurn(this.ctx, {
+      agent,
+      role: mainRole,
       source: 'main',
-      interactions: task.interactions,
-      messageId: task.messageId,
+      task,
+      prompt: mainContext.prompt,
+      fp,
       canonicalAgent: canonicalMain,
       resumeSessionId,
       monitorId,
       allowedTools: this.ctx.providerType === 'codex' ? undefined : getDeveloperAllowedTools(),
-      onContextMessage: (role, content) => {
-        if (role === 'assistant') {
-          this.ctx.contextAssembly.appendAssistantMessage(this.ctx.contextTape, content, 'main');
-        }
+      onFinally: () => {
+        agent.session.setOutputCallback(null);
       },
     });
 
-    // Record actions for future cache hits
-    const recordedActions = agent.session.getRecordedActions();
-    this.ctx.reloadPolicy.maybeRecord(task, fp, recordedActions);
-
-    agent.session.setOutputCallback(null);
-    agent.currentRole = null;
     await this.processMainQueue(monitorId);
   }
 
@@ -173,68 +141,36 @@ export class MainTaskProcessor {
   async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = task.monitorId ?? 'monitor-0';
     const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
-    agent.currentRole = ephemeralRole;
-    agent.lastUsed = Date.now();
 
-    // Set output tracking callback for budget policy with output budget enforcement
-    agent.session.setOutputCallback((bytes) => {
-      this.ctx.budgetPolicy.recordOutput(monitorId, bytes);
-      if (!this.ctx.budgetPolicy.checkOutputBudget(monitorId)) {
-        console.warn(
-          `[ContextPool] Monitor ${monitorId} exceeded output budget — interrupting ephemeral agent`,
-        );
-        agent.session.interrupt().catch((err) => {
-          console.error(`[ContextPool] Failed to interrupt ephemeral agent for ${monitorId}:`, err);
-        });
-      }
-    });
-
-    await this.ctx.sendEvent({
-      type: ServerEventType.MESSAGE_ACCEPTED,
-      messageId: task.messageId,
-      agentId: ephemeralRole,
-    });
+    agent.session.setOutputCallback(
+      createBudgetOutputCallback(this.ctx, agent, monitorId, 'ephemeral agent'),
+    );
 
     console.log(
       `[ContextPool] Processing main task ${task.messageId} with ephemeral agent ${agent.id}`,
     );
 
-    // Ephemeral agents get open windows + reload options + content, but NO callback prefix and NO conversation history
-    const windowSnapshot = this.ctx.windowState.listWindows();
-    const openWindowsContext = this.ctx.contextAssembly.formatOpenWindows(
-      windowSnapshot.map((w) => w.id),
-    );
-    const fp = this.ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
-    const reloadPrefix = this.ctx.reloadPolicy.formatReloadOptions(
-      this.ctx.reloadPolicy.findMatches(fp, 3),
-    );
+    const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const prompt = openWindowsContext + reloadPrefix + task.content;
-
-    // Record user message to tape
     this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, 'main');
 
     try {
-      await agent.session.handleMessage(prompt, {
+      await runAgentTurn(this.ctx, {
+        agent,
         role: ephemeralRole,
         source: 'main',
-        interactions: task.interactions,
-        messageId: task.messageId,
+        task,
+        prompt,
+        fp,
         monitorId,
-        onContextMessage: (role, content) => {
-          if (role === 'assistant') {
-            this.ctx.contextAssembly.appendAssistantMessage(this.ctx.contextTape, content, 'main');
-          }
+        onAfterRun: (recordedActions) => {
+          this.ctx.timeline.pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
+        },
+        onFinally: () => {
+          agent.session.setOutputCallback(null);
         },
       });
-
-      // Record actions for cache + push callback
-      const recordedActions = agent.session.getRecordedActions();
-      this.ctx.reloadPolicy.maybeRecord(task, fp, recordedActions);
-
-      this.ctx.timeline.pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
     } finally {
-      agent.session.setOutputCallback(null);
-      agent.currentRole = null;
       await this.ctx.agentPool.disposeEphemeral(agent);
     }
   }

@@ -6,9 +6,9 @@
  */
 
 import { ServerEventType } from '@yaar/shared';
-import type { ContextSource } from './context.js';
-import type { PoolContext, Task } from './pool-context.js';
+import type { PoolContext, Task } from './pool-types.js';
 import { getToolNames } from '../mcp/server.js';
+import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 
 export class WindowTaskProcessor {
   constructor(private readonly ctx: PoolContext) {}
@@ -63,38 +63,12 @@ export class WindowTaskProcessor {
         return;
       }
 
-      agent.currentRole = agentRole;
-      agent.lastUsed = Date.now();
-
       console.log(
         `[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`,
       );
 
-      await this.ctx.sharedLogger?.registerAgent(
-        agentRole,
-        `main-${task.monitorId ?? 'monitor-0'}`,
-        windowId,
-      );
-      await this.sendWindowStatus(windowId, agentRole, 'assigned');
-
-      await this.ctx.sendEvent({
-        type: ServerEventType.MESSAGE_ACCEPTED,
-        messageId: task.messageId,
-        agentId: agentRole,
-      });
-
-      await this.sendWindowStatus(windowId, agentRole, 'active');
-
-      // Compute fingerprint and check for reload matches
-      const windowSnapshot = this.ctx.windowState.listWindows();
-      const fp = this.ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
-      const reloadPrefix = this.ctx.reloadPolicy.formatReloadOptions(
-        this.ctx.reloadPolicy.findMatches(fp, 3),
-      );
-      const openWindowsContext = this.ctx.contextAssembly.formatOpenWindows(
-        windowSnapshot.map((w) => w.id),
-      );
-      const source: ContextSource = { window: windowId };
+      const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
+      const source = { window: windowId } as const;
 
       // Record user message immediately
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
@@ -107,7 +81,6 @@ export class WindowTaskProcessor {
 
       let prompt: string;
       if (!resumeSessionId && agent.session.getRawSessionId() === null) {
-        // First interaction: include recent main conversation context
         const recentContext = this.ctx.contextAssembly.buildWindowInitialContext(
           this.ctx.contextTape,
         );
@@ -118,48 +91,53 @@ export class WindowTaskProcessor {
             reloadPrefix,
           });
       } else {
-        // Subsequent interaction: session continuity, no extra context
         prompt = this.ctx.contextAssembly.buildWindowPrompt(task.content, {
           openWindows: openWindowsContext,
           reloadPrefix,
         });
       }
 
-      await agent.session.handleMessage(prompt, {
+      await runAgentTurn(this.ctx, {
+        agent,
         role: agentRole,
         source,
-        interactions: task.interactions,
-        messageId: task.messageId,
-        monitorId: task.monitorId,
+        task,
+        prompt,
+        fp,
+        windowId,
         canonicalAgent: canonicalWindow,
         resumeSessionId,
-        allowedTools: getToolNames(), // Excludes Task — window agents must not spawn subagents
-        onContextMessage: (role, content) => {
-          if (role === 'assistant') {
-            this.ctx.contextAssembly.appendAssistantMessage(this.ctx.contextTape, content, source);
+        monitorId: task.monitorId,
+        allowedTools: getToolNames(),
+        onBeforeRun: async () => {
+          await this.ctx.sharedLogger?.registerAgent(
+            agentRole,
+            `main-${task.monitorId ?? 'monitor-0'}`,
+            windowId,
+          );
+          await this.sendWindowStatus(windowId, agentRole, 'assigned');
+          await this.sendWindowStatus(windowId, agentRole, 'active');
+        },
+        onAfterRun: async (recordedActions) => {
+          for (const action of recordedActions) {
+            if (action.type === 'window.create') {
+              this.ctx.windowConnectionPolicy.connectWindow(windowId, action.windowId);
+              console.log(
+                `[ContextPool] Connected child window ${action.windowId} to parent ${windowId} (group: ${this.ctx.windowConnectionPolicy.getGroupId(windowId)})`,
+              );
+            }
           }
+          this.ctx.timeline.pushAI(
+            agentRole,
+            task.content.slice(0, 100),
+            recordedActions,
+            windowId,
+          );
+        },
+        onFinally: async () => {
+          await this.sendWindowStatus(windowId, agentRole, 'released');
         },
       });
-
-      // Record actions for future cache hits
-      const recordedActions = agent.session.getRecordedActions();
-      this.ctx.reloadPolicy.maybeRecord(task, fp, recordedActions, windowId);
-
-      // Connect any child windows created by this window agent
-      for (const action of recordedActions) {
-        if (action.type === 'window.create') {
-          this.ctx.windowConnectionPolicy.connectWindow(windowId, action.windowId);
-          console.log(
-            `[ContextPool] Connected child window ${action.windowId} to parent ${windowId} (group: ${this.ctx.windowConnectionPolicy.getGroupId(windowId)})`,
-          );
-        }
-      }
-
-      // Push to timeline so main agent knows what happened
-      this.ctx.timeline.pushAI(agentRole, task.content.slice(0, 100), recordedActions, windowId);
-
-      agent.currentRole = null;
-      await this.sendWindowStatus(windowId, agentRole, 'released');
     } finally {
       this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
       if (!isParallel) await this.processWindowQueue(processingKey);

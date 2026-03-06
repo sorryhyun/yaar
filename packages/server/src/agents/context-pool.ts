@@ -34,10 +34,10 @@ import {
 } from './context-pool-policies/index.js';
 import { MainTaskProcessor } from './main-task-processor.js';
 import { WindowTaskProcessor } from './window-task-processor.js';
-import type { PoolContext, Task } from './pool-context.js';
+import type { PoolContext, Task } from './pool-types.js';
 
 // Re-export Task for barrel compatibility
-export type { Task } from './pool-context.js';
+export type { Task } from './pool-types.js';
 
 const MAX_QUEUE_SIZE = 10;
 
