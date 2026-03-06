@@ -69,7 +69,7 @@ Monitors enable parallel, independent AI workflows. A user can run a long backgr
 
 ### Identity
 
-Monitors use IDs like `monitor-0`, `monitor-1`, etc. The default monitor is always `monitor-0` ("Desktop 1"). Monitors form the first segment of window URIs — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
+Monitors use numeric IDs like `0`, `1`, etc. The default monitor is always `0` ("Desktop 1"). Window URIs use the `yaar://monitors/{id}/{windowId}` format — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
 
 ### Frontend
 
@@ -77,7 +77,7 @@ Monitors are managed in `monitorSlice.ts`:
 
 ```typescript
 interface Monitor {
-  id: string;        // "monitor-0"
+  id: string;        // "0"
   label: string;     // "Desktop 1"
   createdAt: number;
 }
@@ -110,7 +110,7 @@ When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen befo
 
 ## Window
 
-A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
+A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://monitors/{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
 
 ### Structure
 

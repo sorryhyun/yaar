@@ -233,12 +233,12 @@ export class LiveSession {
         } else if (hook.action.type === 'os_action') {
           const action = hook.action.payload as OSAction;
           if (action.type.startsWith('window.')) {
-            this.windowState.handleAction(action, 'monitor-0');
+            this.windowState.handleAction(action, '0');
           }
           this.broadcast({
             type: ServerEventType.ACTIONS,
             actions: [action],
-            monitorId: 'monitor-0',
+            monitorId: '0',
           });
         }
       }
@@ -310,9 +310,9 @@ export class LiveSession {
 
     switch (event.type) {
       case ClientEventType.USER_MESSAGE: {
-        const monitorId = event.monitorId ?? 'monitor-0';
+        const monitorId = event.monitorId ?? '0';
         // Auto-create monitor agent if needed (max 4 monitors)
-        if (monitorId !== 'monitor-0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
+        if (monitorId !== '0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
           if (this.pool.getMainAgentCount() >= 4) {
             console.warn(
               `[LiveSession ${this.sessionId}] Monitor limit reached (4), ignoring ${monitorId}`,

@@ -11,7 +11,7 @@ export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
   activeMonitorId: DEFAULT_MONITOR_ID,
 
   createMonitor: () => {
-    const id = `monitor-${monitorCounter++}`;
+    const id = `${monitorCounter++}`;
     const label = `Monitor ${monitorCounter}`;
     set((state) => {
       if (state.monitors.length >= MAX_MONITORS) return;
@@ -29,7 +29,7 @@ export const createMonitorSlice: SliceCreator<MonitorSlice> = (set, _get) => ({
       // Close windows belonging to this monitor
       const store = state as DesktopStore;
       for (const [windowId, win] of Object.entries(store.windows)) {
-        if ((win.monitorId ?? 'monitor-0') === id) {
+        if ((win.monitorId ?? DEFAULT_MONITOR_ID) === id) {
           delete store.windows[windowId];
           delete store.queuedActions[windowId];
           store.zOrder = store.zOrder.filter((wid) => wid !== windowId);

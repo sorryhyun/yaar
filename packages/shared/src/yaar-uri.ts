@@ -1,5 +1,5 @@
 /**
- * YAAR URI scheme — unified addressing for apps, storage, sandbox, and window resources.
+ * YAAR URI scheme — unified addressing for apps, storage, sandbox, monitors, and window resources.
  *
  * Format: yaar://{authority}/{path}
  *
@@ -14,17 +14,17 @@
  *   yaar://sandbox/new/{path}          → new sandbox (write/edit only)
  *
  * Window addressing:
- *   yaar://{monitorId}/{windowId}      → window on a monitor
+ *   yaar://monitors/{monitorId}/{windowId}      → window on a monitor
  */
 
-export type YaarAuthority = 'apps' | 'storage' | 'sandbox';
+export type YaarAuthority = 'apps' | 'storage' | 'sandbox' | 'monitors';
 
 export interface ParsedYaarUri {
   authority: YaarAuthority;
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox)\/(.*)$/;
+const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -61,6 +61,9 @@ export function resolveContentUri(uri: string): string | null {
       return `/api/storage/${parsed.path}`;
     case 'sandbox':
       return `/api/sandbox/${parsed.path}`;
+    case 'monitors':
+      // Monitor authority has no content resolution — falls through to window parser
+      return null;
   }
 }
 
@@ -132,7 +135,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
       if (!SANDBOX_ID_RE.test(first)) return null;
       return { authority: 'sandbox', sandboxId: first, path: rest };
     }
-    return null; // apps authority not a file URI
+    return null; // apps/monitors authority not a file URI
   }
 
   // Legacy: storage://{path}
@@ -230,7 +233,7 @@ export interface ParsedWindowKey {
 
 /**
  * Build a scoped window key from monitorId and windowId.
- *   buildWindowKey('monitor-0', 'win-storage') → 'monitor-0/win-storage'
+ *   buildWindowKey('0', 'win-storage') → '0/win-storage'
  */
 export function buildWindowKey(monitorId: string, windowId: string): string {
   return `${monitorId}/${windowId}`;
@@ -238,7 +241,7 @@ export function buildWindowKey(monitorId: string, windowId: string): string {
 
 /**
  * Parse a scoped window key into monitorId and windowId.
- *   parseWindowKey('monitor-0/win-storage') → { monitorId: 'monitor-0', windowId: 'win-storage' }
+ *   parseWindowKey('0/win-storage') → { monitorId: '0', windowId: 'win-storage' }
  */
 export function parseWindowKey(key: string): ParsedWindowKey | null {
   const slashIdx = key.indexOf('/');
@@ -253,10 +256,10 @@ export function parseWindowKey(key: string): ParsedWindowKey | null {
 
 /**
  * Build a yaar:// window URI from monitor and window IDs.
- *   buildWindowUri('monitor-0', 'win-storage') → 'yaar://monitor-0/win-storage'
+ *   buildWindowUri('0', 'win-storage') → 'yaar://monitors/0/win-storage'
  */
 export function buildWindowUri(monitorId: string, windowId: string): string {
-  return `yaar://${monitorId}/${windowId}`;
+  return `yaar://monitors/${monitorId}/${windowId}`;
 }
 
 export interface ParsedWindowUri {
@@ -267,11 +270,11 @@ export interface ParsedWindowUri {
 
 /**
  * Parse a yaar:// window URI into monitor and window IDs, with optional sub-path.
- *   parseWindowUri('yaar://monitor-0/win-storage') → { monitorId: 'monitor-0', windowId: 'win-storage' }
- *   parseWindowUri('yaar://monitor-0/win-excel/state/cells') → { monitorId: 'monitor-0', windowId: 'win-excel', subPath: 'state/cells' }
+ *   parseWindowUri('yaar://monitors/0/win-storage') → { monitorId: '0', windowId: 'win-storage' }
+ *   parseWindowUri('yaar://monitors/0/win-excel/state/cells') → { monitorId: '0', windowId: 'win-excel', subPath: 'state/cells' }
  */
 export function parseWindowUri(uri: string): ParsedWindowUri | null {
-  const match = uri.match(/^yaar:\/\/(monitor-[^/]+)\/([^/]+)(?:\/(.+))?$/);
+  const match = uri.match(/^yaar:\/\/monitors\/([^/]+)\/([^/]+)(?:\/(.+))?$/);
   if (!match) return null;
   return {
     monitorId: match[1],
@@ -291,7 +294,7 @@ export interface ParsedWindowResourceUri {
 
 /**
  * Build a yaar:// window resource URI.
- *   buildWindowResourceUri('monitor-0', 'win-excel', 'state', 'cells') → 'yaar://monitor-0/win-excel/state/cells'
+ *   buildWindowResourceUri('0', 'win-excel', 'state', 'cells') → 'yaar://monitors/0/win-excel/state/cells'
  */
 export function buildWindowResourceUri(
   monitorId: string,
@@ -299,13 +302,13 @@ export function buildWindowResourceUri(
   resourceType: 'state' | 'commands',
   key: string,
 ): string {
-  return `yaar://${monitorId}/${windowId}/${resourceType}/${key}`;
+  return `yaar://monitors/${monitorId}/${windowId}/${resourceType}/${key}`;
 }
 
 /**
  * Parse a yaar:// window resource URI into its components.
- *   parseWindowResourceUri('yaar://monitor-0/win-excel/state/cells')
- *     → { monitorId: 'monitor-0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
+ *   parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')
+ *     → { monitorId: '0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
  */
 export function parseWindowResourceUri(uri: string): ParsedWindowResourceUri | null {
   const parsed = parseWindowUri(uri);

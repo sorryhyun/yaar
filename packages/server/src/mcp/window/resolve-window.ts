@@ -6,14 +6,14 @@
 
 import { parseWindowUri, parseYaarUri } from '@yaar/shared';
 
-const MONITOR_PREFIX_RE = /^monitor-[^/]+\//;
+const MONITOR_PREFIX_RE = /^\d+\//;
 
 /**
  * Resolve a windowId from a uri string.
- * - `yaar://monitor-0/win-id` → `win-id`
+ * - `yaar://monitors/0/win-id` → `win-id`
  * - `yaar://apps/word-lite`   → `word-lite`  (content URI → use app ID)
  * - `yaar://storage/doc.md`   → `doc.md`     (content URI → use path)
- * - `monitor-0/win-id`        → `win-id`
+ * - `0/win-id`                → `win-id`
  * - `win-id`                  → `win-id`
  */
 export function resolveWindowId(uri: string): string {

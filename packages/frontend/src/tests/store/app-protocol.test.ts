@@ -7,7 +7,7 @@ import { handleAppProtocolRequest, useDesktopStore } from '@/store/desktop';
 import { toWindowKey } from '@/store/helpers';
 import type { AppProtocolRequest } from '@yaar/shared';
 
-const MONITOR_ID = 'monitor-0';
+const MONITOR_ID = '0';
 
 function resetStore() {
   useDesktopStore.setState({

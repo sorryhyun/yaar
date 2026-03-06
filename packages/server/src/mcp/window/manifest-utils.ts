@@ -7,7 +7,7 @@ import { parseWindowKey, buildWindowResourceUri } from '@yaar/shared';
 
 /**
  * Add `uri` fields to each state key and command in a manifest response.
- * `windowKey` is the internal scoped key (e.g., "monitor-0/win-excel").
+ * `windowKey` is the internal scoped key (e.g., "0/win-excel").
  */
 export function enrichManifestWithUris(manifest: AppManifest, windowKey: string): void {
   const parsed = parseWindowKey(windowKey);

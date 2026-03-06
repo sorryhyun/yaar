@@ -54,7 +54,7 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
   }, [history.length, streaming]);
 
   const streamingEntries = Object.values(streaming).filter(
-    (e) => (e.monitorId || 'monitor-0') === monitorId,
+    (e) => (e.monitorId || '0') === monitorId,
   );
 
   const entryClass = (type: string) => {

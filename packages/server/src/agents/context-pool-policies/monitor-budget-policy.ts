@@ -6,7 +6,7 @@
  * 2. Action rate limit — max OS actions/min per background monitor (sliding window)
  * 3. Output rate limit — max output bytes/min per background monitor (sliding window)
  *
- * The primary monitor (`monitor-0`) is never throttled.
+ * The primary monitor (`0`) is never throttled.
  */
 
 import {
@@ -15,7 +15,7 @@ import {
   MONITOR_MAX_OUTPUT_PER_MIN,
 } from '../../config.js';
 
-const PRIMARY_MONITOR = 'monitor-0';
+const PRIMARY_MONITOR = '0';
 const WINDOW_MS = 60_000; // 1-minute sliding window
 
 interface SlidingEntry {

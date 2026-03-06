@@ -87,11 +87,17 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
         apiPath,
       };
     }
+
+    case 'monitors':
+      // Monitor authority is not a content resource — handled by resolveUri via parseWindowUri
+      return null;
   }
 }
 
 /**
  * Resolve any yaar:// URI — content resources (apps, storage, sandbox) or window addresses.
+ * Note: URIs with authority `monitor` (e.g., `yaar://monitors/0/win-id`) correctly return null
+ * from `resolveContentUri` and fall through to `parseWindowUri`.
  */
 export function resolveUri(uri: string): ResolvedUri | null {
   const resource = resolveResourceUri(uri);

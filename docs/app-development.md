@@ -294,9 +294,9 @@ export function registerProtocol() {
 ### 예시: Excel Lite
 
 ```
-app_query({ uri: "yaar://monitor-0/excel-lite" })
-app_query({ uri: "yaar://monitor-0/excel-lite/state/cells" })
-app_command({ uri: "yaar://monitor-0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
+app_query({ uri: "yaar://monitors/0/excel-lite" })
+app_query({ uri: "yaar://monitors/0/excel-lite/state/cells" })
+app_command({ uri: "yaar://monitors/0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
 ## 자격 증명 관리
@@ -612,9 +612,9 @@ The agent first calls `app_query` with a bare window URI to discover capabilitie
 ### Example: Excel Lite
 
 ```
-app_query({ uri: "yaar://monitor-0/excel-lite" })
-app_query({ uri: "yaar://monitor-0/excel-lite/state/cells" })
-app_command({ uri: "yaar://monitor-0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
+app_query({ uri: "yaar://monitors/0/excel-lite" })
+app_query({ uri: "yaar://monitors/0/excel-lite/state/cells" })
+app_command({ uri: "yaar://monitors/0/excel-lite/commands/setCells", params: { cells: { "A1": "Hello" } } })
 ```
 
 ## Credential Management

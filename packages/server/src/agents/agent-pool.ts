@@ -101,7 +101,7 @@ export class AgentPool {
    * Create a main agent for the given monitor with the given provider.
    */
   async createMainAgent(
-    monitorId = 'monitor-0',
+    monitorId = '0',
     preWarmedProvider?: AITransport,
   ): Promise<PooledAgent | null> {
     const agent = await this.createAgentCore(preWarmedProvider);
@@ -146,14 +146,14 @@ export class AgentPool {
   /**
    * Get the main agent for a monitor.
    */
-  getMainAgent(monitorId = 'monitor-0'): PooledAgent | null {
+  getMainAgent(monitorId = '0'): PooledAgent | null {
     return this.mainAgents.get(monitorId) ?? null;
   }
 
   /**
    * Check if the main agent for a monitor is currently busy.
    */
-  isMainAgentBusy(monitorId = 'monitor-0'): boolean {
+  isMainAgentBusy(monitorId = '0'): boolean {
     const agent = this.mainAgents.get(monitorId);
     if (!agent) return true; // no main agent = effectively busy
     return agent.session.isRunning() || agent.currentRole !== null;
@@ -162,7 +162,7 @@ export class AgentPool {
   /**
    * Get the main agent's session for a monitor.
    */
-  getMainAgentSession(monitorId = 'monitor-0'): AgentSession | null {
+  getMainAgentSession(monitorId = '0'): AgentSession | null {
     return this.mainAgents.get(monitorId)?.session ?? null;
   }
 
@@ -288,7 +288,7 @@ export class AgentPool {
    * Try to steer the main agent's active turn with additional input.
    * Returns true if steering succeeded, false otherwise.
    */
-  async steerMainAgent(monitorId = 'monitor-0', content: string): Promise<boolean> {
+  async steerMainAgent(monitorId = '0', content: string): Promise<boolean> {
     const agent = this.mainAgents.get(monitorId);
     if (!agent || !agent.session.isRunning()) return false;
     return agent.session.steer(content);

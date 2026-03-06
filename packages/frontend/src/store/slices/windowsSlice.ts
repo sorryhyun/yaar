@@ -2,7 +2,7 @@
  * Windows slice - manages windows, z-order, and focus.
  * This is the most complex slice with cross-slice dependencies.
  *
- * Window store keys are scoped by monitorId: "monitor-0/win-storage".
+ * Window store keys are scoped by monitorId: "0/win-storage".
  * This prevents collisions when multiple monitors create windows with the same ID.
  */
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types';

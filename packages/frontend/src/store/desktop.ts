@@ -21,7 +21,7 @@ import type {
   DesktopUpdateShortcutAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
-import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
+import { WINDOW_ID_DATA_ATTR, DEFAULT_MONITOR_ID } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 // Import all slice creators
 import {
@@ -209,7 +209,7 @@ function handleAppProtocolRequest(
   request: AppProtocolRequest,
 ) {
   const state = useDesktopStore.getState();
-  const monitorId = state.activeMonitorId ?? 'monitor-0';
+  const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
   const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
 
   const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
@@ -397,10 +397,10 @@ function initWindowsSdkHandler() {
     }
 
     // yaar:window-read
-    // Normalize: agents often pass yaar:// URIs (e.g. yaar://monitor-0/win-id)
+    // Normalize: agents often pass yaar:// URIs (e.g. yaar://monitors/0/win-id)
     // but the store uses plain window IDs.
     const rawWindowId: string = e.data.windowId ?? '';
-    const uriMatch = rawWindowId.match(/^yaar:\/\/monitor-[^/]+\/([^/]+)/);
+    const uriMatch = rawWindowId.match(/^yaar:\/\/monitor\/[^/]+\/([^/]+)/);
     const targetWindowId = uriMatch ? uriMatch[1] : rawWindowId;
     const includeImage = e.data.includeImage === true;
 
@@ -413,7 +413,7 @@ function initWindowsSdkHandler() {
     }
 
     const state = useDesktopStore.getState();
-    const monitorId = state.activeMonitorId ?? 'monitor-0';
+    const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
     const key = state.windows[targetWindowId]
       ? targetWindowId
       : toWindowKey(monitorId, targetWindowId);
@@ -549,7 +549,7 @@ export const useDesktopStore = create<DesktopStore>()(
           // Resolve scoped key: server sends raw windowId, store uses monitorId-scoped keys
           const state = useDesktopStore.getState();
           const actionMonitorId = (action as { monitorId?: string }).monitorId;
-          const monitorId = actionMonitorId ?? state.activeMonitorId ?? 'monitor-0';
+          const monitorId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
           const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
           captureWindow(key, requestId);
         }
@@ -701,8 +701,8 @@ export const useDesktopStore = create<DesktopStore>()(
         state.cliMode = false;
         state.cliHistory = {};
         state.cliStreaming = {};
-        state.monitors = [{ id: 'monitor-0', label: 'Monitor 1', createdAt: Date.now() }];
-        state.activeMonitorId = 'monitor-0';
+        state.monitors = [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }];
+        state.activeMonitorId = DEFAULT_MONITOR_ID;
       });
     },
   })),

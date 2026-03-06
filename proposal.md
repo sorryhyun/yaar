@@ -104,6 +104,219 @@ This matters for:
 
 ---
 
+## Current URI Landscape
+
+Before proposing changes, here is what exists in the codebase today.
+
+### Central parser: `packages/shared/src/yaar-uri.ts`
+
+All URI handling flows through this single module. It exports ~15 functions used by both server and frontend.
+
+### Existing URI families
+
+| Pattern | Authority | Example | Parser |
+|---------|-----------|---------|--------|
+| Content | `apps` | `yaar://apps/word-lite` | `parseYaarUri()` — regex: `/^yaar:\/\/(apps\|storage\|sandbox)\/(.*)$/` |
+| Content | `storage` | `yaar://storage/docs/file.txt` | same |
+| Content | `sandbox` | `yaar://sandbox/123/src/main.ts` | same |
+| Window | `monitor-{n}` | `yaar://monitors/0/win-settings` | `parseWindowUri()` — regex: `/^yaar:\/\/(monitor-[^/]+)\/([^/]+)(?:\/(.+))?$/` |
+| Window resource | `monitor-{n}` | `yaar://monitors/0/win-excel/state/cells` | `parseWindowResourceUri()` |
+| Window resource | `monitor-{n}` | `yaar://monitors/0/win-excel/commands/save` | same |
+
+### How parsing works today
+
+Two independent regex branches, tried in sequence:
+
+1. **Content URIs** — authority must be `apps`, `storage`, or `sandbox`
+2. **Window URIs** — authority must match `monitor-{something}`
+
+There is no overlap today because `monitor-*` never matches `apps|storage|sandbox`. But the two branches occupy the **same structural position** in the URI (the authority slot after `yaar://`).
+
+### Key type definitions
+
+```typescript
+type YaarAuthority = 'apps' | 'storage' | 'sandbox';  // content only
+
+interface ParsedWindowUri {
+  monitorId: string;   // e.g. "0"
+  windowId: string;    // e.g. "win-settings"
+  subPath?: string;    // e.g. "state/cells"
+}
+```
+
+### The collision problem
+
+The proposal wants to add new top-level namespaces: `browser`, `config`, `agents`, `user`, `sessions`, `monitors`. These would occupy the same authority slot as both content URIs and monitor IDs:
+
+```
+yaar://storage/file.txt       ← content namespace
+yaar://monitors/0/win-settings ← monitor instance ID
+yaar://browser/current        ← proposed new namespace
+yaar://config/settings        ← proposed new namespace
+```
+
+All four use `yaar://{something}/...` but `{something}` means three different things:
+- a content type (`storage`)
+- a monitor instance (`monitor-0`)
+- a system namespace (`browser`)
+
+Today this works by accident — `monitor-\d+` is structurally distinct from `apps|storage|sandbox`. But adding more namespaces makes the authority slot crowded and the resolution logic fragile.
+
+---
+
+## Options for a Clean URI Structure
+
+### Option A: Formalize the status quo
+
+Keep `monitor-{n}` as a magic prefix. All other top-level names are namespaces.
+
+```
+yaar://apps/word-lite                    (unchanged)
+yaar://storage/docs/file.txt             (unchanged)
+yaar://sandbox/123/src/main.ts           (unchanged)
+yaar://monitors/0/                        (monitor resource — new)
+yaar://monitors/0/win-settings            (unchanged)
+yaar://monitors/0/win-excel/state/cells   (unchanged)
+yaar://browser/current                   (new)
+yaar://config/settings                   (new)
+yaar://agents/main/0             (new)
+yaar://user/notifications                (new)
+```
+
+Resolution rule:
+```
+if authority matches /^monitor-\d+$/  → monitor/window handler
+else if authority in reserved set     → namespace handler
+else                                  → error
+```
+
+**Pros:**
+- Zero migration. Every existing URI stays the same.
+- Simple to implement — one regex check at the top of the resolver.
+- Token-efficient. Window URIs (the most common) stay short.
+
+**Cons:**
+- `monitor-\d+` is a magic pattern baked into the URI scheme forever.
+- Monitor IDs can never be user-named (must stay `monitor-{n}`).
+- The reserved namespace list must be maintained and enforced.
+- Mixes instance IDs and namespaces in the same position — conceptually messy.
+
+### Option B: Namespace everything — `yaar://monitors/{id}/...`
+
+Move monitors under a proper namespace. All authorities become namespaces.
+
+```
+yaar://apps/word-lite                         (unchanged)
+yaar://storage/docs/file.txt                  (unchanged)
+yaar://sandbox/123/src/main.ts                (unchanged)
+yaar://monitors/0/                            (monitor resource — new)
+yaar://monitors/0/win-settings                (migrated from yaar://monitors/0/win-settings)
+yaar://monitors/0/win-excel/state/cells       (migrated)
+yaar://monitors/0/win-excel/commands/save     (migrated)
+yaar://browser/current                        (new)
+yaar://config/settings                        (new)
+yaar://agents/main/0                          (new, monitor ref is just "0")
+yaar://user/notifications                     (new)
+```
+
+Resolution rule:
+```
+match authority to namespace handler (apps, storage, sandbox, monitors, browser, config, agents, user)
+```
+
+**Pros:**
+- Fully uniform — every top-level segment is a namespace, no magic patterns.
+- Monitor IDs could be user-named in the future (just another path segment).
+- Easier to extend — new namespaces just register, no collision risk.
+- Clean parsing: `authority` → handler, remaining path → handler-specific.
+
+**Cons:**
+- **Breaking change.** Every window URI in the codebase changes. Affected locations:
+  - `parseWindowUri()` regex and all callers
+  - `buildWindowUri()`, `buildWindowKey()`, `parseWindowKey()`
+  - `parseWindowResourceUri()`, `buildWindowResourceUri()`
+  - Frontend store keys (`monitor-0/win-settings` → `monitors/0/win-settings` or `0/win-settings`)
+  - `resolve-window.ts` fallback patterns
+  - `app-protocol.ts` bare resource regex
+  - All tests in `yaar-uri.test.ts`
+  - Agent prompts that reference window URIs
+- Window URIs get slightly longer (`yaar://monitors/0/win-x` vs `yaar://monitors/0/win-x`).
+- The `monitor-0` → `0` change in the ID itself may propagate beyond URIs (store keys, agent scoping, etc.).
+
+### Option C: Two-scheme split
+
+Keep `yaar://` for content and system resources. Introduce `yaar://monitors/` for monitor-scoped things, but keep `monitor-0` as the instance ID format internally.
+
+```
+yaar://apps/word-lite                         (unchanged)
+yaar://storage/docs/file.txt                  (unchanged)
+yaar://sandbox/123/src/main.ts                (unchanged)
+yaar://monitors/monitor-0/                    (monitor resource — new)
+yaar://monitors/monitor-0/win-settings        (migrated)
+yaar://monitors/monitor-0/win-excel/state/cells (migrated)
+yaar://browser/current                        (new)
+yaar://config/settings                        (new)
+yaar://agents/main/0                  (new)
+```
+
+This is Option B but keeping `monitor-0` as the full ID (not shortening to `0`).
+
+**Pros:**
+- Uniform namespace structure like Option B.
+- Monitor IDs stay `monitor-0` everywhere — no ID format change, just URI prefix change.
+- Limits blast radius: only URI construction/parsing changes, not the monitor ID system itself.
+
+**Cons:**
+- Still a breaking change for all window URIs (same migration surface as Option B).
+- Slightly more verbose: `yaar://monitors/monitor-0/win-x` (the word "monitor" appears twice).
+- The redundancy (`monitors/monitor-0`) looks awkward.
+
+### Option D: Namespace new resources only, alias monitors
+
+Keep existing URIs exactly as-is. New system resources get their own namespaces. Add `yaar://monitors/` as a **read-only alias** that lists monitors but doesn't own window addressing.
+
+```
+yaar://apps/word-lite                         (unchanged)
+yaar://storage/docs/file.txt                  (unchanged)
+yaar://sandbox/123/src/main.ts                (unchanged)
+yaar://monitors/0/win-settings                 (unchanged — canonical window URI)
+yaar://monitors/0/                             (monitor resource — new, same pattern)
+yaar://monitors/                              (list endpoint only — new)
+yaar://browser/current                        (new)
+yaar://config/settings                        (new)
+yaar://agents/main/0                  (new)
+```
+
+Resolution rule:
+```
+if authority matches /^monitor-\d+$/  → monitor/window handler
+else if authority in namespace set    → namespace handler
+```
+
+**Pros:**
+- Zero migration for existing URIs.
+- New namespaces are cleanly separated.
+- `yaar://monitors/` exists for listing without owning the window URI space.
+- Pragmatic — ships fast, defers the hard rename.
+
+**Cons:**
+- Two ways to reference monitors: `yaar://monitors/0/` and `yaar://monitors/` (list only). Could confuse.
+- Still relies on the `monitor-\d+` magic pattern.
+- Doesn't solve the long-term namespace purity question — just defers it.
+
+---
+
+## Decision
+
+**Option B was chosen and implemented.** Monitor IDs are now plain numeric strings (`'0'`, `'1'`, etc.) and window URIs use the `yaar://monitors/{id}/` namespace (plural, consistent with `apps`, `sessions`, `agents`).
+
+**Before:** `yaar://monitor-0/win-settings` (monitor ID: `monitor-0`)
+**After:** `yaar://monitors/0/win-settings` (monitor ID: `0`)
+
+All authorities are now uniform namespaces: `apps`, `storage`, `sandbox`, `monitors`. The `YaarAuthority` type and `YAAR_RE` regex include all four. `DEFAULT_MONITOR_ID = '0'` is exported from `@yaar/shared`.
+
+---
+
 ## Proposed URI Space
 
 ## Session Root
@@ -128,8 +341,8 @@ Example:
 {
   "kind": "session",
   "sessionId": "ses-1707000000000-abc1234",
-  "activeMonitorId": "monitor-0",
-  "monitors": ["monitor-0", "monitor-1"],
+  "activeMonitorId": "0",
+  "monitors": ["0", "1"],
   "windowCount": 7,
   "browser": { "open": true, "uri": "yaar://browser/current" }
 }
@@ -158,8 +371,8 @@ This is the main addition suggested here.
 
 Examples:
 
-- `yaar://monitor-0/`
-- `yaar://monitor-1/`
+- `yaar://monitors/0/`
+- `yaar://monitors/1/`
 
 Suggested `read()` result:
 
@@ -186,27 +399,27 @@ Example:
     "pending": 2
   },
   "windows": [
-    "yaar://monitor-1/win-browser",
-    "yaar://monitor-1/win-report"
+    "yaar://monitors/1/win-browser",
+    "yaar://monitors/1/win-report"
   ]
 }
 ```
 
 Suggested child resources:
 
-- `yaar://monitor-0/windows`
-- `yaar://monitor-0/agents/main`
-- `yaar://monitor-0/queue`
-- `yaar://monitor-0/budget`
-- `yaar://monitor-0/history`
+- `yaar://monitors/0/windows`
+- `yaar://monitors/0/agents/main`
+- `yaar://monitors/0/queue`
+- `yaar://monitors/0/budget`
+- `yaar://monitors/0/history`
 
 ### Window compatibility
 
 Window URIs remain:
 
-- `yaar://monitor-0/win-settings`
-- `yaar://monitor-0/win-excel/state/cells`
-- `yaar://monitor-0/win-excel/commands/save`
+- `yaar://monitors/0/win-settings`
+- `yaar://monitors/0/win-excel/state/cells`
+- `yaar://monitors/0/win-excel/commands/save`
 
 Parsing rule:
 
@@ -297,7 +510,7 @@ Suggested resources:
 
 - `yaar://agents`
 - `yaar://agents/main`
-- `yaar://agents/main/monitor-0`
+- `yaar://agents/main/0`
 - `yaar://agents/window/win-excel`
 - `yaar://agents/tasks`
 - `yaar://agents/{agentId}`
@@ -321,8 +534,8 @@ Recommended restriction:
 Examples:
 
 ```ts
-read("yaar://agents/main/monitor-0")
-invoke("yaar://agents/main/monitor-0/interrupt", {})
+read("yaar://agents/main/0")
+invoke("yaar://agents/main/0/interrupt", {})
 ```
 
 This keeps agent lifecycle visible without turning internals into mutable blobs.
@@ -395,20 +608,20 @@ Current YAAR behavior scopes most agent actions to the current monitor. That is 
 
 URI expansion can still make cross-monitor operations legible:
 
-- `yaar://monitor-1/` identifies the target monitor
-- `yaar://monitor-1/win-report` identifies a specific cross-monitor window
+- `yaar://monitors/1/` identifies the target monitor
+- `yaar://monitors/1/win-report` identifies a specific cross-monitor window
 
 But cross-monitor mutation should require explicit action, for example:
 
 ```ts
-invoke("yaar://monitor-1/focus", {})
-invoke("yaar://monitor-1/windows/create", {
+invoke("yaar://monitors/1/focus", {})
+invoke("yaar://monitors/1/windows/create", {
   windowId: "win-report",
   renderer: "markdown",
   content: "# Report"
 })
-invoke("yaar://monitor-1/windows/move-here", {
-  from: "yaar://monitor-0/win-report"
+invoke("yaar://monitors/1/windows/move-here", {
+  from: "yaar://monitors/0/win-report"
 })
 ```
 
@@ -424,7 +637,7 @@ A better fit is a manifest-first model:
 
 - `describe("yaar://")` returns the top-level resource map
 - `describe("yaar://config/settings")` returns schema and allowed verbs
-- `describe("yaar://monitor-0/")` returns child resources and monitor-specific actions
+- `describe("yaar://monitors/0/")` returns child resources and monitor-specific actions
 - `describe("yaar://browser/current")` returns supported subresources and invocations
 
 This mirrors the existing App Protocol approach:
@@ -481,8 +694,8 @@ Reserve these authorities/subtrees:
 
 Monitor IDs use the pattern `monitor-{n}` and are interpreted specially:
 
-- `yaar://monitor-0/` -> monitor resource
-- `yaar://monitor-0/win-x` -> window resource
+- `yaar://monitors/0/` -> monitor resource
+- `yaar://monitors/0/win-x` -> window resource
 
 ### Session root
 
@@ -513,13 +726,13 @@ Examples:
 
 ```ts
 read("yaar://")
-read("yaar://monitor-0/")
-list("yaar://monitor-0/windows")
+read("yaar://monitors/0/")
+list("yaar://monitors/0/windows")
 read("yaar://config/settings")
 write("yaar://config/settings", { language: "ko" })
 read("yaar://browser/current")
 invoke("yaar://browser/current/navigate", { url: "https://example.com" })
-read("yaar://agents/main/monitor-0")
+read("yaar://agents/main/0")
 ```
 
 `watch(uri)` can be deferred until there is a real need for subscriptions outside existing WS/SSE channels.

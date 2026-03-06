@@ -158,7 +158,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       wsManager.reconnectAttempts = 0;
       wsManager.notify();
 
-      const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? 'monitor-0';
+      const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? '0';
       if (wsManager.ws?.readyState === WebSocket.OPEN) {
         sendEvent(wsManager, {
           type: ClientEventType.SUBSCRIBE_MONITOR,

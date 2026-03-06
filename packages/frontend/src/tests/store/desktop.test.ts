@@ -3,8 +3,8 @@
  */
 import { useDesktopStore, selectVisibleWindows, selectWindowsInOrder } from '../../store/desktop';
 
-// Window store keys are scoped by monitorId: "monitor-0/w1"
-const key = (id: string) => `monitor-0/${id}`;
+// Window store keys are scoped by monitorId: "0/w1"
+const key = (id: string) => `0/${id}`;
 
 describe('Desktop Store', () => {
   beforeEach(() => {
@@ -184,7 +184,7 @@ describe('Desktop Store', () => {
         title: 'Storage (Monitor 0)',
         bounds: { x: 0, y: 0, w: 400, h: 300 },
         content: { renderer: 'markdown', data: '# Monitor 0' },
-        monitorId: 'monitor-0',
+        monitorId: '0',
       } as Parameters<typeof applyAction>[0]);
 
       applyAction({
@@ -193,15 +193,15 @@ describe('Desktop Store', () => {
         title: 'Storage (Monitor 1)',
         bounds: { x: 50, y: 50, w: 400, h: 300 },
         content: { renderer: 'markdown', data: '# Monitor 1' },
-        monitorId: 'monitor-1',
+        monitorId: '1',
       } as Parameters<typeof applyAction>[0]);
 
       const state = useDesktopStore.getState();
       // Both windows should exist with different scoped keys
-      expect(state.windows['monitor-0/win-storage']).toBeDefined();
-      expect(state.windows['monitor-1/win-storage']).toBeDefined();
-      expect(state.windows['monitor-0/win-storage'].title).toBe('Storage (Monitor 0)');
-      expect(state.windows['monitor-1/win-storage'].title).toBe('Storage (Monitor 1)');
+      expect(state.windows['0/win-storage']).toBeDefined();
+      expect(state.windows['1/win-storage']).toBeDefined();
+      expect(state.windows['0/win-storage'].title).toBe('Storage (Monitor 0)');
+      expect(state.windows['1/win-storage'].title).toBe('Storage (Monitor 1)');
     });
   });
 

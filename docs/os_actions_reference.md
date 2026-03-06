@@ -533,6 +533,6 @@ AI emits tool call → MCP tool creates OSAction
   → applyAction() routes to slice handler
 ```
 
-Actions are scoped by monitor. The store key format is `"monitorId/windowId"` (e.g., `"monitor-0/win-settings"`). If no `monitorId` is present in the action, it falls back to the active monitor.
+Actions are scoped by monitor. The store key format is `"monitorId/windowId"` (e.g., `"0/win-settings"`). If no `monitorId` is present in the action, it falls back to the active monitor.
 
 Multiple synchronous actions are batched into a single Immer transaction. Async actions (`window.capture`) run outside Immer.

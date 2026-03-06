@@ -100,9 +100,9 @@ describe('AgentPool limiter slot release on error', () => {
     const pool = new AgentPool('test-session' as SessionId, vi.fn());
 
     // Create three main agents on different monitors
-    await pool.createMainAgent('monitor-0');
-    await pool.createMainAgent('monitor-1');
-    await pool.createMainAgent('monitor-2');
+    await pool.createMainAgent('0');
+    await pool.createMainAgent('1');
+    await pool.createMainAgent('2');
 
     // Verify all three were created (three tryAcquire calls)
     expect(mockTryAcquire).toHaveBeenCalledTimes(3);

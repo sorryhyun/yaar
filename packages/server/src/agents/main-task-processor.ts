@@ -20,7 +20,7 @@ export class MainTaskProcessor {
    * Route a main task: to the main agent if idle, or to an ephemeral agent.
    */
   async queueMainTask(task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? 'monitor-0';
+    const monitorId = task.monitorId ?? '0';
 
     // Acquire budget slot for background monitors (blocks until available)
     await this.ctx.budgetPolicy.acquireTaskSlot(monitorId);
@@ -89,7 +89,7 @@ export class MainTaskProcessor {
    * Drains callback queue before processing.
    */
   async processMainTask(agent: PooledAgent, task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? 'monitor-0';
+    const monitorId = task.monitorId ?? '0';
     const mainRole = `main-${monitorId}-${task.messageId}`;
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
@@ -139,7 +139,7 @@ export class MainTaskProcessor {
    * Pushes a callback when done, then disposes the agent.
    */
   async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? 'monitor-0';
+    const monitorId = task.monitorId ?? '0';
     const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
 
     agent.session.setOutputCallback(
@@ -178,7 +178,7 @@ export class MainTaskProcessor {
   /**
    * Process queued main tasks when the main agent becomes available.
    */
-  async processMainQueue(monitorId = 'monitor-0'): Promise<void> {
+  async processMainQueue(monitorId = '0'): Promise<void> {
     const queue = this.ctx.getOrCreateMainQueue(monitorId);
     if (!queue.beginProcessing()) return;
     try {

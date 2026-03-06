@@ -28,7 +28,7 @@ export function registerRelayTools(server: McpServer): void {
       if (!pool) return error('Agent pool not initialized.');
 
       const agentId = getAgentId() ?? 'unknown';
-      const monitorId = getMonitorId() ?? 'monitor-0';
+      const monitorId = getMonitorId() ?? '0';
       const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const content = `<relay from="${agentId}">\n${args.message}\n</relay>`;
 

@@ -6,7 +6,7 @@
  *
  * Uses monitorId-scoped keys internally to prevent collision when
  * multiple monitors create windows with the same raw ID.
- * Key format: "monitorId/rawWindowId" (e.g., "monitor-0/win-storage").
+ * Key format: "monitorId/rawWindowId" (e.g., "0/win-storage").
  */
 
 import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
@@ -41,7 +41,7 @@ export class WindowStateRegistry {
     const exact = this.windows.get(windowId);
     if (exact) return [windowId, exact];
 
-    // 2. Scan for suffix match — e.g., looking up "win-storage" matches "monitor-0/win-storage"
+    // 2. Scan for suffix match — e.g., looking up "win-storage" matches "0/win-storage"
     const suffix = `/${windowId}`;
     for (const [key, state] of this.windows) {
       if (key.endsWith(suffix)) return [key, state];

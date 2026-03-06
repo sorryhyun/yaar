@@ -76,7 +76,7 @@ User Request
 The persistent orchestrator handling the main conversation flow per monitor. Maintains provider session continuity across messages. Has a restricted tool set focused on quick actions and delegation.
 
 - **Role**: `main-{monitorId}-{messageId}` (set per-message)
-- **Creation**: One per monitor. Primary (`monitor-0`) created at pool init with a pre-warmed provider; additional monitors auto-created on demand (max 4)
+- **Creation**: One per monitor. Primary (`0`) created at pool init with a pre-warmed provider; additional monitors auto-created on demand (max 4)
 - **Session**: Resumes the same provider session across messages for full conversation history
 - **Canonical ID**: `main-{monitorId}`
 - **Tools**: Windows, notifications, storage read/list, memory, skills, config hooks, cache replay, Task (delegation)
@@ -115,8 +115,8 @@ A temporary agent spawned by the main agent to handle delegated work. Forks the 
 
 Monitors are virtual desktops within a single session. Each has its own main agent and sequential queue.
 
-- **Primary monitor** (`monitor-0`): Always exists, never throttled
-- **Background monitors** (`monitor-1`, `monitor-2`, ...): Auto-created on demand when a `USER_MESSAGE` targets a new monitorId, up to 4 total
+- **Primary monitor** (`0`): Always exists, never throttled
+- **Background monitors** (`1`, `2`, ...): Auto-created on demand when a `USER_MESSAGE` targets a new monitorId, up to 4 total
 - **Independence**: Each monitor has its own main agent and main queue, but all monitors share the same window state, context tape, timeline, and reload cache
 - **Budget limits**: Background monitors are rate-limited by `MonitorBudgetPolicy` (concurrent tasks, actions/min, output/min). The primary monitor bypasses all limits.
 
@@ -285,7 +285,7 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
 │   │ Main Agents (persistent, one per monitor)              │  │
-│   │ - Primary (monitor-0) created at pool init             │  │
+│   │ - Primary (monitor 0) created at pool init             │  │
 │   │ - Additional monitors auto-created on demand (max 4)   │  │
 │   │ - Provider session continuity across messages          │  │
 │   │ - Recreated on pool reset                              │  │
@@ -458,7 +458,7 @@ User types "Hello"          User clicks Save in Window A
        ▼                              ▼
 ┌──────────────┐              ┌──────────────┐
 │ Main Agent   │              │ Window Agent │
-│ (monitor-0)  │              │ (group-A)    │
+│ (monitor 0)  │              │ (group-A)    │
 │              │              │              │
 │ Processing   │              │ First turn:  │
 │ "Hello" with │              │ ContextTape  │

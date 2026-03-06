@@ -3,6 +3,7 @@
  */
 import type { DesktopStore, WindowModel, WindowAgent } from './types';
 import { getRawWindowId } from './helpers';
+import { DEFAULT_MONITOR_ID } from '@/constants/layout';
 
 export const selectWindowsInOrder = (state: DesktopStore) =>
   state.zOrder.map((id) => state.windows[id]).filter(Boolean);
@@ -27,7 +28,7 @@ export const selectVisibleWindows = (state: DesktopStore): WindowModel[] => {
       w != null &&
       !w.minimized &&
       (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
   _visibleCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
   return result;
@@ -39,7 +40,7 @@ export const selectMinimizedWindows = (state: DesktopStore) =>
       w != null &&
       w.minimized &&
       (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
 export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[] =>
@@ -49,7 +50,7 @@ export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[]
       w.minimized &&
       w.content.renderer === 'iframe' &&
       (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
 let _widgetCache: {
@@ -65,7 +66,7 @@ export const selectWidgetWindows = (state: DesktopStore): WindowModel[] => {
       w != null &&
       !w.minimized &&
       w.variant === 'widget' &&
-      (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
   _widgetCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
   return result;
@@ -81,7 +82,9 @@ export const selectPanelWindows = (state: DesktopStore): WindowModel[] => {
     return _panelCache.result;
   const result = Object.values(state.windows).filter(
     (w): w is WindowModel =>
-      w != null && w.variant === 'panel' && (w.monitorId ?? 'monitor-0') === state.activeMonitorId,
+      w != null &&
+      w.variant === 'panel' &&
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
   _panelCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
   return result;

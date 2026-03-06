@@ -119,19 +119,19 @@ Verify manifest contains `setCells` command and `cells` state key.
 
 Write test data:
 ```
-app_command({ uri: "yaar://monitor-0/si-excel/commands/setCells", params: { cells: { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
+app_command({ uri: "yaar://monitors/0/si-excel/commands/setCells", params: { cells: { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
 ```
 
 Read back:
 ```
-app_query({ uri: "yaar://monitor-0/si-excel/state/cells" })
+app_query({ uri: "yaar://monitors/0/si-excel/state/cells" })
 ```
 Verify cells A1="Name", B1="Score", A2="Alice", B2="95", A3="Bob", B3="87".
 
 Test clearRange:
 ```
-app_command({ uri: "yaar://monitor-0/si-excel/commands/clearRange", params: { start: "A3", end: "B3" } })
-app_query({ uri: "yaar://monitor-0/si-excel/state/cells" })
+app_command({ uri: "yaar://monitors/0/si-excel/commands/clearRange", params: { start: "A3", end: "B3" } })
+app_query({ uri: "yaar://monitors/0/si-excel/state/cells" })
 ```
 Verify A3 and B3 are now empty/missing, but A1-B2 still intact.
 
@@ -151,11 +151,11 @@ create({ uri: "si-word", title: "Word Lite", appId: "word-lite", renderer: "ifra
 
 Wait for ready, then:
 ```
-app_command({ uri: "yaar://monitor-0/si-word/commands/setTitle", params: { title: "Self Inspection Test" } })
-app_command({ uri: "yaar://monitor-0/si-word/commands/setHtml", params: { html: "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
-app_query({ uri: "yaar://monitor-0/si-word/state/title" })   # should be "Self Inspection Test"
-app_query({ uri: "yaar://monitor-0/si-word/state/stats" })    # should have words > 0
-app_query({ uri: "yaar://monitor-0/si-word/state/text" })     # should contain "self-inspection test"
+app_command({ uri: "yaar://monitors/0/si-word/commands/setTitle", params: { title: "Self Inspection Test" } })
+app_command({ uri: "yaar://monitors/0/si-word/commands/setHtml", params: { html: "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
+app_query({ uri: "yaar://monitors/0/si-word/state/title" })   # should be "Self Inspection Test"
+app_query({ uri: "yaar://monitors/0/si-word/state/stats" })    # should have words > 0
+app_query({ uri: "yaar://monitors/0/si-word/state/text" })     # should contain "self-inspection test"
 close({ uri: "si-word" })
 ```
 
@@ -177,8 +177,8 @@ create({ uri: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer
 
 Wait for ready, then import the data you read from storage:
 ```
-app_command({ uri: "yaar://monitor-0/si-cross/commands/importWorkbook", params: { data: <parsed JSON from storage read> } })
-app_query({ uri: "yaar://monitor-0/si-cross/state/cells" })
+app_command({ uri: "yaar://monitors/0/si-cross/commands/importWorkbook", params: { data: <parsed JSON from storage read> } })
+app_query({ uri: "yaar://monitors/0/si-cross/state/cells" })
 ```
 Verify A1="Product", B2="9.99".
 
@@ -342,16 +342,16 @@ create({ uri: "si-multi-img", title: "Multi: Images", appId: "image-viewer", ren
 Wait for all 3 to be ready, then interact with each:
 
 ```
-app_command({ uri: "yaar://monitor-0/si-multi-excel/commands/setCells", params: { cells: { "A1": "Multi-app test" } } })
-app_command({ uri: "yaar://monitor-0/si-multi-word/commands/setHtml", params: { html: "<p>Multi-app test</p>" } })
-app_command({ uri: "yaar://monitor-0/si-multi-img/commands/setLayout", params: { mode: "grid", columns: 3 } })
+app_command({ uri: "yaar://monitors/0/si-multi-excel/commands/setCells", params: { cells: { "A1": "Multi-app test" } } })
+app_command({ uri: "yaar://monitors/0/si-multi-word/commands/setHtml", params: { html: "<p>Multi-app test</p>" } })
+app_command({ uri: "yaar://monitors/0/si-multi-img/commands/setLayout", params: { mode: "grid", columns: 3 } })
 ```
 
 Query each to verify:
 ```
-app_query({ uri: "yaar://monitor-0/si-multi-excel/state/cells" })    # A1 = "Multi-app test"
-app_query({ uri: "yaar://monitor-0/si-multi-word/state/text" })      # contains "Multi-app test"
-app_query({ uri: "yaar://monitor-0/si-multi-img/state/layout" })     # mode = "grid"
+app_query({ uri: "yaar://monitors/0/si-multi-excel/state/cells" })    # A1 = "Multi-app test"
+app_query({ uri: "yaar://monitors/0/si-multi-word/state/text" })      # contains "Multi-app test"
+app_query({ uri: "yaar://monitors/0/si-multi-img/state/layout" })     # mode = "grid"
 ```
 
 Close all:

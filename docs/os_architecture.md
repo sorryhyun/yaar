@@ -65,7 +65,7 @@ Three policies in `agents/context-pool-policies/` control task dispatch:
 
 **`WindowQueuePolicy`** — Per-window FIFO queues. Different windows run in parallel; within one window, tasks serialize. Like multi-core scheduling across independent subsystems.
 
-**`MonitorBudgetPolicy`** — Rate-limits background monitors (not `monitor-0`). Three dimensions:
+**`MonitorBudgetPolicy`** — Rate-limits background monitors (not monitor `0`). Three dimensions:
 - Concurrent task semaphore (default: 2)
 - Action rate (sliding 60s window, default: 30/min)
 - Output bytes rate (default: 50KB/min)

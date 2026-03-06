@@ -112,7 +112,7 @@ export class WindowTaskProcessor {
         onBeforeRun: async () => {
           await this.ctx.sharedLogger?.registerAgent(
             agentRole,
-            `main-${task.monitorId ?? 'monitor-0'}`,
+            `main-${task.monitorId ?? '0'}`,
             windowId,
           );
           await this.sendWindowStatus(windowId, agentRole, 'assigned');

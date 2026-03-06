@@ -13,7 +13,7 @@ export function toWindowKey(monitorId: string, rawId: string): string {
 
 /**
  * Extract the raw windowId from a (possibly) scoped store key.
- * "monitor-0/win-storage" → "win-storage"
+ * "0/win-storage" → "win-storage"
  * "win-storage" → "win-storage" (backward compat)
  */
 export function getRawWindowId(key: string): string {

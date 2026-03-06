@@ -21,7 +21,7 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
 
   addCliEntry: (entry) =>
     set((state) => {
-      const monitorId = entry.monitorId || 'monitor-0';
+      const monitorId = entry.monitorId || '0';
       if (!state.cliHistory[monitorId]) {
         state.cliHistory[monitorId] = [];
       }
@@ -39,7 +39,7 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
 
   updateCliStreaming: (agentId, content, type, monitorId) =>
     set((state) => {
-      const mid = monitorId || 'monitor-0';
+      const mid = monitorId || '0';
       state.cliStreaming[agentId] = {
         id: `cli-stream-${agentId}`,
         type,
@@ -54,7 +54,7 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
     set((state) => {
       const streaming = state.cliStreaming[agentId];
       if (streaming && streaming.content) {
-        const monitorId = streaming.monitorId || 'monitor-0';
+        const monitorId = streaming.monitorId || '0';
         if (!state.cliHistory[monitorId]) {
           state.cliHistory[monitorId] = [];
         }

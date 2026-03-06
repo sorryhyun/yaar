@@ -136,7 +136,7 @@ export class ContextPool implements PoolContext {
     this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);
 
-    const mainAgent = await this.agentPool.createMainAgent('monitor-0', provider);
+    const mainAgent = await this.agentPool.createMainAgent('0', provider);
     if (!mainAgent) {
       await provider.dispose();
       return false;
@@ -400,8 +400,8 @@ export class ContextPool implements PoolContext {
         activeMonitorIds.push(monitorId);
       }
     }
-    if (!activeMonitorIds.includes('monitor-0')) {
-      activeMonitorIds.push('monitor-0');
+    if (!activeMonitorIds.includes('0')) {
+      activeMonitorIds.push('0');
     }
 
     await this.teardown({ closeWindows: false });
@@ -422,7 +422,7 @@ export class ContextPool implements PoolContext {
       if (provider) {
         const agent = await this.agentPool.createMainAgent(monitorId, provider);
         if (agent) {
-          if (monitorId === 'monitor-0') {
+          if (monitorId === '0') {
             await this.sendEvent({
               type: ServerEventType.CONNECTION_STATUS,
               status: 'connected',

@@ -3,11 +3,11 @@
 YAAR uses a unified `yaar://` URI scheme to address all internal resources — apps, storage files, sandboxes, and windows. The scheme is implicitly scoped to the current session — `yaar://` *is* the session root.
 
 ```
-yaar://                          → session (implicit root)
-yaar://apps/{appId}              → app
-yaar://storage/{path}            → storage file
-yaar://sandbox/{id}/{path}       → sandbox file
-yaar://{monitorId}/{windowId}    → window
+yaar://                                  → session (implicit root)
+yaar://apps/{appId}                      → app
+yaar://storage/{path}                    → storage file
+yaar://sandbox/{id}/{path}               → sandbox file
+yaar://monitors/{monitorId}/{windowId}    → window
 ```
 
 ---
@@ -43,18 +43,18 @@ Legacy `storage://` and `sandbox://` schemes are also accepted by `parseFileUri(
 
 ### Window Addressing
 
-Windows are internally keyed as `{monitorId}/{windowId}`, which maps naturally to the URI scheme:
+Windows are internally keyed as `{monitorId}/{windowId}` (e.g., `0/win-storage`), and addressed via the `monitor` authority:
 
 ```
-yaar://{monitorId}/{windowId}
+yaar://monitors/{monitorId}/{windowId}
 ```
 
 | Example | Meaning |
 |---------|---------|
-| `yaar://monitor-0/win-storage` | The storage window on the default monitor |
-| `yaar://monitor-1/win-excel` | The excel window on monitor 1 |
+| `yaar://monitors/0/win-storage` | The storage window on the default monitor |
+| `yaar://monitors/1/win-excel` | The excel window on monitor 1 |
 
-This is the same format used by `scopedKey()` (server) and `toWindowKey()` (frontend) for window state lookups. The `yaar://` prefix formalizes it as a URI.
+This is the same format used by `scopedKey()` (server) and `toWindowKey()` (frontend) for window state lookups. The `yaar://monitors/` prefix formalizes it as a URI.
 
 **Agent-facing simplification:** Agents are always scoped to a single monitor and cannot create windows on other monitors. The system prompt instructs agents to use bare window IDs (e.g. `win-storage`) — the server's `resolveWindowId()` strips any monitor prefix the agent might include, and `WindowStateRegistry` adds the correct monitor scope automatically via `actionEmitter.currentMonitorId`.
 
@@ -63,20 +63,20 @@ This is the same format used by `scopedKey()` (server) and `toWindowKey()` (fron
 Window URIs extend with sub-paths to address app state and commands:
 
 ```
-yaar://{monitorId}/{windowId}/state/{key}      → read app state
-yaar://{monitorId}/{windowId}/commands/{name}   → execute app command
+yaar://monitors/{monitorId}/{windowId}/state/{key}      → read app state
+yaar://monitors/{monitorId}/{windowId}/commands/{name}   → execute app command
 ```
 
 | Example | Meaning |
 |---------|---------|
-| `yaar://monitor-0/win-excel/state/cells` | Read the "cells" state from excel app |
-| `yaar://monitor-0/win-excel/commands/save` | Execute the "save" command on excel app |
+| `yaar://monitors/0/win-excel/state/cells` | Read the "cells" state from excel app |
+| `yaar://monitors/0/win-excel/commands/save` | Execute the "save" command on excel app |
 
 These URIs are used by the `app_query` and `app_command` MCP tools via their `uri` parameter. Agents can use either full URIs or bare window IDs — the server resolves the monitor automatically:
 
 ```typescript
 // Full URI (works but unnecessary — agent is already scoped)
-app_query({ uri: "yaar://monitor-0/win-excel/state/cells" })
+app_query({ uri: "yaar://monitors/0/win-excel/state/cells" })
 
 // Bare window ID (preferred — agent doesn't need to know its monitor)
 app_query({ uri: "win-excel", key: "cells" })
@@ -241,20 +241,20 @@ import {
   parseWindowResourceUri,
 } from '@yaar/shared';
 
-buildWindowUri('monitor-0', 'win-storage')
-// -> 'yaar://monitor-0/win-storage'
+buildWindowUri('0', 'win-storage')
+// -> 'yaar://monitors/0/win-storage'
 
-parseWindowUri('yaar://monitor-0/win-storage')
-// -> { monitorId: 'monitor-0', windowId: 'win-storage' }
+parseWindowUri('yaar://monitors/0/win-storage')
+// -> { monitorId: '0', windowId: 'win-storage' }
 
-parseWindowUri('yaar://monitor-0/win-excel/state/cells')
-// -> { monitorId: 'monitor-0', windowId: 'win-excel', subPath: 'state/cells' }
+parseWindowUri('yaar://monitors/0/win-excel/state/cells')
+// -> { monitorId: '0', windowId: 'win-excel', subPath: 'state/cells' }
 
-buildWindowResourceUri('monitor-0', 'win-excel', 'state', 'cells')
-// -> 'yaar://monitor-0/win-excel/state/cells'
+buildWindowResourceUri('0', 'win-excel', 'state', 'cells')
+// -> 'yaar://monitors/0/win-excel/state/cells'
 
-parseWindowResourceUri('yaar://monitor-0/win-excel/state/cells')
-// -> { monitorId: 'monitor-0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
+parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')
+// -> { monitorId: '0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
 ```
 
 ---

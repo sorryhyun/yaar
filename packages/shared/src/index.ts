@@ -6,8 +6,11 @@ export * from './app-protocol.js';
 /** Unique session identifier. */
 export type SessionId = string;
 
-/** Monitor identifier (e.g., 'monitor-0'). */
+/** Monitor identifier (e.g., '0'). */
 export type MonitorId = string;
+
+/** Default monitor ID. */
+export const DEFAULT_MONITOR_ID = '0';
 export {
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,

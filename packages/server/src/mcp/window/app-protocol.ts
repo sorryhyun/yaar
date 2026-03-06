@@ -20,13 +20,13 @@ import { resolveWindowId } from './resolve-window.js';
 /**
  * Resource path pattern for bare URIs without yaar:// prefix.
  * Matches: {windowId}/{resourceType}/{key}
- *      or: monitor-X/{windowId}/{resourceType}/{key}
+ *      or: {monitorId}/{windowId}/{resourceType}/{key}  (monitorId is numeric)
  */
-const BARE_RESOURCE_RE = /^(?:monitor-[^/]+\/)?([^/]+)\/(state|commands)\/(.+)$/;
+const BARE_RESOURCE_RE = /^(?:\d+\/)?([^/]+)\/(state|commands)\/(.+)$/;
 
 /**
  * Parse a window resource URI, with fallback for bare paths.
- * Handles both `yaar://monitor-0/win/commands/save` and `win/commands/save`.
+ * Handles both `yaar://monitors/0/win/commands/save` and `win/commands/save`.
  */
 function parseResourceUri(uri: string): ParsedWindowResourceUri | null {
   return parseWindowResourceUri(uri) ?? parseBareResourceUri(uri);
