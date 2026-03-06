@@ -15,9 +15,10 @@ interface ContentRendererProps {
   content: WindowContent;
   windowId: string;
   requestId?: string;
+  iframeToken?: string;
 }
 
-function ContentRenderer({ content, windowId, requestId }: ContentRendererProps) {
+function ContentRenderer({ content, windowId, requestId, iframeToken }: ContentRendererProps) {
   const callbacks = useWindowCallbacks();
 
   const handleIframeSuccess = useCallback(() => {
@@ -48,6 +49,7 @@ function ContentRenderer({ content, windowId, requestId }: ContentRendererProps)
         <MemoizedIframeRenderer
           data={content.data as string | { url: string; sandbox?: string }}
           requestId={requestId}
+          iframeToken={iframeToken}
           onRenderSuccess={handleIframeSuccess}
           onRenderError={handleIframeError}
         />

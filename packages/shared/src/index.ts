@@ -14,6 +14,7 @@ export {
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
+  IFRAME_WINDOWS_SDK_SCRIPT,
 } from './capture-helper.js';
 export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 export {

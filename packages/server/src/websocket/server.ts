@@ -40,6 +40,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       };
       const requestedSessionId = ws.data.sessionId;
       const session = hub.getOrCreate(requestedSessionId, sessionOptions);
+      hub.cancelEviction(session.sessionId);
 
       // Update ws.data with the actual session ID (may differ from requested)
       ws.data.sessionId = session.sessionId;
@@ -101,9 +102,12 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       const session = hub.get(sessionId!);
       if (session) {
         session.removeConnection(connectionId);
+        if (!session.hasConnections()) {
+          hub.scheduleEviction(session.sessionId);
+        }
       }
       getBroadcastCenter().unsubscribe(connectionId);
-      // Session stays alive for other connections
+      // Session stays alive for reconnection; evicted after timeout if no one reconnects
     },
   };
 }

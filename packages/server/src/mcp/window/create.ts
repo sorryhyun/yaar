@@ -17,6 +17,7 @@ import {
 import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
+import { generateIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { resolveContentUri, extractAppId, buildWindowUri } from '@yaar/shared';
 import { getMonitorId } from '../../agents/session.js';
@@ -138,6 +139,7 @@ export function registerCreateTools(server: McpServer): void {
         ...(appMeta?.frameless ? { frameless: true } : {}),
         ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
         ...(args.minimized ? { minimized: true } : {}),
+        ...(renderer === 'iframe' ? { iframeToken: generateIframeToken(windowId) } : {}),
       };
 
       if (renderer === 'iframe') {

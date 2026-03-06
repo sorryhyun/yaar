@@ -6,6 +6,7 @@ import { join, extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePath, type EndpointMeta } from '../utils.js';
+import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { parseContentPath, type ParsedContentPath } from '@yaar/shared';
 
@@ -299,14 +300,14 @@ async function handleStorage(
   if (req.method === 'POST') {
     if (resolved.readOnly) return errorResponse('Mount is read-only', 403);
     try {
-      const body = await req.arrayBuffer();
-      if (body.byteLength > MAX_UPLOAD_SIZE) {
-        return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
-      }
-      const result = await storageWrite(filePath, Buffer.from(body));
+      const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
+      const result = await storageWrite(filePath, buf);
       if (!result.success) return errorResponse(result.error ?? 'Write failed');
       return jsonResponse({ ok: true, path: result.path });
-    } catch {
+    } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        return errorResponse(`Request body too large (max ${MAX_UPLOAD_SIZE} bytes)`, 413);
+      }
       return errorResponse('Write failed');
     }
   }

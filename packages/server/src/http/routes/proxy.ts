@@ -7,6 +7,7 @@
 
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
+import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -19,22 +20,10 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 ];
 import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../mcp/domains.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
+import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 const TIMEOUT_MS = 30_000;
-
-/** Private/internal IP patterns — block SSRF to internal networks. */
-const INTERNAL_HOSTNAME_PATTERNS = [
-  /^127\./,
-  /^localhost$/i,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^0\./,
-  /^\[?::1\]?$/,
-  /^\[?fe80:/i,
-];
 
 export async function handleProxyRoutes(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/fetch' || req.method !== 'POST') {
@@ -50,12 +39,12 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     sessionId?: string;
   };
   try {
-    const raw = await req.text();
-    if (raw.length > MAX_UPLOAD_SIZE) {
+    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
+    body = JSON.parse(buf.toString('utf-8'));
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
       return errorResponse('Request body too large', 413);
     }
-    body = JSON.parse(raw);
-  } catch {
     return errorResponse('Invalid JSON body', 400);
   }
 
@@ -64,21 +53,12 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     return errorResponse('Missing or invalid "url" field', 400);
   }
 
-  // Validate URL scheme
-  let parsed: URL;
+  // Validate URL scheme, format, and block internal networks (SSRF protection)
   try {
-    parsed = new URL(targetUrl);
-  } catch {
-    return errorResponse('Invalid URL', 400);
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return errorResponse('Only http: and https: URLs are allowed', 400);
-  }
-
-  // Block internal/private network access (SSRF protection)
-  if (INTERNAL_HOSTNAME_PATTERNS.some((p) => p.test(parsed.hostname))) {
-    return errorResponse('Access to internal networks is not allowed', 403);
+    validateUrl(targetUrl);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid URL';
+    return errorResponse(message, 400);
   }
 
   // Check domain allowlist — show permission dialog if sessionId is available
@@ -158,7 +138,7 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
       }
     }
 
-    const response = await fetch(targetUrl, {
+    const response = await safeFetch(targetUrl, {
       method: body.method || 'GET',
       headers: fetchHeaders,
       body: body.method && body.method !== 'GET' && body.method !== 'HEAD' ? body.body : undefined,

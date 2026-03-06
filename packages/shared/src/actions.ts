@@ -55,6 +55,7 @@ export interface WindowCreateAction {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   minimized?: boolean;
+  iframeToken?: string; // Token for iframe route restriction
 }
 
 export interface WindowCloseAction {

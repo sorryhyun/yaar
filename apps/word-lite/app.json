@@ -215,6 +215,25 @@
           "type": "object",
           "properties": {}
         }
+      },
+      "importFromWindow": {
+        "description": "Import content from another open window into this document. Params: { windowId: string, mode?: \"replace\"|\"append\", includeImage?: boolean }",
+        "params": {
+          "type": "object",
+          "properties": {
+            "windowId": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["replace", "append"]
+            },
+            "includeImage": {
+              "type": "boolean"
+            }
+          },
+          "required": ["windowId"]
+        }
       }
     }
   },

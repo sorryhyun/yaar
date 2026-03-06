@@ -4,6 +4,8 @@
  * Uses native fetch() instead of shelling out to curl.
  */
 
+import { validateUrl, safeFetch } from '../../lib/ssrf.js';
+
 // Chrome-like User-Agent for better compatibility
 export const CHROME_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -25,17 +27,15 @@ export interface RequestOptions {
 export async function executeCurl(url: string, options: RequestOptions = {}): Promise<CurlResult> {
   const { method = 'GET', headers = {}, body, followRedirects = true, timeout = 30000 } = options;
 
+  validateUrl(url); // Throws if private/invalid
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(url, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-      redirect: followRedirects ? 'follow' : 'manual',
-    });
+    const res = followRedirects
+      ? await safeFetch(url, { method, headers, body, signal: controller.signal })
+      : await fetch(url, { method, headers, body, signal: controller.signal, redirect: 'manual' });
 
     const responseHeaders: Record<string, string> = {};
     res.headers.forEach((value, key) => {

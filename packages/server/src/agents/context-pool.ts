@@ -288,6 +288,10 @@ export class ContextPool implements PoolContext {
     return this.agentPool.interruptByRole(agentId);
   }
 
+  hasAgent(agentId: string): boolean {
+    return this.agentPool.hasAgent(agentId);
+  }
+
   hasActiveAgent(windowId: string): boolean {
     return this.agentPool.hasRolePrefix(`window-${windowId}`);
   }

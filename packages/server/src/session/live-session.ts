@@ -566,6 +566,27 @@ export class LiveSession {
 class SessionHub {
   private sessions = new Map<SessionId, LiveSession>();
   private defaultSessionId: SessionId | null = null;
+  private evictionTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
+
+  scheduleEviction(sessionId: SessionId, delayMs = 60_000): void {
+    this.cancelEviction(sessionId);
+    const timer = setTimeout(() => {
+      this.evictionTimers.delete(sessionId);
+      console.log(`[SessionHub] Evicting abandoned session: ${sessionId}`);
+      this.remove(sessionId).catch((err) => {
+        console.error(`[SessionHub] Failed to evict session ${sessionId}:`, err);
+      });
+    }, delayMs);
+    this.evictionTimers.set(sessionId, timer);
+  }
+
+  cancelEviction(sessionId: SessionId): void {
+    const timer = this.evictionTimers.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.evictionTimers.delete(sessionId);
+    }
+  }
 
   /**
    * Get an existing session or create a new one.
@@ -604,6 +625,15 @@ class SessionHub {
 
   get(sessionId: SessionId): LiveSession | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  findSessionByAgent(agentId: string): SessionId | undefined {
+    for (const [sessionId, session] of this.sessions) {
+      if (session.getPool()?.hasAgent(agentId)) {
+        return sessionId;
+      }
+    }
+    return undefined;
   }
 
   getDefault(): LiveSession | undefined {

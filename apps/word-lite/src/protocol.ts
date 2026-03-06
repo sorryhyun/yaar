@@ -304,6 +304,55 @@ export function registerAppProtocol() {
           return { ok: true, savedAt: nowLabel() };
         },
       },
+      importFromWindow: {
+        description: 'Import content from another open window into this document. Params: { windowId: string, mode?: "replace"|"append", includeImage?: boolean }',
+        params: {
+          type: 'object',
+          properties: {
+            windowId: { type: 'string' },
+            mode: { type: 'string', enum: ['replace', 'append'] },
+            includeImage: { type: 'boolean' },
+          },
+          required: ['windowId'],
+        },
+        handler: async (p: { windowId: string; mode?: 'replace' | 'append'; includeImage?: boolean }) => {
+          const wins = (window as any).yaar?.windows;
+          if (!wins) return { ok: false, error: 'yaar.windows API not available' };
+
+          const result = await wins.read(p.windowId, { includeImage: p.includeImage ?? false });
+          if (!result) return { ok: false, error: `Window "${p.windowId}" not found or returned no data` };
+
+          const mode = p.mode ?? 'append';
+          let html = '';
+
+          // Build HTML from window content
+          if (result.content) {
+            const escaped = String(result.content)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/\n/g, '<br>');
+            html += `<p>${escaped}</p>`;
+          }
+
+          // Embed screenshot image if requested and available
+          if (p.includeImage && result.image) {
+            html += `<p><img src="${result.image}" alt="Window screenshot: ${p.windowId}" style="max-width:100%;border:1px solid #ddd;border-radius:4px;"></p>`;
+          }
+
+          if (!html) return { ok: false, error: 'No content to import from window' };
+
+          if (mode === 'replace') {
+            setEditorFromHtml(html);
+          } else {
+            appendHtmlFragment(html);
+          }
+
+          setSaveStateText(`Imported from window: ${p.windowId}`);
+          saveDoc();
+          return { ok: true, windowId: p.windowId, mode, hasImage: !!(p.includeImage && result.image) };
+        },
+      },
     },
   });
 }

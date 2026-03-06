@@ -256,6 +256,22 @@ export class AgentPool {
     console.log(`[AgentPool] Window agent disposed for ${windowId}: ${agent.instanceId}`);
   }
 
+  /**
+   * Check if an agent with the given instanceId exists in this pool.
+   */
+  hasAgent(agentId: string): boolean {
+    for (const agent of this.mainAgents.values()) {
+      if (agent.instanceId === agentId) return true;
+    }
+    for (const agent of this.windowAgents.values()) {
+      if (agent.instanceId === agentId) return true;
+    }
+    for (const agent of this.ephemeralAgents) {
+      if (agent.instanceId === agentId) return true;
+    }
+    return false;
+  }
+
   // ── Steer ──────────────────────────────────────────────────────────
 
   /**

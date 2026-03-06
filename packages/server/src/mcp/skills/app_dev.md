@@ -184,6 +184,31 @@ const imgUrl = yaar.storage.url('photos/cat.png');
 
 **Error handling:** `read()` throws when the file doesn't exist (404). Always use `.catch()` or try/catch to handle missing files gracefully — especially on first launch when no data has been saved yet. Never call `fetch('/api/...')` directly for endpoints not listed in `skill("host_api")` — they don't exist and will 404.
 
+## Windows API (Read-Only)
+
+Available at runtime via `window.yaar.windows` (auto-injected, no import needed):
+
+| Method | Description |
+|--------|-------------|
+| `read(windowId, opts?)` | Read another window's content. `opts.includeImage`: capture screenshot |
+| `list()` | List all windows → `[{id, title, renderer}]` |
+
+```ts
+// List all windows
+const windows = await yaar.windows.list();
+// → [{ id: "win-notes", title: "Notes", renderer: "markdown" }, ...]
+
+// Read a window's content
+const win = await yaar.windows.read('win-notes');
+// → { id: "win-notes", title: "Notes", renderer: "markdown", content: "# Hello..." }
+
+// Read with screenshot
+const win = await yaar.windows.read('win-notes', { includeImage: true });
+// → { ..., imageData: "data:image/webp;base64,..." }
+```
+
+This is **read-only** — apps cannot modify other windows.
+
 ## Deploy
 
 `deploy(sandbox, appId, ...)` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.

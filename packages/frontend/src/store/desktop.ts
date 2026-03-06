@@ -367,6 +367,127 @@ export function consumeIframeDragSource() {
 // Initialize the listeners immediately
 initIframeMessageHandlers();
 
+/**
+ * Handle yaar:window-read and yaar:window-list requests from iframes.
+ *
+ * This is a request-response pattern: iframe asks, parent responds.
+ * Read-only — iframes can read other windows' content but not modify them.
+ */
+function initWindowsSdkHandler() {
+  window.addEventListener('message', async (e: MessageEvent) => {
+    const type = e.data?.type;
+    if (type !== 'yaar:window-read' && type !== 'yaar:window-list') return;
+
+    const requestId = e.data.requestId;
+    if (!requestId) return;
+
+    // Find the source iframe to respond to
+    const src = e.source as Window | null;
+    if (!src) return;
+
+    if (type === 'yaar:window-list') {
+      const state = useDesktopStore.getState();
+      const result = Object.values(state.windows).map((win) => ({
+        id: win.id,
+        title: win.title,
+        renderer: win.content.renderer,
+      }));
+      src.postMessage({ type: 'yaar:window-list-response', requestId, result }, '*');
+      return;
+    }
+
+    // yaar:window-read
+    const targetWindowId = e.data.windowId;
+    const includeImage = e.data.includeImage === true;
+
+    if (!targetWindowId) {
+      src.postMessage(
+        { type: 'yaar:window-read-response', requestId, error: 'Missing windowId' },
+        '*',
+      );
+      return;
+    }
+
+    const state = useDesktopStore.getState();
+    const win = state.windows[targetWindowId];
+    if (!win) {
+      src.postMessage(
+        {
+          type: 'yaar:window-read-response',
+          requestId,
+          error: `Window "${targetWindowId}" not found`,
+        },
+        '*',
+      );
+      return;
+    }
+
+    const result: Record<string, unknown> = {
+      id: win.id,
+      title: win.title,
+      renderer: win.content.renderer,
+      content: win.content.data,
+    };
+
+    if (includeImage) {
+      // Reuse the capture infrastructure
+      const el = document.querySelector(
+        `[${WINDOW_ID_DATA_ATTR}="${targetWindowId}"]`,
+      ) as HTMLElement | null;
+
+      if (el) {
+        const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
+        let imageData: string | null = null;
+
+        // Try iframe self-capture first
+        if (iframe?.contentWindow) {
+          imageData = await tryIframeSelfCapture(iframe);
+          // Fall back to html2canvas on iframe content
+          if (!imageData) {
+            try {
+              const doc = iframe.contentDocument;
+              if (doc?.documentElement) {
+                const { default: html2canvas } = await import('html2canvas');
+                const canvas = await html2canvas(doc.documentElement, {
+                  useCORS: true,
+                  logging: false,
+                  scale: 1,
+                  width: iframe.clientWidth || undefined,
+                  height: iframe.clientHeight || undefined,
+                });
+                imageData = canvas.toDataURL('image/webp', 0.9);
+              }
+            } catch {
+              // Cross-origin or failure — fall through
+            }
+          }
+        }
+
+        // Fall back to html2canvas on the window frame
+        if (!imageData) {
+          try {
+            const { default: html2canvas } = await import('html2canvas');
+            const canvas = await html2canvas(el, {
+              useCORS: true,
+              logging: false,
+              scale: 1,
+            });
+            imageData = canvas.toDataURL('image/webp', 0.9);
+          } catch {
+            // Capture failed
+          }
+        }
+
+        if (imageData) result.imageData = imageData;
+      }
+    }
+
+    src.postMessage({ type: 'yaar:window-read-response', requestId, result }, '*');
+  });
+}
+
+initWindowsSdkHandler();
+
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
     // Combine all slices

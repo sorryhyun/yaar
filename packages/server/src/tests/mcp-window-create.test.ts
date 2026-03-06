@@ -18,6 +18,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
 
 vi.mock('../config.js', () => ({
   PROJECT_ROOT: '/mock/project',
+  getConfigDir: () => '/mock/config',
 }));
 
 vi.mock('../mcp/apps/discovery.js', () => ({
@@ -112,7 +113,7 @@ describe('window create tool — iframe embed failure', () => {
 
   it('does not use emitActionWithFeedback for non-iframe renderers', async () => {
     const result = await createHandler({
-      uri: 'md-win',
+      name: 'md-win',
       title: 'Markdown',
       renderer: 'markdown',
       content: '# Hello',

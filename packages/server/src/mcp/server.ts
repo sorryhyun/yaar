@@ -12,7 +12,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { runWithAgentContext } from '../agents/session.js';
+import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/live-session.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
@@ -74,12 +74,14 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
   const server = new McpServer({ name, version: '1.0.0' }, { capabilities: { tools: {} } });
 
   const getWindowState = (): WindowStateRegistry => {
-    const session = getSessionHub().getDefault();
+    const sid = getSessionId();
+    const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
     if (!session) throw new Error('No active session — connect via WebSocket first.');
     return session.windowState;
   };
   const getReloadCache = (): ReloadCache => {
-    const session = getSessionHub().getDefault();
+    const sid = getSessionId();
+    const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
     if (!session) throw new Error('No active session — connect via WebSocket first.');
     return session.reloadCache;
   };
@@ -165,7 +167,8 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   // Restore agent context so tools can resolve the active session.
   // X-Agent-Id is set by the Claude provider; Codex calls omit it.
   const agentId = req.headers.get('x-agent-id') ?? 'unknown';
-  const yaarSessionId = getSessionHub().getDefault()?.sessionId;
+  const hub = getSessionHub();
+  const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
 
   return runWithAgentContext({ agentId, sessionId: yaarSessionId }, async () => {
     // Check for existing MCP session

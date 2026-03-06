@@ -62,10 +62,13 @@ export function isRemoteMode(): boolean {
  */
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const conn = getRemoteConnection();
-  if (!conn) return fetch(path, init);
+  const headers = new Headers(init?.headers);
+  // Identify host app requests so the server can distinguish them from iframe requests
+  headers.set('X-Yaar-Client', 'host');
+
+  if (!conn) return fetch(path, { ...init, headers });
 
   const url = `${conn.serverUrl}${path}`;
-  const headers = new Headers(init?.headers);
   headers.set('Authorization', `Bearer ${conn.token}`);
   return fetch(url, { ...init, headers });
 }

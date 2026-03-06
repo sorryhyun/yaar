@@ -19,6 +19,7 @@ export interface WindowModel {
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  iframeToken?: string;
 }
 
 export interface CliEntry {

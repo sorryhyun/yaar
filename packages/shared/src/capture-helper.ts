@@ -122,6 +122,13 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     return p.split('/').map(encodeURIComponent).join('/');
   }
 
+  var iframeToken = window.__YAAR_TOKEN__ || '';
+  function tokenHeaders(extra) {
+    var h = extra ? Object.assign({}, extra) : {};
+    if (iframeToken) h['X-Iframe-Token'] = iframeToken;
+    return h;
+  }
+
   window.yaar = window.yaar || {};
   window.yaar.storage = {
     async save(path, data) {
@@ -137,7 +144,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       } else {
         body = String(data);
       }
-      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body });
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body, headers: tokenHeaders() });
       if (!res.ok) {
         var err = await res.json().catch(function() { return { error: res.statusText }; });
         throw new Error(err.error || 'Save failed');
@@ -147,7 +154,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
 
     async read(path, options) {
       var mode = (options && options.as) || 'auto';
-      var res = await fetch('/api/storage/' + encodePath(path));
+      var res = await fetch('/api/storage/' + encodePath(path), { headers: tokenHeaders() });
       if (!res.ok) {
         var err = await res.json().catch(function() { return { error: res.statusText }; });
         throw new Error(err.error || 'Read failed');
@@ -165,7 +172,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
 
     async list(dirPath) {
       var p = dirPath ? encodePath(dirPath) : '';
-      var res = await fetch('/api/storage/' + p + '?list=true');
+      var res = await fetch('/api/storage/' + p + '?list=true', { headers: tokenHeaders() });
       if (!res.ok) {
         var err = await res.json().catch(function() { return { error: res.statusText }; });
         throw new Error(err.error || 'List failed');
@@ -174,7 +181,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     },
 
     async remove(path) {
-      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE' });
+      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE', headers: tokenHeaders() });
       if (!res.ok) {
         var err = await res.json().catch(function() { return { error: res.statusText }; });
         throw new Error(err.error || 'Delete failed');
@@ -202,6 +209,7 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
   window.__yaarFetchProxyInstalled = true;
 
   var realFetch = window.fetch.bind(window);
+  var iframeToken = window.__YAAR_TOKEN__ || '';
 
   // Extract sessionId from URL params for domain permission dialogs
   var sessionId = '';
@@ -211,6 +219,16 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
     if (/^[a-zA-Z0-9_-]+$/.test(raw)) sessionId = raw;
   } catch(e) {}
 
+  // Add X-Iframe-Token to same-origin requests for route restriction
+  function addTokenHeader(input, init) {
+    if (!iframeToken) return realFetch(input, init);
+    var newInit = Object.assign({}, init || {});
+    var headers = new Headers(newInit.headers || {});
+    headers.set('X-Iframe-Token', iframeToken);
+    newInit.headers = headers;
+    return realFetch(input, newInit);
+  }
+
   window.fetch = function(input, init) {
     var url;
     if (input instanceof Request) {
@@ -219,17 +237,17 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       url = String(input);
     }
 
-    // Relative URLs and same-origin — pass through
+    // Relative URLs and same-origin — pass through with token header
     if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
-      return realFetch(input, init);
+      return addTokenHeader(input, init);
     }
     try {
       var parsed = new URL(url, location.origin);
       if (parsed.origin === location.origin) {
-        return realFetch(input, init);
+        return addTokenHeader(input, init);
       }
     } catch(e) {
-      return realFetch(input, init);
+      return addTokenHeader(input, init);
     }
 
     // Cross-origin — route through proxy
@@ -265,9 +283,12 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       if (bodyStr !== undefined) payload.body = bodyStr;
       if (sessionId) payload.sessionId = sessionId;
 
+      var proxyHeaders = { 'Content-Type': 'application/json' };
+      if (iframeToken) proxyHeaders['X-Iframe-Token'] = iframeToken;
+
       return realFetch('/api/fetch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: proxyHeaders,
         body: JSON.stringify(payload)
       });
     }).then(function(proxyRes) {
@@ -434,6 +455,75 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
  * so compiled apps can reactively track the parent's notification state.
  * Parent pushes updates via `yaar:notifications-update` postMessages.
  */
+/**
+ * Inline JS windows SDK for iframe apps.
+ *
+ * Provides window.yaar.windows with read/list methods
+ * so iframe apps can read other windows' content (read-only).
+ * Parent handles the request via postMessage and returns window data.
+ */
+export const IFRAME_WINDOWS_SDK_SCRIPT = `
+(function() {
+  if (window.__yaarWindowsInstalled) return;
+  window.__yaarWindowsInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var pending = {};
+  var idCounter = 0;
+
+  function nextId() {
+    return 'win-req-' + (++idCounter) + '-' + Math.random().toString(36).slice(2);
+  }
+
+  window.addEventListener('message', function(e) {
+    if (!e.data) return;
+    var type = e.data.type;
+    if (type === 'yaar:window-read-response' || type === 'yaar:window-list-response') {
+      var requestId = e.data.requestId;
+      var cb = pending[requestId];
+      if (cb) {
+        delete pending[requestId];
+        cb(e.data);
+      }
+    }
+  });
+
+  function request(type, payload, timeoutMs) {
+    var requestId = nextId();
+    payload.type = type;
+    payload.requestId = requestId;
+    return new Promise(function(resolve, reject) {
+      var timer = setTimeout(function() {
+        delete pending[requestId];
+        reject(new Error('Window request timed out'));
+      }, timeoutMs || 5000);
+
+      pending[requestId] = function(data) {
+        clearTimeout(timer);
+        if (data.error) reject(new Error(data.error));
+        else resolve(data.result);
+      };
+
+      window.parent.postMessage(payload, '*');
+    });
+  }
+
+  window.yaar.windows = {
+    read: function(windowId, options) {
+      var includeImage = options && options.includeImage;
+      return request('yaar:window-read', {
+        windowId: windowId,
+        includeImage: !!includeImage
+      }, includeImage ? 10000 : 5000);
+    },
+    list: function() {
+      return request('yaar:window-list', {}, 5000);
+    }
+  };
+})();
+`;
+
 export const IFRAME_NOTIFICATIONS_SDK_SCRIPT = `
 (function() {
   if (window.__yaarNotificationsInstalled) return;

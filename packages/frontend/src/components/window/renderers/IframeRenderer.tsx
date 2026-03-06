@@ -11,6 +11,7 @@ import {
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
+  IFRAME_WINDOWS_SDK_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import { useDesktopStore } from '@/store';
@@ -19,6 +20,7 @@ import styles from '@/styles/window/renderers.module.css';
 interface IframeRendererProps {
   data: string | { url: string; sandbox?: string };
   requestId?: string;
+  iframeToken?: string;
   onRenderSuccess?: () => void;
   onRenderError?: (error: string, url: string) => void;
 }
@@ -43,7 +45,13 @@ function isSameOrigin(url: string): boolean {
   }
 }
 
-function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: IframeRendererProps) {
+function IframeRenderer({
+  data,
+  requestId,
+  iframeToken,
+  onRenderSuccess,
+  onRenderError,
+}: IframeRendererProps) {
   const rawUrl = typeof data === 'string' ? data : data.url;
   const resolved = resolveAssetUrl(rawUrl);
   const sessionId = useDesktopStore((s) => s.sessionId);
@@ -175,6 +183,13 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
       if (iframe) {
         try {
           const doc = iframe.contentDocument;
+          // Inject iframe token before SDK scripts so they can include it in requests
+          if (doc && iframeToken && !doc.querySelector('script[data-yaar-token]')) {
+            const tokenScript = doc.createElement('script');
+            tokenScript.setAttribute('data-yaar-token', '1');
+            tokenScript.textContent = `window.__YAAR_TOKEN__=${JSON.stringify(iframeToken)};`;
+            doc.head.appendChild(tokenScript);
+          }
           if (doc && !doc.querySelector('script[data-yaar-capture]')) {
             const script = doc.createElement('script');
             script.setAttribute('data-yaar-capture', '1');
@@ -210,6 +225,12 @@ function IframeRenderer({ data, requestId, onRenderSuccess, onRenderError }: Ifr
             notifScript.setAttribute('data-yaar-notifications', '1');
             notifScript.textContent = IFRAME_NOTIFICATIONS_SDK_SCRIPT;
             doc.head.appendChild(notifScript);
+          }
+          if (doc && !doc.querySelector('script[data-yaar-windows]')) {
+            const windowsScript = doc.createElement('script');
+            windowsScript.setAttribute('data-yaar-windows', '1');
+            windowsScript.textContent = IFRAME_WINDOWS_SDK_SCRIPT;
+            doc.head.appendChild(windowsScript);
           }
           // Push current notification state to the newly loaded iframe
           const notifs = useDesktopStore.getState().notifications;

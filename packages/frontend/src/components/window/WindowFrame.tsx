@@ -333,6 +333,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
               content={window.content}
               windowId={windowId}
               requestId={window.requestId}
+              iframeToken={window.iframeToken}
             />
           </RendererErrorBoundary>
         </WindowCallbackProvider>

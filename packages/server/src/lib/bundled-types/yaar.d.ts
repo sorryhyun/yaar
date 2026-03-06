@@ -62,12 +62,38 @@ interface YaarNotifications {
   onChange(callback: (items: YaarNotificationItem[]) => void): () => void;
 }
 
+// ── Windows SDK (read-only) ──────────────────────────────────────
+
+interface YaarWindowReadOptions {
+  includeImage?: boolean;
+}
+
+interface YaarWindowReadResult {
+  id: string;
+  title: string;
+  renderer: string;
+  content: unknown;
+  imageData?: string;
+}
+
+interface YaarWindowListItem {
+  id: string;
+  title: string;
+  renderer: string;
+}
+
+interface YaarWindows {
+  read(windowId: string, options?: YaarWindowReadOptions): Promise<YaarWindowReadResult>;
+  list(): Promise<YaarWindowListItem[]>;
+}
+
 // ── Global ──────────────────────────────────────────────────────
 
 interface YaarGlobal {
   app: YaarApp;
   storage: YaarStorage;
   notifications: YaarNotifications;
+  windows: YaarWindows;
 }
 
 interface Window {

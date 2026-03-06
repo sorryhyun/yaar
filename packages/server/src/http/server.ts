@@ -16,6 +16,42 @@ import {
   handleProxyRoutes,
   handleStaticRoutes,
 } from './routes/index.js';
+import { validateIframeToken } from './iframe-tokens.js';
+import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
+import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
+import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
+
+// ── Public endpoint matcher ──────────────────────────────────────────
+// Build a set of { method, regex } from all route files' PUBLIC_ENDPOINTS.
+// Path patterns like `/api/storage/{path}` become `/api/storage/.+`.
+// Static routes (/health, frontend assets) are always allowed.
+
+interface PublicRoute {
+  method: string;
+  pattern: RegExp;
+}
+
+function buildPublicRoutes(): PublicRoute[] {
+  const all = [...API_PUBLIC, ...FILES_PUBLIC, ...PROXY_PUBLIC];
+  return all.map((ep) => {
+    // Strip query string from path pattern
+    const pathOnly = ep.path.split('?')[0];
+    // Convert {param} placeholders to .+ and anchor
+    const regexStr = '^' + pathOnly.replace(/\{[^}]+\}/g, '[^/]+') + '(/.*)?$';
+    return { method: ep.method, pattern: new RegExp(regexStr) };
+  });
+}
+
+const publicRoutes = buildPublicRoutes();
+
+function isPublicRoute(method: string, pathname: string): boolean {
+  // Health and static assets are always public
+  if (pathname === '/health') return true;
+  // Frontend static files (served by static.ts) are always public
+  if (!pathname.startsWith('/api/') && !pathname.startsWith('/mcp/')) return true;
+
+  return publicRoutes.some((r) => r.method === method && r.pattern.test(pathname));
+}
 
 export function createFetchHandler() {
   return async (req: Request, server: import('bun').Server<WsData>) => {
@@ -41,7 +77,8 @@ export function createFetchHandler() {
       if (origin) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
-        corsHeaders['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+        corsHeaders['Access-Control-Allow-Headers'] =
+          'Content-Type, Authorization, X-Iframe-Token, X-Yaar-Client';
         corsHeaders['Access-Control-Allow-Credentials'] = 'true';
       }
     } else {
@@ -50,7 +87,7 @@ export function createFetchHandler() {
       if (origin && allowedOrigins.includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
-        corsHeaders['Access-Control-Allow-Headers'] = 'Content-Type';
+        corsHeaders['Access-Control-Allow-Headers'] = 'Content-Type, X-Iframe-Token, X-Yaar-Client';
         corsHeaders['Access-Control-Allow-Credentials'] = 'true';
       }
     }
@@ -63,6 +100,31 @@ export function createFetchHandler() {
     // Auth gate (no-op when !IS_REMOTE; /health always exempt)
     const authResponse = checkHttpAuth(req, url);
     if (authResponse) return withCors(authResponse, corsHeaders);
+
+    // ── Iframe route restriction ───────────────────────────────────────
+    // Phase A: Sec-Fetch-Dest check — browser-enforced, cannot be spoofed.
+    // Catches iframe document loads (initial page load in <iframe>).
+    const secFetchDest = req.headers.get('sec-fetch-dest');
+    if (secFetchDest === 'iframe' && !isPublicRoute(req.method, url.pathname)) {
+      return withCors(
+        Response.json({ error: 'Route not available to iframe apps' }, { status: 403 }),
+        corsHeaders,
+      );
+    }
+
+    // Phase B: Iframe-scoped token check — catches fetch() calls from within iframes.
+    // If X-Iframe-Token is present and valid, restrict to public routes only.
+    const iframeToken = req.headers.get('x-iframe-token');
+    if (iframeToken) {
+      const windowId = validateIframeToken(iframeToken);
+      if (windowId && !isPublicRoute(req.method, url.pathname)) {
+        return withCors(
+          Response.json({ error: 'Route not available to iframe apps' }, { status: 403 }),
+          corsHeaders,
+        );
+      }
+      // Invalid/expired token — treat as host request (don't block)
+    }
 
     // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/apps, /mcp/basic, ...)
     const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);

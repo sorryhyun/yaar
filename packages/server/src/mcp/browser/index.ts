@@ -23,6 +23,7 @@ function getSessionId(): string {
   // and the SSE endpoint (/api/browser/{sessionId}/events) can find the session.
   const contextId = getContextSessionId();
   if (contextId) return contextId;
+  console.warn('[browser] No session in AsyncLocalStorage context, falling back to getDefault()');
   const session = getSessionHub().getDefault();
   if (!session) throw new Error('No active session — connect via WebSocket first.');
   return session.sessionId;

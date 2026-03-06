@@ -126,6 +126,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
         dockEdge: createAction.dockEdge,
         frameless: createAction.frameless,
         windowStyle: createAction.windowStyle,
+        iframeToken: createAction.iframeToken,
       };
       state.windows[key] = window;
       insertIntoZOrder(state, key, variant);
