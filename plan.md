@@ -4,10 +4,11 @@
 
 - **Phase 1: Shared Agent Turn Orchestration** — `turn-helpers.ts` with `buildReloadContext()`, `runAgentTurn()`, `createBudgetOutputCallback()`. Refactored `MainTaskProcessor` and `WindowTaskProcessor`.
 - **Phase 2: Shared Window Reducer & MCP Window Helpers** — `applyContentOperation()` in `@yaar/shared`, `formatWindowRef()` and `checkWindowAccess()` in `mcp/window/helpers.ts`. Deduplicated `WindowStateRegistry`, `window-restore.ts`, `create.ts`, `update.ts`, `lifecycle.ts`.
+- **Phase 3: Typed Pending Stores And Session Event Bridge** — `PendingStore<TResult, TMeta>` in `mcp/pending-store.ts` replaces four identical pending map patterns in `ActionEmitter`. `subscribeSessionChannels()` helper in `live-session.ts` deduplicates session-scoped emitter listener setup/teardown.
 
 ---
 
-## Phase 3: Typed Pending Stores And Session Event Bridge
+## ~~Phase 3: Typed Pending Stores And Session Event Bridge~~ (Completed)
 
 **Files:** new helper under `packages/server/src/mcp/`, modify:
 

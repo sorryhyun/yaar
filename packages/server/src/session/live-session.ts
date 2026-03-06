@@ -39,6 +39,32 @@ export interface LiveSessionOptions {
   savedThreadIds?: Record<string, string>;
 }
 
+/**
+ * Subscribe to session-scoped emitter channels that filter by sessionId
+ * and forward matching events to a broadcast function.
+ *
+ * Returns a cleanup function that removes all listeners at once.
+ */
+function subscribeSessionChannels(
+  sessionId: SessionId,
+  broadcast: (event: ServerEvent) => void,
+  channels: string[],
+): () => void {
+  const handler = (data: { sessionId: string; event: ServerEvent }) => {
+    if (data.sessionId === sessionId) {
+      broadcast(data.event);
+    }
+  };
+  for (const ch of channels) {
+    actionEmitter.on(ch, handler);
+  }
+  return () => {
+    for (const ch of channels) {
+      actionEmitter.off(ch, handler);
+    }
+  };
+}
+
 export class LiveSession {
   readonly sessionId: SessionId;
   private connections = new Map<ConnectionId, YaarWebSocket>();
@@ -62,10 +88,8 @@ export class LiveSession {
   // App protocol listener for iframe communication
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private appProtocolListener: ((...args: any[]) => void) | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private approvalRequestListener: ((...args: any[]) => void) | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private userPromptListener: ((...args: any[]) => void) | null = null;
+  // Session-scoped channel listeners (approval-request, user-prompt)
+  private unsubscribeSessionChannels: (() => void) | null = null;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -106,21 +130,12 @@ export class LiveSession {
     };
     actionEmitter.on('app-protocol', this.appProtocolListener);
 
-    // Subscribe to approval request events from the fetch proxy
-    this.approvalRequestListener = (data: { sessionId: string; event: ServerEvent }) => {
-      if (data.sessionId === this.sessionId) {
-        this.broadcast(data.event);
-      }
-    };
-    actionEmitter.on('approval-request', this.approvalRequestListener);
-
-    // Subscribe to user prompt events (ask/request tools)
-    this.userPromptListener = (data: { sessionId: string; event: ServerEvent }) => {
-      if (data.sessionId === this.sessionId) {
-        this.broadcast(data.event);
-      }
-    };
-    actionEmitter.on('user-prompt', this.userPromptListener);
+    // Subscribe to session-scoped event channels (approval requests, user prompts)
+    this.unsubscribeSessionChannels = subscribeSessionChannels(
+      sessionId,
+      this.broadcast.bind(this),
+      ['approval-request', 'user-prompt'],
+    );
   }
 
   // ── Connection management ───────────────────────────────────────────
@@ -538,13 +553,9 @@ export class LiveSession {
       actionEmitter.off('app-protocol', this.appProtocolListener);
       this.appProtocolListener = null;
     }
-    if (this.approvalRequestListener) {
-      actionEmitter.off('approval-request', this.approvalRequestListener);
-      this.approvalRequestListener = null;
-    }
-    if (this.userPromptListener) {
-      actionEmitter.off('user-prompt', this.userPromptListener);
-      this.userPromptListener = null;
+    if (this.unsubscribeSessionChannels) {
+      this.unsubscribeSessionChannels();
+      this.unsubscribeSessionChannels = null;
     }
 
     // Force-clear any pending requests/dialogs/app-requests for this session

@@ -39,7 +39,7 @@ import type {
  * Configuration for the app-server.
  */
 export interface AppServerConfig {
-  /** Model to use (default: gpt-5.3-codex) */
+  /** Model to use (default: gpt-5.4) */
   model?: string;
   /** Request timeout in milliseconds */
   requestTimeout?: number;

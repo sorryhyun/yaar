@@ -5,6 +5,7 @@ import type { CollaborationMode } from "../CollaborationMode.js";
 import type { Personality } from "../Personality.js";
 import type { ReasoningEffort } from "../ReasoningEffort.js";
 import type { ReasoningSummary } from "../ReasoningSummary.js";
+import type { ServiceTier } from "../ServiceTier.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
 import type { AskForApproval } from "./AskForApproval.js";
 import type { SandboxPolicy } from "./SandboxPolicy.js";
@@ -27,6 +28,10 @@ sandboxPolicy?: SandboxPolicy | null,
  * Override the model for this turn and subsequent turns.
  */
 model?: string | null, 
+/**
+ * Override the service tier for this turn and subsequent turns.
+ */
+serviceTier?: ServiceTier | null | null, 
 /**
  * Override the reasoning effort for this turn and subsequent turns.
  */

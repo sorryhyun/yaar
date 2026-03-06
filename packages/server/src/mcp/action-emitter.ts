@@ -24,6 +24,7 @@ import {
   savePermission,
   type PermissionDecision,
 } from '../storage/permissions.js';
+import { PendingStore } from './pending-store.js';
 
 /**
  * Action event data.
@@ -60,25 +61,6 @@ export interface DialogFeedback {
 }
 
 /**
- * Pending request waiting for feedback.
- */
-interface PendingRequest {
-  resolve: (feedback: RenderingFeedback | null) => void;
-  timeoutId: NodeJS.Timeout;
-  sessionId?: string;
-}
-
-/**
- * Pending dialog waiting for feedback.
- */
-interface PendingDialog {
-  resolve: (confirmed: boolean) => void;
-  timeoutId: NodeJS.Timeout;
-  permissionOptions?: PermissionOptions;
-  sessionId?: string;
-}
-
-/**
  * User prompt response from frontend.
  */
 export interface UserPromptFeedback {
@@ -98,15 +80,6 @@ export interface UserPromptResult {
 }
 
 /**
- * Pending user prompt waiting for response.
- */
-interface PendingUserPrompt {
-  resolve: (result: UserPromptResult) => void;
-  timeoutId: NodeJS.Timeout;
-  sessionId?: string;
-}
-
-/**
  * Data emitted for an app protocol request.
  */
 export interface AppProtocolRequestData {
@@ -115,22 +88,13 @@ export interface AppProtocolRequestData {
 }
 
 /**
- * Pending app protocol request waiting for response from iframe.
- */
-interface PendingAppRequest {
-  resolve: (response: AppProtocolResponse) => void;
-  timeoutId: NodeJS.Timeout;
-  sessionId?: string;
-}
-
-/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
-  private pendingRequests = new Map<string, PendingRequest>();
-  private pendingDialogs = new Map<string, PendingDialog>();
-  private pendingUserPrompts = new Map<string, PendingUserPrompt>();
-  private pendingAppRequests = new Map<string, PendingAppRequest>();
+  private pendingRequests = new PendingStore<RenderingFeedback | null>();
+  private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
+  private pendingUserPrompts = new PendingStore<UserPromptResult>();
+  private pendingAppRequests = new PendingStore<AppProtocolResponse | null>();
   private readyWindows = new Set<string>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
@@ -214,15 +178,11 @@ class ActionEmitter extends EventEmitter {
     const agentId = this.resolveAgentId();
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
-    // Create promise that resolves when feedback is received or timeout
     const currentSessionId = sessionId ?? getSessionId();
-    const feedbackPromise = new Promise<RenderingFeedback | null>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        resolve(null); // Timeout - no feedback received
-      }, timeoutMs);
-
-      this.pendingRequests.set(requestId, { resolve, timeoutId, sessionId: currentSessionId });
+    const feedbackPromise = this.pendingRequests.create(requestId, {
+      timeoutMs,
+      sessionId: currentSessionId,
+      defaultValue: null,
     });
 
     // Emit action with request ID, agentId from context, and monitorId
@@ -242,14 +202,7 @@ class ActionEmitter extends EventEmitter {
    * Called by the session when it receives rendering feedback from frontend.
    */
   resolveFeedback(feedback: RenderingFeedback): boolean {
-    const pending = this.pendingRequests.get(feedback.requestId);
-    if (pending) {
-      clearTimeout(pending.timeoutId);
-      this.pendingRequests.delete(feedback.requestId);
-      pending.resolve(feedback);
-      return true;
-    }
-    return false;
+    return this.pendingRequests.resolve(feedback.requestId, feedback).resolved;
   }
 
   /**
@@ -266,13 +219,11 @@ class ActionEmitter extends EventEmitter {
     const agentId = getAgentId();
     const currentSessionId = getSessionId();
 
-    const dialogPromise = new Promise<boolean>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingDialogs.delete(dialogId);
-        resolve(false); // Timeout - treat as cancel
-      }, timeoutMs);
-
-      this.pendingDialogs.set(dialogId, { resolve, timeoutId, sessionId: currentSessionId });
+    const dialogPromise = this.pendingDialogs.create(dialogId, {
+      timeoutMs,
+      sessionId: currentSessionId,
+      defaultValue: false,
+      meta: undefined,
     });
 
     const action: DialogConfirmAction = {
@@ -329,31 +280,28 @@ class ActionEmitter extends EventEmitter {
    * Resolve a pending dialog with feedback.
    */
   async resolveDialogFeedback(feedback: DialogFeedback): Promise<boolean> {
-    const pending = this.pendingDialogs.get(feedback.dialogId);
-    if (pending) {
-      clearTimeout(pending.timeoutId);
-      this.pendingDialogs.delete(feedback.dialogId);
+    const { resolved, meta: permissionOptions } = this.pendingDialogs.resolve(
+      feedback.dialogId,
+      feedback.confirmed,
+    );
 
-      // Save permission if user chose to remember
-      if (pending.permissionOptions && feedback.rememberChoice) {
-        const { toolName, context } = pending.permissionOptions;
-        let decision: PermissionDecision = 'ask';
+    // Save permission if user chose to remember (business logic stays here, not in PendingStore)
+    if (resolved && permissionOptions && feedback.rememberChoice) {
+      const { toolName, context } = permissionOptions;
+      let decision: PermissionDecision = 'ask';
 
-        if (feedback.rememberChoice === 'always') {
-          decision = 'allow';
-        } else if (feedback.rememberChoice === 'deny_always') {
-          decision = 'deny';
-        }
-
-        if (decision !== 'ask') {
-          await savePermission(toolName, decision, context);
-        }
+      if (feedback.rememberChoice === 'always') {
+        decision = 'allow';
+      } else if (feedback.rememberChoice === 'deny_always') {
+        decision = 'deny';
       }
 
-      pending.resolve(feedback.confirmed);
-      return true;
+      if (decision !== 'ask') {
+        await savePermission(toolName, decision, context);
+      }
     }
-    return false;
+
+    return resolved;
   }
 
   /**
@@ -377,13 +325,10 @@ class ActionEmitter extends EventEmitter {
     const currentSessionId = getSessionId();
     const timeoutMs = opts.timeoutMs ?? 300000; // 5 minutes default
 
-    const promptPromise = new Promise<UserPromptResult>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingUserPrompts.delete(promptId);
-        resolve({ dismissed: true }); // Timeout — treat as dismiss
-      }, timeoutMs);
-
-      this.pendingUserPrompts.set(promptId, { resolve, timeoutId, sessionId: currentSessionId });
+    const promptPromise = this.pendingUserPrompts.create(promptId, {
+      timeoutMs,
+      sessionId: currentSessionId,
+      defaultValue: { dismissed: true },
     });
 
     const action: UserPromptShowAction = {
@@ -398,7 +343,7 @@ class ActionEmitter extends EventEmitter {
     };
 
     if (currentSessionId) {
-      // Deliver via dedicated event → LiveSession.broadcast() (session-scoped, no monitor filter)
+      // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no monitor filter)
       this.emit('user-prompt', {
         sessionId: currentSessionId,
         event: {
@@ -423,18 +368,11 @@ class ActionEmitter extends EventEmitter {
    * Resolve a pending user prompt with feedback from the frontend.
    */
   resolveUserPromptFeedback(feedback: UserPromptFeedback): boolean {
-    const pending = this.pendingUserPrompts.get(feedback.promptId);
-    if (pending) {
-      clearTimeout(pending.timeoutId);
-      this.pendingUserPrompts.delete(feedback.promptId);
-      pending.resolve({
-        selectedValues: feedback.selectedValues,
-        text: feedback.text,
-        dismissed: feedback.dismissed ?? false,
-      });
-      return true;
-    }
-    return false;
+    return this.pendingUserPrompts.resolve(feedback.promptId, {
+      selectedValues: feedback.selectedValues,
+      text: feedback.text,
+      dismissed: feedback.dismissed ?? false,
+    }).resolved;
   }
 
   /**
@@ -490,13 +428,10 @@ class ActionEmitter extends EventEmitter {
     const requestId = this.generateRequestId();
     const currentSessionId = getSessionId();
 
-    const responsePromise = new Promise<AppProtocolResponse | null>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingAppRequests.delete(requestId);
-        resolve(null);
-      }, timeoutMs);
-
-      this.pendingAppRequests.set(requestId, { resolve, timeoutId, sessionId: currentSessionId });
+    const responsePromise = this.pendingAppRequests.create(requestId, {
+      timeoutMs,
+      sessionId: currentSessionId,
+      defaultValue: null,
     });
 
     this.emit('app-protocol', { requestId, windowId, request });
@@ -509,14 +444,7 @@ class ActionEmitter extends EventEmitter {
    * Called by the session when it receives an APP_PROTOCOL_RESPONSE from the frontend.
    */
   resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
-    const pending = this.pendingAppRequests.get(requestId);
-    if (pending) {
-      clearTimeout(pending.timeoutId);
-      this.pendingAppRequests.delete(requestId);
-      pending.resolve(response);
-      return true;
-    }
-    return false;
+    return this.pendingAppRequests.resolve(requestId, response).resolved;
   }
 
   /**
@@ -550,13 +478,11 @@ class ActionEmitter extends EventEmitter {
       context,
     };
 
-    const dialogPromise = new Promise<boolean>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingDialogs.delete(dialogId);
-        resolve(false); // Timeout — treat as deny
-      }, timeoutMs);
-
-      this.pendingDialogs.set(dialogId, { resolve, timeoutId, permissionOptions, sessionId });
+    const dialogPromise = this.pendingDialogs.create(dialogId, {
+      timeoutMs,
+      sessionId,
+      defaultValue: false,
+      meta: permissionOptions,
     });
 
     // Emit through the event system so LiveSession.broadcast() handles delivery
@@ -584,37 +510,10 @@ class ActionEmitter extends EventEmitter {
    * immediately instead of waiting for their individual timeouts.
    */
   clearPendingForSession(sessionId: string): void {
-    for (const [id, pending] of this.pendingRequests) {
-      if (pending.sessionId === sessionId) {
-        clearTimeout(pending.timeoutId);
-        this.pendingRequests.delete(id);
-        pending.resolve(null);
-      }
-    }
-
-    for (const [id, pending] of this.pendingDialogs) {
-      if (pending.sessionId === sessionId) {
-        clearTimeout(pending.timeoutId);
-        this.pendingDialogs.delete(id);
-        pending.resolve(false);
-      }
-    }
-
-    for (const [id, pending] of this.pendingUserPrompts) {
-      if (pending.sessionId === sessionId) {
-        clearTimeout(pending.timeoutId);
-        this.pendingUserPrompts.delete(id);
-        pending.resolve({ dismissed: true });
-      }
-    }
-
-    for (const [id, pending] of this.pendingAppRequests) {
-      if (pending.sessionId === sessionId) {
-        clearTimeout(pending.timeoutId);
-        this.pendingAppRequests.delete(id);
-        pending.resolve(null as unknown as AppProtocolResponse);
-      }
-    }
+    this.pendingRequests.clearForSession(sessionId, null);
+    this.pendingDialogs.clearForSession(sessionId, false);
+    this.pendingUserPrompts.clearForSession(sessionId, { dismissed: true });
+    this.pendingAppRequests.clearForSession(sessionId, null as unknown as AppProtocolResponse);
   }
 
   /**

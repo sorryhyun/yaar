@@ -90,14 +90,9 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     // Non-fatal: shortcuts will be created on next app interaction
   }
 
-  // Pre-warm provider pool (availability check, no network calls)
-  const warmPoolReady = await initWarmPool();
-  if (warmPoolReady) {
-    const stats = getWarmPool().getStats();
-    console.log(
-      `Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`,
-    );
-  }
+  // NOTE: Warm pool init is deferred to initWarmProviders() — must run AFTER
+  // Bun.serve() so the HTTP server is listening when codex app-server connects
+  // to MCP endpoints at http://127.0.0.1:{PORT}/mcp/*.
 
   // Restore window state from the most recent previous session
   const options: WebSocketServerOptions = {
@@ -139,6 +134,20 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   }
 
   return options;
+}
+
+/**
+ * Initialize the warm provider pool. Must be called AFTER the HTTP server
+ * is listening so that codex app-server can reach the MCP endpoints.
+ */
+export async function initWarmProviders(): Promise<void> {
+  const warmPoolReady = await initWarmPool();
+  if (warmPoolReady) {
+    const stats = getWarmPool().getStats();
+    console.log(
+      `Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`,
+    );
+  }
 }
 
 function getLanIp(): string {

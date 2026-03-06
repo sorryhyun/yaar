@@ -6,7 +6,7 @@
 
 import { createFetchHandler } from './http/index.js';
 import { createWsHandlers, type WsData } from './websocket/index.js';
-import { initializeSubsystems, shutdown, printBanner } from './lifecycle.js';
+import { initializeSubsystems, initWarmProviders, shutdown, printBanner } from './lifecycle.js';
 import { PORT, IS_REMOTE } from './config.js';
 
 export { STORAGE_DIR } from './config.js';
@@ -25,6 +25,10 @@ async function startup() {
   });
 
   await printBanner(server);
+
+  // Initialize warm pool AFTER server is listening — codex app-server needs
+  // to reach MCP endpoints at http://127.0.0.1:{PORT}/mcp/*
+  await initWarmProviders();
 
   // Guard against re-entrant shutdown (e.g. SIGINT during uncaughtException handler)
   let shutdownInProgress = false;
