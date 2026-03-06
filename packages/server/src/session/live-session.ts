@@ -636,6 +636,14 @@ class SessionHub {
     return undefined;
   }
 
+  findMonitorForAgent(agentId: string): string | undefined {
+    for (const session of this.sessions.values()) {
+      const monitorId = session.getPool()?.agentPool?.findMonitorForAgent(agentId);
+      if (monitorId) return monitorId;
+    }
+    return undefined;
+  }
+
   getDefault(): LiveSession | undefined {
     if (this.defaultSessionId) {
       return this.sessions.get(this.defaultSessionId);

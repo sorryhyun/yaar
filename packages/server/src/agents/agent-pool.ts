@@ -272,6 +272,16 @@ export class AgentPool {
     return false;
   }
 
+  /**
+   * Find the monitorId for a given agent instanceId.
+   */
+  findMonitorForAgent(agentId: string): string | undefined {
+    for (const [monitorId, agent] of this.mainAgents) {
+      if (agent.instanceId === agentId) return monitorId;
+    }
+    return undefined;
+  }
+
   // ── Steer ──────────────────────────────────────────────────────────
 
   /**

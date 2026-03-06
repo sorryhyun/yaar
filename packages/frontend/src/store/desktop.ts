@@ -397,7 +397,11 @@ function initWindowsSdkHandler() {
     }
 
     // yaar:window-read
-    const targetWindowId = e.data.windowId;
+    // Normalize: agents often pass yaar:// URIs (e.g. yaar://monitor-0/win-id)
+    // but the store uses plain window IDs.
+    const rawWindowId: string = e.data.windowId ?? '';
+    const uriMatch = rawWindowId.match(/^yaar:\/\/monitor-[^/]+\/([^/]+)/);
+    const targetWindowId = uriMatch ? uriMatch[1] : rawWindowId;
     const includeImage = e.data.includeImage === true;
 
     if (!targetWindowId) {
@@ -409,7 +413,11 @@ function initWindowsSdkHandler() {
     }
 
     const state = useDesktopStore.getState();
-    const win = state.windows[targetWindowId];
+    const monitorId = state.activeMonitorId ?? 'monitor-0';
+    const key = state.windows[targetWindowId]
+      ? targetWindowId
+      : toWindowKey(monitorId, targetWindowId);
+    const win = state.windows[key];
     if (!win) {
       src.postMessage(
         {
@@ -431,9 +439,7 @@ function initWindowsSdkHandler() {
 
     if (includeImage) {
       // Reuse the capture infrastructure
-      const el = document.querySelector(
-        `[${WINDOW_ID_DATA_ATTR}="${targetWindowId}"]`,
-      ) as HTMLElement | null;
+      const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
 
       if (el) {
         const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;

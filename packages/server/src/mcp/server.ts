@@ -169,8 +169,9 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   const agentId = req.headers.get('x-agent-id') ?? 'unknown';
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
+  const monitorId = hub.findMonitorForAgent(agentId);
 
-  return runWithAgentContext({ agentId, sessionId: yaarSessionId }, async () => {
+  return runWithAgentContext({ agentId, sessionId: yaarSessionId, monitorId }, async () => {
     // Check for existing MCP session
     const mcpSessionId = req.headers.get('mcp-session-id') ?? undefined;
 

@@ -92,7 +92,7 @@ export function runWithAgentId<T>(agentId: string, fn: () => T): T {
  * Used by the MCP HTTP handler to restore both identity and session scope.
  */
 export function runWithAgentContext<T>(
-  ctx: { agentId: string; sessionId?: SessionId },
+  ctx: { agentId: string; sessionId?: SessionId; monitorId?: string },
   fn: () => T,
 ): T {
   const existing = agentContext.getStore();
@@ -101,6 +101,7 @@ export function runWithAgentContext<T>(
       agentId: ctx.agentId,
       connectionId: existing?.connectionId ?? ('' as ConnectionId),
       sessionId: ctx.sessionId ?? existing?.sessionId ?? ('' as SessionId),
+      monitorId: ctx.monitorId ?? existing?.monitorId,
     },
     fn,
   );
