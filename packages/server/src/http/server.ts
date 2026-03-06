@@ -116,12 +116,22 @@ export function createFetchHandler() {
     // If X-Iframe-Token is present and valid, restrict to public routes only.
     const iframeToken = req.headers.get('x-iframe-token');
     if (iframeToken) {
-      const windowId = validateIframeToken(iframeToken);
-      if (windowId && !isPublicRoute(req.method, url.pathname)) {
+      const tokenEntry = validateIframeToken(iframeToken);
+      if (tokenEntry && !isPublicRoute(req.method, url.pathname)) {
         return withCors(
           Response.json({ error: 'Route not available to iframe apps' }, { status: 403 }),
           corsHeaders,
         );
+      }
+      // Per-app route scoping: block cross-app static file access
+      if (tokenEntry?.appId) {
+        const appsMatch = url.pathname.match(/^\/api\/apps\/([^/]+)\//);
+        if (appsMatch && appsMatch[1] !== tokenEntry.appId) {
+          return withCors(
+            Response.json({ error: 'Cross-app access denied' }, { status: 403 }),
+            corsHeaders,
+          );
+        }
       }
       // Invalid/expired token — treat as host request (don't block)
     }

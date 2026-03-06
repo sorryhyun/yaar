@@ -4,7 +4,7 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, stat } from 'fs/promises';
+import { mkdir, readdir, unlink, stat, realpath } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
 import {
@@ -41,6 +41,37 @@ export function resolvePath(filePath: string): ResolvedPath | null {
     return null;
   }
   return { absolutePath: normalizedPath, readOnly: false };
+}
+
+/**
+ * Async variant of resolvePath that resolves symlinks before containment check.
+ */
+export async function resolvePathAsync(filePath: string): Promise<ResolvedPath | null> {
+  const cleanedPath = filePath.replaceAll('\\', '/');
+
+  // 1. Check mount prefix
+  const mountResult = resolveMountPath(cleanedPath);
+  if (mountResult) return mountResult;
+
+  // 2. Default: resolve against STORAGE_DIR
+  const normalizedPath = normalize(join(STORAGE_DIR, cleanedPath));
+  const relativePath = relative(STORAGE_DIR, normalizedPath);
+  if (relativePath.startsWith('..') || relativePath.includes('..')) {
+    return null;
+  }
+
+  try {
+    const realPath = await realpath(normalizedPath);
+    const realBase = await realpath(STORAGE_DIR);
+    const realRel = relative(realBase, realPath);
+    if (realRel.startsWith('..') || realRel.includes('..')) {
+      return null;
+    }
+    return { absolutePath: realPath, readOnly: false };
+  } catch {
+    // File doesn't exist yet — fall back to sync check
+    return { absolutePath: normalizedPath, readOnly: false };
+  }
 }
 
 /**

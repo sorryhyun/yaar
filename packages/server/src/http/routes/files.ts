@@ -5,7 +5,7 @@
 import { join, extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
 import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
-import { errorResponse, jsonResponse, safePath, type EndpointMeta } from '../utils.js';
+import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { parseContentPath, type ParsedContentPath } from '@yaar/shared';
@@ -247,7 +247,7 @@ async function handleSandbox(
   if (req.method !== 'GET' || !parsed.sandboxId || !parsed.path) return null;
 
   const sandboxDir = join(PROJECT_ROOT, 'sandbox', parsed.sandboxId);
-  const normalizedPath = safePath(sandboxDir, parsed.path);
+  const normalizedPath = await safePathAsync(sandboxDir, parsed.path);
   if (!normalizedPath) return errorResponse('Access denied', 403);
 
   return serveStaticFile(req, normalizedPath, parsed.path);
@@ -261,7 +261,7 @@ async function handleApps(
   if (req.method !== 'GET') return null;
 
   const appsDir = join(PROJECT_ROOT, 'apps', parsed.appId);
-  const normalizedPath = safePath(appsDir, parsed.path);
+  const normalizedPath = await safePathAsync(appsDir, parsed.path);
   if (!normalizedPath) return errorResponse('Access denied', 403);
 
   return serveStaticFile(req, normalizedPath, parsed.path);

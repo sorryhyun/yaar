@@ -19,8 +19,9 @@ import { ok, error } from '../utils.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { generateIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { resolveContentUri, extractAppId, buildWindowUri } from '@yaar/shared';
-import { getMonitorId } from '../../agents/session.js';
+import { extractAppId, buildWindowUri } from '@yaar/shared';
+import { resolveResourceUri } from '../../uri/resolve.js';
+import { getMonitorId, getSessionId } from '../../agents/session.js';
 
 /** Derive a window ID from appId, name, or title. */
 function deriveWindowId(appId?: string, name?: string, title?: string): string {
@@ -106,9 +107,9 @@ export function registerCreateTools(server: McpServer): void {
 
       // Resolve yaar:// URIs for iframe content
       if (renderer === 'iframe' && typeof data === 'string') {
-        const resolved = resolveContentUri(data);
+        const resolved = resolveResourceUri(data);
         if (resolved) {
-          data = resolved;
+          data = resolved.apiPath;
         } else if (data.startsWith('yaar://')) {
           const appId = extractAppId(data);
           return error(
@@ -139,7 +140,15 @@ export function registerCreateTools(server: McpServer): void {
         ...(appMeta?.frameless ? { frameless: true } : {}),
         ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
         ...(args.minimized ? { minimized: true } : {}),
-        ...(renderer === 'iframe' ? { iframeToken: generateIframeToken(windowId) } : {}),
+        ...(renderer === 'iframe'
+          ? {
+              iframeToken: generateIframeToken(
+                windowId,
+                getSessionId() ?? '',
+                args.appId as string | undefined,
+              ),
+            }
+          : {}),
       };
 
       if (renderer === 'iframe') {

@@ -10,6 +10,8 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface TokenEntry {
   windowId: string;
+  sessionId: string;
+  appId?: string;
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -20,20 +22,20 @@ const tokens = new Map<string, TokenEntry>();
  * Generate a short-lived token tied to a windowId.
  * The token is injected into the iframe SDK so requests can self-identify.
  */
-export function generateIframeToken(windowId: string): string {
+export function generateIframeToken(windowId: string, sessionId: string, appId?: string): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
     tokens.delete(token);
   }, TOKEN_TTL_MS);
-  tokens.set(token, { windowId, createdAt: Date.now(), timer });
+  tokens.set(token, { windowId, sessionId, appId, createdAt: Date.now(), timer });
   return token;
 }
 
 /**
  * Validate an iframe token.
- * Returns the associated windowId if valid, null if expired/invalid.
+ * Returns the associated token entry if valid, null if expired/invalid.
  */
-export function validateIframeToken(token: string): string | null {
+export function validateIframeToken(token: string): TokenEntry | null {
   const entry = tokens.get(token);
   if (!entry) return null;
   if (Date.now() - entry.createdAt > TOKEN_TTL_MS) {
@@ -41,7 +43,7 @@ export function validateIframeToken(token: string): string | null {
     tokens.delete(token);
     return null;
   }
-  return entry.windowId;
+  return entry;
 }
 
 /**

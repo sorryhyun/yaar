@@ -520,6 +520,10 @@ export class LiveSession {
 
   // ── Query methods ───────────────────────────────────────────────────
 
+  hasWindow(windowId: string): boolean {
+    return this.windowState.hasWindow(windowId);
+  }
+
   getPool(): ContextPool | null {
     return this.pool;
   }

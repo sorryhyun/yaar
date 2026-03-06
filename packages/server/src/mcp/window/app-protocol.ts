@@ -9,6 +9,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AppProtocolRequest } from '@yaar/shared';
 import { parseWindowResourceUri, type ParsedWindowResourceUri } from '@yaar/shared';
 import { z } from 'zod';
+import { getSessionId } from '../../agents/session.js';
+import { getSessionHub } from '../../session/live-session.js';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
@@ -72,6 +74,14 @@ export function registerAppProtocolTools(
       } else {
         windowId = resolveWindowId(args.uri);
         stateKey = 'manifest';
+      }
+
+      const sessionId = getSessionId();
+      if (sessionId) {
+        const session = getSessionHub().get(sessionId);
+        if (session && !session.hasWindow(windowId)) {
+          return error(`Window "${windowId}" does not belong to the current session.`);
+        }
       }
 
       const win = getWindowState().getWindow(windowId);
@@ -138,6 +148,14 @@ export function registerAppProtocolTools(
         );
       const { windowId } = resource;
       const command = resource.key;
+
+      const sessionId = getSessionId();
+      if (sessionId) {
+        const session = getSessionHub().get(sessionId);
+        if (session && !session.hasWindow(windowId)) {
+          return error(`Window "${windowId}" does not belong to the current session.`);
+        }
+      }
 
       const win = getWindowState().getWindow(windowId);
       if (!win) return error(`Window "${windowId}" not found.`);
