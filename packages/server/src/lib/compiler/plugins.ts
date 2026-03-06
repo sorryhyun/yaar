@@ -14,6 +14,15 @@ import { fileURLToPath } from 'url';
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Local shim files that wrap npm libraries with compatibility fixes.
+ * When a @bundled/* import matches a shim, it resolves to the shim file
+ * instead of the npm package directly.
+ */
+const BUNDLED_SHIMS: Record<string, string> = {
+  anime: join(PLUGIN_DIR, 'shims', 'anime.ts'),
+};
+
+/**
  * Libraries with browser/node conditional exports that need consistent resolution.
  * Bare imports of these from within bundled code must resolve to the same path as
  * the @bundled/* aliased imports to prevent duplicate module copies.
@@ -107,6 +116,11 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
+        // Strategy 0: local shim file (wraps npm package with compat fixes)
+        if (BUNDLED_SHIMS[libName]) {
+          return { path: BUNDLED_SHIMS[libName] };
+        }
+
         // Strategy 1: embedded libs (production exe)
         const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
