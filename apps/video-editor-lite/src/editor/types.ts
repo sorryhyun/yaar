@@ -22,6 +22,7 @@ export interface EditorState {
   // Creator mode state
   composition: Composition | null;
   selectedSceneId: string | null;
+  selectedLayerId: string | null;
   creatorPlaying: boolean;
   creatorFrame: number;
 }

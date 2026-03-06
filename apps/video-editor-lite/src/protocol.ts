@@ -13,13 +13,20 @@ export interface EditorControllerApi {
   setPlaybackRate: (rate: number) => { ok: true; playbackRate: number };
   // Creator mode API
   createComposition: (params: { width?: number; height?: number; fps?: number; durationInFrames?: number }) => { ok: true; config: Composition['config'] };
-  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps }) => { ok: true; sceneId: string };
+  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps; layerId?: string }) => { ok: true; sceneId: string };
   updateScene: (params: { id: string; from?: number; durationInFrames?: number; props?: SceneProps }) => { ok: true };
   removeScene: (params: { id: string }) => { ok: true };
   reorderScenes: (params: { ids: string[] }) => { ok: true };
-  getComposition: () => { composition: Composition | null };
+  getComposition: () => { composition: unknown };
   preview: () => { ok: true };
   exportVideo: () => Promise<{ ok: true }>;
+  addLayer: (params: { name?: string; index?: number }) => { ok: true; layerId: string; layerName: string };
+  removeLayer: (params: { id: string }) => { ok: true };
+  updateLayer: (params: { id: string; name?: string; visible?: boolean; locked?: boolean }) => { ok: true };
+  reorderLayers: (params: { ids: string[] }) => { ok: true };
+  selectLayer: (params: { id: string }) => { ok: true };
+  moveSceneToLayer: (params: { sceneId: string; layerId: string }) => { ok: true };
+  getLayers: () => { layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; sceneIds: string[] }> };
 }
 
 type AppProtocolStateEntry = {
@@ -74,6 +81,10 @@ export function registerProtocol(controller: EditorControllerApi): void {
       composition: {
         description: 'Current composition state including config and scenes.',
         handler: () => controller.getComposition(),
+      },
+      layers: {
+        description: 'All layers in the current composition with their scenes.',
+        handler: () => controller.getLayers(),
       },
     },
     commands: {
@@ -150,13 +161,14 @@ export function registerProtocol(controller: EditorControllerApi): void {
           }),
       },
       addScene: {
-        description: 'Add a scene to the composition. Types: solid, text, shape, image, video-clip.',
+        description: 'Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).',
         params: {
           type: 'object',
           properties: {
             type: { type: 'string', enum: ['solid', 'text', 'shape', 'image', 'video-clip'] },
             from: { type: 'number', description: 'Start frame (default: 0)' },
             durationInFrames: { type: 'number', description: 'Scene duration in frames' },
+            layerId: { type: 'string', description: 'Target layer ID (default: currently selected layer)' },
             props: {
               type: 'object',
               description: 'Scene-specific properties. solid: {color, colorEnd, gradient}. text: {text, fontSize, fontFamily, color, x, y, align, animation, shadow}. shape: {shape, x, y, width, height, radius, color, strokeColor, keyframes}. image: {src, fit, kenBurns}. video-clip: {src, trimStart, trimEnd}.',
@@ -170,6 +182,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
             type: params.type as string,
             from: typeof params.from === 'number' ? params.from : undefined,
             durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
+            layerId: typeof params.layerId === 'string' ? params.layerId : undefined,
             props: typeof params.props === 'object' && params.props ? (params.props as Record<string, unknown>) : undefined,
           }),
       },
@@ -228,6 +241,96 @@ export function registerProtocol(controller: EditorControllerApi): void {
         description: 'Get the current composition state.',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: () => controller.getComposition(),
+      },
+      addLayer: {
+        description: 'Add a new layer to the composition. Returns the new layer ID.',
+        params: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Layer name (default: "Layer N")' },
+            index: { type: 'number', description: 'Insert position (0 = bottom/background). Default: top.' },
+          },
+          additionalProperties: false,
+        },
+        handler: (params) =>
+          controller.addLayer({
+            name: typeof params.name === 'string' ? params.name : undefined,
+            index: typeof params.index === 'number' ? params.index : undefined,
+          }),
+      },
+      removeLayer: {
+        description: 'Remove a layer and all its scenes by layer ID. The last layer cannot be removed.',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Layer ID to remove' },
+          },
+          required: ['id'],
+          additionalProperties: false,
+        },
+        handler: (params) => controller.removeLayer({ id: params.id as string }),
+      },
+      updateLayer: {
+        description: 'Update layer properties: rename, toggle visibility, or toggle lock.',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Layer ID' },
+            name: { type: 'string', description: 'New layer name' },
+            visible: { type: 'boolean', description: 'Layer visibility (hidden layers are not rendered or exported)' },
+            locked: { type: 'boolean', description: 'Locked layers cannot have their scenes edited' },
+          },
+          required: ['id'],
+          additionalProperties: false,
+        },
+        handler: (params) =>
+          controller.updateLayer({
+            id: params.id as string,
+            name: typeof params.name === 'string' ? params.name : undefined,
+            visible: typeof params.visible === 'boolean' ? params.visible : undefined,
+            locked: typeof params.locked === 'boolean' ? params.locked : undefined,
+          }),
+      },
+      reorderLayers: {
+        description: 'Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).',
+        params: {
+          type: 'object',
+          properties: {
+            ids: { type: 'array', items: { type: 'string' }, description: 'Layer IDs in new order (bottom to top)' },
+          },
+          required: ['ids'],
+          additionalProperties: false,
+        },
+        handler: (params) => controller.reorderLayers({ ids: params.ids as string[] }),
+      },
+      selectLayer: {
+        description: 'Select the active layer. New scenes added via addScene will go into this layer.',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Layer ID to select' },
+          },
+          required: ['id'],
+          additionalProperties: false,
+        },
+        handler: (params) => controller.selectLayer({ id: params.id as string }),
+      },
+      moveSceneToLayer: {
+        description: 'Move a scene from its current layer to a different layer.',
+        params: {
+          type: 'object',
+          properties: {
+            sceneId: { type: 'string', description: 'Scene ID to move' },
+            layerId: { type: 'string', description: 'Target layer ID' },
+          },
+          required: ['sceneId', 'layerId'],
+          additionalProperties: false,
+        },
+        handler: (params) =>
+          controller.moveSceneToLayer({
+            sceneId: params.sceneId as string,
+            layerId: params.layerId as string,
+          }),
       },
     },
   });

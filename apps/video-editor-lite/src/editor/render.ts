@@ -1,6 +1,6 @@
 import type { EditorUI } from './ui';
 import type { EditorState } from './types';
-import type { Scene } from '../core/types';
+import type { Scene, Layer } from '../core/types';
 import { formatTime } from './utils/time';
 import { animate } from '@bundled/anime';
 import { fadeIn, staggerIn, fadeOutRemove, popIn } from './anim-utils';
@@ -14,9 +14,12 @@ export const SCENE_COLORS: Record<string, string> = {
 };
 
 // ── Persistent state for diff-based rendering ──────────────────────────────
-let _playhead: HTMLDivElement | null = null;
-let _timelineBlocks = new Map<string, HTMLDivElement>();
+let _playheadOverlay: HTMLDivElement | null = null;
+let _playheadLine: HTMLDivElement | null = null;
+// Map of layerId -> { rowEl, trackEl, blockMap }
+let _layerRows = new Map<string, { rowEl: HTMLDivElement; trackEl: HTMLDivElement; blockMap: Map<string, HTMLDivElement> }>();
 let _sceneItems = new Map<string, HTMLDivElement>();
+let _layerGroupEls = new Map<string, HTMLDivElement>(); // layerId -> group container
 let _sceneEmptyEl: HTMLDivElement | null = null;
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -60,19 +63,24 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
 
   if (!comp) {
     ui.creatorFrameLabel.textContent = 'No composition';
-    // Clear persistent state
+    // Clear all persistent state
+    for (const { rowEl } of _layerRows.values()) rowEl.remove();
+    _layerRows.clear();
+    _playheadOverlay = null;
+    _playheadLine = null;
     for (const el of _sceneItems.values()) el.remove();
     _sceneItems.clear();
+    for (const el of _layerGroupEls.values()) el.remove();
+    _layerGroupEls.clear();
     _sceneEmptyEl = null;
-    for (const el of _timelineBlocks.values()) el.remove();
-    _timelineBlocks.clear();
-    _playhead = null;
     ui.scenePanel.innerHTML = '<div class="storage-empty">No scenes yet. Add one above.</div>';
     ui.timelineTrack.innerHTML = '';
+    ui.layerListEl.innerHTML = '';
     return;
   }
 
   const totalFrames = comp.config.durationInFrames;
+  const { layers } = comp;
 
   ui.creatorFrameSlider.max = String(Math.max(0, totalFrames - 1));
   ui.creatorFrameSlider.value = String(state.creatorFrame);
@@ -89,119 +97,331 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
   if (document.activeElement !== ui.compFpsInput) ui.compFpsInput.value = String(comp.config.fps);
   if (document.activeElement !== ui.compDurationInput) ui.compDurationInput.value = String(comp.config.durationInFrames);
 
-  // ── Timeline (diff-based) ─────────────────────────────────────────────────
-  const currentSceneIds = new Set(comp.scenes.map((s) => s.id));
+  // ── Layer list in sidebar ────────────────────────────────────────────────
+  renderLayerList(ui, layers, state.selectedLayerId);
 
-  // Remove deleted blocks
-  for (const [id, blockEl] of [..._timelineBlocks.entries()]) {
-    if (!currentSceneIds.has(id)) {
-      _timelineBlocks.delete(id);
-      animate_opacity_out(blockEl);
+  // ── Timeline (multi-row, diff-based) ─────────────────────────────────────
+  renderTimeline(ui, layers, totalFrames, state.selectedSceneId, state.selectedLayerId, state.creatorFrame);
+
+  // ── Scene list (grouped by layer, diff-based) ────────────────────────────
+  renderSceneList(ui, layers, state.selectedSceneId, state.selectedLayerId);
+
+  // ── Scene properties panel ───────────────────────────────────────────────
+  const allScenes = layers.flatMap((l) => l.scenes);
+  const selectedScene = state.selectedSceneId
+    ? allScenes.find((s) => s.id === state.selectedSceneId) ?? null
+    : null;
+  renderScenePropsPanel(ui.scenePropsPanel, selectedScene);
+}
+
+// ── Layer list in sidebar ─────────────────────────────────────────────────
+function renderLayerList(ui: EditorUI, layers: Layer[], selectedLayerId: string | null): void {
+  const container = ui.layerListEl;
+  const currentLayerIds = new Set(layers.map((l) => l.id));
+
+  // Remove deleted layer groups
+  for (const [id, el] of [..._layerGroupEls.entries()]) {
+    if (!currentLayerIds.has(id)) {
+      _layerGroupEls.delete(id);
+      animate(el, { opacity: [1, 0], duration: 150 }).then(() => el.remove());
     }
   }
 
-  // Ensure playhead exists (create before blocks so it's at back, we'll re-append it at end)
-  if (!_playhead || !ui.timelineTrack.contains(_playhead)) {
-    _playhead = document.createElement('div');
-    _playhead.className = 'timeline-playhead';
-    ui.timelineTrack.appendChild(_playhead);
-  }
+  // Display layers in reverse so top layer (last in array) appears at top of list
+  const displayOrder = [...layers].reverse();
 
-  // Update / create timeline blocks
-  for (const scene of comp.scenes) {
-    let block = _timelineBlocks.get(scene.id);
-    const isNew = !block;
+  for (const layer of displayOrder) {
+    let groupEl = _layerGroupEls.get(layer.id);
+    const isNew = !groupEl;
 
-    if (!block) {
-      block = document.createElement('div');
-      block.dataset.sceneId = scene.id;
-      ui.timelineTrack.insertBefore(block, _playhead);
-      _timelineBlocks.set(scene.id, block);
+    if (!groupEl) {
+      groupEl = document.createElement('div');
+      groupEl.className = 'layer-group-item';
+      groupEl.dataset.layerId = layer.id;
+      _layerGroupEls.set(layer.id, groupEl);
+      container.appendChild(groupEl);
+      if (isNew) popIn(groupEl);
     }
 
-    block.className = 'timeline-block' + (scene.id === state.selectedSceneId ? ' selected' : '');
-    const leftPct = (scene.from / totalFrames) * 100;
-    const widthPct = (scene.durationInFrames / totalFrames) * 100;
-    block.style.left = `${leftPct}%`;
-    block.style.width = `${widthPct}%`;
-    block.style.background = SCENE_COLORS[scene.type] ?? '#555';
-    block.textContent = scene.type;
+    const isSelected = layer.id === selectedLayerId;
+    groupEl.className = 'layer-group-item' + (isSelected ? ' selected' : '');
 
-    if (isNew) popIn(block);
+    if (isNew) {
+      // Build inner content only for new elements
+      groupEl.innerHTML = '';
+      const visBtn = document.createElement('button');
+      visBtn.type = 'button';
+      visBtn.className = 'layer-icon-btn';
+      visBtn.dataset.layerVis = layer.id;
+
+      const lockBtn = document.createElement('button');
+      lockBtn.type = 'button';
+      lockBtn.className = 'layer-icon-btn';
+      lockBtn.dataset.layerLock = layer.id;
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'layer-name';
+      nameEl.dataset.layerSelect = layer.id;
+      nameEl.title = layer.name;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'layer-icon-btn layer-delete';
+      deleteBtn.title = 'Delete layer';
+      deleteBtn.dataset.layerDelete = layer.id;
+      deleteBtn.textContent = '✕';
+
+      groupEl.append(visBtn, lockBtn, nameEl, deleteBtn);
+    }
+
+    // Update attributes in-place (for both new and existing)
+    const visBtn = groupEl.querySelector<HTMLButtonElement>('[data-layer-vis]')!;
+    visBtn.title = layer.visible ? 'Hide layer' : 'Show layer';
+    visBtn.textContent = layer.visible ? '👁' : '🙈';
+
+    const lockBtn = groupEl.querySelector<HTMLButtonElement>('[data-layer-lock]')!;
+    lockBtn.title = layer.locked ? 'Unlock layer' : 'Lock layer';
+    lockBtn.textContent = layer.locked ? '🔒' : '🔓';
+
+    const nameEl = groupEl.querySelector<HTMLSpanElement>('.layer-name')!;
+    nameEl.textContent = layer.name;
+    nameEl.title = layer.name;
   }
 
-  // Move playhead to end so it renders on top
-  ui.timelineTrack.appendChild(_playhead);
-  _playhead.style.left = `${(state.creatorFrame / totalFrames) * 100}%`;
+  // Reorder DOM to match displayOrder
+  for (const layer of displayOrder) {
+    const el = _layerGroupEls.get(layer.id);
+    if (el) container.appendChild(el);
+  }
+}
 
-  // ── Scene list (diff-based) ───────────────────────────────────────────────
-  // Remove deleted scenes
+// ── Timeline multi-row ────────────────────────────────────────────────────
+function renderTimeline(
+  ui: EditorUI,
+  layers: Layer[],
+  totalFrames: number,
+  selectedSceneId: string | null,
+  selectedLayerId: string | null,
+  creatorFrame: number,
+): void {
+  const container = ui.timelineTrack;
+  const currentLayerIds = new Set(layers.map((l) => l.id));
+  const allSceneIds = new Set(layers.flatMap((l) => l.scenes.map((s) => s.id)));
+
+  // Remove deleted layer rows
+  for (const [id, { rowEl }] of [..._layerRows.entries()]) {
+    if (!currentLayerIds.has(id)) {
+      _layerRows.delete(id);
+      animate(rowEl, { opacity: [1, 0], duration: 150 }).then(() => rowEl.remove());
+    }
+  }
+
+  // Ensure playhead overlay exists (spans all rows)
+  if (!_playheadOverlay || !container.contains(_playheadOverlay)) {
+    _playheadOverlay = document.createElement('div');
+    _playheadOverlay.className = 'tl-playhead-overlay';
+    _playheadLine = document.createElement('div');
+    _playheadLine.className = 'timeline-playhead';
+    _playheadOverlay.appendChild(_playheadLine);
+    container.appendChild(_playheadOverlay);
+  }
+
+  // Display layers: top layer (last in array) at top of timeline, bottom layer (first) at bottom
+  const displayOrder = [...layers].reverse();
+
+  for (const layer of displayOrder) {
+    let layerRow = _layerRows.get(layer.id);
+    const isNewRow = !layerRow;
+
+    if (!layerRow) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'tl-layer-row';
+      rowEl.dataset.layerId = layer.id;
+
+      const labelEl = document.createElement('div');
+      labelEl.className = 'tl-layer-label';
+      labelEl.dataset.layerSelect = layer.id;
+
+      const trackEl = document.createElement('div');
+      trackEl.className = 'tl-layer-area';
+
+      rowEl.append(labelEl, trackEl);
+      container.insertBefore(rowEl, _playheadOverlay);
+
+      layerRow = { rowEl, trackEl, blockMap: new Map() };
+      _layerRows.set(layer.id, layerRow);
+    }
+
+    const { rowEl, trackEl, blockMap } = layerRow;
+
+    // Update row styling
+    rowEl.classList.toggle('selected', layer.id === selectedLayerId);
+    rowEl.classList.toggle('hidden-layer', !layer.visible);
+
+    // Update label
+    const labelEl = rowEl.querySelector<HTMLDivElement>('.tl-layer-label')!;
+    labelEl.textContent = layer.name;
+
+    // Remove deleted scene blocks in this layer
+    for (const [sceneId, blockEl] of [...blockMap.entries()]) {
+      if (!allSceneIds.has(sceneId)) {
+        blockMap.delete(sceneId);
+        animate(blockEl, { opacity: [1, 0], duration: 150 }).then(() => blockEl.remove());
+      }
+    }
+
+    // Update / create scene blocks
+    for (const scene of layer.scenes) {
+      let block = blockMap.get(scene.id);
+      const isNew = !block;
+
+      if (!block) {
+        block = document.createElement('div');
+        block.dataset.sceneId = scene.id;
+        trackEl.appendChild(block);
+        blockMap.set(scene.id, block);
+      }
+
+      block.className = 'timeline-block' + (scene.id === selectedSceneId ? ' selected' : '');
+      const leftPct = (scene.from / totalFrames) * 100;
+      const widthPct = (scene.durationInFrames / totalFrames) * 100;
+      block.style.left = `${leftPct}%`;
+      block.style.width = `${widthPct}%`;
+      block.style.background = SCENE_COLORS[scene.type] ?? '#555';
+      block.style.opacity = layer.visible ? '1' : '0.4';
+      block.textContent = scene.type;
+
+      if (isNew) popIn(block);
+    }
+  }
+
+  // Reorder layer rows in DOM (keep playhead overlay at end)
+  for (const layer of displayOrder) {
+    const row = _layerRows.get(layer.id);
+    if (row) container.insertBefore(row.rowEl, _playheadOverlay);
+  }
+
+  // Update playhead position
+  if (_playheadLine) {
+    _playheadLine.style.left = `${(creatorFrame / totalFrames) * 100}%`;
+  }
+}
+
+// ── Scene list grouped by layer ───────────────────────────────────────────
+function renderSceneList(
+  ui: EditorUI,
+  layers: Layer[],
+  selectedSceneId: string | null,
+  selectedLayerId: string | null,
+): void {
+  const container = ui.scenePanel;
+  const allCurrentSceneIds = new Set(layers.flatMap((l) => l.scenes.map((s) => s.id)));
+
+  // Remove scene items that no longer exist
   for (const [id, itemEl] of [..._sceneItems.entries()]) {
-    if (!currentSceneIds.has(id)) {
+    if (!allCurrentSceneIds.has(id)) {
       _sceneItems.delete(id);
       fadeOutRemove(itemEl);
     }
   }
 
-  // Empty state
-  if (comp.scenes.length === 0) {
-    if (!_sceneEmptyEl || !ui.scenePanel.contains(_sceneEmptyEl)) {
+  // Check total scene count for empty state
+  const totalScenes = layers.reduce((sum, l) => sum + l.scenes.length, 0);
+
+  if (totalScenes === 0) {
+    if (!_sceneEmptyEl || !container.contains(_sceneEmptyEl)) {
       _sceneEmptyEl = document.createElement('div');
       _sceneEmptyEl.className = 'storage-empty';
       _sceneEmptyEl.textContent = 'No scenes yet. Add one above.';
-      ui.scenePanel.appendChild(_sceneEmptyEl);
+      container.appendChild(_sceneEmptyEl);
       fadeIn(_sceneEmptyEl);
     }
   } else {
-    if (_sceneEmptyEl && ui.scenePanel.contains(_sceneEmptyEl)) {
+    if (_sceneEmptyEl && container.contains(_sceneEmptyEl)) {
       _sceneEmptyEl.remove();
       _sceneEmptyEl = null;
     }
   }
 
-  // Add/update scenes
+  // Group scenes by layer. Display layers in reverse (top layer first in UI)
+  const displayOrder = [...layers].reverse();
   const newItems: HTMLElement[] = [];
-  for (const scene of comp.scenes) {
-    let item = _sceneItems.get(scene.id);
-    const isNew = !item;
 
-    if (!item) {
-      item = createSceneListItem(scene);
-      ui.scenePanel.appendChild(item);
-      _sceneItems.set(scene.id, item);
-      newItems.push(item);
+  for (const layer of displayOrder) {
+    // Layer header: use a dedicated element per layer, tracked by layerId
+    let layerHeaderKey = `__header_${layer.id}`;
+    let headerEl = _sceneItems.get(layerHeaderKey) as HTMLDivElement | undefined;
+    if (!headerEl) {
+      headerEl = document.createElement('div');
+      headerEl.className = 'scene-layer-header';
+      headerEl.dataset.layerHeader = layer.id;
+      _sceneItems.set(layerHeaderKey, headerEl);
+      container.appendChild(headerEl);
     }
 
-    // Update selected class
-    item.className = 'scene-item' + (scene.id === state.selectedSceneId ? ' selected' : '');
-    // Update range display
-    const rangeEl = item.querySelector('.scene-range') as HTMLElement | null;
-    if (rangeEl) {
-      rangeEl.textContent = `Frame ${scene.from} – ${scene.from + scene.durationInFrames}`;
+    headerEl.className = 'scene-layer-header' + (layer.id === selectedLayerId ? ' active-layer' : '');
+    headerEl.innerHTML = '';
+
+    const visSpan = document.createElement('span');
+    visSpan.className = 'scene-layer-vis';
+    visSpan.textContent = layer.visible ? '👁' : '🙈';
+    visSpan.dataset.layerVis = layer.id;
+
+    const lockSpan = document.createElement('span');
+    lockSpan.className = 'scene-layer-vis';
+    lockSpan.textContent = layer.locked ? '🔒' : '🔓';
+    lockSpan.dataset.layerLock = layer.id;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'scene-layer-name';
+    nameSpan.textContent = layer.name;
+    nameSpan.dataset.layerSelect = layer.id;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'scene-layer-count';
+    countSpan.textContent = `${layer.scenes.length} scene${layer.scenes.length !== 1 ? 's' : ''}`;
+
+    headerEl.append(visSpan, lockSpan, nameSpan, countSpan);
+
+    // Scene items within this layer
+    for (const scene of layer.scenes) {
+      let item = _sceneItems.get(scene.id);
+      const isNew = !item;
+
+      if (!item) {
+        item = createSceneListItem(scene, layer.locked);
+        container.appendChild(item);
+        _sceneItems.set(scene.id, item);
+        newItems.push(item);
+      }
+
+      item.className = 'scene-item' + (scene.id === selectedSceneId ? ' selected' : '') + (layer.locked ? ' locked' : '');
+      item.style.opacity = layer.visible ? '1' : '0.5';
+
+      const rangeEl = item.querySelector('.scene-range') as HTMLElement | null;
+      if (rangeEl) {
+        rangeEl.textContent = `Frame ${scene.from} – ${scene.from + scene.durationInFrames}`;
+      }
+      const deleteBtn = item.querySelector<HTMLButtonElement>('.scene-delete');
+      if (deleteBtn) deleteBtn.disabled = layer.locked;
     }
   }
 
-  // Reorder DOM to match comp.scenes order
-  for (const scene of comp.scenes) {
-    const el = _sceneItems.get(scene.id);
-    if (el) ui.scenePanel.appendChild(el); // moves existing elements
+  // Reorder DOM: headers and scene items in correct layer order
+  for (const layer of displayOrder) {
+    const headerKey = `__header_${layer.id}`;
+    const hEl = _sceneItems.get(headerKey);
+    if (hEl) container.appendChild(hEl);
+    for (const scene of layer.scenes) {
+      const el = _sceneItems.get(scene.id);
+      if (el) container.appendChild(el);
+    }
   }
 
   if (newItems.length > 0) staggerIn(newItems);
-
-  // ── Scene properties panel ───────────────────────────────────────────────
-  const selectedScene = state.selectedSceneId
-    ? comp.scenes.find((s) => s.id === state.selectedSceneId) ?? null
-    : null;
-  renderScenePropsPanel(ui.scenePropsPanel, selectedScene);
 }
 
-// Quick opacity-out removal helper (internal, no translate)
-function animate_opacity_out(el: HTMLElement): void {
-  animate(el, { opacity: [1, 0], duration: 150 }).then(() => el.remove());
-}
-
-function createSceneListItem(scene: Scene): HTMLDivElement {
+function createSceneListItem(scene: Scene, locked: boolean): HTMLDivElement {
   const item = document.createElement('div');
   item.className = 'scene-item';
   item.dataset.sceneId = scene.id;
@@ -228,6 +448,7 @@ function createSceneListItem(scene: Scene): HTMLDivElement {
   deleteBtn.textContent = '✕';
   deleteBtn.type = 'button';
   deleteBtn.dataset.deleteSceneId = scene.id;
+  deleteBtn.disabled = locked;
 
   item.append(colorDot, info, deleteBtn);
   return item;
@@ -267,7 +488,28 @@ function makeSelect(options: { value: string; label: string }[], value: string, 
   return el;
 }
 
+let _lastPropsSceneId: string | null = null;
+
+function updatePropValues(panelEl: HTMLDivElement, scene: Scene): void {
+  const props = (scene as any).props ?? {};
+  const fromInput = panelEl.querySelector<HTMLInputElement>('[data-prop="from"]');
+  if (fromInput && document.activeElement !== fromInput) fromInput.value = String(scene.from);
+  const durInput = panelEl.querySelector<HTMLInputElement>('[data-prop="durationInFrames"]');
+  if (durInput && document.activeElement !== durInput) durInput.value = String(scene.durationInFrames);
+  for (const [key, val] of Object.entries(props)) {
+    const input = panelEl.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-prop="${key}"]`);
+    if (input && document.activeElement !== input) input.value = String(val);
+  }
+}
+
 export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | null): void {
+  // In-place update if same scene (preserves focus/cursor)
+  if (scene && scene.id === _lastPropsSceneId) {
+    updatePropValues(panelEl, scene);
+    return;
+  }
+  _lastPropsSceneId = scene?.id ?? null;
+
   panelEl.innerHTML = '';
 
   if (!scene) {

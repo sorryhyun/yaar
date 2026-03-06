@@ -1,7 +1,7 @@
 import type { EditorUI } from './ui';
 import type { EditorStore } from './state';
 import type { Composition } from '../core/types';
-import { DEFAULT_CONFIG } from '../core/types';
+import { DEFAULT_CONFIG, makeDefaultLayer } from '../core/types';
 import { createScene } from '../core/scene-registry';
 import type { SceneProps } from '../core/scene-registry';
 import { PreviewPlayer } from '../player/preview-player';
@@ -26,7 +26,8 @@ export function createCreatorMode(ui: EditorUI, store: EditorStore): CreatorMode
   const ensureComposition = (): Composition => {
     const state = store.getState();
     if (state.composition) return state.composition;
-    const comp: Composition = { config: { ...DEFAULT_CONFIG }, scenes: [] };
+    const defaultLayer = makeDefaultLayer('Layer 1');
+    const comp: Composition = { config: { ...DEFAULT_CONFIG }, layers: [defaultLayer] };
     store.setComposition(comp);
     return comp;
   };
@@ -44,7 +45,6 @@ export function createCreatorMode(ui: EditorUI, store: EditorStore): CreatorMode
       });
     }
 
-    // Render current frame
     previewPlayer.seek(state.creatorFrame);
   };
 

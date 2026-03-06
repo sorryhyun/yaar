@@ -600,3 +600,193 @@ progress {
     width 0.1s ease-out,
     border-color 0.1s;
 }
+
+/* ── Layer list in sidebar ── */
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 2px;
+}
+
+.layer-group-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.layer-group-item:hover {
+  background: #edf4f7;
+}
+
+.layer-group-item.selected {
+  background: #d8eaf3;
+  border-color: #9abfd3;
+}
+
+.layer-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1a3a4e;
+  cursor: pointer;
+}
+
+.layer-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 1px 3px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background 0.1s;
+}
+
+.layer-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.layer-icon-btn.layer-delete:hover {
+  background: #fde0e0;
+}
+
+/* ── Timeline multi-row ── */
+.timeline-track {
+  position: relative;
+  background: #1a2733;
+  border-radius: 6px;
+  overflow: hidden;
+  min-height: 40px;
+}
+
+.tl-playhead-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.tl-layer-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  min-height: 36px;
+}
+
+.tl-layer-row:last-child {
+  border-bottom: none;
+}
+
+.tl-layer-row.selected .tl-layer-label {
+  background: rgba(85, 153, 184, 0.25);
+  color: #9dd3ee;
+}
+
+.tl-layer-row.hidden-layer .tl-layer-area {
+  opacity: 0.4;
+}
+
+.tl-layer-label {
+  width: 72px;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #7fa8be;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.tl-layer-label:hover {
+  background: rgba(85, 153, 184, 0.15);
+}
+
+.tl-layer-area {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+/* ── Scene list layer grouping ── */
+.scene-layer-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  margin-top: 6px;
+  border-radius: 5px;
+  background: #e6eef3;
+  border: 1px solid #c5d3dc;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.scene-layer-header:first-child {
+  margin-top: 0;
+}
+
+.scene-layer-header.active-layer {
+  background: #cce2ef;
+  border-color: #90bbd4;
+}
+
+.scene-layer-vis {
+  font-size: 12px;
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+
+.scene-layer-vis:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.scene-layer-name {
+  flex: 1;
+  font-weight: 700;
+  color: #2b4859;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.scene-layer-count {
+  color: #7a98a8;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.scene-item.locked {
+  opacity: 0.7;
+}
+
+.scene-item.locked .scene-delete {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

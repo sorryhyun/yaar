@@ -19,14 +19,14 @@ export function registerReadTool(server: McpServer): void {
       description:
         'Read a file by URI (yaar://storage/... or yaar://sandbox/...).\n' +
         'For PDF files in storage, returns page count — display via iframe.\n' +
-        'Set lineNumbers=true for numbered output (useful before calling edit with line mode).',
+        'Set lineNumbers=false for non-numbered output (useful before calling edit with line mode).',
       inputSchema: {
         uri: z.string(),
         lineNumbers: z
           .boolean()
           .optional()
-          .default(false)
-          .describe('Prepend line numbers to each line (default: false)'),
+          .default(true)
+          .describe('Prepend line numbers to each line (default: true)'),
       },
     },
     async (args) => {

@@ -1,9 +1,8 @@
+import { v4 as uuid } from '@bundled/uuid';
 import type { SceneProps } from '../core/scene-registry';
 
-let sceneIdCounter = 0;
-
 export function nextSceneId(): string {
-  return `s${++sceneIdCounter}${Date.now().toString(36)}`;
+  return uuid();
 }
 
 export function getDefaultPropsForType(type: string): SceneProps {

@@ -1,7 +1,7 @@
 {
   "icon": "🎬",
   "name": "Video Editor Lite",
-  "description": "Lightweight video editor with trim/export (Edit mode) and composition builder (Create mode) supporting text, shapes, solid fills, images, and video clips.",
+  "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
   "run": "index.html",
   "appProtocol": true,
   "protocol": {
@@ -20,6 +20,9 @@
       },
       "composition": {
         "description": "Current composition state including config and scenes."
+      },
+      "layers": {
+        "description": "All layers in the current composition with their scenes."
       }
     },
     "commands": {
@@ -109,7 +112,7 @@
         }
       },
       "addScene": {
-        "description": "Add a scene to the composition. Types: solid, text, shape, image, video-clip.",
+        "description": "Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).",
         "params": {
           "type": "object",
           "properties": {
@@ -124,6 +127,10 @@
             "durationInFrames": {
               "type": "number",
               "description": "Scene duration in frames"
+            },
+            "layerId": {
+              "type": "string",
+              "description": "Target layer ID (default: currently selected layer)"
             },
             "props": {
               "type": "object",
@@ -209,8 +216,100 @@
           "properties": {},
           "additionalProperties": false
         }
+      },
+      "addLayer": {
+        "description": "Add a new layer to the composition. Returns the new layer ID."
+      },
+      "removeLayer": {
+        "description": "Remove a layer and all its scenes by layer ID. The last layer cannot be removed.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Layer ID to remove"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "updateLayer": {
+        "description": "Update layer properties: rename, toggle visibility, or toggle lock.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Layer ID"
+            },
+            "name": {
+              "type": "string",
+              "description": "New layer name"
+            },
+            "visible": {
+              "type": "boolean",
+              "description": "Layer visibility (hidden layers are not rendered or exported)"
+            },
+            "locked": {
+              "type": "boolean",
+              "description": "Locked layers cannot have their scenes edited"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "reorderLayers": {
+        "description": "Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Layer IDs in new order (bottom to top)"
+            }
+          },
+          "required": ["ids"],
+          "additionalProperties": false
+        }
+      },
+      "selectLayer": {
+        "description": "Select the active layer. New scenes added via addScene will go into this layer.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Layer ID to select"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "moveSceneToLayer": {
+        "description": "Move a scene from its current layer to a different layer.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "sceneId": {
+              "type": "string",
+              "description": "Scene ID to move"
+            },
+            "layerId": {
+              "type": "string",
+              "description": "Target layer ID"
+            }
+          },
+          "required": ["sceneId", "layerId"],
+          "additionalProperties": false
+        }
       }
     }
   },
-  "capture": "canvas"
+  "capture": "dom"
 }

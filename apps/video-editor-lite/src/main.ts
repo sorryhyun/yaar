@@ -6,7 +6,7 @@ import { loadPrefs, savePrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './e
 import type { EditorPrefs } from './editor/prefs';
 import { parseNumber, clamp } from './editor/utils/time';
 import type { Composition, Scene } from './core/types';
-import { DEFAULT_CONFIG } from './core/types';
+import { DEFAULT_CONFIG, getAllScenes, makeDefaultLayer } from './core/types';
 import { createScene } from './core/scene-registry';
 import type { SceneProps } from './core/scene-registry';
 import { getDefaultPropsForType } from './editor/scene-defaults';
@@ -185,6 +185,64 @@ ui.creatorFrameSlider.addEventListener('input', () => {
   store.setCreatorFrame(frame);
 });
 
+// === Event listeners: Layer management ===
+
+ui.addLayerButton.addEventListener('click', () => {
+  const comp = store.getState().composition;
+  if (!comp) {
+    creatorMode.ensureComposition();
+  }
+  const layerCount = store.getState().composition?.layers.length ?? 0;
+  const newLayer = makeDefaultLayer(`Layer ${layerCount + 1}`);
+  store.addLayer(newLayer);
+  creatorMode.syncPlayerToComposition();
+});
+
+// Delegated click handler for layer list in sidebar
+ui.layerListEl.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+
+  // Visibility toggle
+  const layerVisId = target.dataset.layerVis;
+  if (layerVisId) {
+    const comp = store.getState().composition;
+    const layer = comp?.layers.find((l) => l.id === layerVisId);
+    if (layer) {
+      store.updateLayer(layerVisId, { visible: !layer.visible });
+      creatorMode.syncPlayerToComposition();
+    }
+    return;
+  }
+
+  // Lock toggle
+  const layerLockId = target.dataset.layerLock;
+  if (layerLockId) {
+    const comp = store.getState().composition;
+    const layer = comp?.layers.find((l) => l.id === layerLockId);
+    if (layer) {
+      store.updateLayer(layerLockId, { locked: !layer.locked });
+    }
+    return;
+  }
+
+  // Delete layer
+  const layerDeleteId = target.dataset.layerDelete;
+  if (layerDeleteId) {
+    store.removeLayer(layerDeleteId);
+    creatorMode.syncPlayerToComposition();
+    return;
+  }
+
+  // Select layer
+  const layerSelectId = target.dataset.layerSelect;
+  if (layerSelectId) {
+    store.setSelectedLayer(layerSelectId);
+    return;
+  }
+});
+
+// === Event listeners: Scene management ===
+
 ui.addSceneButton.addEventListener('click', () => {
   const type = ui.addSceneSelect.value;
   const fromVal = parseInt(ui.addSceneFromInput.value, 10) || 0;
@@ -193,14 +251,55 @@ ui.addSceneButton.addEventListener('click', () => {
   creatorMode.addSceneToComposition(type, fromVal, dur);
 });
 
+// Delegated click handler for scene panel (handles both layer headers and scene items)
 ui.scenePanel.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
+
+  // Layer visibility toggle in scene panel
+  const layerVisId = target.dataset.layerVis;
+  if (layerVisId) {
+    const comp = store.getState().composition;
+    const layer = comp?.layers.find((l) => l.id === layerVisId);
+    if (layer) {
+      store.updateLayer(layerVisId, { visible: !layer.visible });
+      creatorMode.syncPlayerToComposition();
+    }
+    return;
+  }
+
+  // Layer lock toggle in scene panel
+  const layerLockId = target.dataset.layerLock;
+  if (layerLockId) {
+    const comp = store.getState().composition;
+    const layer = comp?.layers.find((l) => l.id === layerLockId);
+    if (layer) {
+      store.updateLayer(layerLockId, { locked: !layer.locked });
+    }
+    return;
+  }
+
+  // Select layer from scene panel header
+  const layerSelectId = target.dataset.layerSelect;
+  if (layerSelectId) {
+    store.setSelectedLayer(layerSelectId);
+    return;
+  }
+
+  // Delete scene
   const deleteId = target.dataset.deleteSceneId;
   if (deleteId) {
+    // Check if scene is in a locked layer
+    const comp = store.getState().composition;
+    if (comp) {
+      const layer = comp.layers.find((l) => l.scenes.some((s) => s.id === deleteId));
+      if (layer?.locked) return; // locked, do nothing
+    }
     store.removeScene(deleteId);
     creatorMode.syncPlayerToComposition();
     return;
   }
+
+  // Select scene
   const item = target.closest<HTMLElement>('.scene-item');
   if (item?.dataset.sceneId) {
     store.setSelectedScene(item.dataset.sceneId);
@@ -209,8 +308,24 @@ ui.scenePanel.addEventListener('click', (e) => {
 
 ui.timelineTrack.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
+
+  // Click on scene block
   if (target.dataset.sceneId) {
     store.setSelectedScene(target.dataset.sceneId);
+    return;
+  }
+
+  // Click on layer label
+  const layerSelectId = target.dataset.layerSelect;
+  if (layerSelectId) {
+    store.setSelectedLayer(layerSelectId);
+    return;
+  }
+
+  // Click on layer row area (not a block)
+  const layerRow = target.closest<HTMLElement>('.tl-layer-row');
+  if (layerRow?.dataset.layerId) {
+    store.setSelectedLayer(layerRow.dataset.layerId);
   }
 });
 
@@ -226,8 +341,14 @@ ui.scenePropsPanel.addEventListener('change', (e) => {
   if (!sceneId) return;
   const comp = store.composition[0]();
   if (!comp) return;
-  const scene = comp.scenes.find((s) => s.id === sceneId);
+
+  // Find scene across all layers
+  const scene = getAllScenes(comp).find((s) => s.id === sceneId);
   if (!scene) return;
+
+  // Check if scene is in a locked layer
+  const layer = comp.layers.find((l) => l.scenes.some((s) => s.id === sceneId));
+  if (layer?.locked) return;
 
   let value: string | number = target.value;
   if ((target as HTMLInputElement).type === 'number' || (target as HTMLInputElement).type === 'range') {
@@ -373,7 +494,8 @@ registerProtocol({
       fps: params.fps ?? DEFAULT_CONFIG.fps,
       durationInFrames: params.durationInFrames ?? DEFAULT_CONFIG.durationInFrames,
     };
-    const comp: Composition = { config, scenes: [] };
+    const defaultLayer = makeDefaultLayer('Layer 1');
+    const comp: Composition = { config, layers: [defaultLayer] };
     store.setComposition(comp);
     store.setMode('create');
     creatorMode.syncPlayerToComposition();
@@ -381,6 +503,13 @@ registerProtocol({
   },
 
   addScene: (params) => {
+    // If layerId specified, temporarily select that layer
+    if (typeof params.layerId === 'string') {
+      const comp = store.getState().composition ?? creatorMode.ensureComposition();
+      const layer = comp.layers.find((l) => l.id === params.layerId);
+      if (!layer) throw new Error(`Layer "${params.layerId}" not found.`);
+      store.setSelectedLayer(params.layerId);
+    }
     const id = creatorMode.addSceneToComposition(params.type, params.from, params.durationInFrames, params.props);
     return { ok: true as const, sceneId: id };
   },
@@ -388,7 +517,8 @@ registerProtocol({
   updateScene: (params) => {
     const state = store.getState();
     if (!state.composition) throw new Error('No composition.');
-    const existing = state.composition.scenes.find((s) => s.id === params.id);
+    const allScenes = getAllScenes(state.composition);
+    const existing = allScenes.find((s) => s.id === params.id);
     if (!existing) throw new Error(`Scene "${params.id}" not found.`);
     const from = params.from ?? existing.from;
     const dur = params.durationInFrames ?? existing.durationInFrames;
@@ -414,15 +544,23 @@ registerProtocol({
   getComposition: () => {
     const state = store.getState();
     if (!state.composition) return { composition: null };
+    const scenes = getAllScenes(state.composition);
     return {
       composition: {
         config: { ...state.composition.config },
-        scenes: state.composition.scenes.map((s) => ({
+        scenes: scenes.map((s) => ({
           id: s.id,
           type: s.type,
           from: s.from,
           durationInFrames: s.durationInFrames,
           render: s.render,
+        })),
+        layers: state.composition.layers.map((l) => ({
+          id: l.id,
+          name: l.name,
+          visible: l.visible,
+          locked: l.locked,
+          sceneIds: l.scenes.map((s) => s.id),
         })),
       },
     };
@@ -443,5 +581,104 @@ registerProtocol({
   exportVideo: async () => {
     await creatorMode.handleCreatorExport();
     return { ok: true as const };
+  },
+
+  addLayer: (params) => {
+    const name = typeof params.name === 'string' ? params.name : undefined;
+    const index = typeof params.index === 'number' ? params.index : undefined;
+    creatorMode.ensureComposition();
+    const comp = store.getState().composition!;
+    const layerCount = comp.layers.length;
+    const newLayer = makeDefaultLayer(name ?? `Layer ${layerCount + 1}`);
+    store.addLayer(newLayer);
+    // If index provided, reorder to put new layer at that index
+    if (index !== undefined) {
+      const afterComp = store.getState().composition!;
+      const ids = afterComp.layers.map((l) => l.id);
+      // Move the new layer id to the target index
+      const newIdx = Math.max(0, Math.min(index, ids.length - 1));
+      const filteredIds = ids.filter((id) => id !== newLayer.id);
+      filteredIds.splice(newIdx, 0, newLayer.id);
+      store.reorderLayers(filteredIds);
+    }
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const, layerId: newLayer.id, layerName: newLayer.name };
+  },
+
+  removeLayer: (params) => {
+    const comp = store.getState().composition;
+    if (!comp) throw new Error('No composition.');
+    const layer = comp.layers.find((l) => l.id === params.id);
+    if (!layer) throw new Error(`Layer "${params.id}" not found.`);
+    if (comp.layers.length <= 1) throw new Error('Cannot remove the last layer.');
+    store.removeLayer(params.id);
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  updateLayer: (params) => {
+    const comp = store.getState().composition;
+    if (!comp) throw new Error('No composition.');
+    const layer = comp.layers.find((l) => l.id === params.id);
+    if (!layer) throw new Error(`Layer "${params.id}" not found.`);
+    const patch: { name?: string; visible?: boolean; locked?: boolean } = {};
+    if (typeof params.name === 'string') patch.name = params.name;
+    if (typeof params.visible === 'boolean') patch.visible = params.visible;
+    if (typeof params.locked === 'boolean') patch.locked = params.locked;
+    store.updateLayer(params.id, patch);
+    if (patch.visible !== undefined) creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  reorderLayers: (params) => {
+    const comp = store.getState().composition;
+    if (!comp) throw new Error('No composition.');
+    store.reorderLayers(params.ids);
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  selectLayer: (params) => {
+    const comp = store.getState().composition;
+    if (!comp) throw new Error('No composition.');
+    const layer = comp.layers.find((l) => l.id === params.id);
+    if (!layer) throw new Error(`Layer "${params.id}" not found.`);
+    store.setSelectedLayer(params.id);
+    return { ok: true as const };
+  },
+
+  moveSceneToLayer: (params) => {
+    const comp = store.getState().composition;
+    if (!comp) throw new Error('No composition.');
+    const targetLayer = comp.layers.find((l) => l.id === params.layerId);
+    if (!targetLayer) throw new Error(`Layer "${params.layerId}" not found.`);
+    // Find the scene
+    const sourceLayer = comp.layers.find((l) => l.scenes.some((s) => s.id === params.sceneId));
+    if (!sourceLayer) throw new Error(`Scene "${params.sceneId}" not found.`);
+    if (sourceLayer.id === params.layerId) return { ok: true as const }; // already there
+    const scene = sourceLayer.scenes.find((s) => s.id === params.sceneId)!;
+    // Remove from source, add to target
+    const newLayers = comp.layers.map((l) => {
+      if (l.id === sourceLayer.id) return { ...l, scenes: l.scenes.filter((s) => s.id !== params.sceneId) };
+      if (l.id === params.layerId) return { ...l, scenes: [...l.scenes, scene] };
+      return l;
+    });
+    store.composition[1]({ ...comp, layers: newLayers });
+    creatorMode.syncPlayerToComposition();
+    return { ok: true as const };
+  },
+
+  getLayers: () => {
+    const comp = store.getState().composition;
+    if (!comp) return { layers: [] };
+    return {
+      layers: comp.layers.map((l) => ({
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        locked: l.locked,
+        sceneIds: l.scenes.map((s) => s.id),
+      })),
+    };
   },
 });

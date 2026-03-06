@@ -2,7 +2,7 @@
   "id": "video-editor-lite",
   "name": "Video Editor Lite",
   "icon": "🎬",
-  "description": "Lightweight video editor with trim/export (Edit mode) and composition builder (Create mode) supporting text, shapes, solid fills, images, and video clips.",
+  "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
   "version": "1.2.0",
   "author": "YAAR"
 }

@@ -56,6 +56,9 @@ export interface EditorUI {
   creatorFrameSlider: HTMLInputElement;
   creatorStatusLabel: HTMLDivElement;
   creatorErrorLabel: HTMLDivElement;
+  // Layer management
+  addLayerButton: HTMLButtonElement;
+  layerListEl: HTMLDivElement;
 }
 
 export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorUI {
@@ -116,6 +119,8 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
   let creatorFrameSlider!: HTMLInputElement;
   let creatorStatusLabel!: HTMLDivElement;
   let creatorErrorLabel!: HTMLDivElement;
+  let addLayerButton!: HTMLButtonElement;
+  let layerListEl!: HTMLDivElement;
 
   // ─── Template ─────────────────────────────────────────────────────────────
   render(() => html`
@@ -195,6 +200,15 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
                        type="number" value="150" min="1" step="1" class="sb-input" />
               </div>
             </div>
+
+            <hr class="sb-divider" />
+            <div class="sb-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Layers</span>
+              <button
+                ref=${(el: HTMLButtonElement) => { addLayerButton = el; }}
+                type="button" class="sb-btn icon" title="Add Layer" style="padding:2px 8px;font-size:13px;">＋</button>
+            </div>
+            <div ref=${(el: HTMLDivElement) => { layerListEl = el; }} class="layer-list"></div>
 
             <hr class="sb-divider" />
             <div class="sb-title">Add Scene</div>
@@ -386,5 +400,6 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
     creatorPlayButton, creatorExportButton,
     creatorFrameLabel, creatorFrameSlider,
     creatorStatusLabel, creatorErrorLabel,
+    addLayerButton, layerListEl,
   };
 }
