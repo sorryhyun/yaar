@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parseYaarUri,
   parseWindowUri,
   buildWindowUri,
   buildWindowResourceUri,
   parseWindowResourceUri,
+  parseConfigUri,
+  buildConfigUri,
+  parseBrowserUri,
+  buildBrowserUri,
 } from '../yaar-uri.js';
 
 describe('parseWindowUri', () => {
@@ -100,5 +105,179 @@ describe('parseWindowResourceUri', () => {
       resourceType: 'commands',
       key: 'refresh',
     });
+  });
+});
+
+// ============ parseYaarUri with new authorities ============
+
+describe('parseYaarUri with config/browser', () => {
+  it('parses config URIs', () => {
+    expect(parseYaarUri('yaar://config/settings')).toEqual({
+      authority: 'config',
+      path: 'settings',
+    });
+  });
+
+  it('parses browser URIs', () => {
+    expect(parseYaarUri('yaar://browser/current')).toEqual({
+      authority: 'browser',
+      path: 'current',
+    });
+  });
+});
+
+// ============ Config URIs ============
+
+describe('parseConfigUri', () => {
+  it('parses settings section', () => {
+    expect(parseConfigUri('yaar://config/settings')).toEqual({
+      section: 'settings',
+      id: undefined,
+    });
+  });
+
+  it('parses hooks section', () => {
+    expect(parseConfigUri('yaar://config/hooks')).toEqual({
+      section: 'hooks',
+      id: undefined,
+    });
+  });
+
+  it('parses hooks with ID', () => {
+    expect(parseConfigUri('yaar://config/hooks/hook-1')).toEqual({
+      section: 'hooks',
+      id: 'hook-1',
+    });
+  });
+
+  it('parses shortcuts section', () => {
+    expect(parseConfigUri('yaar://config/shortcuts')).toEqual({
+      section: 'shortcuts',
+      id: undefined,
+    });
+  });
+
+  it('parses shortcuts with ID', () => {
+    expect(parseConfigUri('yaar://config/shortcuts/shortcut-123')).toEqual({
+      section: 'shortcuts',
+      id: 'shortcut-123',
+    });
+  });
+
+  it('parses mounts section', () => {
+    expect(parseConfigUri('yaar://config/mounts')).toEqual({
+      section: 'mounts',
+      id: undefined,
+    });
+  });
+
+  it('parses app section with ID', () => {
+    expect(parseConfigUri('yaar://config/app/github-manager')).toEqual({
+      section: 'app',
+      id: 'github-manager',
+    });
+  });
+
+  it('returns null for unknown section', () => {
+    expect(parseConfigUri('yaar://config/unknown')).toBeNull();
+  });
+
+  it('returns null for non-config URI', () => {
+    expect(parseConfigUri('yaar://apps/excel-lite')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseConfigUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildConfigUri', () => {
+  it('builds section URI', () => {
+    expect(buildConfigUri('settings')).toBe('yaar://config/settings');
+  });
+
+  it('builds section URI with ID', () => {
+    expect(buildConfigUri('hooks', 'hook-1')).toBe('yaar://config/hooks/hook-1');
+  });
+
+  it('builds app URI with ID', () => {
+    expect(buildConfigUri('app', 'github')).toBe('yaar://config/app/github');
+  });
+
+  it('roundtrips with parseConfigUri', () => {
+    const uri = buildConfigUri('shortcuts', 'shortcut-42');
+    const parsed = parseConfigUri(uri);
+    expect(parsed).toEqual({ section: 'shortcuts', id: 'shortcut-42' });
+  });
+});
+
+// ============ Browser URIs ============
+
+describe('parseBrowserUri', () => {
+  it('parses current resource', () => {
+    expect(parseBrowserUri('yaar://browser/current')).toEqual({
+      resource: 'current',
+      subResource: undefined,
+    });
+  });
+
+  it('parses current/content', () => {
+    expect(parseBrowserUri('yaar://browser/current/content')).toEqual({
+      resource: 'current',
+      subResource: 'content',
+    });
+  });
+
+  it('parses current/screenshot', () => {
+    expect(parseBrowserUri('yaar://browser/current/screenshot')).toEqual({
+      resource: 'current',
+      subResource: 'screenshot',
+    });
+  });
+
+  it('parses current/navigate', () => {
+    expect(parseBrowserUri('yaar://browser/current/navigate')).toEqual({
+      resource: 'current',
+      subResource: 'navigate',
+    });
+  });
+
+  it('parses current/click', () => {
+    expect(parseBrowserUri('yaar://browser/current/click')).toEqual({
+      resource: 'current',
+      subResource: 'click',
+    });
+  });
+
+  it('returns null for unknown resource', () => {
+    expect(parseBrowserUri('yaar://browser/tabs')).toBeNull();
+  });
+
+  it('returns null for unknown sub-resource', () => {
+    expect(parseBrowserUri('yaar://browser/current/unknown')).toBeNull();
+  });
+
+  it('returns null for non-browser URI', () => {
+    expect(parseBrowserUri('yaar://apps/browser')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseBrowserUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildBrowserUri', () => {
+  it('builds current URI', () => {
+    expect(buildBrowserUri('current')).toBe('yaar://browser/current');
+  });
+
+  it('builds current/screenshot URI', () => {
+    expect(buildBrowserUri('current', 'screenshot')).toBe('yaar://browser/current/screenshot');
+  });
+
+  it('roundtrips with parseBrowserUri', () => {
+    const uri = buildBrowserUri('current', 'navigate');
+    const parsed = parseBrowserUri(uri);
+    expect(parsed).toEqual({ resource: 'current', subResource: 'navigate' });
   });
 });

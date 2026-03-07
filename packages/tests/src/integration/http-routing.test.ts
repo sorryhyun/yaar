@@ -101,7 +101,11 @@ describe('createFetchHandler CORS + routing', () => {
   it('returns 404 for completely unknown routes', async () => {
     // Stub Bun so the static file handler can run (it calls Bun.file().exists())
     vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({ exists: async () => false, text: async () => '', arrayBuffer: async () => new ArrayBuffer(0) })),
+      file: vi.fn(() => ({
+        exists: async () => false,
+        text: async () => '',
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
       write: vi.fn().mockResolvedValue(0),
     });
 

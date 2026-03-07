@@ -117,7 +117,11 @@ describe('createWsHandlers open()', () => {
 
     const ws = createMockWs();
     // Set up ws.data as the handler expects
-    (ws as never as { data: { connectionId: string; sessionId: string | null; monitorId: string | null } }).data = {
+    (
+      ws as never as {
+        data: { connectionId: string; sessionId: string | null; monitorId: string | null };
+      }
+    ).data = {
       connectionId: 'conn-test-1',
       sessionId: null,
       monitorId: null,
@@ -144,7 +148,11 @@ describe('createWsHandlers open()', () => {
     });
 
     const ws = createMockWs();
-    (ws as never as { data: { connectionId: string; sessionId: string | null; monitorId: string | null } }).data = {
+    (
+      ws as never as {
+        data: { connectionId: string; sessionId: string | null; monitorId: string | null };
+      }
+    ).data = {
       connectionId: 'conn-test-2',
       sessionId: null,
       monitorId: null,

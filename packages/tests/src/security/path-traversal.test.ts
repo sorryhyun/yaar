@@ -125,7 +125,10 @@ describe('resolvePath — storage-scoped path traversal', () => {
   it('rejects paths that escape STORAGE_DIR', async () => {
     vi.resetModules();
     vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({ text: async () => JSON.stringify([]), arrayBuffer: async () => new ArrayBuffer(0) })),
+      file: vi.fn(() => ({
+        text: async () => JSON.stringify([]),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
       write: vi.fn().mockResolvedValue(0),
     });
 
@@ -140,7 +143,10 @@ describe('resolvePath — storage-scoped path traversal', () => {
   it('allows normal relative paths under STORAGE_DIR', async () => {
     vi.resetModules();
     vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({ text: async () => JSON.stringify([]), arrayBuffer: async () => new ArrayBuffer(0) })),
+      file: vi.fn(() => ({
+        text: async () => JSON.stringify([]),
+        arrayBuffer: async () => new ArrayBuffer(0),
+      })),
       write: vi.fn().mockResolvedValue(0),
     });
 

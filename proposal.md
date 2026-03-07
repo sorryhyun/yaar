@@ -6,7 +6,7 @@ Expand `yaar://` from a content/window addressing scheme into a unified internal
 
 **Decision:** All top-level segments are namespaces (no magic patterns). Monitor IDs are plain numeric strings (`'0'`, `'1'`). Window URIs use `yaar://monitors/{id}/...`.
 
-**Status:** The `monitors` namespace migration is complete. The resource layer (new namespaces, generic verbs) is proposed but not yet implemented.
+**Status:** The `monitors`, `config`, and `browser` namespace migrations are complete (URI parsing, building, and server-side resolution). The resource layer (generic verbs, ResourceRegistry) is proposed but not yet implemented.
 
 ---
 
@@ -32,8 +32,13 @@ Expand `yaar://` from a content/window addressing scheme into a unified internal
 | `monitors` | `yaar://monitors/0/win-settings` | Window URI |
 | `monitors` | `yaar://monitors/0/win-excel/state/cells` | Window resource (app-protocol) |
 | `monitors` | `yaar://monitors/0/win-excel/commands/save` | Window command (app-protocol) |
+| `config` | `yaar://config/settings` | User settings |
+| `config` | `yaar://config/hooks/hook-1` | Specific hook entry |
+| `config` | `yaar://config/app/github` | App-specific config |
+| `browser` | `yaar://browser/current` | Browser session state |
+| `browser` | `yaar://browser/current/screenshot` | Browser screenshot |
 
-All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers all four namespaces. `DEFAULT_MONITOR_ID = '0'` is exported from `@yaar/shared`.
+All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers all six namespaces. `DEFAULT_MONITOR_ID = '0'` is exported from `@yaar/shared`.
 
 ---
 

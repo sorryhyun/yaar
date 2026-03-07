@@ -17,14 +17,14 @@
  *   yaar://monitors/{monitorId}/{windowId}      → window on a monitor
  */
 
-export type YaarAuthority = 'apps' | 'storage' | 'sandbox' | 'monitors';
+export type YaarAuthority = 'apps' | 'storage' | 'sandbox' | 'monitors' | 'config' | 'browser';
 
 export interface ParsedYaarUri {
   authority: YaarAuthority;
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors)\/(.*)$/;
+const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors|config|browser)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -62,7 +62,9 @@ export function resolveContentUri(uri: string): string | null {
     case 'sandbox':
       return `/api/sandbox/${parsed.path}`;
     case 'monitors':
-      // Monitor authority has no content resolution — falls through to window parser
+    case 'config':
+    case 'browser':
+      // These authorities have no content resolution
       return null;
   }
 }
@@ -135,7 +137,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
       if (!SANDBOX_ID_RE.test(first)) return null;
       return { authority: 'sandbox', sandboxId: first, path: rest };
     }
-    return null; // apps/monitors authority not a file URI
+    return null; // apps/monitors/config/browser authority not a file URI
   }
 
   // Legacy: storage://{path}
@@ -323,4 +325,106 @@ export function parseWindowResourceUri(uri: string): ParsedWindowResourceUri | n
     resourceType: type,
     key: parsed.subPath.slice(slashIdx + 1),
   };
+}
+
+// ============ Config URIs ============
+
+export type ConfigSection = 'settings' | 'hooks' | 'shortcuts' | 'mounts' | 'app';
+
+export interface ParsedConfigUri {
+  section: ConfigSection;
+  /** Entry ID within the section (e.g., hook ID, shortcut ID, app ID). */
+  id?: string;
+}
+
+const CONFIG_SECTIONS: ReadonlySet<string> = new Set([
+  'settings',
+  'hooks',
+  'shortcuts',
+  'mounts',
+  'app',
+]);
+
+/**
+ * Parse a yaar://config/... URI.
+ *
+ *   parseConfigUri('yaar://config/settings')      → { section: 'settings' }
+ *   parseConfigUri('yaar://config/hooks/hook-1')   → { section: 'hooks', id: 'hook-1' }
+ *   parseConfigUri('yaar://config/app/github')     → { section: 'app', id: 'github' }
+ */
+export function parseConfigUri(uri: string): ParsedConfigUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'config') return null;
+
+  const slashIdx = parsed.path.indexOf('/');
+  const section = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
+  if (!CONFIG_SECTIONS.has(section)) return null;
+
+  const id = slashIdx === -1 ? undefined : parsed.path.slice(slashIdx + 1);
+  return { section: section as ConfigSection, id: id || undefined };
+}
+
+/**
+ * Build a yaar://config/... URI.
+ *
+ *   buildConfigUri('settings')          → 'yaar://config/settings'
+ *   buildConfigUri('hooks', 'hook-1')   → 'yaar://config/hooks/hook-1'
+ *   buildConfigUri('app', 'github')     → 'yaar://config/app/github'
+ */
+export function buildConfigUri(section: ConfigSection, id?: string): string {
+  return id ? `yaar://config/${section}/${id}` : `yaar://config/${section}`;
+}
+
+// ============ Browser URIs ============
+
+export type BrowserResource = 'current';
+export type BrowserSubResource = 'content' | 'screenshot' | 'navigate' | 'click';
+
+export interface ParsedBrowserUri {
+  resource: BrowserResource;
+  /** Sub-resource (e.g., 'content', 'screenshot', 'navigate', 'click'). */
+  subResource?: BrowserSubResource;
+}
+
+const BROWSER_SUB_RESOURCES: ReadonlySet<string> = new Set([
+  'content',
+  'screenshot',
+  'navigate',
+  'click',
+]);
+
+/**
+ * Parse a yaar://browser/... URI.
+ *
+ *   parseBrowserUri('yaar://browser/current')            → { resource: 'current' }
+ *   parseBrowserUri('yaar://browser/current/content')    → { resource: 'current', subResource: 'content' }
+ *   parseBrowserUri('yaar://browser/current/screenshot') → { resource: 'current', subResource: 'screenshot' }
+ *   parseBrowserUri('yaar://browser/current/navigate')   → { resource: 'current', subResource: 'navigate' }
+ */
+export function parseBrowserUri(uri: string): ParsedBrowserUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'browser') return null;
+
+  const slashIdx = parsed.path.indexOf('/');
+  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
+  if (resource !== 'current') return null;
+
+  if (slashIdx === -1) return { resource: 'current' };
+
+  const sub = parsed.path.slice(slashIdx + 1);
+  if (!BROWSER_SUB_RESOURCES.has(sub)) return null;
+  return { resource: 'current', subResource: sub as BrowserSubResource };
+}
+
+/**
+ * Build a yaar://browser/... URI.
+ *
+ *   buildBrowserUri('current')              → 'yaar://browser/current'
+ *   buildBrowserUri('current', 'screenshot') → 'yaar://browser/current/screenshot'
+ */
+export function buildBrowserUri(
+  resource: BrowserResource,
+  subResource?: BrowserSubResource,
+): string {
+  return subResource ? `yaar://browser/${resource}/${subResource}` : `yaar://browser/${resource}`;
 }

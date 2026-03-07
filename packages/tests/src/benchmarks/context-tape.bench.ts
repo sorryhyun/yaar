@@ -28,18 +28,16 @@ function buildTape(mainCount: number, windowCount: number): ContextTape {
     tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, 'main');
   }
   for (let i = 0; i < windowCount; i++) {
-    tape.append(
-      i % 2 === 0 ? 'user' : 'assistant',
-      `${WIN_MSG} (${i})`,
-      { window: `win-${i % 5}` },
-    );
+    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, {
+      window: `win-${i % 5}`,
+    });
   }
   return tape;
 }
 
 // Read-only tapes used for filter / format benchmarks.
-const TAPE_200 = buildTape(150, 50);   // 200 messages: 150 main + 50 window
-const TAPE_400 = buildTape(200, 200);  // 400 messages: close to the 200-main prune threshold
+const TAPE_200 = buildTape(150, 50); // 200 messages: 150 main + 50 window
+const TAPE_400 = buildTape(200, 200); // 400 messages: close to the 200-main prune threshold
 
 // ── ContextTape append ────────────────────────────────────────────────────────
 
@@ -54,11 +52,9 @@ describe('ContextTape.append', () => {
   bench('100 window messages across 5 windows', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
-      tape.append(
-        i % 2 === 0 ? 'user' : 'assistant',
-        `${WIN_MSG} (${i})`,
-        { window: `win-${i % 5}` },
-      );
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, {
+        window: `win-${i % 5}`,
+      });
     }
   });
 

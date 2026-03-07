@@ -6,7 +6,15 @@
  */
 
 import { join } from 'path';
-import { parseYaarUri, resolveContentUri, parseWindowUri } from '@yaar/shared';
+import {
+  parseYaarUri,
+  resolveContentUri,
+  parseWindowUri,
+  parseConfigUri,
+  parseBrowserUri,
+  type ParsedConfigUri,
+  type ParsedBrowserUri,
+} from '@yaar/shared';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';
@@ -32,7 +40,21 @@ export interface ResolvedWindow {
   sourceUri: string;
 }
 
-export type ResolvedUri = ResolvedResource | ResolvedWindow;
+export interface ResolvedConfig {
+  kind: 'config';
+  section: ParsedConfigUri['section'];
+  id?: string;
+  sourceUri: string;
+}
+
+export interface ResolvedBrowser {
+  kind: 'browser';
+  resource: ParsedBrowserUri['resource'];
+  subResource?: ParsedBrowserUri['subResource'];
+  sourceUri: string;
+}
+
+export type ResolvedUri = ResolvedResource | ResolvedWindow | ResolvedConfig | ResolvedBrowser;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
   const parsed = parseYaarUri(uri);
@@ -89,7 +111,9 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     }
 
     case 'monitors':
-      // Monitor authority is not a content resource — handled by resolveUri via parseWindowUri
+    case 'config':
+    case 'browser':
+      // Not content resources — handled by resolveUri via dedicated parsers
       return null;
   }
 }
@@ -110,6 +134,26 @@ export function resolveUri(uri: string): ResolvedUri | null {
       monitorId: win.monitorId,
       windowId: win.windowId,
       subPath: win.subPath,
+      sourceUri: uri,
+    };
+  }
+
+  const config = parseConfigUri(uri);
+  if (config) {
+    return {
+      kind: 'config',
+      section: config.section,
+      id: config.id,
+      sourceUri: uri,
+    };
+  }
+
+  const browser = parseBrowserUri(uri);
+  if (browser) {
+    return {
+      kind: 'browser',
+      resource: browser.resource,
+      subResource: browser.subResource,
       sourceUri: uri,
     };
   }

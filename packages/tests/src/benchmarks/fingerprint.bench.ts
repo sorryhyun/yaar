@@ -38,8 +38,7 @@ language TypeScript, sort descending by stars, and include open issue counts
 alongside pull request counts and the date of the last commit.
 `;
 
-const TYPICAL_PROMPT_VARIANT = TYPICAL_PROMPT
-  .replace('dashboard', 'report')
+const TYPICAL_PROMPT_VARIANT = TYPICAL_PROMPT.replace('dashboard', 'report')
   .replace('sales', 'revenue')
   .replace('star count', 'fork count');
 

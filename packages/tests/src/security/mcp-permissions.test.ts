@@ -27,9 +27,7 @@ describe('extractDomain', () => {
   });
 
   it('handles subdomains correctly', () => {
-    expect(extractDomain('https://sub.domain.example.co.uk/path')).toBe(
-      'sub.domain.example.co.uk',
-    );
+    expect(extractDomain('https://sub.domain.example.co.uk/path')).toBe('sub.domain.example.co.uk');
   });
 });
 

@@ -117,9 +117,8 @@ describe('MCP auth — MCP_SKIP_AUTH bypass', () => {
         BROWSER_TOOL_NAMES: [],
       }));
 
-      const { handleMcpRequest: freshHandle, initMcpServer: freshInit } = await import(
-        '@yaar/server/mcp/server'
-      );
+      const { handleMcpRequest: freshHandle, initMcpServer: freshInit } =
+        await import('@yaar/server/mcp/server');
       await freshInit();
 
       const req = new Request('http://localhost:8000/mcp/system', {

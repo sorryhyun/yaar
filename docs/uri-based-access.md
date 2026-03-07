@@ -8,6 +8,8 @@ yaar://apps/{appId}                      → app
 yaar://storage/{path}                    → storage file
 yaar://sandbox/{id}/{path}               → sandbox file
 yaar://monitors/{monitorId}/{windowId}    → window
+yaar://config/{section}                  → configuration
+yaar://browser/current                   → browser session
 ```
 
 ---
@@ -81,6 +83,38 @@ app_query({ uri: "yaar://monitors/0/win-excel/state/cells" })
 // Bare window ID (preferred — agent doesn't need to know its monitor)
 app_query({ uri: "win-excel", key: "cells" })
 ```
+
+### Config Addressing
+
+Configuration is addressed via the `config` authority with section-based paths:
+
+```
+yaar://config/{section}         → config section (settings, hooks, shortcuts, mounts, app)
+yaar://config/{section}/{id}    → specific entry within a section
+```
+
+| Example | Meaning |
+|---------|---------|
+| `yaar://config/settings` | User settings (language, preferences) |
+| `yaar://config/hooks` | All event hooks |
+| `yaar://config/hooks/hook-1` | Specific hook by ID |
+| `yaar://config/shortcuts` | All desktop shortcuts |
+| `yaar://config/shortcuts/shortcut-123` | Specific shortcut by ID |
+| `yaar://config/app/github-manager` | GitHub Manager app config |
+
+### Browser Addressing
+
+The browser session is addressed via the `browser` authority:
+
+```
+yaar://browser/current                → current browser state (URL, title, navigation)
+yaar://browser/current/content        → page content (read)
+yaar://browser/current/screenshot     → page screenshot (read)
+yaar://browser/current/navigate       → navigate to URL (invoke)
+yaar://browser/current/click          → click element (invoke)
+```
+
+Navigation, clicking, and other side effects are `invoke` targets — never `read`.
 
 ---
 
@@ -257,13 +291,49 @@ parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')
 // -> { monitorId: '0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
 ```
 
+### Config Helpers
+
+```typescript
+import { parseConfigUri, buildConfigUri } from '@yaar/shared';
+
+parseConfigUri('yaar://config/settings')
+// -> { section: 'settings' }
+
+parseConfigUri('yaar://config/hooks/hook-1')
+// -> { section: 'hooks', id: 'hook-1' }
+
+buildConfigUri('settings')
+// -> 'yaar://config/settings'
+
+buildConfigUri('app', 'github')
+// -> 'yaar://config/app/github'
+```
+
+### Browser Helpers
+
+```typescript
+import { parseBrowserUri, buildBrowserUri } from '@yaar/shared';
+
+parseBrowserUri('yaar://browser/current')
+// -> { resource: 'current' }
+
+parseBrowserUri('yaar://browser/current/screenshot')
+// -> { resource: 'current', subResource: 'screenshot' }
+
+buildBrowserUri('current')
+// -> 'yaar://browser/current'
+
+buildBrowserUri('current', 'navigate')
+// -> 'yaar://browser/current/navigate'
+```
+
 ---
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window), `ParsedContentPath` |
+| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser), `ParsedContentPath` |
 | `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
 | `packages/server/src/mcp/basic/uri.ts` | Thin adapter over `parseFileUri()` for basic MCP tools |
 | `packages/server/src/mcp/window/create.ts` | Server-side URI resolution for iframe content |
