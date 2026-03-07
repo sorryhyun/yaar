@@ -181,16 +181,17 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         return errorResponse('Invalid JSON', 400);
       }
 
-      // Check if provider is changing
+      // Check if provider or verbMode is changing (both require warm pool restart)
       const providerChanging =
         partial.provider !== undefined && partial.provider !== getWarmPool().getPreferredProvider();
+      const verbModeChanging = partial.verbMode !== undefined;
 
       const settings = await updateSettings(
         partial as Partial<Awaited<ReturnType<typeof readSettings>>>,
       );
 
       // Reinitialize warm pool when provider changes
-      if (providerChanging) {
+      if (providerChanging || verbModeChanging) {
         const warmPool = getWarmPool();
         await warmPool.cleanup();
         await warmPool.initialize();

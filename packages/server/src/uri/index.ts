@@ -8,3 +8,11 @@ export {
   type ResolvedBrowser,
   type ResourceKind,
 } from './resolve.js';
+
+export {
+  ResourceRegistry,
+  type ResourceHandler,
+  type VerbResult,
+  type Verb,
+  type DescribeResult,
+} from './registry.js';

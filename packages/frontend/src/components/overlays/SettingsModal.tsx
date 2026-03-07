@@ -38,6 +38,7 @@ export function SettingsModal() {
   const setIconSize = useDesktopStore((s) => s.setIconSize);
 
   const [allowAllDomains, setAllowAllDomains] = useState(false);
+  const [verbMode, setVerbMode] = useState(false);
   const [serverProvider, setServerProvider] = useState<ProviderSetting>('auto');
   const [selectedProvider, setSelectedProvider] = useState<ProviderSetting>('auto');
   const [applyingProvider, setApplyingProvider] = useState(false);
@@ -57,12 +58,29 @@ export function SettingsModal() {
       .catch(() => {});
     apiFetch('/api/apps')
       .then((r) => r.json())
-      .then((data: { provider?: ProviderSetting }) => {
+      .then((data: { provider?: ProviderSetting; verbMode?: boolean }) => {
         const p = data.provider ?? 'auto';
         setServerProvider(p);
         setSelectedProvider(p);
+        setVerbMode(data.verbMode ?? false);
       })
       .catch(() => {});
+  }, []);
+
+  const handleToggleVerbMode = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.checked;
+    setVerbMode(value);
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verbMode: value }),
+    })
+      .then(() => {
+        window.location.reload();
+      })
+      .catch(() => {
+        setVerbMode(!value);
+      });
   }, []);
 
   const handleToggleAllowAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,6 +178,22 @@ export function SettingsModal() {
                 </button>
               )}
             </div>
+          </div>
+
+          <div className={styles.divider} />
+          <div className={styles.field}>
+            <label className={styles.toggleRow}>
+              <span className={styles.toggleLabel}>
+                <span className={styles.label}>{t('settings.verbMode.label')}</span>
+                <span className={styles.subtitle}>{t('settings.verbMode.description')}</span>
+              </span>
+              <input
+                type="checkbox"
+                className={styles.toggle}
+                checked={verbMode}
+                onChange={handleToggleVerbMode}
+              />
+            </label>
           </div>
 
           <div className={styles.divider} />

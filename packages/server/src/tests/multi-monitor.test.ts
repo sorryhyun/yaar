@@ -56,6 +56,7 @@ vi.mock('../agents/limiter.js', () => ({
 
 vi.mock('../storage/storage-manager.js', () => ({
   configRead: vi.fn(async () => ({ success: false })),
+  configWrite: vi.fn(async () => {}),
 }));
 
 vi.mock('../providers/environment.js', () => ({

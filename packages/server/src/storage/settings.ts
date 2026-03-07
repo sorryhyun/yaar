@@ -9,12 +9,14 @@ export interface Settings {
   onboardingCompleted: boolean;
   language: string;
   provider: 'auto' | 'claude' | 'codex';
+  verbMode: boolean;
 }
 
 const DEFAULTS: Settings = {
   onboardingCompleted: false,
   language: 'en',
   provider: 'auto',
+  verbMode: false,
 };
 
 export const LANGUAGE_CODES = [

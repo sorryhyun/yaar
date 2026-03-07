@@ -16,6 +16,7 @@ export class StreamToEventMapper {
   private lastThinkingEmitTime = 0;
   private lastFlushedThinkingLength = 0;
   private thinkingDirty = false;
+  private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
 
   constructor(
     private readonly role: string,
@@ -91,6 +92,12 @@ export class StreamToEventMapper {
           message.toolUseId,
           this.role,
         );
+        if (message.toolUseId) {
+          this.toolStartTimes.set(message.toolUseId, {
+            toolName: message.toolName ?? 'unknown',
+            startTime: Date.now(),
+          });
+        }
 
         // Execute matching tool_use hooks
         const hooks = await getToolUseHooks(displayName);
@@ -107,7 +114,7 @@ export class StreamToEventMapper {
         break;
       }
 
-      case 'tool_result':
+      case 'tool_result': {
         await this.sendEvent({
           type: ServerEventType.TOOL_PROGRESS,
           toolName: formatToolDisplay(message.toolName ?? 'tool'),
@@ -116,13 +123,49 @@ export class StreamToEventMapper {
           agentId: this.role,
           monitorId: this.monitorId,
         });
+        // Compute timing + error metadata
+        let meta: { isError?: boolean; errorCategory?: string; durationMs?: number } | undefined;
+        if (message.toolUseId) {
+          const startEntry = this.toolStartTimes.get(message.toolUseId);
+          if (startEntry) {
+            const durationMs = Date.now() - startEntry.startTime;
+            this.toolStartTimes.delete(message.toolUseId);
+            const isError = message.isError === true;
+            let errorCategory: string | undefined;
+            if (isError && message.content) {
+              if (
+                message.content.includes('URI not found') ||
+                message.content.includes('No handler')
+              ) {
+                errorCategory = 'uri_not_found';
+              } else if (
+                message.content.includes('not supported') ||
+                message.content.includes('Unknown verb')
+              ) {
+                errorCategory = 'verb_not_supported';
+              } else if (
+                message.content.includes('Validation') ||
+                message.content.includes('Invalid')
+              ) {
+                errorCategory = 'validation';
+              } else if (message.content.includes('Error')) {
+                errorCategory = 'handler_error';
+              } else {
+                errorCategory = 'unknown';
+              }
+            }
+            meta = { durationMs, ...(isError ? { isError, errorCategory } : {}) };
+          }
+        }
         this.logger?.logToolResult(
           message.toolName ?? 'tool',
           message.content,
           message.toolUseId,
           this.role,
+          meta,
         );
         break;
+      }
 
       case 'complete':
         if (message.sessionId && this.onSessionId) {

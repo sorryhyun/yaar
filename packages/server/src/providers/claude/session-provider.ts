@@ -9,7 +9,7 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { getToolNames, getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
+import { getToolNames, getMcpToken, getActiveServers } from '../../mcp/index.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath } from '../../config.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
@@ -43,6 +43,10 @@ export class ClaudeSessionProvider extends BaseTransport {
   private sessionId: string | null = null;
   private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
+  constructor(private readonly verbMode: boolean = false) {
+    super();
+  }
+
   async isAvailable(): Promise<boolean> {
     return this.isCliAvailable(...getClaudeSpawnArgs());
   }
@@ -64,8 +68,9 @@ export class ClaudeSessionProvider extends BaseTransport {
     }
 
     // Build MCP server configs (shared between main agent and subagent definitions)
+    const activeServers = getActiveServers(this.verbMode);
     const mcpServerConfigs = Object.fromEntries(
-      MCP_SERVERS.map((name: string) => [
+      activeServers.map((name: string) => [
         name,
         {
           type: 'http' as const,
@@ -76,7 +81,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     );
 
     // Only enable Task built-in tool if allowedTools includes it (or is unfiltered)
-    const effectiveAllowed = allowedTools ?? getToolNames();
+    const effectiveAllowed = allowedTools ?? getToolNames(this.verbMode);
     const builtinTools: SDKOptions['tools'] = ['WebSearch'];
     if (!allowedTools || allowedTools.includes('Task')) {
       builtinTools.push('Task');

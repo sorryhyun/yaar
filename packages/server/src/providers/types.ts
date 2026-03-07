@@ -38,6 +38,7 @@ export interface StreamMessage {
   toolInput?: unknown;
   toolUseId?: string;
   error?: string;
+  isError?: boolean;
 }
 
 /**

@@ -61,6 +61,10 @@
       "auto": "Auto",
       "claude": "Claude",
       "codex": "Codex"
+    },
+    "verbMode": {
+      "label": "Verb Mode (Experimental)",
+      "description": "Use URI-based verb tools instead of legacy MCP tools. Currently only config operations are supported."
     }
   },
   "connection": {

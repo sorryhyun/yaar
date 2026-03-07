@@ -27,6 +27,7 @@ import type { ReloadCache } from '../reload/cache.js';
 import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES, isBrowserAvailable } from './browser/index.js';
 import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './config/index.js';
+import { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
 
 /** MCP server categories. */
 export const MCP_SERVERS = [
@@ -38,6 +39,7 @@ export const MCP_SERVERS = [
   'dev',
   'basic',
   'browser',
+  'verbs',
 ] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
@@ -123,6 +125,9 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
       break;
     case 'browser':
       await registerBrowserTools(server);
+      break;
+    case 'verbs':
+      registerVerbTools(server);
       break;
   }
 
@@ -287,10 +292,32 @@ export function formatToolDisplay(raw: string): string {
 }
 
 /**
+ * Get the active MCP servers based on verb mode.
+ * In verb mode, only system and verbs servers are used.
+ */
+export function getActiveServers(verbMode: boolean): McpServerName[] {
+  if (verbMode) {
+    return ['system', 'verbs'];
+  }
+  return [...MCP_SERVERS];
+}
+
+/**
  * Get the list of MCP tool names for YAAR.
  * Browser tools are only included when Chrome/Edge was detected at startup.
+ * In verb mode, only system server tools + verb tools are returned.
  */
-export function getToolNames(): string[] {
+export function getToolNames(verbMode?: boolean): string[] {
+  if (verbMode) {
+    return [
+      'WebSearch',
+      ...SYSTEM_TOOL_NAMES,
+      ...SKILL_TOOL_NAMES,
+      ...HTTP_TOOL_NAMES,
+      ...RELOAD_TOOL_NAMES,
+      ...VERB_TOOL_NAMES,
+    ];
+  }
   return [
     'WebSearch',
     ...SYSTEM_TOOL_NAMES,
@@ -304,5 +331,6 @@ export function getToolNames(): string[] {
     ...BASIC_TOOL_NAMES,
     ...RELOAD_TOOL_NAMES,
     ...(isBrowserAvailable() ? BROWSER_TOOL_NAMES : []),
+    ...VERB_TOOL_NAMES,
   ];
 }

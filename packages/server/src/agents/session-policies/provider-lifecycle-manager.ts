@@ -32,7 +32,9 @@ export class ProviderLifecycleManager {
     }
 
     if (!this.state.sessionLogger) {
-      const sessionInfo = await createSession(this.state.provider.name);
+      const { readSettings } = await import('../../storage/settings.js');
+      const settings = await readSettings();
+      const sessionInfo = await createSession(this.state.provider.name, settings.verbMode);
       this.state.sessionLogger = new SessionLogger(sessionInfo);
     }
 

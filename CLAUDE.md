@@ -218,7 +218,7 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
    - Available actions
    - Example workflows
 3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
-4. (Optional) Use `set_config(section: "app", appId, appConfig)` to store credentials (saved to `config/{appId}.json`, git-ignored)
+4. (Optional) Use `config:set(section: "app", appId, appConfig)` to store credentials (saved to `config/{appId}.json`, git-ignored)
 
 ### Apps Tools (MCP)
 
@@ -231,10 +231,10 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 | `apps_market_get` | Download and install an app from the marketplace |
 | `apps_market_delete` | Uninstall an app and its credentials |
 
-App config (credentials, preferences) is managed via `system` config tools:
-- `set_config(section: "app", appId, appConfig)` — merge config into `config/{appId}.json`
-- `get_config(section: "app", appId?)` — read app config
-- `remove_config(appId, appConfigKey?)` — remove app config key or entire file
+App config (credentials, preferences) is managed via `config` namespace tools:
+- `config:set(section: "app", appId, appConfig)` — merge config into `config/{appId}.json`
+- `config:get(section: "app", appId?)` — read app config
+- `config:remove(appId, appConfigKey?)` — remove app config key or entire file
 
 ### Example: GitHub Manager App
 

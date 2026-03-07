@@ -14,6 +14,7 @@ export interface SessionMetadata {
   lastActivity: string;
   agents: Record<string, AgentInfo>; // agentId -> AgentInfo
   threadIds?: Record<string, string>; // canonicalAgent -> provider threadId
+  verbMode?: boolean;
 }
 
 export interface SessionInfo {

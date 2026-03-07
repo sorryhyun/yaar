@@ -9,6 +9,7 @@ export {
   getMcpToken,
   MCP_SERVERS,
   type McpServerName,
+  getActiveServers,
   getToolNames,
   formatToolDisplay,
 } from './server.js';
@@ -21,6 +22,9 @@ export { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
 export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
 export { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
 export { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
+
+// Verb tools
+export { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
 
 // Action emitter
 export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';

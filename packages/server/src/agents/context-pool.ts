@@ -131,7 +131,9 @@ export class ContextPool implements PoolContext {
     }
 
     this.providerType = provider.providerType;
-    const sessionInfo = await createSession(provider.name);
+    const { readSettings } = await import('../storage/settings.js');
+    const settings = await readSettings();
+    const sessionInfo = await createSession(provider.name, settings.verbMode);
     this.sharedLogger = new SessionLogger(sessionInfo);
     this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);

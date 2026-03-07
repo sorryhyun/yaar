@@ -61,6 +61,10 @@
       "auto": "자동",
       "claude": "Claude",
       "codex": "Codex"
+    },
+    "verbMode": {
+      "label": "동사 모드 (실험적)",
+      "description": "레거시 MCP 도구 대신 URI 기반 동사 도구를 사용합니다. 현재 설정 작업만 지원됩니다."
     }
   },
   "connection": {

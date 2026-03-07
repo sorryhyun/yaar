@@ -23,7 +23,7 @@ function generateSessionId(): string {
 /**
  * Create a new session.
  */
-export async function createSession(provider: string): Promise<SessionInfo> {
+export async function createSession(provider: string, verbMode?: boolean): Promise<SessionInfo> {
   await ensureSessionsDir();
 
   const sessionId = generateSessionId();
@@ -37,6 +37,7 @@ export async function createSession(provider: string): Promise<SessionInfo> {
     createdAt: now,
     provider,
     lastActivity: now,
+    verbMode,
     agents: {
       'main-0': {
         agentId: 'main-0',
@@ -245,8 +246,13 @@ export class SessionLogger {
     content: string | undefined,
     toolUseId: string | undefined,
     agentId?: string,
+    meta?: {
+      isError?: boolean;
+      errorCategory?: string;
+      durationMs?: number;
+    },
   ): void {
-    this.appendEntry('tool_result', agentId, { toolName, content, toolUseId });
+    this.appendEntry('tool_result', agentId, { toolName, content, toolUseId, ...meta });
   }
 
   logAction(action: OSAction, agentId?: string): void {
