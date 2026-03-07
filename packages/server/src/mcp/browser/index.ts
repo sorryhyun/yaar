@@ -4,7 +4,7 @@
  * The agent controls a headless Chromium browser, screenshots are displayed
  * in a YAAR window via the browser app, and text content is returned to the agent.
  *
- * The browser app iframe subscribes to SSE updates (/api/browser/{sessionId}/events)
+ * The browser app iframe subscribes to SSE updates (/api/browser/{browserId}/events)
  * so screenshot refreshes happen automatically — no App Protocol round-trip needed.
  */
 
@@ -13,27 +13,26 @@ import { z } from 'zod';
 import { getBrowserPool } from '../../lib/browser/index.js';
 import type { BrowserSession, PageState } from '../../lib/browser/index.js';
 import { actionEmitter } from '../action-emitter.js';
-import { getSessionId as getContextSessionId } from '../../agents/session.js';
-import { getSessionHub } from '../../session/session-hub.js';
 import { isDomainAllowed, extractDomain } from '../domains.js';
 import { ok, okWithImages, error } from '../utils.js';
 
-function getSessionId(): string {
-  // Use the LiveSession's sessionId so both providers share a consistent browser session key
-  // and the SSE endpoint (/api/browser/{sessionId}/events) can find the session.
-  const contextId = getContextSessionId();
-  if (contextId) return contextId;
-  console.warn('[browser] No session in AsyncLocalStorage context, falling back to getDefault()');
-  const session = getSessionHub().getDefault();
-  if (!session) throw new Error('No active session — connect via WebSocket first.');
-  return session.sessionId;
-}
-
-function getSession(): BrowserSession {
-  const id = getSessionId();
-  const session = getBrowserPool().getSession(id);
-  if (!session) throw new Error('No browser session open. Use browser:open first.');
-  return session;
+/**
+ * Resolve a browser session by browserId.
+ * If browserId is given, look up that specific browser.
+ * If not given, use the only browser (or error if 0 or multiple).
+ */
+function resolveSession(browserId?: string): BrowserSession {
+  const pool = getBrowserPool();
+  if (browserId !== undefined) {
+    const session = pool.getSession(browserId);
+    if (!session) throw new Error(`No browser with ID ${browserId}. Use browser:open first.`);
+    return session;
+  }
+  const browsers = pool.getAllSessions();
+  if (browsers.size === 0) throw new Error('No browser open. Use browser:open first.');
+  if (browsers.size === 1) return browsers.values().next().value!;
+  const ids = [...browsers.keys()].join(', ');
+  throw new Error(`Multiple browsers open (${ids}). Specify browserId.`);
 }
 
 function formatPageState(state: PageState): string {
@@ -64,20 +63,6 @@ function formatPageState(state: PageState): string {
     result += `\n\nPage content:\n${state.textSnippet}`;
   }
   return result;
-}
-
-/**
- * Update the window title bar to reflect the current browser state.
- * Screenshot updates are handled by the SSE stream (browser app subscribes
- * to /api/browser/{sessionId}/events).
- */
-function updateWindowTitle(session: BrowserSession, title: string): void {
-  if (!session.windowId) return;
-  actionEmitter.emitAction({
-    type: 'window.setTitle',
-    windowId: session.windowId,
-    title: `Browser — ${title}`,
-  });
 }
 
 /** Heuristic: find the CSS selector for the largest text-containing block element. */
@@ -116,9 +101,13 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     'open',
     {
       description:
-        'Open a URL in a visible browser. Creates a browser window on the desktop. Returns page title, URL, and text content.',
+        'Open a URL in a visible browser. Always creates a new browser tab/window. Returns page title, URL, text content, and the assigned browser ID.',
       inputSchema: {
         url: z.string().url().describe('The URL to navigate to'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Optional browser ID. If omitted, auto-assigns next available ID.'),
         waitUntil: z
           .enum(['load', 'domcontentloaded', 'networkidle'])
           .optional()
@@ -136,39 +125,33 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           return error(`Domain "${domain}" not allowed. Use request_allowing_domain first.`);
         }
 
-        const sessionId = getSessionId();
-        let session = pool.getSession(sessionId);
+        const { session, browserId } = await pool.createSession(args.browserId);
+        const windowId = `browser-${browserId}`;
+        session.windowId = windowId;
 
-        if (!session) {
-          // Create new session + window
-          session = await pool.createSession(sessionId);
-          const windowId = `browser-${sessionId.slice(0, 8)}`;
-          session.windowId = windowId;
-
-          // Navigate first so we have a screenshot before showing the window
-          const state = await session.navigate(args.url, args.waitUntil);
-
-          // Create YAAR window with browser app iframe
-          const osAction = {
-            type: 'window.create' as const,
-            windowId,
-            title: `Browser — ${state.title || domain}`,
-            bounds: { x: 80, y: 60, w: 900, h: 650 },
-            content: {
-              renderer: 'iframe',
-              data: `/api/apps/browser/index.html?sessionId=${sessionId}`,
-            },
-          };
-
-          await actionEmitter.emitActionWithFeedback(osAction, 3000);
-          console.log(`[browser:open] New session → ${state.title || '(no title)'}`);
-          return ok(formatPageState(state));
-        }
-
-        // Existing session — just navigate
+        // Navigate first so we have a screenshot before showing the window
         const state = await session.navigate(args.url, args.waitUntil);
-        updateWindowTitle(session, state.title || domain);
-        return ok(formatPageState(state));
+
+        // Create YAAR window with browser app iframe
+        const osAction = {
+          type: 'window.create' as const,
+          windowId,
+          title: `Browser — ${state.title || domain}`,
+          bounds: {
+            x: 80 + Number(browserId) * 30,
+            y: 60 + Number(browserId) * 30,
+            w: 900,
+            h: 650,
+          },
+          content: {
+            renderer: 'iframe',
+            data: `/api/apps/browser/index.html?browserId=${browserId}`,
+          },
+        };
+
+        await actionEmitter.emitActionWithFeedback(osAction, 3000);
+        console.log(`[browser:open] [browser:${browserId}] → ${state.title || '(no title)'}`);
+        return ok(`[browser:${browserId}]\n${formatPageState(state)}`);
       } catch (err) {
         console.error(`[browser:open] Error:`, err);
         return error(`Browser open failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -201,13 +184,17 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .number()
           .optional()
           .describe('0-based index when multiple text matches exist (default: 0, first match)'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
       if (!args.selector && !args.text && (args.x === undefined || args.y === undefined)) {
         return error('Provide "selector", "text", or both "x" and "y" to identify where to click.');
       }
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.click(args.selector, args.text, args.x, args.y, args.index);
       return ok(formatPageState(state));
     },
@@ -222,10 +209,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
       inputSchema: {
         selector: z.string().describe('CSS selector of the input field'),
         text: z.string().describe('Text to type into the field'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.type(args.selector, args.text);
       return ok(`Typed into ${args.selector}\n\n${formatPageState(state)}`);
     },
@@ -244,10 +235,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .string()
           .optional()
           .describe('CSS selector of the element to focus before pressing the key'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.press(args.key, args.selector);
       return ok(formatPageState(state));
     },
@@ -261,10 +256,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
       description: 'Scroll the page up or down. Returns updated page state.',
       inputSchema: {
         direction: z.enum(['up', 'down']).describe('Scroll direction'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.scroll(args.direction);
       return ok(formatPageState(state));
     },
@@ -282,10 +281,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
         y0: z.number().optional().describe('Top edge of the region in pixels'),
         x1: z.number().optional().describe('Right edge of the region in pixels'),
         y1: z.number().optional().describe('Bottom edge of the region in pixels'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const hasRegion =
         args.x0 !== undefined &&
         args.y0 !== undefined &&
@@ -320,10 +323,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .boolean()
           .optional()
           .describe('Extract only from the largest text-containing block element'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const effectiveSelector =
         args.mainContentOnly && !args.selector ? await findMainContent(session) : args.selector;
       const content = await session.extractContent(effectiveSelector);
@@ -371,10 +378,14 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
       description: 'Navigate browser history back or forward. Returns updated page state.',
       inputSchema: {
         direction: z.enum(['back', 'forward']).describe('Direction to navigate in browser history'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.navigateHistory(args.direction);
       return ok(formatPageState(state));
     },
@@ -402,13 +413,17 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .number()
           .optional()
           .describe('0-based index when multiple text matches exist (default: 0, first match)'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
       if (!args.selector && !args.text && (args.x === undefined || args.y === undefined)) {
         return error('Provide "selector", "text", or both "x" and "y" to identify where to hover.');
       }
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.hover(args);
       return ok(formatPageState(state));
     },
@@ -427,12 +442,34 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
           .number()
           .optional()
           .describe('Max time to wait in milliseconds (default: 10000)'),
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID (required if multiple browsers open)'),
       },
     },
     async (args) => {
-      const session = getSession();
+      const session = resolveSession(args.browserId);
       const state = await session.waitForSelector(args.selector, args.timeout);
       return ok(formatPageState(state));
+    },
+  );
+
+  // ── list ───────────────────────────────────────────────────────────
+
+  server.registerTool(
+    'list',
+    {
+      description: 'List all open browsers with their IDs, URLs, and titles.',
+      inputSchema: {},
+    },
+    async () => {
+      const browsers = pool.getAllSessions();
+      if (browsers.size === 0) return ok('No browsers open.');
+      const lines = [...browsers.entries()].map(
+        ([bid, s]) => `[browser:${bid}] ${s.currentUrl} — ${s.currentTitle || '(no title)'}`,
+      );
+      return ok(lines.join('\n'));
     },
   );
 
@@ -441,24 +478,48 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
   server.registerTool(
     'close',
     {
-      description: 'Close the browser session and its window. Frees resources.',
-      inputSchema: {},
+      description:
+        'Close a browser and its window. If browserId is given, closes that browser. If omitted and exactly one browser is open, closes it. If multiple are open and no browserId is given, closes all.',
+      inputSchema: {
+        browserId: z
+          .string()
+          .optional()
+          .describe('Browser ID to close. If omitted, closes the only browser or all browsers.'),
+      },
     },
-    async () => {
-      const sessionId = getSessionId();
-      const session = pool.getSession(sessionId);
-      if (!session) return ok('No browser session to close.');
+    async (args) => {
+      const browsers = pool.getAllSessions();
 
-      // Close the YAAR window
-      if (session.windowId) {
-        actionEmitter.emitAction({
-          type: 'window.close',
-          windowId: session.windowId,
-        });
+      if (browsers.size === 0) return ok('No browser to close.');
+
+      if (args.browserId !== undefined) {
+        const session = pool.getSession(args.browserId);
+        if (!session) return ok(`No browser with ID ${args.browserId}.`);
+        if (session.windowId) {
+          actionEmitter.emitAction({ type: 'window.close', windowId: session.windowId });
+        }
+        await pool.closeSession(args.browserId);
+        return ok(`Browser ${args.browserId} closed.`);
       }
 
-      await pool.closeSession(sessionId);
-      return ok('Browser closed.');
+      if (browsers.size === 1) {
+        const [browserId, session] = [...browsers.entries()][0];
+        if (session.windowId) {
+          actionEmitter.emitAction({ type: 'window.close', windowId: session.windowId });
+        }
+        await pool.closeSession(browserId);
+        return ok('Browser closed.');
+      }
+
+      // Multiple browsers — close all
+      const ids = [...browsers.keys()];
+      for (const [browserId, session] of browsers) {
+        if (session.windowId) {
+          actionEmitter.emitAction({ type: 'window.close', windowId: session.windowId });
+        }
+        await pool.closeSession(browserId);
+      }
+      return ok(`All browsers closed (${ids.join(', ')}).`);
     },
   );
 }
@@ -474,6 +535,7 @@ export const BROWSER_TOOL_NAMES = [
   'mcp__browser__navigate',
   'mcp__browser__hover',
   'mcp__browser__wait_for',
+  'mcp__browser__list',
   'mcp__browser__close',
 ] as const;
 

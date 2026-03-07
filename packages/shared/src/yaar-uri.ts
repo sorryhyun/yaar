@@ -377,29 +377,18 @@ export function buildConfigUri(section: ConfigSection, id?: string): string {
 
 // ============ Browser URIs ============
 
-export type BrowserResource = 'current';
-export type BrowserSubResource = 'content' | 'screenshot' | 'navigate' | 'click';
-
 export interface ParsedBrowserUri {
-  resource: BrowserResource;
+  /** Browser ID (numeric string, e.g. '0', '1'). */
+  resource: string;
   /** Sub-resource (e.g., 'content', 'screenshot', 'navigate', 'click'). */
-  subResource?: BrowserSubResource;
+  subResource?: string;
 }
-
-const BROWSER_SUB_RESOURCES: ReadonlySet<string> = new Set([
-  'content',
-  'screenshot',
-  'navigate',
-  'click',
-]);
 
 /**
  * Parse a yaar://browser/... URI.
  *
- *   parseBrowserUri('yaar://browser/current')            → { resource: 'current' }
- *   parseBrowserUri('yaar://browser/current/content')    → { resource: 'current', subResource: 'content' }
- *   parseBrowserUri('yaar://browser/current/screenshot') → { resource: 'current', subResource: 'screenshot' }
- *   parseBrowserUri('yaar://browser/current/navigate')   → { resource: 'current', subResource: 'navigate' }
+ *   parseBrowserUri('yaar://browser/0')            → { resource: '0' }
+ *   parseBrowserUri('yaar://browser/1/screenshot')  → { resource: '1', subResource: 'screenshot' }
  */
 export function parseBrowserUri(uri: string): ParsedBrowserUri | null {
   const parsed = parseYaarUri(uri);
@@ -407,24 +396,21 @@ export function parseBrowserUri(uri: string): ParsedBrowserUri | null {
 
   const slashIdx = parsed.path.indexOf('/');
   const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-  if (resource !== 'current') return null;
+  if (!resource) return null;
 
-  if (slashIdx === -1) return { resource: 'current' };
+  if (slashIdx === -1) return { resource };
 
   const sub = parsed.path.slice(slashIdx + 1);
-  if (!BROWSER_SUB_RESOURCES.has(sub)) return null;
-  return { resource: 'current', subResource: sub as BrowserSubResource };
+  if (!sub) return null;
+  return { resource, subResource: sub };
 }
 
 /**
  * Build a yaar://browser/... URI.
  *
- *   buildBrowserUri('current')              → 'yaar://browser/current'
- *   buildBrowserUri('current', 'screenshot') → 'yaar://browser/current/screenshot'
+ *   buildBrowserUri('0')              → 'yaar://browser/0'
+ *   buildBrowserUri('1', 'screenshot') → 'yaar://browser/1/screenshot'
  */
-export function buildBrowserUri(
-  resource: BrowserResource,
-  subResource?: BrowserSubResource,
-): string {
+export function buildBrowserUri(resource: string, subResource?: string): string {
   return subResource ? `yaar://browser/${resource}/${subResource}` : `yaar://browser/${resource}`;
 }

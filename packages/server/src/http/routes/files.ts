@@ -49,6 +49,18 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
   {
     method: 'GET',
+    path: '/api/browser/sessions',
+    response: 'JSON',
+    description: 'List active browser sessions',
+  },
+  {
+    method: 'POST',
+    path: '/api/browser/{browserId}/navigate',
+    response: 'JSON',
+    description: 'Navigate a browser directly (bypass agent)',
+  },
+  {
+    method: 'GET',
     path: '/api/sandbox/{sandboxId}/{path}',
     response: 'file',
     description: 'Serve sandbox files',
@@ -81,18 +93,85 @@ function maybeGzip(
 }
 
 export async function handleFileRoutes(req: Request, url: URL): Promise<Response | null> {
+  // List active browser sessions
+  // URL format: GET /api/browser/sessions
+  if (url.pathname === '/api/browser/sessions' && req.method === 'GET') {
+    try {
+      const { getBrowserPool } = await import('../../lib/browser/index.js');
+      const browsers = getBrowserPool().getAllSessions();
+      const result = [...browsers.entries()].map(([browserId, session]) => ({
+        browserId,
+        url: session.currentUrl,
+        title: session.currentTitle,
+        windowId: session.windowId,
+      }));
+      return jsonResponse(result);
+    } catch {
+      return jsonResponse([]);
+    }
+  }
+
+  // Direct browser navigation (bypass agent)
+  // URL format: POST /api/browser/{browserId}/navigate
+  const browserNavMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/navigate$/);
+  if (browserNavMatch && req.method === 'POST') {
+    const browserId = decodeURIComponent(browserNavMatch[1]);
+    try {
+      const body = (await req.json()) as { url?: string };
+      if (!body.url || typeof body.url !== 'string') {
+        return errorResponse('Missing "url" in request body', 400);
+      }
+
+      // Validate URL
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(body.url);
+      } catch {
+        return errorResponse('Invalid URL', 400);
+      }
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return errorResponse('Only http/https URLs are allowed', 400);
+      }
+
+      // Check domain allowlist
+      const { isDomainAllowed, extractDomain } = await import('../../mcp/domains.js');
+      const domain = extractDomain(body.url);
+      if (!domain) return errorResponse('Invalid URL', 400);
+      if (!(await isDomainAllowed(domain))) {
+        return errorResponse(`Domain "${domain}" not allowed`, 403);
+      }
+
+      const { getBrowserPool } = await import('../../lib/browser/index.js');
+      const session = getBrowserPool().getSession(browserId);
+      if (!session) {
+        return errorResponse('Browser not found', 404);
+      }
+
+      const state = await session.navigate(body.url);
+      return jsonResponse({
+        ok: true,
+        url: state.url,
+        title: state.title,
+      });
+    } catch (err) {
+      return errorResponse(
+        `Navigation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   // Serve browser screenshot
-  // URL format: /api/browser/{sessionId}/screenshot
+  // URL format: /api/browser/{browserId}/screenshot
   const browserScreenshotMatch = url.pathname.match(
     /^\/api\/browser\/([a-zA-Z0-9_-]+)\/screenshot$/,
   );
   if (browserScreenshotMatch && req.method === 'GET') {
-    const sessionId = decodeURIComponent(browserScreenshotMatch[1]);
+    const browserId = decodeURIComponent(browserScreenshotMatch[1]);
     try {
       const { getBrowserPool } = await import('../../lib/browser/index.js');
-      const session = getBrowserPool().getSession(sessionId);
+      const session = getBrowserPool().getSession(browserId);
       if (!session) {
-        return errorResponse('Browser session not found', 404);
+        return errorResponse('Browser not found', 404);
       }
       const fresh = url.searchParams.has('fresh');
       const buf = fresh ? await session.screenshot() : session.lastScreenshot;
@@ -112,13 +191,13 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
   }
 
   // SSE stream for browser session updates
-  // URL format: /api/browser/{sessionId}/events
+  // URL format: /api/browser/{browserId}/events
   const browserEventsMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/events$/);
   if (browserEventsMatch && req.method === 'GET') {
-    const sessionId = decodeURIComponent(browserEventsMatch[1]);
+    const browserId = decodeURIComponent(browserEventsMatch[1]);
     try {
       const { getBrowserPool } = await import('../../lib/browser/index.js');
-      const session = getBrowserPool().getSession(sessionId);
+      const session = getBrowserPool().getSession(browserId);
       if (!session) {
         return errorResponse('Browser session not found', 404);
       }

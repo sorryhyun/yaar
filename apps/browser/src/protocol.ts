@@ -4,14 +4,12 @@
  */
 
 export interface BrowserProtocolDeps {
-  /** Returns the current URL signal value */
   getCurrentUrl: () => string;
-  /** Updates URL bar and optionally the page title */
+  getActiveBrowserId: () => string;
   updateUrlBar: (url: string, title?: string) => void;
-  /** Triggers a screenshot refresh */
   refreshScreenshot: () => void;
-  /** Clears the browser display */
   clearDisplay: () => void;
+  attach: (browserId: string) => void;
 }
 
 export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
@@ -25,13 +23,17 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
       manifest: {
         description: 'App capabilities',
         handler: () => ({
-          state: ['currentUrl'],
-          commands: ['refresh', 'clear', 'navigate'],
+          state: ['currentUrl', 'browserId'],
+          commands: ['refresh', 'clear', 'attach'],
         }),
       },
       currentUrl: {
         description: 'Currently displayed URL',
         handler: () => deps.getCurrentUrl(),
+      },
+      browserId: {
+        description: 'Currently connected browser ID',
+        handler: () => deps.getActiveBrowserId(),
       },
     },
     commands: {
@@ -58,16 +60,16 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           return { ok: true };
         },
       },
-      navigate: {
-        description: 'Navigate the browser to a URL. Params: { url }',
+      attach: {
+        description: 'Switch to a different browser by ID. Params: { browserId }',
         params: {
           type: 'object',
-          properties: { url: { type: 'string' } },
-          required: ['url'],
+          properties: { browserId: { type: 'string' } },
+          required: ['browserId'],
         },
-        handler: (p: { url: string }) => {
-          (window as any).yaar?.app?.sendInteraction?.({ event: 'navigate_request', url: p.url });
-          return { ok: true, url: p.url };
+        handler: (p: { browserId: string }) => {
+          deps.attach(p.browserId);
+          return { ok: true, browserId: p.browserId };
         },
       },
     },

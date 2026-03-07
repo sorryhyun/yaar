@@ -1,7 +1,7 @@
 {
   "icon": "🌐",
   "name": "Browser",
-  "description": "Live browser with SSE screenshot streaming and navigation controls",
+  "description": "Live browser with screenshot streaming and session management",
   "run": "index.html",
   "createShortcut": false,
   "appProtocol": true,
@@ -9,6 +9,9 @@
     "state": {
       "currentUrl": {
         "description": "Currently displayed URL"
+      },
+      "browserId": {
+        "description": "Currently connected browser ID"
       }
     },
     "commands": {
@@ -33,19 +36,21 @@
           "properties": {}
         }
       },
-      "navigate": {
-        "description": "Navigate the browser to a URL. Params: { url }",
+      "attach": {
+        "description": "Switch to a different browser by ID. Params: { browserId }",
         "params": {
           "type": "object",
           "properties": {
-            "url": {
+            "browserId": {
               "type": "string"
             }
           },
-          "required": ["url"]
+          "required": ["browserId"]
         }
       }
     }
   },
-  "capture": "dom"
+  "variant": "panel",
+  "dockEdge": "top",
+  "capture": "canvas"
 }

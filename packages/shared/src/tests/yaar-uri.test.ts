@@ -119,9 +119,9 @@ describe('parseYaarUri with config/browser', () => {
   });
 
   it('parses browser URIs', () => {
-    expect(parseYaarUri('yaar://browser/current')).toEqual({
+    expect(parseYaarUri('yaar://browser/0')).toEqual({
       authority: 'browser',
-      path: 'current',
+      path: '0',
     });
   });
 });
@@ -214,47 +214,36 @@ describe('buildConfigUri', () => {
 // ============ Browser URIs ============
 
 describe('parseBrowserUri', () => {
-  it('parses current resource', () => {
-    expect(parseBrowserUri('yaar://browser/current')).toEqual({
-      resource: 'current',
+  it('parses numeric browser ID', () => {
+    expect(parseBrowserUri('yaar://browser/0')).toEqual({
+      resource: '0',
       subResource: undefined,
     });
   });
 
-  it('parses current/content', () => {
-    expect(parseBrowserUri('yaar://browser/current/content')).toEqual({
-      resource: 'current',
-      subResource: 'content',
-    });
-  });
-
-  it('parses current/screenshot', () => {
-    expect(parseBrowserUri('yaar://browser/current/screenshot')).toEqual({
-      resource: 'current',
+  it('parses browser ID with sub-resource', () => {
+    expect(parseBrowserUri('yaar://browser/1/screenshot')).toEqual({
+      resource: '1',
       subResource: 'screenshot',
     });
   });
 
-  it('parses current/navigate', () => {
-    expect(parseBrowserUri('yaar://browser/current/navigate')).toEqual({
-      resource: 'current',
+  it('parses browser ID with content sub-resource', () => {
+    expect(parseBrowserUri('yaar://browser/0/content')).toEqual({
+      resource: '0',
+      subResource: 'content',
+    });
+  });
+
+  it('parses browser ID with navigate sub-resource', () => {
+    expect(parseBrowserUri('yaar://browser/2/navigate')).toEqual({
+      resource: '2',
       subResource: 'navigate',
     });
   });
 
-  it('parses current/click', () => {
-    expect(parseBrowserUri('yaar://browser/current/click')).toEqual({
-      resource: 'current',
-      subResource: 'click',
-    });
-  });
-
-  it('returns null for unknown resource', () => {
-    expect(parseBrowserUri('yaar://browser/tabs')).toBeNull();
-  });
-
-  it('returns null for unknown sub-resource', () => {
-    expect(parseBrowserUri('yaar://browser/current/unknown')).toBeNull();
+  it('returns null for empty resource', () => {
+    expect(parseBrowserUri('yaar://browser/')).toBeNull();
   });
 
   it('returns null for non-browser URI', () => {
@@ -267,17 +256,17 @@ describe('parseBrowserUri', () => {
 });
 
 describe('buildBrowserUri', () => {
-  it('builds current URI', () => {
-    expect(buildBrowserUri('current')).toBe('yaar://browser/current');
+  it('builds browser URI with numeric ID', () => {
+    expect(buildBrowserUri('0')).toBe('yaar://browser/0');
   });
 
-  it('builds current/screenshot URI', () => {
-    expect(buildBrowserUri('current', 'screenshot')).toBe('yaar://browser/current/screenshot');
+  it('builds browser URI with sub-resource', () => {
+    expect(buildBrowserUri('1', 'screenshot')).toBe('yaar://browser/1/screenshot');
   });
 
   it('roundtrips with parseBrowserUri', () => {
-    const uri = buildBrowserUri('current', 'navigate');
+    const uri = buildBrowserUri('2', 'navigate');
     const parsed = parseBrowserUri(uri);
-    expect(parsed).toEqual({ resource: 'current', subResource: 'navigate' });
+    expect(parsed).toEqual({ resource: '2', subResource: 'navigate' });
   });
 });

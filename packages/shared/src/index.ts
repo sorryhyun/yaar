@@ -30,8 +30,6 @@ export {
   type ParsedWindowKey,
   type ConfigSection,
   type ParsedConfigUri,
-  type BrowserResource,
-  type BrowserSubResource,
   type ParsedBrowserUri,
   parseYaarUri,
   buildYaarUri,

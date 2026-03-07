@@ -54,9 +54,6 @@ import { BrowserSession } from '../lib/browser/session.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Access private members of BrowserPool for test assertions.
- */
 function internals(pool: BrowserPool) {
   return pool as unknown as {
     sessions: Map<string, unknown>;
@@ -77,27 +74,25 @@ describe('BrowserPool', () => {
   });
 
   afterEach(async () => {
-    // Ensure Chrome cleanup timer does not leak across tests
     await pool.shutdown();
     vi.restoreAllMocks();
   });
 
-  it('createSession succeeds and stores session', async () => {
-    const session = await pool.createSession('sess-1');
+  it('createSession auto-assigns browserId', async () => {
+    const { session, browserId } = await pool.createSession();
 
+    expect(browserId).toBe('0');
     expect(session).toBeDefined();
-    expect(session.id).toBe('sess-1');
-    expect(pool.getSession('sess-1')).toBe(session);
+    expect(session.id).toBe('0');
+    expect(pool.getSession('0')).toBe(session);
     expect(BrowserSession.create).toHaveBeenCalledWith(
-      'sess-1',
+      '0',
       'ws://127.0.0.1:9222/devtools/page/mock',
     );
 
-    // Chrome was launched lazily
     const { launchChrome } = await import('../lib/browser/chrome.js');
     expect(launchChrome).toHaveBeenCalledOnce();
 
-    // Fetch was called for /json/new
     expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:9222/json/new?about:blank', {
       method: 'PUT',
       signal: expect.any(AbortSignal),
@@ -108,21 +103,33 @@ describe('BrowserPool', () => {
     expect(stats.chromeRunning).toBe(true);
   });
 
+  it('auto-increments browserId', async () => {
+    const r1 = await pool.createSession();
+    const r2 = await pool.createSession();
+
+    expect(r1.browserId).toBe('0');
+    expect(r2.browserId).toBe('1');
+  });
+
+  it('accepts explicit browserId', async () => {
+    const { browserId } = await pool.createSession('custom');
+    expect(browserId).toBe('custom');
+    expect(pool.getSession('custom')).toBeDefined();
+  });
+
   it('enforces max sessions limit (3)', async () => {
-    await pool.createSession('a');
-    await pool.createSession('b');
-    await pool.createSession('c');
+    await pool.createSession();
+    await pool.createSession();
+    await pool.createSession();
 
-    await expect(pool.createSession('d')).rejects.toThrow(/session limit reached/i);
-
+    await expect(pool.createSession()).rejects.toThrow(/limit reached/i);
     expect(pool.getStats().activeSessions).toBe(3);
   });
 
   it('findByWindowId returns the correct session', async () => {
-    const s1 = await pool.createSession('s1');
-    const s2 = await pool.createSession('s2');
+    const { session: s1 } = await pool.createSession();
+    const { session: s2 } = await pool.createSession();
 
-    // Simulate binding window IDs (normally done externally)
     s1.windowId = 'win-abc';
     s2.windowId = 'win-xyz';
 
@@ -132,26 +139,34 @@ describe('BrowserPool', () => {
   });
 
   it('closeSession removes session and kills Chrome when last', async () => {
-    await pool.createSession('only');
+    await pool.createSession();
     expect(pool.getStats().activeSessions).toBe(1);
 
-    await pool.closeSession('only');
+    await pool.closeSession('0');
 
-    expect(pool.getSession('only')).toBeUndefined();
+    expect(pool.getSession('0')).toBeUndefined();
     expect(pool.getStats().activeSessions).toBe(0);
-    // Chrome should be cleaned up when no sessions remain
     expect(cleanupChrome).toHaveBeenCalled();
     expect(pool.getStats().chromeRunning).toBe(false);
   });
 
+  it('getAllSessions returns all open browsers', async () => {
+    await pool.createSession();
+    await pool.createSession();
+
+    const all = pool.getAllSessions();
+    expect(all.size).toBe(2);
+    expect(all.has('0')).toBe(true);
+    expect(all.has('1')).toBe(true);
+  });
+
   it('shutdown closes all sessions and Chrome', async () => {
-    const s1 = await pool.createSession('s1');
-    const s2 = await pool.createSession('s2');
-    const s3 = await pool.createSession('s3');
+    const { session: s1 } = await pool.createSession();
+    const { session: s2 } = await pool.createSession();
+    const { session: s3 } = await pool.createSession();
 
     await pool.shutdown();
 
-    // All session close() methods were called
     expect(s1.close).toHaveBeenCalled();
     expect(s2.close).toHaveBeenCalled();
     expect(s3.close).toHaveBeenCalled();
@@ -162,12 +177,9 @@ describe('BrowserPool', () => {
   });
 
   it('cleans up stale Chrome before launching', async () => {
-    await pool.createSession('first');
+    await pool.createSession();
 
-    // cleanupStaleChrome should be called before Chrome launch
     expect(cleanupStaleChrome).toHaveBeenCalledOnce();
-
-    // writePidFile should be called after Chrome launch
     expect(writePidFile).toHaveBeenCalledOnce();
     expect(writePidFile).toHaveBeenCalledWith(
       expect.objectContaining({ port: 9222, userDataDir: '/tmp/yaar-browser-mock' }),
@@ -175,12 +187,11 @@ describe('BrowserPool', () => {
   });
 
   it('does not call stale cleanup on subsequent sessions (Chrome already running)', async () => {
-    await pool.createSession('a');
+    await pool.createSession();
     expect(cleanupStaleChrome).toHaveBeenCalledOnce();
 
-    // Second session reuses existing Chrome — no stale cleanup
     vi.mocked(cleanupStaleChrome).mockClear();
-    await pool.createSession('b');
+    await pool.createSession();
     expect(cleanupStaleChrome).not.toHaveBeenCalled();
   });
 
@@ -188,26 +199,20 @@ describe('BrowserPool', () => {
     vi.useFakeTimers();
     try {
       const freshPool = new BrowserPool();
-      const s1 = await freshPool.createSession('stale');
-      const s2 = await freshPool.createSession('fresh');
+      const { session: s1 } = await freshPool.createSession();
+      const { session: s2 } = await freshPool.createSession();
 
-      // Make s1 appear idle (6 minutes ago, beyond the 5-minute timeout)
+      // Make s1 appear idle (6 minutes ago)
       s1.lastActivity = Date.now() - 6 * 60 * 1000;
-      // s2 stays fresh (activity is now)
       s2.lastActivity = Date.now();
 
-      // Invoke the private cleanupIdle method directly
       await internals(freshPool).cleanupIdle();
 
-      // Stale session removed, fresh session kept
-      expect(freshPool.getSession('stale')).toBeUndefined();
-      expect(freshPool.getSession('fresh')).toBe(s2);
+      expect(freshPool.getSession('0')).toBeUndefined();
+      expect(freshPool.getSession('1')).toBe(s2);
       expect(s1.close).toHaveBeenCalled();
       expect(s2.close).not.toHaveBeenCalled();
-
       expect(freshPool.getStats().activeSessions).toBe(1);
-
-      // Chrome still running because one session remains
       expect(freshPool.getStats().chromeRunning).toBe(true);
 
       await freshPool.shutdown();

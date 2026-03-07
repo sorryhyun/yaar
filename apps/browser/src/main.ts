@@ -1,9 +1,10 @@
 /**
  * Browser app — displays live screenshots from browser sessions.
- * Subscribes to SSE (/api/browser/{sessionId}/events) for real-time updates.
+ * Subscribes to SSE (/api/browser/{browserId}/events) for real-time updates.
+ * Supports runtime session switching via the `attach` protocol command.
  * App Protocol is registered in ./protocol.ts.
  */
-import { createSignal, onMount, onCleanup } from '@bundled/solid-js';
+import { createSignal, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { registerBrowserProtocol } from './protocol';
@@ -11,10 +12,7 @@ import './styles.css';
 
 // Extract query params
 const params = new URLSearchParams(window.location.search);
-
-// sessionId (validate format)
-const rawSessionId = params.get('sessionId') || '';
-const sessionId = /^[a-zA-Z0-9_-]+$/.test(rawSessionId) ? rawSessionId : '';
+const initialBrowserId = params.get('browserId') || '0';
 
 // optional initial url (for direct app open like ?url=https://...)
 const rawInitialUrl = params.get('url') || '';
@@ -32,15 +30,15 @@ if (rawInitialUrl) {
 
 // ── Reactive State ────────────────────────────────────────────────────
 
+const [activeBrowserId, setActiveBrowserId] = createSignal(initialBrowserId);
 const [currentUrl, setCurrentUrl] = createSignal(parsedInitialUrl);
 const [pageTitle, setPageTitle] = createSignal('');
 const [loading, setLoading] = createSignal(false);
 const [showScreenshot, setShowScreenshot] = createSignal(false);
-const [placeholderText, setPlaceholderText] = createSignal(
-  sessionId ? 'Waiting for navigation...' : 'No active browser session.'
-);
+const [placeholderText, setPlaceholderText] = createSignal('Waiting for navigation...');
 
 let lastVersion = -1;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Derived helpers ───────────────────────────────────────────────────
 
@@ -71,8 +69,9 @@ function lockIcon(): string {
 let screenshotEl!: HTMLImageElement;
 
 function refreshScreenshot(fresh = false) {
+  const bid = activeBrowserId();
   const ts = Date.now();
-  const src = `/api/browser/${sessionId}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`;
+  const src = `/api/browser/${bid}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`;
   setLoading(true);
 
   screenshotEl.onload = () => {
@@ -117,6 +116,25 @@ function handleUrlFocus(e: FocusEvent) {
   (e.target as HTMLInputElement).select();
 }
 
+async function navigateDirect(url: string) {
+  const bid = activeBrowserId();
+  setLoading(true);
+  try {
+    const resp = await fetch(`/api/browser/${bid}/navigate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }));
+      console.error('[browser] Navigate failed:', err);
+    }
+    // SSE will handle screenshot refresh
+  } catch (err) {
+    console.error('[browser] Navigate error:', err);
+  }
+}
+
 function handleUrlKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -127,23 +145,55 @@ function handleUrlKeydown(e: KeyboardEvent) {
     }
     (e.target as HTMLInputElement).value = url;
     (e.target as HTMLInputElement).blur();
-    const y = (window as any).yaar;
-    y?.app?.sendInteraction?.({ event: 'navigate_request', url });
+    navigateDirect(url);
   }
 }
 
-// ── SSE subscription (lifecycle managed by onMount/onCleanup) ─────────
+// ── SSE connection management ─────────────────────────────────────────
 
-onMount(() => {
-  if (!sessionId) return;
+let currentEvtSource: EventSource | null = null;
+const MAX_SSE_ERRORS = 5;
 
-  const MAX_SSE_ERRORS = 5;
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPolling(bid: string) {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    const ts = Date.now();
+    const img = new Image();
+    img.onload = () => {
+      screenshotEl.src = img.src;
+      setShowScreenshot(true);
+    };
+    img.src = `/api/browser/${bid}/screenshot?t=${ts}`;
+  }, 200);
+}
+
+function disconnectSSE() {
+  stopPolling();
+  if (currentEvtSource) {
+    currentEvtSource.close();
+    currentEvtSource = null;
+  }
+}
+
+function connectSSE(bid: string) {
+  disconnectSSE();
+  lastVersion = -1;
+
   let sseErrorCount = 0;
-  const evtSource = new EventSource(`/api/browser/${sessionId}/events`);
+  const evtSource = new EventSource(`/api/browser/${bid}/events`);
+  currentEvtSource = evtSource;
+  startPolling(bid);
 
   evtSource.onmessage = (e) => {
     if (sseErrorCount > 0) {
-      setPlaceholderText(sessionId ? 'Waiting for navigation...' : 'No active browser session.');
+      setPlaceholderText('Waiting for navigation...');
     }
     sseErrorCount = 0;
     try {
@@ -170,9 +220,24 @@ onMount(() => {
       setShowScreenshot(false);
     }
   };
+}
 
-  onCleanup(() => evtSource.close());
-});
+/**
+ * Attach to a different browser at runtime.
+ * Tears down the current SSE connection and reconnects.
+ */
+function attach(browserId: string) {
+  setActiveBrowserId(browserId);
+  setShowScreenshot(false);
+  setCurrentUrl('about:blank');
+  setPageTitle('');
+  setPlaceholderText('Connecting...');
+  connectSSE(browserId);
+}
+
+// Initial connection
+connectSSE(initialBrowserId);
+onCleanup(() => disconnectSSE());
 
 // ── Render ────────────────────────────────────────────────────────────
 
@@ -189,7 +254,6 @@ render(() => html`
         onFocus=${handleUrlFocus}
         onKeydown=${handleUrlKeydown} />
       <button class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload"
-        disabled=${!sessionId}
         onClick=${handleReload}>↻</button>
       <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
     </div>
@@ -210,7 +274,9 @@ render(() => html`
 
 registerBrowserProtocol({
   getCurrentUrl: () => currentUrl(),
+  getActiveBrowserId: () => activeBrowserId(),
   updateUrlBar,
   refreshScreenshot,
   clearDisplay,
+  attach,
 });

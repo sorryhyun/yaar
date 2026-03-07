@@ -2,8 +2,8 @@
  * BrowserPool — singleton managing Chrome process and tab sessions.
  *
  * Lazy-launches one headless Chrome process and creates isolated tabs
- * per session via CDP. Tracks sessions by ID, enforces a max concurrent limit,
- * and auto-closes sessions idle for too long.
+ * keyed by browserId (auto-incrementing integer). Enforces a max concurrent
+ * limit and auto-closes sessions idle for too long.
  *
  * Uses the system Chrome/Edge — no bundled browser binary needed.
  */
@@ -25,6 +25,7 @@ const CLEANUP_INTERVAL_MS = 60 * 1000; // check every minute
 export class BrowserPool {
   private chrome: ChromeInstance | null = null;
   private sessions = new Map<string, BrowserSession>();
+  private nextId = 0;
   private pendingSessions = 0;
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private initPromise: Promise<ChromeInstance> | null = null;
@@ -85,7 +86,7 @@ export class BrowserPool {
     for (const id of toClose) {
       const session = this.sessions.get(id);
       if (session) {
-        console.log(`[browser] Closing idle session ${id} (window: ${session.windowId})`);
+        console.log(`[browser] Closing idle browser ${id} (window: ${session.windowId})`);
         this.sessions.delete(id);
         await session.close().catch(() => {});
       }
@@ -111,13 +112,17 @@ export class BrowserPool {
   }
 
   /**
-   * Create a new browser session (opens a Chrome tab).
+   * Create a new browser tab. Auto-assigns the next browserId if omitted.
    */
-  async createSession(id: string): Promise<BrowserSession> {
+  async createSession(browserId?: string): Promise<{ session: BrowserSession; browserId: string }> {
     if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) {
       throw new Error(
-        `Browser session limit reached (max ${MAX_SESSIONS}). Close an existing session first.`,
+        `Browser limit reached (max ${MAX_SESSIONS}). Close an existing browser first.`,
       );
+    }
+
+    if (browserId === undefined) {
+      browserId = String(this.nextId++);
     }
 
     this.pendingSessions++;
@@ -137,28 +142,35 @@ export class BrowserPool {
       }
       const target = (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
 
-      const session = await BrowserSession.create(id, target.webSocketDebuggerUrl);
-      this.sessions.set(id, session);
-      return session;
+      const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl);
+      this.sessions.set(browserId, session);
+      return { session, browserId };
     } finally {
       this.pendingSessions--;
     }
   }
 
   /**
-   * Get an existing session by ID.
+   * Get a browser session by ID.
    */
-  getSession(id: string): BrowserSession | undefined {
-    return this.sessions.get(id);
+  getSession(browserId: string): BrowserSession | undefined {
+    return this.sessions.get(browserId);
   }
 
   /**
-   * Close and remove a session by ID.
+   * Get all open browser sessions (browserId → session).
    */
-  async closeSession(id: string): Promise<void> {
-    const session = this.sessions.get(id);
+  getAllSessions(): Map<string, BrowserSession> {
+    return new Map(this.sessions);
+  }
+
+  /**
+   * Close and remove a browser by ID.
+   */
+  async closeSession(browserId: string): Promise<void> {
+    const session = this.sessions.get(browserId);
     if (session) {
-      this.sessions.delete(id);
+      this.sessions.delete(browserId);
       await session.close();
     }
 
