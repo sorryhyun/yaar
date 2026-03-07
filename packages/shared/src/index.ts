@@ -46,6 +46,8 @@ export {
   extractAppId,
   parseFileUri,
   buildFileUri,
+  parseMonitorUri,
+  buildMonitorUri,
   buildWindowUri,
   parseWindowUri,
   buildWindowResourceUri,

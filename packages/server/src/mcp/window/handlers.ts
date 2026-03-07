@@ -22,11 +22,12 @@ import {
   extractAppId,
 } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../uri/registry.js';
-import type { ResolvedUri, ResolvedWindow } from '../../uri/resolve.js';
+import type { ResolvedUri, ResolvedWindow, ResolvedMonitor } from '../../uri/resolve.js';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
 import { getAgentId, getSessionId, getMonitorId } from '../../agents/session.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../uri/index.js';
 import { generateIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
@@ -35,6 +36,10 @@ import { enrichManifestWithUris } from './manifest-utils.js';
 
 function assertWindow(resolved: ResolvedUri): asserts resolved is ResolvedWindow {
   if (resolved.kind !== 'window') throw new Error(`Expected window URI, got ${resolved.kind}`);
+}
+
+function assertMonitor(resolved: ResolvedUri): asserts resolved is ResolvedMonitor {
+  if (resolved.kind !== 'monitor') throw new Error(`Expected monitor URI, got ${resolved.kind}`);
 }
 
 function formatWindowRef(windowId: string): string {
@@ -89,10 +94,11 @@ export function registerWindowHandlers(
   };
   registry.register('yaar://monitors', listHandler);
 
-  // ── yaar://monitors/{monitorId}/{windowId} — window operations ──
+  // ── yaar://monitors/{monitorId}/{windowId} — window and monitor operations ──
   registry.register('yaar://monitors/*', {
     description:
-      'Window on a monitor. Read to view content/metadata, invoke to create/update/manage, delete to close. ' +
+      'Monitor or window resource. For monitors (yaar://monitors/{id}): read for status. ' +
+      'For windows (yaar://monitors/{id}/{windowId}): read to view content/metadata, invoke to create/update/manage, delete to close. ' +
       'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -139,6 +145,43 @@ export function registerWindowHandlers(
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
+      // Monitor-as-resource: yaar://monitors/{id}
+      if (resolved.kind === 'monitor') {
+        assertMonitor(resolved);
+        const sid = getSessionId();
+        const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+        const pool = session?.getPool();
+        if (!pool) return error('Session not initialized.');
+
+        const stats = pool.getStats();
+        const windows = getWindowState()
+          .listWindows()
+          .filter((w) => {
+            const parsed = parseWindowKey(w.id);
+            return parsed?.monitorId === resolved.monitorId;
+          });
+
+        return ok(
+          JSON.stringify(
+            {
+              monitorId: resolved.monitorId,
+              hasMainAgent: pool.hasMainAgent(resolved.monitorId),
+              windows: windows.map((w) => ({
+                id: w.id,
+                title: w.title,
+              })),
+              stats: {
+                totalAgents: stats.totalAgents,
+                mainQueueSize: stats.mainQueueSize,
+              },
+            },
+            null,
+            2,
+          ),
+        );
+      }
+
+      // Window resource: yaar://monitors/{id}/{windowId}
       assertWindow(resolved);
       const win = getWindowState().getWindow(resolved.windowId);
       if (!win) {

@@ -9,6 +9,7 @@ import { join } from 'path';
 import {
   parseYaarUri,
   resolveContentUri,
+  parseMonitorUri,
   parseWindowUri,
   parseConfigUri,
   parseBrowserUri,
@@ -35,6 +36,12 @@ export interface ResolvedResource {
   sourceUri: string;
   /** API path for frontend consumption */
   apiPath: string;
+}
+
+export interface ResolvedMonitor {
+  kind: 'monitor';
+  monitorId: string;
+  sourceUri: string;
 }
 
 export interface ResolvedWindow {
@@ -80,8 +87,15 @@ export interface ResolvedSession {
   sourceUri: string;
 }
 
+export interface ResolvedRoot {
+  kind: 'root';
+  sourceUri: string;
+}
+
 export type ResolvedUri =
+  | ResolvedRoot
   | ResolvedResource
+  | ResolvedMonitor
   | ResolvedWindow
   | ResolvedConfig
   | ResolvedBrowser
@@ -160,6 +174,11 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
  * from `resolveContentUri` and fall through to `parseWindowUri`.
  */
 export function resolveUri(uri: string): ResolvedUri | null {
+  // Root URI: yaar://
+  if (uri === 'yaar://' || uri === 'yaar:///') {
+    return { kind: 'root', sourceUri: uri };
+  }
+
   const resource = resolveResourceUri(uri);
   if (resource) return resource;
 
@@ -170,6 +189,15 @@ export function resolveUri(uri: string): ResolvedUri | null {
       monitorId: win.monitorId,
       windowId: win.windowId,
       subPath: win.subPath,
+      sourceUri: uri,
+    };
+  }
+
+  const monitor = parseMonitorUri(uri);
+  if (monitor) {
+    return {
+      kind: 'monitor',
+      monitorId: monitor.monitorId,
       sourceUri: uri,
     };
   }

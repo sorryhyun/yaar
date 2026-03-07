@@ -119,12 +119,12 @@ Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API p
 - **Session metadata** — `metadata.json` includes `verbMode` flag for post-hoc A/B comparison across sessions
 - **Legacy tools must be maintained** — verb mode is experimental. All ~30 legacy MCP tools remain the production path and must not be removed or degraded until verb mode has been verified across all domains via A/B comparison data
 
-### Not Yet Implemented
+### Recently Completed
 
-- **Browser domain handlers** — `browser/*` handler with action-dispatched invoke (navigate, click, type, screenshot, etc.). Conditional on Chrome availability.
-- **Monitor-as-resource** — reading `yaar://monitors/{id}/` as a status object (queue, budget, agent info)
-- **Session root** — reading `yaar://` for session overview
-- **Agents domain handlers** — `agents/*` handler (list active agents, interrupt via invoke)
+- **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract). Conditional on Chrome availability. List via `yaar://browser`, delete to close.
+- **Monitor-as-resource** — reading `yaar://monitors/{id}` returns monitor status (main agent presence, window list, queue stats). Handled within the existing `yaar://monitors/*` wildcard handler by checking `resolved.kind === 'monitor'`.
+- **Session root** — reading `yaar://` returns session overview (sessionId, platform, agent stats, window/browser counts). Listing returns all 9 URI namespaces. Added `ResolvedRoot` type to URI resolution.
+- **Agents domain handlers** (`mcp/agents/handlers.ts`) — `yaar://agents` lists agent stats, `yaar://agents/{id}` reads agent info, invoke with `{ action: 'interrupt' }` interrupts specific or all agents.
 
 ---
 
@@ -321,14 +321,27 @@ registry.register('yaar://browser/*', {
 Existing MCP tools stay functional — the verb layer is additive. Migration per domain:
 
 1. **Write handlers** for the domain's resources alongside existing tool files
-2. **Register handlers** in the domain's `register*Tools()` function
-3. **Wire MCP verb tools** to `ResourceRegistry.execute()` in `mcp/server.ts`
-4. Once all domains covered, individual tools can be deprecated (keep as aliases initially)
+2. **Register handlers** in `initRegistry()` (`mcp/verbs/index.ts`)
+3. Both old tools and new verbs coexist — `verbMode` toggle controls which set the AI sees
+4. Once verb mode is validated via A/B comparison, individual tools can be deprecated (keep as aliases initially)
 
-Domain priority (by tool count reduced):
-1. `basic/` (read, write, list, edit, delete) -> `storage/*`, `sandbox/*` handlers  ✅
-2. `window/` (create, update, manage, list, view, info) -> `monitors/*` handlers  ✅
-3. `system/` (config CRUD, notifications) -> `config/*`, `user/*` handlers  ✅
-4. `browser/` (navigate, click, screenshot, etc.) -> `browser/*` handler (single handler, action-dispatched)
-5. `agents/` -> `agents/*` handler (single handler, action-dispatched)
-6. `apps/` -> `apps/*` handlers  ✅
+All domains now have verb handlers:
+
+| # | Domain | Legacy Tools | Verb Handlers | Status |
+|---|--------|-------------|---------------|--------|
+| 1 | `basic/` | read, write, list, edit, delete | `storage/*`, `sandbox/*` | ✅ |
+| 2 | `window/` | create, update, manage, list, view, info | `monitors/*` (incl. monitor-as-resource) | ✅ |
+| 3 | `config/` | set, get, remove | `config/*` (settings, hooks, shortcuts, mounts, app) | ✅ |
+| 4 | `user/` | ask, request | `user/notifications`, `user/prompts` | ✅ |
+| 5 | `apps/` | list, load_skill, set_badge, market ops | `apps/*` | ✅ |
+| 6 | `system/` | get_info, memorize | `sessions/current`, `yaar://` root | ✅ |
+| 7 | `browser/` | open, click, type, press, scroll, navigate, hover, wait_for, screenshot, extract, list, close | `browser/*` (action-dispatched invoke) | ✅ |
+| 8 | `agents/` | _(no legacy tools)_ | `agents/*` (list, read, interrupt) | ✅ |
+
+#### Remaining migration work
+
+- **A/B validation** — collect structured tool logs (`logToolResult` with `meta`) across verb-mode and legacy sessions, compare error rates and task completion
+- **Legacy tool deprecation** — once verb mode is validated, mark legacy tools as deprecated; keep as aliases behind `verbMode: false` (current default)
+- **Dev tools** (`dev/compile`, `dev/typecheck`, `dev/deploy`, `dev/clone`) — not yet verb-ified; low priority as they are development-only and infrequently used
+- **System tools** (`run_js`, `relay_to_main`, `show_notification`, `skill`, `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`) — not yet verb-ified; some are side-effecting utilities that don't map cleanly to resources
+- **Storage tools** (`mount`, `unmount`, `list_mounts`) — already covered via `config/mounts` handlers

@@ -14,6 +14,8 @@ import { registerWindowHandlers } from '../window/handlers.js';
 import { registerUserHandlers } from '../user/handlers.js';
 import { registerAppsHandlers } from '../apps/handlers.js';
 import { registerSessionHandlers } from '../system/handlers.js';
+import { registerBrowserHandlers } from '../browser/handlers.js';
+import { registerAgentsHandlers } from '../agents/handlers.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
@@ -45,6 +47,12 @@ export function initRegistry(): ResourceRegistry {
   registerUserHandlers(registry);
   registerAppsHandlers(registry);
   registerSessionHandlers(registry);
+  registerAgentsHandlers(registry);
+
+  // Browser handlers are async (conditional on Chrome availability)
+  registerBrowserHandlers(registry).catch(() => {
+    // Silently skip if Chrome not available
+  });
 
   return registry;
 }

@@ -267,6 +267,32 @@ export function parseWindowKey(key: string): ParsedWindowKey | null {
   };
 }
 
+// ============ Monitor URIs ============
+
+export interface ParsedMonitorUri {
+  monitorId: string;
+}
+
+/**
+ * Parse a yaar://monitors/{monitorId} URI (monitor only, no window).
+ *
+ *   parseMonitorUri('yaar://monitors/0') → { monitorId: '0' }
+ *   parseMonitorUri('yaar://monitors/0/win-1') → null (has window — use parseWindowUri)
+ */
+export function parseMonitorUri(uri: string): ParsedMonitorUri | null {
+  const match = uri.match(/^yaar:\/\/monitors\/([^/]+)$/);
+  if (!match) return null;
+  return { monitorId: match[1] };
+}
+
+/**
+ * Build a yaar://monitors/{monitorId} URI.
+ *   buildMonitorUri('0') → 'yaar://monitors/0'
+ */
+export function buildMonitorUri(monitorId: string): string {
+  return `yaar://monitors/${monitorId}`;
+}
+
 // ============ Window URIs ============
 
 /**

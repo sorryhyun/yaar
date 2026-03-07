@@ -11,8 +11,69 @@ import type { ResourceRegistry, VerbResult } from '../../uri/registry.js';
 import type { ResolvedUri } from '../../uri/resolve.js';
 import { ok, error } from '../utils.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
+import { getSessionId } from '../../agents/session.js';
+import { getSessionHub } from '../../session/session-hub.js';
+import { getBrowserPool } from '../../lib/browser/index.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
+  // ── yaar:// — session root overview ──
+  registry.register('yaar://', {
+    description:
+      'Session root. Read for an overview of the current session and available namespaces.',
+    verbs: ['describe', 'read', 'list'],
+
+    async read(): Promise<VerbResult> {
+      const sid = getSessionId();
+      const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+      const pool = session?.getPool();
+      const stats = pool?.getStats();
+      const browserPool = getBrowserPool();
+
+      return ok(
+        JSON.stringify(
+          {
+            sessionId: sid ?? session?.sessionId ?? null,
+            platform: process.platform,
+            uptime: Math.floor(process.uptime()),
+            agents: stats
+              ? {
+                  total: stats.totalAgents,
+                  idle: stats.idleAgents,
+                  busy: stats.busyAgents,
+                }
+              : null,
+            windows: session?.windowState.listWindows().length ?? 0,
+            browsers: browserPool.getAllSessions().size,
+          },
+          null,
+          2,
+        ),
+      );
+    },
+
+    async list(): Promise<VerbResult> {
+      return ok(
+        JSON.stringify(
+          {
+            namespaces: [
+              'yaar://apps/',
+              'yaar://storage/',
+              'yaar://sandbox/',
+              'yaar://monitors/',
+              'yaar://config/',
+              'yaar://browser/',
+              'yaar://agents/',
+              'yaar://user/',
+              'yaar://sessions/',
+            ],
+          },
+          null,
+          2,
+        ),
+      );
+    },
+  });
+
   // ── yaar://sessions/current — system info and memorize ──
   registry.register('yaar://sessions/current', {
     description: 'Current session. Read for system info, invoke to memorize notes.',
