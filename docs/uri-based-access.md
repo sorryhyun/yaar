@@ -1,6 +1,6 @@
 # URI-Based Resource Addressing
 
-YAAR uses a unified `yaar://` URI scheme to address all internal resources — apps, storage files, sandboxes, and windows. The scheme is implicitly scoped to the current session — `yaar://` *is* the session root.
+YAAR uses a unified `yaar://` URI scheme to address all internal resources — apps, storage files, sandboxes, windows, agents, user state, and sessions. The scheme is implicitly scoped to the current session — `yaar://` *is* the session root.
 
 ```
 yaar://                                  → session (implicit root)
@@ -9,7 +9,10 @@ yaar://storage/{path}                    → storage file
 yaar://sandbox/{id}/{path}               → sandbox file
 yaar://monitors/{monitorId}/{windowId}    → window
 yaar://config/{section}                  → configuration
-yaar://browser/current                   → browser session
+yaar://browser/{browserId}               → browser instance
+yaar://agents/{agentId}                  → agent
+yaar://user/{resource}                   → user state (notifications, prompts, clipboard)
+yaar://sessions/current                  → current session
 ```
 
 ---
@@ -104,17 +107,73 @@ yaar://config/{section}/{id}    → specific entry within a section
 
 ### Browser Addressing
 
-The browser session is addressed via the `browser` authority:
+Browser instances are addressed via the `browser` authority:
 
 ```
-yaar://browser/current                → current browser state (URL, title, navigation)
-yaar://browser/current/content        → page content (read)
-yaar://browser/current/screenshot     → page screenshot (read)
-yaar://browser/current/navigate       → navigate to URL (invoke)
-yaar://browser/current/click          → click element (invoke)
+yaar://browser/{browserId}            → browser state (URL, title, navigation)
+yaar://browser/{browserId}/content    → page content (read)
+yaar://browser/{browserId}/screenshot → page screenshot (read)
+yaar://browser/{browserId}/navigate   → navigate to URL (invoke)
+yaar://browser/{browserId}/click      → click element (invoke)
 ```
 
 Navigation, clicking, and other side effects are `invoke` targets — never `read`.
+
+### Agents Addressing
+
+Agents are addressed via the `agents` authority by instance ID:
+
+```
+yaar://agents/                           → list all agents
+yaar://agents/{agentId}                  → agent by instance ID
+yaar://agents/{agentId}/interrupt        → interrupt an agent
+```
+
+| Example | Meaning |
+|---------|---------|
+| `yaar://agents/` | List all active agents |
+| `yaar://agents/agent-123` | Agent by instance ID |
+| `yaar://agents/agent-123/interrupt` | Interrupt agent-123 |
+
+Read-only introspection by default. Lifecycle control (`interrupt`) via `invoke` only.
+
+### User Addressing
+
+User-facing state is addressed via the `user` authority:
+
+```
+yaar://user/notifications                → notification list
+yaar://user/notifications/{id}           → specific notification
+yaar://user/prompts                      → pending prompts
+yaar://user/prompts/{id}                 → specific prompt
+yaar://user/clipboard                    → clipboard contents
+```
+
+| Example | Meaning |
+|---------|---------|
+| `yaar://user/notifications` | All notifications |
+| `yaar://user/notifications/notif-1` | Specific notification |
+| `yaar://user/prompts` | Pending user prompts |
+| `yaar://user/prompts/prompt-42` | Specific prompt |
+| `yaar://user/clipboard` | Current clipboard contents |
+
+### Sessions Addressing
+
+Session introspection is addressed via the `sessions` authority:
+
+```
+yaar://sessions/current                  → current session
+yaar://sessions/current/logs             → session logs
+yaar://sessions/current/context          → context state
+```
+
+| Example | Meaning |
+|---------|---------|
+| `yaar://sessions/current` | Current session detail |
+| `yaar://sessions/current/logs` | Session conversation logs |
+| `yaar://sessions/current/context` | Context/memory state |
+
+Primarily for introspection and debugging.
 
 ---
 
@@ -314,17 +373,71 @@ buildConfigUri('app', 'github')
 ```typescript
 import { parseBrowserUri, buildBrowserUri } from '@yaar/shared';
 
-parseBrowserUri('yaar://browser/current')
+parseBrowserUri('yaar://browser/0')
+// -> { resource: '0' }
+
+parseBrowserUri('yaar://browser/1/screenshot')
+// -> { resource: '1', subResource: 'screenshot' }
+
+buildBrowserUri('0')
+// -> 'yaar://browser/0'
+
+buildBrowserUri('1', 'navigate')
+// -> 'yaar://browser/1/navigate'
+```
+
+### Agent Helpers
+
+```typescript
+import { parseAgentUri, buildAgentUri } from '@yaar/shared';
+
+parseAgentUri('yaar://agents/agent-123')
+// -> { id: 'agent-123' }
+
+parseAgentUri('yaar://agents/agent-123/interrupt')
+// -> { id: 'agent-123', action: 'interrupt' }
+
+buildAgentUri('agent-123')
+// -> 'yaar://agents/agent-123'
+
+buildAgentUri('agent-123', 'interrupt')
+// -> 'yaar://agents/agent-123/interrupt'
+```
+
+### User Helpers
+
+```typescript
+import { parseUserUri, buildUserUri } from '@yaar/shared';
+
+parseUserUri('yaar://user/notifications')
+// -> { resource: 'notifications' }
+
+parseUserUri('yaar://user/notifications/abc')
+// -> { resource: 'notifications', id: 'abc' }
+
+buildUserUri('notifications')
+// -> 'yaar://user/notifications'
+
+buildUserUri('prompts', 'prompt-42')
+// -> 'yaar://user/prompts/prompt-42'
+```
+
+### Session Helpers
+
+```typescript
+import { parseSessionUri, buildSessionUri } from '@yaar/shared';
+
+parseSessionUri('yaar://sessions/current')
 // -> { resource: 'current' }
 
-parseBrowserUri('yaar://browser/current/screenshot')
-// -> { resource: 'current', subResource: 'screenshot' }
+parseSessionUri('yaar://sessions/current/logs')
+// -> { resource: 'current', subResource: 'logs' }
 
-buildBrowserUri('current')
-// -> 'yaar://browser/current'
+buildSessionUri('current')
+// -> 'yaar://sessions/current'
 
-buildBrowserUri('current', 'navigate')
-// -> 'yaar://browser/current/navigate'
+buildSessionUri('current', 'logs')
+// -> 'yaar://sessions/current/logs'
 ```
 
 ---
@@ -333,7 +446,8 @@ buildBrowserUri('current', 'navigate')
 
 | File | Role |
 |------|------|
-| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser), `ParsedContentPath` |
+| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser, agents, user, sessions), `ParsedContentPath` |
+| `packages/server/src/uri/resolve.ts` | Server-side typed resolution for all URI namespaces |
 | `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
 | `packages/server/src/mcp/basic/uri.ts` | Thin adapter over `parseFileUri()` for basic MCP tools |
 | `packages/server/src/mcp/window/create.ts` | Server-side URI resolution for iframe content |

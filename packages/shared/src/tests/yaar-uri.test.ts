@@ -9,6 +9,12 @@ import {
   buildConfigUri,
   parseBrowserUri,
   buildBrowserUri,
+  parseAgentUri,
+  buildAgentUri,
+  parseUserUri,
+  buildUserUri,
+  parseSessionUri,
+  buildSessionUri,
 } from '../yaar-uri.js';
 
 describe('parseWindowUri', () => {
@@ -268,5 +274,211 @@ describe('buildBrowserUri', () => {
     const uri = buildBrowserUri('2', 'navigate');
     const parsed = parseBrowserUri(uri);
     expect(parsed).toEqual({ resource: '2', subResource: 'navigate' });
+  });
+});
+
+// ============ Agent URIs ============
+
+describe('parseAgentUri', () => {
+  it('parses list all agents', () => {
+    expect(parseAgentUri('yaar://agents/')).toEqual({});
+  });
+
+  it('parses agent by instance ID', () => {
+    expect(parseAgentUri('yaar://agents/agent-123')).toEqual({
+      id: 'agent-123',
+    });
+  });
+
+  it('parses agent with action', () => {
+    expect(parseAgentUri('yaar://agents/agent-123/interrupt')).toEqual({
+      id: 'agent-123',
+      action: 'interrupt',
+    });
+  });
+
+  it('returns null for empty ID segment', () => {
+    expect(parseAgentUri('yaar://agents//interrupt')).toBeNull();
+  });
+
+  it('returns null for non-agents URI', () => {
+    expect(parseAgentUri('yaar://apps/excel')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseAgentUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildAgentUri', () => {
+  it('builds list URI', () => {
+    expect(buildAgentUri()).toBe('yaar://agents/');
+  });
+
+  it('builds agent by ID URI', () => {
+    expect(buildAgentUri('agent-123')).toBe('yaar://agents/agent-123');
+  });
+
+  it('builds agent with action URI', () => {
+    expect(buildAgentUri('agent-123', 'interrupt')).toBe('yaar://agents/agent-123/interrupt');
+  });
+
+  it('roundtrips with parseAgentUri', () => {
+    const uri = buildAgentUri('agent-1');
+    const parsed = parseAgentUri(uri);
+    expect(parsed).toEqual({ id: 'agent-1' });
+  });
+});
+
+// ============ User URIs ============
+
+describe('parseUserUri', () => {
+  it('parses notifications', () => {
+    expect(parseUserUri('yaar://user/notifications')).toEqual({
+      resource: 'notifications',
+      id: undefined,
+    });
+  });
+
+  it('parses notification with ID', () => {
+    expect(parseUserUri('yaar://user/notifications/abc')).toEqual({
+      resource: 'notifications',
+      id: 'abc',
+    });
+  });
+
+  it('parses prompts', () => {
+    expect(parseUserUri('yaar://user/prompts')).toEqual({
+      resource: 'prompts',
+      id: undefined,
+    });
+  });
+
+  it('parses prompt with ID', () => {
+    expect(parseUserUri('yaar://user/prompts/prompt-1')).toEqual({
+      resource: 'prompts',
+      id: 'prompt-1',
+    });
+  });
+
+  it('parses clipboard', () => {
+    expect(parseUserUri('yaar://user/clipboard')).toEqual({
+      resource: 'clipboard',
+      id: undefined,
+    });
+  });
+
+  it('returns null for unknown resource', () => {
+    expect(parseUserUri('yaar://user/unknown')).toBeNull();
+  });
+
+  it('returns null for non-user URI', () => {
+    expect(parseUserUri('yaar://apps/user')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseUserUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildUserUri', () => {
+  it('builds notifications URI', () => {
+    expect(buildUserUri('notifications')).toBe('yaar://user/notifications');
+  });
+
+  it('builds notification with ID URI', () => {
+    expect(buildUserUri('notifications', 'abc')).toBe('yaar://user/notifications/abc');
+  });
+
+  it('builds clipboard URI', () => {
+    expect(buildUserUri('clipboard')).toBe('yaar://user/clipboard');
+  });
+
+  it('roundtrips with parseUserUri', () => {
+    const uri = buildUserUri('prompts', 'prompt-42');
+    const parsed = parseUserUri(uri);
+    expect(parsed).toEqual({ resource: 'prompts', id: 'prompt-42' });
+  });
+});
+
+// ============ Session URIs ============
+
+describe('parseSessionUri', () => {
+  it('parses current session', () => {
+    expect(parseSessionUri('yaar://sessions/current')).toEqual({
+      resource: 'current',
+      subResource: undefined,
+    });
+  });
+
+  it('parses current session logs', () => {
+    expect(parseSessionUri('yaar://sessions/current/logs')).toEqual({
+      resource: 'current',
+      subResource: 'logs',
+    });
+  });
+
+  it('parses current session context', () => {
+    expect(parseSessionUri('yaar://sessions/current/context')).toEqual({
+      resource: 'current',
+      subResource: 'context',
+    });
+  });
+
+  it('returns null for unknown resource', () => {
+    expect(parseSessionUri('yaar://sessions/unknown')).toBeNull();
+  });
+
+  it('returns null for non-sessions URI', () => {
+    expect(parseSessionUri('yaar://apps/sessions')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseSessionUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildSessionUri', () => {
+  it('builds current session URI', () => {
+    expect(buildSessionUri('current')).toBe('yaar://sessions/current');
+  });
+
+  it('builds current session logs URI', () => {
+    expect(buildSessionUri('current', 'logs')).toBe('yaar://sessions/current/logs');
+  });
+
+  it('builds current session context URI', () => {
+    expect(buildSessionUri('current', 'context')).toBe('yaar://sessions/current/context');
+  });
+
+  it('roundtrips with parseSessionUri', () => {
+    const uri = buildSessionUri('current', 'logs');
+    const parsed = parseSessionUri(uri);
+    expect(parsed).toEqual({ resource: 'current', subResource: 'logs' });
+  });
+});
+
+// ============ parseYaarUri with new authorities ============
+
+describe('parseYaarUri with agents/user/sessions', () => {
+  it('parses agents URIs', () => {
+    expect(parseYaarUri('yaar://agents/agent-123')).toEqual({
+      authority: 'agents',
+      path: 'agent-123',
+    });
+  });
+
+  it('parses user URIs', () => {
+    expect(parseYaarUri('yaar://user/notifications')).toEqual({
+      authority: 'user',
+      path: 'notifications',
+    });
+  });
+
+  it('parses sessions URIs', () => {
+    expect(parseYaarUri('yaar://sessions/current')).toEqual({
+      authority: 'sessions',
+      path: 'current',
+    });
   });
 });

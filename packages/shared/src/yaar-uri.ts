@@ -17,14 +17,24 @@
  *   yaar://monitors/{monitorId}/{windowId}      → window on a monitor
  */
 
-export type YaarAuthority = 'apps' | 'storage' | 'sandbox' | 'monitors' | 'config' | 'browser';
+export type YaarAuthority =
+  | 'apps'
+  | 'storage'
+  | 'sandbox'
+  | 'monitors'
+  | 'config'
+  | 'browser'
+  | 'agents'
+  | 'user'
+  | 'sessions';
 
 export interface ParsedYaarUri {
   authority: YaarAuthority;
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors|config|browser)\/(.*)$/;
+const YAAR_RE =
+  /^yaar:\/\/(apps|storage|sandbox|monitors|config|browser|agents|user|sessions)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -64,6 +74,9 @@ export function resolveContentUri(uri: string): string | null {
     case 'monitors':
     case 'config':
     case 'browser':
+    case 'agents':
+    case 'user':
+    case 'sessions':
       // These authorities have no content resolution
       return null;
   }
@@ -137,7 +150,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
       if (!SANDBOX_ID_RE.test(first)) return null;
       return { authority: 'sandbox', sandboxId: first, path: rest };
     }
-    return null; // apps/monitors/config/browser authority not a file URI
+    return null; // non-file authority
   }
 
   // Legacy: storage://{path}
@@ -413,4 +426,131 @@ export function parseBrowserUri(uri: string): ParsedBrowserUri | null {
  */
 export function buildBrowserUri(resource: string, subResource?: string): string {
   return subResource ? `yaar://browser/${resource}/${subResource}` : `yaar://browser/${resource}`;
+}
+
+// ============ Agent URIs ============
+
+export interface ParsedAgentUri {
+  /** Agent instance ID. */
+  id?: string;
+  /** Sub-resource action (e.g., 'interrupt'). */
+  action?: string;
+}
+
+/**
+ * Parse a yaar://agents/... URI.
+ *
+ *   parseAgentUri('yaar://agents/')                    → {}
+ *   parseAgentUri('yaar://agents/agent-123')           → { id: 'agent-123' }
+ *   parseAgentUri('yaar://agents/agent-123/interrupt')  → { id: 'agent-123', action: 'interrupt' }
+ */
+export function parseAgentUri(uri: string): ParsedAgentUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'agents') return null;
+
+  if (!parsed.path) return {};
+
+  const slashIdx = parsed.path.indexOf('/');
+  if (slashIdx === -1) return { id: parsed.path };
+
+  const id = parsed.path.slice(0, slashIdx);
+  const action = parsed.path.slice(slashIdx + 1);
+  if (!id) return null;
+  return action ? { id, action } : { id };
+}
+
+/**
+ * Build a yaar://agents/... URI.
+ *
+ *   buildAgentUri()                              → 'yaar://agents/'
+ *   buildAgentUri('agent-123')                   → 'yaar://agents/agent-123'
+ *   buildAgentUri('agent-123', 'interrupt')      → 'yaar://agents/agent-123/interrupt'
+ */
+export function buildAgentUri(id?: string, action?: string): string {
+  if (id && action) return `yaar://agents/${id}/${action}`;
+  if (id) return `yaar://agents/${id}`;
+  return 'yaar://agents/';
+}
+
+// ============ User URIs ============
+
+export type UserResource = 'notifications' | 'prompts' | 'clipboard';
+
+export interface ParsedUserUri {
+  resource: UserResource;
+  id?: string;
+}
+
+const USER_RESOURCES: ReadonlySet<string> = new Set(['notifications', 'prompts', 'clipboard']);
+
+/**
+ * Parse a yaar://user/... URI.
+ *
+ *   parseUserUri('yaar://user/notifications')       → { resource: 'notifications' }
+ *   parseUserUri('yaar://user/notifications/abc')   → { resource: 'notifications', id: 'abc' }
+ *   parseUserUri('yaar://user/prompts')             → { resource: 'prompts' }
+ *   parseUserUri('yaar://user/clipboard')           → { resource: 'clipboard' }
+ */
+export function parseUserUri(uri: string): ParsedUserUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'user') return null;
+
+  const slashIdx = parsed.path.indexOf('/');
+  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
+  if (!USER_RESOURCES.has(resource)) return null;
+
+  const id = slashIdx === -1 ? undefined : parsed.path.slice(slashIdx + 1);
+  return { resource: resource as UserResource, id: id || undefined };
+}
+
+/**
+ * Build a yaar://user/... URI.
+ *
+ *   buildUserUri('notifications')        → 'yaar://user/notifications'
+ *   buildUserUri('notifications', 'abc') → 'yaar://user/notifications/abc'
+ *   buildUserUri('clipboard')            → 'yaar://user/clipboard'
+ */
+export function buildUserUri(resource: UserResource, id?: string): string {
+  return id ? `yaar://user/${resource}/${id}` : `yaar://user/${resource}`;
+}
+
+// ============ Session URIs ============
+
+export type SessionResource = 'current';
+
+export interface ParsedSessionUri {
+  resource: SessionResource;
+  subResource?: string;
+}
+
+const SESSION_RESOURCES: ReadonlySet<string> = new Set(['current']);
+
+/**
+ * Parse a yaar://sessions/... URI.
+ *
+ *   parseSessionUri('yaar://sessions/current')          → { resource: 'current' }
+ *   parseSessionUri('yaar://sessions/current/logs')     → { resource: 'current', subResource: 'logs' }
+ *   parseSessionUri('yaar://sessions/current/context')  → { resource: 'current', subResource: 'context' }
+ */
+export function parseSessionUri(uri: string): ParsedSessionUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'sessions') return null;
+
+  const slashIdx = parsed.path.indexOf('/');
+  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
+  if (!SESSION_RESOURCES.has(resource)) return null;
+
+  const sub = slashIdx === -1 ? undefined : parsed.path.slice(slashIdx + 1);
+  return { resource: resource as SessionResource, subResource: sub || undefined };
+}
+
+/**
+ * Build a yaar://sessions/... URI.
+ *
+ *   buildSessionUri('current')            → 'yaar://sessions/current'
+ *   buildSessionUri('current', 'logs')    → 'yaar://sessions/current/logs'
+ *   buildSessionUri('current', 'context') → 'yaar://sessions/current/context'
+ */
+export function buildSessionUri(resource: SessionResource, subResource?: string): string {
+  return subResource ? `yaar://sessions/${resource}/${subResource}` : `yaar://sessions/${resource}`;
 }

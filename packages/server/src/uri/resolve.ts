@@ -12,8 +12,13 @@ import {
   parseWindowUri,
   parseConfigUri,
   parseBrowserUri,
+  parseAgentUri,
+  parseUserUri,
+  parseSessionUri,
   type ParsedConfigUri,
   type ParsedBrowserUri,
+  type UserResource,
+  type SessionResource,
 } from '@yaar/shared';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
@@ -54,7 +59,35 @@ export interface ResolvedBrowser {
   sourceUri: string;
 }
 
-export type ResolvedUri = ResolvedResource | ResolvedWindow | ResolvedConfig | ResolvedBrowser;
+export interface ResolvedAgent {
+  kind: 'agent';
+  id?: string;
+  action?: string;
+  sourceUri: string;
+}
+
+export interface ResolvedUser {
+  kind: 'user';
+  resource: UserResource;
+  id?: string;
+  sourceUri: string;
+}
+
+export interface ResolvedSession {
+  kind: 'session';
+  resource: SessionResource;
+  subResource?: string;
+  sourceUri: string;
+}
+
+export type ResolvedUri =
+  | ResolvedResource
+  | ResolvedWindow
+  | ResolvedConfig
+  | ResolvedBrowser
+  | ResolvedAgent
+  | ResolvedUser
+  | ResolvedSession;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
   const parsed = parseYaarUri(uri);
@@ -113,6 +146,9 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     case 'monitors':
     case 'config':
     case 'browser':
+    case 'agents':
+    case 'user':
+    case 'sessions':
       // Not content resources — handled by resolveUri via dedicated parsers
       return null;
   }
@@ -154,6 +190,36 @@ export function resolveUri(uri: string): ResolvedUri | null {
       kind: 'browser',
       resource: browser.resource,
       subResource: browser.subResource,
+      sourceUri: uri,
+    };
+  }
+
+  const agent = parseAgentUri(uri);
+  if (agent) {
+    return {
+      kind: 'agent',
+      id: agent.id,
+      action: agent.action,
+      sourceUri: uri,
+    };
+  }
+
+  const user = parseUserUri(uri);
+  if (user) {
+    return {
+      kind: 'user',
+      resource: user.resource,
+      id: user.id,
+      sourceUri: uri,
+    };
+  }
+
+  const session = parseSessionUri(uri);
+  if (session) {
+    return {
+      kind: 'session',
+      resource: session.resource,
+      subResource: session.subResource,
       sourceUri: uri,
     };
   }

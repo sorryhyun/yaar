@@ -391,7 +391,7 @@ Apps running inside iframes get `window.yaar.storage` injected automatically:
 
 ## Configuration Storage
 
-Separate from user storage, configuration files live in `config/` (override with `YAAR_CONFIG`).
+Separate from user storage, configuration files live in `config/` (override with `YAAR_CONFIG`). Configuration is addressable via `yaar://config/{section}` URIs — see [URI-Based Resource Addressing](./uri-based-access.md#config-addressing).
 
 ### Settings
 

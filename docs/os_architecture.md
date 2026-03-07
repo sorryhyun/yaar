@@ -6,24 +6,26 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 
 ## Quick Reference
 
-| OS Concept | YAAR Equivalent | Key File(s) |
-|---|---|---|
-| Kernel | `LiveSession` + `ContextPool` | `session/live-session.ts`, `agents/context-pool.ts` |
-| Process table | `AgentPool` | `agents/agent-pool.ts` |
-| Process types | Main (init), window (daemon), ephemeral (one-shot) | `agents/profiles.ts` |
-| Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | `agents/context-pool-policies/` |
-| Syscalls | 8 MCP tool namespaces | `mcp/server.ts` |
-| Instruction set | System prompt (~108 lines) | `providers/claude/system-prompt.ts` |
-| Boot | `initializeSubsystems()` | `lifecycle.ts` |
-| Filesystem | `storage/` + mount system | `storage/storage-manager.ts`, `storage/mounts.ts` |
-| Window manager | `WindowStateRegistry` | `mcp/window-state.ts` |
-| Display server | `BroadcastCenter` | `session/broadcast-center.ts` |
-| IPC | `ActionEmitter`, `InteractionTimeline`, App Protocol | `mcp/action-emitter.ts`, `agents/interaction-timeline.ts` |
-| Device drivers | `AITransport` implementations | `providers/types.ts`, `providers/claude/`, `providers/codex/` |
-| Desktop environment | React frontend + Zustand store | `packages/frontend/` |
-| Package manager | Apps marketplace | `mcp/apps/` |
+| OS Concept | YAAR Equivalent | URI Namespace | Key File(s) |
+|---|---|---|---|
+| Kernel | `LiveSession` + `ContextPool` | `yaar://sessions/current` | `session/live-session.ts`, `agents/context-pool.ts` |
+| Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
+| Process types | Main (init), window (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
+| Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
+| Syscalls | 8 MCP tool namespaces | — | `mcp/server.ts` |
+| Instruction set | System prompt (~108 lines) | — | `providers/claude/system-prompt.ts` |
+| Boot | `initializeSubsystems()` | — | `lifecycle.ts` |
+| Filesystem | `storage/` + mount system | `yaar://storage/` | `storage/storage-manager.ts`, `storage/mounts.ts` |
+| Window manager | `WindowStateRegistry` | `yaar://monitors/` | `mcp/window-state.ts` |
+| Display server | `BroadcastCenter` | — | `session/broadcast-center.ts` |
+| IPC | `ActionEmitter`, `InteractionTimeline`, App Protocol | — | `mcp/action-emitter.ts`, `agents/interaction-timeline.ts` |
+| Device drivers | `AITransport` implementations | — | `providers/types.ts`, `providers/claude/`, `providers/codex/` |
+| Desktop environment | React frontend + Zustand store | — | `packages/frontend/` |
+| Package manager | Apps marketplace | `yaar://apps/` | `mcp/apps/` |
+| User interaction | Notifications, prompts, clipboard | `yaar://user/` | `mcp/user/` |
+| Configuration | Settings, hooks, shortcuts, mounts | `yaar://config/` | `storage/settings.ts`, `mcp/system/` |
 
-All paths are relative to `packages/server/src/` unless noted otherwise.
+All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`uri-based-access.md`](./uri-based-access.md) for the full 9-namespace reference.
 
 ---
 
@@ -45,11 +47,11 @@ All server→frontend events flow through `LiveSession.broadcast()`. The session
 
 Agents are processes. `AgentPool` manages their lifecycle.
 
-| Agent type | OS analogy | Lifecycle | Key |
-|---|---|---|---|
-| **Main** | `init` / PID 1 | Persistent per monitor | `monitorId` |
-| **Window** | Daemon | Created on first interaction, persists | `windowId` |
-| **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) |
+| Agent type | OS analogy | Lifecycle | Key | URI |
+|---|---|---|---|---|
+| **Main** | `init` / PID 1 | Persistent per monitor | `monitorId` | `yaar://agents/{instanceId}` |
+| **Window** | Daemon | Created on first interaction, persists | `windowId` | `yaar://agents/{instanceId}` |
+| **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
 
 Main agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
 

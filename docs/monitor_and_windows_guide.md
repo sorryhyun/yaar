@@ -24,7 +24,7 @@ A **session** is the top-level container for one complete conversation. It owns 
 
 ### Identity
 
-Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. See [URI-Based Resource Addressing](./uri-based-access.md).
+Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://sessions/current`, with sub-resources for logs (`yaar://sessions/current/logs`) and context (`yaar://sessions/current/context`). See [URI-Based Resource Addressing](./uri-based-access.md).
 
 ### Multi-connection
 
