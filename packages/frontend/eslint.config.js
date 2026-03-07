@@ -28,6 +28,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/tests/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**'],
   }
 )

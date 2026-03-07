@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
+import type { Settings } from '../../storage/settings.js';
 import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
 import { actionEmitter } from '../action-emitter.js';
 
@@ -16,11 +17,11 @@ export async function handleSetSettings(content: Record<string, unknown>) {
   const result = settingsContentSchema.safeParse(content);
   if (!result.success) return error(`Invalid settings content: ${result.error.message}`);
 
-  const partial: Record<string, unknown> = {};
+  const partial: Partial<Settings> = {};
   if (result.data.language !== undefined) partial.language = result.data.language;
   if (result.data.onboardingCompleted !== undefined)
     partial.onboardingCompleted = result.data.onboardingCompleted;
-  const settings = await updateSettings(partial as any);
+  const settings = await updateSettings(partial);
   actionEmitter.emitAction({ type: 'desktop.refreshApps' });
   return ok(JSON.stringify(settings, null, 2));
 }

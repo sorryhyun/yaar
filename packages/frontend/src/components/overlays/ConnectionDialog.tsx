@@ -23,23 +23,6 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
-  // Auto-connect from hash fragment on mount
-  useEffect(() => {
-    const hashConn = parseHashConnection();
-    if (hashConn) {
-      // Clear hash from URL
-      history.replaceState(null, '', window.location.pathname);
-      testAndConnect(hashConn);
-      return;
-    }
-    // Pre-fill from saved connection
-    const saved = getRemoteConnection();
-    if (saved) {
-      setServerUrl(saved.serverUrl);
-      setToken(saved.token);
-    }
-  }, []);
-
   const testAndConnect = useCallback(
     async (conn: RemoteConnection) => {
       setTesting(true);
@@ -64,8 +47,25 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
         setTesting(false);
       }
     },
-    [onConnected],
+    [onConnected, t],
   );
+
+  // Auto-connect from hash fragment on mount
+  useEffect(() => {
+    const hashConn = parseHashConnection();
+    if (hashConn) {
+      // Clear hash from URL
+      history.replaceState(null, '', window.location.pathname);
+      testAndConnect(hashConn);
+      return;
+    }
+    // Pre-fill from saved connection
+    const saved = getRemoteConnection();
+    if (saved) {
+      setServerUrl(saved.serverUrl);
+      setToken(saved.token);
+    }
+  }, [testAndConnect]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -77,7 +77,7 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
       }
       testAndConnect({ serverUrl: trimmedUrl, token });
     },
-    [serverUrl, token, testAndConnect],
+    [serverUrl, token, testAndConnect, t],
   );
 
   return (

@@ -104,13 +104,13 @@ function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
  * 3. **node_modules** (dev): Resolves browser entry from package.json exports,
  *    falling back to Bun.resolveSync() for packages without conditional exports.
  */
-export function bundledLibraryPluginBun(): { name: string; setup: (build: any) => void } {
+export function bundledLibraryPluginBun(): Bun.BunPlugin {
   return {
     name: 'bundled-libraries-bun',
-    setup(build: any) {
+    setup(build: Bun.PluginBuilder) {
       const NAMESPACE = 'bundled-lib';
 
-      build.onResolve({ filter: /^@bundled\// }, (args: any) => {
+      build.onResolve({ filter: /^@bundled\// }, (args: Bun.OnResolveArgs) => {
         const libName = args.path.replace('@bundled/', '');
         if (!(libName in BUNDLED_LIBRARIES)) {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
@@ -122,7 +122,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
         }
 
         // Strategy 1: embedded libs (production exe)
-        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
+        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
@@ -152,7 +152,7 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
       // Without this, Bun's default resolver may pick different paths (e.g., dev
       // builds or symlinked paths) causing duplicate module copies with separate
       // reactive runtimes that break solid-js's signal tracking.
-      build.onResolve({ filter: /^solid-js(\/|$)/ }, (args: any) => {
+      build.onResolve({ filter: /^solid-js(\/|$)/ }, (args: Bun.OnResolveArgs) => {
         const libName = args.path as string;
         if (!CONDITIONAL_EXPORT_LIBS.includes(libName)) return undefined;
         const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
@@ -164,11 +164,11 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
         }
       });
 
-      build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: any) => {
+      build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: Bun.OnLoadArgs) => {
         const libName = args.path;
 
         // Strategy 1: embedded libs (production exe)
-        const embeddedLibs = (globalThis as any).__YAAR_BUNDLED_LIBS as
+        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
@@ -199,11 +199,11 @@ export function bundledLibraryPluginBun(): { name: string; setup: (build: any) =
  * Bun plugin that converts `.css` file imports into JS modules
  * that inject a <style> element at runtime.
  */
-export function cssFilePlugin(): { name: string; setup: (build: any) => void } {
+export function cssFilePlugin(): Bun.BunPlugin {
   return {
     name: 'css-file-loader',
-    setup(build: any) {
-      build.onLoad({ filter: /\.css$/ }, async (args: any) => {
+    setup(build: Bun.PluginBuilder) {
+      build.onLoad({ filter: /\.css$/ }, async (args: Bun.OnLoadArgs) => {
         const css = await Bun.file(args.path).text();
         const escaped = css.replace(/`/g, '\\`').replace(/\$/g, '\\$');
         return {
@@ -227,11 +227,11 @@ export function cssFilePlugin(): { name: string; setup: (build: any) => void } {
  * This is safe because solid-js/html's parser ignores closing tag names —
  * it only uses level-decrement, never matching open/close tag names.
  */
-export function solidHtmlClosingTagPlugin(): { name: string; setup: (build: any) => void } {
+export function solidHtmlClosingTagPlugin(): Bun.BunPlugin {
   return {
     name: 'solid-html-closing-tag-fix',
-    setup(build: any) {
-      build.onLoad({ filter: /\.tsx?$/ }, async (args: any) => {
+    setup(build: Bun.PluginBuilder) {
+      build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
         const text = await Bun.file(args.path).text();
         if (!text.includes('</${')) return undefined; // fast skip
         return {

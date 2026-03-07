@@ -31,11 +31,7 @@ export function SessionsModal() {
   const applyActions = useDesktopStore((state) => state.applyActions);
   const clearDesktop = useDesktopStore((state) => state.clearDesktop);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
-
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -50,7 +46,11 @@ export function SessionsModal() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   const handleViewSession = useCallback(
     async (sessionId: string) => {
@@ -75,7 +75,7 @@ export function SessionsModal() {
         setLoadingTranscript(false);
       }
     },
-    [selectedSession],
+    [selectedSession, t],
   );
 
   const handleRestoreSession = useCallback(
@@ -99,44 +99,47 @@ export function SessionsModal() {
         setRestoring(null);
       }
     },
-    [applyActions, clearDesktop, toggleSessionsModal],
+    [applyActions, clearDesktop, toggleSessionsModal, t],
   );
 
-  const handleExportSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      setExporting(sessionId);
-      // Fetch both transcript and messages
-      const [transcriptRes, messagesRes] = await Promise.all([
-        apiFetch(`/api/sessions/${sessionId}/transcript`),
-        apiFetch(`/api/sessions/${sessionId}/messages`),
-      ]);
+  const handleExportSession = useCallback(
+    async (sessionId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        setExporting(sessionId);
+        // Fetch both transcript and messages
+        const [transcriptRes, messagesRes] = await Promise.all([
+          apiFetch(`/api/sessions/${sessionId}/transcript`),
+          apiFetch(`/api/sessions/${sessionId}/messages`),
+        ]);
 
-      const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null;
-      const messagesData = messagesRes.ok ? await messagesRes.json() : null;
+        const transcriptData = transcriptRes.ok ? await transcriptRes.json() : null;
+        const messagesData = messagesRes.ok ? await messagesRes.json() : null;
 
-      const exportData = {
-        sessionId,
-        exportedAt: new Date().toISOString(),
-        transcript: transcriptData?.transcript || null,
-        messages: messagesData?.messages || null,
-      };
+        const exportData = {
+          sessionId,
+          exportedAt: new Date().toISOString(),
+          transcript: transcriptData?.transcript || null,
+          messages: messagesData?.messages || null,
+        };
 
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `session-${sessionId}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('sessions.error.export'));
-    } finally {
-      setExporting(null);
-    }
-  }, []);
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `session-${sessionId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('sessions.error.export'));
+      } finally {
+        setExporting(null);
+      }
+    },
+    [t],
+  );
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

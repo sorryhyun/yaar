@@ -132,7 +132,7 @@ export function useDragWindow({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [windowId, bounds.x, bounds.y, bounds.w, bounds.h, variant, frameless, listenersRef],
+    [windowId, bounds.x, bounds.y, variant, frameless, listenersRef],
   );
 
   return { isDragging, snapPreviewBounds, handleDragStart };

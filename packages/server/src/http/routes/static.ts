@@ -21,7 +21,7 @@ function getEmbeddedAssets(): Map<string, string> {
   if (embeddedAssets) return embeddedAssets;
   embeddedAssets = new Map();
 
-  const frontend = (globalThis as any).__YAAR_EMBEDDED_FRONTEND as
+  const frontend = (globalThis as Record<string, unknown>).__YAAR_EMBEDDED_FRONTEND as
     | Record<string, string>
     | undefined;
   if (frontend) {

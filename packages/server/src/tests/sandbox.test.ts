@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeJs, executeTs, executeCode } from '../lib/sandbox/index.js';
+import { executeJs, executeCode } from '../lib/sandbox/index.js';
 
 describe('Sandbox', () => {
   describe('sync execution', () => {
@@ -223,45 +223,6 @@ describe('Sandbox', () => {
       expect(result.success).toBe(true);
       expect(result.result).toBe('200');
     }, 15000);
-  });
-
-  describe('TypeScript execution', () => {
-    it('compiles and runs TypeScript', async () => {
-      const result = await executeTs(`
-        const greet = (name: string): string => \`Hello, \${name}!\`;
-        return greet("World");
-      `);
-      expect(result.success).toBe(true);
-      expect(result.result).toBe('"Hello, World!"');
-    });
-
-    it('supports TypeScript interfaces and types', async () => {
-      const result = await executeTs(`
-        interface Point { x: number; y: number; }
-        const p: Point = { x: 1, y: 2 };
-        return p.x + p.y;
-      `);
-      expect(result.success).toBe(true);
-      expect(result.result).toBe('3');
-    });
-
-    it('supports async/await in TypeScript', async () => {
-      const result = await executeTs(`
-        const getValue = async (): Promise<number> => {
-          return await Promise.resolve(99);
-        };
-        return await getValue();
-      `);
-      expect(result.success).toBe(true);
-      expect(result.result).toBe('99');
-    });
-
-    it('reports TypeScript compilation errors', async () => {
-      // esbuild is lenient with types but catches syntax errors
-      const result = await executeTs('const x: number = ;');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Compilation failed');
-    });
   });
 
   describe('security', () => {

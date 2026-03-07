@@ -54,7 +54,6 @@
     ]
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
     "eslint": "^10.0.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",

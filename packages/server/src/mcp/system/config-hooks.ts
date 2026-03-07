@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
+import type { HookAction } from './hooks.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';
 
 export const hookContentSchema = z.object({
@@ -42,7 +43,7 @@ export async function handleSetHook(content: Record<string, unknown>) {
     return error('Permission denied — hook was not added.');
   }
 
-  const hook = await addHook(event, result.data.action as any, label, filter);
+  const hook = await addHook(event, result.data.action as HookAction, label, filter);
   return ok(`Hook registered: "${hook.label}" (${hook.id})`);
 }
 

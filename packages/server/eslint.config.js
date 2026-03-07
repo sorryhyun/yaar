@@ -23,6 +23,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/tests/**/*.ts', 'src/**/*.test.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**', 'src/providers/codex/generated/**'],
   }
 )

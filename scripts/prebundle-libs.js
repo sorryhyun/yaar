@@ -7,7 +7,6 @@
  * via Bun's `with { type: "file" }` import mechanism.
  */
 
-import esbuild from 'esbuild';
 import { mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -41,8 +40,6 @@ const BUNDLED_LIBRARIES = {
   'prismjs': 'prismjs',
 };
 
-const resolveDir = join(rootDir, 'packages', 'server');
-
 mkdirSync(outDir, { recursive: true });
 
 console.log(`Pre-bundling ${Object.keys(BUNDLED_LIBRARIES).length} libraries into ${outDir}...`);
@@ -51,17 +48,21 @@ const results = await Promise.allSettled(
   Object.entries(BUNDLED_LIBRARIES).map(async ([name, pkg]) => {
     const outfile = join(outDir, `${name}.js`);
     try {
-      await esbuild.build({
-        entryPoints: [pkg],
-        bundle: true,
-        format: 'esm',
-        target: ['es2020'],
-        outfile,
+      const result = await Bun.build({
+        entrypoints: [pkg],
         minify: true,
-        sourcemap: false,
-        logLevel: 'warning',
-        absWorkingDir: resolveDir,
+        format: 'esm',
+        target: 'browser',
       });
+      if (!result.success) {
+        const errors = result.logs
+          .filter((l) => l.level === 'error')
+          .map((l) => l.message || String(l));
+        throw new Error(errors.join('\n') || `Bun.build() failed for ${pkg}`);
+      }
+      // Write output manually to support names with slashes (e.g. solid-js/html)
+      mkdirSync(dirname(outfile), { recursive: true });
+      await Bun.write(outfile, result.outputs[0]);
       console.log(`  ✓ ${name} (${pkg})`);
       return { name, success: true };
     } catch (err) {

@@ -114,12 +114,13 @@ export class ClaudeSessionProvider extends BaseTransport {
     if (!this.currentQuery) return false;
     try {
       await this.currentQuery.streamInput(
-        (async function* (): AsyncGenerator<any> {
+        (async function* () {
           yield {
-            type: 'user',
-            message: { role: 'user', content },
+            type: 'user' as const,
+            message: { role: 'user' as const, content },
           };
-        })(),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK expects SDKUserMessage but accepts partial
+        })() as AsyncIterable<any>,
       );
       return true;
     } catch (err) {

@@ -152,7 +152,7 @@ export function CommandPalette() {
         }
       }
     },
-    [handleSubmit, interrupt, activeAgents, applyAction],
+    [handleSubmit, interrupt, activeAgents, applyAction, t],
   );
 
   const handleReset = useCallback(() => {
@@ -163,7 +163,7 @@ export function CommandPalette() {
       message: t('commandPalette.toast.contextReset'),
       variant: 'info',
     });
-  }, [reset, applyAction]);
+  }, [reset, applyAction, t]);
 
   return (
     <>
