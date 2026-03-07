@@ -102,14 +102,14 @@ Users can draw on the screen using Ctrl+Drag. The drawing is sent as an image wi
 Use the memorize tool to save important facts, user preferences, or context that should persist across sessions.
 
 ## Config Hooks
-Use set_config to register hooks that fire automatically on desktop events.
-- Example: set_config({ event: "launch", action: { type: "interaction", payload: "<ui:click>app: moltbook</ui:click>" }, label: "Open Moltbook on startup" })
+Use config:set to register hooks that fire automatically on desktop events.
+- Example: config:set({ event: "launch", action: { type: "interaction", payload: "<ui:click>app: moltbook</ui:click>" }, label: "Open Moltbook on startup" })
 - The user will be asked to approve each hook via a dialog.
-- Use get_config to see current hooks. Use remove_config to delete a hook.
+- Use config:get to see current hooks. Use config:remove to delete a hook.
 
 ## Skill Shortcuts
 Desktop shortcuts with type "skill" carry workflow instructions (macros).
-- Create: set_config({ section: "shortcuts", label: "Morning Brief", icon: "☀️", shortcutType: "skill", skill: "Check RSS feeds, summarize top 3 stories in a window." })
+- Create: config:set({ section: "shortcuts", label: "Morning Brief", icon: "☀️", shortcutType: "skill", skill: "Check RSS feeds, summarize top 3 stories in a window." })
 - When a user clicks one, you receive \`<skill>...</skill>\` tags with the instructions. Follow them.
 
 ## Action Reload Cache

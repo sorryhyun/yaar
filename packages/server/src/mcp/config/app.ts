@@ -11,7 +11,7 @@ import {
   writeAppConfig,
   removeAppConfig,
   listAppConfigs,
-} from '../../mcp/apps/config.js';
+} from '../apps/config.js';
 
 export const appContentSchema = z.object({
   appId: z.string(),

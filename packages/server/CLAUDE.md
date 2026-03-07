@@ -46,10 +46,10 @@ src/
 │   ├── claude/           # ClaudeSessionProvider, system-prompt, message-mapper
 │   └── codex/            # CodexProvider, AppServer, JsonRpcWsClient, auth, types
 ├── mcp/                  # MCP server + domain-organized tool folders (see Tools section)
-│   ├── server.ts         # Tool registration, request handling (8 namespaces)
+│   ├── server.ts         # Tool registration, request handling (9 namespaces)
 │   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts   # WindowStateRegistry — per-session window state
-│   └── system/ skills/ window/ storage/ http/ apps/ user/ browser/ basic/ dev/
+│   └── system/ config/ skills/ window/ storage/ http/ apps/ user/ browser/ basic/ dev/
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
@@ -129,11 +129,12 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-Tools organized into 8 domain folders under `mcp/`, each with `register*Tools()`. See `mcp/server.ts`.
+Tools organized into 9 domain folders under `mcp/`, each with `register*Tools()`. See `mcp/server.ts`.
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
-| `system/` | system | get_info, memorize, config CRUD, relay_to_main, run_js, show_notification |
+| `system/` | system | get_info, memorize, relay_to_main, run_js, show_notification |
+| `config/` | config | set, get, remove (hooks, settings, shortcuts, mounts, app) |
 | `skills/` | system | skill (reference doc loader) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
 | `window/` | window | create, update, manage, list, view, info, app_query, app_command |
@@ -142,7 +143,7 @@ Tools organized into 8 domain folders under `mcp/`, each with `register*Tools()`
 | `user/` | user | ask, request |
 | `dev/` | dev | compile, typecheck, deploy, clone |
 | `basic/` | basic | read, write, list, delete, edit (URI-style paths) |
-| `browser/` | browser | CDP automation (conditional — Chrome/Edge required) |
+| `browser/` | browser | CDP automation — split into open, interact, navigate, content, manage (conditional — Chrome/Edge required) |
 | `reload/` | system | reload_cached, list_reload_options |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.

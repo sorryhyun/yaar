@@ -1,25 +1,25 @@
 /**
- * Config tools — set_config, get_config, remove_config.
+ * Config tools — set, get, remove.
  *
  * Each section (hooks, settings, shortcuts, mounts, app) is defined in its own
- * config-*.ts file. This module composes them into unified MCP tools.
+ * file. This module composes them into unified MCP tools.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../utils.js';
-import { handleSetHook, handleGetHooks, handleRemoveHook } from './config-hooks.js';
-import { handleSetSettings, handleGetSettings } from './config-settings.js';
-import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from './config-shortcuts.js';
-import { handleSetMount, handleGetMounts, handleRemoveMount } from './config-mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from './config-app.js';
+import { handleSetHook, handleGetHooks, handleRemoveHook } from './hooks.js';
+import { handleSetSettings, handleGetSettings } from './settings.js';
+import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from './shortcuts.js';
+import { handleSetMount, handleGetMounts, handleRemoveMount } from './mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from './app.js';
 
 const CONFIG_SECTIONS = ['hooks', 'settings', 'shortcuts', 'mounts', 'app'] as const;
 const REMOVABLE_SECTIONS = ['hooks', 'shortcuts', 'mounts', 'app'] as const;
 
 export function registerConfigTools(server: McpServer): void {
   server.registerTool(
-    'set_config',
+    'set',
     {
       description:
         'Update configuration. Load skill(topic: "config") for content schema reference.',
@@ -47,7 +47,7 @@ export function registerConfigTools(server: McpServer): void {
   );
 
   server.registerTool(
-    'get_config',
+    'get',
     {
       description:
         'Read current configuration. Returns hooks, settings, shortcuts, mounts, app, or all. For "app" section, optionally provide appId to read a specific app\'s config.',
@@ -85,7 +85,7 @@ export function registerConfigTools(server: McpServer): void {
   );
 
   server.registerTool(
-    'remove_config',
+    'remove',
     {
       description: 'Remove a config entry. Load skill(topic: "config") for details.',
       inputSchema: {

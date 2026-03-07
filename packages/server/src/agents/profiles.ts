@@ -13,6 +13,7 @@ import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
 import { BASIC_TOOL_NAMES } from '../mcp/basic/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
+import { CONFIG_TOOL_NAMES } from '../mcp/config/index.js';
 import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/browser/index.js';
 
 export interface AgentProfile {
@@ -160,9 +161,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
     // System tools
     'mcp__system__memorize',
     'mcp__system__get_env_var',
-    'mcp__system__set_config',
-    'mcp__system__get_config',
-    'mcp__system__remove_config',
+    ...CONFIG_TOOL_NAMES,
   ],
 };
 

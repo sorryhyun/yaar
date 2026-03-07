@@ -1,6 +1,6 @@
 # Config Tools Reference
 
-## `set_config(section, content)`
+## `config:set(section, content)`
 
 Update configuration. The `content` object schema depends on the `section`.
 
@@ -118,7 +118,7 @@ Per-app configuration (credentials, preferences). Stored at `config/{appId}.json
 
 ---
 
-## `remove_config(section, id, key?)`
+## `config:remove(section, id, key?)`
 
 Remove a config entry by section and ID.
 
@@ -130,6 +130,6 @@ Remove a config entry by section and ID.
 
 ---
 
-## `get_config(section?, appId?)`
+## `config:get(section?, appId?)`
 
 Read configuration. Returns all sections if `section` is omitted. For `"app"` section, provide `appId` to read a specific app's config.

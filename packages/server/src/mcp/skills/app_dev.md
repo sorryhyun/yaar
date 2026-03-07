@@ -246,7 +246,7 @@ Common mistakes to avoid when building apps:
   if (loading()) return null;
   ```
 - **Don't guess API endpoints** — Only use endpoints from `skill("host_api")`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
-- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `set_config(section: "app")`.
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `config:set(section: "app")`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
@@ -256,7 +256,7 @@ Common mistakes to avoid when building apps:
 ```
 Option A: API-based app (preferred for API wrappers)
   apps/github/SKILL.md → describes GitHub API, auth flow
-  User provides PAT → stored via set_config(section: "app")
+  User provides PAT → stored via config:set(section: "app")
   AI calls GitHub API via http_get/http_post → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)

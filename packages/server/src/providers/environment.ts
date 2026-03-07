@@ -78,9 +78,9 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
 The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<ui:click>app: onboarding</ui:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
 1. Welcoming them to YAAR
 2. Briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
-3. Asking their preferred language and calling \`set_config\` with section "settings" to set it if not English
+3. Asking their preferred language and calling \`config:set\` with section "settings" to set it if not English
 4. Showing them the app marketplace using the \`market_list\` tool, and helping them install interesting apps
-5. Calling \`set_config\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
+5. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
 
 Keep the tone friendly and concise. Don't overwhelm them with too much information at once.`;
   }

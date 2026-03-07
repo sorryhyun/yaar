@@ -5,8 +5,8 @@
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
 import { actionEmitter } from '../action-emitter.js';
-import type { HookAction } from './hooks.js';
-import { addHook, loadHooks, removeHook } from './hooks.js';
+import type { HookAction } from '../system/hooks.js';
+import { addHook, loadHooks, removeHook } from '../system/hooks.js';
 
 export const hookContentSchema = z.object({
   event: z.enum(['launch', 'tool_use']),

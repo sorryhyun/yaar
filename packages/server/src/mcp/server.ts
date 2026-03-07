@@ -26,9 +26,19 @@ import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES, isBrowserAvailable } from './browser/index.js';
+import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './config/index.js';
 
 /** MCP server categories. */
-export const MCP_SERVERS = ['system', 'window', 'apps', 'user', 'dev', 'basic', 'browser'] as const;
+export const MCP_SERVERS = [
+  'system',
+  'config',
+  'window',
+  'apps',
+  'user',
+  'dev',
+  'basic',
+  'browser',
+] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
 /**
@@ -92,6 +102,9 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
       registerSkillTools(server);
       registerHttpTools(server);
       registerReloadTools(server, getReloadCache, getWindowState);
+      break;
+    case 'config':
+      registerConfigNamespace(server);
       break;
     case 'window':
       registerWindowTools(server, getWindowState);
@@ -281,6 +294,7 @@ export function getToolNames(): string[] {
   return [
     'WebSearch',
     ...SYSTEM_TOOL_NAMES,
+    ...CONFIG_TOOL_NAMES,
     ...SKILL_TOOL_NAMES,
     ...HTTP_TOOL_NAMES,
     ...WINDOW_TOOL_NAMES,
