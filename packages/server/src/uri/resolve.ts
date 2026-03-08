@@ -11,6 +11,7 @@ import {
   resolveContentUri,
   parseMonitorUri,
   parseWindowUri,
+  parseBareWindowUri,
   parseConfigUri,
   parseBrowserUri,
   parseAgentUri,
@@ -24,6 +25,7 @@ import {
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';
+import { getMonitorId } from '../agents/session.js';
 
 export type ResourceKind = 'app-static' | 'storage' | 'sandbox';
 
@@ -158,6 +160,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     }
 
     case 'monitors':
+    case 'windows':
     case 'config':
     case 'browser':
     case 'agents':
@@ -170,8 +173,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
 
 /**
  * Resolve any yaar:// URI — content resources (apps, storage, sandbox) or window addresses.
- * Note: URIs with authority `monitor` (e.g., `yaar://monitors/0/win-id`) correctly return null
- * from `resolveContentUri` and fall through to `parseWindowUri`.
+ * Window URIs use `yaar://windows/{windowId}` (preferred) or legacy `yaar://monitors/{m}/{w}`.
  */
 export function resolveUri(uri: string): ResolvedUri | null {
   // Root URI: yaar://
@@ -191,6 +193,23 @@ export function resolveUri(uri: string): ResolvedUri | null {
       subPath: win.subPath,
       sourceUri: uri,
     };
+  }
+
+  // yaar://windows/{windowId} — monitor-less shortcut, injects current monitorId
+  const bareWin = parseBareWindowUri(uri);
+  if (bareWin) {
+    const monitorId = getMonitorId() ?? '0';
+    if (bareWin.windowId) {
+      return {
+        kind: 'window',
+        monitorId,
+        windowId: bareWin.windowId,
+        subPath: bareWin.subPath,
+        sourceUri: uri,
+      };
+    }
+    // yaar://windows/ with no windowId → treat as monitor
+    return { kind: 'monitor', monitorId, sourceUri: uri };
   }
 
   const monitor = parseMonitorUri(uri);

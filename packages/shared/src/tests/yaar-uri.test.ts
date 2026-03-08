@@ -5,6 +5,8 @@ import {
   buildWindowUri,
   buildWindowResourceUri,
   parseWindowResourceUri,
+  parseBareWindowUri,
+  isBareWindowsAuthority,
   parseConfigUri,
   buildConfigUri,
   parseBrowserUri,
@@ -102,6 +104,24 @@ describe('parseWindowResourceUri', () => {
     expect(parseWindowResourceUri('yaar://monitors/0/win-excel/state')).toBeNull();
   });
 
+  it('parses bare window resource URI (yaar://windows/)', () => {
+    expect(parseWindowResourceUri('yaar://windows/win-excel/state/cells')).toEqual({
+      monitorId: '',
+      windowId: 'win-excel',
+      resourceType: 'state',
+      key: 'cells',
+    });
+  });
+
+  it('parses bare window commands URI', () => {
+    expect(parseWindowResourceUri('yaar://windows/win-app/commands/save')).toEqual({
+      monitorId: '',
+      windowId: 'win-app',
+      resourceType: 'commands',
+      key: 'save',
+    });
+  });
+
   it('roundtrips with buildWindowResourceUri', () => {
     const uri = buildWindowResourceUri('1', 'win-app', 'commands', 'refresh');
     const parsed = parseWindowResourceUri(uri);
@@ -111,6 +131,53 @@ describe('parseWindowResourceUri', () => {
       resourceType: 'commands',
       key: 'refresh',
     });
+  });
+});
+
+// ============ Bare Window URIs (yaar://windows/) ============
+
+describe('parseBareWindowUri', () => {
+  it('parses basic bare window URI', () => {
+    expect(parseBareWindowUri('yaar://windows/my-win')).toEqual({
+      windowId: 'my-win',
+      subPath: undefined,
+    });
+  });
+
+  it('parses bare window URI with sub-path', () => {
+    expect(parseBareWindowUri('yaar://windows/my-win/state/cells')).toEqual({
+      windowId: 'my-win',
+      subPath: 'state/cells',
+    });
+  });
+
+  it('parses bare yaar://windows/ as monitor-level (empty windowId)', () => {
+    expect(parseBareWindowUri('yaar://windows/')).toEqual({
+      windowId: '',
+    });
+  });
+
+  it('returns null for non-windows URI', () => {
+    expect(parseBareWindowUri('yaar://monitors/0/win-id')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseBareWindowUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('isBareWindowsAuthority', () => {
+  it('returns true for yaar://windows/ URIs', () => {
+    expect(isBareWindowsAuthority('yaar://windows/my-win')).toBe(true);
+    expect(isBareWindowsAuthority('yaar://windows/')).toBe(true);
+  });
+
+  it('returns false for yaar://monitors/ URIs', () => {
+    expect(isBareWindowsAuthority('yaar://monitors/0/win-id')).toBe(false);
+  });
+
+  it('returns false for non-yaar URIs', () => {
+    expect(isBareWindowsAuthority('https://example.com')).toBe(false);
   });
 });
 
@@ -459,6 +526,22 @@ describe('buildSessionUri', () => {
 });
 
 // ============ parseYaarUri with new authorities ============
+
+describe('parseYaarUri with windows', () => {
+  it('parses windows URIs', () => {
+    expect(parseYaarUri('yaar://windows/my-win')).toEqual({
+      authority: 'windows',
+      path: 'my-win',
+    });
+  });
+
+  it('parses bare windows URI', () => {
+    expect(parseYaarUri('yaar://windows/')).toEqual({
+      authority: 'windows',
+      path: '',
+    });
+  });
+});
 
 describe('parseYaarUri with agents/user/sessions', () => {
   it('parses agents URIs', () => {

@@ -24,7 +24,7 @@ Use a notification for quick responses ("done", "on it"). Open a window for anyt
 - **iframe**: Apps via \`yaar://apps/appId\` (e.g. \`yaar://apps/excel-lite\`), or storage files via \`yaar://storage/path\` (e.g. \`yaar://storage/mysite/index.html\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
 - **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes
 
-**Window URIs:** Window tools accept a \`uri\` param as a bare window ID (e.g. \`win-id\`). You are scoped to your monitor — all windows you create live under it automatically. Do not include a monitor prefix in the URI.
+**Window URIs:** Window tools accept a \`uri\` param as a bare window ID (e.g. \`win-id\`). All windows you create live under your session automatically.
 
 **File URIs:** File tools (read, write, edit, delete, list, compile, typecheck, deploy) use \`uri\` to address sandbox and storage files:
 - \`yaar://sandbox/{id}/{path}\` — file in an existing sandbox (e.g. \`yaar://sandbox/123/src/main.ts\`)

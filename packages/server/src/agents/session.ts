@@ -117,12 +117,12 @@ function buildScopeSection(role: string, monitorId?: string): string {
   const windowMatch = role.match(/^window-(.+?)(?:\/|$)/);
   if (windowMatch) {
     const windowId = windowMatch[1];
-    return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`${monitorId ? ` on \`${monitorId}\`` : ''}. Your actions are limited to this window. Use the bare window ID \`${windowId}\` in tool calls — do not include a monitor prefix.`;
+    return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`. Your actions are limited to this window. Use \`yaar://windows/${windowId}\` to address it.`;
   }
 
   // Main/ephemeral agent with monitorId
   if (monitorId) {
-    return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. All windows you create live under this monitor automatically. Use bare window IDs (e.g. \`my-window\`) — do not include the monitor prefix.`;
+    return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. Use \`yaar://windows/\` URIs to create and manage windows (e.g. \`yaar://windows/my-window\`). The monitor is assigned automatically.`;
   }
 
   return '';

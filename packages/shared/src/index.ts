@@ -62,4 +62,7 @@ export {
   buildUserUri,
   parseSessionUri,
   buildSessionUri,
+  type ParsedBareWindowUri,
+  parseBareWindowUri,
+  isBareWindowsAuthority,
 } from './yaar-uri.js';

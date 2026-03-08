@@ -103,19 +103,14 @@ let registerWindowHandlers: (
 beforeEach(async () => {
   vi.clearAllMocks();
   mockResolveUri.mockImplementation((u: string) => {
-    // Monitor-only URI: yaar://monitors/0
-    const monitorMatch = u.match(/^yaar:\/\/monitors\/([^/]+)$/);
-    if (monitorMatch) {
-      return { kind: 'monitor', monitorId: monitorMatch[1], sourceUri: u };
+    // yaar://windows/{windowId}
+    const bareMatch = u.match(/^yaar:\/\/windows\/(.+)$/);
+    if (bareMatch) {
+      return { kind: 'window', monitorId: '0', windowId: bareMatch[1], sourceUri: u };
     }
-    // Window URI: yaar://monitors/0/win-1
-    const windowMatch = u.match(/^yaar:\/\/monitors\/([^/]+)\/([^/]+)$/);
-    if (windowMatch) {
-      return { kind: 'window', monitorId: windowMatch[1], windowId: windowMatch[2], sourceUri: u };
-    }
-    // Monitor list
-    if (u === 'yaar://monitors' || u === 'yaar://monitors/') {
-      return { kind: 'monitor', monitorId: '', sourceUri: u };
+    // Bare yaar://windows → monitor-level (current monitor)
+    if (u === 'yaar://windows' || u === 'yaar://windows/') {
+      return { kind: 'monitor', monitorId: '0', sourceUri: u };
     }
     return null;
   });
@@ -130,12 +125,13 @@ function createRegistry() {
   return reg;
 }
 
-describe('Monitor-as-resource', () => {
-  it('reads monitor status for a specific monitor', async () => {
+describe('Monitor read via yaar://windows/', () => {
+  it('reads monitor status for current monitor', async () => {
     mockPool.hasMainAgent.mockReturnValue(true);
 
     const reg = createRegistry();
-    const result = await reg.execute('read', 'yaar://monitors/0');
+    // read('yaar://windows/') resolves to monitor-level for the current agent
+    const result = await reg.execute('read', 'yaar://windows/');
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(text(result));
     expect(data.monitorId).toBe('0');
@@ -144,30 +140,5 @@ describe('Monitor-as-resource', () => {
     expect(data.windows).toHaveLength(2);
     expect(data.windows[0].title).toBe('Storage');
     expect(data.windows[1].title).toBe('Notes');
-  });
-
-  it('filters windows by monitor ID', async () => {
-    mockPool.hasMainAgent.mockReturnValue(false);
-
-    const reg = createRegistry();
-    const result = await reg.execute('read', 'yaar://monitors/1');
-    expect(result.isError).toBeFalsy();
-    const data = JSON.parse(text(result));
-    expect(data.monitorId).toBe('1');
-    expect(data.hasMainAgent).toBe(false);
-    // Should only include windows from monitor 1
-    expect(data.windows).toHaveLength(1);
-    expect(data.windows[0].title).toBe('Chat');
-  });
-
-  it('returns empty windows for unknown monitor', async () => {
-    mockPool.hasMainAgent.mockReturnValue(false);
-
-    const reg = createRegistry();
-    const result = await reg.execute('read', 'yaar://monitors/99');
-    expect(result.isError).toBeFalsy();
-    const data = JSON.parse(text(result));
-    expect(data.monitorId).toBe('99');
-    expect(data.windows).toHaveLength(0);
   });
 });

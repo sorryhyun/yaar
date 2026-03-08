@@ -22,6 +22,7 @@ export type YaarAuthority =
   | 'storage'
   | 'sandbox'
   | 'monitors'
+  | 'windows'
   | 'config'
   | 'browser'
   | 'agents'
@@ -34,7 +35,7 @@ export interface ParsedYaarUri {
 }
 
 const YAAR_RE =
-  /^yaar:\/\/(apps|storage|sandbox|monitors|config|browser|agents|user|sessions)\/(.*)$/;
+  /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|agents|user|sessions)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -72,6 +73,7 @@ export function resolveContentUri(uri: string): string | null {
     case 'sandbox':
       return `/api/sandbox/${parsed.path}`;
     case 'monitors':
+    case 'windows':
     case 'config':
     case 'browser':
     case 'agents':
@@ -324,6 +326,43 @@ export function parseWindowUri(uri: string): ParsedWindowUri | null {
   };
 }
 
+// ============ Bare Window URIs (yaar://windows/) ============
+
+export interface ParsedBareWindowUri {
+  windowId: string;
+  subPath?: string;
+}
+
+/**
+ * Parse a yaar://windows/{windowId} URI (monitor-less shortcut).
+ *
+ *   parseBareWindowUri('yaar://windows/my-win')            → { windowId: 'my-win' }
+ *   parseBareWindowUri('yaar://windows/my-win/state/cells') → { windowId: 'my-win', subPath: 'state/cells' }
+ *   parseBareWindowUri('yaar://windows/')                   → { windowId: '' } (monitor-level, for creates)
+ */
+export function parseBareWindowUri(uri: string): ParsedBareWindowUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'windows') return null;
+
+  if (!parsed.path) return { windowId: '' }; // bare yaar://windows/ → monitor-level
+
+  const slashIdx = parsed.path.indexOf('/');
+  if (slashIdx === -1) return { windowId: parsed.path };
+
+  return {
+    windowId: parsed.path.slice(0, slashIdx),
+    subPath: parsed.path.slice(slashIdx + 1) || undefined,
+  };
+}
+
+/**
+ * Whether this is a bare `yaar://windows/` URI (with or without a windowId).
+ */
+export function isBareWindowsAuthority(uri: string): boolean {
+  const parsed = parseYaarUri(uri);
+  return parsed?.authority === 'windows';
+}
+
 // ============ Window Resource URIs ============
 
 export interface ParsedWindowResourceUri {
@@ -350,19 +389,39 @@ export function buildWindowResourceUri(
  * Parse a yaar:// window resource URI into its components.
  *   parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')
  *     → { monitorId: '0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
+ *   parseWindowResourceUri('yaar://windows/win-excel/state/cells')
+ *     → { monitorId: '', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
  */
 export function parseWindowResourceUri(uri: string): ParsedWindowResourceUri | null {
+  // Try yaar://monitors/{m}/{w}/{type}/{key}
   const parsed = parseWindowUri(uri);
-  if (!parsed?.subPath) return null;
-  const slashIdx = parsed.subPath.indexOf('/');
+  if (parsed?.subPath) {
+    const result = extractResourceFromSubPath(parsed.monitorId, parsed.windowId, parsed.subPath);
+    if (result) return result;
+  }
+  // Try yaar://windows/{w}/{type}/{key}
+  const bare = parseBareWindowUri(uri);
+  if (bare?.subPath) {
+    const result = extractResourceFromSubPath('', bare.windowId, bare.subPath);
+    if (result) return result;
+  }
+  return null;
+}
+
+function extractResourceFromSubPath(
+  monitorId: string,
+  windowId: string,
+  subPath: string,
+): ParsedWindowResourceUri | null {
+  const slashIdx = subPath.indexOf('/');
   if (slashIdx === -1) return null;
-  const type = parsed.subPath.slice(0, slashIdx);
+  const type = subPath.slice(0, slashIdx);
   if (type !== 'state' && type !== 'commands') return null;
   return {
-    monitorId: parsed.monitorId,
-    windowId: parsed.windowId,
+    monitorId,
+    windowId,
     resourceType: type,
-    key: parsed.subPath.slice(slashIdx + 1),
+    key: subPath.slice(slashIdx + 1),
   };
 }
 

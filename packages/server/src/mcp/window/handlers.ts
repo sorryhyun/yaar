@@ -3,11 +3,11 @@
  *
  * Maps window operations to the verb layer:
  *
- *   list('yaar://monitors/')               → list all windows
- *   invoke('yaar://monitors/{m}', ...)     → create window (windowId auto-derived from payload)
- *   read('yaar://monitors/{m}/{w}')        → view window content/metadata
- *   invoke('yaar://monitors/{m}/{w}', ...) → create, update, manage, app_query, app_command
- *   delete('yaar://monitors/{m}/{w}')      → close window
+ *   list('yaar://windows/')               → list all windows
+ *   invoke('yaar://windows/', ...)        → create window (windowId auto-derived from payload)
+ *   read('yaar://windows/{w}')            → view window content/metadata
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command
+ *   delete('yaar://windows/{w}')          → close window
  */
 
 import { join } from 'path';
@@ -19,7 +19,6 @@ import {
   type AppProtocolRequest,
   componentLayoutSchema,
   parseWindowKey,
-  buildWindowUri,
   extractAppId,
 } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../uri/registry.js';
@@ -27,7 +26,7 @@ import type { ResolvedUri, ResolvedWindow, ResolvedMonitor } from '../../uri/res
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
-import { getAgentId, getSessionId, getMonitorId } from '../../agents/session.js';
+import { getAgentId, getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../uri/index.js';
 import { generateIframeToken } from '../../http/iframe-tokens.js';
@@ -44,8 +43,7 @@ function assertMonitor(resolved: ResolvedUri): asserts resolved is ResolvedMonit
 }
 
 function formatWindowRef(windowId: string): string {
-  const monitorId = getMonitorId();
-  return monitorId ? buildWindowUri(monitorId, windowId) : windowId;
+  return `yaar://windows/${windowId}`;
 }
 
 /** Derive a window ID from payload fields. */
@@ -63,10 +61,8 @@ export function registerWindowHandlers(
   registry: ResourceRegistry,
   getWindowState: () => WindowStateRegistry,
 ): void {
-  // List handler registered twice (with and without trailing slash) as exact matches,
-  // to avoid the prefix pattern shadowing the yaar://monitors/* wildcard.
   const listHandler: ResourceHandler = {
-    description: 'List all open windows across all monitors.',
+    description: 'List all open windows.',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -75,9 +71,10 @@ export function registerWindowHandlers(
 
       const windowList = windows.map((win) => {
         const parsed = parseWindowKey(win.id);
+        const windowId = parsed?.windowId ?? win.id;
         return {
-          id: win.id,
-          ...(parsed ? { uri: buildWindowUri(parsed.monitorId, parsed.windowId) } : {}),
+          id: windowId,
+          uri: `yaar://windows/${windowId}`,
           title: win.title,
           position: `(${win.bounds.x}, ${win.bounds.y})`,
           size: `${win.bounds.w}x${win.bounds.h}`,
@@ -93,13 +90,13 @@ export function registerWindowHandlers(
       return ok(JSON.stringify(windowList, null, 2));
     },
   };
-  registry.register('yaar://monitors', listHandler);
+  registry.register('yaar://windows', listHandler);
 
-  // ── yaar://monitors/{monitorId}/{windowId} — window and monitor operations ──
-  registry.register('yaar://monitors/*', {
+  // ── yaar://windows/{windowId} — window operations ──
+  const windowHandler: ResourceHandler = {
     description:
-      'Monitor or window resource. For monitors (yaar://monitors/{id}): read for status, invoke to create windows (windowId auto-derived from payload). ' +
-      'For windows (yaar://monitors/{id}/{windowId}): read to view content/metadata, invoke to update/manage, delete to close. ' +
+      'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
+      'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
       'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -146,7 +143,7 @@ export function registerWindowHandlers(
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      // Monitor-as-resource: yaar://monitors/{id}
+      // Monitor-level: yaar://windows/ (bare, no windowId)
       if (resolved.kind === 'monitor') {
         assertMonitor(resolved);
         const sid = getSessionId();
@@ -182,7 +179,7 @@ export function registerWindowHandlers(
         );
       }
 
-      // Window resource: yaar://monitors/{id}/{windowId}
+      // Window resource: yaar://windows/{windowId}
       assertWindow(resolved);
       const win = getWindowState().getWindow(resolved.windowId);
       if (!win) {
@@ -216,8 +213,8 @@ export function registerWindowHandlers(
         if (action === 'create') return handleCreate('', payload);
         if (action === 'create_component') return handleCreateComponent('', payload);
         return error(
-          `Action "${action}" requires a window URI (yaar://monitors/{id}/{windowId}). ` +
-            'Only "create" and "create_component" can be invoked on a monitor URI.',
+          `Action "${action}" requires a window URI (yaar://windows/{windowId}). ` +
+            'Only "create" and "create_component" can be invoked on a bare windows URI.',
         );
       }
 
@@ -252,7 +249,8 @@ export function registerWindowHandlers(
       assertWindow(resolved);
       return handleManage(getWindowState(), resolved.windowId, 'close');
     },
-  });
+  };
+  registry.register('yaar://windows/*', windowHandler);
 }
 
 // ── Action handlers ──

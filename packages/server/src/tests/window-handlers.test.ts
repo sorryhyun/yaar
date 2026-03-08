@@ -86,11 +86,12 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mockWindowState = createMockWindowState();
   mockResolveUri.mockImplementation((u: string) => {
-    // Parse yaar://monitors/{m}/{w}
-    const match = u.match(/^yaar:\/\/monitors\/(\w+)\/(.+)$/);
-    if (match) return { kind: 'window', monitorId: match[1], windowId: match[2], sourceUri: u };
-    if (u === 'yaar://monitors' || u === 'yaar://monitors')
-      return { kind: 'window', monitorId: '', windowId: '', sourceUri: u };
+    // Parse yaar://windows/{windowId}
+    const bareMatch = u.match(/^yaar:\/\/windows\/(.+)$/);
+    if (bareMatch) return { kind: 'window', monitorId: '0', windowId: bareMatch[1], sourceUri: u };
+    // Bare yaar://windows or yaar://windows/
+    if (u === 'yaar://windows' || u === 'yaar://windows/')
+      return { kind: 'monitor', monitorId: '0', sourceUri: u };
     return null;
   });
 
@@ -108,7 +109,7 @@ describe('Window domain handlers', () => {
   describe('list', () => {
     it('lists empty windows', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('list', 'yaar://monitors');
+      const result = await reg.execute('list', 'yaar://windows');
       expect(result.isError).toBeFalsy();
       expect(text(result)).toContain('No windows');
     });
@@ -120,7 +121,7 @@ describe('Window domain handlers', () => {
       });
 
       const reg = createRegistry();
-      const result = await reg.execute('list', 'yaar://monitors');
+      const result = await reg.execute('list', 'yaar://windows');
       expect(result.isError).toBeFalsy();
       expect(text(result)).toContain('Editor');
       expect(text(result)).toContain('600');
@@ -135,7 +136,7 @@ describe('Window domain handlers', () => {
       });
 
       const reg = createRegistry();
-      const result = await reg.execute('read', 'yaar://monitors/0/mywin');
+      const result = await reg.execute('read', 'yaar://windows/mywin');
       expect(result.isError).toBeFalsy();
       const body = JSON.parse(text(result));
       expect(body.title).toBe('My Window');
@@ -144,7 +145,7 @@ describe('Window domain handlers', () => {
 
     it('returns error for missing window', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('read', 'yaar://monitors/0/nonexistent');
+      const result = await reg.execute('read', 'yaar://windows/nonexistent');
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('not found');
     });
@@ -153,7 +154,7 @@ describe('Window domain handlers', () => {
   describe('invoke (create)', () => {
     it('creates a window', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/my-window', {
+      const result = await reg.execute('invoke', 'yaar://windows/my-window', {
         action: 'create',
         title: 'Test Window',
         renderer: 'markdown',
@@ -166,7 +167,7 @@ describe('Window domain handlers', () => {
 
     it('returns error without title', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/my-window', {
+      const result = await reg.execute('invoke', 'yaar://windows/my-window', {
         action: 'create',
         renderer: 'markdown',
         content: '# Hi',
@@ -182,7 +183,7 @@ describe('Window domain handlers', () => {
       mockEmitActionWithFeedback.mockResolvedValue({ success: true });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/editor', {
+      const result = await reg.execute('invoke', 'yaar://windows/editor', {
         action: 'update',
         operation: 'append',
         content: '\nnew text',
@@ -199,7 +200,7 @@ describe('Window domain handlers', () => {
       });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/editor', {
+      const result = await reg.execute('invoke', 'yaar://windows/editor', {
         action: 'update',
         operation: 'replace',
         content: 'new content',
@@ -215,7 +216,7 @@ describe('Window domain handlers', () => {
       mockEmitActionWithFeedback.mockResolvedValue({ success: true });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/editor', {
+      const result = await reg.execute('invoke', 'yaar://windows/editor', {
         action: 'close',
       });
       expect(result.isError).toBeFalsy();
@@ -226,7 +227,7 @@ describe('Window domain handlers', () => {
       mockWindowState._addWindow('editor', { title: 'Editor' });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/editor', {
+      const result = await reg.execute('invoke', 'yaar://windows/editor', {
         action: 'lock',
       });
       expect(result.isError).toBeFalsy();
@@ -244,7 +245,7 @@ describe('Window domain handlers', () => {
       });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://monitors/0/editor', {
+      const result = await reg.execute('invoke', 'yaar://windows/editor', {
         action: 'close',
       });
       expect(result.isError).toBe(true);
@@ -258,7 +259,7 @@ describe('Window domain handlers', () => {
       mockEmitActionWithFeedback.mockResolvedValue({ success: true });
 
       const reg = createRegistry();
-      const result = await reg.execute('delete', 'yaar://monitors/0/editor');
+      const result = await reg.execute('delete', 'yaar://windows/editor');
       expect(result.isError).toBeFalsy();
       expect(text(result)).toContain('Closed');
     });
@@ -267,7 +268,7 @@ describe('Window domain handlers', () => {
   describe('describe', () => {
     it('describes window resource', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('describe', 'yaar://monitors/0/editor');
+      const result = await reg.execute('describe', 'yaar://windows/editor');
       expect(result.isError).toBeFalsy();
       const body = JSON.parse(text(result));
       expect(body.verbs).toContain('read');

@@ -59,7 +59,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
               'yaar://apps/',
               'yaar://storage/',
               'yaar://sandbox/',
-              'yaar://monitors/',
+              'yaar://windows/',
               'yaar://config/',
               'yaar://browser/',
               'yaar://agents/',

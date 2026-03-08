@@ -87,17 +87,17 @@ Use \`describe(uri)\` to discover what actions a URI supports before invoking it
 
 ## Windows
 
-Create windows by invoking a monitor URI:
+Create windows:
 \`\`\`
-invoke('yaar://monitors/0', { action: "create", title: "Results", renderer: "markdown", content: "# Hello" })
-invoke('yaar://monitors/0', { action: "create_component", title: "UI", components: [...] })
-invoke('yaar://monitors/0', { action: "create", title: "App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/', { action: "create", title: "Results", renderer: "markdown", content: "# Hello" })
+invoke('yaar://windows/', { action: "create_component", title: "UI", components: [...] })
+invoke('yaar://windows/', { action: "create", title: "App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 \`\`\`
 
-Update/manage windows using the full window URI:
+Update/manage/close windows:
 \`\`\`
-invoke('yaar://monitors/0/my-window', { action: "update", operation: "append", content: "more" })
-delete('yaar://monitors/0/my-window')
+invoke('yaar://windows/my-window', { action: "update", operation: "append", content: "more" })
+delete('yaar://windows/my-window')
 \`\`\`
 
 **Renderers:** markdown, html, text, table, component, iframe

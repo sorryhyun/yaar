@@ -26,7 +26,7 @@ const BARE_RESOURCE_RE = /^(?:\d+\/)?([^/]+)\/(state|commands)\/(.+)$/;
 
 /**
  * Parse a window resource URI, with fallback for bare paths.
- * Handles both `yaar://monitors/0/win/commands/save` and `win/commands/save`.
+ * Handles both `yaar://windows/win/commands/save` and `win/commands/save`.
  */
 function parseResourceUri(uri: string): ParsedWindowResourceUri | null {
   return parseWindowResourceUri(uri) ?? parseBareResourceUri(uri);

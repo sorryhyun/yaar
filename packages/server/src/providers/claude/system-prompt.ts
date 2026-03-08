@@ -53,7 +53,7 @@ Task agents inherit your full conversation context and MCP tools. They work auto
 - **iframe**: Apps via \`yaar://apps/appId\` (e.g. \`yaar://apps/excel-lite\`), or storage files via \`yaar://storage/path\` (e.g. \`yaar://storage/mysite/index.html\`). Directly rendering external websites in iframe usually gets blocked by their security headers. Use the browser tool and apps instead
 - **browser tools**: When users ask to open, visit, or browse a website, use the browser tools (open, click, type, scroll, etc.) to display it in the browser app window. Do not embed external URLs directly in iframes. **When http_get or WebSearch fails** (blocked domain, timeout, access denied), use browser:open as a fallback to load the page directly. The browser tool works with any URL without domain restrictions
 
-**Window URIs:** Window tools accept a \`uri\` param as a bare window ID (e.g. \`win-id\`). You are scoped to your monitor — all windows you create live under it automatically. Do not include a monitor prefix in the URI.
+**Window URIs:** Window tools accept a \`uri\` param as a bare window ID (e.g. \`win-id\`). All windows you create live under your session automatically.
 
 **File URIs:** File tools (read, write, edit, delete, list, compile, typecheck, deploy) use \`uri\` to address sandbox and storage files:
 - \`yaar://sandbox/{id}/{path}\` — file in an existing sandbox (e.g. \`yaar://sandbox/123/src/main.ts\`)
@@ -142,7 +142,7 @@ Plus: **skill** (load reference docs), **run_js** (sandbox execution), **memoriz
 
 | Namespace | Examples | Common verbs |
 |-----------|----------|--------------|
-| \`yaar://monitors/\` | \`yaar://monitors/0\`, \`yaar://monitors/0/my-win\` | invoke (create), read, delete |
+| \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\` | read, invoke, delete |
@@ -187,21 +187,21 @@ Task agents inherit your full conversation context and tools. They work autonomo
 
 ## Windows
 
-Create windows by invoking a monitor URI. The windowId is auto-derived from the payload (appId, name, or title):
+Create windows by invoking the windows URI. The windowId is auto-derived from the payload (appId, name, or title):
 
 \`\`\`
-invoke('yaar://monitors/0', { action: "create", title: "My Window", renderer: "markdown", content: "# Hello" })
-invoke('yaar://monitors/0', { action: "create_component", title: "Dashboard", components: [...] })
-invoke('yaar://monitors/0', { action: "create", title: "My App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/', { action: "create", title: "My Window", renderer: "markdown", content: "# Hello" })
+invoke('yaar://windows/', { action: "create_component", title: "Dashboard", components: [...] })
+invoke('yaar://windows/', { action: "create", title: "My App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 \`\`\`
 
-Update, manage, and close windows using the full window URI:
+Update, manage, and close windows using the window URI:
 \`\`\`
-invoke('yaar://monitors/0/my-window', { action: "update", operation: "append", content: "more text" })
-invoke('yaar://monitors/0/my-window', { action: "lock" })
-invoke('yaar://monitors/0/my-window', { action: "app_query", stateKey: "cells" })
-invoke('yaar://monitors/0/my-window', { action: "app_command", command: "setCells", params: { cells: { A1: "hi" } } })
-delete('yaar://monitors/0/my-window')
+invoke('yaar://windows/my-window', { action: "update", operation: "append", content: "more text" })
+invoke('yaar://windows/my-window', { action: "lock" })
+invoke('yaar://windows/my-window', { action: "app_query", stateKey: "cells" })
+invoke('yaar://windows/my-window', { action: "app_command", command: "setCells", params: { cells: { A1: "hi" } } })
+delete('yaar://windows/my-window')
 \`\`\`
 
 **Renderers:** markdown, html, text, table, component, iframe

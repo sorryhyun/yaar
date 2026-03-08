@@ -4,12 +4,13 @@
  * Monitor scoping is handled separately by ActionEmitter + WindowStateRegistry.
  */
 
-import { parseWindowUri, parseYaarUri } from '@yaar/shared';
+import { parseWindowUri, parseBareWindowUri, parseYaarUri } from '@yaar/shared';
 
 const MONITOR_PREFIX_RE = /^\d+\//;
 
 /**
  * Resolve a windowId from a uri string.
+ * - `yaar://windows/win-id`   → `win-id`    (bare window URI — preferred)
  * - `yaar://monitors/0/win-id` → `win-id`
  * - `yaar://apps/word-lite`   → `word-lite`  (content URI → use app ID)
  * - `yaar://storage/doc.md`   → `doc.md`     (content URI → use path)
@@ -17,6 +18,10 @@ const MONITOR_PREFIX_RE = /^\d+\//;
  * - `win-id`                  → `win-id`
  */
 export function resolveWindowId(uri: string): string {
+  // yaar://windows/{windowId} — bare window URI (no monitor)
+  const bare = parseBareWindowUri(uri);
+  if (bare) return bare.windowId;
+  // yaar://monitors/{monitorId}/{windowId}
   const parsed = parseWindowUri(uri);
   if (parsed) return parsed.windowId;
   // Handle content URIs (yaar://apps/..., yaar://storage/..., yaar://sandbox/...)
