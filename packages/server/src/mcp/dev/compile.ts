@@ -9,6 +9,44 @@ import { ok, error } from '../utils.js';
 import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
 import { parseFileUri } from '@yaar/shared';
 
+// ── Core logic (reusable from verb layer) ──
+
+export async function doCompile(
+  sandboxId: string,
+  options?: { title?: string },
+): Promise<{ success: true; previewUrl: string } | { success: false; error: string }> {
+  const sandboxPath = getSandboxPath(sandboxId);
+  try {
+    await stat(sandboxPath);
+  } catch {
+    return { success: false, error: `Sandbox "${sandboxId}" not found.` };
+  }
+  const result = await compileTypeScript(sandboxPath, { title: options?.title });
+  if (!result.success) {
+    return {
+      success: false,
+      error: `Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`,
+    };
+  }
+  return { success: true, previewUrl: `/api/sandbox/${sandboxId}/dist/index.html` };
+}
+
+export async function doTypecheck(
+  sandboxId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const sandboxPath = getSandboxPath(sandboxId);
+  try {
+    await stat(sandboxPath);
+  } catch {
+    return { success: false, error: `Sandbox "${sandboxId}" not found.` };
+  }
+  const result = await typecheckSandbox(sandboxPath);
+  if (result.success) return { success: true };
+  return { success: false, error: `Type check found errors:\n${result.diagnostics.join('\n')}` };
+}
+
+// ── MCP tool registration ──
+
 export function registerCompileTools(server: McpServer): void {
   // compile - Compile sandbox TypeScript to HTML
   server.registerTool(
@@ -26,36 +64,17 @@ export function registerCompileTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const { title } = args;
-
       const parsed = parseFileUri(args.uri);
       if (!parsed || parsed.authority !== 'sandbox' || !parsed.sandboxId) {
         return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
       }
-      const sandboxId = parsed.sandboxId;
-      const sandboxPath = getSandboxPath(sandboxId);
-
-      // Check sandbox exists
-      try {
-        await stat(sandboxPath);
-      } catch {
-        return error(`Sandbox "${sandboxId}" not found.`);
-      }
-
-      // Compile
-      const result = await compileTypeScript(sandboxPath, { title });
-
-      if (!result.success) {
-        return error(`Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`);
-      }
-
-      const previewUrl = `/api/sandbox/${sandboxId}/dist/index.html`;
-
+      const result = await doCompile(parsed.sandboxId, { title: args.title });
+      if (!result.success) return error(result.error);
       return ok(
         JSON.stringify(
           {
             success: true,
-            previewUrl,
+            previewUrl: result.previewUrl,
             message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
           },
           null,
@@ -80,22 +99,9 @@ export function registerCompileTools(server: McpServer): void {
       if (!parsed || parsed.authority !== 'sandbox' || !parsed.sandboxId) {
         return error('Expected a sandbox URI (e.g. yaar://sandbox/123).');
       }
-      const sandboxId = parsed.sandboxId;
-      const sandboxPath = getSandboxPath(sandboxId);
-
-      try {
-        await stat(sandboxPath);
-      } catch {
-        return error(`Sandbox "${sandboxId}" not found.`);
-      }
-
-      const result = await typecheckSandbox(sandboxPath);
-
-      if (result.success) {
-        return ok('Type check passed — no errors found.');
-      }
-
-      return error(`Type check found errors:\n${result.diagnostics.join('\n')}`);
+      const result = await doTypecheck(parsed.sandboxId);
+      if (!result.success) return error(result.error);
+      return ok('Type check passed — no errors found.');
     },
   );
 }

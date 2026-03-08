@@ -114,6 +114,13 @@ describe('Window domain handlers', () => {
       expect(text(result)).toContain('No windows');
     });
 
+    it('lists empty windows via trailing slash', async () => {
+      const reg = createRegistry();
+      const result = await reg.execute('list', 'yaar://windows/');
+      expect(result.isError).toBeFalsy();
+      expect(text(result)).toContain('No windows');
+    });
+
     it('lists windows with details', async () => {
       mockWindowState._addWindow('0/editor', {
         title: 'Editor',

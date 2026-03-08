@@ -12,13 +12,15 @@
 
 import { stat, unlink, mkdir, readdir } from 'fs/promises';
 import { join, dirname } from 'path';
-import { parseFileUri } from '@yaar/shared';
+import { parseFileUri, parseYaarUri } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from '../../uri/registry.js';
 import type { ResolvedUri } from '../../uri/resolve.js';
 import { storageRead, storageWrite, storageList, storageDelete } from '../../storage/index.js';
 import { getSandboxPath } from '../../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../dev/helpers.js';
 import { ok, okWithImages, error } from '../utils.js';
+import { doCompile, doTypecheck } from '../dev/compile.js';
+import { doDeploy, doClone } from '../dev/deploy.js';
 
 // ── Helpers ──
 
@@ -238,17 +240,21 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sandbox/* — sandbox file operations ──
+  // ── yaar://sandbox/* — sandbox file operations + dev pipeline ──
   registry.register('yaar://sandbox/*', {
     description:
-      'Sandbox file. Read to view contents, list to browse, invoke with action "write" or "edit" to modify, delete to remove. ' +
-      'Use yaar://sandbox/new/{path} to auto-create a new sandbox on write.',
+      'Sandbox resource. Read/list files, invoke with action "write"/"edit" to modify files, ' +
+      '"compile"/"typecheck" on sandbox root, "deploy" to publish as app, ' +
+      '"clone" with uri to clone an app source. Use yaar://sandbox/new/{path} for auto-create.',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['write', 'edit'] },
+        action: {
+          type: 'string',
+          enum: ['write', 'edit', 'compile', 'typecheck', 'deploy', 'clone'],
+        },
         content: { type: 'string', description: 'File content (for write)' },
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
         new_string: { type: 'string', description: 'Replacement text (edit)' },
@@ -260,6 +266,12 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
           type: 'number',
           description: 'Last line to replace (edit line mode, 1-based, inclusive)',
         },
+        title: { type: 'string', description: 'App title for compile/deploy' },
+        appId: { type: 'string', description: 'App ID for deploy (lowercase with hyphens)' },
+        name: { type: 'string', description: 'Display name (deploy)' },
+        description: { type: 'string', description: 'App description (deploy)' },
+        icon: { type: 'string', description: 'Emoji icon (deploy)' },
+        uri: { type: 'string', description: 'Source app URI for clone (e.g. yaar://apps/my-app)' },
       },
     },
 
@@ -398,7 +410,89 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
         );
       }
 
-      return error(`Unknown action "${action}". Use "write" or "edit".`);
+      if (action === 'compile') {
+        if (parsed.sandboxId === null) {
+          return error('Cannot compile a new sandbox. Write files first.');
+        }
+        const result = await doCompile(parsed.sandboxId, { title: payload.title as string });
+        if (!result.success) return error(result.error);
+        return ok(
+          JSON.stringify(
+            {
+              success: true,
+              previewUrl: result.previewUrl,
+              message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
+            },
+            null,
+            2,
+          ),
+        );
+      }
+
+      if (action === 'typecheck') {
+        if (parsed.sandboxId === null) {
+          return error('Cannot typecheck a new sandbox. Write files first.');
+        }
+        const result = await doTypecheck(parsed.sandboxId);
+        if (!result.success) return error(result.error);
+        return ok('Type check passed — no errors found.');
+      }
+
+      if (action === 'deploy') {
+        if (parsed.sandboxId === null) {
+          return error('Cannot deploy a new sandbox. Write and compile first.');
+        }
+        const appId = payload.appId as string | undefined;
+        if (!appId) return error('"appId" is required for deploy.');
+        const result = await doDeploy(parsed.sandboxId, {
+          appId,
+          name: payload.name as string | undefined,
+          description: payload.description as string | undefined,
+          icon: payload.icon as string | undefined,
+        });
+        if (!result.success) return error(result.error);
+        return ok(
+          JSON.stringify(
+            {
+              success: true,
+              appId: result.appId,
+              name: result.name,
+              icon: result.icon,
+              message: `App "${result.name}" deployed! It will appear on the desktop.`,
+            },
+            null,
+            2,
+          ),
+        );
+      }
+
+      if (action === 'clone') {
+        const sourceUri = payload.uri as string | undefined;
+        if (!sourceUri) return error('"uri" is required for clone (e.g. yaar://apps/my-app).');
+        const sourceParsed = parseYaarUri(sourceUri);
+        if (!sourceParsed || sourceParsed.authority !== 'apps' || !sourceParsed.path) {
+          return error('Expected an app URI (e.g. yaar://apps/my-app).');
+        }
+        const appId = sourceParsed.path.split('/')[0];
+        const result = await doClone(appId);
+        if (!result.success) return error(result.error);
+        return ok(
+          JSON.stringify(
+            {
+              sandboxId: result.sandboxId,
+              appId: result.appId,
+              files: result.files,
+              message: `Cloned "${result.appId}" into sandbox ${result.sandboxId}. Use yaar://sandbox/${result.sandboxId}/src/main.ts to edit.`,
+            },
+            null,
+            2,
+          ),
+        );
+      }
+
+      return error(
+        `Unknown action "${action}". Use "write", "edit", "compile", "typecheck", "deploy", or "clone".`,
+      );
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

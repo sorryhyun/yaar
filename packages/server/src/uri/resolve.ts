@@ -271,5 +271,12 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
+  // Fallback: collection-level URIs like yaar://config/, yaar://browser/, etc.
+  // These have a valid authority but no path segments for the individual parsers.
+  const parsed = parseYaarUri(uri);
+  if (parsed && !parsed.path) {
+    return { kind: 'root', sourceUri: uri };
+  }
+
   return null;
 }

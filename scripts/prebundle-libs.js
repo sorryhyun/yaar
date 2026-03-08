@@ -48,11 +48,30 @@ const results = await Promise.allSettled(
   Object.entries(BUNDLED_LIBRARIES).map(async ([name, pkg]) => {
     const outfile = join(outDir, `${name}.js`);
     try {
+      const resolved = import.meta.resolve(pkg);
+      const entrypoint = resolved.startsWith('file://') ? Bun.fileURLToPath(resolved) : resolved;
+      /** Shim Node builtins that some libs try to require in browser builds */
+      const nodeShimPlugin = {
+        name: 'node-shim',
+        setup(build) {
+          build.onResolve({ filter: /^(perf_hooks|worker_threads)$/ }, (args) => ({
+            path: args.path,
+            namespace: 'node-shim',
+          }));
+          build.onLoad({ filter: /.*/, namespace: 'node-shim' }, (args) => {
+            if (args.path === 'perf_hooks') {
+              return { contents: 'export const performance = globalThis.performance || {};', loader: 'js' };
+            }
+            return { contents: 'export default {};', loader: 'js' };
+          });
+        },
+      };
       const result = await Bun.build({
-        entrypoints: [pkg],
+        entrypoints: [entrypoint],
         minify: true,
         format: 'esm',
         target: 'browser',
+        plugins: [nodeShimPlugin],
       });
       if (!result.success) {
         const errors = result.logs

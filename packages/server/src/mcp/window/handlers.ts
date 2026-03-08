@@ -98,7 +98,7 @@ export function registerWindowHandlers(
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
       'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
-    verbs: ['describe', 'read', 'invoke', 'delete'],
+    verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
@@ -140,6 +140,10 @@ export function registerWindowHandlers(
         params: { type: 'object' },
         stateKey: { type: 'string' },
       },
+    },
+
+    async list(): Promise<VerbResult> {
+      return listHandler.list!({} as ResolvedUri);
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {

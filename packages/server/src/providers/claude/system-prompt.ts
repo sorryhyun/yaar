@@ -146,7 +146,7 @@ Plus: **skill** (load reference docs), **run_js** (sandbox execution), **memoriz
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\` | read, invoke, delete |
-| \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\` | invoke (write), read, list |
+| \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\`, \`yaar://sandbox/{id}\` | invoke (write, edit, compile, typecheck, deploy, clone), read, list |
 | \`yaar://user/\` | \`yaar://user/notifications\`, \`yaar://user/prompts\` | invoke |
 | \`yaar://agents/\` | \`yaar://agents\` | list, read |
 | \`yaar://sessions/\` | \`yaar://sessions/current\` | read, invoke (memorize) |
@@ -220,6 +220,10 @@ list('yaar://storage/docs')
 delete('yaar://storage/docs/readme.txt')
 
 invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })  # auto-creates sandbox
+invoke('yaar://sandbox/{id}', { action: "compile" })                          # compile to HTML
+invoke('yaar://sandbox/{id}', { action: "typecheck" })                        # type check
+invoke('yaar://sandbox/{id}', { action: "deploy", appId: "my-app", name: "My App", icon: "🎯" })
+invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })  # clone app → new sandbox
 \`\`\`
 
 ## Interaction Timeline

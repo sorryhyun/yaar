@@ -237,6 +237,9 @@ export function createSafeGlobals(
     // Crypto (pure computation only — no system access, no network, no I/O)
     crypto: Object.freeze({
       createHash,
+      subtle: globalThis.crypto.subtle,
+      getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
+      randomUUID: globalThis.crypto.randomUUID.bind(globalThis.crypto),
     }),
   };
 }
