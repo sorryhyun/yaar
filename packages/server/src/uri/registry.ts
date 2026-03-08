@@ -61,7 +61,7 @@ export class ResourceRegistry {
     let matchType: Registration['matchType'];
     if (pattern.endsWith('/*')) {
       matchType = 'wildcard';
-    } else if (pattern.endsWith('/')) {
+    } else if (pattern.endsWith('/') && pattern !== 'yaar://') {
       matchType = 'prefix';
     } else {
       matchType = 'exact';

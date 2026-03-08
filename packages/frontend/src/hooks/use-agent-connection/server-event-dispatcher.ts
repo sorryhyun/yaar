@@ -122,7 +122,13 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const monitorId = (message as { monitorId?: string }).monitorId;
       if (status === 'running') {
         handlers.setAgentActive(agentId, `Running: ${toolName}`);
-      } else if (status === 'complete' || status === 'error') {
+      } else if (status === 'error') {
+        const errorMsg = (message as { message?: string }).message;
+        handlers.setAgentActive(
+          agentId,
+          `Error: ${toolName}${errorMsg ? ' — ' + errorMsg.slice(0, 80) : ''}`,
+        );
+      } else if (status === 'complete') {
         handlers.setAgentActive(agentId, 'Thinking...');
       }
       // Track subagent lifecycle

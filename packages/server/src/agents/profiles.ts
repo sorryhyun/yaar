@@ -15,6 +15,7 @@ import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import { CONFIG_TOOL_NAMES } from '../mcp/config/index.js';
 import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/browser/index.js';
+import { VERB_TOOL_NAMES } from '../mcp/verbs/index.js';
 
 export interface AgentProfile {
   id: string;
@@ -61,6 +62,73 @@ After completing a significant task (form submission, data retrieval, workflow s
 ## Skills
 **You MUST call skill(topic) before using related tools for the first time** (app_dev, sandbox, components).
 `;
+
+const VERB_TASK_AGENT_PROMPT = `You are a task agent for YAAR, a reactive AI-driven operating system interface.
+Execute the objective using your available tools. You have full conversation context from the parent session.
+
+## Tools
+
+You have 5 generic verbs that operate on \`yaar://\` URIs, plus system tools:
+
+| Verb | Purpose |
+|------|---------|
+| **describe** | Discover what a URI supports — returns verbs, description, invoke schema |
+| **read** | Get the current value/state of a resource |
+| **list** | List child resources under a URI |
+| **invoke** | Perform an action (create, update, trigger) |
+| **delete** | Remove a resource |
+
+Use \`describe(uri)\` to discover what actions a URI supports before invoking it.
+
+## Behavior
+- Create windows to display results (prefer visual output over text)
+- Handle errors gracefully — report what failed and why via notifications
+- Be efficient — complete the task and stop
+
+## Windows
+
+Create windows by invoking a monitor URI:
+\`\`\`
+invoke('yaar://monitors/0', { action: "create", title: "Results", renderer: "markdown", content: "# Hello" })
+invoke('yaar://monitors/0', { action: "create_component", title: "UI", components: [...] })
+invoke('yaar://monitors/0', { action: "create", title: "App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+\`\`\`
+
+Update/manage windows using the full window URI:
+\`\`\`
+invoke('yaar://monitors/0/my-window', { action: "update", operation: "append", content: "more" })
+delete('yaar://monitors/0/my-window')
+\`\`\`
+
+**Renderers:** markdown, html, text, table, component, iframe
+
+Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
+**Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
+**Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.
+
+## HTTP Access
+Use http_get/http_post for API calls. Domains require allowlisting.
+Use request_allowing_domain to prompt user for new domain access.
+**When http_get or WebSearch fails**, use \`invoke('yaar://browser/pages', { action: "open", url })\` as a fallback.
+
+## Relay to Main
+After completing a significant task, call relay_to_main to hand results back to the main agent. Only relay when the main agent needs to take further action.
+
+## Skills
+**You MUST call skill(topic) before using related tools for the first time** (app_dev, sandbox, components).
+`;
+
+// ── Verb-mode tool set (replaces all domain tools with 5 verbs) ────
+
+const VERB_TOOLS = [
+  'WebSearch',
+  NOTIFICATION_TOOL,
+  ...INFO_TOOLS,
+  ...HTTP_TOOL_NAMES,
+  'mcp__system__run_js',
+  ...RELOAD_TOOL_NAMES,
+  ...VERB_TOOL_NAMES,
+] as const;
 
 // ── Profile definitions (used by buildAgentDefinitions) ─────────────
 
@@ -129,11 +197,41 @@ const profiles: Record<string, AgentProfile> = {
   },
 };
 
+/** Verb-mode profiles — all profiles use the same verb tool set. */
+const verbProfiles: Record<string, AgentProfile> = {
+  default: {
+    id: 'default',
+    description: 'General-purpose tasks requiring multiple tool types',
+    systemPrompt: VERB_TASK_AGENT_PROMPT,
+    allowedTools: [...VERB_TOOLS],
+  },
+  web: {
+    id: 'web',
+    description: 'Web research, API calls, HTTP requests, browser automation',
+    systemPrompt: VERB_TASK_AGENT_PROMPT,
+    allowedTools: [...VERB_TOOLS],
+  },
+  code: {
+    id: 'code',
+    description: 'Code execution, computation, scripting via JavaScript sandbox',
+    systemPrompt: VERB_TASK_AGENT_PROMPT,
+    allowedTools: [...VERB_TOOLS],
+  },
+  app: {
+    id: 'app',
+    description: 'App interactions, development, deployment',
+    systemPrompt: VERB_TASK_AGENT_PROMPT,
+    allowedTools: [...VERB_TOOLS],
+  },
+};
+
 /**
  * Get a profile by ID. Returns the 'default' profile for unknown IDs.
+ * In verb mode, returns verb-specific profiles with verb tools and prompt.
  */
-export function getProfile(id: string): AgentProfile {
-  return profiles[id] ?? profiles.default;
+export function getProfile(id: string, verbMode?: boolean): AgentProfile {
+  const source = verbMode ? verbProfiles : profiles;
+  return source[id] ?? source.default;
 }
 
 /**
@@ -200,12 +298,15 @@ interface McpHttpConfig {
  * Build Claude SDK AgentDefinition records for native subagents.
  * Each definition maps to a profile with a specific tool subset.
  * mcpServers must be explicitly provided — subagents don't inherit parent MCP servers.
+ * In verb mode, uses verb-specific profiles with verb tools and prompt.
  */
 export function buildAgentDefinitions(
   mcpServerConfigs?: Record<string, McpHttpConfig>,
+  verbMode?: boolean,
 ): Record<string, AgentDefinition> {
+  const source = verbMode ? verbProfiles : profiles;
   return Object.fromEntries(
-    Object.entries(profiles).map(([id, profile]) => {
+    Object.entries(source).map(([id, profile]) => {
       const tools = filterAvailableTools(profile.allowedTools);
       const neededServers = extractMcpServerNames(tools);
 

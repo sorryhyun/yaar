@@ -252,6 +252,10 @@ export class SessionLogger {
       durationMs?: number;
     },
   ): void {
+    if (meta?.isError) {
+      this.sessionInfo.metadata.failureCount = (this.sessionInfo.metadata.failureCount ?? 0) + 1;
+      this.scheduleMetadataSave();
+    }
     this.appendEntry('tool_result', agentId, { toolName, content, toolUseId, ...meta });
   }
 

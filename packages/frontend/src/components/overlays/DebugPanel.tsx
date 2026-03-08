@@ -27,6 +27,9 @@ function getSummary(entry: DebugEntry): string {
       return 'no actions';
     }
     case ServerEventType.TOOL_PROGRESS:
+      if (data.status === 'error' && data.message) {
+        return `❌ ${data.toolName}: ${truncate(String(data.message), 60)}`;
+      }
       return `${data.toolName}: ${data.status}`;
     case ServerEventType.ERROR:
       return truncate(String(data.error || 'Unknown error'), 60);

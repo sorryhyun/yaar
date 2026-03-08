@@ -85,6 +85,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         onboardingCompleted: settings.onboardingCompleted,
         language: settings.language,
         provider: settings.provider,
+        verbMode: settings.verbMode,
       });
     } catch {
       return errorResponse('Failed to list apps');

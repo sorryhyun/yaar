@@ -15,6 +15,7 @@ export interface SessionMetadata {
   agents: Record<string, AgentInfo>; // agentId -> AgentInfo
   threadIds?: Record<string, string>; // canonicalAgent -> provider threadId
   verbMode?: boolean;
+  failureCount?: number;
 }
 
 export interface SessionInfo {

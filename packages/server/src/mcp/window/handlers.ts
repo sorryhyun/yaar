@@ -4,6 +4,7 @@
  * Maps window operations to the verb layer:
  *
  *   list('yaar://monitors/')               → list all windows
+ *   invoke('yaar://monitors/{m}', ...)     → create window (windowId auto-derived from payload)
  *   read('yaar://monitors/{m}/{w}')        → view window content/metadata
  *   invoke('yaar://monitors/{m}/{w}', ...) → create, update, manage, app_query, app_command
  *   delete('yaar://monitors/{m}/{w}')      → close window
@@ -97,8 +98,8 @@ export function registerWindowHandlers(
   // ── yaar://monitors/{monitorId}/{windowId} — window and monitor operations ──
   registry.register('yaar://monitors/*', {
     description:
-      'Monitor or window resource. For monitors (yaar://monitors/{id}): read for status. ' +
-      'For windows (yaar://monitors/{id}/{windowId}): read to view content/metadata, invoke to create/update/manage, delete to close. ' +
+      'Monitor or window resource. For monitors (yaar://monitors/{id}): read for status, invoke to create windows (windowId auto-derived from payload). ' +
+      'For windows (yaar://monitors/{id}/{windowId}): read to view content/metadata, invoke to update/manage, delete to close. ' +
       'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -206,10 +207,21 @@ export function registerWindowHandlers(
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      assertWindow(resolved);
       if (!payload?.action) return error('Payload must include "action".');
 
       const action = payload.action as string;
+
+      // Monitor-level invoke: only create/create_component (windowId derived from payload)
+      if (resolved.kind === 'monitor') {
+        if (action === 'create') return handleCreate('', payload);
+        if (action === 'create_component') return handleCreateComponent('', payload);
+        return error(
+          `Action "${action}" requires a window URI (yaar://monitors/{id}/{windowId}). ` +
+            'Only "create" and "create_component" can be invoked on a monitor URI.',
+        );
+      }
+
+      assertWindow(resolved);
       const windowId = resolved.windowId;
 
       switch (action) {

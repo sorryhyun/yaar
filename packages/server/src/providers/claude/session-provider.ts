@@ -12,7 +12,7 @@ import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, getActiveServers } from '../../mcp/index.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
 import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath } from '../../config.js';
-import { SYSTEM_PROMPT } from './system-prompt.js';
+import { getSystemPrompt } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 import { buildAgentDefinitions } from '../../agents/profiles.js';
 
@@ -38,13 +38,14 @@ type ContentBlock = TextContentBlock | ImageContentBlock;
 export class ClaudeSessionProvider extends BaseTransport {
   readonly name = 'claude';
   readonly providerType: ProviderType = 'claude';
-  readonly systemPrompt = SYSTEM_PROMPT;
+  readonly systemPrompt: string;
 
   private sessionId: string | null = null;
   private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
   constructor(private readonly verbMode: boolean = false) {
     super();
+    this.systemPrompt = getSystemPrompt(verbMode);
   }
 
   async isAvailable(): Promise<boolean> {
@@ -98,7 +99,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: builtinTools,
-      agents: buildAgentDefinitions(mcpServerConfigs),
+      agents: buildAgentDefinitions(mcpServerConfigs, this.verbMode),
       allowedTools: effectiveAllowed,
       mcpServers: mcpServerConfigs,
       includePartialMessages: true,

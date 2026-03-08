@@ -175,7 +175,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
  */
 export function resolveUri(uri: string): ResolvedUri | null {
   // Root URI: yaar://
-  if (uri === 'yaar://' || uri === 'yaar:///') {
+  if (uri === 'yaar://') {
     return { kind: 'root', sourceUri: uri };
   }
 

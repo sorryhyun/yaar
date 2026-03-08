@@ -68,7 +68,7 @@ let registerSessionHandlers: (registry: ResourceRegistry) => void;
 beforeEach(async () => {
   vi.clearAllMocks();
   mockResolveUri.mockImplementation((u: string) => {
-    if (u === 'yaar://' || u === 'yaar:///') {
+    if (u === 'yaar://') {
       return { kind: 'root', sourceUri: u };
     }
     if (u === 'yaar://sessions/current') {

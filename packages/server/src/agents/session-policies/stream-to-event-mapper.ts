@@ -115,14 +115,20 @@ export class StreamToEventMapper {
       }
 
       case 'tool_result': {
+        const isError = message.isError === true;
         await this.sendEvent({
           type: ServerEventType.TOOL_PROGRESS,
           toolName: formatToolDisplay(message.toolName ?? 'tool'),
-          status: 'complete',
+          status: isError ? 'error' : 'complete',
           message: message.content,
           agentId: this.role,
           monitorId: this.monitorId,
         });
+        if (isError) {
+          console.warn(
+            `[ToolError] ${formatToolDisplay(message.toolName ?? 'tool')}: ${message.content?.slice(0, 200)}`,
+          );
+        }
         // Compute timing + error metadata
         let meta: { isError?: boolean; errorCategory?: string; durationMs?: number } | undefined;
         if (message.toolUseId) {
@@ -130,7 +136,6 @@ export class StreamToEventMapper {
           if (startEntry) {
             const durationMs = Date.now() - startEntry.startTime;
             this.toolStartTimes.delete(message.toolUseId);
-            const isError = message.isError === true;
             let errorCategory: string | undefined;
             if (isError && message.content) {
               if (
