@@ -26,24 +26,26 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'invoke'],
     invokeSchema: {
       type: 'object',
-      required: ['id', 'title', 'body'],
+      required: ['title'],
       properties: {
-        id: { type: 'string', description: 'Unique notification ID' },
+        id: { type: 'string', description: 'Unique notification ID (auto-generated if omitted)' },
         title: { type: 'string', description: 'Notification title' },
         body: { type: 'string', description: 'Notification body text' },
         icon: { type: 'string', description: 'Optional icon' },
+        duration: { type: 'number', description: 'Auto-dismiss after N milliseconds' },
       },
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload?.id || !payload?.title || !payload?.body) {
-        return error('"id", "title", and "body" are required.');
+      if (!payload?.title) {
+        return error('"title" is required.');
       }
+      const id = (payload.id as string) || `notif-${Date.now().toString(36)}`;
       const osAction: OSAction = {
         type: 'notification.show',
-        id: payload.id as string,
+        id,
         title: payload.title as string,
-        body: payload.body as string,
+        body: (payload.body as string) ?? '',
         icon: payload.icon as string | undefined,
       };
       actionEmitter.emitAction(osAction);

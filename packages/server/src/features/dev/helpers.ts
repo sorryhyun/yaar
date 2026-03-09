@@ -34,8 +34,8 @@ export function toDisplayName(appId: string): string {
 
 /**
  * Generate the Launch section based on what the app has.
- * - Compiled apps (index.html) → iframe create()
- * - Component apps (.yaarcomponent.json) → create_component(jsonfile)
+ * - Compiled apps (index.html) → invoke create on yaar://windows/
+ * - Component apps (.yaarcomponent.json) → invoke create_component on yaar://windows/
  * - Both → shows both options
  */
 function generateLaunchSection(
@@ -49,8 +49,9 @@ function generateLaunchSection(
   if (hasCompiledApp) {
     parts.push(`Open this app in an iframe window:
 \`\`\`
-create({
-  uri: "${appId}",
+invoke('yaar://windows/${appId}', {
+  action: "create",
+  appId: "${appId}",
   title: "${appName}",
   renderer: "iframe",
   content: "yaar://apps/${appId}"
@@ -60,10 +61,13 @@ create({
 
   if (componentFiles.length > 0) {
     for (const f of componentFiles) {
-      const windowName = f.replace('.yaarcomponent.json', '');
-      parts.push(
-        `\`create_component(jsonfile="${appId}/${f}", uri="${appId}-${windowName}", title="${appName}")\``,
-      );
+      parts.push(`\`\`\`
+invoke('yaar://windows/', {
+  action: "create_component",
+  jsonfile: "${appId}/${f}",
+  title: "${appName}"
+})
+\`\`\``);
     }
   }
 
@@ -98,7 +102,7 @@ ${launchSection}
   }
 
   md += `\n## Source
-Source code is available in \`src/\` directory. Use \`clone(appId="${appId}")\` to copy source into a sandbox for reading or editing.
+Source code is available in \`src/\` directory. Use \`invoke('yaar://sandbox/', { action: "clone", uri: "yaar://apps/${appId}" })\` to copy source into a sandbox for reading or editing.
 `;
 
   if (hasAppProtocol) {
@@ -109,10 +113,10 @@ This app supports the App Protocol for programmatic interaction.
 
 ### Discover capabilities
 \`\`\`
-app_query({ uri: "${appId}" })
+invoke('yaar://windows/${appId}', { action: "app_query" })
 \`\`\`
 
-Use \`app_query\` with a bare window URI/ID to discover available state queries and commands, then use \`app_query\` and \`app_command\` with resource URIs to interact with the app.
+Use \`app_query\` to discover available state and commands. Then query state with \`invoke('yaar://windows/${appId}', { action: "app_query", stateKey: "..." })\` and run commands with \`invoke('yaar://windows/${appId}', { action: "app_command", command: "...", params: {...} })\`.
 `;
   }
 

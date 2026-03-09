@@ -15,18 +15,18 @@ export function registerNotificationTools(server: McpServer): void {
       description:
         'Show a persistent notification that requires manual dismissal. Use for important alerts that should stay visible.',
       inputSchema: {
-        id: z.string().describe('Unique notification ID'),
+        id: z.string().optional().describe('Unique notification ID (auto-generated if omitted)'),
         title: z.string().describe('Notification title'),
-        body: z.string().describe('Notification body text'),
+        body: z.string().optional().describe('Notification body text'),
         icon: z.string().optional().describe('Optional icon name'),
       },
     },
     async (args) => {
       const osAction: OSAction = {
         type: 'notification.show',
-        id: args.id,
+        id: args.id ?? `notif-${Date.now().toString(36)}`,
         title: args.title,
-        body: args.body,
+        body: args.body ?? '',
         icon: args.icon,
       };
 
