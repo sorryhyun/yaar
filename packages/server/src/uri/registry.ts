@@ -86,7 +86,7 @@ export class ResourceRegistry {
         case 'prefix': {
           // pattern "yaar://config/" matches "yaar://config/settings"
           if (uri.startsWith(reg.pattern) || uri === reg.pattern.slice(0, -1)) {
-            const score = reg.pattern.length + 1000; // prefix > wildcard
+            const score = reg.pattern.length + 1; // slight priority over wildcard at equal length
             if (score > bestScore) {
               bestScore = score;
               bestMatch = reg;
