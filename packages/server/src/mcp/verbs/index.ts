@@ -8,14 +8,14 @@ import type { WindowStateRegistry } from '../window-state.js';
 import { getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { registerVerbTools as registerTools } from './tools.js';
-import { registerConfigHandlers } from '../config/handlers.js';
-import { registerBasicHandlers } from '../basic/handlers.js';
-import { registerWindowHandlers } from '../window/handlers.js';
-import { registerUserHandlers } from '../user/handlers.js';
-import { registerAppsHandlers } from '../apps/handlers.js';
-import { registerSessionHandlers } from '../system/handlers.js';
-import { registerBrowserHandlers } from '../browser/handlers.js';
-import { registerAgentsHandlers } from '../agents/handlers.js';
+import { registerConfigHandlers } from './handlers/config.js';
+import { registerBasicHandlers } from './handlers/basic.js';
+import { registerWindowHandlers } from './handlers/window.js';
+import { registerUserHandlers } from './handlers/user.js';
+import { registerAppsHandlers } from './handlers/apps.js';
+import { registerSessionHandlers } from './handlers/session.js';
+import { registerBrowserHandlers } from './handlers/browser.js';
+import { registerAgentsHandlers } from './handlers/agents.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',

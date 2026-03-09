@@ -87,7 +87,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
   },
 }));
 
-vi.mock('../mcp/apps/discovery.js', () => ({
+vi.mock('../mcp/legacy/apps/discovery.js', () => ({
   getAppMeta: vi.fn().mockResolvedValue(null),
 }));
 
@@ -95,7 +95,6 @@ vi.mock('../http/iframe-tokens.js', () => ({
   generateIframeToken: vi.fn().mockReturnValue('tok'),
 }));
 
- 
 let registerWindowHandlers: (registry: ResourceRegistry, getWindowState: () => any) => void;
 
 beforeEach(async () => {
@@ -113,7 +112,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/window/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/window.js');
   registerWindowHandlers = mod.registerWindowHandlers;
 });
 

@@ -42,7 +42,7 @@ vi.mock('../lib/browser/index.js', () => ({
 }));
 
 // Mock shared browser helpers
-vi.mock('../mcp/browser/shared.js', async () => ({
+vi.mock('../mcp/legacy/browser/shared.js', async () => ({
   resolveSession: (id?: string) => {
     if (id !== undefined) {
       const s = mockPool.getSession(id);
@@ -116,7 +116,7 @@ beforeEach(async () => {
     browserId: '0',
   });
 
-  const mod = await import('../mcp/browser/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/browser.js');
   registerBrowserHandlers = mod.registerBrowserHandlers;
 });
 

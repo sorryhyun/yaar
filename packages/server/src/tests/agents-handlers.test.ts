@@ -61,7 +61,7 @@ beforeEach(async () => {
     monitorBudget: {},
   });
 
-  const mod = await import('../mcp/agents/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/agents.js');
   registerAgentsHandlers = mod.registerAgentsHandlers;
 });
 

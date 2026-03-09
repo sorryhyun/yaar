@@ -6,15 +6,16 @@
  */
 
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
-import { WINDOW_TOOL_NAMES } from '../mcp/window/index.js';
+/** @deprecated Legacy tool name imports — used only for normal (non-verb) mode. */
+import { WINDOW_TOOL_NAMES } from '../mcp/legacy/window/index.js';
 import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
-import { APPS_TOOL_NAMES } from '../mcp/apps/index.js';
-import { DEV_TOOL_NAMES } from '../mcp/dev/index.js';
-import { BASIC_TOOL_NAMES } from '../mcp/basic/index.js';
+/** @deprecated */ import { APPS_TOOL_NAMES } from '../mcp/legacy/apps/index.js';
+/** @deprecated */ import { DEV_TOOL_NAMES } from '../mcp/legacy/dev/index.js';
+/** @deprecated */ import { BASIC_TOOL_NAMES } from '../mcp/legacy/basic/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
-import { CONFIG_TOOL_NAMES } from '../mcp/config/index.js';
-import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/browser/index.js';
+/** @deprecated */ import { CONFIG_TOOL_NAMES } from '../mcp/legacy/config/index.js';
+import { BROWSER_TOOL_NAMES, isBrowserAvailable } from '../mcp/legacy/browser/index.js';
 import { VERB_TOOL_NAMES } from '../mcp/verbs/index.js';
 
 export interface AgentProfile {
@@ -132,7 +133,8 @@ const VERB_TOOLS = [
 
 // ── Profile definitions (used by buildAgentDefinitions) ─────────────
 
-const profiles: Record<string, AgentProfile> = {
+/** @deprecated Legacy profiles for normal (non-verb) mode. Use verb mode profiles instead. */
+const legacyProfiles: Record<string, AgentProfile> = {
   default: {
     id: 'default',
     description: 'General-purpose tasks requiring multiple tool types',
@@ -197,8 +199,8 @@ const profiles: Record<string, AgentProfile> = {
   },
 };
 
-/** Verb-mode profiles — all profiles use the same verb tool set. */
-const verbProfiles: Record<string, AgentProfile> = {
+/** Verb-mode profiles (default) — all profiles use the same verb tool set. */
+const profiles: Record<string, AgentProfile> = {
   default: {
     id: 'default',
     description: 'General-purpose tasks requiring multiple tool types',
@@ -230,8 +232,11 @@ const verbProfiles: Record<string, AgentProfile> = {
  * In verb mode, returns verb-specific profiles with verb tools and prompt.
  */
 export function getProfile(id: string, verbMode?: boolean): AgentProfile {
-  const source = verbMode ? verbProfiles : profiles;
-  return source[id] ?? source.default;
+  if (verbMode === false) {
+    console.warn('[Profiles] Legacy tool mode is deprecated. Consider switching to verb mode.');
+    return legacyProfiles[id] ?? legacyProfiles.default;
+  }
+  return profiles[id] ?? profiles.default;
 }
 
 /**
@@ -304,7 +309,7 @@ export function buildAgentDefinitions(
   mcpServerConfigs?: Record<string, McpHttpConfig>,
   verbMode?: boolean,
 ): Record<string, AgentDefinition> {
-  const source = verbMode ? verbProfiles : profiles;
+  const source = verbMode === false ? legacyProfiles : profiles;
   return Object.fromEntries(
     Object.entries(source).map(([id, profile]) => {
       const tools = filterAvailableTools(profile.allowedTools);

@@ -9,7 +9,7 @@ import { join } from 'path';
 import { networkInterfaces } from 'os';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
-import { listApps } from './mcp/apps/discovery.js';
+import { listApps } from './mcp/legacy/apps/discovery.js';
 import { syncAppShortcuts } from './storage/shortcuts.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {

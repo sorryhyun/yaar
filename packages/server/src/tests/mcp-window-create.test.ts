@@ -21,12 +21,12 @@ vi.mock('../config.js', () => ({
   getConfigDir: () => '/mock/config',
 }));
 
-vi.mock('../mcp/apps/discovery.js', () => ({
+vi.mock('../mcp/legacy/apps/discovery.js', () => ({
   getAppMeta: vi.fn().mockResolvedValue(null),
 }));
 
 // Import after mocks are set up
-import { registerCreateTools } from '../mcp/window/create.js';
+import { registerCreateTools } from '../mcp/legacy/window/create.js';
 
 /**
  * Minimal mock of McpServer that captures registered tool handlers.

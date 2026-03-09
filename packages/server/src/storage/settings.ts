@@ -16,7 +16,7 @@ const DEFAULTS: Settings = {
   onboardingCompleted: false,
   language: 'en',
   provider: 'auto',
-  verbMode: false,
+  verbMode: true,
 };
 
 export const LANGUAGE_CODES = [

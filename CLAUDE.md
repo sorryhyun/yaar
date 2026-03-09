@@ -108,7 +108,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-6. **MCP tools**: 8 namespaced MCP endpoints (`system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`) served via a single HTTP server using `@modelcontextprotocol/sdk`.
+6. **MCP tools**: Served via a single HTTP server using `@modelcontextprotocol/sdk`. **Verb mode (default)**: 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) routed via `yaar://` URIs — only `system` + `verbs` namespaces active. **Legacy tool mode (deprecated)**: ~30 individual named tools across 8 namespaces (`system`, `window`, `apps`, `user`, `dev`, `basic`, `browser`, `config`) — will be removed in a future release.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
 8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.

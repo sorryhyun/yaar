@@ -15,23 +15,29 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
-import { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
-import { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
+import { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
+import { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
 import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
-import { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
-import { registerBasicTools, BASIC_TOOL_NAMES } from './basic/index.js';
+import { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
+import { registerBasicTools, BASIC_TOOL_NAMES } from './legacy/basic/index.js';
 import { registerSkillTools, SKILL_TOOL_NAMES } from './skills/index.js';
 import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
-import { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
-import { registerBrowserTools, BROWSER_TOOL_NAMES, isBrowserAvailable } from './browser/index.js';
-import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './config/index.js';
+import { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
+import {
+  registerBrowserTools,
+  BROWSER_TOOL_NAMES,
+  isBrowserAvailable,
+} from './legacy/browser/index.js';
+import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
 
-/** MCP server categories. */
-export const MCP_SERVERS = [
-  'system',
+/** Core MCP servers (always active). */
+export const CORE_SERVERS = ['system', 'verbs'] as const;
+
+/** @deprecated Legacy MCP servers — used only in non-verb mode. */
+export const LEGACY_SERVERS = [
   'config',
   'window',
   'apps',
@@ -39,8 +45,10 @@ export const MCP_SERVERS = [
   'dev',
   'basic',
   'browser',
-  'verbs',
 ] as const;
+
+/** All MCP server categories. */
+export const MCP_SERVERS = [...CORE_SERVERS, ...LEGACY_SERVERS] as const;
 export type McpServerName = (typeof MCP_SERVERS)[number];
 
 /**
@@ -293,12 +301,13 @@ export function formatToolDisplay(raw: string): string {
 
 /**
  * Get the active MCP servers based on verb mode.
- * In verb mode, only system and verbs servers are used.
+ * In verb mode, only core servers (system, verbs) are used.
  */
 export function getActiveServers(verbMode: boolean): McpServerName[] {
   if (verbMode) {
-    return ['system', 'verbs'];
+    return [...CORE_SERVERS];
   }
+  console.warn('[MCP] Legacy tool mode is deprecated and will be removed in a future release.');
   return [...MCP_SERVERS];
 }
 

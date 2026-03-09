@@ -77,7 +77,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/system/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/session.js');
   registerSessionHandlers = mod.registerSessionHandlers;
 });
 

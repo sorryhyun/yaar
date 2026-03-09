@@ -22,7 +22,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
-import { registerAppProtocolTools } from '../mcp/window/app-protocol.js';
+import { registerAppProtocolTools } from '../mcp/legacy/window/app-protocol.js';
 
 /**
  * Minimal mock of McpServer that captures registered tool handlers.

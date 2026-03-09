@@ -43,7 +43,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/user/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/user.js');
   registerUserHandlers = mod.registerUserHandlers;
 });
 

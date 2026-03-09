@@ -45,11 +45,19 @@ src/
 │   ├── warm-pool.ts      # WarmPool singleton
 │   ├── claude/           # ClaudeSessionProvider, system-prompt, message-mapper
 │   └── codex/            # CodexProvider, AppServer, JsonRpcWsClient, auth, types
-├── mcp/                  # MCP server + domain-organized tool folders (see Tools section)
-│   ├── server.ts         # Tool registration, request handling (9 namespaces)
+├── mcp/                  # MCP server + tool folders (see Tools section)
+│   ├── server.ts         # Tool registration, request handling; CORE_SERVERS + LEGACY_SERVERS
 │   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts   # WindowStateRegistry — per-session window state
-│   └── system/ config/ skills/ window/ storage/ http/ apps/ user/ browser/ basic/ dev/
+│   ├── system/           # Always-active: info, notify, relay, sandbox, hooks
+│   ├── skills/           # Always-active: skill reference doc loader
+│   ├── http/             # Always-active: http_get, http_post, domain allow-list
+│   ├── verbs/            # PRIMARY (verb mode): 5 generic URI tools (describe/read/list/invoke/delete)
+│   │   ├── tools.ts      # registerVerbTools() — the 5 MCP tool definitions
+│   │   └── handlers/     # Per-domain URI handlers: apps, basic, browser, config, session, user, window, agents
+│   └── legacy/           # DEPRECATED (legacy tool mode): individual named MCP tools
+│       ├── index.ts      # Re-exports all legacy registrations (@deprecated)
+│       ├── apps/ basic/ browser/ config/ dev/ user/ window/
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
@@ -129,26 +137,35 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-Tools organized into 9 domain folders under `mcp/`, each with `register*Tools()`. See `mcp/server.ts`.
+**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to domain handlers in `mcp/verbs/handlers/` via `yaar://` URIs.
+
+**Legacy tool mode (deprecated):** All namespaces active. Individual named tools in `mcp/legacy/` domain folders. Emits a deprecation warning at startup. Will be removed in a future release.
+
+Always-active tools (both modes):
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `system/` | system | get_info, memorize, relay_to_main, run_js, show_notification |
-| `config/` | config | set, get, remove (hooks, settings, shortcuts, mounts, app) |
 | `skills/` | system | skill (reference doc loader) |
 | `http/` | system | http_get, http_post, request_allowing_domain |
+| `reload/` | system | reload_cached, list_reload_options |
+| `verbs/` | verbs | describe, read, list, invoke, delete (URI-based dispatch) |
+
+Legacy tools (deprecated, `mcp/legacy/`):
+
+| Domain | Namespace | Summary |
+|--------|-----------|---------|
+| `config/` | config | set, get, remove (hooks, settings, shortcuts, mounts, app) |
 | `window/` | window | create, update, manage, list, view, info, app_query, app_command |
-| `storage/` | storage | mount, unmount, list_mounts |
 | `apps/` | apps | list, load_skill, set_app_badge, marketplace ops |
 | `user/` | user | ask, request |
 | `dev/` | dev | compile, typecheck, deploy, clone |
 | `basic/` | basic | read, write, list, delete, edit (URI-style paths) |
-| `browser/` | browser | CDP automation — split into open, interact, navigate, content, manage (conditional — Chrome/Edge required) |
-| `reload/` | system | reload_cached, list_reload_options |
+| `browser/` | browser | CDP automation — open, interact, navigate, content, manage (conditional — Chrome/Edge required) |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
-**App Protocol:** Bidirectional agent-iframe communication via `app_query`/`app_command` tools. Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See `mcp/window/app-protocol.ts` and shared CLAUDE.md for event schemas.
+**App Protocol:** Bidirectional agent-iframe communication via `app_query`/`app_command` tools. Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See `mcp/legacy/window/app-protocol.ts` and shared CLAUDE.md for event schemas.
 
 ## REST API
 

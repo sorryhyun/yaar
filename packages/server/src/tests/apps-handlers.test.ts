@@ -14,7 +14,7 @@ vi.mock('../uri/resolve.js', () => ({
 // Mock discovery
 const mockListApps = vi.fn();
 const mockLoadAppSkill = vi.fn();
-vi.mock('../mcp/apps/discovery.js', () => ({
+vi.mock('../mcp/legacy/apps/discovery.js', () => ({
   listApps: (...args: unknown[]) => mockListApps(...args),
   loadAppSkill: (...args: unknown[]) => mockLoadAppSkill(...args),
   getAppMeta: () => null,
@@ -60,7 +60,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/apps/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/apps.js');
   registerAppsHandlers = mod.registerAppsHandlers;
 });
 

@@ -38,7 +38,7 @@ export function SettingsModal() {
   const setIconSize = useDesktopStore((s) => s.setIconSize);
 
   const [allowAllDomains, setAllowAllDomains] = useState(false);
-  const [verbMode, setVerbMode] = useState(false);
+  const [legacyToolMode, setLegacyToolMode] = useState(false);
   const [serverProvider, setServerProvider] = useState<ProviderSetting>('auto');
   const [selectedProvider, setSelectedProvider] = useState<ProviderSetting>('auto');
   const [applyingProvider, setApplyingProvider] = useState(false);
@@ -62,24 +62,24 @@ export function SettingsModal() {
         const p = data.provider ?? 'auto';
         setServerProvider(p);
         setSelectedProvider(p);
-        setVerbMode(data.verbMode ?? false);
+        setLegacyToolMode(!(data.verbMode ?? true));
       })
       .catch(() => {});
   }, []);
 
-  const handleToggleVerbMode = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleToggleLegacyToolMode = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.checked;
-    setVerbMode(value);
+    setLegacyToolMode(value);
     apiFetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verbMode: value }),
+      body: JSON.stringify({ verbMode: !value }),
     })
       .then(() => {
         window.location.reload();
       })
       .catch(() => {
-        setVerbMode(!value);
+        setLegacyToolMode(!value);
       });
   }, []);
 
@@ -184,14 +184,14 @@ export function SettingsModal() {
           <div className={styles.field}>
             <label className={styles.toggleRow}>
               <span className={styles.toggleLabel}>
-                <span className={styles.label}>{t('settings.verbMode.label')}</span>
-                <span className={styles.subtitle}>{t('settings.verbMode.description')}</span>
+                <span className={styles.label}>{t('settings.legacyToolMode.label')}</span>
+                <span className={styles.subtitle}>{t('settings.legacyToolMode.description')}</span>
               </span>
               <input
                 type="checkbox"
                 className={styles.toggle}
-                checked={verbMode}
-                onChange={handleToggleVerbMode}
+                checked={legacyToolMode}
+                onChange={handleToggleLegacyToolMode}
               />
             </label>
           </div>

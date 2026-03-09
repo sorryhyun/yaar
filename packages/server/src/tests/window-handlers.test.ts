@@ -95,7 +95,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/window/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/window.js');
   registerWindowHandlers = mod.registerWindowHandlers;
 });
 

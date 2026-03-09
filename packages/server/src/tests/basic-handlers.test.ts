@@ -40,7 +40,7 @@ vi.mock('../lib/compiler/index.js', () => ({
   getSandboxPath: (...args: unknown[]) => mockGetSandboxPath(...args),
 }));
 
-vi.mock('../mcp/dev/helpers.js', () => ({
+vi.mock('../mcp/legacy/dev/helpers.js', () => ({
   generateSandboxId: () => mockGenerateSandboxId(),
   isValidPath: (_base: string, path: string) => !path.includes('..'),
 }));
@@ -62,7 +62,7 @@ let registerBasicHandlers: (registry: ResourceRegistry) => void;
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  const mod = await import('../mcp/basic/handlers.js');
+  const mod = await import('../mcp/verbs/handlers/basic.js');
   registerBasicHandlers = mod.registerBasicHandlers;
 });
 

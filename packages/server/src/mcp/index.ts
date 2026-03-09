@@ -16,12 +16,17 @@ export {
 
 // Domain tool registrations + tool name exports
 export { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
-export { registerConfigNamespace, CONFIG_TOOL_NAMES } from './config/index.js';
-export { registerWindowTools, WINDOW_TOOL_NAMES } from './window/index.js';
-export { registerAppsTools, APPS_TOOL_NAMES } from './apps/index.js';
+/** @deprecated Use verb mode instead. */
+export { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
+/** @deprecated Use verb mode instead. */
+export { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
+/** @deprecated Use verb mode instead. */
+export { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
 export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
-export { registerAppDevTools, DEV_TOOL_NAMES } from './dev/index.js';
-export { registerUserTools, USER_TOOL_NAMES } from './user/index.js';
+/** @deprecated Use verb mode instead. */
+export { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
+/** @deprecated Use verb mode instead. */
+export { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
 
 // Verb tools
 export { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
