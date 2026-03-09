@@ -304,6 +304,30 @@ export function CommandPalette() {
               </svg>
             </button>
             <button
+              className={styles.closeAllButton}
+              onClick={() => {
+                const state = useDesktopStore.getState();
+                const windowIds = Object.keys(state.windows);
+                for (const id of windowIds) state.userCloseWindow(id);
+              }}
+              title={t('commandPalette.tooltip.closeAll')}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M5 5L15 15M15 5L5 15"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+            <button
               className={styles.pencilButton}
               onClick={togglePencilMode}
               title={

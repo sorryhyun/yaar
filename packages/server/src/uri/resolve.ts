@@ -218,10 +218,18 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  // Fallback: collection-level URIs like yaar://config/, yaar://browser/, etc.
+  // Fallback: collection-level URIs like yaar://config/, yaar://browser/, yaar://apps, etc.
   // These have a valid authority but no path segments for the individual parsers.
   const parsed = parseYaarUri(uri);
   if (parsed && !parsed.path) {
+    return { kind: 'root', sourceUri: uri };
+  }
+
+  // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
+  const bareMatch = uri.match(
+    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions)$/,
+  );
+  if (bareMatch) {
     return { kind: 'root', sourceUri: uri };
   }
 

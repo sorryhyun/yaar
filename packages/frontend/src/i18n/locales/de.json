@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "Fenster und Kontext zurücksetzen",
+      "closeAll": "Alle Fenster schließen",
       "pencilExit": "Zeichnen beenden (Esc)",
       "pencilEnter": "Auf dem Bildschirm zeichnen",
       "mountFolder": "Ordner einbinden"

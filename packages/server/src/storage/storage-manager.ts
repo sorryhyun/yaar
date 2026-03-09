@@ -258,6 +258,10 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
 
     let dirEntries: string[];
     try {
+      const info = await stat(resolved.absolutePath);
+      if (!info.isDirectory()) {
+        return { success: false, error: `"${cleaned}" is a file, not a folder. Use read instead.` };
+      }
       dirEntries = await readdir(resolved.absolutePath);
     } catch {
       // Directory doesn't exist, return empty list

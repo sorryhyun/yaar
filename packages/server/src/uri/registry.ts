@@ -139,11 +139,37 @@ export class ResourceRegistry {
     }
 
     if (!handler.verbs.includes(verb)) {
+      // Cross-verb fallback: read↔list
+      if (verb === 'read' && handler.verbs.includes('list') && handler.list) {
+        const resolved = resolveUri(uri);
+        if (!resolved)
+          return {
+            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
+            isError: true,
+          };
+        const result = await handler.list.call(handler, resolved);
+        const note = {
+          type: 'text' as const,
+          text: '(Note: this is a folder/collection — used "list" instead of "read".)',
+        };
+        return { ...result, content: [note, ...result.content] };
+      }
+      if (verb === 'list' && handler.verbs.includes('read')) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `"${uri}" is not a folder/collection — use "read" to get its contents.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       return {
         content: [
           {
             type: 'text',
-            text: `Verb "${verb}" not supported for URI: ${uri}. Supported: ${handler.verbs.join(', ')}`,
+            text: `Verb "${verb}" not supported for URI: ${uri}. Supported: ${handler.verbs.join(', ')}.`,
           },
         ],
         isError: true,
@@ -169,8 +195,8 @@ export class ResourceRegistry {
     }
 
     if (verb === 'invoke') {
-      return (handler.invoke as NonNullable<ResourceHandler['invoke']>)(resolved, payload);
+      return handler.invoke!.call(handler, resolved, payload);
     }
-    return (method as (resolved: ResolvedUri) => Promise<VerbResult>)(resolved);
+    return (method as (resolved: ResolvedUri) => Promise<VerbResult>).call(handler, resolved);
   }
 }

@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "창과 컨텍스트 초기화",
+      "closeAll": "모든 창 닫기",
       "pencilExit": "그리기 종료 (Esc)",
       "pencilEnter": "화면에 그리기",
       "mountFolder": "폴더 마운트"

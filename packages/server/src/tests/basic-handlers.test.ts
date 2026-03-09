@@ -127,12 +127,13 @@ describe('Basic domain handlers (storage)', () => {
       expect(text(result)).toContain('File not found');
     });
 
-    it('returns error when reading storage root (directory)', async () => {
+    it('falls through to list when reading storage root (directory)', async () => {
       mockResolveAny();
+      mockStorageList.mockResolvedValue({ success: true, entries: [] });
       const reg = createRegistry();
       const result = await reg.execute('read', 'yaar://storage');
-      expect(result.isError).toBe(true);
-      expect(text(result)).toContain('directory');
+      expect(result.isError).toBeFalsy();
+      expect(text(result)).toContain('folder');
     });
   });
 

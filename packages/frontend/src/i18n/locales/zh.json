@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "重置窗口和上下文",
+      "closeAll": "关闭所有窗口",
       "pencilExit": "退出绘图 (Esc)",
       "pencilEnter": "在屏幕上绘图",
       "mountFolder": "挂载文件夹"

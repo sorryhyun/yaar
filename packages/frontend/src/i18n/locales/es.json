@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "Restablecer ventanas y contexto",
+      "closeAll": "Cerrar todas las ventanas",
       "pencilExit": "Salir del dibujo (Esc)",
       "pencilEnter": "Dibujar en pantalla",
       "mountFolder": "Montar carpeta"

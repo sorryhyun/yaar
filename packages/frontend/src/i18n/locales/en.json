@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "Reset windows and context",
+      "closeAll": "Close all windows",
       "pencilExit": "Exit drawing (Esc)",
       "pencilEnter": "Draw on screen",
       "mountFolder": "Mount a folder"

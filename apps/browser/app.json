@@ -50,7 +50,6 @@
       }
     }
   },
-  "variant": "panel",
-  "dockEdge": "top",
+  "variant": "standard",
   "capture": "canvas"
 }

@@ -24,6 +24,11 @@ import { doDeploy, doClone } from '../dev/deploy.js';
 
 // ── Helpers ──
 
+/** Prepend a note to a VerbResult (for read↔list fallback). */
+function prependNote(result: VerbResult, note: string): VerbResult {
+  return { ...result, content: [{ type: 'text', text: `(${note})` }, ...result.content] };
+}
+
 function validateSandboxPath(path: string, sandboxPath: string): string | null {
   if (path.includes('..') || path.startsWith('/')) {
     return 'Invalid path. Use relative paths without ".." or leading "/".';
@@ -148,12 +153,16 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       const parsed = parseFileUri(resolved.sourceUri);
       if (!parsed) {
-        // Bare yaar://storage without trailing slash — treat as root
         if (resolved.sourceUri === 'yaar://storage')
-          return error('Cannot read a directory. Use list instead.');
+          return this.list!(resolved).then((r) =>
+            prependNote(r, 'This is a folder — used list instead.'),
+          );
         return error('Invalid storage URI.');
       }
-      if (!parsed.path) return error('Cannot read a directory. Use list instead.');
+      if (!parsed.path)
+        return this.list!(resolved).then((r) =>
+          prependNote(r, 'This is a folder — used list instead.'),
+        );
 
       const result = await storageRead(parsed.path);
       if (!result.success) return error(result.error!);
@@ -182,7 +191,15 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
       if (path === null) return error('Invalid storage URI.');
 
       const result = await storageList(path);
-      if (!result.success) return error(result.error!);
+      if (!result.success) {
+        // storageList returns error for files — fall through to read
+        if (result.error?.includes('is a file')) {
+          return this.read!(resolved).then((r) =>
+            prependNote(r, 'This is a file — used read instead.'),
+          );
+        }
+        return error(result.error!);
+      }
 
       const entries = result.entries!;
       if (entries.length === 0) return ok('Directory is empty');
@@ -284,7 +301,10 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
           'Cannot read from a new sandbox (yaar://sandbox/new/...). Provide a sandbox ID.',
         );
       }
-      if (!parsed.path) return error('Cannot read a directory. Use list instead.');
+      if (!parsed.path)
+        return this.list!(resolved).then((r) =>
+          prependNote(r, 'This is a folder — used list instead.'),
+        );
 
       const sandboxPath = getSandboxPath(parsed.sandboxId);
       const pathErr = validateSandboxPath(parsed.path, sandboxPath);
@@ -294,7 +314,10 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
 
       try {
         const info = await stat(fullPath);
-        if (info.isDirectory()) return error('Cannot read a directory. Use list instead.');
+        if (info.isDirectory())
+          return this.list!(resolved).then((r) =>
+            prependNote(r, 'This is a folder — used list instead.'),
+          );
         const content = await Bun.file(fullPath).text();
         const lines = content.split('\n');
         const width = String(lines.length).length;

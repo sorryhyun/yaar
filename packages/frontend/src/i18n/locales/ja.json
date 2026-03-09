@@ -21,6 +21,7 @@
     },
     "tooltip": {
       "reset": "ウィンドウとコンテキストをリセット",
+      "closeAll": "すべてのウィンドウを閉じる",
       "pencilExit": "描画を終了 (Esc)",
       "pencilEnter": "画面に描く",
       "mountFolder": "フォルダをマウント"
