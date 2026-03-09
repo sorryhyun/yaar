@@ -9,6 +9,7 @@
  */
 
 import { BrowserSession } from './session.js';
+import { CDPClient } from './cdp.js';
 import {
   findChrome,
   launchChrome,
@@ -30,6 +31,10 @@ export class BrowserPool {
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private initPromise: Promise<ChromeInstance> | null = null;
   private chromePath: string | null | undefined; // undefined = not checked yet
+  private browserCdp: CDPClient | null = null;
+  private adoptedTargets = new Set<string>();
+  private knownTargetIds = new Set<string>();
+  private pendingAdoptions = new Map<string, { browserId: string; openerBrowserId?: string }>();
 
   /**
    * Check if a Chrome/Edge binary is available on this system.
@@ -60,6 +65,7 @@ export class BrowserPool {
       const instance = await launchChrome(this.chromePath!);
       await writePidFile(instance);
       this.chrome = instance;
+      await this.setupTargetDiscovery(instance);
       this.startCleanup();
       console.log(`[browser] Chrome launched on port ${instance.port}`);
       return instance;
@@ -98,7 +104,121 @@ export class BrowserPool {
     }
   }
 
+  /** Connect to browser-level CDP for target discovery (auto-adopt new tabs). */
+  private async setupTargetDiscovery(chrome: ChromeInstance): Promise<void> {
+    try {
+      const resp = await fetch(`http://127.0.0.1:${chrome.port}/json/version`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const info = (await resp.json()) as { webSocketDebuggerUrl?: string };
+      if (!info.webSocketDebuggerUrl) return;
+
+      this.browserCdp = await CDPClient.connect(info.webSocketDebuggerUrl);
+      await this.browserCdp.send('Target.setDiscoverTargets', { discover: true });
+
+      this.browserCdp.on('Target.targetCreated', (params: unknown) => {
+        const p = params as {
+          targetInfo: { targetId: string; type: string; url: string; openerId?: string };
+        };
+        if (p.targetInfo.type !== 'page') return;
+        if (this.knownTargetIds.has(p.targetInfo.targetId)) return;
+        if (this.adoptedTargets.has(p.targetInfo.targetId)) return;
+        if (p.targetInfo.url === 'about:blank' && !p.targetInfo.openerId) return;
+
+        this.handleNewTarget(p.targetInfo, chrome.port).catch((err) => {
+          console.error('[browser] Failed to adopt new tab:', err);
+        });
+      });
+    } catch (err) {
+      console.error('[browser] Target discovery setup failed:', err);
+    }
+  }
+
+  private async handleNewTarget(
+    targetInfo: { targetId: string; url: string; openerId?: string },
+    chromePort: number,
+  ): Promise<void> {
+    if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) {
+      console.log('[browser] Cannot adopt new tab — limit reached');
+      return;
+    }
+
+    this.adoptedTargets.add(targetInfo.targetId);
+
+    // Find opener browser ID by most recently active session
+    let openerBrowserId: string | undefined;
+    if (targetInfo.openerId) {
+      let latestActivity = 0;
+      for (const [bid, session] of this.sessions) {
+        if (session.lastActivity > latestActivity) {
+          latestActivity = session.lastActivity;
+          openerBrowserId = bid;
+        }
+      }
+    }
+
+    const browserId = String(this.nextId++);
+
+    try {
+      const resp = await fetch(`http://127.0.0.1:${chromePort}/json`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const targets = (await resp.json()) as Array<{
+        id: string;
+        webSocketDebuggerUrl: string;
+        url: string;
+      }>;
+      const target = targets.find((t) => t.id === targetInfo.targetId);
+      if (!target) return;
+
+      this.pendingSessions++;
+      try {
+        const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl);
+        session.openerBrowserId = openerBrowserId;
+        // Wait a moment for the page to load
+        await new Promise((r) => setTimeout(r, 500));
+        // Get current URL
+        const urlTitle = await session
+          .navigate(target.url || session.currentUrl, 'domcontentloaded')
+          .catch(() => null);
+        if (urlTitle) {
+          session.currentUrl = urlTitle.url;
+          session.currentTitle = urlTitle.title;
+        }
+        this.sessions.set(browserId, session);
+        this.pendingAdoptions.set(browserId, { browserId, openerBrowserId });
+        console.log(
+          `[browser] Auto-adopted new tab [browser:${browserId}] → ${session.currentUrl} (opened by browser:${openerBrowserId})`,
+        );
+      } finally {
+        this.pendingSessions--;
+      }
+    } catch (err) {
+      console.error('[browser] Failed to adopt target:', err);
+    }
+  }
+
+  /** Check and consume any pending auto-adopted tabs. */
+  consumeAdoptedTabs(): Array<{ browserId: string; url: string; openerBrowserId?: string }> {
+    const result: Array<{ browserId: string; url: string; openerBrowserId?: string }> = [];
+    for (const [browserId, info] of this.pendingAdoptions) {
+      const session = this.sessions.get(browserId);
+      if (session) {
+        result.push({ browserId, url: session.currentUrl, openerBrowserId: info.openerBrowserId });
+      }
+    }
+    this.pendingAdoptions.clear();
+    return result;
+  }
+
   private async closeChrome() {
+    if (this.browserCdp) {
+      this.browserCdp.close();
+      this.browserCdp = null;
+    }
+    this.adoptedTargets.clear();
+    this.knownTargetIds.clear();
+    this.pendingAdoptions.clear();
     if (this.chrome) {
       await cleanupChrome(this.chrome);
       this.chrome = null;
@@ -143,6 +263,7 @@ export class BrowserPool {
       const target = (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
 
       const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl);
+      this.knownTargetIds.add(target.id);
       this.sessions.set(browserId, session);
       return { session, browserId };
     } finally {

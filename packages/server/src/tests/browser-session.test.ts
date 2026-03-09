@@ -162,22 +162,34 @@ describe('BrowserSession', () => {
     vi.clearAllMocks();
 
     let evalCallCount = 0;
-    mockSend.mockImplementation((method: string) => {
+    mockSend.mockImplementation((method: string, params?: Record<string, unknown>) => {
       if (method === 'Runtime.evaluate') {
         evalCallCount++;
+        const expr = (params as { expression?: string })?.expression ?? '';
         if (evalCallCount === 1) {
           // Finding element coordinates via querySelector
           return Promise.resolve({ result: { value: { x: 150, y: 200 } } });
         }
-        if (evalCallCount === 2) {
-          // getPageState: url + title
+        if (expr.includes('removeAttribute')) {
+          // STRIP_TARGET_BLANK — no return value needed
+          return Promise.resolve({ result: { value: undefined } });
+        }
+        if (expr.includes('scrollY')) {
+          // PAGE_STATE: url + title + scroll info
           return Promise.resolve({
             result: {
-              value: { url: 'https://example.com', title: 'Clicked' },
+              value: {
+                url: 'https://example.com',
+                title: 'Clicked',
+                activeElement: null,
+                scrollY: 0,
+                scrollHeight: 0,
+                viewportHeight: 0,
+              },
             },
           });
         }
-        // getPageState: text snippet
+        // VIEWPORT_TEXT, VIEWPORT_LINKS, etc.
         return Promise.resolve({ result: { value: '' } });
       }
       if (method === 'Page.captureScreenshot') return Promise.resolve({ data: FAKE_IMAGE_BASE64 });

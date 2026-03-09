@@ -14,9 +14,14 @@ import type { PageState, PageContent } from './types.js';
 import {
   PAGE_STATE,
   VIEWPORT_TEXT,
+  VIEWPORT_LINKS,
   URL_AND_TITLE,
   FIND_BY_SELECTOR,
   FIND_BY_TEXT,
+  STRIP_TARGET_BLANK,
+  ELEMENT_AT_POINT,
+  ANNOTATE_ELEMENTS,
+  REMOVE_ANNOTATIONS,
   FOCUS_AND_CLEAR,
   FIRE_CHANGE_EVENTS,
   EXTRACT_CONTENT,
@@ -37,6 +42,7 @@ export interface BrowserSessionUpdate {
 export class BrowserSession extends EventEmitter {
   readonly id: string;
   windowId: string | undefined;
+  openerBrowserId: string | undefined;
   currentUrl = 'about:blank';
   currentTitle = '';
   lastScreenshot: Buffer | null = null;
@@ -161,8 +167,17 @@ export class BrowserSession extends EventEmitter {
       /* page not ready */
     }
 
+    let visibleLinks: Array<{ text: string; href: string }> | undefined;
+    try {
+      const links = await this.eval<Array<{ text: string; href: string }>>(VIEWPORT_LINKS);
+      if (links && links.length > 0) visibleLinks = links;
+    } catch {
+      /* page not ready */
+    }
+
     const state: PageState = { url, title, textSnippet, scrollY, scrollHeight, viewportHeight };
     if (activeElement) state.activeElement = activeElement;
+    if (visibleLinks) state.visibleLinks = visibleLinks;
     return state;
   }
 
@@ -275,9 +290,25 @@ export class BrowserSession extends EventEmitter {
     let clickTarget: PageState['clickTarget'] | undefined;
 
     if (x !== undefined && y !== undefined) {
-      // Coordinate-based click — skip element lookup
+      // Coordinate-based click
       clickX = x;
       clickY = y;
+      // Validate what's at the click coordinates
+      try {
+        const elementInfo = await this.eval<{ tag: string; text: string; href?: string }>(
+          `(${ELEMENT_AT_POINT})(${x}, ${y})`,
+        );
+        if (elementInfo) {
+          clickTarget = {
+            tag: elementInfo.tag,
+            text: elementInfo.text,
+            candidateCount: 1,
+            ...(elementInfo.href ? { href: elementInfo.href } : {}),
+          };
+        }
+      } catch {
+        /* non-fatal */
+      }
     } else {
       if (!selector && !text) {
         throw new Error('Either selector, text, or x/y coordinates must be provided');
@@ -290,6 +321,8 @@ export class BrowserSession extends EventEmitter {
             tag: string;
             text: string;
             candidateCount: number;
+            selector?: string;
+            href?: string;
           }>(FIND_BY_SELECTOR, selector)
         : await this.eval<{
             x: number;
@@ -297,6 +330,8 @@ export class BrowserSession extends EventEmitter {
             tag: string;
             text: string;
             candidateCount: number;
+            selector?: string;
+            href?: string;
           }>(`(${FIND_BY_TEXT})(${JSON.stringify(text)}, ${index ?? 0})`);
 
       if (!coords) {
@@ -309,8 +344,13 @@ export class BrowserSession extends EventEmitter {
         tag: coords.tag,
         text: coords.text,
         candidateCount: coords.candidateCount,
+        ...(coords.selector ? { selector: coords.selector } : {}),
+        ...(coords.href ? { href: coords.href } : {}),
       };
     }
+
+    // Strip target="_blank" so links navigate in-place
+    await this.eval(STRIP_TARGET_BLANK).catch(() => {});
 
     // Dispatch mouse click
     await this.cdp.send('Input.dispatchMouseEvent', {
@@ -584,6 +624,26 @@ export class BrowserSession extends EventEmitter {
     } catch {
       return undefined;
     }
+  }
+
+  /** Inject numbered badges on all visible interactive elements and return element metadata. */
+  async annotateElements(): Promise<
+    Array<{
+      index: number;
+      tag: string;
+      text: string;
+      href?: string | null;
+      selector?: string | null;
+      x: number;
+      y: number;
+    }>
+  > {
+    return (await this.eval(ANNOTATE_ELEMENTS)) || [];
+  }
+
+  /** Remove the annotation overlay injected by annotateElements(). */
+  async removeAnnotations(): Promise<void> {
+    await this.eval(REMOVE_ANNOTATIONS).catch(() => {});
   }
 
   async close(): Promise<void> {

@@ -46,10 +46,18 @@ export function formatPageState(state: PageState): string {
   if (state.clickTarget) {
     const ct = state.clickTarget;
     result += `\nClicked: <${ct.tag}> "${ct.text}"`;
+    if (ct.selector) result += ` [${ct.selector}]`;
+    if (ct.href) result += ` → ${ct.href}`;
     if (ct.candidateCount > 1) result += ` (${ct.candidateCount} candidates)`;
   }
   if (state.textSnippet) {
     result += `\n\nPage content:\n${state.textSnippet}`;
+  }
+  if (state.visibleLinks && state.visibleLinks.length > 0) {
+    result += '\n\nLinks on page:';
+    for (const link of state.visibleLinks) {
+      result += `\n  [${link.text}](${link.href})`;
+    }
   }
   return result;
 }

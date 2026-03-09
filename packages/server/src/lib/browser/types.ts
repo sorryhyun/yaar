@@ -8,10 +8,18 @@ export interface PageState {
   textSnippet: string;
   activeElement?: { tag: string; id?: string; name?: string; type?: string };
   urlChanged?: boolean;
-  clickTarget?: { tag: string; text: string; candidateCount: number };
+  clickTarget?: {
+    tag: string;
+    text: string;
+    candidateCount: number;
+    selector?: string;
+    href?: string;
+  };
   scrollY?: number;
   scrollHeight?: number;
   viewportHeight?: number;
+  visibleLinks?: Array<{ text: string; href: string }>;
+  newTab?: { browserId: string; url: string };
 }
 
 export interface PageContent {

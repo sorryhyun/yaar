@@ -18,6 +18,12 @@ export function registerContentTools(server: McpServer): void {
         y0: z.number().optional().describe('Top edge of the region in pixels'),
         x1: z.number().optional().describe('Right edge of the region in pixels'),
         y1: z.number().optional().describe('Bottom edge of the region in pixels'),
+        annotate: z
+          .boolean()
+          .optional()
+          .describe(
+            'Overlay numbered badges on interactive elements. Returns element map alongside the screenshot.',
+          ),
         browserId: z
           .string()
           .optional()
@@ -34,6 +40,34 @@ export function registerContentTools(server: McpServer): void {
       const clip = hasRegion
         ? { x: args.x0!, y: args.y0!, width: args.x1! - args.x0!, height: args.y1! - args.y0! }
         : undefined;
+      if (args.annotate) {
+        // Inject annotations, take screenshot, then remove
+        const elements = await session.annotateElements();
+        const buffer = await session.screenshot(clip ? { clip } : undefined);
+        await session.removeAnnotations();
+
+        let elementMap = 'Interactive elements:';
+        if (elements && elements.length > 0) {
+          for (const el of elements) {
+            let line = `\n  [${el.index}] <${el.tag}>`;
+            if (el.text) line += ` "${el.text}"`;
+            if (el.selector) line += ` selector=${el.selector}`;
+            if (el.href) line += ` → ${el.href}`;
+            line += ` @(${el.x},${el.y})`;
+            elementMap += line;
+          }
+        } else {
+          elementMap += '\n  (none found)';
+        }
+
+        const label = clip
+          ? `Annotated magnified region (${args.x0},${args.y0})→(${args.x1},${args.y1}) @4x:`
+          : 'Annotated browser screenshot:';
+        return okWithImages(`${label}\n\n${elementMap}`, [
+          { data: buffer.toString('base64'), mimeType: 'image/webp' },
+        ]);
+      }
+
       const buffer = await session.screenshot(clip ? { clip } : undefined);
       const label = clip
         ? `Magnified region (${args.x0},${args.y0})→(${args.x1},${args.y1}) @4x:`

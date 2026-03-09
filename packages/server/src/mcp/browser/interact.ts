@@ -5,6 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../utils.js';
+import { getBrowserPool } from '../../lib/browser/index.js';
 import { resolveSession, formatPageState } from './shared.js';
 
 export function registerInteractTools(server: McpServer): void {
@@ -43,7 +44,16 @@ export function registerInteractTools(server: McpServer): void {
       }
       const session = resolveSession(args.browserId);
       const state = await session.click(args.selector, args.text, args.x, args.y, args.index);
-      return ok(formatPageState(state));
+      // Check for auto-adopted new tabs
+      const pool = getBrowserPool();
+      const adoptedTabs = pool.consumeAdoptedTabs();
+      let result = formatPageState(state);
+      if (adoptedTabs.length > 0) {
+        for (const tab of adoptedTabs) {
+          result += `\nNew tab opened: [browser:${tab.browserId}] ${tab.url}`;
+        }
+      }
+      return ok(result);
     },
   );
 

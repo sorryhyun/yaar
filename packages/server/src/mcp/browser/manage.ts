@@ -18,9 +18,11 @@ export function registerManageTools(server: McpServer, pool: BrowserPool): void 
     async () => {
       const browsers = pool.getAllSessions();
       if (browsers.size === 0) return ok('No browsers open.');
-      const lines = [...browsers.entries()].map(
-        ([bid, s]) => `[browser:${bid}] ${s.currentUrl} — ${s.currentTitle || '(no title)'}`,
-      );
+      const lines = [...browsers.entries()].map(([bid, s]) => {
+        let line = `[browser:${bid}] ${s.currentUrl} — ${s.currentTitle || '(no title)'}`;
+        if (s.openerBrowserId !== undefined) line += ` (opened by browser:${s.openerBrowserId})`;
+        return line;
+      });
       return ok(lines.join('\n'));
     },
   );
@@ -70,6 +72,25 @@ export function registerManageTools(server: McpServer, pool: BrowserPool): void 
         await pool.closeSession(browserId);
       }
       return ok(`All browsers closed (${ids.join(', ')}).`);
+    },
+  );
+
+  server.registerTool(
+    'switch',
+    {
+      description:
+        'Switch the active browser context to another tab by ID. Use browser:list to see available tabs.',
+      inputSchema: {
+        browserId: z.string().describe('Browser ID to switch to'),
+      },
+    },
+    async (args) => {
+      const session = pool.getSession(args.browserId);
+      if (!session)
+        return ok(`No browser with ID ${args.browserId}. Use browser:list to see open browsers.`);
+      return ok(
+        `Switched to browser ${args.browserId}: ${session.currentUrl} — ${session.currentTitle || '(no title)'}`,
+      );
     },
   );
 }
