@@ -11,17 +11,13 @@
  * Conditional on Chrome/Edge availability — skips registration if not found.
  */
 
-import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
-import type { ResolvedUri, ResolvedBrowser } from '../../../uri/resolve.js';
-import { getBrowserPool } from '../../../lib/browser/index.js';
-import { actionEmitter } from '../../action-emitter.js';
-import { isDomainAllowed, extractDomain } from '../../domains.js';
-import { ok, error, okWithImages } from '../../utils.js';
-import {
-  resolveSession,
-  formatPageState,
-  findMainContent,
-} from '../../../features/browser/shared.js';
+import type { ResourceRegistry, VerbResult } from './uri/registry.js';
+import type { ResolvedUri, ResolvedBrowser } from './uri/resolve.js';
+import { getBrowserPool } from '../lib/browser/index.js';
+import { actionEmitter } from '../mcp/action-emitter.js';
+import { isDomainAllowed, extractDomain } from '../mcp/domains.js';
+import { ok, error, okWithImages } from '../mcp/utils.js';
+import { resolveSession, formatPageState, findMainContent } from '../features/browser/shared.js';
 
 function assertBrowser(resolved: ResolvedUri): asserts resolved is ResolvedBrowser {
   if (resolved.kind !== 'browser') throw new Error(`Expected browser URI, got ${resolved.kind}`);

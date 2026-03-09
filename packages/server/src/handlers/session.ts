@@ -7,13 +7,13 @@
  *   invoke('yaar://sessions/current', { ... })   → memorize
  */
 
-import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
-import type { ResolvedUri } from '../../../uri/resolve.js';
-import { ok, error } from '../../utils.js';
-import { configRead, configWrite } from '../../../storage/storage-manager.js';
-import { getSessionId } from '../../../agents/session.js';
-import { getSessionHub } from '../../../session/session-hub.js';
-import { getBrowserPool } from '../../../lib/browser/index.js';
+import type { ResourceRegistry, VerbResult } from './uri/registry.js';
+import type { ResolvedUri } from './uri/resolve.js';
+import { ok, error } from '../mcp/utils.js';
+import { configRead, configWrite } from '../storage/storage-manager.js';
+import { getSessionId } from '../agents/session.js';
+import { getSessionHub } from '../session/session-hub.js';
+import { getBrowserPool } from '../lib/browser/index.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ResourceRegistry } from '../uri/registry.js';
-import type { VerbResult } from '../uri/registry.js';
-import type { ResolvedUri } from '../uri/resolve.js';
+import { ResourceRegistry } from '../handlers/uri/registry.js';
+import type { VerbResult } from '../handlers/uri/registry.js';
+import type { ResolvedUri } from '../handlers/uri/resolve.js';
 
 /** Extract text from first content item. */
 const text = (r: VerbResult) => (r.content[0] as { type: 'text'; text: string }).text;
@@ -20,7 +20,7 @@ const mockGenerateSandboxId = vi.fn();
 // Mock resolveUri — the registry calls this to turn a URI string into a ResolvedUri
 const mockResolveUri = vi.fn();
 
-vi.mock('../uri/resolve.js', () => ({
+vi.mock('../handlers/uri/resolve.js', () => ({
   resolveUri: (...args: unknown[]) => mockResolveUri(...args),
   resolveResourceUri: vi.fn(),
 }));
@@ -62,7 +62,7 @@ let registerBasicHandlers: (registry: ResourceRegistry) => void;
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  const mod = await import('../mcp/verbs/handlers/basic.js');
+  const mod = await import('../handlers/basic.js');
   registerBasicHandlers = mod.registerBasicHandlers;
 });
 

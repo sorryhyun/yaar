@@ -8,11 +8,11 @@
  *   invoke('yaar://sessions/current/agents/{agentId}', { action }) → interrupt / relay
  */
 
-import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
-import type { ResolvedUri, ResolvedSession } from '../../../uri/resolve.js';
-import { getSessionId, getAgentId, getMonitorId } from '../../../agents/session.js';
-import { getSessionHub } from '../../../session/session-hub.js';
-import { ok, error } from '../../utils.js';
+import type { ResourceRegistry, VerbResult } from './uri/registry.js';
+import type { ResolvedUri, ResolvedSession } from './uri/resolve.js';
+import { getSessionId, getAgentId, getMonitorId } from '../agents/session.js';
+import { getSessionHub } from '../session/session-hub.js';
+import { ok, error } from '../mcp/utils.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')

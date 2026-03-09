@@ -16,14 +16,14 @@
 import { stat, unlink, mkdir, readdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { parseFileUri, parseYaarUri } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
-import type { ResolvedUri } from '../../../uri/resolve.js';
-import { storageRead, storageWrite, storageList, storageDelete } from '../../../storage/index.js';
-import { getSandboxPath } from '../../../lib/compiler/index.js';
-import { generateSandboxId, isValidPath } from '../../../features/dev/helpers.js';
-import { ok, okWithImages, error } from '../../utils.js';
-import { doCompile, doTypecheck } from '../../../features/dev/compile.js';
-import { doDeploy, doClone } from '../../../features/dev/deploy.js';
+import type { ResourceRegistry, VerbResult } from './uri/registry.js';
+import type { ResolvedUri } from './uri/resolve.js';
+import { storageRead, storageWrite, storageList, storageDelete } from '../storage/index.js';
+import { getSandboxPath } from '../lib/compiler/index.js';
+import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
+import { ok, okWithImages, error } from '../mcp/utils.js';
+import { doCompile, doTypecheck } from '../features/dev/compile.js';
+import { doDeploy, doClone } from '../features/dev/deploy.js';
 
 // ── Helpers ──
 
@@ -106,7 +106,7 @@ function formatSandboxResult(result: any, code: string): string {
 // ── Storage read/edit helpers ──
 
 async function readStorageRaw(path: string): Promise<{ content: string } | { error: string }> {
-  const { resolvePath } = await import('../../../storage/storage-manager.js');
+  const { resolvePath } = await import('../storage/storage-manager.js');
   const resolved = resolvePath(path);
   if (!resolved) return { error: 'Invalid storage path.' };
   try {
@@ -332,8 +332,8 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
           ? Math.max(100, Math.min(30000, payload.timeout))
           : 5000;
 
-      const { executeJs } = await import('../../../lib/sandbox/index.js');
-      const { readAllowedDomains, isAllDomainsAllowed } = await import('../../domains.js');
+      const { executeJs } = await import('../lib/sandbox/index.js');
+      const { readAllowedDomains, isAllDomainsAllowed } = await import('../mcp/domains.js');
 
       const [allowedDomains, allowAllDomains] = await Promise.all([
         readAllowedDomains(),

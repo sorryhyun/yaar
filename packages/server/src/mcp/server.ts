@@ -28,7 +28,7 @@ import { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
 import { registerBrowserTools, BROWSER_TOOL_NAMES } from './legacy/browser/index.js';
 import { isBrowserAvailable, probeBrowserAvailability } from '../features/browser/availability.js';
 import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
-import { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
+import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 import { logLegacyToolUsage } from './legacy/deprecation.js';
 
 /** Core MCP servers (always active). */

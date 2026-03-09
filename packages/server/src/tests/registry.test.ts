@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ResourceRegistry } from '../uri/registry.js';
-import type { ResourceHandler } from '../uri/registry.js';
+import { ResourceRegistry } from '../handlers/uri/registry.js';
+import type { ResourceHandler } from '../handlers/uri/registry.js';
 
 /** Extract text from first content item (all test results are text). */
 const text = (r: { content: Array<{ type: string; text?: string }> }) =>

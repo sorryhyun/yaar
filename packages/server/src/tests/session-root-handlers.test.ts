@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ResourceRegistry } from '../uri/registry.js';
-import type { VerbResult } from '../uri/registry.js';
+import { ResourceRegistry } from '../handlers/uri/registry.js';
+import type { VerbResult } from '../handlers/uri/registry.js';
 
 const text = (r: VerbResult) => (r.content[0] as { type: 'text'; text: string }).text;
 
 // Mock resolveUri
 const mockResolveUri = vi.fn();
-vi.mock('../uri/resolve.js', () => ({
+vi.mock('../handlers/uri/resolve.js', () => ({
   resolveUri: (...args: unknown[]) => mockResolveUri(...args),
   resolveResourceUri: vi.fn(),
 }));
@@ -77,7 +77,7 @@ beforeEach(async () => {
     return null;
   });
 
-  const mod = await import('../mcp/verbs/handlers/session.js');
+  const mod = await import('../handlers/session.js');
   registerSessionHandlers = mod.registerSessionHandlers;
 });
 

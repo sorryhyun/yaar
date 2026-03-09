@@ -13,14 +13,14 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { rm, unlink } from 'fs/promises';
 import type { OSAction } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../../uri/registry.js';
-import type { ResolvedUri } from '../../../uri/resolve.js';
-import { ok, error } from '../../utils.js';
-import { actionEmitter } from '../../action-emitter.js';
-import { listApps, loadAppSkill } from '../../../features/apps/discovery.js';
-import { PROJECT_ROOT } from '../../../config.js';
-import { getConfigDir } from '../../../storage/storage-manager.js';
-import { ensureAppShortcut, removeAppShortcut } from '../../../storage/shortcuts.js';
+import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri/registry.js';
+import type { ResolvedUri } from './uri/resolve.js';
+import { ok, error } from '../mcp/utils.js';
+import { actionEmitter } from '../mcp/action-emitter.js';
+import { listApps, loadAppSkill } from '../features/apps/discovery.js';
+import { PROJECT_ROOT } from '../config.js';
+import { getConfigDir } from '../storage/storage-manager.js';
+import { ensureAppShortcut, removeAppShortcut } from '../storage/shortcuts.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 

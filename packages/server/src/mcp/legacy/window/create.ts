@@ -20,7 +20,7 @@ import { PROJECT_ROOT } from '../../../config.js';
 import { generateIframeToken } from '../../../http/iframe-tokens.js';
 import { getAppMeta } from '../../../features/apps/discovery.js';
 import { extractAppId } from '@yaar/shared';
-import { resolveResourceUri } from '../../../uri/index.js';
+import { resolveResourceUri } from '../../../handlers/uri/resolve.js';
 import { getSessionId } from '../../../agents/session.js';
 import { formatWindowRef } from './helpers.js';
 

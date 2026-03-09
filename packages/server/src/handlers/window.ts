@@ -21,18 +21,18 @@ import {
   parseWindowKey,
   extractAppId,
 } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../../uri/registry.js';
-import type { ResolvedUri, ResolvedWindow } from '../../../uri/resolve.js';
-import { actionEmitter } from '../../action-emitter.js';
-import type { WindowStateRegistry } from '../../window-state.js';
-import { ok, error } from '../../utils.js';
-import { getAgentId, getSessionId } from '../../../agents/session.js';
-import { getSessionHub } from '../../../session/session-hub.js';
-import { resolveResourceUri } from '../../../uri/index.js';
-import { generateIframeToken } from '../../../http/iframe-tokens.js';
-import { getAppMeta } from '../../../features/apps/discovery.js';
-import { PROJECT_ROOT } from '../../../config.js';
-import { enrichManifestWithUris } from '../../../features/window/manifest-utils.js';
+import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri/registry.js';
+import type { ResolvedUri, ResolvedWindow } from './uri/resolve.js';
+import { actionEmitter } from '../mcp/action-emitter.js';
+import type { WindowStateRegistry } from '../mcp/window-state.js';
+import { ok, error } from '../mcp/utils.js';
+import { getAgentId, getSessionId } from '../agents/session.js';
+import { getSessionHub } from '../session/session-hub.js';
+import { resolveResourceUri } from './uri/resolve.js';
+import { generateIframeToken } from '../http/iframe-tokens.js';
+import { getAppMeta } from '../features/apps/discovery.js';
+import { PROJECT_ROOT } from '../config.js';
+import { enrichManifestWithUris } from '../features/window/manifest-utils.js';
 
 function assertWindow(resolved: ResolvedUri): asserts resolved is ResolvedWindow {
   if (resolved.kind !== 'window') throw new Error(`Expected window URI, got ${resolved.kind}`);

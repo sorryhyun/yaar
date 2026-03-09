@@ -5,27 +5,23 @@
  * as ResourceHandler registrations on the registry.
  */
 
-import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
-import type { ResolvedUri } from '../../../uri/resolve.js';
-import { handleSetSettings, handleGetSettings } from '../../../features/config/settings.js';
+import type { ResourceRegistry, VerbResult } from './uri/registry.js';
+import type { ResolvedUri } from './uri/resolve.js';
+import { handleSetSettings, handleGetSettings } from '../features/config/settings.js';
 import {
   handleSetHook,
   handleGetHooks,
   handleRemoveHook,
-} from '../../../features/config/hooks-handler.js';
+} from '../features/config/hooks-handler.js';
 import {
   handleSetShortcut,
   handleGetShortcuts,
   handleRemoveShortcut,
-} from '../../../features/config/shortcuts.js';
-import {
-  handleSetMount,
-  handleGetMounts,
-  handleRemoveMount,
-} from '../../../features/config/mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from '../../../features/config/app.js';
-import { readAllowedDomains, isAllDomainsAllowed } from '../../domains.js';
-import { ok } from '../../utils.js';
+} from '../features/config/shortcuts.js';
+import { handleSetMount, handleGetMounts, handleRemoveMount } from '../features/config/mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from '../features/config/app.js';
+import { readAllowedDomains, isAllDomainsAllowed } from '../mcp/domains.js';
+import { ok } from '../mcp/utils.js';
 
 function assertConfig(
   resolved: ResolvedUri,

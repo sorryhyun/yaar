@@ -45,6 +45,11 @@ src/
 │   ├── warm-pool.ts      # WarmPool singleton
 │   ├── claude/           # ClaudeSessionProvider, system-prompt, message-mapper
 │   └── codex/            # CodexProvider, AppServer, JsonRpcWsClient, auth, types
+├── handlers/             # PRIMARY (verb mode): URI registry + 5 generic verb tool handlers
+│   ├── index.ts          # registerVerbTools() — the 5 MCP tool definitions
+│   ├── uri/              # URI infrastructure: registry.ts, resolve.ts
+│   ├── agents.ts / apps.ts / basic.ts / browser.ts / config.ts
+│   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS + LEGACY_SERVERS
 │   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
@@ -52,13 +57,10 @@ src/
 │   ├── system/           # Always-active: info, notify, relay, sandbox, hooks
 │   ├── skills/           # Always-active: skill reference doc loader
 │   ├── http/             # Always-active: http_get, http_post, domain allow-list
-│   ├── verbs/            # PRIMARY (verb mode): 5 generic URI tools (describe/read/list/invoke/delete)
-│   │   ├── tools.ts      # registerVerbTools() — the 5 MCP tool definitions
-│   │   └── handlers/     # Thin URI handler files (import from features/): apps, basic, browser, config, session, user, window, agents
 │   └── legacy/           # DEPRECATED (legacy tool mode): individual named MCP tools; import from features/
 │       ├── index.ts      # Re-exports all legacy registrations (@deprecated)
 │       ├── apps/ basic/ browser/ config/ dev/ user/ window/
-├── features/             # Domain business logic (imported by mcp/verbs/handlers/ and mcp/legacy/)
+├── features/             # Domain business logic (imported by handlers/ and mcp/legacy/)
 │   ├── apps/             # App listing, skill loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config
@@ -143,7 +145,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `mcp/verbs/handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
+**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
 
 **Legacy tool mode (deprecated):** All namespaces active. Individual named tools in `mcp/legacy/` domain folders. Emits a deprecation warning at startup. Will be removed in a future release.
 
@@ -151,7 +153,7 @@ Primary tools (verb mode — default):
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
-| `verbs/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `mcp/verbs/handlers/` via `yaar://` URIs |
+| `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `handlers/` via `yaar://` URIs |
 | `system/` | system | get_info, memorize |
 | `mcp/system/` | system | http_get, http_post, request_allowing_domain, reload_cached, list_reload_options, curl |
 | `skills/` | system | skill (reference doc loader) |

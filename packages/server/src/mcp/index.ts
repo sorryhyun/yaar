@@ -30,7 +30,7 @@ export { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
 export { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
 
 // Verb tools
-export { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
+export { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 
 // Action emitter
 export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';

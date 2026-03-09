@@ -17,7 +17,7 @@ import { RELOAD_TOOL_NAMES } from '../mcp/system/reload.js';
 /** @deprecated */ import { CONFIG_TOOL_NAMES } from '../mcp/legacy/config/index.js';
 import { BROWSER_TOOL_NAMES } from '../mcp/legacy/browser/index.js';
 import { isBrowserAvailable } from '../features/browser/availability.js';
-import { VERB_TOOL_NAMES } from '../mcp/verbs/index.js';
+import { VERB_TOOL_NAMES } from '../handlers/index.js';
 
 export interface AgentProfile {
   id: string;
