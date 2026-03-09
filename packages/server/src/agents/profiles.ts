@@ -16,7 +16,7 @@ import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
 import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
 /** @deprecated */ import { CONFIG_TOOL_NAMES } from '../mcp/legacy/config/index.js';
 import { BROWSER_TOOL_NAMES } from '../mcp/legacy/browser/index.js';
-import { isBrowserAvailable } from '../mcp/domains/browser/availability.js';
+import { isBrowserAvailable } from '../features/browser/availability.js';
 import { VERB_TOOL_NAMES } from '../mcp/verbs/index.js';
 
 export interface AgentProfile {

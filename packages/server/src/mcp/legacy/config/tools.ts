@@ -8,11 +8,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../../utils.js';
-import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../domains/config/hooks-handler.js';
-import { handleSetSettings, handleGetSettings } from '../../domains/config/settings.js';
-import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from '../../domains/config/shortcuts.js';
-import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../domains/config/mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from '../../domains/config/app.js';
+import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../../features/config/hooks-handler.js';
+import { handleSetSettings, handleGetSettings } from '../../../features/config/settings.js';
+import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from '../../../features/config/shortcuts.js';
+import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../../features/config/mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from '../../../features/config/app.js';
 
 const CONFIG_SECTIONS = ['hooks', 'settings', 'shortcuts', 'mounts', 'app'] as const;
 const REMOVABLE_SECTIONS = ['hooks', 'shortcuts', 'mounts', 'app'] as const;

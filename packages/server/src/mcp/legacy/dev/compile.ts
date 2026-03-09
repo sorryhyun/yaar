@@ -6,7 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../../utils.js';
-import { doCompile, doTypecheck } from '../../domains/dev/compile.js';
+import { doCompile, doTypecheck } from '../../../features/dev/compile.js';
 import { parseFileUri } from '@yaar/shared';
 
 export { doCompile, doTypecheck };

@@ -4,7 +4,7 @@
 
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { PROJECT_ROOT } from '../../../config.js';
+import { PROJECT_ROOT } from '../../config.js';
 import { hasConfig } from './config.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';

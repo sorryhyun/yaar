@@ -14,7 +14,7 @@ vi.mock('../uri/resolve.js', () => ({
 // Mock discovery
 const mockListApps = vi.fn();
 const mockLoadAppSkill = vi.fn();
-vi.mock('../mcp/domains/apps/discovery.js', () => ({
+vi.mock('../features/apps/discovery.js', () => ({
   listApps: (...args: unknown[]) => mockListApps(...args),
   loadAppSkill: (...args: unknown[]) => mockLoadAppSkill(...args),
   getAppMeta: () => null,

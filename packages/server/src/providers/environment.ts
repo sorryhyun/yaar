@@ -7,7 +7,7 @@
 
 import { platform } from 'os';
 import type { ProviderType } from './types.js';
-import { listApps } from '../mcp/domains/apps/discovery.js';
+import { listApps } from '../features/apps/discovery.js';
 import { storageList } from '../storage/storage-manager.js';
 import { loadMounts } from '../storage/mounts.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';

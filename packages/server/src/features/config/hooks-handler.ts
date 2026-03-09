@@ -3,8 +3,8 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../utils.js';
-import { actionEmitter } from '../../action-emitter.js';
+import { ok, error } from '../../mcp/utils.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 import type { HookAction } from './hooks.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';
 

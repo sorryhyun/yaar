@@ -3,11 +3,7 @@
  */
 
 import { stat } from 'fs/promises';
-import {
-  compileTypeScript,
-  typecheckSandbox,
-  getSandboxPath,
-} from '../../../lib/compiler/index.js';
+import { compileTypeScript, typecheckSandbox, getSandboxPath } from '../../lib/compiler/index.js';
 
 export async function doCompile(
   sandboxId: string,

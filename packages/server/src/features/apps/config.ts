@@ -7,8 +7,8 @@
 
 import { stat, mkdir, unlink, readdir } from 'fs/promises';
 import { join, basename } from 'path';
-import { getConfigDir } from '../../../storage/storage-manager.js';
-import { PROJECT_ROOT } from '../../../config.js';
+import { getConfigDir } from '../../storage/storage-manager.js';
+import { PROJECT_ROOT } from '../../config.js';
 
 function getAppConfigPath(appId: string): string {
   return join(getConfigDir(), `${appId}.json`);

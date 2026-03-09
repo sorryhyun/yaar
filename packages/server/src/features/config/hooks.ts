@@ -6,7 +6,7 @@
  */
 
 import type { OSAction } from '@yaar/shared';
-import { configRead, configWrite } from '../../../storage/storage-manager.js';
+import { configRead, configWrite } from '../../storage/storage-manager.js';
 
 export type HookAction =
   | { type: 'interaction'; payload: string }

@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mkdir } from 'fs/promises';
 import { ok } from '../../utils.js';
-import { generateSandboxId } from '../../domains/dev/helpers.js';
+import { generateSandboxId } from '../../../features/dev/helpers.js';
 import { getSandboxPath } from '../../../lib/compiler/index.js';
 
 export function registerCreateSandboxTools(server: McpServer): void {

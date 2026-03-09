@@ -12,7 +12,7 @@ import {
   getContextRestoreMessages,
 } from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
-import { listApps } from '../../mcp/domains/apps/discovery.js';
+import { listApps } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 

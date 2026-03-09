@@ -54,10 +54,16 @@ src/
 │   ├── http/             # Always-active: http_get, http_post, domain allow-list
 │   ├── verbs/            # PRIMARY (verb mode): 5 generic URI tools (describe/read/list/invoke/delete)
 │   │   ├── tools.ts      # registerVerbTools() — the 5 MCP tool definitions
-│   │   └── handlers/     # Per-domain URI handlers: apps, basic, browser, config, session, user, window, agents
-│   └── legacy/           # DEPRECATED (legacy tool mode): individual named MCP tools
+│   │   └── handlers/     # Thin URI handler files (import from features/): apps, basic, browser, config, session, user, window, agents
+│   └── legacy/           # DEPRECATED (legacy tool mode): individual named MCP tools; import from features/
 │       ├── index.ts      # Re-exports all legacy registrations (@deprecated)
 │       ├── apps/ basic/ browser/ config/ dev/ user/ window/
+├── features/             # Domain business logic (imported by mcp/verbs/handlers/ and mcp/legacy/)
+│   ├── apps/             # App listing, skill loading, marketplace, badge
+│   ├── browser/          # CDP browser automation actions
+│   ├── config/           # Hooks, settings, shortcuts, mounts, app config
+│   ├── dev/              # Compile, typecheck, deploy, clone
+│   └── window/           # Window create/update/manage, app protocol, app query/command
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
@@ -137,7 +143,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to domain handlers in `mcp/verbs/handlers/` via `yaar://` URIs.
+**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `mcp/verbs/handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
 
 **Legacy tool mode (deprecated):** All namespaces active. Individual named tools in `mcp/legacy/` domain folders. Emits a deprecation warning at startup. Will be removed in a future release.
 

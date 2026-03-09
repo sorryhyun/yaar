@@ -6,10 +6,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../../utils.js';
-import { doDeploy, doClone } from '../../domains/dev/deploy.js';
+import { doDeploy, doClone } from '../../../features/dev/deploy.js';
 import { parseFileUri } from '@yaar/shared';
 
-export type { DeployArgs, DeployResult, CloneResult } from '../../domains/dev/deploy.js';
+export type { DeployArgs, DeployResult, CloneResult } from '../../../features/dev/deploy.js';
 export { doDeploy, doClone };
 
 export function registerDeployTools(server: McpServer): void {

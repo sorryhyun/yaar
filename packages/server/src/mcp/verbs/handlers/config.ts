@@ -7,19 +7,23 @@
 
 import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
 import type { ResolvedUri } from '../../../uri/resolve.js';
-import { handleSetSettings, handleGetSettings } from '../../domains/config/settings.js';
+import { handleSetSettings, handleGetSettings } from '../../../features/config/settings.js';
 import {
   handleSetHook,
   handleGetHooks,
   handleRemoveHook,
-} from '../../domains/config/hooks-handler.js';
+} from '../../../features/config/hooks-handler.js';
 import {
   handleSetShortcut,
   handleGetShortcuts,
   handleRemoveShortcut,
-} from '../../domains/config/shortcuts.js';
-import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../domains/config/mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from '../../domains/config/app.js';
+} from '../../../features/config/shortcuts.js';
+import {
+  handleSetMount,
+  handleGetMounts,
+  handleRemoveMount,
+} from '../../../features/config/mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from '../../../features/config/app.js';
 import { ok } from '../../utils.js';
 
 function assertConfig(

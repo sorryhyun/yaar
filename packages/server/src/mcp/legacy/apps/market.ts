@@ -13,7 +13,7 @@ import { actionEmitter } from '../../action-emitter.js';
 import { PROJECT_ROOT } from '../../../config.js';
 import { getConfigDir } from '../../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../../storage/shortcuts.js';
-import { listApps } from '../../domains/apps/discovery.js';
+import { listApps } from '../../../features/apps/discovery.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 

@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../../utils.js';
-import { listApps, loadAppSkill } from '../../domains/apps/discovery.js';
+import { listApps, loadAppSkill } from '../../../features/apps/discovery.js';
 import { registerBadgeTool } from './badge.js';
 import { registerMarketTools } from './market.js';
 

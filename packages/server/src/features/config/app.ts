@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../utils.js';
+import { ok, error } from '../../mcp/utils.js';
 import {
   readAppConfig,
   writeAppConfig,

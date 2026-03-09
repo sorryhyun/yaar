@@ -4,7 +4,7 @@ import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
 import { formatToolDisplay } from '../../mcp/server.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import { getToolUseHooks } from '../../mcp/domains/config/hooks.js';
+import { getToolUseHooks } from '../../features/config/hooks.js';
 
 export interface StreamMappingState {
   responseText: string;

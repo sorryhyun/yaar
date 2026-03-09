@@ -10,7 +10,7 @@ import { actionEmitter } from '../../action-emitter.js';
 import type { WindowStateRegistry } from '../../window-state.js';
 import { ok, okWithImages, error } from '../../utils.js';
 import { getAgentId } from '../../../agents/session.js';
-import { resolveWindowId } from '../../domains/window/resolve-window.js';
+import { resolveWindowId } from '../../../features/window/resolve-window.js';
 import { formatWindowRef } from './helpers.js';
 
 export function registerLifecycleTools(

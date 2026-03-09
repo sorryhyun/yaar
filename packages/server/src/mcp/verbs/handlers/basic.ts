@@ -20,7 +20,7 @@ import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
 import type { ResolvedUri } from '../../../uri/resolve.js';
 import { storageRead, storageWrite, storageList, storageDelete } from '../../../storage/index.js';
 import { getSandboxPath } from '../../../lib/compiler/index.js';
-import { generateSandboxId, isValidPath } from '../../domains/dev/helpers.js';
+import { generateSandboxId, isValidPath } from '../../../features/dev/helpers.js';
 import { ok, okWithImages, error } from '../../utils.js';
 import { doCompile, doTypecheck } from '../../legacy/dev/compile.js';
 import { doDeploy, doClone } from '../../legacy/dev/deploy.js';

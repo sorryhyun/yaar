@@ -3,14 +3,14 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../utils.js';
-import { actionEmitter } from '../../action-emitter.js';
+import { ok, error } from '../../mcp/utils.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 import {
   readShortcuts,
   addShortcut,
   removeShortcut,
   updateShortcut,
-} from '../../../storage/shortcuts.js';
+} from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 
 export const shortcutContentSchema = z.object({

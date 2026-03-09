@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, okWithImages } from '../../utils.js';
-import { resolveSession, findMainContent } from '../../domains/browser/shared.js';
+import { resolveSession, findMainContent } from '../../../features/browser/shared.js';
 
 export function registerContentTools(server: McpServer): void {
   server.registerTool(

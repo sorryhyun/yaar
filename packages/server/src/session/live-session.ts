@@ -31,7 +31,7 @@ import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
-import { getHooksByEvent } from '../mcp/domains/config/hooks.js';
+import { getHooksByEvent } from '../features/config/hooks.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];

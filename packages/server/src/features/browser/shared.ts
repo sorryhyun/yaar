@@ -2,8 +2,8 @@
  * Shared browser tool helpers — session resolution and page state formatting.
  */
 
-import { getBrowserPool } from '../../../lib/browser/index.js';
-import type { BrowserSession, PageState } from '../../../lib/browser/index.js';
+import { getBrowserPool } from '../../lib/browser/index.js';
+import type { BrowserSession, PageState } from '../../lib/browser/index.js';
 
 /**
  * Resolve a browser session by browserId.

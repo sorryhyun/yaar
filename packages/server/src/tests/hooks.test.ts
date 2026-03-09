@@ -7,7 +7,7 @@ import {
   removeHook,
   getHooksByEvent,
   _resetHooksCache,
-} from '../mcp/domains/config/hooks.js';
+} from '../features/config/hooks.js';
 
 // Use a temporary config directory for tests
 const TEST_CONFIG_DIR = join(import.meta.dirname, '__test-config__');

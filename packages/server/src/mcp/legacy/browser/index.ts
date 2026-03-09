@@ -11,7 +11,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getBrowserPool } from '../../../lib/browser/index.js';
-import { isBrowserAvailable as _isBrowserAvailable } from '../../domains/browser/availability.js';
+import { isBrowserAvailable as _isBrowserAvailable } from '../../../features/browser/availability.js';
 import { registerOpenTool } from './open.js';
 import { registerInteractTools } from './interact.js';
 import { registerNavigateTools } from './navigate.js';
@@ -20,7 +20,7 @@ import { registerManageTools } from './manage.js';
 
 /**
  * Whether browser tools were successfully registered (Chrome/Edge was found).
- * @deprecated Import from '../../domains/browser/availability.js' instead.
+ * @deprecated Import from '../../../features/browser/availability.js' instead.
  */
 export const isBrowserAvailable = _isBrowserAvailable;
 

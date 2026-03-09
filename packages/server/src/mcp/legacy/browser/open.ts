@@ -8,7 +8,7 @@ import type { BrowserPool } from '../../../lib/browser/index.js';
 import { actionEmitter } from '../../action-emitter.js';
 import { isDomainAllowed, extractDomain } from '../../domains.js';
 import { ok, error } from '../../utils.js';
-import { formatPageState } from '../../domains/browser/shared.js';
+import { formatPageState } from '../../../features/browser/shared.js';
 
 export function registerOpenTool(server: McpServer, pool: BrowserPool): void {
   server.registerTool(

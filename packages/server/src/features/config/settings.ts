@@ -3,10 +3,10 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../utils.js';
-import type { Settings } from '../../../storage/settings.js';
-import { readSettings, updateSettings, LANGUAGE_CODES } from '../../../storage/settings.js';
-import { actionEmitter } from '../../action-emitter.js';
+import { ok, error } from '../../mcp/utils.js';
+import type { Settings } from '../../storage/settings.js';
+import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
 
 export const settingsContentSchema = z.object({
   language: z.enum(LANGUAGE_CODES as unknown as [string, ...string[]]).optional(),

@@ -3,9 +3,9 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../utils.js';
-import { actionEmitter } from '../../action-emitter.js';
-import { addMount, removeMount, loadMounts } from '../../../storage/mounts.js';
+import { ok, error } from '../../mcp/utils.js';
+import { actionEmitter } from '../../mcp/action-emitter.js';
+import { addMount, removeMount, loadMounts } from '../../storage/mounts.js';
 
 export const mountContentSchema = z.object({
   alias: z.string(),

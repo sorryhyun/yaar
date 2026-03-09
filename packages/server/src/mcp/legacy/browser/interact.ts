@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok, error } from '../../utils.js';
 import { getBrowserPool } from '../../../lib/browser/index.js';
-import { resolveSession, formatPageState } from '../../domains/browser/shared.js';
+import { resolveSession, formatPageState } from '../../../features/browser/shared.js';
 
 export function registerInteractTools(server: McpServer): void {
   server.registerTool(

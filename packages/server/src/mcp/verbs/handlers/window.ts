@@ -30,9 +30,9 @@ import { getAgentId, getSessionId } from '../../../agents/session.js';
 import { getSessionHub } from '../../../session/session-hub.js';
 import { resolveResourceUri } from '../../../uri/index.js';
 import { generateIframeToken } from '../../../http/iframe-tokens.js';
-import { getAppMeta } from '../../domains/apps/discovery.js';
+import { getAppMeta } from '../../../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../../../config.js';
-import { enrichManifestWithUris } from '../../domains/window/manifest-utils.js';
+import { enrichManifestWithUris } from '../../../features/window/manifest-utils.js';
 
 function assertWindow(resolved: ResolvedUri): asserts resolved is ResolvedWindow {
   if (resolved.kind !== 'window') throw new Error(`Expected window URI, got ${resolved.kind}`);

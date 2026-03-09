@@ -2,7 +2,7 @@
  * Browser availability check — whether Chrome/Edge was found at startup.
  */
 
-import { getBrowserPool } from '../../../lib/browser/index.js';
+import { getBrowserPool } from '../../lib/browser/index.js';
 
 let _available = false;
 

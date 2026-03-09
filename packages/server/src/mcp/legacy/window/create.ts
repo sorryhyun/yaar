@@ -18,7 +18,7 @@ import { actionEmitter } from '../../action-emitter.js';
 import { ok, error } from '../../utils.js';
 import { PROJECT_ROOT } from '../../../config.js';
 import { generateIframeToken } from '../../../http/iframe-tokens.js';
-import { getAppMeta } from '../../domains/apps/discovery.js';
+import { getAppMeta } from '../../../features/apps/discovery.js';
 import { extractAppId } from '@yaar/shared';
 import { resolveResourceUri } from '../../../uri/index.js';
 import { getSessionId } from '../../../agents/session.js';
