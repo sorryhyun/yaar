@@ -72,7 +72,7 @@ describe('User domain handlers', () => {
     it('returns error without required fields', async () => {
       const reg = createRegistry();
       const result = await reg.execute('invoke', 'yaar://sessions/current/notifications', {
-        title: 'Alert',
+        body: 'no title provided',
       });
       expect(result.isError).toBe(true);
     });
