@@ -17,11 +17,11 @@ import { getSessionHub } from '../session/session-hub.js';
 import { registerSystemTools, SYSTEM_TOOL_NAMES } from './legacy/system/index.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
 import { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
-import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
+import { registerHttpTools, HTTP_TOOL_NAMES } from './system/index.js';
 import { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
 import { registerBasicTools, BASIC_TOOL_NAMES } from './legacy/basic/index.js';
 import { registerSkillTools, SKILL_TOOL_NAMES } from './skills/index.js';
-import { registerReloadTools, RELOAD_TOOL_NAMES } from '../reload/tools.js';
+import { registerReloadTools, RELOAD_TOOL_NAMES } from './system/reload.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
@@ -29,6 +29,7 @@ import { registerBrowserTools, BROWSER_TOOL_NAMES } from './legacy/browser/index
 import { isBrowserAvailable, probeBrowserAvailability } from '../features/browser/availability.js';
 import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from './verbs/index.js';
+import { logLegacyToolUsage } from './legacy/deprecation.js';
 
 /** Core MCP servers (always active). */
 export const CORE_SERVERS = ['system', 'verbs'] as const;
@@ -200,6 +201,11 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);
+
+  // Log deprecation for legacy namespace access
+  if (verbModeEnabled && (LEGACY_SERVERS as readonly string[]).includes(serverName)) {
+    logLegacyToolUsage(serverName, yaarSessionId);
+  }
 
   return runWithAgentContext({ agentId, sessionId: yaarSessionId, monitorId }, async () => {
     // Check for existing MCP session

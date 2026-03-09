@@ -22,7 +22,7 @@ export { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/inde
 export { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
 /** @deprecated Use verb mode instead. */
 export { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
-export { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
+export { registerHttpTools, HTTP_TOOL_NAMES } from './system/index.js';
 /** @deprecated Use verb mode instead. */
 export { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
 /** @deprecated Use verb mode instead. */

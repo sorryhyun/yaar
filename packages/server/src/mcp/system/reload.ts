@@ -6,12 +6,12 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../mcp/utils.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
-import type { WindowStateRegistry } from '../mcp/window-state.js';
-import { getAgentId } from '../agents/session.js';
-import type { ReloadCache } from './cache.js';
-import type { CacheEntry } from './types.js';
+import { ok } from '../utils.js';
+import { actionEmitter } from '../action-emitter.js';
+import type { WindowStateRegistry } from '../window-state.js';
+import { getAgentId } from '../../agents/session.js';
+import type { ReloadCache } from '../../reload/cache.js';
+import type { CacheEntry } from '../../reload/types.js';
 
 export const RELOAD_TOOL_NAMES = [
   'mcp__system__reload_cached',

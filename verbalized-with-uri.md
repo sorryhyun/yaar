@@ -334,7 +334,9 @@ All domains now have verb handlers:
 #### Remaining migration work
 
 - **A/B validation** — collect structured tool logs (`logToolResult` with `meta`) across verb-mode and legacy sessions, compare error rates and task completion
-- **Legacy tool deprecation** — once verb mode is validated, mark legacy tools as deprecated; keep as aliases behind `verbMode: false` (current default)
-- **Dev tools** (`dev/compile`, `dev/typecheck`, `dev/deploy`, `dev/clone`) — not yet verb-ified; low priority as they are development-only and infrequently used
-- **System tools** (`run_js`, `relay_to_main`, `show_notification`, `skill`, `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`) — not yet verb-ified; some are side-effecting utilities that don't map cleanly to resources
-- **Storage tools** (`mount`, `unmount`, `list_mounts`) — already covered via `config/mounts` handlers
+- **Legacy tool deprecation** — verb mode is now the primary interface; legacy tools are deprecated and kept as aliases behind `verbMode: false`
+- **Dev tools** (`dev/compile`, `dev/typecheck`, `dev/deploy`, `dev/clone`) — verb-ified via `yaar://sandbox/{id}` invoke with `action` param (in `verbs/handlers/basic.ts`). Done.
+- **System tools** — split into two categories:
+  - **Verb-ified (removed from VERB_TOOLS — verb equivalents are primary):** `run_js` → `invoke('yaar://sandbox/eval')`, `relay_to_main` → `invoke('yaar://sessions/current/agents/main', { action: 'relay' })`, `show_notification` → `invoke('yaar://sessions/current/notifications')`, `skill` → `read('yaar://skills/{topic}')`, `INFO_TOOLS` (get_info, memorize) → `read('yaar://sessions/current')` / `invoke('yaar://sessions/current', { action: 'memorize' })`
+  - **Staying as named system tools (not being verb-ified):** `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options` — these remain as always-active system namespace tools in both modes
+- **Storage tools** (`mount`, `unmount`, `list_mounts`) — already covered via `config/mounts` handlers. Done.

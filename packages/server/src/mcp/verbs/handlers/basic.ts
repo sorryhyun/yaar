@@ -22,8 +22,8 @@ import { storageRead, storageWrite, storageList, storageDelete } from '../../../
 import { getSandboxPath } from '../../../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../../../features/dev/helpers.js';
 import { ok, okWithImages, error } from '../../utils.js';
-import { doCompile, doTypecheck } from '../../legacy/dev/compile.js';
-import { doDeploy, doClone } from '../../legacy/dev/deploy.js';
+import { doCompile, doTypecheck } from '../../../features/dev/compile.js';
+import { doDeploy, doClone } from '../../../features/dev/deploy.js';
 
 // ── Helpers ──
 

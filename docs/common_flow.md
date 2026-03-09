@@ -447,7 +447,7 @@ Each log entry includes `agentId` for filtering:
 | `mcp/basic/` | Unified file I/O tools (read, write, list, delete, edit via `yaar://sandbox/` and `yaar://storage/` URIs) |
 | `mcp/browser/` | Browser automation tools via CDP (open, click, type, press, scroll, screenshot, extract, navigate, hover, wait_for, close) |
 | `mcp/user/` | User prompt tools (ask, request) |
-| `mcp/window/app-protocol.ts` | App Protocol tools (app_query, app_command) |
+| `mcp/window/app-protocol.ts` | App Protocol tools — verb mode: `invoke('yaar://windows/{id}', { action: 'app_query' \| 'app_command' })`. Legacy: `app_query`, `app_command` (deprecated) |
 
 ## Example: Concurrent Execution
 

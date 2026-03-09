@@ -8,12 +8,12 @@
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 /** @deprecated Legacy tool name imports — used only for normal (non-verb) mode. */
 import { WINDOW_TOOL_NAMES } from '../mcp/legacy/window/index.js';
-import { HTTP_TOOL_NAMES } from '../mcp/http/index.js';
+import { HTTP_TOOL_NAMES } from '../mcp/system/index.js';
 /** @deprecated */ import { APPS_TOOL_NAMES } from '../mcp/legacy/apps/index.js';
 /** @deprecated */ import { DEV_TOOL_NAMES } from '../mcp/legacy/dev/index.js';
 /** @deprecated */ import { BASIC_TOOL_NAMES } from '../mcp/legacy/basic/index.js';
 import { SKILL_TOOL_NAMES } from '../mcp/skills/names.js';
-import { RELOAD_TOOL_NAMES } from '../reload/tools.js';
+import { RELOAD_TOOL_NAMES } from '../mcp/system/reload.js';
 /** @deprecated */ import { CONFIG_TOOL_NAMES } from '../mcp/legacy/config/index.js';
 import { BROWSER_TOOL_NAMES } from '../mcp/legacy/browser/index.js';
 import { isBrowserAvailable } from '../features/browser/availability.js';
@@ -124,10 +124,7 @@ After completing a significant task, call relay_to_main to hand results back to 
 
 const VERB_TOOLS = [
   'WebSearch',
-  NOTIFICATION_TOOL,
-  ...INFO_TOOLS,
   ...HTTP_TOOL_NAMES,
-  'mcp__system__run_js',
   ...RELOAD_TOOL_NAMES,
   ...VERB_TOOL_NAMES,
 ] as const;

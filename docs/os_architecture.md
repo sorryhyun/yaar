@@ -80,18 +80,19 @@ The primary monitor is never throttled.
 
 ## Syscalls (MCP Tools)
 
-MCP tools are syscalls. 8 namespaced HTTP endpoints on the same server (`/mcp/{namespace}`):
+MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/mcp/system`, `/mcp/verbs`) expose 5 generic URI verbs plus system tools:
 
-| Namespace | OS analogy | Key tools |
+| Verb | OS analogy | URI pattern examples |
 |---|---|---|
-| `system` | Core syscalls | `get_info`, `memorize`, `relay_to_main`, config, HTTP, sandbox, reload |
-| `window` | Window manager API | `create`, `update`, `close`, `lock`, `list`, `show_notification` |
-| `storage` | Filesystem API | `mount`, `unmount`, `list_mounts` |
-| `apps` | Package manager | `list`, `load_skill`, `read_config`, `write_config`, marketplace |
-| `user` | stdin/stdout | `ask`, `request` (prompt user for input) |
-| `dev` | Compiler toolchain | `compile`, `typecheck`, `deploy`, `clone` |
-| `basic` | File I/O | `read`, `write`, `list`, `delete`, `edit` (URI-style: `yaar://sandbox/`, `yaar://storage/`) |
-| `browser` | Network stack | `open`, `click`, `type`, `press`, `scroll`, `screenshot`, `extract`, `navigate`, `hover`, `wait_for`, `close` |
+| `describe` | stat / introspect | `yaar://windows/{id}`, `yaar://apps/{id}`, `yaar://browser/{id}` |
+| `read` | read / open | `yaar://storage/{path}`, `yaar://sandbox/{path}`, `yaar://skills/{topic}` |
+| `list` | readdir / ls | `yaar://windows/`, `yaar://apps/`, `yaar://config/hooks/` |
+| `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://sandbox/eval` (run_js), `yaar://config/app/{id}` |
+| `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
+
+System tools (always active): `get_info`, `memorize`, `skill`, `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`
+
+> **Note:** Legacy named tools (~30 individual tools across 8 namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`) are deprecated. See individual domain docs for migration details.
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
 

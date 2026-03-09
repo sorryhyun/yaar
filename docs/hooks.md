@@ -47,7 +47,7 @@ The `filter.toolName` field narrows which tool calls trigger the hook:
 - **Multiple tools:** `"toolName": ["basic:write", "basic:edit"]`
 - **Omitted:** Hook fires on every tool call
 
-Tool names use the `namespace:name` format (e.g., `apps:compile`, `window:create`).
+Tool names use the `namespace:name` format (e.g., `apps:compile`, `window:create`). In verb mode, the equivalent verb calls (e.g., `invoke('yaar://sandbox/{id}', { action: 'compile' })`) also trigger hooks matching the legacy tool name.
 
 ## Example: App-Dev Progress Tracking
 
@@ -55,10 +55,10 @@ An example config at `docs/example_hooks.json` demonstrates a 4-stage progress w
 
 | Stage | Trigger Tool | Progress | Status |
 |-------|-------------|----------|--------|
-| Clone | `apps:clone` | 10% | "Cloning..." |
-| Write | `basic:write`, `basic:edit` | 50% | "Writing code..." |
-| Compile | `apps:compile` | 80% | "Compiling..." |
-| Deploy | `apps:deploy` | 100% | "Deployed!" |
+| Clone | `apps:clone` (verb: `invoke('yaar://apps/{id}', { action: 'clone' })`) | 10% | "Cloning..." |
+| Write | `basic:write`, `basic:edit` (verb: `invoke('yaar://sandbox/{path}')`) | 50% | "Writing code..." |
+| Compile | `apps:compile` (verb: `invoke('yaar://sandbox/{id}', { action: 'compile' })`) | 80% | "Compiling..." |
+| Deploy | `apps:deploy` (verb: `invoke('yaar://sandbox/{id}', { action: 'deploy' })`) | 100% | "Deployed!" |
 
 The first hook creates a small progress window (280x120, top-right corner). Subsequent hooks update its content as the dev flow progresses.
 
@@ -76,9 +76,9 @@ Then start the server with `make dev`. When the AI uses app-dev tools, the progr
 
 The AI can manage hooks through built-in MCP tools (all on the `system` MCP server):
 
-- **`set_config`** — Register a new hook (shows a permission dialog) or update settings (`section: "hooks"` or `"settings"`)
-- **`get_config`** — Read registered hooks and/or user settings (`section: "hooks"`, `"settings"`, or omit for both)
-- **`remove_config`** — Delete a hook by ID (shows a confirmation dialog)
+- **`set_config`** (verb: `invoke('yaar://config/hooks/{id}', { hook })`) — Register a new hook (shows a permission dialog) or update settings
+- **`get_config`** (verb: `read('yaar://config/hooks/')` or `list('yaar://config/hooks/')`) — Read registered hooks and/or user settings
+- **`remove_config`** (verb: `delete('yaar://config/hooks/{id}')`) — Delete a hook by ID (shows a confirmation dialog)
 
 ### Example: Adding a Hook via set_config
 

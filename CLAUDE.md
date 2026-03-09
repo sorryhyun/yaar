@@ -231,10 +231,10 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 | `apps_market_get` | Download and install an app from the marketplace |
 | `apps_market_delete` | Uninstall an app and its credentials |
 
-App config (credentials, preferences) is managed via `config` namespace tools:
-- `config:set(section: "app", appId, appConfig)` — merge config into `config/{appId}.json`
-- `config:get(section: "app", appId?)` — read app config
-- `config:remove(appId, appConfigKey?)` — remove app config key or entire file
+App config (credentials, preferences) is managed via verb tools (or legacy `config` namespace):
+- `invoke('yaar://config/app/{appId}', { config })` — merge config into `config/{appId}.json` (legacy: `config:set(section: "app", appId, appConfig)`)
+- `read('yaar://config/app/{appId}')` — read app config (legacy: `config:get(section: "app", appId?)`)
+- `delete('yaar://config/app/{appId}')` — remove app config key or entire file (legacy: `config:remove(appId, appConfigKey?)`)
 
 ### Example: GitHub Manager App
 

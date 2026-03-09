@@ -28,9 +28,9 @@ Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environme
 
 ## MCP Tools
 
-File I/O tools are registered in the **`basic`** MCP namespace. All tools accept URI-style paths with `yaar://storage/` or `yaar://sandbox/` schemes. Only the `yaar://storage/` scheme is covered here.
+**Verb mode (default):** File I/O is handled by the 5 generic verb tools (`read`, `list`, `invoke`, `delete`, `describe`) with `yaar://storage/` URIs. **Legacy mode (deprecated):** tools are in the `basic` MCP namespace. All tools accept URI-style paths with `yaar://storage/` or `yaar://sandbox/` schemes. Only the `yaar://storage/` scheme is covered here.
 
-**Source:** `packages/server/src/mcp/basic/`
+**Source:** `packages/server/src/mcp/verbs/handlers/basic.ts` (verb mode), `packages/server/src/mcp/legacy/basic/` (legacy)
 
 ### `read`
 
@@ -424,7 +424,7 @@ Stored at `config/permissions.json`. Records "allow" / "deny" decisions for MCP 
 
 ### App Config
 
-Stored at `config/{appId}.json`. Managed via `set_config(section: "app")`, `get_config(section: "app")`, and `remove_config` MCP tools.
+Stored at `config/{appId}.json`. Managed via verb tools: `invoke('yaar://config/app/{appId}', { config })`, `read('yaar://config/app/{appId}')`, `delete('yaar://config/app/{appId}')`. Legacy: `set_config(section: "app")`, `get_config(section: "app")`, `remove_config` (deprecated).
 
 ---
 

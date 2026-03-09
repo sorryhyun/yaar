@@ -147,17 +147,16 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 **Legacy tool mode (deprecated):** All namespaces active. Individual named tools in `mcp/legacy/` domain folders. Emits a deprecation warning at startup. Will be removed in a future release.
 
-Always-active tools (both modes):
+Primary tools (verb mode — default):
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
-| `system/` | system | get_info, memorize, relay_to_main, run_js, show_notification |
+| `verbs/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `mcp/verbs/handlers/` via `yaar://` URIs |
+| `system/` | system | get_info, memorize |
+| `mcp/system/` | system | http_get, http_post, request_allowing_domain, reload_cached, list_reload_options, curl |
 | `skills/` | system | skill (reference doc loader) |
-| `http/` | system | http_get, http_post, request_allowing_domain |
-| `reload/` | system | reload_cached, list_reload_options |
-| `verbs/` | verbs | describe, read, list, invoke, delete (URI-based dispatch) |
 
-Legacy tools (deprecated, `mcp/legacy/`):
+@deprecated — Legacy tools (`mcp/legacy/`):
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|

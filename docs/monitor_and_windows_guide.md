@@ -188,7 +188,7 @@ AI emits window.close / user clicks X
 
 ### Server-side tracking
 
-`WindowStateRegistry` (in `LiveSession`) maintains the server's view of all open windows. This lets agents call `list_windows` / `view_window` MCP tools to inspect what's on screen without asking the frontend.
+`WindowStateRegistry` (in `LiveSession`) maintains the server's view of all open windows. This lets agents call `list('yaar://windows/')` / `read('yaar://windows/{id}')` verb tools to inspect what's on screen without asking the frontend. (Legacy: `list_windows` / `view_window` — deprecated.)
 
 ---
 

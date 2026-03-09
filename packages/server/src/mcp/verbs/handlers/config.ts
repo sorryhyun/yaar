@@ -24,6 +24,7 @@ import {
   handleRemoveMount,
 } from '../../../features/config/mounts.js';
 import { handleSetApp, handleGetApp, handleRemoveApp } from '../../../features/config/app.js';
+import { readAllowedDomains, isAllDomainsAllowed } from '../../domains.js';
 import { ok } from '../../utils.js';
 
 function assertConfig(
@@ -39,7 +40,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'list', 'read'],
 
     async list() {
-      const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app'];
+      const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app', 'domains'];
       return ok(JSON.stringify({ sections: sections.map((s) => `yaar://config/${s}`) }, null, 2));
     },
 
@@ -51,6 +52,18 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         handleGetMounts(),
       ]);
       return ok(JSON.stringify({ ...hooks, ...settings, ...shortcuts, ...mounts }, null, 2));
+    },
+  });
+
+  // ── yaar://config/domains — read-only domain allowlist ──
+  registry.register('yaar://config/domains', {
+    description:
+      'HTTP domain allowlist. Read to see which domains are allowed for http_get/http_post.',
+    verbs: ['describe', 'read'],
+
+    async read(): Promise<VerbResult> {
+      const [domains, allowAll] = await Promise.all([readAllowedDomains(), isAllDomainsAllowed()]);
+      return ok(JSON.stringify({ allow_all_domains: allowAll, allowed_domains: domains }, null, 2));
     },
   });
 
