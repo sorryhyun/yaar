@@ -17,7 +17,7 @@ import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../../uri
 import type { ResolvedUri } from '../../../uri/resolve.js';
 import { ok, error } from '../../utils.js';
 import { actionEmitter } from '../../action-emitter.js';
-import { listApps, loadAppSkill } from '../../legacy/apps/discovery.js';
+import { listApps, loadAppSkill } from '../../domains/apps/discovery.js';
 import { PROJECT_ROOT } from '../../../config.js';
 import { getConfigDir } from '../../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../../storage/shortcuts.js';

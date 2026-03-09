@@ -1,53 +1,15 @@
 /**
  * App development compile tools - compile and typecheck.
+ * @deprecated Legacy MCP tool registration. Domain logic in domains/dev/compile.ts.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { stat } from 'fs/promises';
 import { ok, error } from '../../utils.js';
-import {
-  compileTypeScript,
-  typecheckSandbox,
-  getSandboxPath,
-} from '../../../lib/compiler/index.js';
+import { doCompile, doTypecheck } from '../../domains/dev/compile.js';
 import { parseFileUri } from '@yaar/shared';
 
-// ── Core logic (reusable from verb layer) ──
-
-export async function doCompile(
-  sandboxId: string,
-  options?: { title?: string },
-): Promise<{ success: true; previewUrl: string } | { success: false; error: string }> {
-  const sandboxPath = getSandboxPath(sandboxId);
-  try {
-    await stat(sandboxPath);
-  } catch {
-    return { success: false, error: `Sandbox "${sandboxId}" not found.` };
-  }
-  const result = await compileTypeScript(sandboxPath, { title: options?.title });
-  if (!result.success) {
-    return {
-      success: false,
-      error: `Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`,
-    };
-  }
-  return { success: true, previewUrl: `/api/sandbox/${sandboxId}/dist/index.html` };
-}
-
-export async function doTypecheck(
-  sandboxId: string,
-): Promise<{ success: true } | { success: false; error: string }> {
-  const sandboxPath = getSandboxPath(sandboxId);
-  try {
-    await stat(sandboxPath);
-  } catch {
-    return { success: false, error: `Sandbox "${sandboxId}" not found.` };
-  }
-  const result = await typecheckSandbox(sandboxPath);
-  if (result.success) return { success: true };
-  return { success: false, error: `Type check found errors:\n${result.diagnostics.join('\n')}` };
-}
+export { doCompile, doTypecheck };
 
 // ── MCP tool registration ──
 

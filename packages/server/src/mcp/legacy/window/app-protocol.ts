@@ -14,8 +14,8 @@ import { getSessionHub } from '../../../session/session-hub.js';
 import { actionEmitter } from '../../action-emitter.js';
 import type { WindowStateRegistry } from '../../window-state.js';
 import { ok, error } from '../../utils.js';
-import { enrichManifestWithUris } from './manifest-utils.js';
-import { resolveWindowId } from './resolve-window.js';
+import { enrichManifestWithUris } from '../../domains/window/manifest-utils.js';
+import { resolveWindowId } from '../../domains/window/resolve-window.js';
 
 /**
  * Resource path pattern for bare URIs without yaar:// prefix.

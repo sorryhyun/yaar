@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { parseFileUri } from '@yaar/shared';
 import { ok, error } from '../../utils.js';
 import { getSandboxPath } from '../../../lib/compiler/index.js';
-import { generateSandboxId } from '../dev/helpers.js';
+import { generateSandboxId } from '../../domains/dev/helpers.js';
 import { storageWrite } from '../../../storage/index.js';
 import { validateSandboxPath } from './helpers.js';
 

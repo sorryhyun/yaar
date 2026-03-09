@@ -5,7 +5,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../../utils.js';
-import { resolveSession, formatPageState } from './shared.js';
+import { resolveSession, formatPageState } from '../../domains/browser/shared.js';
 
 export function registerNavigateTools(server: McpServer): void {
   server.registerTool(

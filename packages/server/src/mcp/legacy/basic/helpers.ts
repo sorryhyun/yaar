@@ -4,7 +4,7 @@
 
 import { readdir } from 'fs/promises';
 import { join, relative } from 'path';
-import { isValidPath } from '../dev/helpers.js';
+import { isValidPath } from '../../domains/dev/helpers.js';
 
 /** Recursively list all files under a directory, returning relative paths. */
 export async function listFiles(dir: string, base: string): Promise<string[]> {

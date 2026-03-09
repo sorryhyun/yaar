@@ -1,5 +1,6 @@
 /**
  * MCP browser tools — visible browser automation via CDP.
+ * @deprecated Legacy MCP tool registration. Browser availability in domains/browser/availability.ts.
  *
  * The agent controls a headless Chromium browser, screenshots are displayed
  * in a YAAR window via the browser app, and text content is returned to the agent.
@@ -10,20 +11,18 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getBrowserPool } from '../../../lib/browser/index.js';
+import { isBrowserAvailable as _isBrowserAvailable } from '../../domains/browser/availability.js';
 import { registerOpenTool } from './open.js';
 import { registerInteractTools } from './interact.js';
 import { registerNavigateTools } from './navigate.js';
 import { registerContentTools } from './content.js';
 import { registerManageTools } from './manage.js';
 
-let _available = false;
-
 /**
  * Whether browser tools were successfully registered (Chrome/Edge was found).
+ * @deprecated Import from '../../domains/browser/availability.js' instead.
  */
-export function isBrowserAvailable(): boolean {
-  return _available;
-}
+export const isBrowserAvailable = _isBrowserAvailable;
 
 /**
  * Register browser automation tools on the given MCP server.
@@ -38,7 +37,6 @@ export async function registerBrowserTools(server: McpServer): Promise<void> {
     return;
   }
 
-  _available = true;
   console.log('[browser] Chrome found — registering browser tools');
 
   registerOpenTool(server, pool);

@@ -40,7 +40,7 @@ vi.mock('../lib/compiler/index.js', () => ({
   getSandboxPath: (...args: unknown[]) => mockGetSandboxPath(...args),
 }));
 
-vi.mock('../mcp/legacy/dev/helpers.js', () => ({
+vi.mock('../mcp/domains/dev/helpers.js', () => ({
   generateSandboxId: () => mockGenerateSandboxId(),
   isValidPath: (_base: string, path: string) => !path.includes('..'),
 }));

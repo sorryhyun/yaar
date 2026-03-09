@@ -15,7 +15,7 @@ import { actionEmitter } from '../../action-emitter.js';
 import type { WindowStateRegistry } from '../../window-state.js';
 import { ok, error } from '../../utils.js';
 import { gapEnum, colsSchema } from './create.js';
-import { resolveWindowId } from './resolve-window.js';
+import { resolveWindowId } from '../../domains/window/resolve-window.js';
 import { formatWindowRef, checkWindowAccess } from './helpers.js';
 
 export function registerUpdateTools(

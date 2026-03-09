@@ -7,15 +7,15 @@
 
 import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
 import type { ResolvedUri } from '../../../uri/resolve.js';
-import { handleSetSettings, handleGetSettings } from '../../legacy/config/settings.js';
-import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../legacy/config/hooks.js';
+import { handleSetSettings, handleGetSettings } from '../../domains/config/settings.js';
+import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../domains/config/hooks.js';
 import {
   handleSetShortcut,
   handleGetShortcuts,
   handleRemoveShortcut,
-} from '../../legacy/config/shortcuts.js';
-import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../legacy/config/mounts.js';
-import { handleSetApp, handleGetApp, handleRemoveApp } from '../../legacy/config/app.js';
+} from '../../domains/config/shortcuts.js';
+import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../domains/config/mounts.js';
+import { handleSetApp, handleGetApp, handleRemoveApp } from '../../domains/config/app.js';
 import { ok } from '../../utils.js';
 
 function assertConfig(
