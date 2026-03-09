@@ -16,7 +16,7 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcWsClient } from './jsonrpc-ws-client.js';
-import { getMcpToken, MCP_SERVERS } from '../../mcp/index.js';
+import { getMcpToken, CORE_SERVERS } from '../../mcp/index.js';
 import {
   getCodexSpawnArgs,
   getCodexAppServerArgs,
@@ -197,7 +197,7 @@ export class AppServer {
     // Kill any orphaned process still holding the port from a previous run
     this.killStaleProcess();
 
-    const namespaces = MCP_SERVERS;
+    const namespaces = CORE_SERVERS;
     const args = getCodexAppServerArgs(namespaces);
 
     // Add WebSocket listener

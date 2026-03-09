@@ -7,6 +7,7 @@ export {
   initMcpServer,
   handleMcpRequest,
   getMcpToken,
+  CORE_SERVERS,
   MCP_SERVERS,
   type McpServerName,
   getActiveServers,
