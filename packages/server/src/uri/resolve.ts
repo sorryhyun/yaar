@@ -227,9 +227,14 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions)$/,
+    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions|skills)$/,
   );
   if (bareMatch) {
+    return { kind: 'root', sourceUri: uri };
+  }
+
+  // Extended authorities handled only by verb-layer handlers (not by core parsers)
+  if (uri.startsWith('yaar://skills/')) {
     return { kind: 'root', sourceUri: uri };
   }
 

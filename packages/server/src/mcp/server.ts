@@ -14,7 +14,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+import { registerSystemTools, SYSTEM_TOOL_NAMES } from './legacy/system/index.js';
 import { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
 import { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
 import { registerHttpTools, HTTP_TOOL_NAMES } from './http/index.js';
@@ -72,6 +72,9 @@ const skipAuth = process.env.MCP_SKIP_AUTH === '1';
 // Track whether the module has been initialized
 let initialized = false;
 
+// Track verb mode so createServerForName can conditionally register tools
+let verbModeEnabled = false;
+
 /**
  * Get the MCP authentication token.
  * Must be called after initMcpServer().
@@ -105,8 +108,12 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
 
   switch (name) {
     case 'system':
-      registerSystemTools(server);
-      registerSkillTools(server);
+      // In verb mode, system/skill tools are handled by verb-layer URI handlers,
+      // so only register HTTP and reload tools on the system server.
+      if (!verbModeEnabled) {
+        registerSystemTools(server);
+        registerSkillTools(server);
+      }
       registerHttpTools(server);
       registerReloadTools(server, getReloadCache, getWindowState);
       break;
@@ -147,6 +154,11 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
 export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
   mcpToken = crypto.randomUUID();
+
+  // Read settings to determine verb mode for conditional tool registration
+  const { readSettings } = await import('../storage/settings.js');
+  const settings = await readSettings();
+  verbModeEnabled = settings.verbMode;
 
   // Probe browser availability once at startup so isBrowserAvailable() is set.
   await probeBrowserAvailability();
@@ -310,14 +322,7 @@ export function getActiveServers(verbMode: boolean): McpServerName[] {
  */
 export function getToolNames(verbMode?: boolean): string[] {
   if (verbMode) {
-    return [
-      'WebSearch',
-      ...SYSTEM_TOOL_NAMES,
-      ...SKILL_TOOL_NAMES,
-      ...HTTP_TOOL_NAMES,
-      ...RELOAD_TOOL_NAMES,
-      ...VERB_TOOL_NAMES,
-    ];
+    return ['WebSearch', ...HTTP_TOOL_NAMES, ...RELOAD_TOOL_NAMES, ...VERB_TOOL_NAMES];
   }
   return [
     'WebSearch',

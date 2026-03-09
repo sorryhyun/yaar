@@ -8,6 +8,9 @@
  *   list   → list directory entries
  *   invoke → write or edit (dispatched by payload.action)
  *   delete → delete a file
+ *
+ * Also registers:
+ *   invoke('yaar://sandbox/eval', { code, timeout }) → ephemeral JS execution
  */
 
 import { stat, unlink, mkdir, readdir } from 'fs/promises';
@@ -52,6 +55,52 @@ async function listFiles(dir: string, base: string): Promise<string[]> {
     }
   }
   return files;
+}
+
+// ── Sandbox eval helpers ──
+
+/** Common sandbox-escape patterns → short hint */
+const SANDBOX_HINTS: [RegExp, string][] = [
+  [
+    /\brequire\b/,
+    'require() is not available. This sandbox uses ESM — only built-in globals and fetch (for allowed domains) are provided.',
+  ],
+  [/\bDeno\b/, 'Deno APIs are not available. This is a Node.js vm sandbox, not Deno.'],
+  [
+    /\b(readFile|writeFile|readdir)\b/,
+    'Node.js fs APIs are not available in the sandbox. Use storage tools for file access.',
+  ],
+  [/\bprocess\b/, 'process is not available. The sandbox has no access to the host environment.'],
+  [/\bimport\s*\(/, 'Dynamic import() is not available in the sandbox.'],
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatSandboxResult(result: any, code: string): string {
+  const parts: string[] = [];
+
+  if (result.logsFormatted) {
+    parts.push('Console output:');
+    parts.push(result.logsFormatted);
+    parts.push('');
+  }
+
+  if (result.success) {
+    parts.push(`Result: ${result.result !== undefined ? result.result : 'undefined'}`);
+  } else {
+    parts.push(`Error: ${result.error}`);
+
+    if (result.error?.includes('is not defined') || result.error?.includes('is not a function')) {
+      for (const [pattern, hint] of SANDBOX_HINTS) {
+        if (pattern.test(code)) {
+          parts.push(`Hint: ${hint}`);
+          break;
+        }
+      }
+    }
+  }
+
+  parts.push(`Execution time: ${Math.round(result.executionTimeMs)}ms`);
+  return parts.join('\n');
 }
 
 // ── Storage read/edit helpers ──
@@ -254,6 +303,50 @@ export function registerBasicHandlers(registry: ResourceRegistry): void {
       const result = await storageDelete(path);
       if (!result.success) return error(result.error!);
       return ok(`Deleted yaar://storage/${path}`);
+    },
+  });
+
+  // ── yaar://sandbox/eval — ephemeral JS execution ──
+  registry.register('yaar://sandbox/eval', {
+    description:
+      'Execute JavaScript code in a sandboxed environment. Code runs in an async IIFE (await supported).',
+    verbs: ['describe', 'invoke'],
+    invokeSchema: {
+      type: 'object',
+      required: ['code'],
+      properties: {
+        code: { type: 'string', description: 'JavaScript code to execute' },
+        timeout: {
+          type: 'number',
+          description: 'Timeout in milliseconds (default: 5000, min: 100, max: 30000)',
+        },
+      },
+    },
+
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      if (typeof payload?.code !== 'string' || !payload.code)
+        return error('"code" (string) is required.');
+
+      const timeout =
+        typeof payload.timeout === 'number'
+          ? Math.max(100, Math.min(30000, payload.timeout))
+          : 5000;
+
+      const { executeJs } = await import('../../../lib/sandbox/index.js');
+      const { readAllowedDomains, isAllDomainsAllowed } = await import('../../domains.js');
+
+      const [allowedDomains, allowAllDomains] = await Promise.all([
+        readAllowedDomains(),
+        isAllDomainsAllowed(),
+      ]);
+
+      const result = await executeJs(payload.code, {
+        timeout,
+        allowedDomains,
+        allowAllDomains,
+      });
+
+      return ok(formatSandboxResult(result, payload.code));
     },
   });
 

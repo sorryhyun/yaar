@@ -8,7 +8,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../../utils.js';
-import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../domains/config/hooks.js';
+import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../domains/config/hooks-handler.js';
 import { handleSetSettings, handleGetSettings } from '../../domains/config/settings.js';
 import { handleSetShortcut, handleGetShortcuts, handleRemoveShortcut } from '../../domains/config/shortcuts.js';
 import { handleSetMount, handleGetMounts, handleRemoveMount } from '../../domains/config/mounts.js';

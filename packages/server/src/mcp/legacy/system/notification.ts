@@ -5,8 +5,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { OSAction } from '@yaar/shared';
-import { actionEmitter } from '../action-emitter.js';
-import { ok } from '../utils.js';
+import { actionEmitter } from '../../action-emitter.js';
+import { ok } from '../../utils.js';
 
 export function registerNotificationTools(server: McpServer): void {
   server.registerTool(

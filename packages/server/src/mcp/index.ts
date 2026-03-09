@@ -15,7 +15,7 @@ export {
 } from './server.js';
 
 // Domain tool registrations + tool name exports
-export { registerSystemTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+export { registerSystemTools, SYSTEM_TOOL_NAMES } from './legacy/system/index.js';
 /** @deprecated Use verb mode instead. */
 export { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
 /** @deprecated Use verb mode instead. */

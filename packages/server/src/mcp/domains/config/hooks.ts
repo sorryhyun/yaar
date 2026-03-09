@@ -1,72 +1,130 @@
 /**
- * Config section: hooks — event-driven automation.
+ * Hook storage — reads/writes config/hooks.json.
+ *
+ * Hooks are event-driven config entries that fire interactions
+ * or commands on specific triggers (e.g., session launch).
  */
 
-import { z } from 'zod';
-import { ok, error } from '../../utils.js';
-import { actionEmitter } from '../../action-emitter.js';
-import type { HookAction } from '../../system/hooks.js';
-import { addHook, loadHooks, removeHook } from '../../system/hooks.js';
+import type { OSAction } from '@yaar/shared';
+import { configRead, configWrite } from '../../../storage/storage-manager.js';
 
-export const hookContentSchema = z.object({
-  event: z.enum(['launch', 'tool_use']),
-  label: z.string(),
-  filter: z
-    .object({
-      toolName: z.union([z.string(), z.array(z.string())]),
-    })
-    .optional(),
-  action: z.object({
-    type: z.enum(['interaction', 'os_action']),
-    payload: z.union([
-      z.string(),
-      z.record(z.string(), z.unknown()),
-      z.array(z.record(z.string(), z.unknown())),
-    ]),
-  }),
-});
+export type HookAction =
+  | { type: 'interaction'; payload: string }
+  | { type: 'os_action'; payload: OSAction | OSAction[] };
 
-export async function handleSetHook(content: Record<string, unknown>) {
-  const result = hookContentSchema.safeParse(content);
-  if (!result.success) return error(`Invalid hooks content: ${result.error.message}`);
-
-  const { event, label, filter } = result.data;
-
-  const approved = await actionEmitter.showPermissionDialog(
-    'Add Hook',
-    `The AI wants to add a hook: **${label}** (${event}). Allow?`,
-    'config_hook',
-    event,
-  );
-
-  if (!approved) {
-    return error('Permission denied — hook was not added.');
-  }
-
-  const hook = await addHook(event, result.data.action as HookAction, label, filter);
-  return ok(`Hook registered: "${hook.label}" (${hook.id})`);
+export interface HookFilter {
+  toolName?: string | string[];
 }
 
-export async function handleGetHooks() {
+export interface Hook {
+  id: string;
+  event: string;
+  filter?: HookFilter;
+  action: HookAction;
+  label: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+interface HooksFile {
+  hooks: Hook[];
+  idCounter: number;
+}
+
+const HOOKS_PATH = 'hooks.json';
+
+let cachedHooksFile: HooksFile | null = null;
+
+async function loadHooksFile(): Promise<HooksFile> {
+  if (cachedHooksFile) return cachedHooksFile;
+
+  const result = await configRead(HOOKS_PATH);
+  if (result.success && result.content) {
+    try {
+      cachedHooksFile = JSON.parse(result.content) as HooksFile;
+      return cachedHooksFile;
+    } catch {
+      // Corrupted file, start fresh
+    }
+  }
+  cachedHooksFile = { hooks: [], idCounter: 0 };
+  return cachedHooksFile;
+}
+
+async function saveHooksFile(data: HooksFile): Promise<void> {
+  await configWrite(HOOKS_PATH, JSON.stringify(data, null, 2));
+  cachedHooksFile = data;
+}
+
+/** Reset the in-memory cache (for testing). */
+export function _resetHooksCache(): void {
+  cachedHooksFile = null;
+}
+
+/**
+ * Load all hooks.
+ */
+export async function loadHooks(): Promise<Hook[]> {
+  const data = await loadHooksFile();
+  return data.hooks;
+}
+
+/**
+ * Get hooks filtered by event type.
+ */
+export async function getHooksByEvent(event: string): Promise<Hook[]> {
   const hooks = await loadHooks();
-  return { hooks };
+  return hooks.filter((h) => h.event === event && h.enabled);
 }
 
-export async function handleRemoveHook(hookId: string) {
-  const confirmed = await actionEmitter.showConfirmDialog(
-    'Remove Hook',
-    `Remove hook "${hookId}"?`,
-    'Remove',
-    'Cancel',
-  );
+/**
+ * Add a new hook. Returns the created hook.
+ */
+export async function addHook(
+  event: string,
+  action: HookAction,
+  label: string,
+  filter?: HookFilter,
+): Promise<Hook> {
+  const data = await loadHooksFile();
+  data.idCounter += 1;
 
-  if (!confirmed) {
-    return ok('Cancelled — hook was not removed.');
-  }
+  const hook: Hook = {
+    id: `hook-${data.idCounter}`,
+    event,
+    ...(filter && { filter }),
+    action,
+    label,
+    enabled: true,
+    createdAt: new Date().toISOString(),
+  };
 
-  const removed = await removeHook(hookId);
-  if (!removed) {
-    return error(`Hook "${hookId}" not found.`);
-  }
-  return ok(`Hook "${hookId}" removed.`);
+  data.hooks.push(hook);
+  await saveHooksFile(data);
+  return hook;
+}
+
+/**
+ * Get enabled tool_use hooks that match a given tool name.
+ */
+export async function getToolUseHooks(toolName: string): Promise<Hook[]> {
+  const hooks = await getHooksByEvent('tool_use');
+  return hooks.filter((h) => {
+    if (!h.filter?.toolName) return true;
+    const names = Array.isArray(h.filter.toolName) ? h.filter.toolName : [h.filter.toolName];
+    return names.includes(toolName);
+  });
+}
+
+/**
+ * Remove a hook by ID. Returns true if found and removed.
+ */
+export async function removeHook(hookId: string): Promise<boolean> {
+  const data = await loadHooksFile();
+  const idx = data.hooks.findIndex((h) => h.id === hookId);
+  if (idx === -1) return false;
+
+  data.hooks.splice(idx, 1);
+  await saveHooksFile(data);
+  return true;
 }

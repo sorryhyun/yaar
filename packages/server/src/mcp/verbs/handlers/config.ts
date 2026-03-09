@@ -8,7 +8,11 @@
 import type { ResourceRegistry, VerbResult } from '../../../uri/registry.js';
 import type { ResolvedUri } from '../../../uri/resolve.js';
 import { handleSetSettings, handleGetSettings } from '../../domains/config/settings.js';
-import { handleSetHook, handleGetHooks, handleRemoveHook } from '../../domains/config/hooks.js';
+import {
+  handleSetHook,
+  handleGetHooks,
+  handleRemoveHook,
+} from '../../domains/config/hooks-handler.js';
 import {
   handleSetShortcut,
   handleGetShortcuts,

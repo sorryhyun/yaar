@@ -4,8 +4,8 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok, error } from '../utils.js';
-import { configRead, configWrite } from '../../storage/storage-manager.js';
+import { ok, error } from '../../utils.js';
+import { configRead, configWrite } from '../../../storage/storage-manager.js';
 
 export function registerInfoTools(server: McpServer): void {
   // get_info — system info + optional env var reading

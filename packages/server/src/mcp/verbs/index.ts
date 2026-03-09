@@ -16,6 +16,7 @@ import { registerAppsHandlers } from './handlers/apps.js';
 import { registerSessionHandlers } from './handlers/session.js';
 import { registerBrowserHandlers } from './handlers/browser.js';
 import { registerAgentsHandlers } from './handlers/agents.js';
+import { registerSkillsHandlers } from './handlers/skills.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
@@ -48,6 +49,7 @@ export function initRegistry(): ResourceRegistry {
   registerAppsHandlers(registry);
   registerSessionHandlers(registry);
   registerAgentsHandlers(registry);
+  registerSkillsHandlers(registry);
 
   // Browser handlers are async (conditional on Chrome availability)
   registerBrowserHandlers(registry).catch(() => {
