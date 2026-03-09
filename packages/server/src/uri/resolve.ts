@@ -9,18 +9,15 @@ import { join } from 'path';
 import {
   parseYaarUri,
   resolveContentUri,
-  parseMonitorUri,
   parseWindowUri,
   parseBareWindowUri,
   parseConfigUri,
   parseBrowserUri,
-  parseAgentUri,
-  parseUserUri,
   parseSessionUri,
   type ParsedConfigUri,
   type ParsedBrowserUri,
-  type UserResource,
   type SessionResource,
+  type SessionSubKind,
 } from '@yaar/shared';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
@@ -38,12 +35,6 @@ export interface ResolvedResource {
   sourceUri: string;
   /** API path for frontend consumption */
   apiPath: string;
-}
-
-export interface ResolvedMonitor {
-  kind: 'monitor';
-  monitorId: string;
-  sourceUri: string;
 }
 
 export interface ResolvedWindow {
@@ -68,24 +59,12 @@ export interface ResolvedBrowser {
   sourceUri: string;
 }
 
-export interface ResolvedAgent {
-  kind: 'agent';
-  id?: string;
-  action?: string;
-  sourceUri: string;
-}
-
-export interface ResolvedUser {
-  kind: 'user';
-  resource: UserResource;
-  id?: string;
-  sourceUri: string;
-}
-
 export interface ResolvedSession {
   kind: 'session';
   resource: SessionResource;
-  subResource?: string;
+  subKind?: SessionSubKind;
+  id?: string;
+  action?: string;
   sourceUri: string;
 }
 
@@ -97,12 +76,9 @@ export interface ResolvedRoot {
 export type ResolvedUri =
   | ResolvedRoot
   | ResolvedResource
-  | ResolvedMonitor
   | ResolvedWindow
   | ResolvedConfig
   | ResolvedBrowser
-  | ResolvedAgent
-  | ResolvedUser
   | ResolvedSession;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
@@ -163,8 +139,6 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     case 'windows':
     case 'config':
     case 'browser':
-    case 'agents':
-    case 'user':
     case 'sessions':
       // Not content resources — handled by resolveUri via dedicated parsers
       return null;
@@ -208,17 +182,8 @@ export function resolveUri(uri: string): ResolvedUri | null {
         sourceUri: uri,
       };
     }
-    // yaar://windows/ with no windowId → treat as monitor
-    return { kind: 'monitor', monitorId, sourceUri: uri };
-  }
-
-  const monitor = parseMonitorUri(uri);
-  if (monitor) {
-    return {
-      kind: 'monitor',
-      monitorId: monitor.monitorId,
-      sourceUri: uri,
-    };
+    // yaar://windows/ with no windowId → treat as window collection
+    return { kind: 'window', monitorId, windowId: '', sourceUri: uri };
   }
 
   const config = parseConfigUri(uri);
@@ -241,32 +206,14 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  const agent = parseAgentUri(uri);
-  if (agent) {
-    return {
-      kind: 'agent',
-      id: agent.id,
-      action: agent.action,
-      sourceUri: uri,
-    };
-  }
-
-  const user = parseUserUri(uri);
-  if (user) {
-    return {
-      kind: 'user',
-      resource: user.resource,
-      id: user.id,
-      sourceUri: uri,
-    };
-  }
-
   const session = parseSessionUri(uri);
   if (session) {
     return {
       kind: 'session',
       resource: session.resource,
-      subResource: session.subResource,
+      subKind: session.subKind,
+      id: session.id,
+      action: session.action,
       sourceUri: uri,
     };
   }

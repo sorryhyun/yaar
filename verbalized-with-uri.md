@@ -2,7 +2,7 @@
 
 ## Summary
 
-`yaar://` is a unified URI scheme for addressing all internal resources: content (apps, storage, sandbox), windows, configuration, browser instances, agents, user state, and sessions.
+`yaar://` is a unified URI scheme for addressing all internal resources: content (apps, storage, sandbox), windows, configuration, browser instances, and session state (agents, notifications, prompts, monitors).
 
 Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `read`, `list`, `invoke`, `delete`) replace individual MCP tools.
 
@@ -18,11 +18,13 @@ Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `re
 
 4. **Actions live in the payload.** If something can only be `invoke`d but never `read` or `list`ed, it's not a resource — it's an action on a resource. Pass it as `{ action: 'navigate', ... }` in the invoke payload.
 
+5. **Session-scoped resources live under `yaar://sessions/`.** Agents, notifications, prompts, clipboard, and monitors are facets of the current session — not independent top-level namespaces.
+
 ---
 
 ## URI Space
 
-All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers all nine namespaces. Server-side resolution is in `packages/server/src/uri/resolve.ts`.
+All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers seven namespaces. Server-side resolution is in `packages/server/src/uri/resolve.ts`.
 
 ### Content Resources
 
@@ -35,11 +37,15 @@ All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority`
 
 Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API paths via `resolveContentUri()`.
 
-### Windows — `yaar://monitors/{monitorId}/...`
+### Windows — `yaar://windows/{windowId}`
+
+The primary way agents address windows. Monitor ID is injected automatically from the agent's context.
 
 | URI | Description |
 |-----|-------------|
-| `yaar://monitors/{monitorId}/{windowId}` | Window on a monitor |
+| `yaar://windows/{windowId}` | Window (preferred shorthand, monitor auto-injected) |
+| `yaar://windows/` | Window collection (list, create) |
+| `yaar://monitors/{monitorId}/{windowId}` | Window with explicit monitor (internal addressing) |
 | `yaar://monitors/{monitorId}/{windowId}/state/{key}` | Window state (app-protocol) |
 
 ### Config — `yaar://config/...`
@@ -60,28 +66,20 @@ Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API p
 |-----|-------------|
 | `yaar://browser/{browserId}` | Browser instance (URL, title, content, screenshot via `read`; navigate, click, type via `invoke` with `action`) |
 
-### Agents — `yaar://agents/...`
+### Sessions — `yaar://sessions/current/...`
+
+All session-scoped resources live under this namespace. Agents, notifications, prompts, clipboard, and monitors are sub-resources of the current session.
 
 | URI | Description |
 |-----|-------------|
-| `yaar://agents/` | All active agents |
-| `yaar://agents/{agentId}` | Agent by instance ID (interrupt via `invoke` with `action`) |
-
-### User — `yaar://user/...`
-
-| URI | Description |
-|-----|-------------|
-| `yaar://user/notifications` | Notification list |
-| `yaar://user/notifications/{id}` | Individual notification |
-| `yaar://user/prompts` | Pending prompts |
-| `yaar://user/prompts/{id}` | Individual prompt |
-| `yaar://user/clipboard` | Clipboard contents |
-
-### Sessions — `yaar://sessions/...`
-
-| URI | Description |
-|-----|-------------|
-| `yaar://sessions/current` | Current session |
+| `yaar://sessions/current` | Current session info (platform, uptime, stats) |
+| `yaar://sessions/current/agents` | All active agents (list) |
+| `yaar://sessions/current/agents/{agentId}` | Agent by instance ID (read info, invoke with `{ action: 'interrupt' }`) |
+| `yaar://sessions/current/notifications` | Show notification (invoke with `{ id, title, body }`) |
+| `yaar://sessions/current/notifications/{id}` | Dismiss notification (delete) |
+| `yaar://sessions/current/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
+| `yaar://sessions/current/clipboard` | Clipboard contents |
+| `yaar://sessions/current/monitors/{monitorId}` | Monitor status (main agent, window list, queue stats) |
 | `yaar://sessions/current/logs` | Session logs |
 | `yaar://sessions/current/context` | Context state |
 
@@ -91,23 +89,24 @@ Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API p
 
 ### Done
 
-- **URI parsing and building** for all nine authorities (`apps`, `storage`, `sandbox`, `monitors`, `config`, `browser`, `agents`, `user`, `sessions`) in `@yaar/shared`
+- **URI parsing and building** for all seven authorities (`apps`, `storage`, `sandbox`, `windows`, `monitors`, `config`, `browser`, `sessions`) in `@yaar/shared`
+- **Session sub-resource parsing** — `parseSessionUri()` handles deep paths (`yaar://sessions/current/agents/{id}/interrupt`) via `SessionSubKind` discriminant
 - **Server-side resolution** (`resolveUri`, `resolveResourceUri`) mapping URIs to filesystem paths, window addresses, and typed metadata
 - **Content resolution** — `resolveContentUri()` maps content URIs to API paths, used by window creation and file-serving
 - **Window URIs** — `buildWindowUri` used in window list/lifecycle tools; window resource URIs for app-protocol state/commands
 - **File-operation URIs** — `parseFileUri`/`buildFileUri` used by basic MCP tools (read, write, edit, list, delete)
 - **Legacy compat** — `storage://` and `sandbox://` legacy schemes still accepted by `parseFileUri`
 
-### Verb Layer (Done — All Domains Except Browser)
+### Verb Layer (Done — All Domains)
 
 - **ResourceRegistry** (`uri/registry.ts`) — central registry matching URI patterns to handlers (exact > prefix > wildcard priority)
 - **5 verb MCP tools** (`mcp/verbs/`) — `describe`, `read`, `list`, `invoke`, `delete` registered as the `verbs` MCP server
 - **Config domain handlers** (`mcp/config/handlers.ts`) — settings, hooks, shortcuts, mounts, app config
 - **Basic domain handlers** (`mcp/basic/handlers.ts`) — storage and sandbox file I/O (read, write, edit, list, delete) via `yaar://storage/*` and `yaar://sandbox/*`
-- **Window domain handlers** (`mcp/window/handlers.ts`) — create, update, manage, list, view, app_query, app_command via `yaar://monitors/*` with action-dispatched invoke
-- **User domain handlers** (`mcp/user/handlers.ts`) — notifications (show/dismiss) and prompts (ask/request) via `yaar://user/notifications` and `yaar://user/prompts`
+- **Window domain handlers** (`mcp/window/handlers.ts`) — create, update, manage, list, view, app_query, app_command via `yaar://windows/*` with action-dispatched invoke
+- **Session domain handlers** — agents (`mcp/agents/handlers.ts`), notifications/prompts (`mcp/user/handlers.ts`), system info/memorize (`mcp/system/handlers.ts`) via `yaar://sessions/current/*`
 - **Apps domain handlers** (`mcp/apps/handlers.ts`) — list apps, load skill, set badge, marketplace install/uninstall via `yaar://apps/*`
-- **Sessions domain handlers** (`mcp/system/handlers.ts`) — system info and memorize via `yaar://sessions/current`
+- **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract)
 - Both old tools and new verbs work simultaneously — no breaking changes
 
 ### Verb Mode Toggle (Done)
@@ -118,13 +117,6 @@ Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API p
 - **Structured tool logging** — `logToolResult()` now accepts optional `meta: { isError, errorCategory, durationMs }`. `StreamToEventMapper` tracks tool_use start times, computes duration on tool_result, classifies errors (`uri_not_found`, `verb_not_supported`, `validation`, `handler_error`, `unknown`).
 - **Session metadata** — `metadata.json` includes `verbMode` flag for post-hoc A/B comparison across sessions
 - **Legacy tools must be maintained** — verb mode is experimental. All ~30 legacy MCP tools remain the production path and must not be removed or degraded until verb mode has been verified across all domains via A/B comparison data
-
-### Recently Completed
-
-- **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract). Conditional on Chrome availability. List via `yaar://browser`, delete to close.
-- **Monitor-as-resource** — reading `yaar://monitors/{id}` returns monitor status (main agent presence, window list, queue stats). Handled within the existing `yaar://monitors/*` wildcard handler by checking `resolved.kind === 'monitor'`.
-- **Session root** — reading `yaar://` returns session overview (sessionId, platform, agent stats, window/browser counts). Listing returns all 9 URI namespaces. Added `ResolvedRoot` type to URI resolution.
-- **Agents domain handlers** (`mcp/agents/handlers.ts`) — `yaar://agents` lists agent stats, `yaar://agents/{id}` reads agent info, invoke with `{ action: 'interrupt' }` interrupts specific or all agents.
 
 ---
 
@@ -143,6 +135,8 @@ Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API p
 6. **Composable for agents.** A single verb vocabulary makes it trivial for agents to chain operations: `describe` to discover, `list` to enumerate, `read` to inspect, `invoke` to act, `delete` to clean up. This is particularly powerful for multi-step workflows where the agent navigates an unfamiliar resource tree.
 
 7. **Testable in isolation.** The `ResourceRegistry` is a pure data structure with no MCP dependency — handlers can be unit-tested without spinning up an MCP server.
+
+8. **Session-scoped coherence.** Agents, notifications, prompts, clipboard, and monitors are all sub-resources of `yaar://sessions/current/` — reflecting the reality that they're facets of a single session, not independent systems. This reduces the top-level namespace count (9 → 7) and makes the URI tree self-documenting.
 
 ---
 
@@ -167,14 +161,14 @@ Five verbs. The URI identifies the resource, the verb determines the operation, 
 Resources like `yaar://config/settings` or `yaar://browser/0` are things you can read, describe, and invoke. But "navigate" or "click" are actions *on* the browser resource — not resources themselves. They go in the invoke payload:
 
 ```
-invoke('yaar://browser/0', { action: 'navigate', url: '...' })    -- not yaar://browser/0/navigate
-invoke('yaar://agents/agent-1', { action: 'interrupt' })           -- not yaar://agents/agent-1/interrupt
+invoke('yaar://browser/0', { action: 'navigate', url: '...' })
+invoke('yaar://sessions/current/agents/agent-1', { action: 'interrupt' })
 ```
 
 Sub-resources that are genuinely addressable (like window state keys) stay in the URI:
 
 ```
-read('yaar://monitors/0/win-1/state/theme')     -- this IS a readable resource
+read('yaar://windows/win-1/state/theme')     -- this IS a readable resource
 ```
 
 ### Examples
@@ -184,20 +178,26 @@ read('yaar://config/settings')                          -> { theme: 'dark', ... 
 invoke('yaar://config/settings', { theme: 'light' })    -> merge into settings
 delete('yaar://config/app/github')                      -> remove app config
 
-read('yaar://monitors/0/win-1')                         -> window state
-invoke('yaar://monitors/0/win-1', { action: 'command', name: 'refresh' })
+read('yaar://windows/win-1')                            -> window state
+invoke('yaar://windows/', { action: 'create', title: 'Notes', renderer: 'markdown', content: '# Hello' })
+invoke('yaar://windows/win-1', { action: 'update', operation: 'append', content: '...' })
+delete('yaar://windows/win-1')                          -> close window
 
 read('yaar://browser/0')                                -> { url, title }
 invoke('yaar://browser/0', { action: 'navigate', url: '...' })
 invoke('yaar://browser/0', { action: 'click', selector: '#btn' })
 invoke('yaar://browser/0', { action: 'screenshot' })
 
-list('yaar://agents/')                                  -> active agents
-invoke('yaar://agents/agent-1', { action: 'interrupt' })
+list('yaar://sessions/current/agents')                  -> active agents
+invoke('yaar://sessions/current/agents/agent-1', { action: 'interrupt' })
 
-read('yaar://user/clipboard')                           -> clipboard contents
-invoke('yaar://user/notifications', { title: '...', body: '...' })
-delete('yaar://user/notifications/abc')                 -> dismiss notification
+read('yaar://sessions/current/clipboard')               -> clipboard contents
+invoke('yaar://sessions/current/notifications', { id: 'n1', title: '...', body: '...' })
+delete('yaar://sessions/current/notifications/n1')      -> dismiss notification
+invoke('yaar://sessions/current/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
+
+read('yaar://sessions/current/monitors/0')              -> monitor status
+read('yaar://sessions/current')                         -> session info
 
 describe('yaar://config/settings')                      -> { verbs: ['read', 'invoke'], schema: { ... } }
 describe('yaar://browser/0')                            -> { verbs: ['read', 'invoke'], actions: ['navigate', 'click', 'screenshot', ...] }
@@ -265,7 +265,7 @@ class ResourceRegistry {
 
 ### Handler Registration
 
-Each domain registers its handlers during server startup. Only the config domain is wired so far. Handlers live alongside existing tool code — no rewrite needed, just wiring.
+Each domain registers its handlers during server startup. Handlers live alongside existing tool code — no rewrite needed, just wiring.
 
 ```typescript
 // mcp/config/handlers.ts
@@ -291,27 +291,20 @@ export function registerConfigHandlers(registry: ResourceRegistry) {
 For action-bearing resources (browser, agents), the handler dispatches on `payload.action`:
 
 ```typescript
-// future: mcp/browser/handlers.ts
-registry.register('yaar://browser/*', {
+// mcp/agents/handlers.ts — registered under yaar://sessions/current/agents
+registry.register('yaar://sessions/current/agents/*', {
   verbs: ['read', 'invoke', 'describe'],
-  description: 'Browser instance — read state, invoke actions (navigate, click, type, screenshot)',
+  description: 'Agent instance. Read for info, invoke to interrupt.',
   invokeSchema: {
     type: 'object',
     required: ['action'],
     properties: {
-      action: { type: 'string', enum: ['navigate', 'click', 'type', 'screenshot'] },
-      url: { type: 'string' },
-      selector: { type: 'string' },
-      text: { type: 'string' },
+      action: { type: 'string', enum: ['interrupt'] },
     },
   },
-  async read(parsed) { return getBrowserState(parsed.id); },
-  async invoke(parsed, payload) {
-    switch (payload.action) {
-      case 'navigate': return browserNavigate(parsed.id, payload.url);
-      case 'click': return browserClick(parsed.id, payload.selector);
-      // ...
-    }
+  async read(resolved) { /* ... */ },
+  async invoke(resolved, payload) {
+    if (payload.action === 'interrupt') { /* ... */ }
   },
 });
 ```
@@ -329,14 +322,14 @@ All domains now have verb handlers:
 
 | # | Domain | Legacy Tools | Verb Handlers | Status |
 |---|--------|-------------|---------------|--------|
-| 1 | `basic/` | read, write, list, edit, delete | `storage/*`, `sandbox/*` | ✅ |
-| 2 | `window/` | create, update, manage, list, view, info | `monitors/*` (incl. monitor-as-resource) | ✅ |
-| 3 | `config/` | set, get, remove | `config/*` (settings, hooks, shortcuts, mounts, app) | ✅ |
-| 4 | `user/` | ask, request | `user/notifications`, `user/prompts` | ✅ |
-| 5 | `apps/` | list, load_skill, set_badge, market ops | `apps/*` | ✅ |
-| 6 | `system/` | get_info, memorize | `sessions/current`, `yaar://` root | ✅ |
-| 7 | `browser/` | open, click, type, press, scroll, navigate, hover, wait_for, screenshot, extract, list, close | `browser/*` (action-dispatched invoke) | ✅ |
-| 8 | `agents/` | _(no legacy tools)_ | `agents/*` (list, read, interrupt) | ✅ |
+| 1 | `basic/` | read, write, list, edit, delete | `storage/*`, `sandbox/*` | Done |
+| 2 | `window/` | create, update, manage, list, view, info | `windows/*` | Done |
+| 3 | `config/` | set, get, remove | `config/*` (settings, hooks, shortcuts, mounts, app) | Done |
+| 4 | `user/` | ask, request | `sessions/current/notifications`, `sessions/current/prompts` | Done |
+| 5 | `apps/` | list, load_skill, set_badge, market ops | `apps/*` | Done |
+| 6 | `system/` | get_info, memorize | `sessions/current`, `yaar://` root | Done |
+| 7 | `browser/` | open, click, type, press, scroll, navigate, hover, wait_for, screenshot, extract, list, close | `browser/*` (action-dispatched invoke) | Done |
+| 8 | `agents/` | _(no legacy tools)_ | `sessions/current/agents/*` (list, read, interrupt) | Done |
 
 #### Remaining migration work
 

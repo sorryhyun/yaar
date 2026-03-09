@@ -22,7 +22,7 @@ import {
   extractAppId,
 } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from '../../uri/registry.js';
-import type { ResolvedUri, ResolvedWindow, ResolvedMonitor } from '../../uri/resolve.js';
+import type { ResolvedUri, ResolvedWindow } from '../../uri/resolve.js';
 import { actionEmitter } from '../action-emitter.js';
 import type { WindowStateRegistry } from '../window-state.js';
 import { ok, error } from '../utils.js';
@@ -38,8 +38,8 @@ function assertWindow(resolved: ResolvedUri): asserts resolved is ResolvedWindow
   if (resolved.kind !== 'window') throw new Error(`Expected window URI, got ${resolved.kind}`);
 }
 
-function assertMonitor(resolved: ResolvedUri): asserts resolved is ResolvedMonitor {
-  if (resolved.kind !== 'monitor') throw new Error(`Expected monitor URI, got ${resolved.kind}`);
+function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
+  return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
 }
 
 function formatWindowRef(windowId: string): string {
@@ -147,27 +147,27 @@ export function registerWindowHandlers(
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      // Monitor-level: yaar://windows/ (bare, no windowId)
-      if (resolved.kind === 'monitor') {
-        assertMonitor(resolved);
+      // Collection-level: yaar://windows/ (bare, no windowId)
+      if (isWindowCollection(resolved)) {
         const sid = getSessionId();
         const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
         const pool = session?.getPool();
         if (!pool) return error('Session not initialized.');
 
+        const monitorId = resolved.monitorId;
         const stats = pool.getStats();
         const windows = getWindowState()
           .listWindows()
           .filter((w) => {
             const parsed = parseWindowKey(w.id);
-            return parsed?.monitorId === resolved.monitorId;
+            return parsed?.monitorId === monitorId;
           });
 
         return ok(
           JSON.stringify(
             {
-              monitorId: resolved.monitorId,
-              hasMainAgent: pool.hasMainAgent(resolved.monitorId),
+              monitorId,
+              hasMainAgent: pool.hasMainAgent(monitorId),
               windows: windows.map((w) => ({
                 id: w.id,
                 title: w.title,
@@ -212,8 +212,8 @@ export function registerWindowHandlers(
 
       const action = payload.action as string;
 
-      // Monitor-level invoke: only create/create_component (windowId derived from payload)
-      if (resolved.kind === 'monitor') {
+      // Collection-level invoke: only create/create_component (windowId derived from payload)
+      if (isWindowCollection(resolved)) {
         if (action === 'create') return handleCreate('', payload);
         if (action === 'create_component') return handleCreateComponent('', payload);
         return error(

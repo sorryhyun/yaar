@@ -62,8 +62,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
               'yaar://windows/',
               'yaar://config/',
               'yaar://browser/',
-              'yaar://agents/',
-              'yaar://user/',
               'yaar://sessions/',
             ],
           },

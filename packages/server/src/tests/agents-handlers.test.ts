@@ -37,12 +37,12 @@ let registerAgentsHandlers: (registry: ResourceRegistry) => void;
 beforeEach(async () => {
   vi.clearAllMocks();
   mockResolveUri.mockImplementation((u: string) => {
-    if (u === 'yaar://agents/' || u === 'yaar://agents') {
-      return { kind: 'agent', sourceUri: u };
+    if (u === 'yaar://sessions/current/agents' || u === 'yaar://sessions/current/agents/') {
+      return { kind: 'session', resource: 'current', subKind: 'agents', sourceUri: u };
     }
-    if (u.startsWith('yaar://agents/')) {
-      const id = u.replace('yaar://agents/', '');
-      return { kind: 'agent', id, sourceUri: u };
+    if (u.startsWith('yaar://sessions/current/agents/')) {
+      const id = u.replace('yaar://sessions/current/agents/', '');
+      return { kind: 'session', resource: 'current', subKind: 'agents', id, sourceUri: u };
     }
     return null;
   });
@@ -75,7 +75,7 @@ describe('Agents domain handlers', () => {
   describe('list', () => {
     it('lists agent stats', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('list', 'yaar://agents');
+      const result = await reg.execute('list', 'yaar://sessions/current/agents');
       expect(result.isError).toBeFalsy();
       const data = JSON.parse(text(result));
       expect(data.totalAgents).toBe(3);
@@ -88,7 +88,7 @@ describe('Agents domain handlers', () => {
     it('reads agent info', async () => {
       mockPool.hasAgent.mockReturnValue(true);
       const reg = createRegistry();
-      const result = await reg.execute('read', 'yaar://agents/agent-0-123');
+      const result = await reg.execute('read', 'yaar://sessions/current/agents/agent-0-123');
       expect(result.isError).toBeFalsy();
       const data = JSON.parse(text(result));
       expect(data.id).toBe('agent-0-123');
@@ -98,7 +98,7 @@ describe('Agents domain handlers', () => {
     it('returns error for unknown agent', async () => {
       mockPool.hasAgent.mockReturnValue(false);
       const reg = createRegistry();
-      const result = await reg.execute('read', 'yaar://agents/unknown');
+      const result = await reg.execute('read', 'yaar://sessions/current/agents/unknown');
       expect(result.isError).toBe(true);
       expect(text(result)).toContain('not found');
     });
@@ -108,7 +108,7 @@ describe('Agents domain handlers', () => {
     it('interrupts a specific agent', async () => {
       mockPool.interruptAgent.mockResolvedValue(true);
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://agents/agent-0-123', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/agents/agent-0-123', {
         action: 'interrupt',
       });
       expect(result.isError).toBeFalsy();
@@ -119,7 +119,7 @@ describe('Agents domain handlers', () => {
     it('returns error if agent not found for interrupt', async () => {
       mockPool.interruptAgent.mockResolvedValue(false);
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://agents/unknown', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/agents/unknown', {
         action: 'interrupt',
       });
       expect(result.isError).toBe(true);
@@ -127,7 +127,7 @@ describe('Agents domain handlers', () => {
 
     it('returns error for unknown action', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://agents/agent-0-123', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/agents/agent-0-123', {
         action: 'unknown',
       });
       expect(result.isError).toBe(true);
@@ -135,7 +135,7 @@ describe('Agents domain handlers', () => {
 
     it('returns error without action', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://agents/agent-0-123', {});
+      const result = await reg.execute('invoke', 'yaar://sessions/current/agents/agent-0-123', {});
       expect(result.isError).toBe(true);
     });
   });
@@ -143,7 +143,7 @@ describe('Agents domain handlers', () => {
   describe('describe', () => {
     it('returns description for agents collection', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('describe', 'yaar://agents');
+      const result = await reg.execute('describe', 'yaar://sessions/current/agents');
       expect(result.isError).toBeFalsy();
       const data = JSON.parse(text(result));
       expect(data.verbs).toContain('list');
@@ -151,7 +151,7 @@ describe('Agents domain handlers', () => {
 
     it('returns description for specific agent', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('describe', 'yaar://agents/agent-0-123');
+      const result = await reg.execute('describe', 'yaar://sessions/current/agents/agent-0-123');
       expect(result.isError).toBeFalsy();
       const data = JSON.parse(text(result));
       expect(data.verbs).toContain('read');

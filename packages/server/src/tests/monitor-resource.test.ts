@@ -95,10 +95,8 @@ vi.mock('../http/iframe-tokens.js', () => ({
   generateIframeToken: vi.fn().mockReturnValue('tok'),
 }));
 
-let registerWindowHandlers: (
-  registry: ResourceRegistry,
-  getWindowState: () => typeof mockWindowState,
-) => void;
+ 
+let registerWindowHandlers: (registry: ResourceRegistry, getWindowState: () => any) => void;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -108,9 +106,9 @@ beforeEach(async () => {
     if (bareMatch) {
       return { kind: 'window', monitorId: '0', windowId: bareMatch[1], sourceUri: u };
     }
-    // Bare yaar://windows → monitor-level (current monitor)
+    // Bare yaar://windows → window collection (current monitor)
     if (u === 'yaar://windows' || u === 'yaar://windows/') {
-      return { kind: 'monitor', monitorId: '0', sourceUri: u };
+      return { kind: 'window', monitorId: '0', windowId: '', sourceUri: u };
     }
     return null;
   });

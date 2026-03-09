@@ -3,19 +3,20 @@
  *
  * Maps agent operations to the verb layer:
  *
- *   list('yaar://agents/')                         → list all active agents
- *   read('yaar://agents/{agentId}')               → agent info
- *   invoke('yaar://agents/{agentId}', { action })  → interrupt
+ *   list('yaar://sessions/current/agents')                         → list all active agents
+ *   read('yaar://sessions/current/agents/{agentId}')               → agent info
+ *   invoke('yaar://sessions/current/agents/{agentId}', { action }) → interrupt
  */
 
 import type { ResourceRegistry, VerbResult } from '../../uri/registry.js';
-import type { ResolvedUri, ResolvedAgent } from '../../uri/resolve.js';
+import type { ResolvedUri, ResolvedSession } from '../../uri/resolve.js';
 import { getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { ok, error } from '../utils.js';
 
-function assertAgent(resolved: ResolvedUri): asserts resolved is ResolvedAgent {
-  if (resolved.kind !== 'agent') throw new Error(`Expected agent URI, got ${resolved.kind}`);
+function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
+  if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')
+    throw new Error(`Expected session agents URI, got ${resolved.kind}`);
 }
 
 function getPool() {
@@ -26,8 +27,8 @@ function getPool() {
 }
 
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
-  // ── yaar://agents — list all agents ──
-  registry.register('yaar://agents', {
+  // ── yaar://sessions/current/agents — list all agents ──
+  registry.register('yaar://sessions/current/agents', {
     description: 'List all active agents (main, window, ephemeral).',
     verbs: ['describe', 'list'],
 
@@ -53,8 +54,8 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://agents/* — agent instance operations ──
-  registry.register('yaar://agents/*', {
+  // ── yaar://sessions/current/agents/* — agent instance operations ──
+  registry.register('yaar://sessions/current/agents/*', {
     description: 'Agent instance. Read for agent info, invoke to interrupt.',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
@@ -66,7 +67,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      assertAgent(resolved);
+      assertSessionAgents(resolved);
       if (!resolved.id) return error('Agent ID required.');
       const pool = getPool();
       if (!pool) return error('No agents — session not initialized.');
@@ -78,7 +79,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      assertAgent(resolved);
+      assertSessionAgents(resolved);
       if (!payload?.action) return error('Payload must include "action".');
 
       if (payload.action === 'interrupt') {

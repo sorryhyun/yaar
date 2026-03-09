@@ -11,10 +11,6 @@ import {
   buildConfigUri,
   parseBrowserUri,
   buildBrowserUri,
-  parseAgentUri,
-  buildAgentUri,
-  parseUserUri,
-  buildUserUri,
   parseSessionUri,
   buildSessionUri,
 } from '../yaar-uri.js';
@@ -344,156 +340,82 @@ describe('buildBrowserUri', () => {
   });
 });
 
-// ============ Agent URIs ============
-
-describe('parseAgentUri', () => {
-  it('parses list all agents', () => {
-    expect(parseAgentUri('yaar://agents/')).toEqual({});
-  });
-
-  it('parses agent by instance ID', () => {
-    expect(parseAgentUri('yaar://agents/agent-123')).toEqual({
-      id: 'agent-123',
-    });
-  });
-
-  it('parses agent with action', () => {
-    expect(parseAgentUri('yaar://agents/agent-123/interrupt')).toEqual({
-      id: 'agent-123',
-      action: 'interrupt',
-    });
-  });
-
-  it('returns null for empty ID segment', () => {
-    expect(parseAgentUri('yaar://agents//interrupt')).toBeNull();
-  });
-
-  it('returns null for non-agents URI', () => {
-    expect(parseAgentUri('yaar://apps/excel')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseAgentUri('https://example.com')).toBeNull();
-  });
-});
-
-describe('buildAgentUri', () => {
-  it('builds list URI', () => {
-    expect(buildAgentUri()).toBe('yaar://agents/');
-  });
-
-  it('builds agent by ID URI', () => {
-    expect(buildAgentUri('agent-123')).toBe('yaar://agents/agent-123');
-  });
-
-  it('builds agent with action URI', () => {
-    expect(buildAgentUri('agent-123', 'interrupt')).toBe('yaar://agents/agent-123/interrupt');
-  });
-
-  it('roundtrips with parseAgentUri', () => {
-    const uri = buildAgentUri('agent-1');
-    const parsed = parseAgentUri(uri);
-    expect(parsed).toEqual({ id: 'agent-1' });
-  });
-});
-
-// ============ User URIs ============
-
-describe('parseUserUri', () => {
-  it('parses notifications', () => {
-    expect(parseUserUri('yaar://user/notifications')).toEqual({
-      resource: 'notifications',
-      id: undefined,
-    });
-  });
-
-  it('parses notification with ID', () => {
-    expect(parseUserUri('yaar://user/notifications/abc')).toEqual({
-      resource: 'notifications',
-      id: 'abc',
-    });
-  });
-
-  it('parses prompts', () => {
-    expect(parseUserUri('yaar://user/prompts')).toEqual({
-      resource: 'prompts',
-      id: undefined,
-    });
-  });
-
-  it('parses prompt with ID', () => {
-    expect(parseUserUri('yaar://user/prompts/prompt-1')).toEqual({
-      resource: 'prompts',
-      id: 'prompt-1',
-    });
-  });
-
-  it('parses clipboard', () => {
-    expect(parseUserUri('yaar://user/clipboard')).toEqual({
-      resource: 'clipboard',
-      id: undefined,
-    });
-  });
-
-  it('returns null for unknown resource', () => {
-    expect(parseUserUri('yaar://user/unknown')).toBeNull();
-  });
-
-  it('returns null for non-user URI', () => {
-    expect(parseUserUri('yaar://apps/user')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseUserUri('https://example.com')).toBeNull();
-  });
-});
-
-describe('buildUserUri', () => {
-  it('builds notifications URI', () => {
-    expect(buildUserUri('notifications')).toBe('yaar://user/notifications');
-  });
-
-  it('builds notification with ID URI', () => {
-    expect(buildUserUri('notifications', 'abc')).toBe('yaar://user/notifications/abc');
-  });
-
-  it('builds clipboard URI', () => {
-    expect(buildUserUri('clipboard')).toBe('yaar://user/clipboard');
-  });
-
-  it('roundtrips with parseUserUri', () => {
-    const uri = buildUserUri('prompts', 'prompt-42');
-    const parsed = parseUserUri(uri);
-    expect(parsed).toEqual({ resource: 'prompts', id: 'prompt-42' });
-  });
-});
-
-// ============ Session URIs ============
+// ============ Session URIs (consolidated agents, notifications, prompts, clipboard, monitors) ============
 
 describe('parseSessionUri', () => {
   it('parses current session', () => {
     expect(parseSessionUri('yaar://sessions/current')).toEqual({
       resource: 'current',
-      subResource: undefined,
     });
   });
 
-  it('parses current session logs', () => {
-    expect(parseSessionUri('yaar://sessions/current/logs')).toEqual({
+  it('parses agents list', () => {
+    expect(parseSessionUri('yaar://sessions/current/agents')).toEqual({
       resource: 'current',
-      subResource: 'logs',
+      subKind: 'agents',
     });
   });
 
-  it('parses current session context', () => {
-    expect(parseSessionUri('yaar://sessions/current/context')).toEqual({
+  it('parses agent by ID', () => {
+    expect(parseSessionUri('yaar://sessions/current/agents/agent-123')).toEqual({
       resource: 'current',
-      subResource: 'context',
+      subKind: 'agents',
+      id: 'agent-123',
+    });
+  });
+
+  it('parses agent with action', () => {
+    expect(parseSessionUri('yaar://sessions/current/agents/agent-123/interrupt')).toEqual({
+      resource: 'current',
+      subKind: 'agents',
+      id: 'agent-123',
+      action: 'interrupt',
+    });
+  });
+
+  it('parses notifications', () => {
+    expect(parseSessionUri('yaar://sessions/current/notifications')).toEqual({
+      resource: 'current',
+      subKind: 'notifications',
+    });
+  });
+
+  it('parses notification with ID', () => {
+    expect(parseSessionUri('yaar://sessions/current/notifications/abc')).toEqual({
+      resource: 'current',
+      subKind: 'notifications',
+      id: 'abc',
+    });
+  });
+
+  it('parses prompts', () => {
+    expect(parseSessionUri('yaar://sessions/current/prompts')).toEqual({
+      resource: 'current',
+      subKind: 'prompts',
+    });
+  });
+
+  it('parses clipboard', () => {
+    expect(parseSessionUri('yaar://sessions/current/clipboard')).toEqual({
+      resource: 'current',
+      subKind: 'clipboard',
+    });
+  });
+
+  it('parses monitor by ID', () => {
+    expect(parseSessionUri('yaar://sessions/current/monitors/0')).toEqual({
+      resource: 'current',
+      subKind: 'monitors',
+      id: '0',
     });
   });
 
   it('returns null for unknown resource', () => {
     expect(parseSessionUri('yaar://sessions/unknown')).toBeNull();
+  });
+
+  it('returns null for unknown subKind', () => {
+    expect(parseSessionUri('yaar://sessions/current/unknown')).toBeNull();
   });
 
   it('returns null for non-sessions URI', () => {
@@ -510,18 +432,52 @@ describe('buildSessionUri', () => {
     expect(buildSessionUri('current')).toBe('yaar://sessions/current');
   });
 
-  it('builds current session logs URI', () => {
-    expect(buildSessionUri('current', 'logs')).toBe('yaar://sessions/current/logs');
+  it('builds agents list URI', () => {
+    expect(buildSessionUri('current', 'agents')).toBe('yaar://sessions/current/agents');
   });
 
-  it('builds current session context URI', () => {
-    expect(buildSessionUri('current', 'context')).toBe('yaar://sessions/current/context');
+  it('builds agent by ID URI', () => {
+    expect(buildSessionUri('current', 'agents', 'agent-123')).toBe(
+      'yaar://sessions/current/agents/agent-123',
+    );
   });
 
-  it('roundtrips with parseSessionUri', () => {
-    const uri = buildSessionUri('current', 'logs');
+  it('builds agent with action URI', () => {
+    expect(buildSessionUri('current', 'agents', 'agent-123', 'interrupt')).toBe(
+      'yaar://sessions/current/agents/agent-123/interrupt',
+    );
+  });
+
+  it('builds notifications URI', () => {
+    expect(buildSessionUri('current', 'notifications')).toBe(
+      'yaar://sessions/current/notifications',
+    );
+  });
+
+  it('builds notification with ID URI', () => {
+    expect(buildSessionUri('current', 'notifications', 'abc')).toBe(
+      'yaar://sessions/current/notifications/abc',
+    );
+  });
+
+  it('builds clipboard URI', () => {
+    expect(buildSessionUri('current', 'clipboard')).toBe('yaar://sessions/current/clipboard');
+  });
+
+  it('builds monitor URI', () => {
+    expect(buildSessionUri('current', 'monitors', '0')).toBe('yaar://sessions/current/monitors/0');
+  });
+
+  it('roundtrips agents with parseSessionUri', () => {
+    const uri = buildSessionUri('current', 'agents', 'agent-1');
     const parsed = parseSessionUri(uri);
-    expect(parsed).toEqual({ resource: 'current', subResource: 'logs' });
+    expect(parsed).toEqual({ resource: 'current', subKind: 'agents', id: 'agent-1' });
+  });
+
+  it('roundtrips notifications with parseSessionUri', () => {
+    const uri = buildSessionUri('current', 'notifications', 'notif-42');
+    const parsed = parseSessionUri(uri);
+    expect(parsed).toEqual({ resource: 'current', subKind: 'notifications', id: 'notif-42' });
   });
 });
 
@@ -543,25 +499,26 @@ describe('parseYaarUri with windows', () => {
   });
 });
 
-describe('parseYaarUri with agents/user/sessions', () => {
-  it('parses agents URIs', () => {
-    expect(parseYaarUri('yaar://agents/agent-123')).toEqual({
-      authority: 'agents',
-      path: 'agent-123',
-    });
-  });
-
-  it('parses user URIs', () => {
-    expect(parseYaarUri('yaar://user/notifications')).toEqual({
-      authority: 'user',
-      path: 'notifications',
-    });
-  });
-
+describe('parseYaarUri with sessions', () => {
   it('parses sessions URIs', () => {
     expect(parseYaarUri('yaar://sessions/current')).toEqual({
       authority: 'sessions',
       path: 'current',
     });
+  });
+
+  it('parses sessions URIs with deep paths', () => {
+    expect(parseYaarUri('yaar://sessions/current/agents/agent-123')).toEqual({
+      authority: 'sessions',
+      path: 'current/agents/agent-123',
+    });
+  });
+
+  it('returns null for removed agents authority', () => {
+    expect(parseYaarUri('yaar://agents/agent-123')).toBeNull();
+  });
+
+  it('returns null for removed user authority', () => {
+    expect(parseYaarUri('yaar://user/notifications')).toBeNull();
   });
 });

@@ -110,8 +110,8 @@ describe('Session root handler', () => {
       const data = JSON.parse(text(result));
       expect(data.namespaces).toContain('yaar://apps/');
       expect(data.namespaces).toContain('yaar://browser/');
-      expect(data.namespaces).toContain('yaar://agents/');
-      expect(data.namespaces.length).toBe(9);
+      expect(data.namespaces).toContain('yaar://sessions/');
+      expect(data.namespaces.length).toBe(7);
     });
   });
 

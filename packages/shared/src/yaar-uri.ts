@@ -15,6 +15,14 @@
  *
  * Window addressing:
  *   yaar://monitors/{monitorId}/{windowId}      → window on a monitor
+ *
+ * Session-scoped resources (consolidated under yaar://sessions/current/...):
+ *   yaar://sessions/current/agents/{id}              → agent by ID
+ *   yaar://sessions/current/agents/{id}/interrupt     → agent action
+ *   yaar://sessions/current/notifications/{id}        → notification by ID
+ *   yaar://sessions/current/prompts                   → user prompts
+ *   yaar://sessions/current/clipboard                 → clipboard
+ *   yaar://sessions/current/monitors/{monitorId}      → monitor by ID
  */
 
 export type YaarAuthority =
@@ -25,8 +33,6 @@ export type YaarAuthority =
   | 'windows'
   | 'config'
   | 'browser'
-  | 'agents'
-  | 'user'
   | 'sessions';
 
 export interface ParsedYaarUri {
@@ -34,8 +40,7 @@ export interface ParsedYaarUri {
   path: string;
 }
 
-const YAAR_RE =
-  /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|agents|user|sessions)\/(.*)$/;
+const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -76,8 +81,6 @@ export function resolveContentUri(uri: string): string | null {
     case 'windows':
     case 'config':
     case 'browser':
-    case 'agents':
-    case 'user':
     case 'sessions':
       // These authorities have no content resolution
       return null;
@@ -267,32 +270,6 @@ export function parseWindowKey(key: string): ParsedWindowKey | null {
     monitorId: key.slice(0, slashIdx),
     windowId: key.slice(slashIdx + 1),
   };
-}
-
-// ============ Monitor URIs ============
-
-export interface ParsedMonitorUri {
-  monitorId: string;
-}
-
-/**
- * Parse a yaar://monitors/{monitorId} URI (monitor only, no window).
- *
- *   parseMonitorUri('yaar://monitors/0') → { monitorId: '0' }
- *   parseMonitorUri('yaar://monitors/0/win-1') → null (has window — use parseWindowUri)
- */
-export function parseMonitorUri(uri: string): ParsedMonitorUri | null {
-  const match = uri.match(/^yaar:\/\/monitors\/([^/]+)$/);
-  if (!match) return null;
-  return { monitorId: match[1] };
-}
-
-/**
- * Build a yaar://monitors/{monitorId} URI.
- *   buildMonitorUri('0') → 'yaar://monitors/0'
- */
-export function buildMonitorUri(monitorId: string): string {
-  return `yaar://monitors/${monitorId}`;
 }
 
 // ============ Window URIs ============
@@ -513,129 +490,94 @@ export function buildBrowserUri(resource: string, subResource?: string): string 
   return subResource ? `yaar://browser/${resource}/${subResource}` : `yaar://browser/${resource}`;
 }
 
-// ============ Agent URIs ============
-
-export interface ParsedAgentUri {
-  /** Agent instance ID. */
-  id?: string;
-  /** Sub-resource action (e.g., 'interrupt'). */
-  action?: string;
-}
-
-/**
- * Parse a yaar://agents/... URI.
- *
- *   parseAgentUri('yaar://agents/')                    → {}
- *   parseAgentUri('yaar://agents/agent-123')           → { id: 'agent-123' }
- *   parseAgentUri('yaar://agents/agent-123/interrupt')  → { id: 'agent-123', action: 'interrupt' }
- */
-export function parseAgentUri(uri: string): ParsedAgentUri | null {
-  const parsed = parseYaarUri(uri);
-  if (!parsed || parsed.authority !== 'agents') return null;
-
-  if (!parsed.path) return {};
-
-  const slashIdx = parsed.path.indexOf('/');
-  if (slashIdx === -1) return { id: parsed.path };
-
-  const id = parsed.path.slice(0, slashIdx);
-  const action = parsed.path.slice(slashIdx + 1);
-  if (!id) return null;
-  return action ? { id, action } : { id };
-}
-
-/**
- * Build a yaar://agents/... URI.
- *
- *   buildAgentUri()                              → 'yaar://agents/'
- *   buildAgentUri('agent-123')                   → 'yaar://agents/agent-123'
- *   buildAgentUri('agent-123', 'interrupt')      → 'yaar://agents/agent-123/interrupt'
- */
-export function buildAgentUri(id?: string, action?: string): string {
-  if (id && action) return `yaar://agents/${id}/${action}`;
-  if (id) return `yaar://agents/${id}`;
-  return 'yaar://agents/';
-}
-
-// ============ User URIs ============
-
-export type UserResource = 'notifications' | 'prompts' | 'clipboard';
-
-export interface ParsedUserUri {
-  resource: UserResource;
-  id?: string;
-}
-
-const USER_RESOURCES: ReadonlySet<string> = new Set(['notifications', 'prompts', 'clipboard']);
-
-/**
- * Parse a yaar://user/... URI.
- *
- *   parseUserUri('yaar://user/notifications')       → { resource: 'notifications' }
- *   parseUserUri('yaar://user/notifications/abc')   → { resource: 'notifications', id: 'abc' }
- *   parseUserUri('yaar://user/prompts')             → { resource: 'prompts' }
- *   parseUserUri('yaar://user/clipboard')           → { resource: 'clipboard' }
- */
-export function parseUserUri(uri: string): ParsedUserUri | null {
-  const parsed = parseYaarUri(uri);
-  if (!parsed || parsed.authority !== 'user') return null;
-
-  const slashIdx = parsed.path.indexOf('/');
-  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-  if (!USER_RESOURCES.has(resource)) return null;
-
-  const id = slashIdx === -1 ? undefined : parsed.path.slice(slashIdx + 1);
-  return { resource: resource as UserResource, id: id || undefined };
-}
-
-/**
- * Build a yaar://user/... URI.
- *
- *   buildUserUri('notifications')        → 'yaar://user/notifications'
- *   buildUserUri('notifications', 'abc') → 'yaar://user/notifications/abc'
- *   buildUserUri('clipboard')            → 'yaar://user/clipboard'
- */
-export function buildUserUri(resource: UserResource, id?: string): string {
-  return id ? `yaar://user/${resource}/${id}` : `yaar://user/${resource}`;
-}
-
 // ============ Session URIs ============
 
 export type SessionResource = 'current';
 
+export type SessionSubKind = 'agents' | 'notifications' | 'prompts' | 'clipboard' | 'monitors';
+
 export interface ParsedSessionUri {
-  resource: SessionResource;
-  subResource?: string;
+  resource: 'current';
+  subKind?: SessionSubKind;
+  id?: string;
+  action?: string;
 }
 
-const SESSION_RESOURCES: ReadonlySet<string> = new Set(['current']);
+const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
+  'agents',
+  'notifications',
+  'prompts',
+  'clipboard',
+  'monitors',
+]);
 
 /**
- * Parse a yaar://sessions/... URI.
+ * Parse a yaar://sessions/... URI with support for deep paths.
  *
- *   parseSessionUri('yaar://sessions/current')          → { resource: 'current' }
- *   parseSessionUri('yaar://sessions/current/logs')     → { resource: 'current', subResource: 'logs' }
- *   parseSessionUri('yaar://sessions/current/context')  → { resource: 'current', subResource: 'context' }
+ *   parseSessionUri('yaar://sessions/current')
+ *     → { resource: 'current' }
+ *   parseSessionUri('yaar://sessions/current/agents')
+ *     → { resource: 'current', subKind: 'agents' }
+ *   parseSessionUri('yaar://sessions/current/agents/agent-123')
+ *     → { resource: 'current', subKind: 'agents', id: 'agent-123' }
+ *   parseSessionUri('yaar://sessions/current/agents/agent-123/interrupt')
+ *     → { resource: 'current', subKind: 'agents', id: 'agent-123', action: 'interrupt' }
+ *   parseSessionUri('yaar://sessions/current/notifications')
+ *     → { resource: 'current', subKind: 'notifications' }
+ *   parseSessionUri('yaar://sessions/current/notifications/abc')
+ *     → { resource: 'current', subKind: 'notifications', id: 'abc' }
+ *   parseSessionUri('yaar://sessions/current/prompts')
+ *     → { resource: 'current', subKind: 'prompts' }
+ *   parseSessionUri('yaar://sessions/current/clipboard')
+ *     → { resource: 'current', subKind: 'clipboard' }
+ *   parseSessionUri('yaar://sessions/current/monitors/0')
+ *     → { resource: 'current', subKind: 'monitors', id: '0' }
  */
 export function parseSessionUri(uri: string): ParsedSessionUri | null {
   const parsed = parseYaarUri(uri);
   if (!parsed || parsed.authority !== 'sessions') return null;
 
-  const slashIdx = parsed.path.indexOf('/');
-  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-  if (!SESSION_RESOURCES.has(resource)) return null;
+  // Split path into segments: "current/agents/agent-123/interrupt" → ["current", "agents", "agent-123", "interrupt"]
+  const segments = parsed.path.split('/').filter(Boolean);
+  if (segments.length === 0 || segments[0] !== 'current') return null;
 
-  const sub = slashIdx === -1 ? undefined : parsed.path.slice(slashIdx + 1);
-  return { resource: resource as SessionResource, subResource: sub || undefined };
+  const result: ParsedSessionUri = { resource: 'current' };
+
+  if (segments.length >= 2) {
+    if (!SESSION_SUB_KINDS.has(segments[1])) return null;
+    result.subKind = segments[1] as SessionSubKind;
+  }
+
+  if (segments.length >= 3) {
+    result.id = segments[2];
+  }
+
+  if (segments.length >= 4) {
+    result.action = segments[3];
+  }
+
+  return result;
 }
 
 /**
  * Build a yaar://sessions/... URI.
  *
- *   buildSessionUri('current')            → 'yaar://sessions/current'
- *   buildSessionUri('current', 'logs')    → 'yaar://sessions/current/logs'
- *   buildSessionUri('current', 'context') → 'yaar://sessions/current/context'
+ *   buildSessionUri('current')                                    → 'yaar://sessions/current'
+ *   buildSessionUri('current', 'agents')                          → 'yaar://sessions/current/agents'
+ *   buildSessionUri('current', 'agents', 'agent-123')             → 'yaar://sessions/current/agents/agent-123'
+ *   buildSessionUri('current', 'agents', 'agent-123', 'interrupt') → 'yaar://sessions/current/agents/agent-123/interrupt'
+ *   buildSessionUri('current', 'notifications')                   → 'yaar://sessions/current/notifications'
+ *   buildSessionUri('current', 'monitors', '0')                   → 'yaar://sessions/current/monitors/0'
  */
-export function buildSessionUri(resource: SessionResource, subResource?: string): string {
-  return subResource ? `yaar://sessions/${resource}/${subResource}` : `yaar://sessions/${resource}`;
+export function buildSessionUri(
+  resource: 'current',
+  subKind?: SessionSubKind,
+  id?: string,
+  action?: string,
+): string {
+  let uri = `yaar://sessions/${resource}`;
+  if (subKind) uri += `/${subKind}`;
+  if (id) uri += `/${id}`;
+  if (action) uri += `/${action}`;
+  return uri;
 }

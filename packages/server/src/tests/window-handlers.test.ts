@@ -91,7 +91,7 @@ beforeEach(async () => {
     if (bareMatch) return { kind: 'window', monitorId: '0', windowId: bareMatch[1], sourceUri: u };
     // Bare yaar://windows or yaar://windows/
     if (u === 'yaar://windows' || u === 'yaar://windows/')
-      return { kind: 'monitor', monitorId: '0', sourceUri: u };
+      return { kind: 'window', monitorId: '0', windowId: '', sourceUri: u };
     return null;
   });
 

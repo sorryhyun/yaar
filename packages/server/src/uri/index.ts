@@ -6,6 +6,7 @@ export {
   type ResolvedWindow,
   type ResolvedConfig,
   type ResolvedBrowser,
+  type ResolvedSession,
   type ResourceKind,
 } from './resolve.js';
 

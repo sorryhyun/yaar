@@ -26,14 +26,19 @@ let registerUserHandlers: (registry: ResourceRegistry) => void;
 beforeEach(async () => {
   vi.clearAllMocks();
   mockResolveUri.mockImplementation((u: string) => {
-    // user URIs
-    if (u.startsWith('yaar://user/notifications/')) {
-      const id = u.replace('yaar://user/notifications/', '');
-      return { kind: 'user', resource: 'notifications', id, sourceUri: u };
+    // session-scoped user URIs
+    if (u.startsWith('yaar://sessions/current/notifications/')) {
+      const id = u.replace('yaar://sessions/current/notifications/', '');
+      return { kind: 'session', resource: 'current', subKind: 'notifications', id, sourceUri: u };
     }
-    if (u.startsWith('yaar://user/')) {
-      const resource = u.replace('yaar://user/', '');
-      return { kind: 'user', resource, sourceUri: u };
+    if (u === 'yaar://sessions/current/notifications') {
+      return { kind: 'session', resource: 'current', subKind: 'notifications', sourceUri: u };
+    }
+    if (u === 'yaar://sessions/current/prompts') {
+      return { kind: 'session', resource: 'current', subKind: 'prompts', sourceUri: u };
+    }
+    if (u === 'yaar://sessions/current/clipboard') {
+      return { kind: 'session', resource: 'current', subKind: 'clipboard', sourceUri: u };
     }
     return null;
   });
@@ -52,7 +57,7 @@ describe('User domain handlers', () => {
   describe('notifications', () => {
     it('shows a notification via invoke', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://user/notifications', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/notifications', {
         id: 'n1',
         title: 'Alert',
         body: 'Something happened',
@@ -66,7 +71,7 @@ describe('User domain handlers', () => {
 
     it('returns error without required fields', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://user/notifications', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/notifications', {
         title: 'Alert',
       });
       expect(result.isError).toBe(true);
@@ -74,7 +79,7 @@ describe('User domain handlers', () => {
 
     it('dismisses a notification via delete', async () => {
       const reg = createRegistry();
-      const result = await reg.execute('delete', 'yaar://user/notifications/n1');
+      const result = await reg.execute('delete', 'yaar://sessions/current/notifications/n1');
       expect(result.isError).toBeFalsy();
       expect(mockEmitAction).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'notification.dismiss', id: 'n1' }),
@@ -87,7 +92,7 @@ describe('User domain handlers', () => {
       mockShowUserPrompt.mockResolvedValue({ selectedValues: ['option1'] });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://user/prompts', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/prompts', {
         action: 'ask',
         title: 'Choose',
         message: 'Pick one',
@@ -104,7 +109,7 @@ describe('User domain handlers', () => {
       mockShowUserPrompt.mockResolvedValue({ dismissed: true });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://user/prompts', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/prompts', {
         action: 'ask',
         title: 'Choose',
         message: 'Pick one',
@@ -121,7 +126,7 @@ describe('User domain handlers', () => {
       mockShowUserPrompt.mockResolvedValue({ text: 'user response' });
 
       const reg = createRegistry();
-      const result = await reg.execute('invoke', 'yaar://user/prompts', {
+      const result = await reg.execute('invoke', 'yaar://sessions/current/prompts', {
         action: 'request',
         title: 'API Key',
         message: 'Enter your API key',

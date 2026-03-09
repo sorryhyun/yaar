@@ -3,27 +3,25 @@
  *
  * Maps user-facing operations to the verb layer:
  *
- *   invoke('yaar://user/notifications', { title, body, ... })  → show notification
- *   delete('yaar://user/notifications/{id}')                   → dismiss notification
- *   invoke('yaar://user/prompts', { action: 'ask', ... })      → ask user a question
- *   invoke('yaar://user/prompts', { action: 'request', ... })  → request user action
+ *   invoke('yaar://sessions/current/notifications', { title, body, ... })  → show notification
+ *   delete('yaar://sessions/current/notifications/{id}')                   → dismiss notification
+ *   invoke('yaar://sessions/current/prompts', { action: 'ask', ... })      → ask user a question
+ *   invoke('yaar://sessions/current/prompts', { action: 'request', ... })  → request user action
  */
 
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from '../../uri/registry.js';
-import type { ResolvedUri } from '../../uri/resolve.js';
+import type { ResolvedUri, ResolvedSession } from '../../uri/resolve.js';
 import { actionEmitter } from '../action-emitter.js';
 import { ok, error } from '../utils.js';
 
-function assertUser(
-  resolved: ResolvedUri,
-): asserts resolved is Extract<ResolvedUri, { kind: 'user' }> {
-  if (resolved.kind !== 'user') throw new Error(`Expected user URI, got ${resolved.kind}`);
+function assertSessionUser(resolved: ResolvedUri): asserts resolved is ResolvedSession {
+  if (resolved.kind !== 'session') throw new Error(`Expected session URI, got ${resolved.kind}`);
 }
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
-  // ── yaar://user/notifications — show/manage notifications ──
-  registry.register('yaar://user/notifications', {
+  // ── yaar://sessions/current/notifications — show/manage notifications ──
+  registry.register('yaar://sessions/current/notifications', {
     description: 'Notifications. Invoke to show a new notification.',
     verbs: ['describe', 'invoke'],
     invokeSchema: {
@@ -53,13 +51,13 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://user/notifications/{id} — dismiss a specific notification ──
-  registry.register('yaar://user/notifications/*', {
+  // ── yaar://sessions/current/notifications/{id} — dismiss a specific notification ──
+  registry.register('yaar://sessions/current/notifications/*', {
     description: 'A specific notification. Delete to dismiss.',
     verbs: ['describe', 'delete'],
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertUser(resolved);
+      assertSessionUser(resolved);
       if (!resolved.id) return error('Notification ID required.');
       const osAction: OSAction = {
         type: 'notification.dismiss',
@@ -70,8 +68,8 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://user/prompts — ask/request user interaction ──
-  registry.register('yaar://user/prompts', {
+  // ── yaar://sessions/current/prompts — ask/request user interaction ──
+  registry.register('yaar://sessions/current/prompts', {
     description:
       'User prompts. Invoke with action "ask" for multiple-choice questions, or "request" for freeform text input.',
     verbs: ['describe', 'invoke'],
