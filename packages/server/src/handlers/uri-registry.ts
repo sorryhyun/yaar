@@ -6,8 +6,8 @@
  * to the best-matching handler and dispatches verb calls.
  */
 
-import type { ResolvedUri } from './resolve.js';
-import { resolveUri } from './resolve.js';
+import type { ResolvedUri } from './uri-resolve.js';
+import { resolveUri } from './uri-resolve.js';
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 

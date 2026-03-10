@@ -11,8 +11,8 @@
  * Conditional on Chrome/Edge availability — skips registration if not found.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri/registry.js';
-import type { ResolvedUri, ResolvedBrowser } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri, ResolvedBrowser } from './uri-resolve.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { isDomainAllowed, extractDomain } from '../mcp/domains.js';

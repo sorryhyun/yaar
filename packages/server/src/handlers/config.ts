@@ -5,8 +5,8 @@
  * as ResourceHandler registrations on the registry.
  */
 
-import type { ResourceRegistry, VerbResult } from './uri/registry.js';
-import type { ResolvedUri } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { handleSetSettings, handleGetSettings } from '../features/config/settings.js';
 import {
   handleSetHook,

@@ -19,10 +19,10 @@ import {
   type SessionResource,
   type SessionSubKind,
 } from '@yaar/shared';
-import { safePath } from '../../http/utils.js';
-import { resolvePath } from '../../storage/storage-manager.js';
-import { PROJECT_ROOT } from '../../config.js';
-import { getMonitorId } from '../../agents/session.js';
+import { safePath } from '../http/utils.js';
+import { resolvePath } from '../storage/storage-manager.js';
+import { PROJECT_ROOT } from '../config.js';
+import { getMonitorId } from '../agents/session.js';
 
 export type ResourceKind = 'app-static' | 'storage' | 'sandbox';
 

@@ -7,8 +7,8 @@
  *   invoke('yaar://sessions/current', { ... })   → memorize
  */
 
-import type { ResourceRegistry, VerbResult } from './uri/registry.js';
-import type { ResolvedUri } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { ok, error } from '../mcp/utils.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { getSessionId, getMonitorId } from '../agents/session.js';
