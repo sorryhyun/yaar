@@ -101,8 +101,8 @@ export function extractAppId(uri: string): string | null {
 
 // ============ File-operation URIs ============
 
-/** Sandbox IDs are numeric timestamps (e.g. Date.now().toString()). */
-const SANDBOX_ID_RE = /^\d+$/;
+/** Reserved sandbox path segment for new sandbox creation. */
+const SANDBOX_NEW = 'new';
 
 export type ParsedContentPath =
   | { authority: 'storage'; path: string }
@@ -121,7 +121,7 @@ export type ParsedFileUri =
  * Parse a file-operation URI.
  *
  * Primary format: yaar://storage/{path}, yaar://sandbox/{id}/{path}, yaar://sandbox/new/{path}
- * Sandbox IDs must be numeric timestamps or "new" (for new sandbox creation).
+ * "new" is reserved for new sandbox creation; any other non-empty string is a valid sandbox ID.
  *
  *   yaar://storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
  *   yaar://storage/                   → { authority: 'storage', path: '' }
@@ -143,16 +143,16 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
     if (parsed.authority === 'sandbox') {
       const slashIdx = parsed.path.indexOf('/');
       if (slashIdx === -1) {
-        // yaar://sandbox/{sandboxId} — root
-        if (!SANDBOX_ID_RE.test(parsed.path)) return null;
+        if (parsed.path === SANDBOX_NEW) return { authority: 'sandbox', sandboxId: null, path: '' };
+        if (!parsed.path) return null;
         return { authority: 'sandbox', sandboxId: parsed.path, path: '' };
       }
       const first = parsed.path.slice(0, slashIdx);
       const rest = parsed.path.slice(slashIdx + 1);
-      if (first === 'new') {
+      if (first === SANDBOX_NEW) {
         return { authority: 'sandbox', sandboxId: null, path: rest };
       }
-      if (!SANDBOX_ID_RE.test(first)) return null;
+      if (!first) return null;
       return { authority: 'sandbox', sandboxId: first, path: rest };
     }
     return null; // non-file authority
@@ -174,11 +174,11 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
     }
     const slashIdx = rest.indexOf('/');
     if (slashIdx === -1) {
-      if (!SANDBOX_ID_RE.test(rest)) return null;
+      if (!rest) return null;
       return { authority: 'sandbox', sandboxId: rest, path: '' };
     }
     const id = rest.slice(0, slashIdx);
-    if (!SANDBOX_ID_RE.test(id)) return null;
+    if (!id) return null;
     return {
       authority: 'sandbox',
       sandboxId: id,
@@ -205,11 +205,11 @@ export function parseContentPath(pathname: string): ParsedContentPath | null {
     const rest = pathname.slice('/api/sandbox/'.length);
     const slashIdx = rest.indexOf('/');
     if (slashIdx === -1) {
-      if (!SANDBOX_ID_RE.test(rest)) return null;
+      if (!rest) return null;
       return { authority: 'sandbox', sandboxId: rest, path: '' };
     }
     const id = rest.slice(0, slashIdx);
-    if (!SANDBOX_ID_RE.test(id)) return null;
+    if (!id) return null;
     return { authority: 'sandbox', sandboxId: id, path: rest.slice(slashIdx + 1) };
   }
   if (pathname.startsWith('/api/apps/')) {

@@ -19,7 +19,7 @@ You have 5 generic verbs that operate on \`yaar://\` URIs, plus a few system too
 | **invoke** | Perform an action (create, update, trigger) |
 | **delete** | Remove a resource |
 
-Plus: **skill** (load reference docs), **run_js** (sandbox execution), **memorize**, **show_notification**, **relay_to_main**, **http_get/http_post**, **reload_cached**, **WebSearch**.
+Plus: **run_js** (sandbox execution), **memorize**, **show_notification**, **relay_to_main**, **http_get/http_post**, **reload_cached**, **WebSearch**.
 
 ## URI Namespaces
 
@@ -31,6 +31,7 @@ Plus: **skill** (load reference docs), **run_js** (sandbox execution), **memoriz
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\` | read, invoke, delete |
 | \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\`, \`yaar://sandbox/{id}\` | invoke (write, edit, compile, typecheck, deploy, clone), read, list |
 | \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/notifications\`, \`yaar://sessions/current/prompts\` | read, invoke, list |
+| \`yaar://skills/\` | \`yaar://skills/app_dev\`, \`yaar://skills/components\` | list, read |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |
 
 Use \`describe(uri)\` to discover what actions a URI supports before invoking it.
@@ -121,7 +122,12 @@ Window agents can relay results to you via \`<relay>\` messages. When you see a 
 
 ## Skills
 
-**IMPORTANT: You MUST call skill(topic) before using related tools for the first time.** Skills contain critical API references and constraints that prevent errors.
+**IMPORTANT: You MUST read the relevant skill before using related tools for the first time.** Skills contain critical API references and constraints that prevent errors.
+
+\`\`\`
+list('yaar://skills')              # list available topics
+read('yaar://skills/app_dev')      # load a specific skill
+\`\`\`
 
 Available skills:
 - **app_dev** — REQUIRED before sandbox write, compile, deploy. Contains bundled libraries, storage API, runtime constraints

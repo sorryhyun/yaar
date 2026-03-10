@@ -22,16 +22,20 @@
       }
     },
     "commands": {
-      "setHtml": {
-        "description": "Replace document with HTML. Params: { html: string }",
+      "setContent": {
+        "description": "Replace document content. Params: { content: string, renderer?: \"html\"|\"text\" }",
         "params": {
           "type": "object",
           "properties": {
-            "html": {
+            "content": {
               "type": "string"
+            },
+            "renderer": {
+              "type": "string",
+              "enum": ["html", "text"]
             }
           },
-          "required": ["html"]
+          "required": ["content"]
         }
       },
       "setTitle": {
@@ -46,40 +50,20 @@
           "required": ["title"]
         }
       },
-      "setText": {
-        "description": "Replace document with plain text. Params: { text: string }",
+      "appendContent": {
+        "description": "Append content to the end of the document. Params: { content: string, renderer?: \"html\"|\"text\" }",
         "params": {
           "type": "object",
           "properties": {
-            "text": {
+            "content": {
               "type": "string"
+            },
+            "renderer": {
+              "type": "string",
+              "enum": ["html", "text"]
             }
           },
-          "required": ["text"]
-        }
-      },
-      "appendText": {
-        "description": "Append plain text as a new paragraph to the document. Params: { text: string }",
-        "params": {
-          "type": "object",
-          "properties": {
-            "text": {
-              "type": "string"
-            }
-          },
-          "required": ["text"]
-        }
-      },
-      "appendHtml": {
-        "description": "Append HTML content to the end of the document without replacing existing content. Params: { html: string }",
-        "params": {
-          "type": "object",
-          "properties": {
-            "html": {
-              "type": "string"
-            }
-          },
-          "required": ["html"]
+          "required": ["content"]
         }
       },
       "setDocuments": {

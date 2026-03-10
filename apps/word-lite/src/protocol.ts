@@ -42,15 +42,22 @@ export function registerAppProtocol() {
       },
     },
     commands: {
-      setHtml: {
-        description: 'Replace document with HTML. Params: { html: string }',
+      setContent: {
+        description: 'Replace document content. Params: { content: string, renderer?: "html"|"text" }',
         params: {
           type: 'object',
-          properties: { html: { type: 'string' } },
-          required: ['html'],
+          properties: {
+            content: { type: 'string' },
+            renderer: { type: 'string', enum: ['html', 'text'] },
+          },
+          required: ['content'],
         },
-        handler: (p: { html: string }) => {
-          setEditorFromHtml(p.html || '<p></p>');
+        handler: (p: { content: string; renderer?: 'html' | 'text' }) => {
+          if ((p.renderer ?? 'html') === 'text') {
+            setEditorFromPlainText(p.content || '');
+          } else {
+            setEditorFromHtml(p.content || '<p></p>');
+          }
           setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
@@ -70,53 +77,30 @@ export function registerAppProtocol() {
           return { ok: true };
         },
       },
-      setText: {
-        description: 'Replace document with plain text. Params: { text: string }',
-        params: {
-          type: 'object',
-          properties: { text: { type: 'string' } },
-          required: ['text'],
-        },
-        handler: (p: { text: string }) => {
-          setEditorFromPlainText(p.text || '');
-          setSaveStateText('Updated via app protocol');
-          saveDoc();
-          return { ok: true };
-        },
-      },
-      appendText: {
-        description: 'Append plain text as a new paragraph to the document. Params: { text: string }',
+      appendContent: {
+        description: 'Append content to the end of the document. Params: { content: string, renderer?: "html"|"text" }',
         params: {
           type: 'object',
           properties: {
-            text: { type: 'string' },
+            content: { type: 'string' },
+            renderer: { type: 'string', enum: ['html', 'text'] },
           },
-          required: ['text'],
+          required: ['content'],
         },
-        handler: (p: { text: string }) => {
-          const escaped = (p.text || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>');
-          const para = document.createElement('p');
-          para.innerHTML = escaped;
-          editorEl.appendChild(para);
-          refreshStats();
-          setSaveStateText('Updated via app protocol');
-          saveDoc();
-          return { ok: true };
-        },
-      },
-      appendHtml: {
-        description: 'Append HTML content to the end of the document without replacing existing content. Params: { html: string }',
-        params: {
-          type: 'object',
-          properties: { html: { type: 'string' } },
-          required: ['html'],
-        },
-        handler: (p: { html: string }) => {
-          appendHtmlFragment(p.html || '');
+        handler: (p: { content: string; renderer?: 'html' | 'text' }) => {
+          if ((p.renderer ?? 'html') === 'text') {
+            const escaped = (p.content || '')
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/\n/g, '<br>');
+            const para = document.createElement('p');
+            para.innerHTML = escaped;
+            editorEl.appendChild(para);
+            refreshStats();
+          } else {
+            appendHtmlFragment(p.content || '');
+          }
           setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
