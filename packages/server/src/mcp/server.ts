@@ -14,40 +14,16 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { registerSystemTools, SYSTEM_TOOL_NAMES } from './legacy/system/index.js';
-import { registerWindowTools, WINDOW_TOOL_NAMES } from './legacy/window/index.js';
-import { registerAppsTools, APPS_TOOL_NAMES } from './legacy/apps/index.js';
 import { registerHttpTools, HTTP_TOOL_NAMES } from './system/index.js';
-import { registerAppDevTools, DEV_TOOL_NAMES } from './legacy/dev/index.js';
-import { registerBasicTools, BASIC_TOOL_NAMES } from './legacy/basic/index.js';
-import { registerSkillTools, SKILL_TOOL_NAMES } from './skills/index.js';
 import { registerReloadTools, RELOAD_TOOL_NAMES } from './system/reload.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
-import { registerUserTools, USER_TOOL_NAMES } from './legacy/user/index.js';
-import { registerBrowserTools, BROWSER_TOOL_NAMES } from './legacy/browser/index.js';
-import { isBrowserAvailable, probeBrowserAvailability } from '../features/browser/availability.js';
-import { registerConfigNamespace, CONFIG_TOOL_NAMES } from './legacy/config/index.js';
+import { probeBrowserAvailability } from '../features/browser/availability.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
-import { logLegacyToolUsage } from './legacy/deprecation.js';
 
 /** Core MCP servers (always active). */
 export const CORE_SERVERS = ['system', 'verbs'] as const;
-
-/** @deprecated Legacy MCP servers — used only in non-verb mode. */
-export const LEGACY_SERVERS = [
-  'config',
-  'window',
-  'apps',
-  'user',
-  'dev',
-  'basic',
-  'browser',
-] as const;
-
-/** All MCP server categories. */
-export const MCP_SERVERS = [...CORE_SERVERS, ...LEGACY_SERVERS] as const;
-export type McpServerName = (typeof MCP_SERVERS)[number];
+export type McpServerName = (typeof CORE_SERVERS)[number];
 
 /**
  * Per-session MCP transport entry.
@@ -72,9 +48,6 @@ const skipAuth = process.env.MCP_SKIP_AUTH === '1';
 
 // Track whether the module has been initialized
 let initialized = false;
-
-// Track verb mode so createServerForName can conditionally register tools
-let verbModeEnabled = false;
 
 /**
  * Get the MCP authentication token.
@@ -109,35 +82,8 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
 
   switch (name) {
     case 'system':
-      // In verb mode, system/skill tools are handled by verb-layer URI handlers,
-      // so only register HTTP and reload tools on the system server.
-      if (!verbModeEnabled) {
-        registerSystemTools(server);
-        registerSkillTools(server);
-      }
       registerHttpTools(server);
       registerReloadTools(server, getReloadCache, getWindowState);
-      break;
-    case 'config':
-      registerConfigNamespace(server);
-      break;
-    case 'window':
-      registerWindowTools(server, getWindowState);
-      break;
-    case 'apps':
-      registerAppsTools(server);
-      break;
-    case 'user':
-      registerUserTools(server);
-      break;
-    case 'dev':
-      registerAppDevTools(server);
-      break;
-    case 'basic':
-      registerBasicTools(server);
-      break;
-    case 'browser':
-      await registerBrowserTools(server);
       break;
     case 'verbs':
       registerVerbTools(server);
@@ -156,17 +102,12 @@ export async function initMcpServer(): Promise<void> {
   // Generate auth token for this session
   mcpToken = crypto.randomUUID();
 
-  // Read settings to determine verb mode for conditional tool registration
-  const { readSettings } = await import('../storage/settings.js');
-  const settings = await readSettings();
-  verbModeEnabled = settings.verbMode;
-
   // Probe browser availability once at startup so isBrowserAvailable() is set.
   await probeBrowserAvailability();
 
   initialized = true;
   console.log(
-    `[MCP] HTTP server initialized (${MCP_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
+    `[MCP] HTTP server initialized (${CORE_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
   );
 }
 
@@ -182,7 +123,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
     return Response.json({ error: 'MCP server not initialized' }, { status: 503 });
   }
 
-  if (!(MCP_SERVERS as readonly string[]).includes(serverName)) {
+  if (!(CORE_SERVERS as readonly string[]).includes(serverName)) {
     return Response.json({ error: `Unknown MCP server: ${serverName}` }, { status: 404 });
   }
 
@@ -201,11 +142,6 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);
-
-  // Log deprecation for legacy namespace access
-  if (verbModeEnabled && (LEGACY_SERVERS as readonly string[]).includes(serverName)) {
-    logLegacyToolUsage(serverName, yaarSessionId);
-  }
 
   return runWithAgentContext({ agentId, sessionId: yaarSessionId, monitorId }, async () => {
     // Check for existing MCP session
@@ -310,39 +246,15 @@ export function formatToolDisplay(raw: string): string {
 }
 
 /**
- * Get the active MCP servers based on verb mode.
- * In verb mode, only core servers (system, verbs) are used.
+ * Get the active MCP servers.
  */
-export function getActiveServers(verbMode: boolean): McpServerName[] {
-  if (verbMode) {
-    return [...CORE_SERVERS];
-  }
-  console.warn('[MCP] Legacy tool mode is deprecated and will be removed in a future release.');
-  return [...MCP_SERVERS];
+export function getActiveServers(): McpServerName[] {
+  return [...CORE_SERVERS];
 }
 
 /**
  * Get the list of MCP tool names for YAAR.
- * Browser tools are only included when Chrome/Edge was detected at startup.
- * In verb mode, only system server tools + verb tools are returned.
  */
-export function getToolNames(verbMode?: boolean): string[] {
-  if (verbMode) {
-    return ['WebSearch', ...HTTP_TOOL_NAMES, ...RELOAD_TOOL_NAMES, ...VERB_TOOL_NAMES];
-  }
-  return [
-    'WebSearch',
-    ...SYSTEM_TOOL_NAMES,
-    ...CONFIG_TOOL_NAMES,
-    ...SKILL_TOOL_NAMES,
-    ...HTTP_TOOL_NAMES,
-    ...WINDOW_TOOL_NAMES,
-    ...APPS_TOOL_NAMES,
-    ...USER_TOOL_NAMES,
-    ...DEV_TOOL_NAMES,
-    ...BASIC_TOOL_NAMES,
-    ...RELOAD_TOOL_NAMES,
-    ...(isBrowserAvailable() ? BROWSER_TOOL_NAMES : []),
-    ...VERB_TOOL_NAMES,
-  ];
+export function getToolNames(): string[] {
+  return ['WebSearch', ...HTTP_TOOL_NAMES, ...RELOAD_TOOL_NAMES, ...VERB_TOOL_NAMES];
 }

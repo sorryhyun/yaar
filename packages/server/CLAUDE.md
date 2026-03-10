@@ -51,16 +51,13 @@ src/
 │   ├── agents.ts / apps.ts / basic.ts / browser.ts / config.ts
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
-│   ├── server.ts         # Tool registration, request handling; CORE_SERVERS + LEGACY_SERVERS
+│   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
 │   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts   # WindowStateRegistry — per-session window state
 │   ├── system/           # Always-active: info, notify, relay, sandbox, hooks
 │   ├── skills/           # Always-active: skill reference doc loader
-│   ├── http/             # Always-active: http_get, http_post, domain allow-list
-│   └── legacy/           # DEPRECATED (legacy tool mode): individual named MCP tools; import from features/
-│       ├── index.ts      # Re-exports all legacy registrations (@deprecated)
-│       ├── apps/ basic/ browser/ config/ dev/ user/ window/
-├── features/             # Domain business logic (imported by handlers/ and mcp/legacy/)
+│   └── http/             # Always-active: http_get, http_post, domain allow-list
+├── features/             # Domain business logic (imported by handlers/)
 │   ├── apps/             # App listing, skill loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config
@@ -145,11 +142,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-**Verb mode (default):** Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
-
-**Legacy tool mode (deprecated):** All namespaces active. Individual named tools in `mcp/legacy/` domain folders. Emits a deprecation warning at startup. Will be removed in a future release.
-
-Primary tools (verb mode — default):
+Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
@@ -158,21 +151,9 @@ Primary tools (verb mode — default):
 | `mcp/system/` | system | http_get, http_post, request_allowing_domain, reload_cached, list_reload_options, curl |
 | `skills/` | system | skill (reference doc loader) |
 
-@deprecated — Legacy tools (`mcp/legacy/`):
-
-| Domain | Namespace | Summary |
-|--------|-----------|---------|
-| `config/` | config | set, get, remove (hooks, settings, shortcuts, mounts, app) |
-| `window/` | window | create, update, manage, list, view, info, app_query, app_command |
-| `apps/` | apps | list, load_skill, set_app_badge, marketplace ops |
-| `user/` | user | ask, request |
-| `dev/` | dev | compile, typecheck, deploy, clone |
-| `basic/` | basic | read, write, list, delete, edit (URI-style paths) |
-| `browser/` | browser | CDP automation — open, interact, navigate, content, manage (conditional — Chrome/Edge required) |
-
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
-**App Protocol:** Bidirectional agent-iframe communication via `app_query`/`app_command` tools. Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See `mcp/legacy/window/app-protocol.ts` and shared CLAUDE.md for event schemas.
+**App Protocol:** Bidirectional agent-iframe communication via `app_query`/`app_command` tools. Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
 
 ## REST API
 

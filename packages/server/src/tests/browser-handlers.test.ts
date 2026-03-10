@@ -42,7 +42,7 @@ vi.mock('../lib/browser/index.js', () => ({
 }));
 
 // Mock shared browser helpers
-vi.mock('../mcp/legacy/browser/shared.js', async () => ({
+vi.mock('../features/browser/shared.js', async () => ({
   resolveSession: (id?: string) => {
     if (id !== undefined) {
       const s = mockPool.getSession(id);

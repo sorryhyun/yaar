@@ -107,9 +107,7 @@ class ProviderWarmPool {
       if (providerType === 'claude') {
         // Use session provider for Claude (supports warmup)
         const { ClaudeSessionProvider } = await import('./claude/index.js');
-        const { readSettings } = await import('../storage/settings.js');
-        const settings = await readSettings();
-        provider = new ClaudeSessionProvider(settings.verbMode);
+        provider = new ClaudeSessionProvider();
       } else {
         // Ensure shared AppServer exists and is running
         await this.ensureCodexAppServer();

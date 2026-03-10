@@ -38,7 +38,6 @@ export function SettingsModal() {
   const setIconSize = useDesktopStore((s) => s.setIconSize);
 
   const [allowAllDomains, setAllowAllDomains] = useState(false);
-  const [legacyToolMode, setLegacyToolMode] = useState(false);
   const [serverProvider, setServerProvider] = useState<ProviderSetting>('auto');
   const [selectedProvider, setSelectedProvider] = useState<ProviderSetting>('auto');
   const [applyingProvider, setApplyingProvider] = useState(false);
@@ -58,29 +57,12 @@ export function SettingsModal() {
       .catch(() => {});
     apiFetch('/api/apps')
       .then((r) => r.json())
-      .then((data: { provider?: ProviderSetting; verbMode?: boolean }) => {
+      .then((data: { provider?: ProviderSetting }) => {
         const p = data.provider ?? 'auto';
         setServerProvider(p);
         setSelectedProvider(p);
-        setLegacyToolMode(!(data.verbMode ?? true));
       })
       .catch(() => {});
-  }, []);
-
-  const handleToggleLegacyToolMode = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.checked;
-    setLegacyToolMode(value);
-    apiFetch('/api/settings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verbMode: !value }),
-    })
-      .then(() => {
-        window.location.reload();
-      })
-      .catch(() => {
-        setLegacyToolMode(!value);
-      });
   }, []);
 
   const handleToggleAllowAll = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,22 +160,6 @@ export function SettingsModal() {
                 </button>
               )}
             </div>
-          </div>
-
-          <div className={styles.divider} />
-          <div className={styles.field}>
-            <label className={styles.toggleRow}>
-              <span className={styles.toggleLabel}>
-                <span className={styles.label}>{t('settings.legacyToolMode.label')}</span>
-                <span className={styles.subtitle}>{t('settings.legacyToolMode.description')}</span>
-              </span>
-              <input
-                type="checkbox"
-                className={styles.toggle}
-                checked={legacyToolMode}
-                onChange={handleToggleLegacyToolMode}
-              />
-            </label>
           </div>
 
           <div className={styles.divider} />

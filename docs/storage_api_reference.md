@@ -28,9 +28,9 @@ Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environme
 
 ## MCP Tools
 
-**Verb mode (default):** File I/O is handled by the 5 generic verb tools (`read`, `list`, `invoke`, `delete`, `describe`) with `yaar://storage/` URIs. **Legacy mode (deprecated):** tools are in the `basic` MCP namespace. All tools accept URI-style paths with `yaar://storage/` or `yaar://sandbox/` schemes. Only the `yaar://storage/` scheme is covered here.
+File I/O is handled by the 5 generic verb tools (`read`, `list`, `invoke`, `delete`, `describe`) with `yaar://storage/` URIs. All tools accept URI-style paths with `yaar://storage/` or `yaar://sandbox/` schemes. Only the `yaar://storage/` scheme is covered here.
 
-**Source:** `packages/server/src/mcp/verbs/handlers/basic.ts` (verb mode), `packages/server/src/mcp/legacy/basic/` (legacy)
+**Source:** `packages/server/src/handlers/basic.ts`
 
 ### `read`
 

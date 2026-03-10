@@ -6,7 +6,7 @@
  * to signal to the caller that server.upgrade() should be called instead.
  */
 
-import { handleMcpRequest, MCP_SERVERS, type McpServerName } from '../mcp/server.js';
+import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
 import { PORT, IS_REMOTE } from '../config.js';
 import { checkHttpAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
@@ -140,7 +140,7 @@ export function createFetchHandler() {
     const mcpMatch = url.pathname.match(/^\/mcp\/(\w+)$/);
     if (mcpMatch && (req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE')) {
       const serverName = mcpMatch[1] as McpServerName;
-      if ((MCP_SERVERS as readonly string[]).includes(serverName)) {
+      if ((CORE_SERVERS as readonly string[]).includes(serverName)) {
         const response = await handleMcpRequest(req, serverName);
         return withCors(response, corsHeaders);
       }

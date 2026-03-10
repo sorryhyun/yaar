@@ -107,16 +107,7 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 - **Session domain handlers** — agents (`mcp/agents/handlers.ts`), notifications/prompts (`mcp/user/handlers.ts`), system info/memorize (`mcp/system/handlers.ts`) via `yaar://sessions/current/*`
 - **Apps domain handlers** (`mcp/apps/handlers.ts`) — list apps, load skill, set badge, marketplace install/uninstall via `yaar://apps/*`
 - **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract)
-- Both old tools and new verbs work simultaneously — no breaking changes
-
-### Verb Mode Toggle (Done)
-
-- **Settings toggle** — `verbMode: boolean` in `config/settings.json` (default `false`), exposed in Settings modal as "Verb Mode (Experimental)"
-- **MCP server filtering** — when `verbMode` is on, provider connects to only `system` + `verbs` MCP servers (not all 9). `getActiveServers(verbMode)` and `getToolNames(verbMode)` control which tools are available.
-- **Warm pool restart** — changing `verbMode` in settings triggers `cleanup()` + `initialize()` so new providers reflect the toggle immediately
-- **Structured tool logging** — `logToolResult()` now accepts optional `meta: { isError, errorCategory, durationMs }`. `StreamToEventMapper` tracks tool_use start times, computes duration on tool_result, classifies errors (`uri_not_found`, `verb_not_supported`, `validation`, `handler_error`, `unknown`).
-- **Session metadata** — `metadata.json` includes `verbMode` flag for post-hoc A/B comparison across sessions
-- **Legacy tools must be maintained** — verb mode is experimental. All ~30 legacy MCP tools remain the production path and must not be removed or degraded until verb mode has been verified across all domains via A/B comparison data
+- Legacy tools have been removed — verb mode is now the only mode
 
 ---
 
@@ -128,7 +119,7 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 
 3. **Uniform addressing.** Every resource — config, windows, browser pages, agents, storage — uses the same `yaar://` scheme. The AI can reason about resources compositionally (e.g., "read this, then invoke that") without switching between unrelated tool APIs.
 
-4. **Zero-disruption migration.** Old tools and new verbs coexist. Domain handlers wrap existing functions — no logic duplication, no rewrite. Each domain migrates independently at its own pace.
+4. **Clean migration.** Domain handlers wrap existing business logic functions — no logic duplication, no rewrite. Each domain migrated independently.
 
 5. **Pattern-based extensibility.** Adding a new resource type means registering a handler with a URI pattern. No changes to the verb tools, MCP server setup, or system prompt. The registry's priority system (exact > prefix > wildcard) handles specificity automatically.
 

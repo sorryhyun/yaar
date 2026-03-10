@@ -87,7 +87,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
   },
 }));
 
-vi.mock('../mcp/legacy/apps/discovery.js', () => ({
+vi.mock('../features/apps/discovery.js', () => ({
   getAppMeta: vi.fn().mockResolvedValue(null),
 }));
 

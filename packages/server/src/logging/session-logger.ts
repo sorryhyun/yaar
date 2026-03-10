@@ -23,7 +23,7 @@ function generateSessionId(): string {
 /**
  * Create a new session.
  */
-export async function createSession(provider: string, verbMode?: boolean): Promise<SessionInfo> {
+export async function createSession(provider: string): Promise<SessionInfo> {
   await ensureSessionsDir();
 
   const sessionId = generateSessionId();
@@ -37,7 +37,6 @@ export async function createSession(provider: string, verbMode?: boolean): Promi
     createdAt: now,
     provider,
     lastActivity: now,
-    verbMode,
     agents: {
       'main-0': {
         agentId: 'main-0',

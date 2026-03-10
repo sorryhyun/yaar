@@ -108,7 +108,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, window messages in parallel. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
-6. **MCP tools**: Served via a single HTTP server using `@modelcontextprotocol/sdk`. **Verb mode (default)**: 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) routed via `yaar://` URIs — only `system` + `verbs` namespaces active. **Legacy tool mode (deprecated)**: ~30 individual named tools across 8 namespaces (`system`, `window`, `apps`, `user`, `dev`, `basic`, `browser`, `config`) — will be removed in a future release.
+6. **MCP tools**: Served via a single HTTP server using `@modelcontextprotocol/sdk`. 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) routed via `yaar://` URIs — only `system` + `verbs` namespaces active.
 7. **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections. Broadcasts to all connections in a session.
 8. **Flat Component DSL**: No recursive trees — flat array with CSS grid layout for LLM simplicity.
 9. **AsyncLocalStorage**: Tracks which agent is running for tool action routing via `getAgentId()`.
@@ -218,7 +218,7 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
    - Available actions
    - Example workflows
 3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
-4. (Optional) Use `config:set(section: "app", appId, appConfig)` to store credentials (saved to `config/{appId}.json`, git-ignored)
+4. (Optional) Use `invoke('yaar://config/app/{appId}', { config })` to store credentials (saved to `config/{appId}.json`, git-ignored)
 
 ### Apps Tools (MCP)
 
@@ -231,10 +231,10 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 | `apps_market_get` | Download and install an app from the marketplace |
 | `apps_market_delete` | Uninstall an app and its credentials |
 
-App config (credentials, preferences) is managed via verb tools (or legacy `config` namespace):
-- `invoke('yaar://config/app/{appId}', { config })` — merge config into `config/{appId}.json` (legacy: `config:set(section: "app", appId, appConfig)`)
-- `read('yaar://config/app/{appId}')` — read app config (legacy: `config:get(section: "app", appId?)`)
-- `delete('yaar://config/app/{appId}')` — remove app config key or entire file (legacy: `config:remove(appId, appConfigKey?)`)
+App config (credentials, preferences) is managed via verb tools:
+- `invoke('yaar://config/app/{appId}', { config })` — merge config into `config/{appId}.json`
+- `read('yaar://config/app/{appId}')` — read app config
+- `delete('yaar://config/app/{appId}')` — remove app config key or entire file
 
 ### Example: GitHub Manager App
 
