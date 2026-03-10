@@ -13,7 +13,7 @@ import { join } from 'path';
 
 // Import and start the server
 // The server starts automatically on import
-import './index.js';
+import './main.js';
 
 import { getRemoteToken } from './http/auth.js';
 
