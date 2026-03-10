@@ -21,7 +21,7 @@ const TOPIC_NAMES = ['app_dev', 'sandbox', 'components', 'host_api', 'app_protoc
 /** Lazily load and resolve a topic's content (with template substitution). */
 async function loadTopic(topic: string): Promise<string | null> {
   // Dynamic import keeps .md text imports out of the static module graph
-  const { getTopicContent } = await import('../mcp/skills/topics.js');
+  const { getTopicContent } = await import('../features/skills/topics.js');
   return getTopicContent(topic);
 }
 

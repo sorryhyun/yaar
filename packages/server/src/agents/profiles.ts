@@ -6,9 +6,15 @@
  */
 
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
-import { HTTP_TOOL_NAMES } from '../mcp/system/index.js';
-import { RELOAD_TOOL_NAMES } from '../mcp/system/reload.js';
-import { VERB_TOOL_NAMES } from '../handlers/index.js';
+import { SYSTEM_TOOL_NAMES } from '../mcp/system/index.js';
+// Inlined to avoid circular dependency: handlers/index → session-hub → live-session → context-pool → main-task-processor → profiles → handlers/index
+const VERB_TOOL_NAMES = [
+  'mcp__verbs__describe',
+  'mcp__verbs__read',
+  'mcp__verbs__list',
+  'mcp__verbs__invoke',
+  'mcp__verbs__delete',
+] as const;
 
 export interface AgentProfile {
   id: string;
@@ -76,12 +82,7 @@ After completing a significant task, call relay_to_main to hand results back to 
 
 // ── Verb tool set ──────────────────────────────────────────────────
 
-const VERB_TOOLS = [
-  'WebSearch',
-  ...HTTP_TOOL_NAMES,
-  ...RELOAD_TOOL_NAMES,
-  ...VERB_TOOL_NAMES,
-] as const;
+const VERB_TOOLS = ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES] as const;
 
 // ── Profile definitions (used by buildAgentDefinitions) ─────────────
 
@@ -127,7 +128,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
   id: 'developer',
   description: 'Developer agent — handles quick actions directly, delegates complex work',
   systemPrompt: '',
-  allowedTools: ['Task', 'WebSearch', ...HTTP_TOOL_NAMES, ...RELOAD_TOOL_NAMES, ...VERB_TOOL_NAMES],
+  allowedTools: ['Task', 'WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
 };
 
 /**

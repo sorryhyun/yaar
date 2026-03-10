@@ -25,7 +25,7 @@ Test that `describe` returns valid schemas for key resources across multiple dom
 describe('yaar://config/settings')
 describe('yaar://storage')
 describe('yaar://sessions/current/monitors')
-describe('yaar://sessions/current/user/notifications')
+describe('yaar://sessions/current/notifications')
 describe('yaar://apps')
 describe('yaar://sessions/current/agents')
 describe('yaar://sessions/current')
@@ -183,7 +183,7 @@ invoke('yaar://windows/si-v-word', { action: "create", title: "Word Lite", appId
 Wait for ready, then:
 ```
 invoke('yaar://windows/si-v-word', { action: "app_command", command: "setTitle", params: { "title": "Self Inspection Test" } })
-invoke('yaar://windows/si-v-word', { action: "app_command", command: "setHtml", params: { "html": "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
+invoke('yaar://windows/si-v-word', { action: "app_command", command: "setContent", params: { "content": "<h1>Test Document</h1><p>This is a self-inspection test.</p>", "renderer": "html" } })
 invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "title" })   # should be "Self Inspection Test"
 invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "stats" })    # should have words > 0
 invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "text" })     # should contain "self-inspection test"
@@ -227,7 +227,7 @@ Test the full app development pipeline. Note: dev tools (`compile`, `deploy`) ar
 
 **Step 1 — Write source via verb:**
 ```
-invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "document.body.innerHTML = '<h1 id=\"si-v-test\">Verb Inspection Dev Test</h1><p>Compiled and deployed successfully.</p>'; document.body.style.cssText = 'font-family:system-ui;padding:24px;';" })
+invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "import html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\n\nrender(() => html\`<div><h1 id=\"si-v-test\">Verb Inspection Dev Test</h1><p>Compiled and deployed successfully.</p></div>\`, document.getElementById('app')!);" })
 ```
 Record the returned `sandboxId`.
 
@@ -374,7 +374,7 @@ Wait for all 3 to be ready, then interact with each:
 
 ```
 invoke('yaar://windows/si-v-multi-excel', { action: "app_command", command: "setCells", params: { "cells": { "A1": "Multi-app test" } } })
-invoke('yaar://windows/si-v-multi-word', { action: "app_command", command: "setHtml", params: { "html": "<p>Multi-app test</p>" } })
+invoke('yaar://windows/si-v-multi-word', { action: "app_command", command: "setContent", params: { "content": "<p>Multi-app test</p>", "renderer": "html" } })
 invoke('yaar://windows/si-v-multi-img', { action: "app_command", command: "setLayout", params: { "mode": "grid", "columns": 3 } })
 ```
 
@@ -424,7 +424,7 @@ read('yaar://sessions/current/agents/<first-agent-id>')
 Test notification lifecycle through verb layer:
 
 ```
-invoke('yaar://sessions/current/user/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
+invoke('yaar://sessions/current/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
 ```
 
 **PASS** if notification is shown without error.
@@ -441,7 +441,7 @@ invoke('yaar://windows/self-inspection-report', {
   title: "Self Inspection Report (Verb Mode)",
   width: 750, height: 750,
   renderer: "markdown",
-  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setHtml/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
+  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
 })
 ```
 

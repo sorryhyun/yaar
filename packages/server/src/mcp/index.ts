@@ -15,7 +15,7 @@ export {
 } from './server.js';
 
 // Domain tool registrations
-export { registerHttpTools, HTTP_TOOL_NAMES } from './system/index.js';
+export { registerHttpTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 
 // Verb tools
 export { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';

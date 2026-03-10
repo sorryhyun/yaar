@@ -22,7 +22,7 @@ bun run build                  # Build for production
 
 ```
 src/
-├── index.ts              # Thin orchestrator (~35 lines)
+├── main.ts               # Thin orchestrator (~35 lines)
 ├── config.ts             # Constants, paths, MIME types, PORT, monitor budget limits
 ├── lifecycle.ts          # initializeSubsystems(), printBanner(), shutdown()
 ├── http/                 # HTTP server: createFetchHandler() (CORS, auth, MCP dispatch)

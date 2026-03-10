@@ -188,6 +188,10 @@ export class ContextPool implements PoolContext {
     return this.agentPool.getMainAgentCount();
   }
 
+  getMainAgentMonitorIds(): string[] {
+    return this.agentPool.getMainAgentMonitorIds();
+  }
+
   async removeMonitorAgent(monitorId: string): Promise<void> {
     const queue = this.mainQueues.get(monitorId);
     if (queue) {

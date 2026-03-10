@@ -97,7 +97,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
+      'Invoke actions: create, create_component, update (requires operation), update_component, close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -133,7 +133,11 @@ export function registerWindowHandlers(
         gap: { type: 'string', enum: ['none', 'sm', 'md', 'lg'] },
         jsonfile: { type: 'string' },
         // update fields
-        operation: { type: 'string', enum: ['append', 'prepend', 'replace', 'insertAt', 'clear'] },
+        operation: {
+          type: 'string',
+          enum: ['append', 'prepend', 'replace', 'insertAt', 'clear'],
+          description: 'Required for "update" action.',
+        },
         position: { type: 'number' },
         // app_command fields
         command: { type: 'string' },

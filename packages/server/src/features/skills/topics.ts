@@ -1,9 +1,9 @@
 /**
- * Skill topic content — shared between the legacy `skill` tool and
- * the verb-layer `yaar://skills/*` handler.
+ * Skill topic content — reference docs loaded by the verb-layer
+ * `yaar://skills/*` handler and the legacy `skill` MCP tool.
  *
- * Separated from index.ts so the verb handler can dynamically import
- * this module without pulling .md text imports into the static graph.
+ * Content is imported at build time via Bun text imports so it works
+ * in both dev mode and bundled executables.
  */
 
 import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';

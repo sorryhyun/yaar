@@ -14,8 +14,8 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { registerHttpTools, HTTP_TOOL_NAMES } from './system/index.js';
-import { registerReloadTools, RELOAD_TOOL_NAMES } from './system/reload.js';
+import { registerHttpTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+import { registerReloadTools } from './system/reload.js';
 import type { WindowStateRegistry } from './window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
@@ -256,5 +256,5 @@ export function getActiveServers(): McpServerName[] {
  * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
-  return ['WebSearch', ...HTTP_TOOL_NAMES, ...RELOAD_TOOL_NAMES, ...VERB_TOOL_NAMES];
+  return ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES];
 }
