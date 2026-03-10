@@ -43,9 +43,9 @@ export class ClaudeSessionProvider extends BaseTransport {
   private sessionId: string | null = null;
   private currentQuery: ReturnType<typeof sdkQuery> | null = null;
 
-  constructor(private readonly verbMode: boolean = false) {
+  constructor() {
     super();
-    this.systemPrompt = getSystemPrompt(verbMode);
+    this.systemPrompt = getSystemPrompt();
   }
 
   async isAvailable(): Promise<boolean> {
@@ -69,7 +69,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     }
 
     // Build MCP server configs (shared between main agent and subagent definitions)
-    const activeServers = getActiveServers(this.verbMode);
+    const activeServers = getActiveServers();
     const mcpServerConfigs = Object.fromEntries(
       activeServers.map((name: string) => [
         name,
@@ -82,7 +82,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     );
 
     // Only enable Task built-in tool if allowedTools includes it (or is unfiltered)
-    const effectiveAllowed = allowedTools ?? getToolNames(this.verbMode);
+    const effectiveAllowed = allowedTools ?? getToolNames();
     const builtinTools: SDKOptions['tools'] = ['WebSearch'];
     if (!allowedTools || allowedTools.includes('Task')) {
       builtinTools.push('Task');
@@ -99,7 +99,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: builtinTools,
-      agents: buildAgentDefinitions(mcpServerConfigs, this.verbMode),
+      agents: buildAgentDefinitions(mcpServerConfigs),
       allowedTools: effectiveAllowed,
       mcpServers: mcpServerConfigs,
       includePartialMessages: true,

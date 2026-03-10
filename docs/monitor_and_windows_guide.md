@@ -24,7 +24,7 @@ A **session** is the top-level container for one complete conversation. It owns 
 
 ### Identity
 
-Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://sessions/current`, with sub-resources for logs (`yaar://sessions/current/logs`) and context (`yaar://sessions/current/context`). See [URI-Based Resource Addressing](./uri-based-access.md).
+Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://sessions/current`, with sub-resources for logs (`yaar://sessions/current/logs`) and context (`yaar://sessions/current/context`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
 ### Multi-connection
 
@@ -69,7 +69,7 @@ Monitors enable parallel, independent AI workflows. A user can run a long backgr
 
 ### Identity
 
-Monitors use numeric IDs like `0`, `1`, etc. The default monitor is always `0` ("Desktop 1"). Window URIs use the `yaar://monitors/{id}/{windowId}` format — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
+Monitors use numeric IDs like `0`, `1`, etc. The default monitor is always `0` ("Desktop 1"). Window URIs use the `yaar://monitors/{id}/{windowId}` format — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
 ### Frontend
 
@@ -110,7 +110,7 @@ When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen befo
 
 ## Window
 
-A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://monitors/{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./uri-based-access.md#window-addressing).
+A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://monitors/{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
 ### Structure
 

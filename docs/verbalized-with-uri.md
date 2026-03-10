@@ -107,16 +107,7 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 - **Session domain handlers** — agents (`mcp/agents/handlers.ts`), notifications/prompts (`mcp/user/handlers.ts`), system info/memorize (`mcp/system/handlers.ts`) via `yaar://sessions/current/*`
 - **Apps domain handlers** (`mcp/apps/handlers.ts`) — list apps, load skill, set badge, marketplace install/uninstall via `yaar://apps/*`
 - **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract)
-- Both old tools and new verbs work simultaneously — no breaking changes
-
-### Verb Mode Toggle (Done)
-
-- **Settings toggle** — `verbMode: boolean` in `config/settings.json` (default `false`), exposed in Settings modal as "Verb Mode (Experimental)"
-- **MCP server filtering** — when `verbMode` is on, provider connects to only `system` + `verbs` MCP servers (not all 9). `getActiveServers(verbMode)` and `getToolNames(verbMode)` control which tools are available.
-- **Warm pool restart** — changing `verbMode` in settings triggers `cleanup()` + `initialize()` so new providers reflect the toggle immediately
-- **Structured tool logging** — `logToolResult()` now accepts optional `meta: { isError, errorCategory, durationMs }`. `StreamToEventMapper` tracks tool_use start times, computes duration on tool_result, classifies errors (`uri_not_found`, `verb_not_supported`, `validation`, `handler_error`, `unknown`).
-- **Session metadata** — `metadata.json` includes `verbMode` flag for post-hoc A/B comparison across sessions
-- **Legacy tools must be maintained** — verb mode is experimental. All ~30 legacy MCP tools remain the production path and must not be removed or degraded until verb mode has been verified across all domains via A/B comparison data
+- Legacy tools have been removed — verb mode is now the only mode
 
 ---
 
@@ -128,7 +119,7 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 
 3. **Uniform addressing.** Every resource — config, windows, browser pages, agents, storage — uses the same `yaar://` scheme. The AI can reason about resources compositionally (e.g., "read this, then invoke that") without switching between unrelated tool APIs.
 
-4. **Zero-disruption migration.** Old tools and new verbs coexist. Domain handlers wrap existing functions — no logic duplication, no rewrite. Each domain migrates independently at its own pace.
+4. **Clean migration.** Domain handlers wrap existing business logic functions — no logic duplication, no rewrite. Each domain migrated independently.
 
 5. **Pattern-based extensibility.** Adding a new resource type means registering a handler with a URI pattern. No changes to the verb tools, MCP server setup, or system prompt. The registry's priority system (exact > prefix > wildcard) handles specificity automatically.
 
@@ -309,34 +300,155 @@ registry.register('yaar://sessions/current/agents/*', {
 });
 ```
 
-### Migration Path
+---
 
-Existing MCP tools stay functional — the verb layer is additive. Migration per domain:
+## Where URIs Are Used
 
-1. **Write handlers** for the domain's resources alongside existing tool files
-2. **Register handlers** in `initRegistry()` (`mcp/verbs/index.ts`)
-3. Both old tools and new verbs coexist — `verbMode` toggle controls which set the AI sees
-4. Once verb mode is validated via A/B comparison, individual tools can be deprecated (keep as aliases initially)
+### Window Content
 
-All domains now have verb handlers:
+The AI uses bare window IDs in the `create` tool's `uri` parameter, and `yaar://` URIs for content:
 
-| # | Domain | Legacy Tools | Verb Handlers | Status |
-|---|--------|-------------|---------------|--------|
-| 1 | `basic/` | read, write, list, edit, delete | `storage/*`, `sandbox/*` | Done |
-| 2 | `window/` | create, update, manage, list, view, info | `windows/*` | Done |
-| 3 | `config/` | set, get, remove | `config/*` (settings, hooks, shortcuts, mounts, app) | Done |
-| 4 | `user/` | ask, request | `sessions/current/notifications`, `sessions/current/prompts` | Done |
-| 5 | `apps/` | list, load_skill, set_badge, market ops | `apps/*` | Done |
-| 6 | `system/` | get_info, memorize | `sessions/current`, `yaar://` root | Done |
-| 7 | `browser/` | open, click, type, press, scroll, navigate, hover, wait_for, screenshot, extract, list, close | `browser/*` (action-dispatched invoke) | Done |
-| 8 | `agents/` | _(no legacy tools)_ | `sessions/current/agents/*` (list, read, interrupt) | Done |
+```
+create({
+  uri: "excel-lite",
+  title: "Excel Lite",
+  renderer: "iframe",
+  content: "yaar://apps/excel-lite"
+})
+```
 
-#### Remaining migration work
+The server resolves the content URI to an API path before sending the action to the frontend, and scopes the window to the agent's monitor automatically. Storage files work the same way:
 
-- **A/B validation** — collect structured tool logs (`logToolResult` with `meta`) across verb-mode and legacy sessions, compare error rates and task completion
-- **Legacy tool deprecation** — verb mode is now the primary interface; legacy tools are deprecated and kept as aliases behind `verbMode: false`
-- **Dev tools** (`dev/compile`, `dev/typecheck`, `dev/deploy`, `dev/clone`) — verb-ified via `yaar://sandbox/{id}` invoke with `action` param (in `verbs/handlers/basic.ts`). Done.
-- **System tools** — split into two categories:
-  - **Verb-ified (removed from VERB_TOOLS — verb equivalents are primary):** `run_js` → `invoke('yaar://sandbox/eval')`, `relay_to_main` → `invoke('yaar://sessions/current/agents/main', { action: 'relay' })`, `show_notification` → `invoke('yaar://sessions/current/notifications')`, `skill` → `read('yaar://skills/{topic}')`, `INFO_TOOLS` (get_info, memorize) → `read('yaar://sessions/current')` / `invoke('yaar://sessions/current', { action: 'memorize' })`
-  - **Staying as named system tools (not being verb-ified):** `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options` — these remain as always-active system namespace tools in both modes
-- **Storage tools** (`mount`, `unmount`, `list_mounts`) — already covered via `config/mounts` handlers. Done.
+```
+create({
+  uri: "report",
+  title: "Q4 Report",
+  renderer: "iframe",
+  content: "yaar://storage/reports/q4.pdf"
+})
+```
+
+### Desktop Shortcuts
+
+Shortcuts use yaar:// URIs as their `target`:
+
+```json
+{
+  "id": "app-excel-lite",
+  "label": "Excel Lite",
+  "icon": "📊",
+  "target": "yaar://apps/excel-lite",
+  "createdAt": 1709600000000
+}
+```
+
+The URI itself communicates what the shortcut points to — `extractAppId()` parses app identity from the target.
+
+### App Discovery API
+
+The `/api/apps` endpoint returns `run` fields as yaar:// URIs:
+
+```json
+{
+  "id": "excel-lite",
+  "name": "Excel Lite",
+  "run": "yaar://apps/excel-lite",
+  ...
+}
+```
+
+Apps with custom `run` paths in `app.json` (e.g., `"run": "index.html"`) get `yaar://apps/{appId}/index.html`. Absolute paths (starting with `/`) are returned as-is.
+
+---
+
+## Resolution
+
+### Content Resolution
+
+Content URIs are resolved via `resolveContentUri()` in `@yaar/shared`:
+
+```typescript
+import { resolveContentUri } from '@yaar/shared';
+
+resolveContentUri('yaar://apps/excel-lite')
+// -> '/api/apps/excel-lite/index.html'
+
+resolveContentUri('yaar://storage/docs/file.txt')
+// -> '/api/storage/docs/file.txt'
+
+resolveContentUri('yaar://sandbox/123/src/main.ts')
+// -> '/api/sandbox/123/src/main.ts'
+```
+
+Resolution points:
+- **Server** (`mcp/window/create.ts`): resolves URIs in iframe content before emitting OS actions
+- **Frontend** (`lib/api.ts`): `resolveAssetUrl()` resolves URIs and adds remote-mode auth
+
+### File-Operation Parsing
+
+File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`. This handles `yaar://` URIs (not API paths) and includes sandbox creation (`sandboxId: null`):
+
+```typescript
+import { parseFileUri, buildFileUri } from '@yaar/shared';
+
+parseFileUri('yaar://storage/docs/file.txt')
+// -> { authority: 'storage', path: 'docs/file.txt' }
+
+parseFileUri('yaar://sandbox/123/src/main.ts')
+// -> { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
+
+parseFileUri('yaar://sandbox/new/src/main.ts')
+// -> { authority: 'sandbox', sandboxId: null, path: 'src/main.ts' }
+
+buildFileUri('storage', 'docs/file.txt')
+// -> 'yaar://storage/docs/file.txt'
+```
+
+The verb handlers use `parseFileUri()` for storage and sandbox file operations.
+
+### Content Helpers
+
+```typescript
+import { parseYaarUri, buildYaarUri, extractAppId, isYaarUri } from '@yaar/shared';
+
+parseYaarUri('yaar://apps/storage')
+// -> { authority: 'apps', path: 'storage' }
+
+buildYaarUri('apps', 'excel-lite')
+// -> 'yaar://apps/excel-lite'
+
+extractAppId('yaar://apps/excel-lite')
+// -> 'excel-lite'
+```
+
+---
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser, agents, user, sessions) |
+| `packages/server/src/handlers/uri-resolve.ts` | Server-side typed resolution for all URI namespaces |
+| `packages/server/src/handlers/uri-registry.ts` | ResourceRegistry — central handler registry |
+| `packages/server/src/handlers/index.ts` | 5 verb MCP tool definitions (describe, read, list, invoke, delete) |
+| `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
+| `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
+
+---
+
+## Migration Status
+
+Migration is complete. All domains use the verb layer exclusively — legacy tools have been removed.
+
+| # | Domain | Verb Handlers |
+|---|--------|---------------|
+| 1 | `storage/sandbox` | `yaar://storage/*`, `yaar://sandbox/*` |
+| 2 | `windows` | `yaar://windows/*` |
+| 3 | `config` | `yaar://config/*` (settings, hooks, shortcuts, mounts, app) |
+| 4 | `user` | `yaar://sessions/current/notifications`, `yaar://sessions/current/prompts` |
+| 5 | `apps` | `yaar://apps/*` |
+| 6 | `system` | `yaar://sessions/current` |
+| 7 | `browser` | `yaar://browser/*` (action-dispatched invoke) |
+| 8 | `agents` | `yaar://sessions/current/agents/*` (list, read, interrupt) |
+
+Named system tools that remain alongside verbs: `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`, `curl`.

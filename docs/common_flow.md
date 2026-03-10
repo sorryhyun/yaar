@@ -79,7 +79,7 @@ The persistent orchestrator handling the main conversation flow per monitor. Mai
 - **Creation**: One per monitor. Primary (`0`) created at pool init with a pre-warmed provider; additional monitors auto-created on demand (max 4)
 - **Session**: Resumes the same provider session across messages for full conversation history
 - **Canonical ID**: `main-{monitorId}`
-- **URI**: `yaar://agents/{instanceId}` — see [URI-Based Resource Addressing](./uri-based-access.md#agents-addressing)
+- **URI**: `yaar://agents/{instanceId}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md)
 - **Tools**: Windows, notifications, storage read/list, memory, skills, config hooks, cache replay, Task (delegation)
 
 ### 2. Ephemeral Agent
@@ -100,7 +100,7 @@ A persistent agent for handling window-specific interactions (button clicks, con
 - **Context**: First interaction receives recent main conversation from ContextTape; subsequent interactions use provider session continuity
 - **Grouping**: Child windows created by a window agent join the parent's group, sharing one agent
 - **Canonical ID**: `window-{agentKey}` (where agentKey = groupId or windowId)
-- **URI**: `yaar://agents/{instanceId}` — see [URI-Based Resource Addressing](./uri-based-access.md#agents-addressing)
+- **URI**: `yaar://agents/{instanceId}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md)
 
 ### 4. Task Agent
 

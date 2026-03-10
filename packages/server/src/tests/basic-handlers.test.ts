@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ResourceRegistry } from '../handlers/uri/registry.js';
-import type { VerbResult } from '../handlers/uri/registry.js';
-import type { ResolvedUri } from '../handlers/uri/resolve.js';
+import { ResourceRegistry } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../handlers/uri-registry.js';
+import type { ResolvedUri } from '../handlers/uri-resolve.js';
 
 /** Extract text from first content item. */
 const text = (r: VerbResult) => (r.content[0] as { type: 'text'; text: string }).text;
@@ -20,7 +20,7 @@ const mockGenerateSandboxId = vi.fn();
 // Mock resolveUri — the registry calls this to turn a URI string into a ResolvedUri
 const mockResolveUri = vi.fn();
 
-vi.mock('../handlers/uri/resolve.js', () => ({
+vi.mock('../handlers/uri-resolve.js', () => ({
   resolveUri: (...args: unknown[]) => mockResolveUri(...args),
   resolveResourceUri: vi.fn(),
 }));
@@ -58,12 +58,15 @@ vi.mock('fs/promises', () => ({
 }));
 
 // We need to import after mocks are set up
-let registerBasicHandlers: (registry: ResourceRegistry) => void;
+let registerStorageHandlers: (registry: ResourceRegistry) => void;
+let registerSandboxHandlers: (registry: ResourceRegistry) => void;
 
 beforeEach(async () => {
   vi.clearAllMocks();
-  const mod = await import('../handlers/basic.js');
-  registerBasicHandlers = mod.registerBasicHandlers;
+  const storageMod = await import('../handlers/storage.js');
+  registerStorageHandlers = storageMod.registerStorageHandlers;
+  const sandboxMod = await import('../handlers/sandbox.js');
+  registerSandboxHandlers = sandboxMod.registerSandboxHandlers;
 });
 
 /** Helper: mock resolveUri to return a minimal resolved object for a given URI. */
@@ -98,7 +101,7 @@ function mockResolveAny(): void {
 describe('Basic domain handlers (storage)', () => {
   function createRegistry() {
     const reg = new ResourceRegistry();
-    registerBasicHandlers(reg);
+    registerStorageHandlers(reg);
     return reg;
   }
 
@@ -313,7 +316,7 @@ describe('Basic domain handlers (storage)', () => {
 describe('Basic domain handlers (sandbox)', () => {
   function createRegistry() {
     const reg = new ResourceRegistry();
-    registerBasicHandlers(reg);
+    registerSandboxHandlers(reg);
     return reg;
   }
 

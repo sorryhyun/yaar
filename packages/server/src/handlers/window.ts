@@ -21,14 +21,14 @@ import {
   parseWindowKey,
   extractAppId,
 } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri/registry.js';
-import type { ResolvedUri, ResolvedWindow } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
+import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
 import { ok, error } from '../mcp/utils.js';
 import { getAgentId, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { resolveResourceUri } from './uri/resolve.js';
+import { resolveResourceUri } from './uri-resolve.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../config.js';
@@ -97,7 +97,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, create_component, update, update_component, close, lock, unlock, app_query, app_command.',
+      'Invoke actions: create, create_component, update (requires operation), update_component, close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -133,7 +133,11 @@ export function registerWindowHandlers(
         gap: { type: 'string', enum: ['none', 'sm', 'md', 'lg'] },
         jsonfile: { type: 'string' },
         // update fields
-        operation: { type: 'string', enum: ['append', 'prepend', 'replace', 'insertAt', 'clear'] },
+        operation: {
+          type: 'string',
+          enum: ['append', 'prepend', 'replace', 'insertAt', 'clear'],
+          description: 'Required for "update" action.',
+        },
         position: { type: 'number' },
         // app_command fields
         command: { type: 'string' },

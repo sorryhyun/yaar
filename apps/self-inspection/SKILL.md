@@ -1,97 +1,128 @@
-# Self Inspection
+# Self Inspection (Verb Mode)
 
-A deep diagnostic suite that stress-tests YAAR's complex subsystems: App Protocol, dev pipeline, concurrent windows, cross-app data flow, and more.
+A deep diagnostic suite that stress-tests YAAR's verb layer — identical coverage to Self Inspection but using **only the 5 generic verbs** (`describe`, `read`, `list`, `invoke`, `delete`) against `yaar://` URIs.
 
 ## Launch
 
-This is a pure-skill app — no iframe or compiled code. Follow the instructions below using MCP tools directly.
+This is a pure-skill app — no iframe or compiled code. Follow the instructions below using verb tools directly.
 
-When the user opens this app or says "run self-inspection", "run diagnostics", or "self-test", run all checks below and produce the report.
+When the user opens this app or says "run verb inspection", "run verb diagnostics", or "verb self-test", run all checks below and produce the report.
 
-If localhost is not in the allowed domains list, use `request_allowing_domain({ domain: "localhost" })` first.
+**Important:** Verb mode must be enabled (`verbMode: true` in settings). If it's not, enable it first:
+```
+invoke('yaar://config/settings', { verbMode: true })
+```
 
 ---
 
 ## Diagnostics
 
-### 1. Concurrent Multi-Renderer Windows
+### 1. Describe & Discovery
 
-Open 5 windows simultaneously using different renderers, verify all exist, then close all:
+Test that `describe` returns valid schemas for key resources across multiple domains:
 
 ```
-create({ uri: "si-mr-md", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
-create({ uri: "si-mr-html", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
-create({ uri: "si-mr-text", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
-create_component({ uri: "si-mr-comp", title: "Test: Component", width: 300, height: 200, components: [{ type: "text", content: "Component DSL", variant: "heading" }, { type: "badge", label: "OK", variant: "success" }, { type: "progress", value: 75, label: "Progress" }] })
-create({ uri: "si-mr-tbl", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { headers: ["Col A", "Col B"], rows: [["1", "2"], ["3", "4"]] } })
+describe('yaar://config/settings')
+describe('yaar://storage')
+describe('yaar://sessions/current/monitors')
+describe('yaar://sessions/current/notifications')
+describe('yaar://apps')
+describe('yaar://sessions/current/agents')
+describe('yaar://sessions/current')
 ```
 
-Then verify:
+**PASS** if all 7 describe calls return verbs arrays and descriptions without errors.
+
+### 2. Session Root & Namespace Listing
+
+Test the root resource and namespace enumeration:
+
 ```
-list()   # all 5 windows should appear: si-mr-md, si-mr-html, si-mr-text, si-mr-comp, si-mr-tbl
+read('yaar://')                    # should return session overview (sessionId, platform, etc.)
+list('yaar://')                    # should return all 9 URI namespaces
+list('yaar://config/')             # should return config sections (settings, hooks, shortcuts, mounts, app)
+```
+
+**PASS** if root read returns session info and both list calls return expected items.
+
+### 3. Concurrent Multi-Renderer Windows
+
+Open 5 windows simultaneously using different renderers via `invoke`, verify all exist via `list`, then close all via `delete`:
+
+```
+invoke('yaar://windows/si-v-md', { action: "create", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
+invoke('yaar://windows/si-v-html', { action: "create", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
+invoke('yaar://windows/si-v-text', { action: "create", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
+invoke('yaar://windows/si-v-comp', { action: "create_component", title: "Test: Component", width: 300, height: 200, components: [{ "type": "text", "content": "Component DSL", "variant": "heading" }, { "type": "badge", "label": "OK", "variant": "success" }, { "type": "progress", "value": 75, "label": "Progress" }] })
+invoke('yaar://windows/si-v-tbl', { action: "create", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { "headers": ["Col A", "Col B"], "rows": [["1", "2"], ["3", "4"]] } })
+```
+
+Verify:
+```
+list('yaar://sessions/current/monitors')   # all 5 windows should appear: si-v-md, si-v-html, si-v-text, si-v-comp, si-v-tbl
 ```
 
 **PASS** if all 5 windows appear in the list. Then close all:
 ```
-close({ uri: "si-mr-md" })
-close({ uri: "si-mr-html" })
-close({ uri: "si-mr-text" })
-close({ uri: "si-mr-comp" })
-close({ uri: "si-mr-tbl" })
+delete('yaar://windows/si-v-md')
+delete('yaar://windows/si-v-html')
+delete('yaar://windows/si-v-text')
+delete('yaar://windows/si-v-comp')
+delete('yaar://windows/si-v-tbl')
 ```
 
-### 2. Window Content Update Operations
+### 4. Window Content Update Operations
 
-Create a markdown window and test all update operations:
-
-```
-create({ uri: "si-update", title: "Update Test", renderer: "markdown", content: "Line 1" })
-update({ uri: "si-update", operation: "append", content: "\nLine 2" })
-view({ uri: "si-update" })          # should contain "Line 1\nLine 2"
-update({ uri: "si-update", operation: "prepend", content: "Line 0\n" })
-view({ uri: "si-update" })          # should contain "Line 0\nLine 1\nLine 2"
-update({ uri: "si-update", operation: "replace", content: "Replaced." })
-view({ uri: "si-update" })          # should contain only "Replaced."
-close({ uri: "si-update" })
-```
-
-**PASS** if each `view()` returns the expected content after each operation.
-
-### 3. Window Lock/Unlock
+Create a markdown window and test all update operations via invoke:
 
 ```
-create({ uri: "si-lock", title: "Lock Test", renderer: "text", content: "Locked window test." })
-lock({ uri: "si-lock", agentId: "si-tester" })
+invoke('yaar://windows/si-v-update', { action: "create", title: "Update Test", renderer: "markdown", content: "Line 1" })
+invoke('yaar://windows/si-v-update', { action: "update", operation: "append", content: "\nLine 2" })
+read('yaar://windows/si-v-update')          # should contain "Line 1\nLine 2"
+invoke('yaar://windows/si-v-update', { action: "update", operation: "prepend", content: "Line 0\n" })
+read('yaar://windows/si-v-update')          # should contain "Line 0\nLine 1\nLine 2"
+invoke('yaar://windows/si-v-update', { action: "update", operation: "replace", content: "Replaced." })
+read('yaar://windows/si-v-update')          # should contain only "Replaced."
+delete('yaar://windows/si-v-update')
+```
+
+**PASS** if each `read` returns the expected content after each operation.
+
+### 5. Window Lock/Unlock
+
+```
+invoke('yaar://windows/si-v-lock', { action: "create", title: "Lock Test", renderer: "text", content: "Locked window test." })
+invoke('yaar://windows/si-v-lock', { action: "lock" })
 ```
 Attempt to update the locked window — it should return a lock error or feedback:
 ```
-update({ uri: "si-lock", operation: "replace", content: "Should fail." })
+invoke('yaar://windows/si-v-lock', { action: "update", operation: "replace", content: "Should fail." })
 ```
 Then unlock and update successfully:
 ```
-unlock({ uri: "si-lock", agentId: "si-tester" })
-update({ uri: "si-lock", operation: "replace", content: "Unlocked and updated." })
-view({ uri: "si-lock" })            # should contain "Unlocked and updated."
-close({ uri: "si-lock" })
+invoke('yaar://windows/si-v-lock', { action: "unlock" })
+invoke('yaar://windows/si-v-lock', { action: "update", operation: "replace", content: "Unlocked and updated." })
+read('yaar://windows/si-v-lock')            # should contain "Unlocked and updated."
+delete('yaar://windows/si-v-lock')
 ```
 
 **PASS** if locked update is rejected and unlocked update succeeds.
 
-### 4. Component Form Submission (interactive)
+### 6. Component Form Submission (interactive)
 
 Create a component window with a form and ask the user to fill it:
 
 ```
-create_component({
-  uri: "si-form",
+invoke('yaar://windows/si-v-form', {
+  action: "create_component",
   title: "Form Test",
   width: 400, height: 300,
   components: [
-    { type: "text", content: "Fill out this form and click Submit.", variant: "heading" },
-    { type: "input", name: "username", formId: "test-form", label: "Username", placeholder: "Enter anything" },
-    { type: "select", name: "color", formId: "test-form", label: "Favorite Color", options: [{ value: "red", label: "Red" }, { value: "blue", label: "Blue" }, { value: "green", label: "Green" }] },
-    { type: "input", name: "notes", formId: "test-form", label: "Notes", placeholder: "Optional", rows: 2 },
-    { type: "button", label: "Submit", submitForm: "test-form", action: "form-submitted", variant: "primary" }
+    { "type": "text", "content": "Fill out this form and click Submit.", "variant": "heading" },
+    { "type": "input", "name": "username", "formId": "test-form", "label": "Username", "placeholder": "Enter anything" },
+    { "type": "select", "name": "color", "formId": "test-form", "label": "Favorite Color", "options": [{ "value": "red", "label": "Red" }, { "value": "blue", "label": "Blue" }, { "value": "green", "label": "Green" }] },
+    { "type": "input", "name": "notes", "formId": "test-form", "label": "Notes", "placeholder": "Optional", "rows": 2 },
+    { "type": "button", "label": "Submit", "submitForm": "test-form", "action": "form-submitted", "variant": "primary" }
   ]
 })
 ```
@@ -100,268 +131,303 @@ Tell the user: "Please fill out the form and click **Submit**."
 When you receive the `COMPONENT_ACTION` event with form data, read the submitted values and close the window.
 **PASS** if form data is received with `username` and `color` fields.
 ```
-close({ uri: "si-form" })
+delete('yaar://windows/si-v-form')
 ```
 
-### 5. App Protocol Round-Trip (Excel)
+### 7. App Protocol Round-Trip (Excel)
 
 Open Excel Lite, query its manifest, write cells, read them back, verify data integrity:
 
 ```
-create({ uri: "si-excel", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/si-v-excel', { action: "create", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
-Wait for App Protocol ready, then:
+Wait for App Protocol ready, then query manifest:
 ```
-app_query({ uri: "si-excel" })
+invoke('yaar://windows/si-v-excel', { action: "app_query" })
 ```
 Verify manifest contains `setCells` command and `cells` state key.
 
 Write test data:
 ```
-app_command({ uri: "yaar://monitors/0/si-excel/commands/setCells", params: { cells: { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
+invoke('yaar://windows/si-v-excel', { action: "app_command", command: "setCells", params: { "cells": { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
 ```
 
 Read back:
 ```
-app_query({ uri: "yaar://monitors/0/si-excel/state/cells" })
+invoke('yaar://windows/si-v-excel', { action: "app_query", stateKey: "cells" })
 ```
 Verify cells A1="Name", B1="Score", A2="Alice", B2="95", A3="Bob", B3="87".
 
 Test clearRange:
 ```
-app_command({ uri: "yaar://monitors/0/si-excel/commands/clearRange", params: { start: "A3", end: "B3" } })
-app_query({ uri: "yaar://monitors/0/si-excel/state/cells" })
+invoke('yaar://windows/si-v-excel', { action: "app_command", command: "clearRange", params: { "start": "A3", "end": "B3" } })
+invoke('yaar://windows/si-v-excel', { action: "app_query", stateKey: "cells" })
 ```
 Verify A3 and B3 are now empty/missing, but A1-B2 still intact.
 
 ```
-close({ uri: "si-excel" })
+delete('yaar://windows/si-v-excel')
 ```
 
 **PASS** if all read-back values match expectations.
 
-### 6. App Protocol Round-Trip (Word)
+### 8. App Protocol Round-Trip (Word)
 
 Open Word Lite, set content, read it back:
 
 ```
-create({ uri: "si-word", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+invoke('yaar://windows/si-v-word', { action: "create", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
 ```
 
 Wait for ready, then:
 ```
-app_command({ uri: "yaar://monitors/0/si-word/commands/setTitle", params: { title: "Self Inspection Test" } })
-app_command({ uri: "yaar://monitors/0/si-word/commands/setHtml", params: { html: "<h1>Test Document</h1><p>This is a self-inspection test.</p>" } })
-app_query({ uri: "yaar://monitors/0/si-word/state/title" })   # should be "Self Inspection Test"
-app_query({ uri: "yaar://monitors/0/si-word/state/stats" })    # should have words > 0
-app_query({ uri: "yaar://monitors/0/si-word/state/text" })     # should contain "self-inspection test"
-close({ uri: "si-word" })
+invoke('yaar://windows/si-v-word', { action: "app_command", command: "setTitle", params: { "title": "Self Inspection Test" } })
+invoke('yaar://windows/si-v-word', { action: "app_command", command: "setContent", params: { "content": "<h1>Test Document</h1><p>This is a self-inspection test.</p>", "renderer": "html" } })
+invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "title" })   # should be "Self Inspection Test"
+invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "stats" })    # should have words > 0
+invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "text" })     # should contain "self-inspection test"
+delete('yaar://windows/si-v-word')
 ```
 
 **PASS** if title, stats, and text match expectations.
 
-### 7. Cross-App Data Flow (Storage → Excel)
+### 9. Cross-App Data Flow (Storage → Excel)
 
-Write structured data to storage, then import it into Excel via App Protocol:
+Write structured data to storage via invoke, then import it into Excel via App Protocol:
 
 ```
-write({ path: "_si-test-data.json", content: "{\"cells\":{\"A1\":\"Product\",\"B1\":\"Price\",\"A2\":\"Widget\",\"B2\":\"9.99\",\"A3\":\"Gadget\",\"B3\":\"24.50\"},\"styles\":{\"A1\":{\"bold\":true},\"B1\":{\"bold\":true}}}" })
-read({ path: "_si-test-data.json" })     # verify JSON is readable
+invoke('yaar://storage/_si-v-test-data.json', { action: "write", content: "{\"cells\":{\"A1\":\"Product\",\"B1\":\"Price\",\"A2\":\"Widget\",\"B2\":\"9.99\",\"A3\":\"Gadget\",\"B3\":\"24.50\"},\"styles\":{\"A1\":{\"bold\":true},\"B1\":{\"bold\":true}}}" })
+read('yaar://storage/_si-v-test-data.json')     # verify JSON is readable
 ```
 
 Open Excel and import:
 ```
-create({ uri: "si-cross", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/si-v-cross', { action: "create", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
 ```
-app_command({ uri: "yaar://monitors/0/si-cross/commands/importWorkbook", params: { data: <parsed JSON from storage read> } })
-app_query({ uri: "yaar://monitors/0/si-cross/state/cells" })
+invoke('yaar://windows/si-v-cross', { action: "app_command", command: "importWorkbook", params: { "data": <parsed JSON from storage read> } })
+invoke('yaar://windows/si-v-cross', { action: "app_query", stateKey: "cells" })
 ```
 Verify A1="Product", B2="9.99".
 
 Cleanup:
 ```
-close({ uri: "si-cross" })
-delete({ path: "_si-test-data.json" })
+delete('yaar://windows/si-v-cross')
+delete('yaar://storage/_si-v-test-data.json')
 ```
 
 **PASS** if imported data matches the original JSON.
 
-### 8. Dev Pipeline (Write → Compile → Deploy → Verify → Cleanup)
+### 10. Dev Pipeline (Write → Compile → Deploy → Verify → Cleanup)
 
-Test the full app development pipeline:
+Test the full app development pipeline. Note: dev tools (`compile`, `deploy`) are not yet verb-ified, so this test uses a mix of sandbox verb operations and legacy dev tools.
 
-**Step 1 — Write source:**
+**Step 1 — Write source via verb:**
 ```
-write({ uri: "yaar://sandbox/src/main.ts", content: "document.body.innerHTML = '<h1 id=\"si-test\">Self Inspection Dev Test</h1><p>Compiled and deployed successfully.</p>'; document.body.style.cssText = 'font-family:system-ui;padding:24px;';" })
+invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "import html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\n\nrender(() => html\`<div><h1 id=\"si-v-test\">Verb Inspection Dev Test</h1><p>Compiled and deployed successfully.</p></div>\`, document.getElementById('app')!);" })
 ```
 Record the returned `sandboxId`.
 
-**Step 2 — Compile:**
+**Step 2 — Compile (legacy tool — not yet verb-ified):**
 ```
 compile({ sandbox: <sandboxId> })
 ```
 **PASS (compile)** if `previewUrl` is returned.
 
-**Step 3 — Deploy:**
+**Step 3 — Deploy (legacy tool):**
 ```
-deploy({ sandbox: <sandboxId>, appId: "si-dev-test", name: "SI Dev Test", icon: "🧪", description: "Temporary test app from self-inspection", createShortcut: false })
+deploy({ sandbox: <sandboxId>, appId: "si-v-dev-test", name: "SI Verb Dev Test", icon: "🧪", description: "Temporary test app from verb self-inspection", createShortcut: false })
 ```
 **PASS (deploy)** if deploy succeeds without error.
 
-**Step 4 — Verify deployment:**
+**Step 4 — Verify deployment via verb:**
 ```
-http_get({ url: "http://localhost:8000/api/apps" })
+list('yaar://apps')
 ```
-Verify "si-dev-test" appears in the app list.
+Verify "si-v-dev-test" appears in the app list.
 
 **Step 5 — Open and verify:**
 ```
-create({ uri: "si-dev-verify", title: "Dev Test Verify", appId: "si-dev-test", renderer: "iframe", content: "yaar://apps/si-dev-test" })
-list()    # verify window exists
-close({ uri: "si-dev-verify" })
+invoke('yaar://windows/si-v-dev-verify', { action: "create", title: "Dev Test Verify", appId: "si-v-dev-test", renderer: "iframe", content: "yaar://apps/si-v-dev-test" })
+list('yaar://monitors')    # verify window exists
+delete('yaar://windows/si-v-dev-verify')
 ```
 
-**Step 6 — Cleanup (delete the test app):**
+**Step 6 — Cleanup (delete the test app via verb):**
 ```
-market_delete({ appId: "si-dev-test" })
+delete('yaar://apps/si-v-dev-test')
 ```
 Verify it no longer appears in the app list.
 
 **PASS** if all 6 steps complete successfully.
 
-### 9. Sandbox Stress Tests
+### 11. Sandbox Stress Tests
 
-Run multiple sandbox executions testing edge cases:
+Run multiple sandbox executions testing edge cases. Note: `run_js` is a system tool not yet verb-ified. Use it directly.
 
-**9a — Async/await:**
+**11a — Async/await:**
 ```
 run_js({ code: "const r = await fetch('http://localhost:8000/health').then(r=>r.json()); JSON.stringify(r)" })
 ```
 **PASS** if returns `{"status":"ok"}`.
 
-**9b — Computation:**
+**11b — Computation:**
 ```
 run_js({ code: "let sum = 0; for (let i = 0; i < 1000000; i++) sum += i; JSON.stringify({ sum })" })
 ```
 **PASS** if returns `{"sum":499999500000}`.
 
-**9c — Error handling:**
+**11c — Error handling:**
 ```
 run_js({ code: "throw new Error('intentional test error')" })
 ```
 **PASS** if error is caught and reported (not a crash).
 
-**9d — Crypto:**
+**11d — Crypto:**
 ```
 run_js({ code: "const hash = crypto.createHash('sha256').update('self-inspection').digest('hex'); hash" })
 ```
 **PASS** if returns a 64-character hex string.
 
-**9e — Multiple return types:**
+**11e — Multiple return types:**
 ```
 run_js({ code: "JSON.stringify({ string: 'hello', number: 42, bool: true, array: [1,2,3], nested: { a: 1 } })" })
 ```
 **PASS** if all types are preserved in the output.
 
-### 10. Shortcut Create/Delete
+### 12. Shortcut Create/Delete via Config URI
 
 ```
-config:set({ section: "shortcuts", label: "SI Test", icon: "🧪", shortcutType: "action", target: "self-inspection test" })
-config:get({ section: "shortcuts" })     # verify shortcut appears, note the shortcutId
-config:remove({ shortcutId: "<the-shortcut-id>" })
-config:get({ section: "shortcuts" })     # verify it's gone
+invoke('yaar://config/shortcuts', { label: "SI Verb Test", icon: "🧪", shortcutType: "action", target: "self-inspection test" })
+read('yaar://config/shortcuts')     # verify shortcut appears, note the shortcutId
+delete('yaar://config/shortcuts/<the-shortcut-id>')
+read('yaar://config/shortcuts')     # verify it's gone
 ```
 
 **PASS** if shortcut appears after create and disappears after remove.
 
-### 11. Component Update
+### 13. Component Update
 
 Create a component window, then replace its entire layout:
 
 ```
-create_component({
-  uri: "si-comp-upd",
+invoke('yaar://windows/si-v-comp-upd', {
+  action: "create_component",
   title: "Component Update Test",
   width: 350, height: 200,
   components: [
-    { type: "text", content: "Version 1", variant: "heading" },
-    { type: "progress", value: 25, label: "Progress" }
+    { "type": "text", "content": "Version 1", "variant": "heading" },
+    { "type": "progress", "value": 25, "label": "Progress" }
   ]
 })
 ```
 
 Update the components:
 ```
-update_component({
-  uri: "si-comp-upd",
+invoke('yaar://windows/si-v-comp-upd', {
+  action: "update_component",
   components: [
-    { type: "text", content: "Version 2", variant: "heading" },
-    { type: "progress", value: 100, label: "Complete", variant: "success" },
-    { type: "badge", label: "Updated", variant: "info" }
+    { "type": "text", "content": "Version 2", "variant": "heading" },
+    { "type": "progress", "value": 100, "label": "Complete", "variant": "success" },
+    { "type": "badge", "label": "Updated", "variant": "info" }
   ]
 })
 ```
 
 ```
-close({ uri: "si-comp-upd" })
+delete('yaar://windows/si-v-comp-upd')
 ```
 
 **PASS** if update_component succeeds without error.
 
-### 12. Storage Directory Operations
+### 14. Storage Directory Operations via URI
 
 Test directory creation and listing:
 
 ```
-write({ path: "_si-test-dir/file1.txt", content: "File 1" })
-write({ path: "_si-test-dir/file2.txt", content: "File 2" })
-write({ path: "_si-test-dir/sub/file3.txt", content: "File 3" })
-list({ path: "_si-test-dir" })           # should show file1.txt, file2.txt, sub/
-list({ path: "_si-test-dir/sub" })       # should show file3.txt
-delete({ path: "_si-test-dir/file1.txt" })
-delete({ path: "_si-test-dir/file2.txt" })
-delete({ path: "_si-test-dir/sub/file3.txt" })
+invoke('yaar://storage/_si-v-test-dir/file1.txt', { action: "write", content: "File 1" })
+invoke('yaar://storage/_si-v-test-dir/file2.txt', { action: "write", content: "File 2" })
+invoke('yaar://storage/_si-v-test-dir/sub/file3.txt', { action: "write", content: "File 3" })
+list('yaar://storage/_si-v-test-dir')           # should show file1.txt, file2.txt, sub/
+list('yaar://storage/_si-v-test-dir/sub')       # should show file3.txt
+delete('yaar://storage/_si-v-test-dir/file1.txt')
+delete('yaar://storage/_si-v-test-dir/file2.txt')
+delete('yaar://storage/_si-v-test-dir/sub/file3.txt')
 ```
 
 **PASS** if directory listing shows expected files and subdirectory.
 
-### 13. Multi-App Simultaneous
+### 15. Multi-App Simultaneous
 
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
-create({ uri: "si-multi-excel", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
-create({ uri: "si-multi-word", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
-create({ uri: "si-multi-img", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
+invoke('yaar://windows/si-v-multi-excel', { action: "create", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/si-v-multi-word', { action: "create", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+invoke('yaar://windows/si-v-multi-img', { action: "create", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:
 
 ```
-app_command({ uri: "yaar://monitors/0/si-multi-excel/commands/setCells", params: { cells: { "A1": "Multi-app test" } } })
-app_command({ uri: "yaar://monitors/0/si-multi-word/commands/setHtml", params: { html: "<p>Multi-app test</p>" } })
-app_command({ uri: "yaar://monitors/0/si-multi-img/commands/setLayout", params: { mode: "grid", columns: 3 } })
+invoke('yaar://windows/si-v-multi-excel', { action: "app_command", command: "setCells", params: { "cells": { "A1": "Multi-app test" } } })
+invoke('yaar://windows/si-v-multi-word', { action: "app_command", command: "setContent", params: { "content": "<p>Multi-app test</p>", "renderer": "html" } })
+invoke('yaar://windows/si-v-multi-img', { action: "app_command", command: "setLayout", params: { "mode": "grid", "columns": 3 } })
 ```
 
 Query each to verify:
 ```
-app_query({ uri: "yaar://monitors/0/si-multi-excel/state/cells" })    # A1 = "Multi-app test"
-app_query({ uri: "yaar://monitors/0/si-multi-word/state/text" })      # contains "Multi-app test"
-app_query({ uri: "yaar://monitors/0/si-multi-img/state/layout" })     # mode = "grid"
+invoke('yaar://windows/si-v-multi-excel', { action: "app_query", stateKey: "cells" })    # A1 = "Multi-app test"
+invoke('yaar://windows/si-v-multi-word', { action: "app_query", stateKey: "text" })      # contains "Multi-app test"
+invoke('yaar://windows/si-v-multi-img', { action: "app_query", stateKey: "layout" })     # mode = "grid"
 ```
 
 Close all:
 ```
-close({ uri: "si-multi-excel" })
-close({ uri: "si-multi-word" })
-close({ uri: "si-multi-img" })
+delete('yaar://windows/si-v-multi-excel')
+delete('yaar://windows/si-v-multi-word')
+delete('yaar://windows/si-v-multi-img')
 ```
 
 **PASS** if all 3 apps respond correctly to commands and queries simultaneously.
+
+### 16. Monitor-as-Resource
+
+Read the monitor resource to verify it returns status:
+
+```
+read('yaar://sessions/current/monitors')
+```
+
+**PASS** if returns monitorId, hasMainAgent, windows list, and stats.
+
+### 17. Agents Discovery
+
+List and inspect active agents:
+
+```
+list('yaar://sessions/current/agents')
+```
+
+If agents are listed, read one:
+```
+read('yaar://sessions/current/agents/<first-agent-id>')
+```
+
+**PASS** if agent list returns without error and (if agents exist) individual agent read returns agent info.
+
+### 18. User Notifications via URI
+
+Test notification lifecycle through verb layer:
+
+```
+invoke('yaar://sessions/current/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
+```
+
+**PASS** if notification is shown without error.
 
 ---
 
@@ -370,12 +436,12 @@ close({ uri: "si-multi-img" })
 After all checks, create a markdown window with the results:
 
 ```
-create({
-  uri: "self-inspection-report",
-  title: "Self Inspection Report",
-  width: 700, height: 700,
+invoke('yaar://windows/self-inspection-report', {
+  action: "create",
+  title: "Self Inspection Report (Verb Mode)",
+  width: 750, height: 750,
   renderer: "markdown",
-  content: "# Self Inspection Report\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 2 | Content Updates | PASS | append/prepend/replace verified |\n| 3 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 4 | Form Submission | PASS | received username, color fields |\n| 5 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 6 | App Protocol (Word) | PASS | setHtml/title/stats verified |\n| 7 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 8 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 9 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 10 | Shortcuts | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n\n**Result: X/13 checks passed**"
+  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
 })
 ```
 
@@ -386,4 +452,8 @@ Mark each check as:
 
 ## Cleanup Guarantee
 
-If any test fails partway through, always attempt cleanup (close windows, delete test files, remove test apps). Never leave test artifacts behind. Window IDs used by self-inspection all start with `si-` for easy identification.
+If any test fails partway through, always attempt cleanup (close windows, delete test files, remove test apps). Never leave test artifacts behind. Window IDs used by this inspection all start with `si-v-` for easy identification.
+
+## Notes on Mixed-Mode Tests
+
+Some subsystems are not yet verb-ified (dev tools: `compile`, `typecheck`, `deploy`, `clone`; system tools: `run_js`, `relay_to_main`). Tests 10 and 11 use legacy tools for these operations. This is expected — the verb layer is additive and does not replace all tools yet.

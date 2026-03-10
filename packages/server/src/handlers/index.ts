@@ -6,12 +6,13 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ResourceRegistry } from './uri/registry.js';
+import { ResourceRegistry } from './uri-registry.js';
 import type { WindowStateRegistry } from '../mcp/window-state.js';
 import { getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { registerConfigHandlers } from './config.js';
-import { registerBasicHandlers } from './basic.js';
+import { registerStorageHandlers } from './storage.js';
+import { registerSandboxHandlers } from './sandbox.js';
 import { registerWindowHandlers } from './window.js';
 import { registerUserHandlers } from './user.js';
 import { registerAppsHandlers } from './apps.js';
@@ -45,7 +46,8 @@ export function initRegistry(): ResourceRegistry {
 
   // Register domain handlers -- add new domains here
   registerConfigHandlers(registry);
-  registerBasicHandlers(registry);
+  registerStorageHandlers(registry);
+  registerSandboxHandlers(registry);
   registerWindowHandlers(registry, getWindowState);
   registerUserHandlers(registry);
   registerAppsHandlers(registry);

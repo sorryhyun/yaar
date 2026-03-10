@@ -4,7 +4,7 @@ Hooks are event-driven config entries that fire actions on specific triggers. Th
 
 ## Storage
 
-Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (or `yaar://config/hooks/{id}` for individual hooks). This file is git-ignored and managed either manually or through the MCP tools (`set_config`, `get_config`, `remove_config`). See [URI-Based Resource Addressing](./uri-based-access.md#config-addressing).
+Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (or `yaar://config/hooks/{id}` for individual hooks). This file is git-ignored and managed either manually or through verb tools (`invoke`, `read`, `delete` on `yaar://config/hooks`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
 ## Event Types
 

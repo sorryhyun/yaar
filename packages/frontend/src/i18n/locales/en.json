@@ -62,10 +62,6 @@
       "auto": "Auto",
       "claude": "Claude",
       "codex": "Codex"
-    },
-    "legacyToolMode": {
-      "label": "Legacy Tool Mode (Deprecated)",
-      "description": "Use individual MCP tools instead of URI-based verbs. This mode is deprecated and will be removed in a future release."
     }
   },
   "connection": {

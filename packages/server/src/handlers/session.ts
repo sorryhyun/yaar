@@ -7,13 +7,14 @@
  *   invoke('yaar://sessions/current', { ... })   → memorize
  */
 
-import type { ResourceRegistry, VerbResult } from './uri/registry.js';
-import type { ResolvedUri } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { ok, error } from '../mcp/utils.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
-import { getSessionId } from '../agents/session.js';
+import { getSessionId, getMonitorId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
+import { parseWindowKey } from '@yaar/shared';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -113,6 +114,46 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       }
 
       return error(`Unknown action "${payload.action}".`);
+    },
+  });
+
+  // ── yaar://sessions/current/monitors — list active monitors ──
+  registry.register('yaar://sessions/current/monitors', {
+    description:
+      'Active monitors in the current session. Read for list of monitor IDs and their status.',
+    verbs: ['describe', 'read'],
+
+    async read(): Promise<VerbResult> {
+      const sid = getSessionId();
+      const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+      const pool = session?.getPool();
+      if (!pool) return error('Session not initialized.');
+
+      const monitorIds = pool.getMainAgentMonitorIds();
+      const allWindows = session!.windowState.listWindows();
+
+      const monitors = monitorIds.map((id) => {
+        const windows = allWindows.filter((w) => {
+          const parsed = parseWindowKey(w.id);
+          return parsed?.monitorId === id;
+        });
+        return {
+          monitorId: id,
+          hasMainAgent: pool.hasMainAgent(id),
+          windowCount: windows.length,
+        };
+      });
+
+      return ok(
+        JSON.stringify(
+          {
+            currentMonitorId: getMonitorId() ?? '0',
+            monitors,
+          },
+          null,
+          2,
+        ),
+      );
     },
   });
 }

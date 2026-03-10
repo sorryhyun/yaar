@@ -1,5 +1,5 @@
 {
   "name": "Self Inspection",
-  "description": "Deep diagnostic suite — tests health, App Protocol, dev pipeline, cross-app data flow, and concurrent subsystems",
+  "description": "Diagnostic suite that tests all URI domains using the 5 generic verbs",
   "icon": "🔬"
 }

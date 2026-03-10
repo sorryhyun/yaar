@@ -6,8 +6,8 @@
  * to the best-matching handler and dispatches verb calls.
  */
 
-import type { ResolvedUri } from './resolve.js';
-import { resolveUri } from './resolve.js';
+import type { ResolvedUri } from './uri-resolve.js';
+import { resolveUri } from './uri-resolve.js';
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 
@@ -139,6 +139,10 @@ export class ResourceRegistry {
     }
 
     if (!handler.verbs.includes(verb)) {
+      // Trailing-slash fallback: "yaar://apps/" → retry as "yaar://apps"
+      if (uri !== 'yaar://' && uri.endsWith('/')) {
+        return this.execute(verb, uri.slice(0, -1), payload);
+      }
       // Cross-verb fallback: read↔list
       if (verb === 'read' && handler.verbs.includes('list') && handler.list) {
         const resolved = resolveUri(uri);

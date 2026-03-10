@@ -62,10 +62,6 @@
       "auto": "자동",
       "claude": "Claude",
       "codex": "Codex"
-    },
-    "legacyToolMode": {
-      "label": "레거시 도구 모드 (지원 중단 예정)",
-      "description": "URI 기반 동사 대신 개별 MCP 도구를 사용합니다. 이 모드는 지원 중단 예정이며 향후 릴리스에서 제거됩니다."
     }
   },
   "connection": {

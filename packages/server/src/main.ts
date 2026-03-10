@@ -9,8 +9,6 @@ import { createWsHandlers, type WsData } from './websocket/index.js';
 import { initializeSubsystems, initWarmProviders, shutdown, printBanner } from './lifecycle.js';
 import { PORT, IS_REMOTE } from './config.js';
 
-export { STORAGE_DIR } from './config.js';
-
 async function startup() {
   const wsOptions = await initializeSubsystems();
   const fetch = createFetchHandler();

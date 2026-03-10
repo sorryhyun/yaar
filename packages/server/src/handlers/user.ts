@@ -10,8 +10,8 @@
  */
 
 import type { OSAction } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult } from './uri/registry.js';
-import type { ResolvedUri, ResolvedSession } from './uri/resolve.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { actionEmitter } from '../mcp/action-emitter.js';
 import { ok, error } from '../mcp/utils.js';
 

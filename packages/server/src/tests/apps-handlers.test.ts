@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ResourceRegistry } from '../handlers/uri/registry.js';
-import type { VerbResult } from '../handlers/uri/registry.js';
+import { ResourceRegistry } from '../handlers/uri-registry.js';
+import type { VerbResult } from '../handlers/uri-registry.js';
 
 const text = (r: VerbResult) => (r.content[0] as { type: 'text'; text: string }).text;
 
 // Mock resolveUri
 const mockResolveUri = vi.fn();
-vi.mock('../handlers/uri/resolve.js', () => ({
+vi.mock('../handlers/uri-resolve.js', () => ({
   resolveUri: (...args: unknown[]) => mockResolveUri(...args),
   resolveResourceUri: vi.fn(),
 }));
