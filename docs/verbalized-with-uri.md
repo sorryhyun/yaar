@@ -300,6 +300,145 @@ registry.register('yaar://sessions/current/agents/*', {
 });
 ```
 
+---
+
+## Where URIs Are Used
+
+### Window Content
+
+The AI uses bare window IDs in the `create` tool's `uri` parameter, and `yaar://` URIs for content:
+
+```
+create({
+  uri: "excel-lite",
+  title: "Excel Lite",
+  renderer: "iframe",
+  content: "yaar://apps/excel-lite"
+})
+```
+
+The server resolves the content URI to an API path before sending the action to the frontend, and scopes the window to the agent's monitor automatically. Storage files work the same way:
+
+```
+create({
+  uri: "report",
+  title: "Q4 Report",
+  renderer: "iframe",
+  content: "yaar://storage/reports/q4.pdf"
+})
+```
+
+### Desktop Shortcuts
+
+Shortcuts use yaar:// URIs as their `target`:
+
+```json
+{
+  "id": "app-excel-lite",
+  "label": "Excel Lite",
+  "icon": "📊",
+  "target": "yaar://apps/excel-lite",
+  "createdAt": 1709600000000
+}
+```
+
+The URI itself communicates what the shortcut points to — `extractAppId()` parses app identity from the target.
+
+### App Discovery API
+
+The `/api/apps` endpoint returns `run` fields as yaar:// URIs:
+
+```json
+{
+  "id": "excel-lite",
+  "name": "Excel Lite",
+  "run": "yaar://apps/excel-lite",
+  ...
+}
+```
+
+Apps with custom `run` paths in `app.json` (e.g., `"run": "index.html"`) get `yaar://apps/{appId}/index.html`. Absolute paths (starting with `/`) are returned as-is.
+
+---
+
+## Resolution
+
+### Content Resolution
+
+Content URIs are resolved via `resolveContentUri()` in `@yaar/shared`:
+
+```typescript
+import { resolveContentUri } from '@yaar/shared';
+
+resolveContentUri('yaar://apps/excel-lite')
+// -> '/api/apps/excel-lite/index.html'
+
+resolveContentUri('yaar://storage/docs/file.txt')
+// -> '/api/storage/docs/file.txt'
+
+resolveContentUri('yaar://sandbox/123/src/main.ts')
+// -> '/api/sandbox/123/src/main.ts'
+```
+
+Resolution points:
+- **Server** (`mcp/window/create.ts`): resolves URIs in iframe content before emitting OS actions
+- **Frontend** (`lib/api.ts`): `resolveAssetUrl()` resolves URIs and adds remote-mode auth
+
+### File-Operation Parsing
+
+File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`. This handles `yaar://` URIs (not API paths) and includes sandbox creation (`sandboxId: null`):
+
+```typescript
+import { parseFileUri, buildFileUri } from '@yaar/shared';
+
+parseFileUri('yaar://storage/docs/file.txt')
+// -> { authority: 'storage', path: 'docs/file.txt' }
+
+parseFileUri('yaar://sandbox/123/src/main.ts')
+// -> { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
+
+parseFileUri('yaar://sandbox/new/src/main.ts')
+// -> { authority: 'sandbox', sandboxId: null, path: 'src/main.ts' }
+
+buildFileUri('storage', 'docs/file.txt')
+// -> 'yaar://storage/docs/file.txt'
+```
+
+The `basic/` MCP tools use `parseFileUri()` via a thin adapter in `mcp/basic/uri.ts`.
+
+### Content Helpers
+
+```typescript
+import { parseYaarUri, buildYaarUri, extractAppId, isYaarUri } from '@yaar/shared';
+
+parseYaarUri('yaar://apps/storage')
+// -> { authority: 'apps', path: 'storage' }
+
+buildYaarUri('apps', 'excel-lite')
+// -> 'yaar://apps/excel-lite'
+
+extractAppId('yaar://apps/excel-lite')
+// -> 'excel-lite'
+```
+
+---
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser, agents, user, sessions) |
+| `packages/server/src/uri/resolve.ts` | Server-side typed resolution for all URI namespaces |
+| `packages/server/src/uri/registry.ts` | ResourceRegistry — central handler registry |
+| `packages/server/src/mcp/verbs/` | 5 verb MCP tools (describe, read, list, invoke, delete) |
+| `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
+| `packages/server/src/mcp/basic/uri.ts` | Thin adapter over `parseFileUri()` for basic MCP tools |
+| `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
+
+---
+
+## Migration Status
+
 ### Migration Path
 
 Existing MCP tools stay functional — the verb layer is additive. Migration per domain:

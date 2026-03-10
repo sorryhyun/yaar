@@ -31,7 +31,7 @@ Read state from an iframe app or discover its capabilities.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | Window URI (`yaar://monitors/{monitorId}/{windowId}`) for manifest, or resource URI (`yaar://monitors/{monitorId}/{windowId}/state/{key}`) for a specific state key. |
+| `uri` | `string` | yes | Window URI (`yaar://windows/{windowId}`) for manifest, or resource URI (`yaar://windows/{windowId}/state/{key}`) for a specific state key. |
 
 **Behavior:**
 1. Validates the window exists and uses the `iframe` renderer.
@@ -48,7 +48,7 @@ Execute a command on an iframe app.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | Command resource URI (`yaar://monitors/{monitorId}/{windowId}/commands/{name}`) |
+| `uri` | `string` | yes | Command resource URI (`yaar://windows/{windowId}/commands/{name}`) |
 | `params` | `Record<string, unknown>` | no | Parameters as described in the manifest |
 
 **Behavior:**
@@ -61,7 +61,7 @@ Execute a command on an iframe app.
 
 ## Manifest
 
-An `AppManifest` describes what the app can do. The agent retrieves it by calling `app_query` with a bare window URI (e.g., `yaar://monitors/0/win-sheet`).
+An `AppManifest` describes what the app can do. The agent retrieves it by calling `app_query` with a bare window URI (e.g., `yaar://windows/win-sheet`).
 
 ```typescript
 interface AppManifest {
@@ -333,7 +333,7 @@ window.yaar.app.register({
 Agent interaction:
 
 ```
-app_query({ uri: "yaar://monitors/0/sheet" })                          → discover capabilities (manifest)
-app_query({ uri: "yaar://monitors/0/sheet/state/cells" })              → read current state
-app_command({ uri: "yaar://monitors/0/sheet/commands/setCells", params: { cells: { "A1": "100" } } })
+app_query({ uri: "yaar://windows/sheet" })                          → discover capabilities (manifest)
+app_query({ uri: "yaar://windows/sheet/state/cells" })              → read current state
+app_command({ uri: "yaar://windows/sheet/commands/setCells", params: { cells: { "A1": "100" } } })
 ```

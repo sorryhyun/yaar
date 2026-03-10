@@ -25,7 +25,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | User interaction | Notifications, prompts, clipboard | `yaar://user/` | `mcp/user/` |
 | Configuration | Settings, hooks, shortcuts, mounts | `yaar://config/` | `storage/settings.ts`, `mcp/system/` |
 
-All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`uri-based-access.md`](./uri-based-access.md) for the full 9-namespace reference.
+All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`verbalized-with-uri.md`](./verbalized-with-uri.md) for the full 9-namespace reference.
 
 ---
 
