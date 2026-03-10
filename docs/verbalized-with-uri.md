@@ -404,7 +404,7 @@ buildFileUri('storage', 'docs/file.txt')
 // -> 'yaar://storage/docs/file.txt'
 ```
 
-The `basic/` MCP tools use `parseFileUri()` via a thin adapter in `mcp/basic/uri.ts`.
+The verb handlers use `parseFileUri()` for storage and sandbox file operations.
 
 ### Content Helpers
 
@@ -428,45 +428,27 @@ extractAppId('yaar://apps/excel-lite')
 | File | Role |
 |------|------|
 | `packages/shared/src/yaar-uri.ts` | URI parser, builder, resolver (content, file, window, config, browser, agents, user, sessions) |
-| `packages/server/src/uri/resolve.ts` | Server-side typed resolution for all URI namespaces |
-| `packages/server/src/uri/registry.ts` | ResourceRegistry — central handler registry |
-| `packages/server/src/mcp/verbs/` | 5 verb MCP tools (describe, read, list, invoke, delete) |
+| `packages/server/src/handlers/uri-resolve.ts` | Server-side typed resolution for all URI namespaces |
+| `packages/server/src/handlers/uri-registry.ts` | ResourceRegistry — central handler registry |
+| `packages/server/src/handlers/index.ts` | 5 verb MCP tool definitions (describe, read, list, invoke, delete) |
 | `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
-| `packages/server/src/mcp/basic/uri.ts` | Thin adapter over `parseFileUri()` for basic MCP tools |
 | `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
 
 ---
 
 ## Migration Status
 
-### Migration Path
+Migration is complete. All domains use the verb layer exclusively — legacy tools have been removed.
 
-Existing MCP tools stay functional — the verb layer is additive. Migration per domain:
+| # | Domain | Verb Handlers |
+|---|--------|---------------|
+| 1 | `storage/sandbox` | `yaar://storage/*`, `yaar://sandbox/*` |
+| 2 | `windows` | `yaar://windows/*` |
+| 3 | `config` | `yaar://config/*` (settings, hooks, shortcuts, mounts, app) |
+| 4 | `user` | `yaar://sessions/current/notifications`, `yaar://sessions/current/prompts` |
+| 5 | `apps` | `yaar://apps/*` |
+| 6 | `system` | `yaar://sessions/current` |
+| 7 | `browser` | `yaar://browser/*` (action-dispatched invoke) |
+| 8 | `agents` | `yaar://sessions/current/agents/*` (list, read, interrupt) |
 
-1. **Write handlers** for the domain's resources alongside existing tool files
-2. **Register handlers** in `initRegistry()` (`mcp/verbs/index.ts`)
-3. Both old tools and new verbs coexist — `verbMode` toggle controls which set the AI sees
-4. Once verb mode is validated via A/B comparison, individual tools can be deprecated (keep as aliases initially)
-
-All domains now have verb handlers:
-
-| # | Domain | Legacy Tools | Verb Handlers | Status |
-|---|--------|-------------|---------------|--------|
-| 1 | `basic/` | read, write, list, edit, delete | `storage/*`, `sandbox/*` | Done |
-| 2 | `window/` | create, update, manage, list, view, info | `windows/*` | Done |
-| 3 | `config/` | set, get, remove | `config/*` (settings, hooks, shortcuts, mounts, app) | Done |
-| 4 | `user/` | ask, request | `sessions/current/notifications`, `sessions/current/prompts` | Done |
-| 5 | `apps/` | list, load_skill, set_badge, market ops | `apps/*` | Done |
-| 6 | `system/` | get_info, memorize | `sessions/current`, `yaar://` root | Done |
-| 7 | `browser/` | open, click, type, press, scroll, navigate, hover, wait_for, screenshot, extract, list, close | `browser/*` (action-dispatched invoke) | Done |
-| 8 | `agents/` | _(no legacy tools)_ | `sessions/current/agents/*` (list, read, interrupt) | Done |
-
-#### Remaining migration work
-
-- **A/B validation** — collect structured tool logs (`logToolResult` with `meta`) across verb-mode and legacy sessions, compare error rates and task completion
-- **Legacy tool deprecation** — verb mode is now the primary interface; legacy tools are deprecated and kept as aliases behind `verbMode: false`
-- **Dev tools** (`dev/compile`, `dev/typecheck`, `dev/deploy`, `dev/clone`) — verb-ified via `yaar://sandbox/{id}` invoke with `action` param (in `verbs/handlers/basic.ts`). Done.
-- **System tools** — split into two categories:
-  - **Verb-ified (removed from VERB_TOOLS — verb equivalents are primary):** `run_js` → `invoke('yaar://sandbox/eval')`, `relay_to_main` → `invoke('yaar://sessions/current/agents/main', { action: 'relay' })`, `show_notification` → `invoke('yaar://sessions/current/notifications')`, `skill` → `read('yaar://skills/{topic}')`, `INFO_TOOLS` (get_info, memorize) → `read('yaar://sessions/current')` / `invoke('yaar://sessions/current', { action: 'memorize' })`
-  - **Staying as named system tools (not being verb-ified):** `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options` — these remain as always-active system namespace tools in both modes
-- **Storage tools** (`mount`, `unmount`, `list_mounts`) — already covered via `config/mounts` handlers. Done.
+Named system tools that remain alongside verbs: `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`, `curl`.

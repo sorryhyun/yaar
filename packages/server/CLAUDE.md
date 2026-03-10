@@ -45,18 +45,19 @@ src/
 │   ├── warm-pool.ts      # WarmPool singleton
 │   ├── claude/           # ClaudeSessionProvider, system-prompt, message-mapper
 │   └── codex/            # CodexProvider, AppServer, JsonRpcWsClient, auth, types
-├── handlers/             # PRIMARY (verb mode): URI registry + 5 generic verb tool handlers
+├── handlers/             # PRIMARY: URI registry + 5 generic verb tool handlers
 │   ├── index.ts          # registerVerbTools() — the 5 MCP tool definitions
-│   ├── uri/              # URI infrastructure: registry.ts, resolve.ts
-│   ├── agents.ts / apps.ts / basic.ts / browser.ts / config.ts
+│   ├── uri-registry.ts   # ResourceRegistry — central handler registry
+│   ├── uri-resolve.ts    # Server-side URI resolution
+│   ├── utils.ts          # Shared handler utilities
+│   ├── agents.ts / apps.ts / sandbox.ts / storage.ts / browser.ts / config.ts
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
 │   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
 │   ├── window-state.ts   # WindowStateRegistry — per-session window state
-│   ├── system/           # Always-active: info, notify, relay, sandbox, hooks
-│   ├── skills/           # Always-active: skill reference doc loader
-│   └── http/             # Always-active: http_get, http_post, domain allow-list
+│   ├── system/           # Always-active: http_get, http_post, curl, reload, domain allow-list
+│   └── domains.ts        # MCP domain registry
 ├── features/             # Domain business logic (imported by handlers/)
 │   ├── apps/             # App listing, skill loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
@@ -147,9 +148,7 @@ Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `handlers/` via `yaar://` URIs |
-| `system/` | system | get_info, memorize |
 | `mcp/system/` | system | http_get, http_post, request_allowing_domain, reload_cached, list_reload_options, curl |
-| `skills/` | system | skill (reference doc loader) |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
