@@ -223,27 +223,27 @@ delete('yaar://storage/_si-v-test-data.json')
 
 ### 10. Dev Pipeline (Write → Compile → Deploy → Verify → Cleanup)
 
-Test the full app development pipeline. Note: dev tools (`compile`, `deploy`) are not yet verb-ified, so this test uses a mix of sandbox verb operations and legacy dev tools.
+Test the full app development pipeline using verb-based sandbox operations.
 
-**Step 1 — Write source via verb:**
+**Step 1 — Write source:**
 ```
 invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "import html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\n\nrender(() => html\`<div><h1 id=\"si-v-test\">Verb Inspection Dev Test</h1><p>Compiled and deployed successfully.</p></div>\`, document.getElementById('app')!);" })
 ```
 Record the returned `sandboxId`.
 
-**Step 2 — Compile (legacy tool — not yet verb-ified):**
+**Step 2 — Compile via verb:**
 ```
-compile({ sandbox: <sandboxId> })
+invoke('yaar://sandbox/<sandboxId>', { action: "compile" })
 ```
 **PASS (compile)** if `previewUrl` is returned.
 
-**Step 3 — Deploy (legacy tool):**
+**Step 3 — Deploy via verb:**
 ```
-deploy({ sandbox: <sandboxId>, appId: "si-v-dev-test", name: "SI Verb Dev Test", icon: "🧪", description: "Temporary test app from verb self-inspection", createShortcut: false })
+invoke('yaar://sandbox/<sandboxId>', { action: "deploy", appId: "si-v-dev-test", name: "SI Verb Dev Test", icon: "🧪", description: "Temporary test app from verb self-inspection" })
 ```
 **PASS (deploy)** if deploy succeeds without error.
 
-**Step 4 — Verify deployment via verb:**
+**Step 4 — Verify deployment:**
 ```
 list('yaar://apps')
 ```
@@ -256,7 +256,7 @@ list('yaar://monitors')    # verify window exists
 delete('yaar://windows/si-v-dev-verify')
 ```
 
-**Step 6 — Cleanup (delete the test app via verb):**
+**Step 6 — Cleanup (delete the test app):**
 ```
 delete('yaar://apps/si-v-dev-test')
 ```
@@ -266,35 +266,35 @@ Verify it no longer appears in the app list.
 
 ### 11. Sandbox Stress Tests
 
-Run multiple sandbox executions testing edge cases. Note: `run_js` is a system tool not yet verb-ified. Use it directly.
+Run multiple sandbox executions testing edge cases via `yaar://sandbox/eval`.
 
 **11a — Async/await:**
 ```
-run_js({ code: "const r = await fetch('http://localhost:8000/health').then(r=>r.json()); JSON.stringify(r)" })
+invoke('yaar://sandbox/eval', { code: "const r = await fetch('http://localhost:8000/health').then(r=>r.json()); JSON.stringify(r)" })
 ```
 **PASS** if returns `{"status":"ok"}`.
 
 **11b — Computation:**
 ```
-run_js({ code: "let sum = 0; for (let i = 0; i < 1000000; i++) sum += i; JSON.stringify({ sum })" })
+invoke('yaar://sandbox/eval', { code: "let sum = 0; for (let i = 0; i < 1000000; i++) sum += i; JSON.stringify({ sum })" })
 ```
 **PASS** if returns `{"sum":499999500000}`.
 
 **11c — Error handling:**
 ```
-run_js({ code: "throw new Error('intentional test error')" })
+invoke('yaar://sandbox/eval', { code: "throw new Error('intentional test error')" })
 ```
 **PASS** if error is caught and reported (not a crash).
 
 **11d — Crypto:**
 ```
-run_js({ code: "const hash = crypto.createHash('sha256').update('self-inspection').digest('hex'); hash" })
+invoke('yaar://sandbox/eval', { code: "const hash = crypto.createHash('sha256').update('self-inspection').digest('hex'); hash" })
 ```
 **PASS** if returns a 64-character hex string.
 
 **11e — Multiple return types:**
 ```
-run_js({ code: "JSON.stringify({ string: 'hello', number: 42, bool: true, array: [1,2,3], nested: { a: 1 } })" })
+invoke('yaar://sandbox/eval', { code: "JSON.stringify({ string: 'hello', number: 42, bool: true, array: [1,2,3], nested: { a: 1 } })" })
 ```
 **PASS** if all types are preserved in the output.
 
@@ -454,6 +454,6 @@ Mark each check as:
 
 If any test fails partway through, always attempt cleanup (close windows, delete test files, remove test apps). Never leave test artifacts behind. Window IDs used by this inspection all start with `si-v-` for easy identification.
 
-## Notes on Mixed-Mode Tests
+## Verb Coverage Notes
 
-Some subsystems are not yet verb-ified (dev tools: `compile`, `typecheck`, `deploy`, `clone`; system tools: `run_js`, `relay_to_main`). Tests 10 and 11 use legacy tools for these operations. This is expected — the verb layer is additive and does not replace all tools yet.
+All diagnostics use the 5 generic verbs exclusively. Dev tools (compile, typecheck, deploy, clone) are available via `invoke('yaar://sandbox/{id}', { action: "..." })`. Sandboxed JS execution uses `invoke('yaar://sandbox/eval', { code: "..." })`.

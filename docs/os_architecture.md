@@ -87,7 +87,7 @@ MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/
 | `describe` | stat / introspect | `yaar://windows/{id}`, `yaar://apps/{id}`, `yaar://browser/{id}` |
 | `read` | read / open | `yaar://storage/{path}`, `yaar://sandbox/{path}`, `yaar://skills/{topic}` |
 | `list` | readdir / ls | `yaar://windows/`, `yaar://apps/`, `yaar://config/hooks/` |
-| `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://sandbox/eval` (run_js), `yaar://config/app/{id}` |
+| `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://sandbox/eval` (JS execution), `yaar://config/app/{id}` |
 | `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
 
 System tools (always active): `get_info`, `memorize`, `skill`, `http_get`, `http_post`, `request_allowing_domain`, `reload_cached`, `list_reload_options`

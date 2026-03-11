@@ -72,7 +72,7 @@ For other users, clone this repository, install [Bun](https://bun.sh/), then run
 
 Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
 
-- **Sandbox isolation**: `run_js` code executes in `node:vm` with `eval`, `Function`, `require`, `import`, filesystem access, and WebAssembly all disabled.
+- **Sandbox isolation**: Sandbox code (`yaar://sandbox/eval`) executes in `node:vm` with `eval`, `Function`, `require`, `import`, filesystem access, and WebAssembly all disabled.
 - **Domain allowlist**: HTTP requests (`http_get`/`http_post`) and sandbox `fetch` are restricted to domains listed in `config/curl_allowed_domains.yaml`. New domains require user approval via a confirmation dialog.
 - **MCP authentication**: MCP tool calls are authenticated with a Bearer token generated at server startup. Set `MCP_SKIP_AUTH=1` for local development.
 - **Remembered permissions**: User allow/deny decisions are persisted in `config/permissions.json` so repeated requests don't re-prompt.
