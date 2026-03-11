@@ -19,7 +19,7 @@ import {
   getWindowRestoreActions,
   getContextRestoreMessages,
 } from './logging/index.js';
-import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, PORT } from './config.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, getPort } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
@@ -64,7 +64,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     const tunnelConfig = loadTunnelConfig();
     if (tunnelConfig?.disabled !== true) {
       const config = tunnelConfig ?? { service: 'localhost.run' as const };
-      const tunnel = new SshTunnel(config, PORT);
+      const tunnel = new SshTunnel(config, getPort());
       const ok = await tunnel.connect();
       if (ok) {
         activeTunnel = tunnel;
@@ -204,7 +204,7 @@ export function getRemoteInfo(): {
   const token = getRemoteToken();
   if (!token) return null;
   const lanIp = getLanIp();
-  const lanUrl = `http://${lanIp}:${PORT}`;
+  const lanUrl = `http://${lanIp}:${getPort()}`;
   const lanConnectUrl = `${lanUrl}/#remote=${token}`;
   const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
   const connectUrl = tunnelUrl ?? lanConnectUrl;

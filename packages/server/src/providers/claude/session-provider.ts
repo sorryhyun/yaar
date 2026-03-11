@@ -11,13 +11,10 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, getActiveServers } from '../../mcp/index.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath } from '../../config.js';
+import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath, getPort } from '../../config.js';
 import { getSystemPrompt } from './system-prompt.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 import { buildAgentDefinitions } from '../../agents/profiles.js';
-
-// Port for the MCP HTTP server (same as main server)
-const MCP_PORT = parseInt(process.env.PORT ?? '8000', 10);
 
 interface ImageContentBlock {
   type: 'image';
@@ -75,7 +72,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         name,
         {
           type: 'http' as const,
-          url: `http://127.0.0.1:${MCP_PORT}/mcp/${name}`,
+          url: `http://127.0.0.1:${getPort()}/mcp/${name}`,
           headers: mcpHeaders,
         },
       ]),

@@ -96,7 +96,20 @@ export const MIME_TYPES: Record<string, string> = {
 
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
-export const PORT = parseInt(process.env.PORT ?? '8000', 10);
+const DEFAULT_PORT = parseInt(process.env.PORT ?? '8000', 10);
+
+/** Current server port (may differ from default if the default was in use). */
+export function getPort(): number {
+  return parseInt(process.env.PORT ?? String(DEFAULT_PORT), 10);
+}
+
+/** Update the port after the server has bound to a free port. */
+export function setPort(p: number): void {
+  process.env.PORT = String(p);
+}
+
+/** @deprecated Use getPort() for runtime port. This is the initial configured value. */
+export const PORT = DEFAULT_PORT;
 
 export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
@@ -223,7 +236,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   for (const ns of mcpNamespaces) {
     args.push(
       '-c',
-      `mcp_servers.${ns}.url=http://127.0.0.1:${PORT}/mcp/${ns}`,
+      `mcp_servers.${ns}.url=http://127.0.0.1:${getPort()}/mcp/${ns}`,
       '-c',
       `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
     );

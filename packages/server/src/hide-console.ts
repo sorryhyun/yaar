@@ -1,13 +1,14 @@
 /**
  * Hide the Windows console window via FFI.
  *
- * Import this module BEFORE any other server code so the console
- * is hidden before log output starts. The CONSOLE PE subsystem is
- * kept so stdout/stderr still function (e.g. for log files).
+ * Call hideConsole() after the browser window has opened so the user
+ * sees the app window instead of a bare console.
  */
 import { platform } from 'os';
 
-if (platform() === 'win32') {
+export async function hideConsole(): Promise<void> {
+  if (platform() !== 'win32') return;
+
   try {
     const { dlopen, FFIType } = await import('bun:ffi');
     const kernel32 = dlopen('kernel32.dll', {

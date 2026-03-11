@@ -11,19 +11,13 @@ import { platform, tmpdir } from 'os';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
-// Hide the console window BEFORE the server starts logging.
-// ESM evaluates imports in order, so this runs before main.js.
-import './hide-console.js';
-
 // Import and start the server
 // The server starts automatically on import
 import './main.js';
 
 import { getRemoteToken } from './http/auth.js';
-
-// Auto-open browser after server starts
-const PORT = process.env.PORT || '8000';
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+import { getPort } from './config.js';
+import { hideConsole } from './hide-console.js';
 
 /**
  * Find a Chromium-based browser that supports --app mode.
@@ -74,9 +68,14 @@ function findChromiumBrowser(): string | null {
 /**
  * Build the full URL, including the remote auth token when in remote/bundled mode.
  */
+function getBaseUrl(): string {
+  return `http://127.0.0.1:${getPort()}`;
+}
+
 function getAppUrl(): string {
+  const base = getBaseUrl();
   const token = getRemoteToken();
-  return token ? `${BASE_URL}/#remote=${token}` : BASE_URL;
+  return token ? `${base}/#remote=${token}` : base;
 }
 
 /**
@@ -112,6 +111,9 @@ function openAppWindow() {
       stdio: ['ignore', 'ignore', 'ignore'],
     });
 
+    // Hide console after browser is launched
+    hideConsole();
+
     // Terminate the server when the browser window is closed.
     browserProc.exited.then(() => {
       console.log('Browser closed — shutting down.');
@@ -129,6 +131,7 @@ function openAppWindow() {
 
   // Fallback: open in default browser
   console.log(`No Chromium browser found. Opening default browser: ${url}`);
+  hideConsole();
   try {
     if (currentPlatform === 'win32') {
       Bun.spawn(['cmd', '/c', 'start', '', url], {
@@ -154,7 +157,7 @@ function openAppWindow() {
 async function waitAndOpen() {
   for (let i = 0; i < 30; i++) {
     try {
-      const res = await fetch(`${BASE_URL}/health`);
+      const res = await fetch(`${getBaseUrl()}/health`);
       if (res.ok) {
         openAppWindow();
         return;

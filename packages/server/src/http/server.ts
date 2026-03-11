@@ -7,7 +7,7 @@
  */
 
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
-import { PORT, IS_REMOTE } from '../config.js';
+import { getPort, IS_REMOTE } from '../config.js';
 import { checkHttpAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
 import {
@@ -55,7 +55,7 @@ function isPublicRoute(method: string, pathname: string): boolean {
 
 export function createFetchHandler() {
   return async (req: Request, server: import('bun').Server<WsData>) => {
-    const url = new URL(req.url, `http://localhost:${PORT}`);
+    const url = new URL(req.url, `http://localhost:${getPort()}`);
 
     // WebSocket upgrade — auth + upgrade happen here, handlers in websocket config
     if (url.pathname === '/ws') {

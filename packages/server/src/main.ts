@@ -7,20 +7,54 @@
 import { createFetchHandler } from './http/index.js';
 import { createWsHandlers, type WsData } from './websocket/index.js';
 import { initializeSubsystems, initWarmProviders, shutdown, printBanner } from './lifecycle.js';
-import { PORT, IS_REMOTE } from './config.js';
+import { IS_REMOTE, getPort, setPort } from './config.js';
+
+const MAX_PORT_ATTEMPTS = 20;
 
 async function startup() {
   const wsOptions = await initializeSubsystems();
   const fetch = createFetchHandler();
   const websocket = createWsHandlers(wsOptions);
+  const hostname = IS_REMOTE ? '0.0.0.0' : '127.0.0.1';
+  const preferredPort = getPort();
 
-  const server = Bun.serve<WsData>({
-    port: PORT,
-    hostname: IS_REMOTE ? '0.0.0.0' : '127.0.0.1',
-    idleTimeout: 255, // seconds; default 10 is too short for MCP tool calls and SSE streams
-    fetch,
-    websocket,
-  });
+  let server!: ReturnType<typeof Bun.serve<WsData>>;
+  let lastError: unknown;
+  let bound = false;
+
+  for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
+    const port = preferredPort + attempt;
+    try {
+      server = Bun.serve<WsData>({
+        port,
+        hostname,
+        idleTimeout: 255, // seconds; default 10 is too short for MCP tool calls and SSE streams
+        fetch,
+        websocket,
+      });
+      if (port !== preferredPort) {
+        console.log(`Port ${preferredPort} in use, using ${port} instead`);
+        setPort(port);
+      }
+      bound = true;
+      break;
+    } catch (err) {
+      lastError = err;
+      if (
+        err instanceof Error &&
+        (err.message.includes('EADDRINUSE') || (err as NodeJS.ErrnoException).code === 'EADDRINUSE')
+      ) {
+        continue;
+      }
+      throw err; // non-port error, rethrow
+    }
+  }
+
+  if (!bound) {
+    throw new Error(
+      `Could not find a free port in range ${preferredPort}–${preferredPort + MAX_PORT_ATTEMPTS - 1}: ${lastError}`,
+    );
+  }
 
   await printBanner(server);
 
