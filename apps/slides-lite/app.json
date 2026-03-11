@@ -42,6 +42,7 @@
       },
       "setActiveIndex": {
         "description": "Select a slide by zero-based index. Clamped to valid range. Returns { ok, activeIndex }.",
+        "aliases": ["selectSlide", "goToSlide", "jumpToSlide"],
         "params": {
           "type": "object",
           "properties": {

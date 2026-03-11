@@ -290,6 +290,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
       },
       setActiveIndex: {
         description: 'Select a slide by zero-based index. Clamped to valid range. Returns { ok, activeIndex }.',
+        aliases: ['selectSlide', 'goToSlide', 'jumpToSlide'],
         params: { type: 'object', properties: { index: { type: 'number', description: 'Zero-based slide index.' } }, required: ['index'] },
         handler: (p: { index: number }) => {
           const deck = ctx.getDeck();

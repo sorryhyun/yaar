@@ -36,6 +36,7 @@ type AppProtocolStateEntry = {
 
 type AppProtocolCommandEntry = {
   description: string;
+  aliases?: string[];
   params: {
     type: 'object';
     properties: Record<string, unknown>;
@@ -209,6 +210,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
       },
       removeScene: {
         description: 'Remove a scene by ID.',
+        aliases: ['deleteScene'],
         params: {
           type: 'object',
           properties: { id: { type: 'string' } },
@@ -260,6 +262,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
       },
       removeLayer: {
         description: 'Remove a layer and all its scenes by layer ID. The last layer cannot be removed.',
+        aliases: ['deleteLayer'],
         params: {
           type: 'object',
           properties: {

@@ -166,6 +166,7 @@
       },
       "removeScene": {
         "description": "Remove a scene by ID.",
+        "aliases": ["deleteScene"],
         "params": {
           "type": "object",
           "properties": {
@@ -222,6 +223,7 @@
       },
       "removeLayer": {
         "description": "Remove a layer and all its scenes by layer ID. The last layer cannot be removed.",
+        "aliases": ["deleteLayer"],
         "params": {
           "type": "object",
           "properties": {

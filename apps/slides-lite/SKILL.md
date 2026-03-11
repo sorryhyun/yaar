@@ -5,8 +5,9 @@ A compiled TypeScript application.
 ## Launch
 Open this app in an iframe window:
 ```
-create({
-  uri: "slides-lite",
+invoke('yaar://windows/slides-lite', {
+  action: "create",
+  appId: "slides-lite",
   title: "Slides Lite",
   renderer: "iframe",
   content: "yaar://apps/slides-lite"
@@ -14,4 +15,4 @@ create({
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `clone(appId="slides-lite")` to copy source into a sandbox for reading or editing.
+Source code is available in `src/` directory. Use `invoke('yaar://sandbox/', { action: "clone", uri: "yaar://apps/slides-lite" })` to copy source into a sandbox for reading or editing.
