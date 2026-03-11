@@ -1,4 +1,4 @@
-# Sandbox (run_js) Guide
+# Sandbox (yaar://sandbox/eval) Guide
 
 Code runs in an async IIFE — `await` is supported at the top level. Use `return` to return a value.
 

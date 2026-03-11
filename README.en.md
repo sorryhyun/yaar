@@ -16,70 +16,107 @@ User actions like button clicks, drawing, and typing are sent not to a program, 
 ![YAAR Desktop](./docs/image.png)
 
 
-## Basic Structure
+## Quick Start
 
-The program consists of a browser, a local server (on the user's machine), and Codex/Claude Code.
+Codex or Claude Code authentication is required.
 
-All UI runs in the browser. Actions in the browser are sent to the local server, the server signals the Codex or Claude Code AI, the AI signals back to the server, and the result is sent back to the browser for display.
+**Windows:** Install the [Codex CLI](https://github.com/openai/codex), then download `yaar.exe` from the Releases tab. You may see a SmartScreen warning (code signing not applied).
 
-In essence, you're having a 1:1 conversation with Codex or Claude Code, but instead of plain text, you interact through a UI.
+**Other platforms:**
+```bash
+git clone https://github.com/sorryhyun/yaar.git && cd yaar
+bun install && make codex-types
+make dev          # Browser opens automatically
+```
 
-On startup, the program automatically creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** If you want to provide files, place them in these folders. Files are preserved even after the program exits.
+Once running, start with something like "install essential apps".
+
+
+## What You Can Do
+
+- **"Analyze this CSV"** → AI reads the data and opens a chart window with visualizations
+- **"Check my GitHub issues"** → GitHub Manager app displays and manages your issues
+- **"Make a presentation"** → Slides Lite generates a slide deck
+- **Right-click drag to sketch** → AI interprets your drawing and converts it to code or diagrams
+- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable app
+
+
+## How It Works
+
+```
+Browser (UI) ←→ Local Server ←→ Claude Code / Codex (AI)
+```
+
+You're essentially having a 1:1 conversation with Claude Code or Codex, but interacting through a UI instead of plain text.
+
+On startup, the program creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** Place any files you want to provide in these directories.
 
 
 ## Key Features
 
-### 1. AI Interprets and Renders
+### AI Interprets and Renders
 
-The AI responds by **directly creating UI**.
+The AI responds by **directly creating UI** — opening windows or showing notifications to react to user actions.
 
-It opens "windows" or displays "messages" in the browser to respond to user actions. Users can type in the input field at the bottom center, paste images, drag and drop, click buttons on screen, right-click to send instructions to a specific window, drag a selected area to a specific app, or **right-click drag to draw** and send it to the AI. For convenience, actions like drag-selecting multiple apps or typing are not sent to the AI immediately.
+| Input | Action |
+|-------|--------|
+| Typing | Send a message |
+| Paste image / drag & drop | Send image to AI |
+| Right-click drag | Draw and send sketch to AI |
+| Button click | Execute in-window action |
+| Right-click → select window | Send instructions to a specific window |
+| Drag file/selection to app | Transfer data between apps |
 
-Most user actions are first saved as context. When you click a button or send a message, all accumulated context is included and sent to the AI. When the AI responds, **your instructions + context and the AI's response are recorded**, so when you give the same instruction later, the AI is offered the option to **reuse that response**, performing the same task much faster than before.
-
-Records are stored in `config/reload-cache/` and can be managed at any time.
-
-
-### 2. App Development
-
-Sometimes you need pre-built programs. Since essential apps like the storage folder and browser are needed, YAAR operates a separate YAAR Market website. Currently, **only a small number of apps made by me are listed, and users cannot upload, so there are no security concerns.**
-
-Tell the AI "install essential apps" and it will install browser, storage folder, spreadsheet, word processor, etc. from the market.
-
-You may also want to develop apps yourself, so YAAR supports programming capabilities. Various libraries are bundled, so you can develop the apps you need and deploy them to the desktop. Bundled libraries (lodash, anime.js, Konva, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies. The development environment is strictly configured, so there are minimal security concerns even when letting the AI develop autonomously.
-
-See the [App Development Guide](./docs/app-development.md) for details.
-
-### 3. Remote Access
-
-Running with `make claude` or `make codex`, or using the bundled executable (`.exe`), automatically enables remote mode. A one-time auth token is generated at server startup, and a connection URL and QR code are printed to the terminal. The QR code encodes a URL in the form `http://<LAN IP>:<PORT>/#remote=<token>` — scanning it with your phone camera handles token authentication automatically and connects you right away. SSH mode is launched automatically so it can be used from external networks, but prior setup such as `ssh-keygen` is required.
-
-See the [Remote Access Guide](./docs/remote_mode.md) for details.
+User actions accumulate as context and are sent to the AI together when you submit a message. AI responses are automatically cached — identical instructions can instantly reuse previous responses.
 
 
-## Getting Started
+### App Ecosystem
 
-Codex or Claude Code user authentication is required. The program cannot be used without it.
+Bundled apps available from YAAR Market:
 
-For Windows users, install the [Codex CLI](https://github.com/openai/codex) and download `yaar.exe` from the Releases tab.
+| App | Description |
+|-----|-------------|
+| 📁 Storage | File manager |
+| 🌐 Browser | Live browser with screenshot streaming |
+| 📊 Excel Lite | Spreadsheet with formula support |
+| 📝 Word Lite | DOCX/Markdown document editor |
+| 🎞️ Slides Lite | Presentation editor |
+| 📄 PDF Viewer | PDF viewer |
+| 🐙 GitHub Manager | GitHub issues & PR management |
+| 📰 RSS Reader | Multi-feed RSS reader |
+| 🖼️ Image Viewer | Image viewer |
+| 🎬 Video Editor / Viewer | Video editing and playback |
+| 📄 Recent Papers | Academic paper browser |
+| 🕐 Dock | Clock, weather, and notification panel |
 
-You may see a SmartScreen warning — this is because I haven't paid for code signing, so please bear with it. Once launched, a browser window opens immediately. Start by saying something like "install essential apps".
+You can also develop your own apps. Bundled libraries (lodash, anime.js, Konva, Solid.js, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are **bundled into a single HTML file** that runs independently anywhere. See the [App Development Guide](./docs/app-development.md) for details.
 
-For other users, clone this repository, install [Bun](https://bun.sh/), then run `bun install` and `make codex-types` to set up, and `make dev` to start. You'll have a more stable environment than the Windows executable.
+
+### Multi-Monitor & Sessions
+
+Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own main agent and conversation history. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
+
+
+### Remote Access
+
+Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. SSH tunneling allows access from external networks. See the [Remote Access Guide](./docs/remote_mode.md) for details.
+
+
+### Hooks
+
+Set up event-driven automation with `config/hooks.json`. Automatically execute actions when specific events occur. See the [Hooks Guide](./docs/hooks.md) for details.
 
 
 ## Security
 
 Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
 
-- **Sandbox isolation**: `run_js` code executes in `node:vm` with `eval`, `Function`, `require`, `import`, filesystem access, and WebAssembly all disabled.
-- **Domain allowlist**: HTTP requests (`http_get`/`http_post`) and sandbox `fetch` are restricted to domains listed in `config/curl_allowed_domains.yaml`. New domains require user approval via a confirmation dialog.
-- **MCP authentication**: MCP tool calls are authenticated with a Bearer token generated at server startup. Set `MCP_SKIP_AUTH=1` for local development.
-- **Remembered permissions**: User allow/deny decisions are persisted in `config/permissions.json` so repeated requests don't re-prompt.
-- **Credential isolation**: App credentials are stored in `config/credentials/` and git-ignored.
-- **Path validation**: Storage and sandbox file access is guarded against path traversal.
-- **CORS**: Only frontend dev server origins (`localhost:5173`, `localhost:3000`) are allowed.
-- **Iframe isolation**: Compiled apps run inside iframes and communicate with the server only via `postMessage`. A dedicated App Protocol was built for this — see [app-development.md](./docs/app-development.md) for details.
+- **Sandbox isolation** — Runs in `node:vm` with `eval`/`import`/filesystem/WebAssembly disabled
+- **Domain allowlist** — Only domains in `config/curl_allowed_domains.yaml` are permitted; new domains require user approval
+- **MCP authentication** — Bearer token-based tool call authentication
+- **Remembered permissions** — Allow/deny decisions persisted in `config/permissions.json`
+- **Iframe isolation** — Apps run inside iframes, communicating with the server only via `postMessage`
+- **Path validation** — Guards against path traversal attacks
 
 
 ## Project Structure
@@ -87,12 +124,14 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 ```
 yaar/
 ├── apps/              # Drop folders here to create apps
+├── config/            # User settings and credentials (git-ignored)
+├── storage/           # AI-accessible file storage (git-ignored)
 ├── packages/
-│   ├── shared/        # OS Actions types
-│   ├── server/        # WebSocket server + AI providers
+│   ├── shared/        # OS Actions, WebSocket events, Component DSL types
+│   ├── server/        # WebSocket server + AI providers (Claude/Codex)
 │   └── frontend/      # React frontend
 ```
 
-YAAR's architecture can also be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/os_architecture.md) for the full mapping.
+YAAR's architecture can be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/os_architecture.md) for the full mapping.
 
 See [CLAUDE.md](./CLAUDE.md) for development details.

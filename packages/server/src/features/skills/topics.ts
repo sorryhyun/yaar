@@ -1,6 +1,6 @@
 /**
  * Skill topic content — reference docs loaded by the verb-layer
- * `yaar://skills/*` handler and the legacy `skill` MCP tool.
+ * `yaar://skills/*` handler.
  *
  * Content is imported at build time via Bun text imports so it works
  * in both dev mode and bundled executables.

@@ -20,8 +20,14 @@ import {
 } from '../features/config/shortcuts.js';
 import { handleSetMount, handleGetMounts, handleRemoveMount } from '../features/config/mounts.js';
 import { handleSetApp, handleGetApp, handleRemoveApp } from '../features/config/app.js';
-import { readAllowedDomains, isAllDomainsAllowed } from '../mcp/domains.js';
-import { ok } from '../mcp/utils.js';
+import {
+  readAllowedDomains,
+  isAllDomainsAllowed,
+  isDomainAllowed,
+  addAllowedDomain,
+} from '../mcp/domains.js';
+import { ok, error } from '../mcp/utils.js';
+import { actionEmitter } from '../mcp/action-emitter.js';
 
 function assertConfig(
   resolved: ResolvedUri,
@@ -51,15 +57,57 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://config/domains — read-only domain allowlist ──
+  // ── yaar://config/domains — domain allowlist ──
   registry.register('yaar://config/domains', {
     description:
-      'HTTP domain allowlist. Read to see which domains are allowed for http_get/http_post.',
-    verbs: ['describe', 'read'],
+      'HTTP domain allowlist. Read to see allowed domains. Invoke to request user permission for a new domain.',
+    verbs: ['describe', 'read', 'invoke'],
+    invokeSchema: {
+      type: 'object',
+      required: ['domain'],
+      properties: {
+        domain: {
+          type: 'string',
+          description: 'The domain to request access for (e.g., "api.example.com")',
+        },
+        reason: {
+          type: 'string',
+          description: 'Optional reason for why this domain access is needed',
+        },
+      },
+    },
 
     async read(): Promise<VerbResult> {
       const [domains, allowAll] = await Promise.all([readAllowedDomains(), isAllDomainsAllowed()]);
       return ok(JSON.stringify({ allow_all_domains: allowAll, allowed_domains: domains }, null, 2));
+    },
+
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      const domain = payload?.domain as string | undefined;
+      if (!domain) return error('"domain" is required.');
+
+      if (await isDomainAllowed(domain)) {
+        return ok(`Domain "${domain}" is already in the allowed list.`);
+      }
+
+      const reasonText = payload?.reason ? `\n\nReason: ${payload.reason}` : '';
+      const confirmed = await actionEmitter.showPermissionDialog(
+        'Allow Domain Access',
+        `The AI wants to make HTTP requests to "${domain}".${reasonText}\n\nDo you want to allow this domain?`,
+        'http_domain',
+        domain,
+        'Allow',
+        'Deny',
+      );
+
+      if (confirmed) {
+        const success = await addAllowedDomain(domain);
+        if (success) {
+          return ok(`Domain "${domain}" has been added to the allowed list.`);
+        }
+        return error(`Failed to add domain "${domain}" to the allowed list.`);
+      }
+      return error(`User denied access to domain "${domain}".`);
     },
   });
 

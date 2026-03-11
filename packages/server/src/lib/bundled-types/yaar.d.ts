@@ -16,6 +16,7 @@ interface YaarAppStateDescriptor<T = unknown> {
 
 interface YaarAppCommandDescriptor<P = unknown, R = unknown> {
   description: string;
+  aliases?: string[];
   handler: (params: P) => R | Promise<R>;
   params?: object;
   returns?: object;
@@ -30,7 +31,7 @@ interface YaarAppRegistration {
 
 interface YaarApp {
   register(config: YaarAppRegistration): void;
-  sendInteraction(description: string | object): void;
+  sendInteraction(description: string | (Record<string, unknown> & { instructions?: string })): void;
 }
 
 // ── Storage SDK ─────────────────────────────────────────────────

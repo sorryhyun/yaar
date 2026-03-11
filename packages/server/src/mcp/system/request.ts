@@ -14,7 +14,7 @@ export function registerRequestTools(server: McpServer): void {
     'http_get',
     {
       description:
-        'Make an HTTP GET request. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
+        "Make an HTTP GET request. Requires the domain to be in the allowed list. Use invoke('yaar://config/domains', { domain }) to allowlist a domain first.",
       inputSchema: {
         url: z.string().url().describe('The URL to fetch'),
         headers: z
@@ -33,7 +33,7 @@ export function registerRequestTools(server: McpServer): void {
 
       if (!(await isDomainAllowed(domain))) {
         return error(
-          `Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
+          `Domain "${domain}" is not in the allowed list. Use invoke('yaar://config/domains', { domain: "${domain}" }) to request access.`,
         );
       }
 
@@ -60,7 +60,7 @@ export function registerRequestTools(server: McpServer): void {
     'http_post',
     {
       description:
-        'Make an HTTP POST request. Requires the domain to be in the allowed list. Use request_allowing_domain first if needed.',
+        "Make an HTTP POST request. Requires the domain to be in the allowed list. Use invoke('yaar://config/domains', { domain }) to allowlist a domain first.",
       inputSchema: {
         url: z.string().url().describe('The URL to send the request to'),
         body: z
@@ -89,7 +89,7 @@ export function registerRequestTools(server: McpServer): void {
 
       if (!(await isDomainAllowed(domain))) {
         return error(
-          `Domain "${domain}" is not in the allowed list. Use request_allowing_domain tool first to request access.`,
+          `Domain "${domain}" is not in the allowed list. Use invoke('yaar://config/domains', { domain: "${domain}" }) to request access.`,
         );
       }
 

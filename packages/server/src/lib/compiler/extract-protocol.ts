@@ -111,6 +111,27 @@ function extractStringProp(body: string, propName: string): string | null {
 }
 
 /**
+ * Extract a string array value for a property like `aliases: ['foo', 'bar']`.
+ * Returns the parsed array, or null.
+ */
+function extractStringArrayProp(body: string, propName: string): string[] | null {
+  const pattern = new RegExp(`\\b${propName}\\s*:\\s*\\[`);
+  const match = body.match(pattern);
+  if (!match || match.index === undefined) return null;
+  const bracketStart = body.indexOf('[', match.index + propName.length);
+  const end = findMatchingBrace(body, bracketStart);
+  if (end === -1) return null;
+  const raw = body.slice(bracketStart, end + 1);
+  try {
+    const parsed = JSON.parse(raw.replace(/'/g, '"'));
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === 'string')) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract a JSON-like object value for a property like `params: { type: 'object', ... }`.
  * Returns the parsed object, or null.
  */
@@ -207,6 +228,8 @@ export function extractProtocolFromSource(source: string): Protocol | null {
         const description = extractStringProp(block, 'description');
         if (description) {
           protocol.commands[key] = { description };
+          const aliases = extractStringArrayProp(block, 'aliases');
+          if (aliases) protocol.commands[key].aliases = aliases;
           const params = extractObjectProp(block, 'params');
           if (params) protocol.commands[key].params = params;
           const returns = extractObjectProp(block, 'returns');

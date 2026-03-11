@@ -9,10 +9,10 @@ In YAAR, you tell the AI what to build and it creates the app. TypeScript author
 ```
 "Make me a Tetris game"
 
-    ↓  AI writes code (invoke('yaar://sandbox/{path}', { content }))
-    ↓  Compiles (compile) → single HTML file
+    ↓  AI writes code    invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })
+    ↓  Compiles           invoke('yaar://sandbox/{id}', { action: "compile" })
     ↓  Previews in iframe window
-    ↓  Deploys to desktop (deploy)
+    ↓  Deploys to desktop invoke('yaar://sandbox/{id}', { action: "deploy", appId: "tetris", ... })
 
 🎮 Tetris icon appears on the desktop
 ```
@@ -29,16 +29,16 @@ Users don't need to write code. The AI writes TypeScript in a sandbox, compiles 
 | `read` | Read sandbox files (`yaar://sandbox/` URI) |
 | `list` | List sandbox files (`yaar://sandbox/` URI) |
 | `edit` | Apply search-and-replace edits to sandbox files (`yaar://sandbox/` URI) |
-| `compile` | Bundle `src/main.ts` → single HTML (Bun) |
-| `typecheck` | Run TypeScript type checking on sandbox code |
-| `deploy` | Deploy compiled app to desktop |
-| `clone` | Clone a deployed app's source into a sandbox for editing |
+| `invoke('yaar://sandbox/{id}', { action: "compile" })` | Bundle `src/main.ts` → single HTML (Bun) |
+| `invoke('yaar://sandbox/{id}', { action: "typecheck" })` | Run TypeScript type checking on sandbox code |
+| `invoke('yaar://sandbox/{id}', { action: "deploy", appId, ... })` | Deploy compiled app to desktop |
+| `invoke('yaar://sandbox/{id}', { action: "clone", uri })` | Clone a deployed app's source into a sandbox for editing |
 
 ### Code Execution Tools
 
 | Tool | Description |
 |------|-------------|
-| `run_js` | Execute JavaScript in sandboxed VM |
+| `invoke('yaar://sandbox/eval', { code })` | Execute JavaScript in sandboxed VM |
 
 ### Reference Tools
 
@@ -72,10 +72,10 @@ write(uri: "yaar://sandbox/1739xxx/src/main.ts", content: "...") // write to exi
 - `yaar://sandbox/{path}` without a sandbox ID auto-generates a new sandbox ID
 - Supports multiple files (`src/main.ts`, `src/utils.ts`, ...)
 
-### Step 2: Compile — `compile`
+### Step 2: Compile
 
 ```
-compile(sandboxId: "1739xxx", title?: "My App")
+invoke('yaar://sandbox/1739xxx', { action: "compile", title: "My App" })
 ```
 
 - Bundles from `src/main.ts` entry point via Bun
@@ -86,12 +86,10 @@ compile(sandboxId: "1739xxx", title?: "My App")
 
 The AI opens an iframe window to preview the compiled result immediately.
 
-### Step 4: Deploy — `deploy`
+### Step 4: Deploy
 
 ```
-deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀",
-       keepSource?: true, skill?: "...", appProtocol?: true,
-       fileAssociations?: [{ extensions: [".txt"], command: "openFile", paramKey: "content" }])
+invoke('yaar://sandbox/1739xxx', { action: "deploy", appId: "my-app", name: "My App", icon: "🚀", description: "..." })
 ```
 
 - Copies compiled HTML to `apps/{appId}/`
@@ -100,13 +98,13 @@ deploy(sandboxId: "1739xxx", appId: "my-app", name?: "My App", icon?: "🚀",
 - `appProtocol`: Mark app as supporting App Protocol (auto-detected from HTML if not set)
 - `fileAssociations`: Map file extensions to app_command calls for file opening
 
-### Editing Existing Apps — `clone` → edit → `compile` → `deploy`
+### Editing Existing Apps — clone → edit → compile → deploy
 
 ```
-clone(appId: "my-app") → returns sandboxId
-edit(uri: "yaar://sandbox/{sandboxId}/path", old_string, new_string)  // or write for full replacement
-compile(sandbox: sandboxId)
-deploy(sandbox: sandboxId, appId: "my-app")  // same appId overwrites in-place
+invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })  → returns sandboxId
+invoke('yaar://sandbox/{sandboxId}/src/main.ts', { action: "edit", old_string: "...", new_string: "..." })
+invoke('yaar://sandbox/{sandboxId}', { action: "compile" })
+invoke('yaar://sandbox/{sandboxId}', { action: "deploy", appId: "my-app" })  // same appId overwrites in-place
 ```
 
 ## Bundled Libraries
@@ -140,7 +138,7 @@ import anime from '@bundled/anime';
 
 ## Sandbox Execution Environment
 
-`run_js` executes code in an isolated VM.
+`invoke('yaar://sandbox/eval', { code })` executes code in an isolated VM.
 
 **Available:** JSON, Math, Date, Promise, fetch (domain-restricted), crypto.createHash, TextEncoder/Decoder, typed arrays
 

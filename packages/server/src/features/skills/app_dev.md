@@ -3,15 +3,15 @@
 ## Workflow
 
 To create a new app from scratch:
-1. `write(uri: "yaar://sandbox/new/src/main.ts", content: "...")` — creates a new sandbox, returns `{ sandboxId }`
-2. `deploy(sandbox: sandboxId, appId: "my-app")` — auto-compiles, installs to `apps/`, appears on desktop
+1. `invoke('yaar://sandbox/new/src/main.ts', { action: 'write', content: '...' })` — creates a new sandbox, returns `{ sandboxId }`
+2. `invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: 'my-app' })` — auto-compiles, installs to `apps/`, appears on desktop
 
 To edit an existing app:
-1. `clone(appId)` — copies source into a new sandbox, returns sandboxId
-2. Edit with `edit(uri: "yaar://sandbox/{sandboxId}/path", old_string, new_string)` or `write` for full replacement
-3. `deploy` back to the same appId
+1. `invoke('yaar://sandbox/new', { action: 'clone', uri: 'yaar://apps/{appId}' })` — copies source into a new sandbox, returns sandboxId
+2. Edit with `invoke('yaar://sandbox/{sandboxId}/path', { action: 'edit', old_string: '...', new_string: '...' })` or `action: 'write'` for full replacement
+3. `invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...' })` back to the same appId
 
-Optional: use `compile(sandbox)` separately if you want a preview URL before deploying.
+Optional: use `invoke('yaar://sandbox/{sandboxId}', { action: 'compile' })` separately if you want a preview URL before deploying.
 
 ## Sandbox Structure
 
@@ -182,7 +182,7 @@ const data = await yaar.storage.read('scores.json', { as: 'json' }).catch(() => 
 const imgUrl = yaar.storage.url('photos/cat.png');
 ```
 
-**Error handling:** `read()` throws when the file doesn't exist (404). Always use `.catch()` or try/catch to handle missing files gracefully — especially on first launch when no data has been saved yet. Never call `fetch('/api/...')` directly for endpoints not listed in `skill("host_api")` — they don't exist and will 404.
+**Error handling:** `read()` throws when the file doesn't exist (404). Always use `.catch()` or try/catch to handle missing files gracefully — especially on first launch when no data has been saved yet. Never call `fetch('/api/...')` directly for endpoints not listed in `read('yaar://skills/host_api')` — they don't exist and will 404.
 
 ## Windows API (Read-Only)
 
@@ -211,7 +211,7 @@ This is **read-only** — apps cannot modify other windows.
 
 ## Deploy
 
-`deploy(sandbox, appId, ...)` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.
+`invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...', ... })` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
@@ -245,8 +245,8 @@ Common mistakes to avoid when building apps:
   // GOOD
   if (loading()) return null;
   ```
-- **Don't guess API endpoints** — Only use endpoints from `skill("host_api")`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
-- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `config:set(section: "app")`.
+- **Don't guess API endpoints** — Only use endpoints from `read('yaar://skills/host_api')`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { ... })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
@@ -256,7 +256,7 @@ Common mistakes to avoid when building apps:
 ```
 Option A: API-based app (preferred for API wrappers)
   apps/github/SKILL.md → describes GitHub API, auth flow
-  User provides PAT → stored via config:set(section: "app")
+  User provides PAT → stored via invoke('yaar://config/app/{appId}', { ... })
   AI calls GitHub API via http_get/http_post → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)
@@ -269,5 +269,5 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 
 ## Related Skills
 
-- **host_api** — REST endpoints available to iframe apps
-- **app_protocol** — Bidirectional agent-iframe communication (state, commands, interactions)
+- `read('yaar://skills/host_api')` — REST endpoints available to iframe apps
+- `read('yaar://skills/app_protocol')` — Bidirectional agent-iframe communication (state, commands, interactions)

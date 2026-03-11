@@ -1,26 +1,41 @@
-# Config Tools Reference
+# Config Reference
 
-## `config:set(section, content)`
+All configuration is accessed via `yaar://config/` URIs using the 5 generic verbs.
 
-Update configuration. The `content` object schema depends on the `section`.
+## Overview
 
-### Section: `hooks`
+| URI | Verbs | Description |
+|-----|-------|-------------|
+| `yaar://config/` | read, list | Read all config or list sections |
+| `yaar://config/settings` | read, invoke | User preferences |
+| `yaar://config/hooks` | read, invoke | Event-driven hooks |
+| `yaar://config/hooks/{id}` | read, delete | A specific hook |
+| `yaar://config/shortcuts` | read, invoke | Desktop shortcuts |
+| `yaar://config/shortcuts/{id}` | delete | A specific shortcut |
+| `yaar://config/mounts` | read, invoke | Host directory mounts |
+| `yaar://config/mounts/{alias}` | delete | A specific mount |
+| `yaar://config/app` | read, invoke | Per-app config (credentials, preferences) |
+| `yaar://config/app/{appId}` | read, invoke, delete | A specific app's config |
+| `yaar://config/domains` | read | HTTP domain allowlist |
 
-Event-driven automation hooks.
+## Settings
 
-```json
-{
-  "section": "hooks",
-  "content": {
-    "event": "launch" | "tool_use",
-    "label": "Human-readable description",
-    "action": {
-      "type": "interaction" | "os_action",
-      "payload": "string for interaction, object or array for os_action"
-    },
-    "filter": { "toolName": "tool_name" | ["tool1", "tool2"] }
-  }
-}
+```
+read('yaar://config/settings')
+invoke('yaar://config/settings', { language: "en", onboardingCompleted: true })
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `language` | string | Language code: en, ko, ja, zh, es, fr, de, pt, ru, ar, hi, it, nl, pl, tr, vi, th, id, sv, uk |
+| `onboardingCompleted` | boolean | Mark onboarding as completed |
+
+## Hooks
+
+```
+read('yaar://config/hooks')
+invoke('yaar://config/hooks', { event, label, action, filter? })
+delete('yaar://config/hooks/{id}')
 ```
 
 | Field | Required | Description |
@@ -30,44 +45,18 @@ Event-driven automation hooks.
 | `action` | yes | `{ type, payload }` — what happens when hook fires |
 | `filter` | no | For `tool_use` — which tool names trigger this hook |
 
-### Section: `settings`
+## Shortcuts
 
-User preferences. All fields optional — only provided fields are updated.
-
-```json
-{
-  "section": "settings",
-  "content": {
-    "language": "en",
-    "onboardingCompleted": true
-  }
-}
 ```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `language` | string | Language code: en, ko, ja, zh, es, fr, de, pt, ru, ar, hi, it, nl, pl, tr, vi, th, id, sv, uk |
-| `onboardingCompleted` | boolean | Mark onboarding as completed |
-
-### Section: `shortcuts`
-
-Desktop shortcuts. If `id` is provided, updates an existing shortcut; otherwise creates a new one.
-
-```json
-{
-  "section": "shortcuts",
-  "content": {
-    "label": "My Shortcut",
-    "icon": "🔗",
-    "shortcutType": "url",
-    "target": "https://example.com"
-  }
-}
+read('yaar://config/shortcuts')
+invoke('yaar://config/shortcuts', { label, icon, shortcutType, target, ... })
+invoke('yaar://config/shortcuts', { id: "existing-id", label: "Updated" })
+delete('yaar://config/shortcuts/{id}')
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | no | Existing shortcut ID to update |
+| `id` | no | Existing shortcut ID to update (omit to create) |
 | `label` | create | Display name |
 | `icon` | create | Emoji icon or storage image path |
 | `iconType` | no | `"emoji"` (default) or `"image"` |
@@ -76,19 +65,14 @@ Desktop shortcuts. If `id` is provided, updates an existing shortcut; otherwise 
 | `osActions` | no | OS Actions array to execute client-side on click |
 | `skill` | skill type | Instructions sent to AI when clicked |
 
-### Section: `mounts`
+## Mounts
 
 Host directory mounts exposed via `yaar://storage/mounts/{alias}/`.
 
-```json
-{
-  "section": "mounts",
-  "content": {
-    "alias": "my-docs",
-    "hostPath": "/home/user/Documents",
-    "readOnly": true
-  }
-}
+```
+read('yaar://config/mounts')
+invoke('yaar://config/mounts', { alias: "my-docs", hostPath: "/home/user/Documents", readOnly: true })
+delete('yaar://config/mounts/{alias}')
 ```
 
 | Field | Required | Description |
@@ -97,39 +81,14 @@ Host directory mounts exposed via `yaar://storage/mounts/{alias}/`.
 | `hostPath` | yes | Absolute path on the host filesystem |
 | `readOnly` | no | Block writes if true (default: false) |
 
-### Section: `app`
+## App Config
 
 Per-app configuration (credentials, preferences). Stored at `config/{appId}.json`.
 
-```json
-{
-  "section": "app",
-  "content": {
-    "appId": "github-manager",
-    "config": { "api_key": "ghp_xxx" }
-  }
-}
+```
+read('yaar://config/app/{appId}')
+invoke('yaar://config/app/{appId}', { api_key: "ghp_xxx" })
+delete('yaar://config/app/{appId}')
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `appId` | yes | App folder name |
-| `config` | yes | Key-value pairs to merge into the app's config |
-
----
-
-## `config:remove(section, id, key?)`
-
-Remove a config entry by section and ID.
-
-| Param | Required | Description |
-|-------|----------|-------------|
-| `section` | yes | `"hooks"`, `"shortcuts"`, `"mounts"`, or `"app"` |
-| `id` | yes | Entry ID (e.g., `"hook-1"`, `"shortcut-xxx"`, `"my-docs"`, `"github-manager"`) |
-| `key` | no | (app only) Remove a single key instead of the entire config |
-
----
-
-## `config:get(section?, appId?)`
-
-Read configuration. Returns all sections if `section` is omitted. For `"app"` section, provide `appId` to read a specific app's config.
+The payload is merged directly into the app's config — no wrapper object needed when using the app-specific URI.

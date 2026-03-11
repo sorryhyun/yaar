@@ -27,6 +27,7 @@ export interface AppStateDescriptor {
 
 export interface AppCommandDescriptor {
   description: string;
+  aliases?: string[];
   params?: object;
   returns?: object;
 }
@@ -119,17 +120,42 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   window.yaar = window.yaar || {};
 
   var registration = null;
+  var aliasMap = {};  // alias → canonical command name
 
   window.yaar.app = {
     register: function(config) {
       registration = config;
+      // Build alias lookup map
+      aliasMap = {};
+      if (config.commands) {
+        for (var name in config.commands) {
+          var cmd = config.commands[name];
+          if (cmd.aliases) {
+            for (var i = 0; i < cmd.aliases.length; i++) {
+              aliasMap[cmd.aliases[i]] = name;
+            }
+          }
+        }
+      }
       // Notify parent that this app supports the protocol
       window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
     },
     sendInteraction: function(description) {
+      var content, instructions;
+      if (typeof description === 'string') {
+        content = description;
+      } else {
+        instructions = description.instructions;
+        var payload = {};
+        for (var k in description) {
+          if (k !== 'instructions') payload[k] = description[k];
+        }
+        content = JSON.stringify(payload);
+      }
       window.parent.postMessage({
         type: 'yaar:app-interaction',
-        content: typeof description === 'string' ? description : JSON.stringify(description)
+        content: content,
+        instructions: instructions
       }, '*');
     }
   };
@@ -167,6 +193,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         for (var key in registration.commands) {
           var c = registration.commands[key];
           manifest.commands[key] = { description: c.description };
+          if (c.aliases) manifest.commands[key].aliases = c.aliases;
           if (c.params) manifest.commands[key].params = c.params;
           if (c.returns) manifest.commands[key].returns = c.returns;
         }
@@ -226,7 +253,10 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     }
 
     if (msg.type === 'yaar:app-command-request') {
-      if (!registration || !registration.commands || !registration.commands[msg.command]) {
+      var cmdName = msg.command;
+      // Resolve alias to canonical command name
+      if (aliasMap[cmdName]) cmdName = aliasMap[cmdName];
+      if (!registration || !registration.commands || !registration.commands[cmdName]) {
         window.parent.postMessage({
           type: 'yaar:app-command-response',
           requestId: requestId,
@@ -236,7 +266,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         return;
       }
       try {
-        var result = registration.commands[msg.command].handler(msg.params);
+        var result = registration.commands[cmdName].handler(msg.params);
         // Handle async handlers
         if (result && typeof result.then === 'function') {
           result.then(function(data) {

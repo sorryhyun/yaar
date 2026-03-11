@@ -325,9 +325,12 @@ function initIframeMessageHandlers() {
     if (!ctx.source) return;
     const content = ctx.data.content;
     if (typeof content !== 'string' || !content) return;
+    const instructions =
+      typeof ctx.data.instructions === 'string' ? ctx.data.instructions : undefined;
     useDesktopStore.getState().addPendingAppInteraction({
       windowId: ctx.source.windowId,
       content,
+      instructions,
     });
   });
 

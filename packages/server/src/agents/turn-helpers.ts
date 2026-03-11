@@ -23,9 +23,16 @@ export interface PreparedReloadContext {
   reloadPrefix: string;
 }
 
-export function buildReloadContext(ctx: PoolContext, task: Task): PreparedReloadContext {
+export function buildReloadContext(
+  ctx: PoolContext,
+  task: Task,
+  options?: { currentWindowId?: string },
+): PreparedReloadContext {
   const windowSnapshot = ctx.windowState.listWindows();
-  const openWindowsContext = ctx.contextAssembly.formatOpenWindows(windowSnapshot.map((w) => w.id));
+  const openWindowsContext = ctx.contextAssembly.formatOpenWindows(windowSnapshot, {
+    monitorId: task.monitorId,
+    currentWindowId: options?.currentWindowId,
+  });
   const fp = ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
   const reloadPrefix = ctx.reloadPolicy.formatReloadOptions(ctx.reloadPolicy.findMatches(fp, 3));
   return { windowSnapshot, openWindowsContext, fp, reloadPrefix };
