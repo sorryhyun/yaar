@@ -148,7 +148,7 @@ Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `handlers/` via `yaar://` URIs |
-| `mcp/system/` | system | http_get, http_post, request_allowing_domain, reload_cached, list_reload_options, curl |
+| `mcp/system/` | system | http_get, http_post, reload_cached, list_reload_options, curl |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 

@@ -70,7 +70,7 @@ Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>
 
 ## HTTP Access
 Use http_get/http_post for API calls. Domains require allowlisting.
-Use request_allowing_domain to prompt user for new domain access.
+Use invoke('yaar://config/domains', { domain }) to prompt user for new domain access.
 **When http_get or WebSearch fails**, use \`invoke('yaar://browser/pages', { action: "open", url })\` as a fallback.
 
 ## Relay to Main

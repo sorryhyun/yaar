@@ -21,12 +21,13 @@ export class ContextAssemblyPolicy {
     if (windows.length === 0) return '';
     const lines = windows.map((w) => {
       const label = w.title || w.content.renderer;
-      return `  ${w.id} — ${label}`;
+      const current = options?.currentWindowId === w.id ? ' (you)' : '';
+      const slashIdx = w.id.indexOf('/');
+      const rawId = slashIdx >= 0 ? w.id.slice(slashIdx + 1) : w.id;
+      return `  yaar://windows/${rawId} — ${label}${current}`;
     });
-    let header = '<open_windows>';
-    if (options?.monitorId) header += ` monitor=${options.monitorId}`;
-    if (options?.currentWindowId) header += ` current=${options.currentWindowId}`;
-    return `${header}\n${lines.join('\n')}\n</open_windows>\n\n`;
+    const monitor = options?.monitorId ? ` monitor="${options.monitorId}"` : '';
+    return `<open_windows${monitor}>\n${lines.join('\n')}\n</open_windows>\n\n`;
   }
 
   /**

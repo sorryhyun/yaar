@@ -455,6 +455,23 @@ export class LiveSession {
           logger?.logInteraction(interaction);
 
           switch (interaction.type) {
+            case 'window.create':
+              if (interaction.windowId && interaction.content && interaction.bounds) {
+                const createAction = {
+                  type: 'window.create' as const,
+                  windowId: interaction.windowId,
+                  title: interaction.windowTitle ?? interaction.windowId,
+                  bounds: interaction.bounds,
+                  content: interaction.content,
+                  variant: interaction.variant as 'standard' | 'widget' | 'panel' | undefined,
+                  dockEdge: interaction.dockEdge as 'top' | 'bottom' | undefined,
+                  frameless: interaction.frameless,
+                  windowStyle: interaction.windowStyle,
+                };
+                this.windowState.handleAction(createAction, interaction.monitorId ?? '0');
+                logger?.logAction(createAction);
+              }
+              break;
             case 'window.close':
               if (interaction.windowId) {
                 this.windowState.handleAction({

@@ -31,7 +31,7 @@ interface YaarAppRegistration {
 
 interface YaarApp {
   register(config: YaarAppRegistration): void;
-  sendInteraction(description: string | object): void;
+  sendInteraction(description: string | (Record<string, unknown> & { instructions?: string })): void;
 }
 
 // ── Storage SDK ─────────────────────────────────────────────────

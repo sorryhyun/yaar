@@ -216,6 +216,7 @@ export interface AppProtocolResponseItem {
 export interface AppInteractionItem {
   windowId: string;
   content: string;
+  instructions?: string;
 }
 
 export interface FeedbackSliceState {

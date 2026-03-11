@@ -131,7 +131,9 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             const domain = extractDomain(url);
             if (!domain) return error('Invalid URL');
             if (!(await isDomainAllowed(domain))) {
-              return error(`Domain "${domain}" not allowed. Use request_allowing_domain first.`);
+              return error(
+                `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
+              );
             }
             const { session, browserId: bid } = await pool.createSession(browserId);
             const windowId = `browser-${bid}`;

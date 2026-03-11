@@ -1,5 +1,5 @@
 {
-  "icon": "💬",
+  "icon": "🤖",
   "name": "AI Chat",
   "run": "index.html",
   "appProtocol": true,
@@ -15,6 +15,7 @@
     "commands": {
       "addMessage": {
         "description": "Add an AI response message to the chat",
+        "aliases": ["sendMessage", "postMessage", "appendMessage"],
         "params": {
           "type": "object",
           "properties": {
@@ -30,6 +31,7 @@
       },
       "setError": {
         "description": "Show an error message",
+        "aliases": ["showError", "displayError", "addError"],
         "params": {
           "type": "object",
           "properties": {

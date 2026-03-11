@@ -52,7 +52,12 @@ function sendMessage() {
 
   // Notify the agent
   if (window.yaar?.app) {
-    window.yaar.app.sendInteraction({ event: 'user_message', content: text, msgId });
+    window.yaar.app.sendInteraction({
+      event: 'user_message',
+      content: text,
+      msgId,
+      instructions: 'Reply to the user message above. Use app_command addMessage to display your response in this chat window.',
+    });
   }
 }
 

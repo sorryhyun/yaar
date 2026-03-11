@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@bundled/uuid';
-import { messages, setMessages, setIsWaiting } from './store';
+import { messages, setMessages, isWaiting, setIsWaiting } from './store';
 import type { ChatMessage } from './types';
 
 export function registerProtocol() {
@@ -21,6 +21,7 @@ export function registerProtocol() {
     commands: {
       addMessage: {
         description: 'Add an AI response message to the chat',
+        aliases: ['sendMessage', 'postMessage', 'appendMessage'],
         params: {
           type: 'object',
           properties: {
@@ -44,6 +45,7 @@ export function registerProtocol() {
       },
       setError: {
         description: 'Show an error message',
+        aliases: ['showError', 'displayError', 'addError'],
         params: {
           type: 'object',
           properties: { content: { type: 'string' } },

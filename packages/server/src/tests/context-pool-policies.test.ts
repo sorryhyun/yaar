@@ -61,8 +61,8 @@ describe('ContextAssemblyPolicy', () => {
         updatedAt: 0,
       },
     ]);
-    expect(windows).toContain('w-1 — Notes');
-    expect(windows).toContain('w-2 — Chat');
+    expect(windows).toContain('yaar://windows/w-1 — Notes');
+    expect(windows).toContain('yaar://windows/w-2 — Chat');
     expect(windows).toContain('<open_windows>');
   });
 
@@ -71,7 +71,7 @@ describe('ContextAssemblyPolicy', () => {
     const windows = policy.formatOpenWindows(
       [
         {
-          id: '0/chat',
+          id: 'chat',
           title: 'Chat',
           content: { renderer: 'iframe', data: '' },
           bounds: { x: 0, y: 0, w: 400, h: 300 },
@@ -80,10 +80,10 @@ describe('ContextAssemblyPolicy', () => {
           updatedAt: 0,
         },
       ],
-      { monitorId: '0', currentWindowId: '0/chat' },
+      { monitorId: '0', currentWindowId: 'chat' },
     );
-    expect(windows).toContain('monitor=0');
-    expect(windows).toContain('current=0/chat');
+    expect(windows).toContain('monitor="0"');
+    expect(windows).toContain('yaar://windows/chat — Chat (you)');
   });
 
   describe('buildWindowInitialContext with configurable maxTurns', () => {

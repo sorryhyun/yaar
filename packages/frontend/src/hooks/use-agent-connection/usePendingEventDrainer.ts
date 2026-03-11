@@ -86,7 +86,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             type: ClientEventType.WINDOW_MESSAGE,
             messageId,
             windowId: getRawWindowId(item.windowId),
-            content: `<app_interaction>${item.content}</app_interaction>`,
+            content: `<app_interaction>${item.content}</app_interaction>${item.instructions ? `\n\n${item.instructions}` : ''}`,
           });
         }
       }
