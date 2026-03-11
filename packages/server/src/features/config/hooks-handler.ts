@@ -8,12 +8,17 @@ import { actionEmitter } from '../../mcp/action-emitter.js';
 import type { HookAction } from './hooks.js';
 import { addHook, loadHooks, removeHook } from './hooks.js';
 
+const stringOrStrings = z.union([z.string(), z.array(z.string())]);
+
 export const hookContentSchema = z.object({
   event: z.enum(['launch', 'tool_use']),
   label: z.string(),
   filter: z
     .object({
-      toolName: z.union([z.string(), z.array(z.string())]),
+      toolName: stringOrStrings.optional(),
+      verb: stringOrStrings.optional(),
+      uri: stringOrStrings.optional(),
+      action: stringOrStrings.optional(),
     })
     .optional(),
   action: z.object({

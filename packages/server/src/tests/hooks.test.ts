@@ -6,6 +6,7 @@ import {
   addHook,
   removeHook,
   getHooksByEvent,
+  getToolUseHooks,
   _resetHooksCache,
 } from '../features/config/hooks.js';
 
@@ -135,5 +136,131 @@ describe('hooks storage', () => {
 
     const hooks = await loadHooks();
     expect(hooks).toEqual([]);
+  });
+});
+
+describe('getToolUseHooks — URI-based matching', () => {
+  beforeEach(async () => {
+    _resetHooksCache();
+    await mkdir(TEST_CONFIG_DIR, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
+  });
+
+  it('matches by verb + uri + action', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Compiling...' } },
+      'Compile toast',
+      { verb: 'invoke', uri: 'yaar://sandbox/*', action: 'compile' },
+    );
+
+    const matched = await getToolUseHooks({
+      toolName: 'verbs:invoke',
+      verb: 'invoke',
+      uri: 'yaar://sandbox/abc123',
+      action: 'compile',
+    });
+    expect(matched).toHaveLength(1);
+
+    const noMatch = await getToolUseHooks({
+      toolName: 'verbs:invoke',
+      verb: 'invoke',
+      uri: 'yaar://sandbox/abc123',
+      action: 'deploy',
+    });
+    expect(noMatch).toHaveLength(0);
+  });
+
+  it('matches wildcard URI patterns', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Reading...' } },
+      'Storage read',
+      { verb: 'read', uri: 'yaar://storage/*' },
+    );
+
+    const matched = await getToolUseHooks({
+      toolName: 'verbs:read',
+      verb: 'read',
+      uri: 'yaar://storage/docs/readme.md',
+    });
+    expect(matched).toHaveLength(1);
+
+    const noMatch = await getToolUseHooks({
+      toolName: 'verbs:read',
+      verb: 'read',
+      uri: 'yaar://apps/my-app',
+    });
+    expect(noMatch).toHaveLength(0);
+  });
+
+  it('matches action array filter', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Writing...' } },
+      'Write/edit toast',
+      { verb: 'invoke', uri: 'yaar://sandbox/*', action: ['write', 'edit'] },
+    );
+
+    const writeMatch = await getToolUseHooks({
+      toolName: 'verbs:invoke',
+      verb: 'invoke',
+      uri: 'yaar://sandbox/abc/src/main.ts',
+      action: 'write',
+    });
+    expect(writeMatch).toHaveLength(1);
+
+    const editMatch = await getToolUseHooks({
+      toolName: 'verbs:invoke',
+      verb: 'invoke',
+      uri: 'yaar://sandbox/abc/src/main.ts',
+      action: 'edit',
+    });
+    expect(editMatch).toHaveLength(1);
+  });
+
+  it('still supports legacy toolName filter', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Searching...' } },
+      'Web search toast',
+      { toolName: 'WebSearch' },
+    );
+
+    const matched = await getToolUseHooks({ toolName: 'WebSearch' });
+    expect(matched).toHaveLength(1);
+
+    const noMatch = await getToolUseHooks({ toolName: 'verbs:invoke' });
+    expect(noMatch).toHaveLength(0);
+  });
+
+  it('hook with no filter matches everything', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Tool used!' } },
+      'Catch-all',
+    );
+
+    const matched = await getToolUseHooks({
+      toolName: 'verbs:invoke',
+      verb: 'invoke',
+      uri: 'yaar://anything',
+    });
+    expect(matched).toHaveLength(1);
+  });
+
+  it('does not match when verb filter present but ctx has no verb', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Invoke!' } },
+      'Invoke only',
+      { verb: 'invoke' },
+    );
+
+    const noMatch = await getToolUseHooks({ toolName: 'WebSearch' });
+    expect(noMatch).toHaveLength(0);
   });
 });

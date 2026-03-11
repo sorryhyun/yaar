@@ -4,7 +4,8 @@ import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
 import { formatToolDisplay } from '../../mcp/server.js';
 import { actionEmitter } from '../../mcp/action-emitter.js';
-import { getToolUseHooks } from '../../features/config/hooks.js';
+import { getToolUseHooks, type ToolUseContext } from '../../features/config/hooks.js';
+import { VERB_TOOL_NAMES } from '../../handlers/index.js';
 
 export interface StreamMappingState {
   responseText: string;
@@ -100,7 +101,22 @@ export class StreamToEventMapper {
         }
 
         // Execute matching tool_use hooks
-        const hooks = await getToolUseHooks(displayName);
+        const hookCtx: ToolUseContext = { toolName: displayName };
+
+        // For verb tools, extract verb/uri/action from toolInput
+        const rawName = message.toolName ?? '';
+        if ((VERB_TOOL_NAMES as readonly string[]).includes(rawName)) {
+          const input = message.toolInput as Record<string, unknown> | undefined;
+          // verb = 'invoke', 'read', 'list', 'delete', 'describe'
+          hookCtx.verb = rawName.replace('mcp__verbs__', '');
+          if (input?.uri && typeof input.uri === 'string') hookCtx.uri = input.uri;
+          if (input?.payload && typeof input.payload === 'object' && input.payload !== null) {
+            const action = (input.payload as Record<string, unknown>).action;
+            if (typeof action === 'string') hookCtx.action = action;
+          }
+        }
+
+        const hooks = await getToolUseHooks(hookCtx);
         for (const hook of hooks) {
           if (hook.action.type === 'os_action') {
             const actions = Array.isArray(hook.action.payload)

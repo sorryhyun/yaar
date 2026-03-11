@@ -1,6 +1,6 @@
 # Hooks
 
-Hooks are event-driven config entries that fire actions on specific triggers. They let you automate responses to desktop events — for example, showing a progress window when the AI uses app-dev tools.
+Hooks are event-driven config entries that fire actions on specific triggers. They let you automate responses to desktop events — for example, showing a progress toast when the AI compiles an app.
 
 ## Storage
 
@@ -11,7 +11,7 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
 | Event | Description | Filter Support |
 |-------|-------------|----------------|
 | `launch` | Fires when a new session starts | None |
-| `tool_use` | Fires when the AI calls a tool | `toolName` filter |
+| `tool_use` | Fires when the AI calls a tool | `verb`, `uri`, `action`, `toolName` filters |
 
 ## Action Types
 
@@ -27,13 +27,15 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
   "id": "hook-1",
   "event": "tool_use",
   "filter": {
-    "toolName": "apps:clone"
+    "verb": "invoke",
+    "uri": "yaar://sandbox/*",
+    "action": "compile"
   },
   "action": {
     "type": "os_action",
-    "payload": { "type": "window.create", "..." : "..." }
+    "payload": { "type": "toast.show", "message": "Compiling..." }
   },
-  "label": "Show progress on clone",
+  "label": "Toast on compile",
   "enabled": true,
   "createdAt": "2025-01-01T00:00:00.000Z"
 }
@@ -41,26 +43,34 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
 
 ### Filter Syntax (tool_use only)
 
-The `filter.toolName` field narrows which tool calls trigger the hook:
+Filters match against the verb tool context. All filter fields are optional — omit a field to match any value. All specified fields must match (AND logic).
 
-- **Single tool:** `"toolName": "apps:clone"`
-- **Multiple tools:** `"toolName": ["basic:write", "basic:edit"]`
-- **Omitted:** Hook fires on every tool call
+| Field | Type | Description |
+|-------|------|-------------|
+| `verb` | `string \| string[]` | The verb used: `invoke`, `read`, `list`, `delete` |
+| `uri` | `string \| string[]` | URI pattern. Supports trailing `/*` wildcard (e.g., `yaar://sandbox/*`) |
+| `action` | `string \| string[]` | The `payload.action` value for invoke calls (e.g., `compile`, `deploy`) |
+| `toolName` | `string \| string[]` | Legacy: matches non-verb tool names (e.g., `WebSearch`) |
 
-Tool names use the `namespace:name` format (e.g., `apps:compile`, `window:create`). In verb mode, the equivalent verb calls (e.g., `invoke('yaar://sandbox/{id}', { action: 'compile' })`) also trigger hooks matching the legacy tool name.
+**Examples:**
+
+- Match any sandbox invoke: `{ "verb": "invoke", "uri": "yaar://sandbox/*" }`
+- Match compile specifically: `{ "verb": "invoke", "uri": "yaar://sandbox/*", "action": "compile" }`
+- Match sandbox writes/edits: `{ "verb": "invoke", "uri": "yaar://sandbox/*", "action": ["write", "edit"] }`
+- Match any storage read: `{ "verb": "read", "uri": "yaar://storage/*" }`
+- Match non-verb tool: `{ "toolName": "WebSearch" }`
+- Match everything (no filter): omit the `filter` field entirely
 
 ## Example: App-Dev Progress Tracking
 
-An example config at `docs/example_hooks.json` demonstrates a 4-stage progress window that tracks app development:
+An example config at `docs/example_hooks.json` demonstrates toasts that track app development:
 
-| Stage | Trigger Tool | Progress | Status |
-|-------|-------------|----------|--------|
-| Clone | `apps:clone` (verb: `invoke('yaar://apps/{id}', { action: 'clone' })`) | 10% | "Cloning..." |
-| Write | `basic:write`, `basic:edit` (verb: `invoke('yaar://sandbox/{path}')`) | 50% | "Writing code..." |
-| Compile | `apps:compile` (verb: `invoke('yaar://sandbox/{id}', { action: 'compile' })`) | 80% | "Compiling..." |
-| Deploy | `apps:deploy` (verb: `invoke('yaar://sandbox/{id}', { action: 'deploy' })`) | 100% | "Deployed!" |
-
-The first hook creates a small progress window (280x120, top-right corner). Subsequent hooks update its content as the dev flow progresses.
+| Stage | Filter | Status |
+|-------|--------|--------|
+| Clone | `verb: invoke, uri: yaar://sandbox/*, action: clone` | "Cloning..." |
+| Write | `verb: invoke, uri: yaar://sandbox/*, action: [write, edit]` | "Writing code..." |
+| Compile | `verb: invoke, uri: yaar://sandbox/*, action: compile` | "Compiling..." |
+| Deploy | `verb: invoke, uri: yaar://sandbox/*, action: deploy` | "Deployed!" |
 
 ### Activating the Example
 
@@ -70,46 +80,44 @@ Copy the example config to the active hooks file:
 cp docs/example_hooks.json config/hooks.json
 ```
 
-Then start the server with `make dev`. When the AI uses app-dev tools, the progress window will appear and update automatically.
+Then start the server with `make dev`. When the AI uses app-dev tools, toasts will appear automatically.
 
 ## Managing Hooks via MCP Tools
 
-The AI can manage hooks through built-in MCP tools (all on the `system` MCP server):
+The AI can manage hooks through verb tools:
 
-- **`set_config`** (verb: `invoke('yaar://config/hooks/{id}', { hook })`) — Register a new hook (shows a permission dialog) or update settings
-- **`get_config`** (verb: `read('yaar://config/hooks/')` or `list('yaar://config/hooks/')`) — Read registered hooks and/or user settings
-- **`remove_config`** (verb: `delete('yaar://config/hooks/{id}')`) — Delete a hook by ID (shows a confirmation dialog)
+- **`invoke('yaar://config/hooks/{id}', { hook })`** — Register a new hook (shows a permission dialog) or update settings
+- **`read('yaar://config/hooks/')`** or **`list('yaar://config/hooks/')`** — Read registered hooks
+- **`delete('yaar://config/hooks/{id}')`** — Delete a hook by ID (shows a confirmation dialog)
 
-### Example: Adding a Hook via set_config
+### Example: Adding a Hook
 
 ```json
 {
   "event": "tool_use",
-  "filter": { "toolName": "apps:compile" },
+  "filter": {
+    "verb": "invoke",
+    "uri": "yaar://sandbox/*",
+    "action": "compile"
+  },
   "action": {
     "type": "os_action",
     "payload": {
-      "type": "window.setContent",
-      "windowId": "dev-progress",
-      "content": {
-        "renderer": "component",
-        "data": {
-          "components": [
-            { "type": "progress", "value": 80, "label": "Compiling..." }
-          ]
-        }
-      }
+      "type": "toast.show",
+      "id": "dev-compile",
+      "message": "Compiling app...",
+      "variant": "info"
     }
   },
-  "label": "Show compile progress"
+  "label": "Show compile toast"
 }
 ```
 
 ## How It Works
 
-1. When the AI calls a tool, the `StreamToEventMapper` sends a `TOOL_PROGRESS` event to the frontend
-2. It then checks for matching `tool_use` hooks via `getToolUseHooks(toolName)`
+1. When the AI calls a verb tool (e.g., `invoke('yaar://sandbox/abc', { action: 'compile' })`), the `StreamToEventMapper` extracts the verb, URI, and action from the tool input
+2. It checks for matching `tool_use` hooks via `getToolUseHooks({ toolName, verb, uri, action })`
 3. For each matching hook with an `os_action` action, the OS Action(s) are emitted through `actionEmitter`
-4. The frontend receives and processes these actions (creating/updating windows, showing notifications, etc.)
+4. The frontend receives and processes these actions (showing toasts, creating windows, etc.)
 
 Hook actions inherit the current agent context (agentId, monitorId) from the action emitter, so they route correctly to the active session.

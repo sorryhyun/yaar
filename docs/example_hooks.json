@@ -4,7 +4,9 @@
       "id": "hook-1",
       "event": "tool_use",
       "filter": {
-        "toolName": "dev:clone"
+        "verb": "invoke",
+        "uri": "yaar://sandbox/*",
+        "action": "clone"
       },
       "action": {
         "type": "os_action",
@@ -23,7 +25,9 @@
       "id": "hook-2",
       "event": "tool_use",
       "filter": {
-        "toolName": ["dev:write_ts", "dev:apply_diff_ts"]
+        "verb": "invoke",
+        "uri": "yaar://sandbox/*",
+        "action": ["write", "edit"]
       },
       "action": {
         "type": "os_action",
@@ -42,7 +46,9 @@
       "id": "hook-3",
       "event": "tool_use",
       "filter": {
-        "toolName": "dev:compile"
+        "verb": "invoke",
+        "uri": "yaar://sandbox/*",
+        "action": "compile"
       },
       "action": {
         "type": "os_action",
@@ -61,7 +67,9 @@
       "id": "hook-4",
       "event": "tool_use",
       "filter": {
-        "toolName": "dev:deploy"
+        "verb": "invoke",
+        "uri": "yaar://sandbox/*",
+        "action": "deploy"
       },
       "action": {
         "type": "os_action",
@@ -80,7 +88,7 @@
       "id": "hook-6",
       "event": "tool_use",
       "filter": {
-        "toolName": "web_search"
+        "toolName": "WebSearch"
       },
       "action": {
         "type": "os_action",
