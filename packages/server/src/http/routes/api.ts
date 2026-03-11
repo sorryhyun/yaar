@@ -59,6 +59,7 @@ import type { DesktopShortcut } from '@yaar/shared';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
+import { getRemoteInfo } from '../../lifecycle.js';
 
 export async function handleApiRoutes(req: Request, url: URL): Promise<Response | null> {
   // Health check
@@ -323,6 +324,13 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     } catch {
       return errorResponse('Failed to open directory picker');
     }
+  }
+
+  // Remote connection info (QR code data)
+  if (url.pathname === '/api/remote-info' && req.method === 'GET') {
+    const info = getRemoteInfo();
+    if (!info) return jsonResponse({ remote: false });
+    return jsonResponse({ remote: true, ...info });
   }
 
   // Agent stats endpoint

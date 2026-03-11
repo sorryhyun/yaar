@@ -190,6 +190,27 @@ function isWsl(): boolean {
   }
 }
 
+/**
+ * Get remote connection info for display in the frontend UI.
+ * Returns null if not in remote mode.
+ */
+export function getRemoteInfo(): {
+  connectUrl: string;
+  token: string;
+  lanUrl: string;
+  tunnelUrl: string | null;
+} | null {
+  if (!IS_REMOTE) return null;
+  const token = getRemoteToken();
+  if (!token) return null;
+  const lanIp = getLanIp();
+  const lanUrl = `http://${lanIp}:${PORT}`;
+  const lanConnectUrl = `${lanUrl}/#remote=${token}`;
+  const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
+  const connectUrl = tunnelUrl ?? lanConnectUrl;
+  return { connectUrl, token, lanUrl, tunnelUrl };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function printBanner(server: Server<any>): Promise<void> {
   const port = server.port;

@@ -16,6 +16,7 @@
     },
     "menu": {
       "settings": "Settings",
+      "qrCode": "QR Code",
       "sessions": "Sessions",
       "actions": "Actions"
     },

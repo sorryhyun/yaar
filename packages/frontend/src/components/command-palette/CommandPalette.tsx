@@ -8,8 +8,9 @@ import { useDesktopStore } from '@/store';
 import { RecentActionsPanel } from '../overlays/RecentActionsPanel';
 import { SessionsModal } from '../overlays/SessionsModal';
 import { SettingsModal } from '../overlays/SettingsModal';
+import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, isRemoteMode } from '@/lib/api';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
 function readFilesAsDataUrls(files: File[]): Promise<string[]> {
@@ -33,6 +34,7 @@ export function CommandPalette() {
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -170,6 +172,7 @@ export function CommandPalette() {
       {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
       {settingsModalOpen && <SettingsModal />}
+      {qrCodeOpen && <QrCodeModal onClose={() => setQrCodeOpen(false)} />}
       <div className={styles.container} data-expanded={isExpanded}>
         {hasDrawing && (
           <div className={styles.drawingIndicator}>
@@ -252,6 +255,18 @@ export function CommandPalette() {
                   >
                     {t('commandPalette.menu.settings')}
                   </button>
+                  {isRemoteMode() && (
+                    <button
+                      className={styles.settingsItem}
+                      onClick={() => {
+                        setQrCodeOpen(true);
+                        setSettingsOpen(false);
+                      }}
+                      data-active={qrCodeOpen}
+                    >
+                      {t('commandPalette.menu.qrCode')}
+                    </button>
+                  )}
                   <button
                     className={styles.settingsItem}
                     onClick={() => {

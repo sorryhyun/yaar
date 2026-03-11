@@ -11,6 +11,10 @@ import { platform, tmpdir } from 'os';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
+// Hide the console window BEFORE the server starts logging.
+// ESM evaluates imports in order, so this runs before main.js.
+import './hide-console.js';
+
 // Import and start the server
 // The server starts automatically on import
 import './main.js';
@@ -104,8 +108,21 @@ function openAppWindow() {
     ];
 
     console.log(`Opening app window: ${chromium} ${args.join(' ')}`);
-    Bun.spawn([chromium, ...args], {
+    const browserProc = Bun.spawn([chromium, ...args], {
       stdio: ['ignore', 'ignore', 'ignore'],
+    });
+
+    // Terminate the server when the browser window is closed.
+    browserProc.exited.then(() => {
+      console.log('Browser closed — shutting down.');
+      // Force-kill our own process tree on Windows; process.exit() can hang
+      // when Bun has active server handles.
+      if (platform() === 'win32') {
+        Bun.spawnSync(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
+          stdio: ['ignore', 'ignore', 'ignore'],
+        });
+      }
+      process.exit(0);
     });
     return;
   }
