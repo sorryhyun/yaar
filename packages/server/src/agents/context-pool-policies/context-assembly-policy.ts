@@ -1,4 +1,4 @@
-import type { UserInteraction } from '@yaar/shared';
+import type { UserInteraction, WindowState } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
 
@@ -14,9 +14,19 @@ export class ContextAssemblyPolicy {
     this.windowInitialMaxTurns = windowInitialMaxTurns;
   }
 
-  formatOpenWindows(windowIds: string[]): string {
-    if (windowIds.length === 0) return '';
-    return `<open_windows>${windowIds.join(', ')}</open_windows>\n\n`;
+  formatOpenWindows(
+    windows: WindowState[],
+    options?: { monitorId?: string; currentWindowId?: string },
+  ): string {
+    if (windows.length === 0) return '';
+    const lines = windows.map((w) => {
+      const label = w.title || w.content.renderer;
+      return `  ${w.id} — ${label}`;
+    });
+    let header = '<open_windows>';
+    if (options?.monitorId) header += ` monitor=${options.monitorId}`;
+    if (options?.currentWindowId) header += ` current=${options.currentWindowId}`;
+    return `${header}\n${lines.join('\n')}\n</open_windows>\n\n`;
   }
 
   /**

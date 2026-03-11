@@ -16,6 +16,7 @@ interface YaarAppStateDescriptor<T = unknown> {
 
 interface YaarAppCommandDescriptor<P = unknown, R = unknown> {
   description: string;
+  aliases?: string[];
   handler: (params: P) => R | Promise<R>;
   params?: object;
   returns?: object;

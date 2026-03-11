@@ -67,7 +67,9 @@ export class WindowTaskProcessor {
         `[ContextPool] Agent ${agent.instanceId} assigned for window ${windowId} (agentKey: ${agentKey}, role: ${agentRole})`,
       );
 
-      const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
+      const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task, {
+        currentWindowId: windowId,
+      });
       const source = { window: windowId } as const;
 
       // Record user message immediately

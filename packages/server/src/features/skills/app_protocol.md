@@ -80,6 +80,15 @@ commands: {
 - Return `{ ok: true, ...extraData }` on success
 - Throw on error — the SDK catches and reports it to the agent
 - `params` uses JSON Schema format: `{ type: 'object', properties: { ... }, required: [...] }`
+- `aliases` (optional): alternative command names that resolve to this command. Useful when the agent might guess a synonym (e.g., `sendMessage` instead of `addMessage`):
+
+```ts
+addMessage: {
+  description: 'Add a message to the chat',
+  aliases: ['sendMessage', 'postMessage'],
+  // ...
+}
+```
 
 ## Sending Interactions
 

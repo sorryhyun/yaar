@@ -1,0 +1,45 @@
+{
+  "icon": "💬",
+  "name": "AI Chat",
+  "run": "index.html",
+  "appProtocol": true,
+  "protocol": {
+    "state": {
+      "messages": {
+        "description": "All chat messages"
+      },
+      "isWaiting": {
+        "description": "Whether app is waiting for AI response"
+      }
+    },
+    "commands": {
+      "addMessage": {
+        "description": "Add an AI response message to the chat",
+        "params": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["content"]
+        }
+      },
+      "setError": {
+        "description": "Show an error message",
+        "params": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": ["content"]
+        }
+      }
+    }
+  }
+}

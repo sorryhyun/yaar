@@ -39,10 +39,51 @@ describe('WindowQueuePolicy', () => {
 });
 
 describe('ContextAssemblyPolicy', () => {
-  it('formats open windows context', () => {
+  it('formats open windows context with details', () => {
     const policy = new ContextAssemblyPolicy();
-    const windows = policy.formatOpenWindows(['w-1', 'w-2']);
-    expect(windows).toContain('<open_windows>w-1, w-2</open_windows>');
+    const windows = policy.formatOpenWindows([
+      {
+        id: 'w-1',
+        title: 'Notes',
+        content: { renderer: 'markdown', data: '' },
+        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        locked: false,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'w-2',
+        title: 'Chat',
+        content: { renderer: 'iframe', data: '' },
+        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        locked: false,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]);
+    expect(windows).toContain('w-1 — Notes');
+    expect(windows).toContain('w-2 — Chat');
+    expect(windows).toContain('<open_windows>');
+  });
+
+  it('includes monitor and current window in open_windows header', () => {
+    const policy = new ContextAssemblyPolicy();
+    const windows = policy.formatOpenWindows(
+      [
+        {
+          id: '0/chat',
+          title: 'Chat',
+          content: { renderer: 'iframe', data: '' },
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          locked: false,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+      { monitorId: '0', currentWindowId: '0/chat' },
+    );
+    expect(windows).toContain('monitor=0');
+    expect(windows).toContain('current=0/chat');
   });
 
   describe('buildWindowInitialContext with configurable maxTurns', () => {
