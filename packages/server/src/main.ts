@@ -88,4 +88,5 @@ async function startup() {
   });
 }
 
-startup();
+/** Resolves when the server is fully ready (listening + warm pool initialized). */
+export const ready = startup();

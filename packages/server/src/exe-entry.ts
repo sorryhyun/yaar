@@ -11,9 +11,8 @@ import { platform, tmpdir } from 'os';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
-// Import and start the server
-// The server starts automatically on import
-import './main.js';
+// Import and start the server — `ready` resolves when the server is listening
+import { ready } from './main.js';
 
 import { getRemoteToken } from './http/auth.js';
 import { getPort } from './config.js';
@@ -151,27 +150,13 @@ function openAppWindow() {
   }
 }
 
-/**
- * Wait for the server to be ready, then open the app window.
- */
-async function waitAndOpen() {
-  for (let i = 0; i < 30; i++) {
-    try {
-      const res = await fetch(`${getBaseUrl()}/health`);
-      if (res.ok) {
-        openAppWindow();
-        return;
-      }
-    } catch {
-      // Server not ready yet
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  // Timeout — try anyway
-  openAppWindow();
-}
-
-waitAndOpen();
+// Wait for the server to be fully ready, then open the app window.
+ready
+  .then(() => openAppWindow())
+  .catch((err) => {
+    console.error('Server failed to start:', err);
+    process.exit(1);
+  });
 
 // Keep the process running
 process.on('SIGINT', () => {
