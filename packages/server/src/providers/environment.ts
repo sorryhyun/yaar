@@ -36,6 +36,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   ]);
 
   const lines = [`- Platform: ${getPlatformName()}`, `- Provider: ${getProviderName(provider)}`];
+  if (settings.userName) lines.push(`- User: ${settings.userName}`);
   lines.push(`- Language: ${getLanguageLabel(settings.language)} (${settings.language})`);
 
   if (IS_BUNDLED_EXE) {
@@ -76,14 +77,15 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     result += `\n\n## Onboarding
 
 The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<ui:click>app: onboarding</ui:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
-1. Welcoming them to YAAR
-2. Briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
-3. Asking their preferred language and calling \`config:set\` with section "settings" to set it if not English
-4. Showing them the app marketplace using \`list('yaar://market')\`, and helping them install interesting apps
-5. Asking if they want to set up any hooks — event-driven automations that fire on specific triggers (e.g., showing a toast when the AI compiles an app). If interested, help them configure hooks via \`invoke('yaar://config/hooks/{id}', { hook })\`. Keep it simple — suggest one or two practical examples rather than explaining all options.
-6. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
+1. Welcoming them to YAAR and briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
+2. Using \`invoke('yaar://sessions/current/prompts', ...)\` to ask structured questions. Use the "ask" action for choices and "request" action for text input. Ask these one at a time (wait for each answer before the next):
+   - **Name**: Use "request" action to ask for their name/nickname (title: "What should I call you?"). Save it via \`config:set\` with section "settings" and \`userName\`.
+   - **Language**: Use "ask" action with language options relevant to their locale. Set the language via \`config:set\` with section "settings" if not English.
+3. Showing them the app marketplace using \`list('yaar://market')\`, and helping them install interesting apps
+4. Asking if they want to set up any hooks — event-driven automations that fire on specific triggers (e.g., showing a toast when the AI compiles an app). If interested, help them configure hooks via \`invoke('yaar://config/hooks/{id}', { hook })\`. Keep it simple — suggest one or two practical examples rather than explaining all options.
+5. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
 
-Keep the tone friendly and concise. Don't overwhelm them with too much information at once.`;
+The user prompt dialogs provide a polished UI for collecting answers — use them instead of asking questions in plain chat text. Keep the tone friendly and concise. Don't overwhelm them with too much information at once.`;
   }
 
   return result;

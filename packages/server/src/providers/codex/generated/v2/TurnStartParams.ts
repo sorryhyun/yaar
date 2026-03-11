@@ -45,7 +45,8 @@ summary?: ReasoningSummary | null,
  */
 personality?: Personality | null, 
 /**
- * Optional JSON Schema used to constrain the final assistant message for this turn.
+ * Optional JSON Schema used to constrain the final assistant message for
+ * this turn.
  */
 outputSchema?: JsonValue | null, 
 /**

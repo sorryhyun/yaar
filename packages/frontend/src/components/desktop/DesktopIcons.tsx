@@ -68,6 +68,9 @@ export function DesktopIcons({
           const data = await response.json();
           setApps(data.apps || []);
           setOnboardingCompleted(!!data.onboardingCompleted);
+          if (data.userName && data.userName !== useDesktopStore.getState().userName) {
+            useDesktopStore.getState().setUserName(data.userName);
+          }
           if (data.language && data.language !== useDesktopStore.getState().language) {
             useDesktopStore.getState().applyServerLanguage(data.language);
           }

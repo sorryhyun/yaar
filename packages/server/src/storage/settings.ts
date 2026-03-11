@@ -7,12 +7,14 @@ import { configRead, configWrite } from './storage-manager.js';
 
 export interface Settings {
   onboardingCompleted: boolean;
+  userName: string;
   language: string;
   provider: 'auto' | 'claude' | 'codex';
 }
 
 const DEFAULTS: Settings = {
   onboardingCompleted: false,
+  userName: '',
   language: 'en',
   provider: 'auto',
 };

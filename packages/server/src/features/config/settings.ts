@@ -9,6 +9,7 @@ import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/sett
 import { actionEmitter } from '../../mcp/action-emitter.js';
 
 export const settingsContentSchema = z.object({
+  userName: z.string().optional(),
   language: z.enum(LANGUAGE_CODES as unknown as [string, ...string[]]).optional(),
   onboardingCompleted: z.boolean().optional(),
 });
@@ -18,6 +19,7 @@ export async function handleSetSettings(content: Record<string, unknown>) {
   if (!result.success) return error(`Invalid settings content: ${result.error.message}`);
 
   const partial: Partial<Settings> = {};
+  if (result.data.userName !== undefined) partial.userName = result.data.userName;
   if (result.data.language !== undefined) partial.language = result.data.language;
   if (result.data.onboardingCompleted !== undefined)
     partial.onboardingCompleted = result.data.onboardingCompleted;

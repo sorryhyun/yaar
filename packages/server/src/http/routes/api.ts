@@ -84,6 +84,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       return jsonResponse({
         apps,
         onboardingCompleted: settings.onboardingCompleted,
+        userName: settings.userName,
         language: settings.language,
         provider: settings.provider,
       });
