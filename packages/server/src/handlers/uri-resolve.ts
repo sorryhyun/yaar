@@ -140,6 +140,8 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     case 'config':
     case 'browser':
     case 'sessions':
+    case 'skills':
+    case 'market':
       // Not content resources — handled by resolveUri via dedicated parsers
       return null;
   }
@@ -218,23 +220,18 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  // Fallback: collection-level URIs like yaar://config/, yaar://browser/, yaar://apps, etc.
-  // These have a valid authority but no path segments for the individual parsers.
+  // Fallback: collection-level URIs or verb-layer-only authorities (skills, market).
+  // These have a valid authority but no dedicated parser — resolve as root kind.
   const parsed = parseYaarUri(uri);
-  if (parsed && !parsed.path) {
+  if (parsed && (!parsed.path || parsed.authority === 'skills' || parsed.authority === 'market')) {
     return { kind: 'root', sourceUri: uri };
   }
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions|skills)$/,
+    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions|skills|market)$/,
   );
   if (bareMatch) {
-    return { kind: 'root', sourceUri: uri };
-  }
-
-  // Extended authorities handled only by verb-layer handlers (not by core parsers)
-  if (uri.startsWith('yaar://skills/')) {
     return { kind: 'root', sourceUri: uri };
   }
 

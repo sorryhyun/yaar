@@ -33,14 +33,17 @@ export type YaarAuthority =
   | 'windows'
   | 'config'
   | 'browser'
-  | 'sessions';
+  | 'sessions'
+  | 'skills'
+  | 'market';
 
 export interface ParsedYaarUri {
   authority: YaarAuthority;
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions)\/(.*)$/;
+const YAAR_RE =
+  /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions|skills|market)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -82,6 +85,8 @@ export function resolveContentUri(uri: string): string | null {
     case 'config':
     case 'browser':
     case 'sessions':
+    case 'skills':
+    case 'market':
       // These authorities have no content resolution
       return null;
   }

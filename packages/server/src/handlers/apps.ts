@@ -3,9 +3,9 @@
  *
  * Maps app operations to the verb layer:
  *
- *   list('yaar://apps')                              → list all apps
+ *   list('yaar://apps')                              → list all installed apps
  *   read('yaar://apps/{appId}')                      → load SKILL.md
- *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge, market_get
+ *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge
  *   delete('yaar://apps/{appId}')                    → uninstall app
  */
 
@@ -31,18 +31,10 @@ function extractAppIdFromUri(uri: string): string {
 }
 
 export function registerAppsHandlers(registry: ResourceRegistry): void {
-  // ── yaar://apps — list all apps (exact match) ──
+  // ── yaar://apps — list all installed apps (exact match) ──
   const listHandler: ResourceHandler = {
-    description: 'List all available apps. Invoke to browse/install from marketplace.',
-    verbs: ['describe', 'list', 'invoke'],
-    invokeSchema: {
-      type: 'object',
-      required: ['action'],
-      properties: {
-        action: { type: 'string', enum: ['market_list', 'market_get'] },
-        appId: { type: 'string', description: 'App ID (for market_get)' },
-      },
-    },
+    description: 'List all installed apps.',
+    verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
       const apps = await listApps();
@@ -61,38 +53,6 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       });
 
       return ok(`Available apps:\n${lines.join('\n')}`);
-    },
-
-    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload?.action) return error('Payload must include "action".');
-
-      if (payload.action === 'market_list') {
-        const res = await fetch(`${MARKET_URL}/api/apps`);
-        if (!res.ok) return error(`Failed to fetch marketplace (${res.status})`);
-        const data = (await res.json()) as {
-          apps: Array<{
-            id: string;
-            name: string;
-            icon: string;
-            description: string;
-            version: string;
-            author: string;
-          }>;
-        };
-        if (!data.apps?.length) return ok('No apps available in the marketplace.');
-        const lines = data.apps.map(
-          (app) =>
-            `- ${app.icon} **${app.name}** (${app.id}) v${app.version}\n  ${app.description} — by ${app.author}`,
-        );
-        return ok(`Marketplace apps:\n${lines.join('\n')}`);
-      }
-
-      if (payload.action === 'market_get') {
-        if (!payload.appId) return error('"appId" is required for market_get.');
-        return installApp(payload.appId as string);
-      }
-
-      return error(`Unknown action "${payload.action}".`);
     },
   };
   registry.register('yaar://apps', listHandler);
@@ -173,7 +133,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   });
 }
 
-async function installApp(appId: string): Promise<VerbResult> {
+export async function installApp(appId: string): Promise<VerbResult> {
   const appsDir = join(PROJECT_ROOT, 'apps');
   const appDir = join(appsDir, appId);
   const isUpdate = existsSync(appDir);

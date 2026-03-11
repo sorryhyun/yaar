@@ -32,6 +32,7 @@ Plus: **run_js** (sandbox execution), **memorize**, **show_notification**, **rel
 | \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\`, \`yaar://sandbox/{id}\` | invoke (write, edit, compile, typecheck, deploy, clone), read, list |
 | \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/notifications\`, \`yaar://sessions/current/prompts\` | read, invoke, list |
 | \`yaar://skills/\` | \`yaar://skills/app_dev\`, \`yaar://skills/components\` | list, read |
+| \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |
 
 Use \`describe(uri)\` to discover what actions a URI supports before invoking it.

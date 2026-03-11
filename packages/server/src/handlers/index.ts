@@ -16,6 +16,7 @@ import { registerSandboxHandlers } from './sandbox.js';
 import { registerWindowHandlers } from './window.js';
 import { registerUserHandlers } from './user.js';
 import { registerAppsHandlers } from './apps.js';
+import { registerMarketHandlers } from './market.js';
 import { registerSessionHandlers } from './session.js';
 import { registerBrowserHandlers } from './browser.js';
 import { registerAgentsHandlers } from './agents.js';
@@ -51,6 +52,7 @@ export function initRegistry(): ResourceRegistry {
   registerWindowHandlers(registry, getWindowState);
   registerUserHandlers(registry);
   registerAppsHandlers(registry);
+  registerMarketHandlers(registry);
   registerSessionHandlers(registry);
   registerAgentsHandlers(registry);
   registerSkillsHandlers(registry);

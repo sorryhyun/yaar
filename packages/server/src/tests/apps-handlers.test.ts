@@ -137,7 +137,7 @@ describe('Apps domain handlers', () => {
       expect(result.isError).toBeFalsy();
       const body = JSON.parse(text(result));
       expect(body.verbs).toContain('list');
-      expect(body.verbs).toContain('invoke');
+      expect(body.verbs).not.toContain('invoke');
     });
 
     it('describes specific app', async () => {

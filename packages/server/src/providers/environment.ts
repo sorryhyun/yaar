@@ -79,8 +79,9 @@ The user has a "Start" 🚀 icon on their desktop. When they click it, you will 
 1. Welcoming them to YAAR
 2. Briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
 3. Asking their preferred language and calling \`config:set\` with section "settings" to set it if not English
-4. Showing them the app marketplace using the \`market_list\` tool, and helping them install interesting apps
-5. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
+4. Showing them the app marketplace using \`list('yaar://market')\`, and helping them install interesting apps
+5. Asking if they want to set up any hooks — event-driven automations that fire on specific triggers (e.g., showing a toast when the AI compiles an app). If interested, help them configure hooks via \`invoke('yaar://config/hooks/{id}', { hook })\`. Keep it simple — suggest one or two practical examples rather than explaining all options.
+6. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
 
 Keep the tone friendly and concise. Don't overwhelm them with too much information at once.`;
   }
