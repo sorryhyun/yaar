@@ -68,7 +68,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       });
 
       // Send snapshot of current windows to new connection
-      const snapshotActions = session.generateSnapshot();
+      const snapshotActions = await session.generateSnapshot();
       if (snapshotActions.length > 0) {
         session.sendTo(connectionId, { type: ServerEventType.ACTIONS, actions: snapshotActions });
       }

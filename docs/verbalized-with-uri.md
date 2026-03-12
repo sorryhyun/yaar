@@ -24,7 +24,7 @@ Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `re
 
 ## URI Space
 
-All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers seven namespaces. Server-side resolution is in `packages/server/src/uri/resolve.ts`.
+All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority` type covers seven namespaces. Server-side resolution is in `packages/server/src/handlers/uri-resolve.ts`.
 
 ### Content Resources
 
@@ -99,14 +99,9 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 
 ### Verb Layer (Done — All Domains)
 
-- **ResourceRegistry** (`uri/registry.ts`) — central registry matching URI patterns to handlers (exact > prefix > wildcard priority)
-- **5 verb MCP tools** (`mcp/verbs/`) — `describe`, `read`, `list`, `invoke`, `delete` registered as the `verbs` MCP server
-- **Config domain handlers** (`mcp/config/handlers.ts`) — settings, hooks, shortcuts, mounts, app config
-- **Basic domain handlers** (`mcp/basic/handlers.ts`) — storage and sandbox file I/O (read, write, edit, list, delete) via `yaar://storage/*` and `yaar://sandbox/*`
-- **Window domain handlers** (`mcp/window/handlers.ts`) — create, update, manage, list, view, app_query, app_command via `yaar://windows/*` with action-dispatched invoke
-- **Session domain handlers** — agents (`mcp/agents/handlers.ts`), notifications/prompts (`mcp/user/handlers.ts`), system info/memorize (`mcp/system/handlers.ts`) via `yaar://sessions/current/*`
-- **Apps domain handlers** (`mcp/apps/handlers.ts`) — list apps, load skill, set badge, marketplace install/uninstall via `yaar://apps/*`
-- **Browser domain handlers** (`mcp/browser/handlers.ts`) — `yaar://browser/*` handler with action-dispatched invoke (open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract)
+- **ResourceRegistry** (`handlers/uri-registry.ts`) — central registry matching URI patterns to handlers (exact > prefix > wildcard priority)
+- **5 verb MCP tools** (`handlers/index.ts`) — `describe`, `read`, `list`, `invoke`, `delete` registered as the `verbs` MCP server
+- **Domain handlers** — all in `handlers/`: `config.ts`, `storage.ts`, `sandbox.ts`, `window.ts`, `agents.ts`, `user.ts`, `session.ts`, `apps.ts`, `browser.ts`, `skills.ts`
 - Legacy tools have been removed — verb mode is now the only mode
 
 ---
@@ -259,7 +254,7 @@ class ResourceRegistry {
 Each domain registers its handlers during server startup. Handlers live alongside existing tool code — no rewrite needed, just wiring.
 
 ```typescript
-// mcp/config/handlers.ts
+// handlers/config.ts
 export function registerConfigHandlers(registry: ResourceRegistry) {
   registry.register('yaar://config/settings', {
     verbs: ['read', 'invoke', 'describe'],
@@ -282,7 +277,7 @@ export function registerConfigHandlers(registry: ResourceRegistry) {
 For action-bearing resources (browser, agents), the handler dispatches on `payload.action`:
 
 ```typescript
-// mcp/agents/handlers.ts — registered under yaar://sessions/current/agents
+// handlers/agents.ts — registered under yaar://sessions/current/agents
 registry.register('yaar://sessions/current/agents/*', {
   verbs: ['read', 'invoke', 'describe'],
   description: 'Agent instance. Read for info, invoke to interrupt.',
@@ -454,3 +449,76 @@ Migration is complete. All domains use the verb layer exclusively — legacy too
 Named system tools that remain alongside verbs: `reload_cached`, `list_reload_options`. HTTP requests now use `invoke('yaar://http', { url, method?, headers?, body? })`.
 
 Domain allowlisting is now via `invoke('yaar://config/domains', { domain })`.
+
+---
+
+## Iframe Verb Access & Token Validation
+
+Iframe apps can call verbs via HTTP (`POST /api/verb`), but access is gated by a per-window token and an allowlist declared in `app.json`.
+
+### Token Lifecycle
+
+```
+Window created (server)
+  → generateIframeToken(windowId, sessionId, appId, permissions)
+  → Token included in window.create OS action payload
+  → Frontend injects token into iframe (same-origin only):
+     1. URL query param: ?__yaar_token=<token>
+     2. Script injection: window.__YAAR_TOKEN__ = '<token>'
+  → Cross-origin iframes cannot receive tokens (no verb access)
+  → Iframe SDK reads token from either source
+  → All /api/verb requests include X-Iframe-Token header
+  → Token expires after 24 hours (auto-cleaned)
+  → Token revoked when window closes
+```
+
+**Source:** `packages/server/src/http/iframe-tokens.ts`
+
+### Permission Enforcement
+
+Apps declare which URIs they can access in `app.json`:
+
+```json
+{
+  "permissions": [
+    "yaar://apps/self/storage/",
+    "yaar://storage/"
+  ]
+}
+```
+
+The verb route (`POST /api/verb`) enforces this:
+
+1. Extract `X-Iframe-Token` header
+2. Validate token → get `TokenEntry` (windowId, sessionId, appId, permissions)
+3. Check URI against permissions: exact match or prefix match (entries ending in `/`)
+4. If no match → 403
+
+Apps with no `permissions` field get zero verb access by default.
+
+**Source:** `packages/server/src/http/routes/verb.ts`
+
+### `yaar://apps/self/` Resolution
+
+Apps can use `self` as a shorthand for their own appId:
+
+```
+yaar://apps/self/storage/data.json  →  yaar://apps/{actual-appId}/storage/data.json
+```
+
+Resolved server-side using the `appId` from the token entry. Fails with 403 if the token has no appId.
+
+### Iframe SDK
+
+The `IFRAME_VERB_SDK_SCRIPT` (exported from `packages/shared/src/capture-helper.ts`) provides a `window.yaar` API:
+
+| Method | Endpoint |
+|--------|----------|
+| `window.yaar.invoke(uri, payload?)` | `POST /api/verb` |
+| `window.yaar.read(uri)` | `POST /api/verb` |
+| `window.yaar.list(uri)` | `POST /api/verb` |
+| `window.yaar.describe(uri)` | `POST /api/verb` |
+| `window.yaar.delete(uri)` | `POST /api/verb` |
+| `window.yaar.subscribe(uri, cb)` | `POST /api/verb/subscribe` |
+
+All requests automatically include the `X-Iframe-Token` header. Subscriptions deliver update notifications via `postMessage` with type `yaar:subscription-update` (contains the URI that changed — apps must call `read` to get the new value).

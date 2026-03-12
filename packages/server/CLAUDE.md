@@ -27,8 +27,10 @@ src/
 ├── lifecycle.ts          # initializeSubsystems(), printBanner(), shutdown()
 ├── http/                 # HTTP server: createFetchHandler() (CORS, auth, MCP dispatch)
 │   ├── auth.ts           # checkHttpAuth(), generateRemoteToken()
-│   └── routes/           # api.ts (REST), files.ts (file-serving), proxy.ts, static.ts
-├── session/              # LiveSession, SessionHub, BroadcastCenter, types
+│   ├── iframe-tokens.ts  # generateIframeToken(), validateIframeToken()
+│   ├── subscriptions.ts  # subscriptionRegistry — reactive verb URI subscriptions
+│   └── routes/           # api.ts (REST), verb.ts (iframe verb proxy), files.ts, browse.ts, proxy.ts, static.ts
+├── session/              # LiveSession, SessionHub, BroadcastCenter, ActionEmitter, WindowStateRegistry, types
 ├── websocket/            # WebSocket server + connection registry
 ├── agents/               # Agent lifecycle, pooling, context management
 │   ├── agent-pool.ts     # AgentPool — per-monitor and window agent registry
@@ -37,6 +39,7 @@ src/
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
 │   ├── session.ts        # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
 │   ├── main-task-processor.ts / window-task-processor.ts
+│   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
 │   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowConnection
 ├── providers/            # Pluggable AI backends
@@ -54,15 +57,14 @@ src/
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
-│   ├── action-emitter.ts # ActionEmitter — decouple tools from sessions
-│   ├── window-state.ts   # WindowStateRegistry — per-session window state
 │   ├── system/           # Always-active: reload_cached, list_reload_options
-│   └── domains.ts        # MCP domain registry
+│   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
 │   ├── apps/             # App listing, skill loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
-│   ├── config/           # Hooks, settings, shortcuts, mounts, app config
+│   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone
+│   ├── http/             # fetch.ts — proxied HTTP fetch
 │   └── window/           # Window create/update/manage, app protocol, app query/command
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
@@ -113,7 +115,7 @@ For non-agent contexts (HTTP routes, proxy) where there is no `LiveSession` refe
 2. `actionEmitter.on('my-event', handler)` in the `LiveSession` constructor → `this.broadcast(event)`
 3. Clean up listener in `LiveSession.cleanup()`
 
-See `'app-protocol'` and `'approval-request'` listeners in `live-session.ts` as reference implementations. Calling `BroadcastCenter.publishToSession()` directly bypasses routing and silently fails during active agent streaming.
+See `'app-protocol'`, `'approval-request'`, and `'verb-subscription'` listeners in `live-session.ts` as reference implementations. Calling `BroadcastCenter.publishToSession()` directly bypasses routing and silently fails during active agent streaming.
 
 ### Event Type Constants
 
@@ -156,4 +158,4 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 ## REST API
 
-Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/sandbox/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`. See `routes/api.ts` and `routes/files.ts` for full signatures.
+Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/sandbox/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.

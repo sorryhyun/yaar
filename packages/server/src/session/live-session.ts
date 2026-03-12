@@ -33,6 +33,7 @@ import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
+import { refreshIframeTokens } from '../logging/window-restore.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -195,10 +196,11 @@ export class LiveSession {
   /**
    * Generate a snapshot of current windows as window.create actions.
    * Used when a new connection joins an existing session.
+   * Generates fresh iframe tokens for iframe windows.
    */
-  generateSnapshot(): OSAction[] {
+  async generateSnapshot(): Promise<OSAction[]> {
     const windows = this.windowState.listWindows();
-    return windows.map((win) => ({
+    const actions: OSAction[] = windows.map((win) => ({
       type: 'window.create' as const,
       windowId: win.id,
       title: win.title,
@@ -210,6 +212,7 @@ export class LiveSession {
       ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
       ...(win.minimized ? { minimized: win.minimized } : {}),
     }));
+    return refreshIframeTokens(actions, this.sessionId);
   }
 
   // ── Launch hooks ──────────────────────────────────────────────────

@@ -1,6 +1,14 @@
 import type { OSAction } from '@yaar/shared';
-import { applyContentOperation } from '@yaar/shared';
+import { applyContentOperation, extractAppId } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
+import { generateIframeToken } from '../http/iframe-tokens.js';
+import { getAppMeta } from '../features/apps/discovery.js';
+
+/** Extract appId from resolved paths like /api/apps/{appId}/... */
+function extractAppIdFromPath(path: string): string | null {
+  const match = path.match(/^\/api\/apps\/([^/]+)\//);
+  return match ? match[1] : null;
+}
 
 /**
  * Extract window restore actions from parsed messages.
@@ -85,4 +93,30 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
   }
 
   return Array.from(windows.values());
+}
+
+/**
+ * Generate fresh iframe tokens for restored window.create actions.
+ * Stale tokens from session logs won't be in the server's token map,
+ * so iframe apps would get 403 on every verb call without this.
+ */
+export async function refreshIframeTokens(
+  actions: OSAction[],
+  sessionId: string,
+): Promise<OSAction[]> {
+  return Promise.all(
+    actions.map(async (action) => {
+      if (action.type !== 'window.create' || action.content?.renderer !== 'iframe') return action;
+      const data = action.content.data;
+      const appId =
+        typeof data === 'string'
+          ? (extractAppId(data) ?? extractAppIdFromPath(data) ?? undefined)
+          : undefined;
+      const appMeta = appId ? await getAppMeta(appId) : null;
+      return {
+        ...action,
+        iframeToken: generateIframeToken(action.windowId, sessionId, appId, appMeta?.permissions),
+      };
+    }),
+  );
 }

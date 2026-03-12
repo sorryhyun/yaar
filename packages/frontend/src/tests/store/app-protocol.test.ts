@@ -3,7 +3,7 @@
  * from the server to the target iframe via postMessage, collects responses,
  * and pushes them into the store.
  */
-import { handleAppProtocolRequest, useDesktopStore } from '@/store/desktop';
+import { handleAppProtocolRequest, useDesktopStore } from '@/store';
 import { toWindowKey } from '@/store/helpers';
 import type { AppProtocolRequest } from '@yaar/shared';
 

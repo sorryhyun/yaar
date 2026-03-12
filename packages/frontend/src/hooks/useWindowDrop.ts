@@ -3,8 +3,7 @@
  * Supports app icon drops, iframe text drags, and external image file drops.
  */
 import { useCallback, useState } from 'react';
-import { useDesktopStore } from '@/store';
-import { getIframeDragSource, consumeIframeDragSource } from '@/store/desktop';
+import { useDesktopStore, getIframeDragSource, consumeIframeDragSource } from '@/store';
 import { getRawWindowId } from '@/store/helpers';
 import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
 

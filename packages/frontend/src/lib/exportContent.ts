@@ -1,7 +1,7 @@
 /**
  * Export window content as downloadable files.
  */
-import { tryIframeSelfCapture } from '@/store/desktop';
+import { tryIframeSelfCapture } from '@/store';
 import type { WindowModel } from '@/types/state';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 

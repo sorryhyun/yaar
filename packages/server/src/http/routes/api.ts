@@ -9,10 +9,11 @@ import {
   readSessionMessages,
   parseSessionMessages,
   getWindowRestoreActions,
+  refreshIframeTokens,
   getContextRestoreMessages,
 } from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
-import { listApps } from '../../features/apps/discovery.js';
+import { listApps, getAppMeta } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 
@@ -271,7 +272,8 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         return errorResponse('Session not found', 404);
       }
       const messages = parseSessionMessages(messagesJsonl);
-      const restoreActions = getWindowRestoreActions(messages);
+      const rawActions = getWindowRestoreActions(messages);
+      const restoreActions = await refreshIframeTokens(rawActions, sessionId);
       const contextMessages = getContextRestoreMessages(messages, policy);
       return jsonResponse({ actions: restoreActions, contextMessages });
     } catch {
@@ -363,7 +365,8 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       if (!windowId || !sessionId) {
         return errorResponse('windowId and sessionId are required', 400);
       }
-      const token = generateIframeToken(windowId, sessionId, appId);
+      const appMeta = appId ? await getAppMeta(appId) : null;
+      const token = generateIframeToken(windowId, sessionId, appId, appMeta?.permissions);
       return jsonResponse({ token });
     } catch {
       return errorResponse('Invalid request body', 400);

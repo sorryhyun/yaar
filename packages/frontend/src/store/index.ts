@@ -1,5 +1,12 @@
 // Public API for the store
-export { useDesktopStore, handleAppProtocolRequest, handleVerbSubscriptionUpdate } from './desktop';
+export { useDesktopStore } from './desktop';
+export {
+  handleAppProtocolRequest,
+  handleVerbSubscriptionUpdate,
+  tryIframeSelfCapture,
+  getIframeDragSource,
+  consumeIframeDragSource,
+} from './iframe-bridge';
 
 // Selectors
 export {

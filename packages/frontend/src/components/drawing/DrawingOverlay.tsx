@@ -10,8 +10,7 @@
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
 import html2canvas from 'html2canvas';
-import { useDesktopStore } from '@/store';
-import { tryIframeSelfCapture } from '@/store/desktop';
+import { useDesktopStore, tryIframeSelfCapture } from '@/store';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import styles from '@/styles/drawing/DrawingOverlay.module.css';
 

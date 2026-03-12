@@ -180,13 +180,15 @@ Each app folder can contain an `app.json` with optional metadata:
   "name": "My App",
   "description": "Brief description of what the app does",
   "icon": "📦",
-  "hidden": true,
+  "createShortcut": false,
   "appProtocol": false,
   "fileAssociations": [],
   "variant": "standard",
   "dockEdge": "bottom",
   "frameless": false,
   "windowStyle": {},
+  "capture": "dom",
+  "permissions": [],
   "protocol": { "state": {}, "commands": {} }
 }
 ```
@@ -203,6 +205,8 @@ Each app folder can contain an `app.json` with optional metadata:
 | `dockEdge` | `'top' \| 'bottom'` | Dock edge for panel variant |
 | `frameless` | boolean | Hide the titlebar when the app opens |
 | `windowStyle` | object | Custom CSS styles applied to the window element |
+| `capture` | `'auto' \| 'canvas' \| 'dom' \| 'svg' \| 'protocol'` | Capture mode for window screenshots |
+| `permissions` | string[] | `yaar://` URI prefixes the iframe app can access via `POST /api/verb` |
 | `protocol` | object | Static manifest (`{ state, commands }`) appended to SKILL.md for agent discovery |
 
 ### System Apps

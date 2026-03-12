@@ -89,6 +89,7 @@
   },
   "capture": "dom",
   "permissions": [
-    "yaar://apps/self/storage/", "yaar://storage/"
+    "yaar://apps/self/storage/",
+    "yaar://storage/"
   ]
 }

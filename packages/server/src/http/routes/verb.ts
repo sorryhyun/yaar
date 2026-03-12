@@ -5,7 +5,8 @@
  * Body: { verb, uri, payload? }
  * Returns: VerbResult JSON
  *
- * Only URIs matching IFRAME_ALLOWED_URI_PREFIXES are accessible.
+ * Access restricted to permissions declared in the app's app.json.
+ * Apps without explicit permissions get no verb access.
  * Iframe token auth is reused (X-Iframe-Token header).
  */
 
@@ -34,18 +35,8 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
-/**
- * URI patterns accessible to iframe apps via POST /api/verb.
- * Each entry is either an exact match or a prefix (trailing `/` means prefix).
- */
-export const IFRAME_ALLOWED_URI_PREFIXES = [
-  'yaar://browser/',
-  'yaar://storage/',
-  'yaar://apps/self/storage/',
-  'yaar://windows/',
-  'yaar://windows', // exact — for list('yaar://windows')
-  'yaar://http', // exact — for invoke('yaar://http', { url, ... })
-];
+/** No verb access by default — apps must declare permissions in app.json. */
+const NO_PERMISSIONS: string[] = [];
 
 /** Check if a URI is allowed by the given prefixes. */
 function isUriAllowed(uri: string, prefixes: string[]): boolean {
@@ -103,7 +94,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('Missing or invalid "uri" field', 400);
       }
 
-      const effectivePermissions = tokenEntry.permissions ?? IFRAME_ALLOWED_URI_PREFIXES;
+      const effectivePermissions = tokenEntry.permissions ?? NO_PERMISSIONS;
       if (!isUriAllowed(body.uri, effectivePermissions)) {
         return errorResponse('URI not accessible to iframe apps', 403);
       }
@@ -152,8 +143,8 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const token = req.headers.get('X-Iframe-Token');
   const tokenEntry = token ? validateIframeToken(token) : null;
 
-  // Compute effective permissions: per-token if available, otherwise default allowlist
-  const effectivePermissions = tokenEntry?.permissions ?? IFRAME_ALLOWED_URI_PREFIXES;
+  // Compute effective permissions from app.json (no access if undeclared)
+  const effectivePermissions = tokenEntry?.permissions ?? NO_PERMISSIONS;
 
   // Allowlist check
   if (!isUriAllowed(uri, effectivePermissions)) {
