@@ -1,5 +1,18 @@
 const PREFS_KEY = 'video-editor-lite/prefs.json';
-const storage = (window as any).yaar?.storage;
+
+const _yaar = (window as any).yaar;
+
+async function storageSave(path: string, content: string): Promise<void> {
+  const r = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  if (r.isError) throw new Error(r.content[0]?.text);
+}
+
+async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
+  const r = await _yaar.read(`yaar://storage/${path}`);
+  if (r.isError) throw new Error(r.content[0]?.text);
+  const text = r.content[0]?.text ?? '';
+  return as === 'json' ? JSON.parse(text) : text;
+}
 
 export const ALLOWED_PLAYBACK_RATES = new Set([0.5, 1, 1.5, 2]);
 
@@ -21,7 +34,8 @@ export const DEFAULT_PREFS: EditorPrefs = {
 
 export async function loadPrefs(): Promise<EditorPrefs> {
   try {
-    const parsed = await storage?.read(PREFS_KEY, { as: 'json' }) as Partial<EditorPrefs> | null;
+    if (!_yaar) return { ...DEFAULT_PREFS };
+    const parsed = await storageRead(PREFS_KEY, 'json') as Partial<EditorPrefs> | null;
     if (!parsed) return { ...DEFAULT_PREFS };
 
     const playbackRate =
@@ -44,7 +58,8 @@ export async function loadPrefs(): Promise<EditorPrefs> {
 
 export async function savePrefs(prefs: EditorPrefs): Promise<void> {
   try {
-    await storage?.save(PREFS_KEY, JSON.stringify(prefs));
+    if (!_yaar) return;
+    await storageSave(PREFS_KEY, JSON.stringify(prefs));
   } catch {
     // no-op
   }

@@ -5,21 +5,33 @@ import { debounce } from './utils';
 
 export const STORAGE_KEY = 'word-lite/draft.json';
 
-const yaarStorage = (window as any).yaar?.storage;
+const _yaar = (window as any).yaar;
+
+async function storageSave(path: string, content: string): Promise<void> {
+  const result = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  if (result.isError) throw new Error(result.content[0]?.text);
+}
+
+async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
+  const result = await _yaar.read(`yaar://storage/${path}`);
+  if (result.isError) throw new Error(result.content[0]?.text);
+  const text = result.content[0]?.text ?? '';
+  return as === 'json' ? JSON.parse(text) : text;
+}
 
 export const getTitle = () => (docTitleEl?.value || '').trim() || 'Untitled Document';
 export const exportBaseName = () => sanitizeFilename(getTitle());
 
 export const saveDoc = async () => {
   const payload = { html: editorEl?.innerHTML || '', title: getTitle(), savedAt: Date.now() };
-  await yaarStorage?.save(STORAGE_KEY, JSON.stringify(payload));
+  await storageSave(STORAGE_KEY, JSON.stringify(payload));
   setSaveStateText(`Saved at ${nowLabel()}`);
 };
 
 export const autoSave = debounce(() => saveDoc(), 550);
 
 export const loadDoc = async () => {
-  const stored = await yaarStorage?.read(STORAGE_KEY, { as: 'text' }).catch(() => null);
+  const stored = await storageRead(STORAGE_KEY, 'text').catch(() => null);
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as { html?: string; title?: string };

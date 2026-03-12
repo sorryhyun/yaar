@@ -2,7 +2,8 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import {
-  storageApi, autosavePath,
+  storageAvailable, storageRead,
+  autosavePath,
   cells, mutable, refs,
   setIoStatus, tryImportWorkbook,
   toggleStyle, clearSelectionValues,
@@ -26,7 +27,7 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-// ── Build grid imperatively (refs are set after mount) ─────────────────
+// ── Build grid imperatively (refs are set after mount) ─────────────────────
 buildSheet();
 refreshAll();
 
@@ -90,10 +91,10 @@ document.addEventListener('keydown', (e) => {
 
 // ── Autosave recovery ─────────────────────────────────────────────────
 async function tryRecoverAutosave() {
-  if (!storageApi) return;
+  if (!storageAvailable()) return;
   if (Object.keys(cells).length > 0) return;
   try {
-    const raw = await storageApi.read(autosavePath, { as: 'text' });
+    const raw = await storageRead(autosavePath, 'text');
     if (typeof raw !== 'string' || !raw.trim()) return;
     if (tryImportWorkbook(raw, 'Autosave is corrupted and could not be restored.')) {
       setIoStatus(`Recovered autosave from ${autosavePath}`);
@@ -105,9 +106,9 @@ async function tryRecoverAutosave() {
 
 void tryRecoverAutosave();
 
-if (!storageApi) {
+if (!storageAvailable()) {
   setIoStatus('Storage API unavailable in this runtime.', true);
 }
 
-// ── App Protocol ──────────────────────────────────────────────────────
+// ── App Protocol ────────────────────────────────────────────────────
 registerAppProtocol();

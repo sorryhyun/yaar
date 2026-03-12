@@ -6,21 +6,22 @@ import { createXlsxWorkbook, parseXlsxWorkbook } from './xlsx-utils';
 import { parseRef, key as cellKey } from './ref-utils';
 import { csvEscape } from './data-utils';
 import {
-  storageApi, storagePath,
+  storageAvailable, storageSave, storageRead,
+  storagePath,
   cells, setIoStatus,
   tryImportWorkbook, importWorkbook,
   serializeWorkbook, getRaw,
 } from './state';
 
 export async function saveWorkbookToStorage() {
-  if (!storageApi) {
+  if (!storageAvailable()) {
     setIoStatus('Storage API unavailable in this runtime.', true);
     return;
   }
   try {
     const path = storagePath();
     const binary = createXlsxWorkbook(cells);
-    await storageApi.save(path, binary);
+    await storageSave(path, binary);
     setIoStatus(`Saved XLSX to storage: ${path}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save';
@@ -29,7 +30,7 @@ export async function saveWorkbookToStorage() {
 }
 
 export async function openWorkbookFromStorage() {
-  if (!storageApi) {
+  if (!storageAvailable()) {
     setIoStatus('Storage API unavailable in this runtime.', true);
     return;
   }
@@ -38,7 +39,7 @@ export async function openWorkbookFromStorage() {
     const lower = path.toLowerCase();
 
     if (lower.endsWith('.json')) {
-      const text = await storageApi.read(path, { as: 'text' });
+      const text = await storageRead(path, 'text');
       if (typeof text !== 'string') throw new Error('Workbook content is not text');
       if (tryImportWorkbook(text, `Invalid JSON in ${path}`)) {
         setIoStatus(`Opened JSON from storage: ${path}`);
@@ -46,7 +47,7 @@ export async function openWorkbookFromStorage() {
       return;
     }
 
-    const data = await storageApi.read(path, { as: 'arraybuffer' });
+    const data = await storageRead(path, 'arraybuffer');
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
     const parsed = parseXlsxWorkbook(bytes);
     importWorkbook(parsed);

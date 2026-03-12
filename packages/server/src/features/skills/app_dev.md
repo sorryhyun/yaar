@@ -159,56 +159,6 @@ render(() => html`
 `, document.getElementById('app')!);
 ```
 
-## Storage API
-
-Available at runtime via `window.yaar.storage` (auto-injected, no import needed):
-
-| Method | Description |
-|--------|-------------|
-| `save(path, data)` | Write file (`string \| Blob \| ArrayBuffer \| Uint8Array`) |
-| `read(path, opts?)` | Read file (`opts.as`: `'text' \| 'blob' \| 'arraybuffer' \| 'json' \| 'auto'`) |
-| `list(dirPath?)` | List directory → `[{path, isDirectory, size, modifiedAt}]` |
-| `remove(path)` | Delete file |
-| `url(path)` | Get URL string for `<a>`/`<img>`/etc. |
-
-Files are stored in the server's `storage/` directory. Paths are relative (e.g., `"myapp/data.json"`).
-
-```ts
-// Save
-await yaar.storage.save('scores.json', JSON.stringify(data));
-// Read (throws on 404 — always handle missing files)
-const data = await yaar.storage.read('scores.json', { as: 'json' }).catch(() => null);
-// Get URL for display
-const imgUrl = yaar.storage.url('photos/cat.png');
-```
-
-**Error handling:** `read()` throws when the file doesn't exist (404). Always use `.catch()` or try/catch to handle missing files gracefully — especially on first launch when no data has been saved yet. Never call `fetch('/api/...')` directly for endpoints not listed in `read('yaar://skills/host_api')` — they don't exist and will 404.
-
-## Windows API (Read-Only)
-
-Available at runtime via `window.yaar.windows` (auto-injected, no import needed):
-
-| Method | Description |
-|--------|-------------|
-| `read(windowId, opts?)` | Read another window's content. `opts.includeImage`: capture screenshot |
-| `list()` | List all windows → `[{id, title, renderer}]` |
-
-```ts
-// List all windows
-const windows = await yaar.windows.list();
-// → [{ id: "win-notes", title: "Notes", renderer: "markdown" }, ...]
-
-// Read a window's content
-const win = await yaar.windows.read('win-notes');
-// → { id: "win-notes", title: "Notes", renderer: "markdown", content: "# Hello..." }
-
-// Read with screenshot
-const win = await yaar.windows.read('win-notes', { includeImage: true });
-// → { ..., imageData: "data:image/webp;base64,..." }
-```
-
-This is **read-only** — apps cannot modify other windows.
-
 ## Verb API
 
 Available at runtime via `window.yaar` (auto-injected, no import needed). Uses the same `yaar://` URI pattern the agent uses via MCP tools — one mental model for both agent and app code.
@@ -223,7 +173,63 @@ Available at runtime via `window.yaar` (auto-injected, no import needed). Uses t
 
 Each method returns a `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
 
-**Currently allowed URIs:** `yaar://browser/*` only. Other URIs (config, storage, etc.) return 403.
+**Allowed URI prefixes:** `yaar://browser/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403.
+
+Apps use `self` as the appId — the server resolves it to the real appId from the iframe token, so apps can only access their own namespace.
+
+**Error handling:** Methods throw on network errors or when the server returns an error. Always use `.catch()` or try/catch.
+
+```ts
+try {
+  const result = await yaar.invoke('yaar://browser/tab1', { action: 'open', url });
+  const text = result.content[0]?.text;
+} catch (err) {
+  console.error('Verb call failed:', err.message);
+}
+```
+
+### Storage (`yaar://apps/self/storage/`)
+
+App-scoped persistent storage. Files are stored on disk at `storage/apps/{appId}/`.
+
+```ts
+// Write
+await yaar.invoke('yaar://apps/self/storage/scores.json', {
+  action: 'write',
+  content: JSON.stringify(data),
+});
+
+// Read (throws on 404 — always handle missing files)
+const result = await yaar.read('yaar://apps/self/storage/scores.json').catch(() => null);
+const data = result ? JSON.parse(result.content[0].text) : defaults;
+
+// List directory
+const files = await yaar.list('yaar://apps/self/storage/');
+
+// Delete
+await yaar.delete('yaar://apps/self/storage/old-data.json');
+
+// Get URL for <a>/<img>/etc. (convenience — still available on legacy API)
+const imgUrl = yaar.storage.url('photos/cat.png');
+```
+
+### Windows (`yaar://windows`) — Read-Only
+
+Read other windows' content. Apps cannot modify other windows.
+
+```ts
+// List all windows
+const result = await yaar.list('yaar://windows');
+// → content[0].text: [{ id: "win-notes", title: "Notes", renderer: "markdown" }, ...]
+
+// Read a window's content
+const result = await yaar.read('yaar://windows/win-notes');
+// → content[0].text: { id: "win-notes", title: "Notes", content: "# Hello..." }
+```
+
+### Browser (`yaar://browser/`)
+
+Headless Chrome automation.
 
 ```ts
 // Open a page in headless Chrome
@@ -237,21 +243,21 @@ const page = await yaar.read('yaar://browser/my-tab');
 
 // List open browser sessions
 const sessions = await yaar.list('yaar://browser');
-
-// Check what a resource supports
-const info = await yaar.describe('yaar://browser');
 ```
 
-**Error handling:** Methods throw on network errors or when the server returns an error. Always use `.catch()` or try/catch.
+### Legacy APIs
 
-```ts
-try {
-  const result = await yaar.invoke('yaar://browser/tab1', { action: 'open', url });
-  const text = result.content[0]?.text;
-} catch (err) {
-  console.error('Verb call failed:', err.message);
-}
-```
+`window.yaar.storage.*` and `window.yaar.windows.*` still work but are internally reimplemented over the verb API. Prefer verb URIs for new code.
+
+| Legacy | Verb equivalent |
+|--------|-----------------|
+| `yaar.storage.save(path, data)` | `yaar.invoke('yaar://apps/self/storage/' + path, { action: 'write', content: data })` |
+| `yaar.storage.read(path)` | `yaar.read('yaar://apps/self/storage/' + path)` |
+| `yaar.storage.list(dir)` | `yaar.list('yaar://apps/self/storage/' + dir)` |
+| `yaar.storage.remove(path)` | `yaar.delete('yaar://apps/self/storage/' + path)` |
+| `yaar.storage.url(path)` | No verb equivalent — use `yaar.storage.url()` directly |
+| `yaar.windows.read(id)` | `yaar.read('yaar://windows/' + id)` |
+| `yaar.windows.list()` | `yaar.list('yaar://windows')` |
 
 ## HTTP Proxy APIs
 

@@ -12,11 +12,29 @@ type StorageEntry = {
   modifiedAt?: string;
 };
 
-type YaarStorage = {
-  read: (path: string, opts?: { as?: 'text' | 'blob' | 'arraybuffer' | 'json' | 'auto' }) => Promise<ArrayBuffer>;
-  save: (path: string, data: string) => Promise<void>;
-  list: (dirPath?: string) => Promise<StorageEntry[]>;
-};
+// --- New URI-based storage helpers ---
+const _yaar = (window as any).yaar;
+
+async function storageSave(path: string, content: string): Promise<void> {
+  const r = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  if (r.isError) throw new Error(r.content[0]?.text);
+}
+
+async function storageReadBinary(path: string): Promise<ArrayBuffer> {
+  const r = await _yaar.read(`yaar://storage/${path}`);
+  if (r.isError) throw new Error(r.content[0]?.text);
+  const b64 = r.content[0]?.data ?? '';
+  const binaryStr = atob(b64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function storageList(dir: string): Promise<StorageEntry[]> {
+  const r = await _yaar.list(`yaar://storage/${dir}`);
+  if (r.isError) return [];
+  return JSON.parse(r.content[0]?.text ?? '[]');
+}
 
 // --- Signals ---
 const [mode, setMode] = createSignal<Mode>('viewer');
@@ -38,11 +56,6 @@ let printAreaEl: HTMLDivElement;
 let currentPdfUrl: string | null = null;
 
 // --- Helpers ---
-function getStorage(): YaarStorage | null {
-  const maybeWindow = window as unknown as { yaar?: { storage?: YaarStorage } };
-  return maybeWindow.yaar?.storage ?? null;
-}
-
 function cleanStoragePath(path: string): string {
   return path.trim().replace(/^\/+/, '').replace(/\/+/g, '/').replace(/\/$/, '');
 }
@@ -89,13 +102,12 @@ async function openFromStorage(path: string) {
     setPdfStatus('Select a PDF file from storage first.');
     return;
   }
-  const storage = getStorage();
-  if (!storage) {
+  if (!_yaar) {
     setPdfStatus('Storage API unavailable in this app context.');
     return;
   }
   try {
-    const bytes = await storage.read(clean, { as: 'arraybuffer' });
+    const bytes = await storageReadBinary(clean);
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     showPdfUrl(url, clean);
@@ -116,8 +128,7 @@ function setStorageListPlaceholder(message: string) {
 }
 
 async function loadStorageList(dir = storageDir()) {
-  const storage = getStorage();
-  if (!storage) {
+  if (!_yaar) {
     setStorageDirDisplay('Storage unavailable');
     setStorageListPlaceholder('Storage API unavailable');
     return;
@@ -129,7 +140,7 @@ async function loadStorageList(dir = storageDir()) {
 
   setStorageListPlaceholder('Loading...');
   try {
-    const entries = await storage.list(cleanDir || undefined);
+    const entries = await storageList(cleanDir);
     entries.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return a.path.localeCompare(b.path);
@@ -223,14 +234,13 @@ function renderPreview() {
 }
 
 async function saveHtmlSnapshot() {
-  const storage = getStorage();
-  if (!storage) {
+  if (!_yaar) {
     setGlobalStatus('Storage API unavailable');
     return;
   }
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const path = `pdf-viewer/exports/export-${ts}.html`;
-  await storage.save(path, printAreaEl.innerHTML || '<p></p>');
+  await storageSave(path, printAreaEl.innerHTML || '<p></p>');
   setGlobalStatus(`Saved HTML: ${path}`);
 }
 

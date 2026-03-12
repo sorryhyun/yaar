@@ -1,17 +1,29 @@
 import type { Deck } from './types';
 
 const STORAGE_PATH = 'slides-lite/draft.json';
-const storage = (window as any).yaar?.storage;
+const _yaar = (window as any).yaar;
+
+async function storageSave(path: string, content: string): Promise<void> {
+  const result = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  if (result.isError) throw new Error(result.content[0]?.text);
+}
+
+async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
+  const result = await _yaar.read(`yaar://storage/${path}`);
+  if (result.isError) throw new Error(result.content[0]?.text);
+  const text = result.content[0]?.text ?? '';
+  return as === 'json' ? JSON.parse(text) : text;
+}
 
 export async function saveDeck(deck: Deck): Promise<void> {
-  if (!storage) return;
-  try { await storage.save(STORAGE_PATH, JSON.stringify(deck)); } catch { /* ignore */ }
+  if (!_yaar) return;
+  try { await storageSave(STORAGE_PATH, JSON.stringify(deck)); } catch { /* ignore */ }
 }
 
 export async function loadDeck(): Promise<Deck | null> {
-  if (!storage) return null;
+  if (!_yaar) return null;
   try {
-    const raw = await storage.read(STORAGE_PATH, { as: 'text' });
+    const raw = await storageRead(STORAGE_PATH, 'text');
     return JSON.parse(raw) as Deck;
   } catch { return null; }
 }
