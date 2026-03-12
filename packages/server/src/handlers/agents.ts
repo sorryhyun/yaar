@@ -10,9 +10,8 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { getSessionId, getAgentId, getMonitorId } from '../agents/session.js';
-import { getSessionHub } from '../session/session-hub.js';
-import { ok, error } from './utils.js';
+import { getAgentId, getMonitorId } from '../agents/session.js';
+import { ok, error, getActivePool } from './utils.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')
@@ -20,10 +19,7 @@ function assertSessionAgents(resolved: ResolvedUri): asserts resolved is Resolve
 }
 
 function getPool() {
-  const sid = getSessionId();
-  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-  if (!session) throw new Error('No active session.');
-  return session.getPool();
+  return getActivePool();
 }
 
 export function registerAgentsHandlers(registry: ResourceRegistry): void {

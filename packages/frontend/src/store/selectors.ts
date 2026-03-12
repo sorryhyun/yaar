@@ -8,11 +8,28 @@ import { DEFAULT_MONITOR_ID } from '@/constants/layout';
 export const selectWindowsInOrder = (state: DesktopStore) =>
   state.zOrder.map((id) => state.windows[id]).filter(Boolean);
 
-let _visibleCache: {
-  windows: Record<string, WindowModel>;
-  monitorId: string;
-  result: WindowModel[];
-} = { windows: {}, monitorId: '', result: [] };
+/** Factory for cached window selectors with monitor-scoping. */
+function createCachedWindowSelector(
+  predicate: (w: WindowModel) => boolean,
+): (state: DesktopStore) => WindowModel[] {
+  let cache: {
+    windows: Record<string, WindowModel>;
+    monitorId: string;
+    result: WindowModel[];
+  } = { windows: {}, monitorId: '', result: [] };
+
+  return (state: DesktopStore): WindowModel[] => {
+    if (state.windows === cache.windows && state.activeMonitorId === cache.monitorId)
+      return cache.result;
+    const result = Object.values(state.windows).filter(
+      (w): w is WindowModel =>
+        w != null && predicate(w) && (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
+    );
+    cache = { windows: state.windows, monitorId: state.activeMonitorId, result };
+    return result;
+  };
+}
+
 /**
  * Returns visible (non-minimized) standard windows on the active monitor in
  * stable insertion order.  Z-order is intentionally NOT used here so that
@@ -20,19 +37,9 @@ let _visibleCache: {
  * nodes — which would cause browsers to reload iframes (e.g. YouTube videos
  * restart).
  */
-export const selectVisibleWindows = (state: DesktopStore): WindowModel[] => {
-  if (state.windows === _visibleCache.windows && state.activeMonitorId === _visibleCache.monitorId)
-    return _visibleCache.result;
-  const result = Object.values(state.windows).filter(
-    (w): w is WindowModel =>
-      w != null &&
-      !w.minimized &&
-      (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
-  _visibleCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
-  return result;
-};
+export const selectVisibleWindows = createCachedWindowSelector(
+  (w) => !w.minimized && (!w.variant || w.variant === 'standard'),
+);
 
 export const selectMinimizedWindows = (state: DesktopStore) =>
   Object.values(state.windows).filter(
@@ -53,42 +60,11 @@ export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[]
       (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
-let _widgetCache: {
-  windows: Record<string, WindowModel>;
-  monitorId: string;
-  result: WindowModel[];
-} = { windows: {}, monitorId: '', result: [] };
-export const selectWidgetWindows = (state: DesktopStore): WindowModel[] => {
-  if (state.windows === _widgetCache.windows && state.activeMonitorId === _widgetCache.monitorId)
-    return _widgetCache.result;
-  const result = Object.values(state.windows).filter(
-    (w): w is WindowModel =>
-      w != null &&
-      !w.minimized &&
-      w.variant === 'widget' &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
-  _widgetCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
-  return result;
-};
+export const selectWidgetWindows = createCachedWindowSelector(
+  (w) => !w.minimized && w.variant === 'widget',
+);
 
-let _panelCache: {
-  windows: Record<string, WindowModel>;
-  monitorId: string;
-  result: WindowModel[];
-} = { windows: {}, monitorId: '', result: [] };
-export const selectPanelWindows = (state: DesktopStore): WindowModel[] => {
-  if (state.windows === _panelCache.windows && state.activeMonitorId === _panelCache.monitorId)
-    return _panelCache.result;
-  const result = Object.values(state.windows).filter(
-    (w): w is WindowModel =>
-      w != null &&
-      w.variant === 'panel' &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
-  _panelCache = { windows: state.windows, monitorId: state.activeMonitorId, result };
-  return result;
-};
+export const selectPanelWindows = createCachedWindowSelector((w) => w.variant === 'panel');
 
 export const selectToasts = (state: DesktopStore) => Object.values(state.toasts);
 

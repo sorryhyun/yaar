@@ -3,6 +3,34 @@
  */
 
 import type { VerbResult } from './uri-registry.js';
+import { getSessionId } from '../agents/session.js';
+import { getSessionHub } from '../session/session-hub.js';
+import type { LiveSession } from '../session/live-session.js';
+import type { ContextPool } from '../agents/context-pool.js';
+
+/** Get the active LiveSession (from agent context or default). */
+export function getActiveSession(): LiveSession {
+  const sid = getSessionId();
+  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+  if (!session) throw new Error('No active session — connect via WebSocket first.');
+  return session;
+}
+
+/** Get the ContextPool from the active session. */
+export function getActivePool(): ContextPool | null {
+  return getActiveSession().getPool();
+}
+
+/**
+ * Validate that a path is relative and doesn't contain traversal segments.
+ * Returns an error message string if invalid, null if valid.
+ */
+export function validateRelativePath(path: string): string | null {
+  if (path.includes('..') || path.startsWith('/')) {
+    return 'Invalid path. Use relative paths without ".." or leading "/".';
+  }
+  return null;
+}
 
 /** Create a successful text result */
 export const ok = (text: string) => ({

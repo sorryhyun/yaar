@@ -25,11 +25,10 @@ import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-regist
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { ok, error } from './utils.js';
+import { ok, error, getActiveSession, validateRelativePath } from './utils.js';
 import { getAgentId, getSessionId } from '../agents/session.js';
-import { getSessionHub } from '../session/session-hub.js';
 import { resolveResourceUri } from './uri-resolve.js';
-import { generateIframeToken } from '../http/iframe-tokens.js';
+import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../config.js';
 import { enrichManifestWithUris } from '../features/window/manifest-utils.js';
@@ -153,9 +152,8 @@ export function registerWindowHandlers(
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       // Collection-level: yaar://windows/ (bare, no windowId)
       if (isWindowCollection(resolved)) {
-        const sid = getSessionId();
-        const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-        const pool = session?.getPool();
+        const session = getActiveSession();
+        const pool = session.getPool();
         if (!pool) return error('Session not initialized.');
 
         const monitorId = resolved.monitorId;
@@ -319,12 +317,7 @@ async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
-          iframeToken: generateIframeToken(
-            actualId,
-            getSessionId() ?? '',
-            appId,
-            appMeta?.permissions,
-          ),
+          iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', appId),
         }
       : {}),
   };
@@ -365,7 +358,8 @@ async function handleCreateComponent(
     const filePath = payload.jsonfile as string;
     if (!filePath.endsWith('.yaarcomponent.json'))
       return error('jsonfile must end with .yaarcomponent.json');
-    if (filePath.includes('..') || filePath.startsWith('/')) return error('Invalid jsonfile path.');
+    const pathErr = validateRelativePath(filePath);
+    if (pathErr) return error(pathErr);
 
     const fullPath = join(PROJECT_ROOT, 'apps', filePath);
     try {

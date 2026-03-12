@@ -13,7 +13,7 @@ import {
   getContextRestoreMessages,
 } from '../../logging/index.js';
 import { getAgentLimiter } from '../../agents/index.js';
-import { listApps, getAppMeta } from '../../features/apps/discovery.js';
+import { listApps } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 
@@ -65,7 +65,7 @@ import {
 } from '../../features/config/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
-import { generateIframeToken } from '../iframe-tokens.js';
+import { generateAppIframeToken } from '../iframe-tokens.js';
 
 export async function handleApiRoutes(req: Request, url: URL): Promise<Response | null> {
   // Health check
@@ -365,8 +365,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       if (!windowId || !sessionId) {
         return errorResponse('windowId and sessionId are required', 400);
       }
-      const appMeta = appId ? await getAppMeta(appId) : null;
-      const token = generateIframeToken(windowId, sessionId, appId, appMeta?.permissions);
+      const token = await generateAppIframeToken(windowId, sessionId, appId);
       return jsonResponse({ token });
     } catch {
       return errorResponse('Invalid request body', 400);

@@ -23,7 +23,7 @@ import { rm, unlink } from 'fs/promises';
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from './utils.js';
+import { ok, error, validateRelativePath } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
@@ -54,7 +54,7 @@ function parseAppStoragePath(uri: string): { appId: string; path: string } | nul
   if (!match) return null;
   const path = match[2] ?? '';
   // Block path traversal — apps must stay within their own namespace
-  if (path.split('/').includes('..')) return null;
+  if (validateRelativePath(path)) return null;
   return { appId: match[1], path };
 }
 

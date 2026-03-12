@@ -1,7 +1,7 @@
 /**
  * Helper functions for the desktop store.
  */
-import type { DebugSliceState } from './types';
+import type { DebugSliceState, DesktopStore } from './types';
 
 /**
  * Create a monitor-scoped window key for the store.
@@ -55,4 +55,24 @@ export function addDebugLogEntry(state: DebugSliceState, type: string, data: unk
   if (state.debugLog.length > 100) {
     state.debugLog = state.debugLog.slice(-100);
   }
+}
+
+/**
+ * Factory for consume-queue actions. Reads all items from an array state key,
+ * clears it, and returns them. Avoids unnecessary state updates when empty.
+ */
+export function createConsumeQueue<K extends keyof DesktopStore>(
+  get: () => DesktopStore,
+  set: (fn: (state: DesktopStore) => void) => void,
+  key: K,
+): () => DesktopStore[K] {
+  return () => {
+    const items = get()[key];
+    if (Array.isArray(items) && items.length > 0) {
+      set((state) => {
+        (state[key] as unknown[]) = [];
+      });
+    }
+    return items;
+  };
 }

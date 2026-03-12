@@ -8,8 +8,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ResourceRegistry } from './uri-registry.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { getSessionId } from '../agents/session.js';
-import { getSessionHub } from '../session/session-hub.js';
+import { getActiveSession } from './utils.js';
 import { registerConfigHandlers } from './config.js';
 import { registerStorageHandlers } from './storage.js';
 import { registerSandboxHandlers } from './sandbox.js';
@@ -35,10 +34,7 @@ let registry: ResourceRegistry | null = null;
 
 /** Lazy session-scoped WindowStateRegistry lookup (same pattern as mcp/server.ts). */
 function getWindowState(): WindowStateRegistry {
-  const sid = getSessionId();
-  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-  if (!session) throw new Error('No active session -- connect via WebSocket first.');
-  return session.windowState;
+  return getActiveSession().windowState;
 }
 
 /** Create the singleton registry and register all domain handlers. */

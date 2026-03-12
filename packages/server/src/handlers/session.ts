@@ -9,7 +9,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from './utils.js';
+import { ok, error, getActiveSession } from './utils.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { getSessionId, getMonitorId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
@@ -124,13 +124,12 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'read'],
 
     async read(): Promise<VerbResult> {
-      const sid = getSessionId();
-      const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-      const pool = session?.getPool();
+      const session = getActiveSession();
+      const pool = session.getPool();
       if (!pool) return error('Session not initialized.');
 
       const monitorIds = pool.getMainAgentMonitorIds();
-      const allWindows = session!.windowState.listWindows();
+      const allWindows = session.windowState.listWindows();
 
       const monitors = monitorIds.map((id) => {
         const windows = allWindows.filter((w) => {

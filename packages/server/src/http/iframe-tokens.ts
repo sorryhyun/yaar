@@ -38,6 +38,20 @@ export function generateIframeToken(
 }
 
 /**
+ * Generate an iframe token with automatic app metadata resolution.
+ * Consolidates the repeated pattern of: getAppMeta -> extract permissions -> generateIframeToken.
+ */
+export async function generateAppIframeToken(
+  windowId: string,
+  sessionId: string,
+  appId?: string,
+): Promise<string> {
+  const { getAppMeta } = await import('../features/apps/discovery.js');
+  const appMeta = appId ? await getAppMeta(appId) : null;
+  return generateIframeToken(windowId, sessionId, appId, appMeta?.permissions);
+}
+
+/**
  * Validate an iframe token.
  * Returns the associated token entry if valid, null if expired/invalid.
  */

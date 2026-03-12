@@ -1,8 +1,7 @@
 import type { OSAction } from '@yaar/shared';
 import { applyContentOperation, extractAppId } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
-import { generateIframeToken } from '../http/iframe-tokens.js';
-import { getAppMeta } from '../features/apps/discovery.js';
+import { generateAppIframeToken } from '../http/iframe-tokens.js';
 
 /** Extract appId from resolved paths like /api/apps/{appId}/... */
 function extractAppIdFromPath(path: string): string | null {
@@ -112,10 +111,9 @@ export async function refreshIframeTokens(
         typeof data === 'string'
           ? (extractAppId(data) ?? extractAppIdFromPath(data) ?? undefined)
           : undefined;
-      const appMeta = appId ? await getAppMeta(appId) : null;
       return {
         ...action,
-        iframeToken: generateIframeToken(action.windowId, sessionId, appId, appMeta?.permissions),
+        iframeToken: await generateAppIframeToken(action.windowId, sessionId, appId),
       };
     }),
   );

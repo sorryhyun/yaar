@@ -13,7 +13,7 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { getSandboxPath } from '../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
-import { ok, error } from './utils.js';
+import { ok, error, validateRelativePath } from './utils.js';
 import { doCompile, doTypecheck } from '../features/dev/compile.js';
 import { doDeploy, doClone } from '../features/dev/deploy.js';
 import { prependNote, applyEdit } from './utils.js';
@@ -21,9 +21,8 @@ import { prependNote, applyEdit } from './utils.js';
 // ── Helpers ──
 
 function validateSandboxPath(path: string, sandboxPath: string): string | null {
-  if (path.includes('..') || path.startsWith('/')) {
-    return 'Invalid path. Use relative paths without ".." or leading "/".';
-  }
+  const pathErr = validateRelativePath(path);
+  if (pathErr) return pathErr;
   if (!isValidPath(sandboxPath, path)) {
     return 'Path escapes sandbox directory.';
   }

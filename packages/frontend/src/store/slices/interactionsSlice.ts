@@ -2,20 +2,13 @@
  * Interactions slice - manages pending user interactions sent to the server.
  */
 import type { SliceCreator, InteractionsSlice } from '../types';
+import { createConsumeQueue } from '../helpers';
 
 export const createInteractionsSlice: SliceCreator<InteractionsSlice> = (set, get) => ({
   pendingInteractions: [],
   pendingGestureMessages: [],
 
-  consumePendingInteractions: () => {
-    const interactions = get().pendingInteractions;
-    if (interactions.length > 0) {
-      set((state) => {
-        state.pendingInteractions = [];
-      });
-    }
-    return interactions;
-  },
+  consumePendingInteractions: createConsumeQueue(get, set, 'pendingInteractions'),
 
   queueGestureMessage: (content: string) => {
     set((state) => {
@@ -23,13 +16,5 @@ export const createInteractionsSlice: SliceCreator<InteractionsSlice> = (set, ge
     });
   },
 
-  consumeGestureMessages: () => {
-    const messages = get().pendingGestureMessages;
-    if (messages.length > 0) {
-      set((state) => {
-        state.pendingGestureMessages = [];
-      });
-    }
-    return messages;
-  },
+  consumeGestureMessages: createConsumeQueue(get, set, 'pendingGestureMessages'),
 });
