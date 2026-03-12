@@ -170,6 +170,11 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         name: { type: 'string', description: 'Display name (deploy)' },
         description: { type: 'string', description: 'App description (deploy)' },
         icon: { type: 'string', description: 'Emoji icon (deploy)' },
+        permissions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'URI prefixes the app iframe can access (deploy)',
+        },
         uri: { type: 'string', description: 'Source app URI for clone (e.g. yaar://apps/my-app)' },
       },
     },
@@ -354,6 +359,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           name: payload.name as string | undefined,
           description: payload.description as string | undefined,
           icon: payload.icon as string | undefined,
+          permissions: payload.permissions as string[] | undefined,
         });
         if (!result.success) return error(result.error);
         return ok(

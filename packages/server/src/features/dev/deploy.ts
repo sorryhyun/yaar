@@ -30,6 +30,7 @@ export interface DeployArgs {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   capture?: 'auto' | 'canvas' | 'dom' | 'svg' | 'protocol';
+  permissions?: string[];
 }
 
 export interface DeployResult {
@@ -60,6 +61,7 @@ export async function doDeploy(
     frameless,
     windowStyle,
     capture,
+    permissions,
   } = args;
 
   if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
@@ -222,6 +224,10 @@ export async function doDeploy(
     if (capture !== undefined) {
       if (capture !== 'auto') metadata.capture = capture;
       else delete metadata.capture;
+    }
+    if (permissions !== undefined) {
+      if (permissions.length > 0) metadata.permissions = permissions;
+      else delete metadata.permissions;
     }
     if (extractedProtocol) {
       metadata.protocol = extractedProtocol;

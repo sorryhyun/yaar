@@ -1,6 +1,7 @@
 export {};
-import { storage, appApi, setMountAliases, setShowModal, setStatusText, elMountAlias, elMountHostPath, elMountReadonly } from './state';
+import { appApi, setMountAliases, setShowModal, setStatusText, elMountAlias, elMountHostPath, elMountReadonly } from './state';
 import { basename, sanitizeAlias } from './helpers';
+import { storageList } from './storage-api';
 
 export function openMountDialog() {
   if (elMountAlias) elMountAlias.value = '';
@@ -37,7 +38,7 @@ export async function submitMountRequest(e: Event) {
 
 export async function refreshMountAliases() {
   try {
-    const items = await storage.list('mounts');
+    const items = await storageList('mounts');
     setMountAliases(
       items.filter((entry) => entry.isDirectory)
         .map((entry) => basename(entry.path))

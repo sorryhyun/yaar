@@ -6,7 +6,6 @@
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import {
   IFRAME_CAPTURE_HELPER_SCRIPT,
-  IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
@@ -207,12 +206,6 @@ function IframeRenderer({
             verbScript.setAttribute('data-yaar-verb', '1');
             verbScript.textContent = IFRAME_VERB_SDK_SCRIPT;
             doc.head.appendChild(verbScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-storage]')) {
-            const storageScript = doc.createElement('script');
-            storageScript.setAttribute('data-yaar-storage', '1');
-            storageScript.textContent = IFRAME_STORAGE_SDK_SCRIPT;
-            doc.head.appendChild(storageScript);
           }
           if (doc && !doc.querySelector('script[data-yaar-fetch-proxy]')) {
             const fetchProxyScript = doc.createElement('script');

@@ -3,14 +3,15 @@ import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
-import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody, setStatusText, storage } from './state';
+import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody, setStatusText } from './state';
 import { basename, formatSize, getFileIcon } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
+import { storageSave, storageDelete, storageUrl } from './storage-api';
 
-// ── Toast helper ──────────────────────────────────────────────────────
+// ── Toast helper ─────────────────────────────────────────────────────
 
 function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000) {
   const toast = document.createElement('div');
@@ -29,7 +30,7 @@ function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000
   }, ms);
 }
 
-// ── Upload ────────────────────────────────────────────────────────────
+// ── Upload ───────────────────────────────────────────────────────────
 
 let uploadInput: HTMLInputElement;
 
@@ -46,7 +47,7 @@ async function handleUpload(e: Event) {
     for (const file of files) {
       const path = currentPath() ? `${currentPath()}/${file.name}` : file.name;
       const buf = await file.arrayBuffer();
-      await (storage as any).save(path, buf);
+      await storageSave(path, buf);
     }
     input.value = '';
     navigate(currentPath());
@@ -57,7 +58,7 @@ async function handleUpload(e: Event) {
   }
 }
 
-// ── Template ──────────────────────────────────────────────────────────
+// ── Template ───────────────────────────────────────────────────────────
 
 const App = () => html`
   <div class="toolbar y-flex-between">
@@ -129,14 +130,14 @@ const App = () => html`
                     <${Show} when=${() => !entry.isDirectory}>
                       <button title="Open in new tab" onClick=${(e: MouseEvent) => {
                         e.stopPropagation();
-                        window.open((window as any).yaar?.storage?.url(entry.path), '_blank');
+                        window.open(storageUrl(entry.path), '_blank');
                       }}>&#x21D7;</button>
                     <//>
                     <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
                       e.stopPropagation();
                       if (!confirm(`Delete "${name}"?`)) return;
                       try {
-                        await (window as any).yaar?.storage?.remove(entry.path);
+                        await storageDelete(entry.path);
                         navigate(currentPath());
                       } catch {
                         setStatusText(`Failed to delete ${name}`);
@@ -194,7 +195,7 @@ const App = () => html`
 
 render(App, document.getElementById('app')!);
 
-// ── App Protocol & Init ────────────────────────────────────────────────
+// ── App Protocol & Init ──────────────────────────────────────────────
 
 registerProtocol();
 navigate('');

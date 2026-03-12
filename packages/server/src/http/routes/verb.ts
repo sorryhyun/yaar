@@ -40,6 +40,7 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
  */
 export const IFRAME_ALLOWED_URI_PREFIXES = [
   'yaar://browser/',
+  'yaar://storage/',
   'yaar://apps/self/storage/',
   'yaar://windows/',
   'yaar://windows', // exact — for list('yaar://windows')

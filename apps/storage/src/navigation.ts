@@ -1,9 +1,10 @@
 export {};
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
-import { storage, currentPath, setCurrentPath, entries, setEntries, selectedFile, setSelectedFile, setPreviewContent, setShowPreview, setStatusText, setPreviewTitleText, setPreviewMetaText, elPreviewBody } from './state';
+import { currentPath, setCurrentPath, setEntries, setSelectedFile, setPreviewContent, setShowPreview, setStatusText, setPreviewTitleText, setPreviewMetaText, elPreviewBody } from './state';
 import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
+import { storageList, storageRead, storageUrl } from './storage-api';
 
 const EXT_LANG: Record<string, string> = {
   js: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -25,7 +26,7 @@ export async function navigate(path: string) {
   setStatusText('Loading...');
   try {
     await refreshMountAliases();
-    const fetched = await storage.list(path);
+    const fetched = await storageList(path);
     fetched.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return basename(a.path).localeCompare(basename(b.path));
@@ -51,7 +52,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Loading…</span>';
 
   if (isImage(name)) {
-    elPreviewBody.innerHTML = `<img src="${storage.url(entry.path)}" alt="${name}" style="max-width:100%;border-radius:var(--yaar-radius)" />`;
+    elPreviewBody.innerHTML = `<img src="${storageUrl(entry.path)}" alt="${name}" style="max-width:100%;border-radius:var(--yaar-radius)" />`;
     return;
   }
 
@@ -59,7 +60,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isMarkdown(name)) {
     try {
-      const content = await storage.read(entry.path, { as: 'text' });
+      const content = await storageRead(entry.path);
       setPreviewContent(content);
       const htmlContent = marked.parse(content) as string;
       elPreviewBody.innerHTML = `<div class="md-preview">${htmlContent}</div>`;
@@ -71,7 +72,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isPreviewable(name)) {
     try {
-      const content = await storage.read(entry.path, { as: 'text' });
+      const content = await storageRead(entry.path);
       setPreviewContent(content);
 
       const lang = EXT_LANG[ext] || 'clike';
@@ -102,7 +103,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     </div>
   `;
   document.getElementById('open-external')?.addEventListener('click', () => {
-    window.open(storage.url(entry.path), '_blank');
+    window.open(storageUrl(entry.path), '_blank');
   });
 }
 

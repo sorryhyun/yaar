@@ -70,7 +70,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           prependNote(r, 'This is a folder — used list instead.'),
         );
 
-      const result = await storageRead(parsed.path);
+      const result = await storageRead(parsed.path, { raw: true });
       if (!result.success) {
         // Directory → fall through to list
         if (result.error?.includes('is a directory'))
@@ -115,15 +115,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       }
 
       const entries = result.entries!;
-      if (entries.length === 0) return ok('Directory is empty');
-
-      const text = entries
-        .map(
-          (e: { isDirectory: boolean; path: string }) =>
-            `${e.isDirectory ? '\uD83D\uDCC1' : '\uD83D\uDCC4'} ${e.path}`,
-        )
-        .join('\n');
-      return ok(text);
+      return ok(JSON.stringify(entries));
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

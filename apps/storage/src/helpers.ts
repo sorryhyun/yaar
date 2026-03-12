@@ -1,8 +1,8 @@
 export {};
 import type { StorageEntry } from './types';
-import { storage } from './state';
+import { storageUrl } from './storage-api';
 
-// ── Pure utilities ────────────────────────────────────────────────────
+// ── Pure utilities ──────────────────────────────────────────────
 
 export function basename(path: string): string {
   const parts = path.replace(/\/$/, '').split('/');
@@ -56,7 +56,7 @@ export function toStorageUri(path: string): string {
 
 export function buildDragMetadata(entry: StorageEntry) {
   const name = basename(entry.path);
-  const url = !entry.isDirectory ? storage.url(entry.path) : null;
+  const url = !entry.isDirectory ? storageUrl(entry.path) : null;
   return {
     source: 'storage',
     appId: 'storage',

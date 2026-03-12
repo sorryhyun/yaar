@@ -173,7 +173,7 @@ Available at runtime via `window.yaar` (auto-injected, no import needed). Uses t
 
 Each method returns a `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
 
-**Allowed URI prefixes:** `yaar://browser/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403.
+**Allowed URI prefixes:** `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403.
 
 Apps use `self` as the appId — the server resolves it to the real appId from the iframe token, so apps can only access their own namespace.
 
@@ -188,29 +188,39 @@ try {
 }
 ```
 
-### Storage (`yaar://apps/self/storage/`)
+### Storage (`yaar://storage/` and `yaar://apps/self/storage/`)
 
-App-scoped persistent storage. Files are stored on disk at `storage/apps/{appId}/`.
+Two storage scopes available:
+- `yaar://storage/` — global persistent storage (`storage/` on disk)
+- `yaar://apps/self/storage/` — app-scoped storage (`storage/apps/{appId}/` on disk)
 
 ```ts
 // Write
-await yaar.invoke('yaar://apps/self/storage/scores.json', {
+await yaar.invoke('yaar://storage/scores.json', {
   action: 'write',
   content: JSON.stringify(data),
 });
 
 // Read (throws on 404 — always handle missing files)
-const result = await yaar.read('yaar://apps/self/storage/scores.json').catch(() => null);
+const result = await yaar.read('yaar://storage/scores.json').catch(() => null);
 const data = result ? JSON.parse(result.content[0].text) : defaults;
 
 // List directory
-const files = await yaar.list('yaar://apps/self/storage/');
+const files = await yaar.list('yaar://storage/');
 
 // Delete
-await yaar.delete('yaar://apps/self/storage/old-data.json');
+await yaar.delete('yaar://storage/old-data.json');
 
-// Get URL for <a>/<img>/etc. (convenience — still available on legacy API)
-const imgUrl = yaar.storage.url('photos/cat.png');
+// App-scoped (only your app's files):
+await yaar.invoke('yaar://apps/self/storage/prefs.json', { action: 'write', content: '{}' });
+```
+
+For binary content (images, etc.) in `<img src>`, read via verb and create a blob URL:
+```ts
+const result = await yaar.read('yaar://storage/photos/cat.png');
+const base64 = result.content[0].text;
+const blob = await fetch('data:image/png;base64,' + base64).then(r => r.blob());
+const imgUrl = URL.createObjectURL(blob);
 ```
 
 ### Windows (`yaar://windows`) — Read-Only
@@ -247,17 +257,14 @@ const sessions = await yaar.list('yaar://browser');
 
 ### Legacy APIs
 
-`window.yaar.storage.*` and `window.yaar.windows.*` still work but are internally reimplemented over the verb API. Prefer verb URIs for new code.
+`window.yaar.windows.*` still works but is internally reimplemented over the verb API. Prefer verb URIs for new code.
 
 | Legacy | Verb equivalent |
 |--------|-----------------|
-| `yaar.storage.save(path, data)` | `yaar.invoke('yaar://apps/self/storage/' + path, { action: 'write', content: data })` |
-| `yaar.storage.read(path)` | `yaar.read('yaar://apps/self/storage/' + path)` |
-| `yaar.storage.list(dir)` | `yaar.list('yaar://apps/self/storage/' + dir)` |
-| `yaar.storage.remove(path)` | `yaar.delete('yaar://apps/self/storage/' + path)` |
-| `yaar.storage.url(path)` | No verb equivalent — use `yaar.storage.url()` directly |
 | `yaar.windows.read(id)` | `yaar.read('yaar://windows/' + id)` |
 | `yaar.windows.list()` | `yaar.list('yaar://windows')` |
+
+`window.yaar.storage.*` has been removed. Use `yaar://storage/` or `yaar://apps/self/storage/` verbs directly.
 
 ## HTTP Requests
 
@@ -316,6 +323,7 @@ const result = await yaar.read('yaar://browser/my-tab');
 | `appProtocol` | auto-detected | Set explicitly if auto-detection (scanning HTML for `.app.register`) isn't reliable |
 | `capture` | `auto` | Screenshot strategy: `canvas` (toDataURL on largest canvas), `dom` (html2canvas), `svg` (serialize largest SVG), `protocol` (app provides screenshot via App Protocol). Default `auto` tries canvas → svg → dom fallback chain. Set this for faster, more reliable captures. |
 | `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
+| `permissions` | default allowlist | URI prefixes the app iframe can access. E.g. `["yaar://storage/", "yaar://apps/self/storage/"]` to grant global + app-scoped storage. |
 
 ## Runtime Constraints
 
@@ -325,7 +333,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
 - **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `yaar.invoke('yaar://http', { url, ... })` to proxy requests through the server. See **HTTP Requests** above.
-- **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
+- **No localStorage/IndexedDB** — Use `yaar://storage/` verbs for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
 ## Anti-Patterns

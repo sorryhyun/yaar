@@ -1,15 +1,14 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
-import type { StorageEntry, StorageSDK, AppSDK } from './types';
+import type { AppSDK } from './types';
 
 // ── Runtime SDK references ─────────────────────────────────────────────
-const yaar = (window as unknown as { yaar?: { storage?: StorageSDK; app?: AppSDK } }).yaar;
-export const storage = yaar?.storage!;
+const yaar = (window as unknown as { yaar?: { app?: AppSDK } }).yaar;
 export const appApi = yaar?.app;
 
 // ── Signals ───────────────────────────────────────────────────────────
 export const [currentPath, setCurrentPath] = createSignal('');
-export const [entries, setEntries] = createSignal<StorageEntry[]>([]);
+export const [entries, setEntries] = createSignal<import('./types').StorageEntry[]>([]);
 export const [mountAliases, setMountAliases] = createSignal<string[]>([]);
 export const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
 export const [previewContent, setPreviewContent] = createSignal<string | null>(null);
