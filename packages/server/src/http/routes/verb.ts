@@ -14,6 +14,7 @@ import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
 import type { Verb } from '../../handlers/uri-registry.js';
+import { validateIframeToken } from '../iframe-tokens.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -25,8 +26,25 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
-/** URI prefixes accessible to iframe apps. Phase 2: add 'yaar://appstorage' here. */
-const IFRAME_ALLOWED_URI_PREFIXES = ['yaar://browser'];
+/**
+ * URI patterns accessible to iframe apps via POST /api/verb.
+ * Each entry is either an exact match or a prefix (trailing `/` means prefix).
+ */
+const IFRAME_ALLOWED_URI_PREFIXES = [
+  'yaar://browser/',
+  'yaar://apps/self/storage/',
+  'yaar://windows/',
+  'yaar://windows', // exact — for list('yaar://windows')
+];
+
+/** Check if a URI is allowed by the iframe allowlist. */
+function isUriAllowed(uri: string): boolean {
+  return IFRAME_ALLOWED_URI_PREFIXES.some(
+    (entry) =>
+      uri === entry || // exact match
+      (entry.endsWith('/') && uri.startsWith(entry)), // prefix match
+  );
+}
 
 const VALID_VERBS: Verb[] = ['describe', 'read', 'list', 'invoke', 'delete'];
 
@@ -65,15 +83,25 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   }
 
   // Allowlist check
-  const allowed = IFRAME_ALLOWED_URI_PREFIXES.some((prefix) => uri.startsWith(prefix));
-  if (!allowed) {
+  if (!isUriAllowed(uri)) {
     return errorResponse('URI not accessible to iframe apps', 403);
+  }
+
+  // Resolve `self` → real appId from iframe token
+  let resolvedUri = uri;
+  if (uri.startsWith('yaar://apps/self/')) {
+    const token = req.headers.get('X-Iframe-Token');
+    const entry = token ? validateIframeToken(token) : null;
+    if (!entry?.appId) {
+      return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
+    }
+    resolvedUri = uri.replace('yaar://apps/self/', `yaar://apps/${entry.appId}/`);
   }
 
   // Dispatch to ResourceRegistry
   try {
     const registry = initRegistry();
-    const result = await registry.execute(verb, uri, body.payload);
+    const result = await registry.execute(verb, resolvedUri, body.payload);
     return jsonResponse(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Verb execution failed';

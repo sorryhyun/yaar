@@ -7,6 +7,14 @@
  *   read('yaar://apps/{appId}')                      → load SKILL.md
  *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge
  *   delete('yaar://apps/{appId}')                    → uninstall app
+ *
+ * App-scoped storage (Phase 2):
+ *   read('yaar://apps/{appId}/storage/{path}')       → read file
+ *   list('yaar://apps/{appId}/storage/{dir}')        → list directory
+ *   invoke('yaar://apps/{appId}/storage/{path}', ..) → write file
+ *   delete('yaar://apps/{appId}/storage/{path}')     → delete file
+ *
+ * On disk: storage/apps/{appId}/{path}
  */
 
 import { join } from 'path';
@@ -19,7 +27,13 @@ import { ok, error } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../config.js';
-import { getConfigDir } from '../storage/storage-manager.js';
+import {
+  getConfigDir,
+  storageRead,
+  storageWrite,
+  storageList,
+  storageDelete,
+} from '../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../storage/shortcuts.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
@@ -28,6 +42,19 @@ function extractAppIdFromUri(uri: string): string {
   // yaar://apps/{appId} → appId
   const match = uri.match(/^yaar:\/\/apps\/([^/]+)/);
   return match?.[1] ?? '';
+}
+
+/**
+ * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.
+ * Rejects paths containing `..` segments to prevent cross-app traversal.
+ */
+function parseAppStoragePath(uri: string): { appId: string; path: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/storage(?:\/(.*))?$/);
+  if (!match) return null;
+  const path = match[2] ?? '';
+  // Block path traversal — apps must stay within their own namespace
+  if (path.split('/').includes('..')) return null;
+  return { appId: match[1], path };
 }
 
 export function registerAppsHandlers(registry: ResourceRegistry): void {
@@ -57,21 +84,62 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   };
   registry.register('yaar://apps', listHandler);
 
-  // ── yaar://apps/{appId} — per-app operations ──
+  // ── yaar://apps/{appId} — per-app operations + app-scoped storage ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app. Read to load its SKILL.md, invoke to set_badge, delete to uninstall.',
-    verbs: ['describe', 'read', 'invoke', 'delete'],
+      'A specific app. Read to load its SKILL.md, invoke to set_badge, delete to uninstall. ' +
+      'Sub-path /storage/{path} provides app-scoped file storage.',
+    verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['set_badge'] },
-        count: { type: 'number', description: 'Badge count (0 to clear)' },
+        action: {
+          type: 'string',
+          enum: ['set_badge', 'write'],
+          description: 'set_badge for app badge, write for app storage',
+        },
+        count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
+        content: { type: 'string', description: 'File content (for write)' },
+        encoding: {
+          type: 'string',
+          enum: ['utf-8', 'base64'],
+          description: 'Content encoding (default: utf-8)',
+        },
       },
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App storage sub-path ──
+      const storagePath = parseAppStoragePath(resolved.sourceUri);
+      if (storagePath) {
+        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        if (!storagePath.path) {
+          // Bare storage root → redirect to list
+          const listResult = await storageList(prefixedPath);
+          if (!listResult.success) return error(listResult.error!);
+          return ok(JSON.stringify(listResult.entries ?? []));
+        }
+        const result = await storageRead(prefixedPath);
+        if (!result.success) return error(result.error!);
+        // Return raw content for app consumption (strip line numbers)
+        // storageRead adds "── path (N lines) ──\n" header + "N│" line numbers for text
+        // Extract raw content by checking if it has the header pattern
+        const content = result.content!;
+        const headerEnd = content.indexOf('\n');
+        if (headerEnd !== -1 && content.startsWith('── ')) {
+          // Text file with line numbers — strip them
+          const lines = content.slice(headerEnd + 1).split('\n');
+          const raw = lines.map((line) => {
+            const pipeIdx = line.indexOf('│');
+            return pipeIdx !== -1 ? line.slice(pipeIdx + 1) : line;
+          });
+          return ok(raw.join('\n'));
+        }
+        return ok(content);
+      }
+
+      // ── App skill (existing behavior) ──
       const appId = extractAppIdFromUri(resolved.sourceUri);
       if (!appId) return error('App ID required.');
 
@@ -108,7 +176,50 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       return ok(skill);
     },
 
+    async list(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App storage sub-path ──
+      const storagePath = parseAppStoragePath(resolved.sourceUri);
+      if (storagePath) {
+        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const result = await storageList(prefixedPath);
+        if (!result.success) return error(result.error!);
+        // Return JSON entries for machine-readable consumption
+        const entries = (result.entries ?? []).map((e) => ({
+          // Strip the apps/{appId}/ prefix from paths for app-relative paths
+          path: e.path.replace(`apps/${storagePath.appId}/`, ''),
+          isDirectory: e.isDirectory,
+          size: e.size,
+          modifiedAt: e.modifiedAt,
+        }));
+        return ok(JSON.stringify(entries));
+      }
+
+      // Non-storage list on a specific app doesn't make sense
+      return error(
+        'Cannot list an app directly. Use list("yaar://apps") for all apps, ' +
+          'or list("yaar://apps/{appId}/storage/") for app storage.',
+      );
+    },
+
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      // ── App storage sub-path ──
+      const storagePath = parseAppStoragePath(resolved.sourceUri);
+      if (storagePath) {
+        if (!storagePath.path) return error('Provide a file path under /storage/.');
+        if (!payload?.action) return error('Payload must include "action" ("write").');
+        if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);
+        if (typeof payload.content !== 'string')
+          return error('"content" (string) is required for write.');
+
+        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const content =
+          payload.encoding === 'base64' ? Buffer.from(payload.content, 'base64') : payload.content;
+        const result = await storageWrite(prefixedPath, content);
+        if (!result.success) return error(result.error!);
+        return ok(`Written to yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
+      }
+
+      // ── App operations (existing behavior) ──
       const appId = extractAppIdFromUri(resolved.sourceUri);
       if (!appId) return error('App ID required.');
       if (!payload?.action) return error('Payload must include "action".');
@@ -126,6 +237,17 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App storage sub-path ──
+      const storagePath = parseAppStoragePath(resolved.sourceUri);
+      if (storagePath) {
+        if (!storagePath.path) return error('Provide a file path to delete.');
+        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const result = await storageDelete(prefixedPath);
+        if (!result.success) return error(result.error!);
+        return ok(`Deleted yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
+      }
+
+      // ── App uninstall (existing behavior) ──
       const appId = extractAppIdFromUri(resolved.sourceUri);
       if (!appId) return error('App ID required.');
       return uninstallApp(appId);

@@ -12,6 +12,7 @@ import { extractProtocolFromSource } from './extract-protocol.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
 import {
   IFRAME_CAPTURE_HELPER_SCRIPT,
+  IFRAME_VERB_SDK_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
@@ -55,6 +56,7 @@ let sdkScriptsCache: { raw: string; minified: string } | null = null;
 function getRawSdkScripts(): string {
   return [
     IFRAME_CAPTURE_HELPER_SCRIPT,
+    IFRAME_VERB_SDK_SCRIPT,
     IFRAME_STORAGE_SDK_SCRIPT,
     IFRAME_FETCH_PROXY_SCRIPT,
     IFRAME_APP_PROTOCOL_SCRIPT,

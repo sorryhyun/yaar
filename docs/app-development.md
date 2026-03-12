@@ -308,3 +308,49 @@ config/
 - `invoke('yaar://config/app/moltbook', { config: { api_key: "..." } })` — save
 - `read('yaar://config/app/moltbook')` — read
 - `delete('yaar://config/app/moltbook')` — remove
+
+## App-Scoped Storage
+
+Each app has isolated file storage at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+
+### From App Code (Verb SDK)
+
+```typescript
+// Write a file
+await window.yaar.invoke('yaar://apps/self/storage/data.json', {
+  action: 'write',
+  content: JSON.stringify({ key: 'value' }),
+});
+
+// Read a file
+const result = await window.yaar.read('yaar://apps/self/storage/data.json');
+const text = result.content[0].text; // raw file content
+
+// List files
+const listResult = await window.yaar.list('yaar://apps/self/storage/');
+const entries = JSON.parse(listResult.content[0].text); // [{ path, isDirectory, size, modifiedAt }]
+
+// Delete a file
+await window.yaar.delete('yaar://apps/self/storage/data.json');
+```
+
+### From App Code (Storage SDK)
+
+The `window.yaar.storage` convenience API uses the verb SDK internally:
+
+```typescript
+await window.yaar.storage.save('data.json', JSON.stringify({ key: 'value' }));
+const data = await window.yaar.storage.read('data.json', { as: 'json' });
+const files = await window.yaar.storage.list();
+await window.yaar.storage.remove('data.json');
+const url = window.yaar.storage.url('image.png'); // direct URL for <img> src
+```
+
+### From Agent (MCP Tools)
+
+```
+invoke('yaar://apps/my-app/storage/data.json', { action: 'write', content: '...' })
+read('yaar://apps/my-app/storage/data.json')
+list('yaar://apps/my-app/storage/')
+delete('yaar://apps/my-app/storage/data.json')
+```

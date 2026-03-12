@@ -9,6 +9,7 @@ import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '.
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { parseContentPath, type ParsedContentPath } from '@yaar/shared';
+import { validateIframeToken } from '../iframe-tokens.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -352,7 +353,16 @@ async function handleStorage(
   url: URL,
   parsed: Extract<ParsedContentPath, { authority: 'storage' }>,
 ): Promise<Response | null> {
-  const filePath = parsed.path;
+  // Resolve apps/self/ → apps/{appId}/ using iframe token
+  let filePath = parsed.path;
+  if (filePath.startsWith('apps/self/') || filePath === 'apps/self') {
+    const token = req.headers.get('X-Iframe-Token');
+    const entry = token ? validateIframeToken(token) : null;
+    if (!entry?.appId) return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
+    filePath = filePath.replace('apps/self', `apps/${entry.appId}`);
+    // Block path traversal after self resolution
+    if (filePath.split('/').includes('..')) return errorResponse('Invalid path', 403);
+  }
   const resolved = resolvePath(filePath);
   if (!resolved) return errorResponse('Access denied', 403);
 

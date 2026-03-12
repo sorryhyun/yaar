@@ -110,8 +110,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 /**
  * Inline JS storage SDK for iframe apps.
  *
- * Provides window.yaar.storage with save/read/list/remove/url methods
- * so compiled apps can access the server's storage directory via REST.
+ * Provides window.yaar.storage with save/read/list/remove/url methods.
+ * Reimplemented over the verb SDK (POST /api/verb) using app-scoped
+ * storage at yaar://apps/self/storage/{path}.
  */
 export const IFRAME_STORAGE_SDK_SCRIPT = `
 (function() {
@@ -122,75 +123,73 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     return p.split('/').map(encodeURIComponent).join('/');
   }
 
-  var iframeToken = window.__YAAR_TOKEN__ || '';
-  function tokenHeaders(extra) {
-    var h = extra ? Object.assign({}, extra) : {};
-    if (iframeToken) h['X-Iframe-Token'] = iframeToken;
-    return h;
+  function extractText(result) {
+    if (result && result.content && result.content[0] && result.content[0].text !== undefined) {
+      return result.content[0].text;
+    }
+    return '';
+  }
+
+  function toBase64(bytes) {
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
   }
 
   window.yaar = window.yaar || {};
   window.yaar.storage = {
     async save(path, data) {
-      var body;
+      var content;
+      var encoding = 'utf-8';
       if (typeof data === 'string') {
-        body = data;
+        content = data;
       } else if (data instanceof Blob) {
-        body = await data.arrayBuffer();
+        var buf = await data.arrayBuffer();
+        content = toBase64(new Uint8Array(buf));
+        encoding = 'base64';
       } else if (data instanceof ArrayBuffer) {
-        body = data;
+        content = toBase64(new Uint8Array(data));
+        encoding = 'base64';
       } else if (data instanceof Uint8Array) {
-        body = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+        content = toBase64(data);
+        encoding = 'base64';
       } else {
-        body = String(data);
+        content = String(data);
       }
-      var res = await fetch('/api/storage/' + encodePath(path), { method: 'POST', body: body, headers: tokenHeaders() });
-      if (!res.ok) {
-        var err = await res.json().catch(function() { return { error: res.statusText }; });
-        throw new Error(err.error || 'Save failed');
-      }
-      return res.json();
+      await window.yaar.invoke('yaar://apps/self/storage/' + path, {
+        action: 'write', content: content, encoding: encoding
+      });
+      return { ok: true };
     },
 
     async read(path, options) {
       var mode = (options && options.as) || 'auto';
-      var res = await fetch('/api/storage/' + encodePath(path), { headers: tokenHeaders() });
-      if (!res.ok) {
-        var err = await res.json().catch(function() { return { error: res.statusText }; });
-        throw new Error(err.error || 'Read failed');
+      if (mode === 'blob' || mode === 'arraybuffer') {
+        // Binary modes — use direct URL for efficiency
+        var res = await fetch(window.yaar.storage.url(path));
+        if (!res.ok) throw new Error('Read failed: ' + res.statusText);
+        return mode === 'blob' ? res.blob() : res.arrayBuffer();
       }
-      if (mode === 'blob') return res.blob();
-      if (mode === 'arraybuffer') return res.arrayBuffer();
-      if (mode === 'json') return res.json();
-      if (mode === 'text') return res.text();
-      // auto: guess from content-type
-      var ct = res.headers.get('content-type') || '';
-      if (ct.includes('json')) return res.json();
-      if (ct.startsWith('text/')) return res.text();
-      return res.blob();
+      var result = await window.yaar.read('yaar://apps/self/storage/' + path);
+      var text = extractText(result);
+      if (mode === 'json') return JSON.parse(text);
+      if (mode === 'text') return text;
+      // auto: try JSON first
+      try { return JSON.parse(text); } catch(e) { return text; }
     },
 
     async list(dirPath) {
-      var p = dirPath ? encodePath(dirPath) : '';
-      var res = await fetch('/api/storage/' + p + '?list=true', { headers: tokenHeaders() });
-      if (!res.ok) {
-        var err = await res.json().catch(function() { return { error: res.statusText }; });
-        throw new Error(err.error || 'List failed');
-      }
-      return res.json();
+      var result = await window.yaar.list('yaar://apps/self/storage/' + (dirPath || ''));
+      return JSON.parse(extractText(result));
     },
 
     async remove(path) {
-      var res = await fetch('/api/storage/' + encodePath(path), { method: 'DELETE', headers: tokenHeaders() });
-      if (!res.ok) {
-        var err = await res.json().catch(function() { return { error: res.statusText }; });
-        throw new Error(err.error || 'Delete failed');
-      }
-      return res.json();
+      await window.yaar.delete('yaar://apps/self/storage/' + path);
+      return { ok: true };
     },
 
     url: function(path) {
-      return '/api/storage/' + encodePath(path);
+      return '/api/storage/apps/self/' + encodePath(path);
     }
   };
 })();
@@ -460,7 +459,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
  *
  * Provides window.yaar.windows with read/list methods
  * so iframe apps can read other windows' content (read-only).
- * Parent handles the request via postMessage and returns window data.
+ * Reimplemented over the verb SDK (POST /api/verb).
  */
 export const IFRAME_WINDOWS_SDK_SCRIPT = `
 (function() {
@@ -469,56 +468,25 @@ export const IFRAME_WINDOWS_SDK_SCRIPT = `
 
   window.yaar = window.yaar || {};
 
-  var pending = {};
-  var idCounter = 0;
-
-  function nextId() {
-    return 'win-req-' + (++idCounter) + '-' + Math.random().toString(36).slice(2);
-  }
-
-  window.addEventListener('message', function(e) {
-    if (!e.data) return;
-    var type = e.data.type;
-    if (type === 'yaar:window-read-response' || type === 'yaar:window-list-response') {
-      var requestId = e.data.requestId;
-      var cb = pending[requestId];
-      if (cb) {
-        delete pending[requestId];
-        cb(e.data);
-      }
+  function extractText(result) {
+    if (result && result.content && result.content[0] && result.content[0].text !== undefined) {
+      return result.content[0].text;
     }
-  });
-
-  function request(type, payload, timeoutMs) {
-    var requestId = nextId();
-    payload.type = type;
-    payload.requestId = requestId;
-    return new Promise(function(resolve, reject) {
-      var timer = setTimeout(function() {
-        delete pending[requestId];
-        reject(new Error('Window request timed out'));
-      }, timeoutMs || 5000);
-
-      pending[requestId] = function(data) {
-        clearTimeout(timer);
-        if (data.error) reject(new Error(data.error));
-        else resolve(data.result);
-      };
-
-      window.parent.postMessage(payload, '*');
-    });
+    return '';
   }
 
   window.yaar.windows = {
     read: function(windowId, options) {
-      var includeImage = options && options.includeImage;
-      return request('yaar:window-read', {
-        windowId: windowId,
-        includeImage: !!includeImage
-      }, includeImage ? 10000 : 5000);
+      return window.yaar.read('yaar://windows/' + windowId).then(function(result) {
+        var text = extractText(result);
+        try { return JSON.parse(text); } catch(e) { return { id: windowId, content: text }; }
+      });
     },
     list: function() {
-      return request('yaar:window-list', {}, 5000);
+      return window.yaar.list('yaar://windows').then(function(result) {
+        var text = extractText(result);
+        try { return JSON.parse(text); } catch(e) { return []; }
+      });
     }
   };
 })();
@@ -538,10 +506,10 @@ export const IFRAME_VERB_SDK_SCRIPT = `
 
   window.yaar = window.yaar || {};
 
-  var iframeToken = window.__YAAR_TOKEN__ || '';
   function tokenHeaders() {
+    var t = window.__YAAR_TOKEN__ || '';
     var h = { 'Content-Type': 'application/json' };
-    if (iframeToken) h['X-Iframe-Token'] = iframeToken;
+    if (t) h['X-Iframe-Token'] = t;
     return h;
   }
 

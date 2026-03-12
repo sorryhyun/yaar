@@ -197,6 +197,13 @@ function IframeRenderer({
             script.textContent = IFRAME_CAPTURE_HELPER_SCRIPT;
             doc.head.appendChild(script);
           }
+          // Verb SDK must come before storage/windows SDKs (they depend on it)
+          if (doc && !doc.querySelector('script[data-yaar-verb]')) {
+            const verbScript = doc.createElement('script');
+            verbScript.setAttribute('data-yaar-verb', '1');
+            verbScript.textContent = IFRAME_VERB_SDK_SCRIPT;
+            doc.head.appendChild(verbScript);
+          }
           if (doc && !doc.querySelector('script[data-yaar-storage]')) {
             const storageScript = doc.createElement('script');
             storageScript.setAttribute('data-yaar-storage', '1');
@@ -232,12 +239,6 @@ function IframeRenderer({
             windowsScript.setAttribute('data-yaar-windows', '1');
             windowsScript.textContent = IFRAME_WINDOWS_SDK_SCRIPT;
             doc.head.appendChild(windowsScript);
-          }
-          if (doc && !doc.querySelector('script[data-yaar-verb]')) {
-            const verbScript = doc.createElement('script');
-            verbScript.setAttribute('data-yaar-verb', '1');
-            verbScript.textContent = IFRAME_VERB_SDK_SCRIPT;
-            doc.head.appendChild(verbScript);
           }
           // Push current notification state to the newly loaded iframe
           const notifs = useDesktopStore.getState().notifications;

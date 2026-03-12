@@ -2,9 +2,13 @@
 
 ## Status
 
-Phase 1 is complete: `POST /api/verb` route, `IFRAME_VERB_SDK_SCRIPT`, injection in IframeRenderer, types, and docs are all in place. Apps can now call `window.yaar.invoke('yaar://browser/...', payload)` etc.
+Phases 1–3 are complete.
 
-Current allowlist: `yaar://browser` only.
+- **Phase 1** ✅: `POST /api/verb` route, `IFRAME_VERB_SDK_SCRIPT`, injection in IframeRenderer, types, and docs.
+- **Phase 2** ✅: App-scoped storage via `yaar://apps/{appId}/storage/`, `self` → appId resolution from iframe token, REST storage `self` support for `url()`.
+- **Phase 3** ✅: Storage SDK reimplemented over verb SDK (`window.yaar.invoke`), Windows SDK reimplemented over verb SDK (`window.yaar.read/list`). Verb SDK added to compiler baked scripts, injection order fixed (verb SDK before dependents). Token read made lazy.
+
+Current allowlist: `yaar://browser`, `yaar://apps/self/`, `yaar://windows`.
 
 ---
 
