@@ -12,6 +12,7 @@ import {
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
+  IFRAME_VERB_SDK_SCRIPT,
 } from '@yaar/shared';
 import { resolveAssetUrl, getRemoteConnection } from '@/lib/api';
 import { useDesktopStore } from '@/store';
@@ -231,6 +232,12 @@ function IframeRenderer({
             windowsScript.setAttribute('data-yaar-windows', '1');
             windowsScript.textContent = IFRAME_WINDOWS_SDK_SCRIPT;
             doc.head.appendChild(windowsScript);
+          }
+          if (doc && !doc.querySelector('script[data-yaar-verb]')) {
+            const verbScript = doc.createElement('script');
+            verbScript.setAttribute('data-yaar-verb', '1');
+            verbScript.textContent = IFRAME_VERB_SDK_SCRIPT;
+            doc.head.appendChild(verbScript);
           }
           // Push current notification state to the newly loaded iframe
           const notifs = useDesktopStore.getState().notifications;

@@ -209,6 +209,50 @@ const win = await yaar.windows.read('win-notes', { includeImage: true });
 
 This is **read-only** — apps cannot modify other windows.
 
+## Verb API
+
+Available at runtime via `window.yaar` (auto-injected, no import needed). Uses the same `yaar://` URI pattern the agent uses via MCP tools — one mental model for both agent and app code.
+
+| Method | Description |
+|--------|-------------|
+| `invoke(uri, payload?)` | Execute an action on a resource |
+| `read(uri)` | Read a resource's current value |
+| `list(uri)` | List child resources under a URI |
+| `describe(uri)` | Get resource description, supported verbs, and invoke schema |
+| `delete(uri)` | Delete a resource |
+
+Each method returns a `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
+
+**Currently allowed URIs:** `yaar://browser/*` only. Other URIs (config, storage, etc.) return 403.
+
+```ts
+// Open a page in headless Chrome
+const result = await yaar.invoke('yaar://browser/my-tab', {
+  action: 'open',
+  url: 'https://example.com',
+});
+
+// Read the current browser tab content
+const page = await yaar.read('yaar://browser/my-tab');
+
+// List open browser sessions
+const sessions = await yaar.list('yaar://browser');
+
+// Check what a resource supports
+const info = await yaar.describe('yaar://browser');
+```
+
+**Error handling:** Methods throw on network errors or when the server returns an error. Always use `.catch()` or try/catch.
+
+```ts
+try {
+  const result = await yaar.invoke('yaar://browser/tab1', { action: 'open', url });
+  const text = result.content[0]?.text;
+} catch (err) {
+  console.error('Verb call failed:', err.message);
+}
+```
+
 ## HTTP Proxy APIs
 
 Iframe apps are subject to CORS. Two server-side proxies bypass this:

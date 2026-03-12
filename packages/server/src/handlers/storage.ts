@@ -71,7 +71,14 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         );
 
       const result = await storageRead(parsed.path);
-      if (!result.success) return error(result.error!);
+      if (!result.success) {
+        // Directory → fall through to list
+        if (result.error?.includes('is a directory'))
+          return this.list!(resolved).then((r) =>
+            prependNote(r, 'This is a folder — used list instead.'),
+          );
+        return error(result.error!);
+      }
 
       if (result.images && result.images.length > 0) {
         const isPdf = result.totalPages != null;

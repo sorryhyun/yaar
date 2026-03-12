@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { extractDomain } from '@yaar/server/mcp/domains';
+import { extractDomain } from '@yaar/server/features/config/domains';
 import { executeJs } from '@yaar/server/lib/sandbox/index';
 
 // ── extractDomain ──────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ describe('isDomainAllowed — with Bun stub', () => {
       write: vi.fn().mockResolvedValue(0),
     });
 
-    const { isDomainAllowed } = await import('@yaar/server/mcp/domains');
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('example.com')).toBe(false);
     expect(await isDomainAllowed('api.openai.com')).toBe(false);
   });
@@ -63,7 +63,7 @@ describe('isDomainAllowed — with Bun stub', () => {
       write: vi.fn().mockResolvedValue(0),
     });
 
-    const { isDomainAllowed } = await import('@yaar/server/mcp/domains');
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('example.com')).toBe(true);
     expect(await isDomainAllowed('api.test.io')).toBe(true);
   });
@@ -76,7 +76,7 @@ describe('isDomainAllowed — with Bun stub', () => {
       write: vi.fn().mockResolvedValue(0),
     });
 
-    const { isDomainAllowed } = await import('@yaar/server/mcp/domains');
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('evil.example.com')).toBe(false);
     expect(await isDomainAllowed('attacker.net')).toBe(false);
   });
@@ -89,14 +89,14 @@ describe('isDomainAllowed — with Bun stub', () => {
       write: vi.fn().mockResolvedValue(0),
     });
 
-    const { isDomainAllowed } = await import('@yaar/server/mcp/domains');
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('anything.example.com')).toBe(true);
     expect(await isDomainAllowed('totally-unknown.net')).toBe(true);
   });
 
   it('defaults to empty allowlist (safe) when config file missing (Bun unavailable)', async () => {
     // No Bun stub → configRead throws → falls back to empty config
-    const { isDomainAllowed } = await import('@yaar/server/mcp/domains');
+    const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     // Without Bun, returns false (safe default — deny)
     expect(await isDomainAllowed('example.com')).toBe(false);
   });

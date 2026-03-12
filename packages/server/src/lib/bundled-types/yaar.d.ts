@@ -88,6 +88,20 @@ interface YaarWindows {
   list(): Promise<YaarWindowListItem[]>;
 }
 
+// ── Verb SDK ─────────────────────────────────────────────────────
+
+interface YaarVerbResultContent {
+  type: 'text' | 'image';
+  text?: string;
+  data?: string;
+  mimeType?: string;
+}
+
+interface YaarVerbResult {
+  content: YaarVerbResultContent[];
+  isError?: boolean;
+}
+
 // ── Global ──────────────────────────────────────────────────────
 
 interface YaarGlobal {
@@ -95,6 +109,17 @@ interface YaarGlobal {
   storage: YaarStorage;
   notifications: YaarNotifications;
   windows: YaarWindows;
+
+  /** Execute an action on a yaar:// resource. */
+  invoke(uri: string, payload?: Record<string, unknown>): Promise<YaarVerbResult>;
+  /** Read the current value/state of a yaar:// resource. */
+  read(uri: string): Promise<YaarVerbResult>;
+  /** List child resources under a yaar:// URI. */
+  list(uri: string): Promise<YaarVerbResult>;
+  /** Describe a yaar:// resource (supported verbs, schema). */
+  describe(uri: string): Promise<YaarVerbResult>;
+  /** Delete a yaar:// resource. */
+  delete(uri: string): Promise<YaarVerbResult>;
 }
 
 interface Window {

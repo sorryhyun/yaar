@@ -1,94 +1,158 @@
-# Plan: `window.yaar` Verb SDK for Iframe Apps
+# Plan: `window.yaar` Verb SDK — Phase 2+
 
-## Context
+## Status
 
-The agent uses `invoke('yaar://browser/...', payload)` via MCP verbs, but apps use completely different APIs (`fetch('/api/browse', ...)`, `window.yaar.storage.save(...)`, etc.). This forces the agent to context-switch between two mental models when writing app code. We want apps to use the same `yaar://` URI pattern the agent uses.
+Phase 1 is complete: `POST /api/verb` route, `IFRAME_VERB_SDK_SCRIPT`, injection in IframeRenderer, types, and docs are all in place. Apps can now call `window.yaar.invoke('yaar://browser/...', payload)` etc.
 
-**Phase 1 (this PR):** Expose only `yaar://browser` to apps.
-**Phase 2 (future):** Add `yaar://appstorage/` for app-scoped storage.
+Current allowlist: `yaar://browser` only.
 
-## Changes
+---
 
-### 1. New route: `packages/server/src/http/routes/verb.ts`
+## Phase 2: App-scoped storage via `yaar://apps/{appId}/storage/`
 
-- `POST /api/verb` — accepts `{ verb, uri, payload? }`, dispatches to `ResourceRegistry`
-- Server-side allowlist constant: `IFRAME_ALLOWED_URI_PREFIXES = ['yaar://browser']`
-- Validates verb is one of 5 valid verbs, URI starts with an allowed prefix
-- Exports `PUBLIC_ENDPOINTS` so iframe token gate allows it
-- Pattern follows `browse.ts` / `proxy.ts` structure
+### Context
+Each app currently uses `window.yaar.storage.save('myapp/data.json', ...)` with manually-prefixed paths. This is error-prone (apps can clobber each other's data) and forces the agent to use a different API pattern than the app.
 
-### 2. Wire route: `packages/server/src/http/server.ts`
+### Design
+Use the existing `yaar://apps/` hierarchy instead of a new authority. Apps use the `self` keyword as a shorthand — the server resolves it to the real appId from the iframe token.
 
-- Import `handleVerbRoutes` from routes index
-- Import `PUBLIC_ENDPOINTS as VERB_PUBLIC` from `./routes/verb.js`
-- Add to `buildPublicRoutes()` spread
-- Add `handleVerbRoutes` dispatch in route chain (after browse, before files)
+- **Agent calls:** `invoke('yaar://apps/my-app/storage/data.json', { action: 'write', content: '...' })`
+- **App calls:** `yaar.invoke('yaar://apps/self/storage/data.json', { action: 'write', content: '...' })`
+- **On disk:** `storage/apps/{appId}/data.json`
 
-### 3. Wire route export: `packages/server/src/http/routes/index.ts`
+### Changes
 
-- Add `export { handleVerbRoutes } from './verb.js';`
+#### 1. Extend apps handler: `packages/server/src/handlers/apps.ts`
+- Add storage sub-path handling for `yaar://apps/{appId}/storage/{path}`
+- Verbs: `read`, `list`, `invoke` (write), `delete`
+- Map to `storage/apps/{appId}/{path}` on disk via `StorageManager`
 
-### 4. SDK script: `packages/shared/src/capture-helper.ts`
+#### 2. Resolve `self` in verb route: `routes/verb.ts`
+- Extract `appId` from validated iframe token
+- Rewrite `yaar://apps/self/` → `yaar://apps/{appId}/` before dispatching to registry
+- Reject if token has no `appId` (non-app iframe)
 
-- New `IFRAME_VERB_SDK_SCRIPT` constant (IIFE, ES5-style, idempotency guard)
-- Adds `window.yaar.invoke(uri, payload)`, `.read(uri)`, `.list(uri)`, `.describe(uri)`, `.delete(uri)`
-- Each calls `POST /api/verb` with `X-Iframe-Token` header
+#### 3. Expand allowlist in `routes/verb.ts`
+- Add `'yaar://apps/self/'` to `IFRAME_ALLOWED_URI_PREFIXES`
+- The `self` → `appId` rewrite happens before dispatch but after the allowlist check
+- Apps can only access their own namespace — `yaar://apps/other-app/storage/` won't match `self`
 
-### 5. Export SDK: `packages/shared/src/index.ts`
+#### 4. Update docs in `app_dev.md`
+- Add verb-based storage examples: `yaar.invoke('yaar://apps/self/storage/...', ...)`
+- Note: `window.yaar.storage.*` still works (unchanged) but verb API is preferred
 
-- Add `IFRAME_VERB_SDK_SCRIPT` to export list
+### Security
+- `self` is server-resolved from iframe token — apps can't impersonate other apps
+- Agent (no iframe token) uses explicit appId — full access across apps
+- Path traversal prevented by existing `StorageManager` safe-path checks
 
-### 6. Inject SDK: `packages/frontend/src/components/window/renderers/IframeRenderer.tsx`
+---
 
-- Import `IFRAME_VERB_SDK_SCRIPT`
-- Add injection block with `data-yaar-verb` guard (same pattern as other SDKs)
+## Phase 3: Deprecate purpose-built SDKs
 
-### 7. Types: `packages/server/src/lib/bundled-types/yaar.d.ts`
+### Context
+Once verb SDK covers storage via `yaar://apps/self/storage/`, the purpose-built `window.yaar.storage.*` and `window.yaar.windows.*` become redundant. Unify them for a single code path.
 
-- Add `VerbResult` interface and verb methods to `YaarGlobal`
+### Changes
 
-### 8. Docs: `packages/server/src/features/skills/app_dev.md`
+#### 1. Reimplement `IFRAME_STORAGE_SDK_SCRIPT` over verb SDK
+- `window.yaar.storage.save(path, data)` → `yaar.invoke('yaar://apps/self/storage/' + path, { action: 'write', ... })`
+- `window.yaar.storage.read(path)` → `yaar.read('yaar://apps/self/storage/' + path)`
+- `window.yaar.storage.list(dir)` → `yaar.list('yaar://apps/self/storage/' + dir)`
+- `window.yaar.storage.remove(path)` → `yaar.delete('yaar://apps/self/storage/' + path)`
+- `window.yaar.storage.url(path)` — keep as-is (returns a direct URL, no verb needed)
 
-- Add "Verb API" section documenting `window.yaar.invoke()` etc. with browser example
+#### 2. Reimplement `IFRAME_WINDOWS_SDK_SCRIPT` over verb SDK
+- `window.yaar.windows.read(id)` → `yaar.read('yaar://windows/' + id)`
+- `window.yaar.windows.list()` → `yaar.list('yaar://windows')`
+- Add `'yaar://windows'` to `IFRAME_ALLOWED_URI_PREFIXES`
 
-## Security
+#### 3. Remove postMessage/REST-based implementations
+- Delete the postMessage request/response pattern from windows SDK
+- Delete the REST-based pattern from storage SDK
+- Both now go through `POST /api/verb` → ResourceRegistry
+- Capture helper, notifications, contextmenu, app protocol SDKs remain unchanged (postMessage for real-time push)
 
-- URI allowlist is server-side constant — apps cannot access `yaar://config`, `yaar://storage`, etc.
-- Iframe token auth reused (same `X-Iframe-Token` pattern)
-- Browser handler's own domain allowlist still enforced internally
-- Phase 2 extensibility: just append to `IFRAME_ALLOWED_URI_PREFIXES`
+#### 4. Update types in `yaar.d.ts`
+- Mark old methods as `@deprecated` for one release cycle, then remove
 
-## Verification
+### Migration
+- No breaking change initially — old methods still work, just reimplemented internally
+- Later: remove deprecated methods and the separate SDK scripts
 
-1. `bun run --filter @yaar/shared build` — shared package builds with new export
-2. `bun run typecheck` — no type errors
-3. `make dev` → open an app that uses `window.yaar.invoke('yaar://browser/test', { action: 'open', url: '...' })` → verify it works
-4. Verify disallowed URIs return 403: `window.yaar.read('yaar://config/settings')` should fail
+---
 
-## Nice-to-Have / Future
+## Phase 4: Per-app URI permissions in `app.json`
 
-### `yaar://appstorage/` — App-scoped storage
-- Each app gets an isolated namespace: `yaar://appstorage/{appId}/`
-- Server resolves `appId` from iframe token automatically — apps just write to `yaar://appstorage/data.json` and the server scopes it to `storage/apps/{appId}/data.json`
-- Replaces the current pattern where apps manually prefix paths in `window.yaar.storage`
-- Would let the agent use `invoke('yaar://appstorage/...', ...)` consistently in both OS and app contexts
+### Context
+Currently the allowlist is a global server-side constant. As more URI prefixes become available, apps should declare what they need.
 
-### Deprecate purpose-built SDKs
-- Once verb SDK covers storage, `window.yaar.storage.*` becomes a convenience alias over `window.yaar.invoke('yaar://storage/...')`
-- Same for `window.yaar.windows.*` → `window.yaar.read('yaar://windows/...')`
-- Keep the convenience methods but implement them internally via the verb SDK — single code path
+### Changes
 
-### Per-app URI permissions in `app.json`
-- Let apps declare which URI prefixes they need: `"permissions": ["yaar://browser", "yaar://appstorage/"]`
-- Server validates against declared permissions at runtime
-- Agent can see required permissions when loading the skill — knows what the app can/can't do
+#### 1. Add `permissions` field to `app.json` schema
+```json
+{
+  "permissions": ["yaar://browser", "yaar://apps/self/storage/"]
+}
+```
 
-### `window.yaar.subscribe()` — Reactive verb results
-- WebSocket-based subscriptions to URI changes: `window.yaar.subscribe('yaar://browser/my-tab', callback)`
-- Enables real-time UI updates when browser state changes (page navigated, content loaded)
-- Would use the existing BroadcastCenter infrastructure
+#### 2. Embed permissions in iframe token
+- When generating iframe tokens, include the app's declared permissions
+- `validateIframeToken()` returns the permission list alongside `appId`
 
-### Unify `/api/fetch` and `/api/browse` under verbs
-- `window.yaar.invoke('yaar://http', { url, method, headers })` instead of `fetch()` proxy
-- `window.yaar.invoke('yaar://browser/new', { action: 'open', url })` instead of `/api/browse`
-- Agent and app code become identical — one mental model everywhere
+#### 3. Check permissions in `handleVerbRoutes`
+- Replace global `IFRAME_ALLOWED_URI_PREFIXES` check with per-token permission check
+- Fall back to global allowlist for apps that don't declare permissions (backward compat)
+
+#### 4. Agent visibility
+- When loading a skill (`apps_load_skill`), include the app's declared permissions in the output
+- Agent knows what the app can/can't do and can suggest appropriate API calls
+
+---
+
+## Phase 5: `window.yaar.subscribe()` — Reactive verb results
+
+### Context
+Apps that use headless Chrome need to poll for state changes. A subscription model would let them react in real-time.
+
+### Changes
+
+#### 1. SDK addition: `window.yaar.subscribe(uri, callback)`
+- Opens a subscription over the existing iframe ↔ parent WebSocket/postMessage channel
+- Returns an unsubscribe function
+
+#### 2. Server-side subscription registry
+- Track which sessions/windows are subscribed to which URIs
+- When a verb handler modifies a resource, notify subscribers
+
+#### 3. BroadcastCenter integration
+- Use existing `BroadcastCenter.publishToSession()` for push delivery
+- Parent window relays to iframe via postMessage
+
+#### 4. Scope
+- Start with `yaar://browser/*` subscriptions (page navigated, content loaded)
+- Extend to `yaar://apps/*/storage/*` later (file changed)
+
+---
+
+## Phase 6: Unify `/api/fetch` and `/api/browse` under verbs
+
+### Context
+The final step toward "one mental model everywhere." Currently apps use `fetch('/api/fetch', ...)` for HTTP and `fetch('/api/browse', ...)` for Chrome — both are purpose-built REST endpoints outside the verb system.
+
+### Changes
+
+#### 1. Register `yaar://http` handler
+- `invoke('yaar://http', { url, method, headers, body })` → replaces `/api/fetch`
+- Domain allowlist and permission dialogs reused
+
+#### 2. Migrate `/api/browse` to `yaar://browser`
+- Already partially there — `yaar://browser` handler exists
+- Ensure `invoke('yaar://browser/new', { action: 'open', url })` works for one-shot browse (create temp session, extract, close)
+
+#### 3. Add `yaar://http` to default allowlist
+- Apps that currently use `fetch()` (which goes through the proxy script) would migrate to `yaar.invoke('yaar://http', ...)`
+
+#### 4. Deprecate `/api/fetch` and `/api/browse`
+- Keep as thin wrappers over verb handlers for backward compat
+- Eventually remove the proxy fetch script override (biggest win: no more monkey-patching `window.fetch`)

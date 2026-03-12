@@ -148,6 +148,17 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
   const validatedPath = resolved.absolutePath;
 
   try {
+    // Check existence and type before extension-based dispatch
+    let fileStat;
+    try {
+      fileStat = await stat(validatedPath);
+    } catch {
+      return { success: false, error: `File not found: ${filePath}` };
+    }
+    if (fileStat.isDirectory()) {
+      return { success: false, error: `"${filePath}" is a directory. Use list instead.` };
+    }
+
     // Handle PDF files by converting to images
     if (isPdfFile(validatedPath)) {
       const { images, totalPages } = await convertPdfToImages(validatedPath);
@@ -193,9 +204,17 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
       .join('\n');
     return { success: true, content: `── ${filePath} (${lines.length} lines) ──\n${numbered}` };
   } catch (err) {
-    const error = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error };
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, error: sanitizeStorageError(msg, filePath) };
   }
+}
+
+/** Strip absolute storage paths from error messages. */
+function sanitizeStorageError(msg: string, _filePath: string): string {
+  if (msg.includes(STORAGE_DIR)) {
+    return msg.replaceAll(STORAGE_DIR + '/', '').replaceAll(STORAGE_DIR, '');
+  }
+  return msg;
 }
 
 /**
@@ -224,8 +243,8 @@ export async function storageWrite(
     await Bun.write(validatedPath, content);
     return { success: true, path: filePath };
   } catch (err) {
-    const error = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, path: filePath, error };
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };
   }
 }
 
@@ -325,8 +344,8 @@ export async function storageDelete(filePath: string): Promise<StorageDeleteResu
     await unlink(validatedPath);
     return { success: true, path: filePath };
   } catch (err) {
-    const error = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, path: filePath, error };
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };
   }
 }
 

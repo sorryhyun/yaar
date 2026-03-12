@@ -524,6 +524,54 @@ export const IFRAME_WINDOWS_SDK_SCRIPT = `
 })();
 `;
 
+/**
+ * Inline JS verb SDK for iframe apps.
+ *
+ * Provides window.yaar verb methods (invoke, read, list, describe, delete)
+ * that dispatch to POST /api/verb with the iframe token header.
+ * Uses the same yaar:// URI pattern the agent uses via MCP.
+ */
+export const IFRAME_VERB_SDK_SCRIPT = `
+(function() {
+  if (window.__yaarVerbInstalled) return;
+  window.__yaarVerbInstalled = true;
+
+  window.yaar = window.yaar || {};
+
+  var iframeToken = window.__YAAR_TOKEN__ || '';
+  function tokenHeaders() {
+    var h = { 'Content-Type': 'application/json' };
+    if (iframeToken) h['X-Iframe-Token'] = iframeToken;
+    return h;
+  }
+
+  function callVerb(verb, uri, payload) {
+    var body = { verb: verb, uri: uri };
+    if (payload !== undefined) body.payload = payload;
+    return fetch('/api/verb', {
+      method: 'POST',
+      headers: tokenHeaders(),
+      body: JSON.stringify(body)
+    }).then(function(res) {
+      return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || 'Verb call failed');
+        if (data.isError) {
+          var msg = (data.content && data.content[0] && data.content[0].text) || 'Verb error';
+          throw new Error(msg);
+        }
+        return data;
+      });
+    });
+  }
+
+  window.yaar.invoke = function(uri, payload) { return callVerb('invoke', uri, payload); };
+  window.yaar.read = function(uri) { return callVerb('read', uri); };
+  window.yaar.list = function(uri) { return callVerb('list', uri); };
+  window.yaar.describe = function(uri) { return callVerb('describe', uri); };
+  window.yaar.delete = function(uri) { return callVerb('delete', uri); };
+})();
+`;
+
 export const IFRAME_NOTIFICATIONS_SDK_SCRIPT = `
 (function() {
   if (window.__yaarNotificationsInstalled) return;

@@ -3,3 +3,4 @@ export { handleBrowseRoutes } from './browse.js';
 export { handleFileRoutes } from './files.js';
 export { handleProxyRoutes } from './proxy.js';
 export { handleStaticRoutes } from './static.js';
+export { handleVerbRoutes } from './verb.js';
