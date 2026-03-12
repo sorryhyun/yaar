@@ -22,7 +22,7 @@ import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
-import type { WindowStateRegistry } from '../mcp/window-state.js';
+import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import {
   MainQueuePolicy,

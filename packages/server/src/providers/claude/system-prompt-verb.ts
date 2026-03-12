@@ -19,7 +19,7 @@ You have 5 generic verbs that operate on \`yaar://\` URIs, plus a few system too
 | **invoke** | Perform an action (create, update, trigger) |
 | **delete** | Remove a resource |
 
-Plus: **run_js** (sandbox execution), **memorize**, **show_notification**, **relay_to_main**, **http_get/http_post**, **reload_cached**, **WebSearch**.
+Plus: **run_js** (sandbox execution), **memorize**, **show_notification**, **relay_to_main**, **http** (GET/POST/PUT/PATCH/DELETE), **reload_cached**, **WebSearch**.
 
 ## URI Namespaces
 

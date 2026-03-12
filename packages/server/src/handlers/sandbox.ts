@@ -13,7 +13,7 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { getSandboxPath } from '../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
-import { ok, error } from '../mcp/utils.js';
+import { ok, error } from './utils.js';
 import { doCompile, doTypecheck } from '../features/dev/compile.js';
 import { doDeploy, doClone } from '../features/dev/deploy.js';
 import { prependNote, applyEdit } from './utils.js';
@@ -121,7 +121,8 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           : 5000;
 
       const { executeJs } = await import('../lib/sandbox/index.js');
-      const { readAllowedDomains, isAllDomainsAllowed } = await import('../mcp/domains.js');
+      const { readAllowedDomains, isAllDomainsAllowed } =
+        await import('../features/config/domains.js');
 
       const [allowedDomains, allowAllDomains] = await Promise.all([
         readAllowedDomains(),

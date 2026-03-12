@@ -22,7 +22,7 @@ vi.mock('../features/apps/discovery.js', () => ({
 
 // Mock action emitter
 const mockEmitAction = vi.fn();
-vi.mock('../mcp/action-emitter.js', () => ({
+vi.mock('../session/action-emitter.js', () => ({
   actionEmitter: {
     emitAction: (...args: unknown[]) => mockEmitAction(...args),
   },

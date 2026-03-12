@@ -3,10 +3,10 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../mcp/utils.js';
+import { ok, error } from '../../handlers/utils.js';
 import type { Settings } from '../../storage/settings.js';
 import { readSettings, updateSettings, LANGUAGE_CODES } from '../../storage/settings.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 
 export const settingsContentSchema = z.object({
   userName: z.string().optional(),

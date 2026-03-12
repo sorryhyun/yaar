@@ -134,7 +134,7 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
       }
 
       // Check domain allowlist
-      const { isDomainAllowed, extractDomain } = await import('../../mcp/domains.js');
+      const { isDomainAllowed, extractDomain } = await import('../../features/config/domains.js');
       const domain = extractDomain(body.url);
       if (!domain) return errorResponse('Invalid URL', 400);
       if (!(await isDomainAllowed(domain))) {

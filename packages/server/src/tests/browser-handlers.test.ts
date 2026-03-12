@@ -57,7 +57,7 @@ vi.mock('../features/browser/shared.js', async () => ({
 }));
 
 // Mock action emitter
-vi.mock('../mcp/action-emitter.js', () => ({
+vi.mock('../session/action-emitter.js', () => ({
   actionEmitter: {
     emitAction: vi.fn(),
     emitActionWithFeedback: vi.fn().mockResolvedValue(null),
@@ -65,7 +65,7 @@ vi.mock('../mcp/action-emitter.js', () => ({
 }));
 
 // Mock domains
-vi.mock('../mcp/domains.js', () => ({
+vi.mock('../features/config/domains.js', () => ({
   isDomainAllowed: vi.fn().mockResolvedValue(true),
   extractDomain: (url: string) => {
     try {

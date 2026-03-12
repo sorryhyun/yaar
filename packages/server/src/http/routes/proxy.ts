@@ -18,8 +18,8 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
       'Proxy HTTP request (for CORS-blocked APIs). Body: `{ url, method?, headers?, body? }`',
   },
 ];
-import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../mcp/domains.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../features/config/domains.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB

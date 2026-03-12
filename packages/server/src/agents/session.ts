@@ -14,7 +14,7 @@ import {
   type OSAction,
 } from '@yaar/shared';
 import type { SessionLogger } from '../logging/index.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
+import { actionEmitter } from '../session/action-emitter.js';
 import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';

@@ -3,8 +3,8 @@
  */
 
 import { z } from 'zod';
-import { ok, error } from '../../mcp/utils.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { ok, error } from '../../handlers/utils.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { addMount, removeMount, loadMounts } from '../../storage/mounts.js';
 
 export const mountContentSchema = z.object({

@@ -10,7 +10,7 @@ import type { ServerEvent, UserInteraction } from '@yaar/shared';
 import type { ContextTape } from './context.js';
 import type { AgentPool } from './agent-pool.js';
 import type { InteractionTimeline } from './interaction-timeline.js';
-import type { WindowStateRegistry } from '../mcp/window-state.js';
+import type { WindowStateRegistry } from '../session/window-state.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { ProviderType } from '../providers/types.js';
 import type {

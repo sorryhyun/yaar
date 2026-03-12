@@ -6,7 +6,7 @@ import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
 import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
 import { PROJECT_ROOT } from '../../config.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';

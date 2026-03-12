@@ -57,7 +57,11 @@ import {
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 import type { ContextRestorePolicy } from '../../logging/index.js';
-import { readAllowedDomains, isAllDomainsAllowed, setAllowAllDomains } from '../../mcp/domains.js';
+import {
+  readAllowedDomains,
+  isAllDomainsAllowed,
+  setAllowAllDomains,
+} from '../../features/config/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 

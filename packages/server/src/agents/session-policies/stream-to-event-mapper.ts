@@ -3,7 +3,7 @@ import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
 import { formatToolDisplay } from '../../mcp/server.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { getToolUseHooks, type ToolUseContext } from '../../features/config/hooks.js';
 import { VERB_TOOL_NAMES } from '../../handlers/index.js';
 

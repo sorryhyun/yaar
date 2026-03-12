@@ -12,8 +12,8 @@
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
-import { ok, error } from '../mcp/utils.js';
+import { actionEmitter } from '../session/action-emitter.js';
+import { ok, error } from './utils.js';
 
 function assertSessionUser(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session') throw new Error(`Expected session URI, got ${resolved.kind}`);

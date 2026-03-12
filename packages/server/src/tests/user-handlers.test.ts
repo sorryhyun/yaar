@@ -14,7 +14,7 @@ vi.mock('../handlers/uri-resolve.js', () => ({
 // Mock action emitter
 const mockEmitAction = vi.fn();
 const mockShowUserPrompt = vi.fn();
-vi.mock('../mcp/action-emitter.js', () => ({
+vi.mock('../session/action-emitter.js', () => ({
   actionEmitter: {
     emitAction: (...args: unknown[]) => mockEmitAction(...args),
     showUserPrompt: (...args: unknown[]) => mockShowUserPrompt(...args),

@@ -23,9 +23,9 @@ import {
 } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
-import type { WindowStateRegistry } from '../mcp/window-state.js';
-import { ok, error } from '../mcp/utils.js';
+import { actionEmitter } from '../session/action-emitter.js';
+import type { WindowStateRegistry } from '../session/window-state.js';
+import { ok, error } from './utils.js';
 import { getAgentId, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { resolveResourceUri } from './uri-resolve.js';

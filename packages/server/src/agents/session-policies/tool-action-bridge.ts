@@ -1,4 +1,4 @@
-import type { ActionEvent } from '../../mcp/action-emitter.js';
+import type { ActionEvent } from '../../session/action-emitter.js';
 import { ServerEventType, type OSAction, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 

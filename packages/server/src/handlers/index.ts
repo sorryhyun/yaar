@@ -7,7 +7,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ResourceRegistry } from './uri-registry.js';
-import type { WindowStateRegistry } from '../mcp/window-state.js';
+import type { WindowStateRegistry } from '../session/window-state.js';
 import { getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { registerConfigHandlers } from './config.js';

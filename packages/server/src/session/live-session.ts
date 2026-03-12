@@ -14,7 +14,7 @@
 import { join } from 'path';
 import { ContextPool } from '../agents/context-pool.js';
 import type { ContextMessage } from '../agents/context.js';
-import { WindowStateRegistry } from '../mcp/window-state.js';
+import { WindowStateRegistry } from './window-state.js';
 import { ReloadCache } from '../reload/cache.js';
 import type { SessionId } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
@@ -28,7 +28,7 @@ import {
   type AppProtocolRequest,
 } from '@yaar/shared';
 import type { YaarWebSocket } from './types.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
+import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import { getHooksByEvent } from '../features/config/hooks.js';

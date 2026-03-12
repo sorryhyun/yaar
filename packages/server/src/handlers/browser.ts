@@ -14,9 +14,9 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedBrowser } from './uri-resolve.js';
 import { getBrowserPool } from '../lib/browser/index.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
-import { isDomainAllowed, extractDomain } from '../mcp/domains.js';
-import { ok, error, okWithImages } from '../mcp/utils.js';
+import { actionEmitter } from '../session/action-emitter.js';
+import { isDomainAllowed, extractDomain } from '../features/config/domains.js';
+import { ok, error, okWithImages } from './utils.js';
 import { resolveSession, formatPageState, findMainContent } from '../features/browser/shared.js';
 
 function assertBrowser(resolved: ResolvedUri): asserts resolved is ResolvedBrowser {

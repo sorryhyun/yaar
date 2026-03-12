@@ -63,7 +63,7 @@ vi.mock('../providers/environment.js', () => ({
   buildEnvironmentSection: vi.fn(async () => ''),
 }));
 
-vi.mock('../mcp/action-emitter.js', () => ({
+vi.mock('../session/action-emitter.js', () => ({
   actionEmitter: {
     onAction: vi.fn(() => vi.fn()),
     emitAction: vi.fn(),

@@ -78,7 +78,7 @@ vi.mock('../session/session-hub.js', () => ({
   }),
 }));
 
-vi.mock('../mcp/action-emitter.js', () => ({
+vi.mock('../session/action-emitter.js', () => ({
   actionEmitter: {
     emitAction: vi.fn(),
     emitActionWithFeedback: vi.fn().mockResolvedValue(null),

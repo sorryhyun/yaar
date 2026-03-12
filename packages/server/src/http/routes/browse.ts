@@ -12,8 +12,8 @@
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../mcp/domains.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../features/config/domains.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { validateUrl } from '../../lib/ssrf.js';
 import { getBrowserPool } from '../../lib/browser/pool.js';
 

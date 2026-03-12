@@ -69,9 +69,9 @@ Button clicks send: \`<ui:click>button "{action}" in window "{title}"</ui:click>
 **Images:** Use \`/api/storage/<path>\` for stored files, \`/api/pdf/<path>/<page>\` for PDF pages.
 
 ## HTTP Access
-Use http_get/http_post for API calls. Domains require allowlisting.
+Use http({ url, method }) for API calls. Domains require allowlisting.
 Use invoke('yaar://config/domains', { domain }) to prompt user for new domain access.
-**When http_get or WebSearch fails**, use \`invoke('yaar://browser/pages', { action: "open", url })\` as a fallback.
+**When http or WebSearch fails**, use \`invoke('yaar://browser/pages', { action: "open", url })\` as a fallback.
 
 ## Relay to Main
 After completing a significant task, call relay_to_main to hand results back to the main agent. Only relay when the main agent needs to take further action.

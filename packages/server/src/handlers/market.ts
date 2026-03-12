@@ -11,7 +11,7 @@
 
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from '../mcp/utils.js';
+import { ok, error } from './utils.js';
 import { installApp } from './apps.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';

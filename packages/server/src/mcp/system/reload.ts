@@ -6,9 +6,9 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ok } from '../utils.js';
-import { actionEmitter } from '../action-emitter.js';
-import type { WindowStateRegistry } from '../window-state.js';
+import { ok } from '../../handlers/utils.js';
+import { actionEmitter } from '../../session/action-emitter.js';
+import type { WindowStateRegistry } from '../../session/window-state.js';
 import { getAgentId } from '../../agents/session.js';
 import type { ReloadCache } from '../../reload/cache.js';
 import type { CacheEntry } from '../../reload/types.js';

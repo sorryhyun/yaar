@@ -13,7 +13,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from '../mcp/utils.js';
+import { ok, error } from './utils.js';
 
 /** Known topic names — kept in sync with skills/index.ts. */
 const TOPIC_NAMES = ['app_dev', 'sandbox', 'components', 'host_api', 'app_protocol', 'config'];

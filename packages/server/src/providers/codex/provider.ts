@@ -18,7 +18,7 @@ import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
-import { actionEmitter } from '../../mcp/action-emitter.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,

@@ -16,7 +16,7 @@ import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { registerHttpTools, SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
-import type { WindowStateRegistry } from './window-state.js';
+import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';

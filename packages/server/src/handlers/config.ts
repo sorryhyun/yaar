@@ -25,9 +25,9 @@ import {
   isAllDomainsAllowed,
   isDomainAllowed,
   addAllowedDomain,
-} from '../mcp/domains.js';
-import { ok, error } from '../mcp/utils.js';
-import { actionEmitter } from '../mcp/action-emitter.js';
+} from '../features/config/domains.js';
+import { ok, error } from './utils.js';
+import { actionEmitter } from '../session/action-emitter.js';
 
 function assertConfig(
   resolved: ResolvedUri,
