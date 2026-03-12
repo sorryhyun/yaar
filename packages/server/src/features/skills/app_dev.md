@@ -209,6 +209,68 @@ const win = await yaar.windows.read('win-notes', { includeImage: true });
 
 This is **read-only** — apps cannot modify other windows.
 
+## HTTP Proxy APIs
+
+Iframe apps are subject to CORS. Two server-side proxies bypass this:
+
+### `/api/fetch` — Raw HTTP Proxy
+
+For simple HTTP requests (API calls, HTML scraping of server-rendered pages):
+
+```ts
+const res = await fetch('/api/fetch', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    url: 'https://example.com/api/data',
+    method: 'GET',                          // optional, default GET
+    headers: { 'Accept': 'application/json' }, // optional, forwarded to target
+    body: '...',                            // optional, for POST/PUT
+  }),
+});
+const data = await res.json();
+// → { ok: true, status: 200, statusText: "OK", headers: {...}, body: "..." }
+// Binary responses: body is base64, bodyEncoding: "base64"
+```
+
+- First request to a new domain triggers a user permission dialog
+- `Referer` headers targeting the upstream site are forwarded (useful for sites that check referer)
+- Max response: 10MB, timeout: 30s
+
+### `/api/browse` — Headless Chrome Proxy
+
+For JS-rendered pages (SPAs, dynamic content). Navigates a real browser and extracts content:
+
+```ts
+const res = await fetch('/api/browse', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    url: 'https://example.com/spa-page',
+    extract: 'text',                         // "text" | "html" | "screenshot"
+    selector: '.main-content',               // optional CSS selector
+    waitUntil: 'networkidle',                // optional: "load" | "domcontentloaded" | "networkidle"
+  }),
+});
+const data = await res.json();
+// text/html → { ok, url, title, text, links, forms }
+// screenshot → { ok, url, title, screenshot: "<base64>", format: "webp" }
+```
+
+- Requires Chrome/Edge on the server (returns 503 if unavailable)
+- Same domain allowlist as `/api/fetch`
+- Each request gets a temporary browser tab (cleaned up after)
+- Timeout: 30s
+
+### When to Use Which
+
+| Scenario | Use |
+|----------|-----|
+| REST API calls, JSON endpoints | `/api/fetch` |
+| Server-rendered HTML scraping | `/api/fetch` + `DOMParser` |
+| JS-rendered SPA content | `/api/browse` |
+| Page screenshots / visual capture | `/api/browse` with `extract: "screenshot"` |
+
 ## Deploy
 
 `invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...', ... })` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.
@@ -230,7 +292,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
-- **Browser `fetch()` only** — Apps can make HTTP requests, but they are subject to CORS restrictions. Many APIs will block direct browser requests.
+- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `/api/fetch` (raw HTTP proxy) or `/api/browse` (headless Chrome) to bypass CORS. See **HTTP Proxy APIs** above.
 - **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 

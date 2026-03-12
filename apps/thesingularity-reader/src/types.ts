@@ -1,0 +1,28 @@
+export type Post = {
+  id: string;
+  num: string;
+  title: string;
+  url: string;
+  category?: string;
+  author: string;
+  date: string;
+  views: string;
+  recommend: string;
+  isNotice: boolean;
+};
+
+export type AppSettings = {
+  refreshInterval: number; // in seconds
+};
+
+export type AppState = {
+  posts: Post[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  newPostCount: number;
+  settings: AppSettings;
+  selectedPost: Post | null;
+  postContent: string | null;
+  postLoading: boolean;
+};

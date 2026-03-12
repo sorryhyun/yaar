@@ -171,7 +171,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
-- **Browser `fetch()` only** — Apps can make HTTP requests, but they are subject to CORS restrictions. Many APIs will block direct browser requests.
+- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `POST /api/fetch` (raw HTTP proxy) or `POST /api/browse` (headless Chrome rendering) to bypass CORS. See the Host API skill for details.
 - **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
@@ -254,10 +254,9 @@ Call `window.yaar.app.register()` with state handlers and command handlers. The 
 import { items } from './store';
 
 export function registerProtocol() {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!window.yaar?.app) return;
 
-  appApi.register({
+  window.yaar.app.register({
     appId: 'my-app',
     name: 'My App',
     state: {

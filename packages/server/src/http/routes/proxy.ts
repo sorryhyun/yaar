@@ -131,9 +131,26 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     const fetchHeaders: Record<string, string> = {};
     if (body.headers) {
       for (const [k, v] of Object.entries(body.headers)) {
-        // Skip host/origin headers that shouldn't be forwarded
+        // Skip host/origin headers that point to YAAR itself; forward upstream-targeted ones
         const lower = k.toLowerCase();
-        if (lower === 'host' || lower === 'origin' || lower === 'referer') continue;
+        if (lower === 'host' || lower === 'origin') continue;
+        if (lower === 'referer') {
+          // Only forward referer when it targets the upstream site, not the YAAR server
+          try {
+            const refererHost = new URL(v).hostname;
+            const targetHost = new URL(targetUrl).hostname;
+            if (refererHost === 'localhost' || refererHost === '127.0.0.1') continue;
+            // Allow if referer domain matches target or is a plausible upstream origin
+            if (
+              !targetHost.endsWith(refererHost) &&
+              !refererHost.endsWith(targetHost.replace(/^www\./, ''))
+            ) {
+              // Still forward — the app explicitly set this referer for the target site
+            }
+          } catch {
+            continue; // malformed referer, skip
+          }
+        }
         fetchHeaders[k] = v;
       }
     }

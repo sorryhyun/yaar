@@ -11,6 +11,15 @@ import type { StreamMessage } from '../types.js';
 /** Track tool_use_id → toolName from content_block_start events */
 const toolNameById = new Map<string, string>();
 
+/** Buffer pending tool_use blocks: accumulate input_json_delta, emit at content_block_stop */
+interface PendingToolUse {
+  toolName: string;
+  toolUseId?: string;
+  inputChunks: string[];
+}
+const pendingToolUse = new Map<number, PendingToolUse>();
+let currentBlockIndex = -1;
+
 /**
  * Map a Claude SDK message to a StreamMessage.
  * Returns null for messages that should be skipped.
@@ -114,22 +123,38 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
 function mapStreamEvent(event: unknown): StreamMessage | null {
   if (!event || typeof event !== 'object') return null;
 
-  const evt = event as { type: string; delta?: unknown; content_block?: unknown };
+  const evt = event as {
+    type: string;
+    index?: number;
+    delta?: unknown;
+    content_block?: unknown;
+  };
 
   if (evt.type === 'content_block_start') {
     const block = evt.content_block as { type: string; name?: string; id?: string } | undefined;
     if (block?.type === 'tool_use' && block.name) {
       if (block.id) toolNameById.set(block.id, block.name);
-      return {
-        type: 'tool_use',
+      const idx = evt.index ?? ++currentBlockIndex;
+      currentBlockIndex = idx;
+      // Buffer: don't emit yet — wait for input_json_delta + content_block_stop
+      pendingToolUse.set(idx, {
         toolName: block.name,
         toolUseId: block.id,
-      };
+        inputChunks: [],
+      });
+      return null;
     }
   }
 
   if (evt.type === 'content_block_delta') {
-    const delta = evt.delta as { type: string; text?: string; thinking?: string } | undefined;
+    const delta = evt.delta as
+      | {
+          type: string;
+          text?: string;
+          thinking?: string;
+          partial_json?: string;
+        }
+      | undefined;
     if (!delta) return null;
 
     if (delta.type === 'text_delta' && delta.text) {
@@ -137,6 +162,36 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
     }
     if (delta.type === 'thinking_delta' && delta.thinking) {
       return { type: 'thinking', content: delta.thinking };
+    }
+    if (delta.type === 'input_json_delta' && delta.partial_json) {
+      const idx = evt.index ?? currentBlockIndex;
+      const pending = pendingToolUse.get(idx);
+      if (pending) {
+        pending.inputChunks.push(delta.partial_json);
+      }
+      return null;
+    }
+  }
+
+  if (evt.type === 'content_block_stop') {
+    const idx = evt.index ?? currentBlockIndex;
+    const pending = pendingToolUse.get(idx);
+    if (pending) {
+      pendingToolUse.delete(idx);
+      let toolInput: Record<string, unknown> | undefined;
+      if (pending.inputChunks.length > 0) {
+        try {
+          toolInput = JSON.parse(pending.inputChunks.join(''));
+        } catch {
+          // Malformed JSON — emit without input
+        }
+      }
+      return {
+        type: 'tool_use',
+        toolName: pending.toolName,
+        toolUseId: pending.toolUseId,
+        toolInput,
+      };
     }
   }
 

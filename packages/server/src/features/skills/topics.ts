@@ -11,6 +11,7 @@ import type { EndpointMeta } from '../../http/utils.js';
 import { PUBLIC_ENDPOINTS as apiEndpoints } from '../../http/routes/api.js';
 import { PUBLIC_ENDPOINTS as fileEndpoints } from '../../http/routes/files.js';
 import { PUBLIC_ENDPOINTS as proxyEndpoints } from '../../http/routes/proxy.js';
+import { PUBLIC_ENDPOINTS as browseEndpoints } from '../../http/routes/browse.js';
 
 // Bun text imports — content inlined at build time for exe bundles
 // @ts-expect-error: Bun text import
@@ -38,7 +39,12 @@ export const TOPICS: Record<string, string> = {
 export const TOPIC_NAMES = Object.keys(TOPICS);
 
 function renderEndpointTable(): string {
-  const all: EndpointMeta[] = [...apiEndpoints, ...fileEndpoints, ...proxyEndpoints];
+  const all: EndpointMeta[] = [
+    ...apiEndpoints,
+    ...fileEndpoints,
+    ...proxyEndpoints,
+    ...browseEndpoints,
+  ];
   const rows = all.map((e) => `| ${e.method} | \`${e.path}\` | ${e.response} | ${e.description} |`);
   return [
     '| Method | Endpoint | Response | Description |',
