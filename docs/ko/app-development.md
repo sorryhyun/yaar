@@ -171,7 +171,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **Node.js API 없음** — `fs`, `process`, `child_process`, `net` 등을 사용할 수 없습니다. 브라우저 환경입니다.
 - **서버 프로세스 없음** — 앱은 포트를 열거나 서버를 실행할 수 없습니다.
 - **OAuth 플로우 불가** — OAuth code-for-token 교환에는 서버 측 `client_secret`이 필요합니다. iframe 앱에서는 안전하게 수행할 수 없으므로, API 기반 앱 패턴을 사용하세요 (아래 참조).
-- **브라우저 `fetch()`만 가능** — HTTP 요청은 가능하지만 CORS 제한을 받습니다. 많은 API가 직접적인 브라우저 요청을 차단합니다.
+- **브라우저 `fetch()`는 CORS 제한** — 직접적인 크로스 오리진 요청은 차단됩니다. `yaar.invoke('yaar://http', { url, ... })`를 사용하여 서버를 통해 프록시하세요.
 - **localStorage/IndexedDB 사용 금지** — `window.yaar.storage`를 사용하세요 (서버 측 저장, 세션 간 유지).
 - **자체 완결형** — 앱은 외부 서버, localhost 서비스, iframe 외부 인프라에 의존해서는 안 됩니다.
 
@@ -181,7 +181,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 
 - **OAuth 클라이언트를 컴파일된 앱으로 만들지 마세요** — OAuth에는 서버 측 `client_secret` 토큰 교환이 필요합니다. 대신, 사용자가 개인 액세스 토큰(PAT)을 제공하고 `invoke('yaar://config/app/{appId}', { config })`로 저장하는 API 기반 앱(SKILL.md만)을 만드세요.
 - **외부 서버가 실행 중이라고 가정하지 마세요** — `localhost:3000`이나 다른 포트에 백엔드가 없습니다. 앱은 완전히 자체 완결형이어야 합니다.
-- **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `http_get`/`http_post` 시스템 도구로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
+- **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `invoke('yaar://http', { url, method?, headers?, body? })`로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
 
 ### 외부 서비스 연동의 올바른 패턴
@@ -190,7 +190,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 옵션 A: API 기반 앱 (API 래퍼에 적합)
   apps/github/SKILL.md → GitHub API, 인증 흐름 기술
   사용자가 PAT 제공 → invoke('yaar://config/app/{appId}', { config })로 저장
-  AI가 http_get/http_post로 GitHub API 호출 → 윈도우에 렌더링
+  AI가 invoke('yaar://http', ...)로 GitHub API 호출 → 윈도우에 렌더링
 
 옵션 B: 컴파일된 앱 + AI 매개 API (풍부한 UI용)
   컴파일된 iframe 앱은 UI/표시만 담당

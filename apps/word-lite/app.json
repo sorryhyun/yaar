@@ -222,5 +222,6 @@
     }
   },
   "appProtocol": true,
-  "capture": "dom"
+  "capture": "dom",
+  "permissions": ["yaar://apps/self/storage/", "yaar://windows/"]
 }

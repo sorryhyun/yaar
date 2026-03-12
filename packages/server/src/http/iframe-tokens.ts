@@ -12,6 +12,7 @@ interface TokenEntry {
   windowId: string;
   sessionId: string;
   appId?: string;
+  permissions?: string[];
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -22,12 +23,17 @@ const tokens = new Map<string, TokenEntry>();
  * Generate a short-lived token tied to a windowId.
  * The token is injected into the iframe SDK so requests can self-identify.
  */
-export function generateIframeToken(windowId: string, sessionId: string, appId?: string): string {
+export function generateIframeToken(
+  windowId: string,
+  sessionId: string,
+  appId?: string,
+  permissions?: string[],
+): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
     tokens.delete(token);
   }, TOKEN_TTL_MS);
-  tokens.set(token, { windowId, sessionId, appId, createdAt: Date.now(), timer });
+  tokens.set(token, { windowId, sessionId, appId, permissions, createdAt: Date.now(), timer });
   return token;
 }
 

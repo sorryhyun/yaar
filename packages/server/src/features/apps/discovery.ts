@@ -35,6 +35,7 @@ export interface AppInfo {
   dockEdge?: DockEdgeType;
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  permissions?: string[];
 }
 
 /**
@@ -86,6 +87,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let dockEdge: DockEdgeType | undefined;
       let frameless: boolean | undefined;
       let windowStyle: Record<string, string | number> | undefined;
+      let permissions: string[] | undefined;
       try {
         const metaContent = await Bun.file(join(appPath, 'app.json')).text();
         const meta = JSON.parse(metaContent);
@@ -103,6 +105,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.frameless === true) frameless = true;
         if (meta.windowStyle && typeof meta.windowStyle === 'object')
           windowStyle = meta.windowStyle;
+        if (Array.isArray(meta.permissions)) permissions = meta.permissions;
       } catch {
         // No metadata or invalid JSON
       }
@@ -161,6 +164,7 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(dockEdge && { dockEdge }),
         ...(frameless && { frameless }),
         ...(windowStyle && { windowStyle }),
+        ...(permissions && { permissions }),
       });
     }
 
@@ -179,6 +183,7 @@ export async function getAppMeta(appId: string): Promise<{
   dockEdge?: DockEdgeType;
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  permissions?: string[];
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -188,12 +193,14 @@ export async function getAppMeta(appId: string): Promise<{
       dockEdge?: DockEdgeType;
       frameless?: boolean;
       windowStyle?: Record<string, string | number>;
+      permissions?: string[];
     } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
     if (meta.frameless === true) result.frameless = true;
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
+    if (Array.isArray(meta.permissions)) result.permissions = meta.permissions;
     return Object.keys(result).length > 0 ? result : null;
   } catch {
     return null;

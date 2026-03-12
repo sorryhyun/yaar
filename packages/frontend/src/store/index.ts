@@ -1,5 +1,5 @@
 // Public API for the store
-export { useDesktopStore, handleAppProtocolRequest } from './desktop';
+export { useDesktopStore, handleAppProtocolRequest, handleVerbSubscriptionUpdate } from './desktop';
 
 // Selectors
 export {

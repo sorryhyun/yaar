@@ -54,5 +54,6 @@
       }
     }
   },
-  "description": "Manage GitHub repositories and issues"
+  "description": "Manage GitHub repositories and issues",
+  "permissions": ["yaar://http"]
 }

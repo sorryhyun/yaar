@@ -259,67 +259,49 @@ const sessions = await yaar.list('yaar://browser');
 | `yaar.windows.read(id)` | `yaar.read('yaar://windows/' + id)` |
 | `yaar.windows.list()` | `yaar.list('yaar://windows')` |
 
-## HTTP Proxy APIs
+## HTTP Requests
 
-Iframe apps are subject to CORS. Two server-side proxies bypass this:
-
-### `/api/fetch` — Raw HTTP Proxy
-
-For simple HTTP requests (API calls, HTML scraping of server-rendered pages):
+Iframe apps are subject to CORS. Use `yaar.invoke('yaar://http', ...)` to proxy requests through the server:
 
 ```ts
-const res = await fetch('/api/fetch', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    url: 'https://example.com/api/data',
-    method: 'GET',                          // optional, default GET
-    headers: { 'Accept': 'application/json' }, // optional, forwarded to target
-    body: '...',                            // optional, for POST/PUT
-  }),
+const result = await yaar.invoke('yaar://http', {
+  url: 'https://example.com/api/data',
+  method: 'GET',                            // optional, default GET
+  headers: { 'Accept': 'application/json' }, // optional, forwarded to target
+  body: '...',                              // optional, for POST/PUT/PATCH
 });
-const data = await res.json();
+const data = JSON.parse(result.content[0].text);
 // → { ok: true, status: 200, statusText: "OK", headers: {...}, body: "..." }
 // Binary responses: body is base64, bodyEncoding: "base64"
 ```
 
 - First request to a new domain triggers a user permission dialog
-- `Referer` headers targeting the upstream site are forwarded (useful for sites that check referer)
+- SSRF protection (blocks internal networks)
 - Max response: 10MB, timeout: 30s
 
-### `/api/browse` — Headless Chrome Proxy
+### Headless Chrome (`yaar://browser`)
 
-For JS-rendered pages (SPAs, dynamic content). Navigates a real browser and extracts content:
+For JS-rendered pages (SPAs, dynamic content), use headless Chrome via the browser verb:
 
 ```ts
-const res = await fetch('/api/browse', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    url: 'https://example.com/spa-page',
-    extract: 'text',                         // "text" | "html" | "screenshot"
-    selector: '.main-content',               // optional CSS selector
-    waitUntil: 'networkidle',                // optional: "load" | "domcontentloaded" | "networkidle"
-  }),
-});
-const data = await res.json();
-// text/html → { ok, url, title, text, links, forms }
-// screenshot → { ok, url, title, screenshot: "<base64>", format: "webp" }
+// Open a page
+await yaar.invoke('yaar://browser/my-tab', { action: 'open', url: 'https://example.com/spa-page' });
+
+// Read extracted content
+const result = await yaar.read('yaar://browser/my-tab');
 ```
 
-- Requires Chrome/Edge on the server (returns 503 if unavailable)
-- Same domain allowlist as `/api/fetch`
-- Each request gets a temporary browser tab (cleaned up after)
-- Timeout: 30s
+- Requires Chrome/Edge on the server
+- Same domain allowlist as HTTP proxy
 
 ### When to Use Which
 
 | Scenario | Use |
 |----------|-----|
-| REST API calls, JSON endpoints | `/api/fetch` |
-| Server-rendered HTML scraping | `/api/fetch` + `DOMParser` |
-| JS-rendered SPA content | `/api/browse` |
-| Page screenshots / visual capture | `/api/browse` with `extract: "screenshot"` |
+| REST API calls, JSON endpoints | `yaar.invoke('yaar://http', ...)` |
+| Server-rendered HTML scraping | `yaar.invoke('yaar://http', ...)` + `DOMParser` |
+| JS-rendered SPA content | `yaar://browser` |
+| Page screenshots / visual capture | `yaar://browser` with screenshot action |
 
 ## Deploy
 
@@ -342,7 +324,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
-- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `/api/fetch` (raw HTTP proxy) or `/api/browse` (headless Chrome) to bypass CORS. See **HTTP Proxy APIs** above.
+- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `yaar.invoke('yaar://http', { url, ... })` to proxy requests through the server. See **HTTP Requests** above.
 - **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
@@ -360,7 +342,7 @@ Common mistakes to avoid when building apps:
 - **Don't guess API endpoints** — Only use endpoints from `read('yaar://skills/host_api')`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { ... })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
-- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` MCP tools and relay data via App Protocol.
+- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 
 ### Right Pattern for External Service Integration
@@ -369,7 +351,7 @@ Common mistakes to avoid when building apps:
 Option A: API-based app (preferred for API wrappers)
   apps/github/SKILL.md → describes GitHub API, auth flow
   User provides PAT → stored via invoke('yaar://config/app/{appId}', { ... })
-  AI calls GitHub API via http_get/http_post → renders in windows
+  AI calls GitHub API via invoke('yaar://http', ...) → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)
   Compiled iframe app handles UI/display only

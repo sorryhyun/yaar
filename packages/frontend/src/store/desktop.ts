@@ -307,7 +307,33 @@ function handleAppProtocolRequest(
   iframe.contentWindow.postMessage(msg, getIframeTargetOrigin(iframe));
 }
 
-export { handleAppProtocolRequest };
+/**
+ * Forward a verb subscription update to the target iframe via postMessage.
+ * The iframe SDK listens for 'yaar:subscription-update' messages and
+ * invokes the registered callback for the matching subscriptionId.
+ */
+function handleVerbSubscriptionUpdate(windowId: string, subscriptionId: string, uri: string): void {
+  const state = useDesktopStore.getState();
+  const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
+  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
+
+  const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
+  if (!el) return;
+
+  const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
+  if (!iframe?.contentWindow) return;
+
+  iframe.contentWindow.postMessage(
+    {
+      type: 'yaar:subscription-update',
+      subscriptionId,
+      uri,
+    },
+    getIframeTargetOrigin(iframe),
+  );
+}
+
+export { handleAppProtocolRequest, handleVerbSubscriptionUpdate };
 
 /**
  * Register iframe message handlers via the centralized router.

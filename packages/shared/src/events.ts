@@ -25,6 +25,7 @@ export const ServerEventType = {
   MESSAGE_QUEUED: 'MESSAGE_QUEUED',
   APPROVAL_REQUEST: 'APPROVAL_REQUEST',
   APP_PROTOCOL_REQUEST: 'APP_PROTOCOL_REQUEST',
+  VERB_SUBSCRIPTION_UPDATE: 'VERB_SUBSCRIPTION_UPDATE',
 } as const;
 
 /** Client → Server event type discriminants. */
@@ -311,6 +312,13 @@ export interface AppProtocolRequestEvent {
   request: AppProtocolRequest;
 }
 
+export interface VerbSubscriptionUpdateEvent {
+  type: typeof ServerEventType.VERB_SUBSCRIPTION_UPDATE;
+  windowId: string;
+  subscriptionId: string;
+  uri: string;
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -322,4 +330,5 @@ export type ServerEvent =
   | MessageAcceptedEvent
   | MessageQueuedEvent
   | ApprovalRequestEvent
-  | AppProtocolRequestEvent;
+  | AppProtocolRequestEvent
+  | VerbSubscriptionUpdateEvent;

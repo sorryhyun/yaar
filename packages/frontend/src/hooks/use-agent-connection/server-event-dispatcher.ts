@@ -37,6 +37,7 @@ export interface ServerEventDispatchHandlers {
     windowId: string,
     request: AppProtocolRequest,
   ) => void;
+  handleVerbSubscriptionUpdate: (windowId: string, subscriptionId: string, uri: string) => void;
   incrementSubagentCount: (agentId: string) => void;
   decrementSubagentCount: (agentId: string) => void;
 }
@@ -201,6 +202,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.APP_PROTOCOL_REQUEST: {
       const m = message as AppProtocolRequestEvent;
       handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request);
+      break;
+    }
+    case ServerEventType.VERB_SUBSCRIPTION_UPDATE: {
+      const m = message as { windowId: string; subscriptionId: string; uri: string };
+      handlers.handleVerbSubscriptionUpdate(m.windowId, m.subscriptionId, m.uri);
       break;
     }
   }

@@ -545,6 +545,68 @@ export const IFRAME_VERB_SDK_SCRIPT = `
   window.yaar.list = function(uri) { return callVerb('list', uri); };
   window.yaar.describe = function(uri) { return callVerb('describe', uri); };
   window.yaar.delete = function(uri) { return callVerb('delete', uri); };
+
+  // ── Reactive subscriptions ──
+  var __yaarSubs = {};
+  var __yaarSubCounter = 0;
+
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'yaar:subscription-update') return;
+    var id = e.data.subscriptionId;
+    if (__yaarSubs[id]) {
+      try { __yaarSubs[id](e.data.uri); } catch(err) {}
+    }
+  });
+
+  window.yaar.subscribe = function(uri, callback) {
+    var headers = tokenHeaders();
+    return fetch('/api/verb/subscribe', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ uri: uri, action: 'subscribe' })
+    }).then(function(res) {
+      return res.json();
+    }).then(function(data) {
+      if (data.error) throw new Error(data.error);
+      var serverId = data.subscriptionId;
+      __yaarSubs[serverId] = callback;
+      return function unsubscribe() {
+        delete __yaarSubs[serverId];
+        return fetch('/api/verb/subscribe', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ action: 'unsubscribe', subscriptionId: serverId })
+        }).then(function() {});
+      };
+    });
+  };
+
+  window.yaar.fetch = function(url, options) {
+    var payload = { url: url };
+    if (options) {
+      if (options.method) payload.method = options.method;
+      if (options.headers) payload.headers = options.headers;
+      if (options.body) payload.body = options.body;
+    }
+    return window.yaar.invoke('yaar://http', payload).then(function(result) {
+      var text = (result && result.content && result.content[0] && result.content[0].text) || '{}';
+      var data = JSON.parse(text);
+      var body;
+      if (data.bodyEncoding === 'base64') {
+        var bin = atob(data.body);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        body = bytes.buffer;
+      } else {
+        body = data.body;
+      }
+      return new Response(body, {
+        status: data.status,
+        statusText: data.statusText,
+        headers: data.headers
+      });
+    });
+  };
 })();
 `;
 

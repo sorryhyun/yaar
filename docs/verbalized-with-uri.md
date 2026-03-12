@@ -451,6 +451,6 @@ Migration is complete. All domains use the verb layer exclusively — legacy too
 | 7 | `browser` | `yaar://browser/*` (action-dispatched invoke) |
 | 8 | `agents` | `yaar://sessions/current/agents/*` (list, read, interrupt) |
 
-Named system tools that remain alongside verbs: `http_get`, `http_post`, `reload_cached`, `list_reload_options`, `curl`.
+Named system tools that remain alongside verbs: `reload_cached`, `list_reload_options`. HTTP requests now use `invoke('yaar://http', { url, method?, headers?, body? })`.
 
 Domain allowlisting is now via `invoke('yaar://config/domains', { domain })`.

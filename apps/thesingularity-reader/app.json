@@ -1,5 +1,6 @@
 {
   "icon": "🔮",
   "name": "특이점이 온다",
-  "run": "index.html"
+  "run": "index.html",
+  "permissions": []
 }

@@ -171,7 +171,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
-- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `POST /api/fetch` (raw HTTP proxy) or `POST /api/browse` (headless Chrome rendering) to bypass CORS. See the Host API skill for details.
+- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `yaar.invoke('yaar://http', { url, ... })` to proxy requests through the server.
 - **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
@@ -181,7 +181,7 @@ Common mistakes to avoid when building apps:
 
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { config })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
-- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `http_get`/`http_post` system tools and relay data via App Protocol.
+- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 
 ### Right Pattern for External Service Integration
@@ -190,7 +190,7 @@ Common mistakes to avoid when building apps:
 Option A: API-based app (preferred for API wrappers)
   apps/github/SKILL.md → describes GitHub API, auth flow
   User provides PAT → stored via invoke('yaar://config/app/{appId}', { config })
-  AI calls GitHub API via http_get/http_post → renders in windows
+  AI calls GitHub API via invoke('yaar://http', ...) → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)
   Compiled iframe app handles UI/display only

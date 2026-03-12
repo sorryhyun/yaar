@@ -3,7 +3,7 @@
  * Uses a singleton pattern to share the WebSocket across all components.
  */
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react';
-import { useDesktopStore, handleAppProtocolRequest } from '@/store';
+import { useDesktopStore, handleAppProtocolRequest, handleVerbSubscriptionUpdate } from '@/store';
 import type { ClientEvent, AppProtocolRequest } from '@/types';
 import { ClientEventType } from '@/types';
 import {
@@ -96,6 +96,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     [],
   );
 
+  const handleVerbSubscriptionUpdateCb = useCallback(
+    (windowId: string, subscriptionId: string, uri: string) => {
+      handleVerbSubscriptionUpdate(windowId, subscriptionId, uri);
+    },
+    [],
+  );
+
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
@@ -115,6 +122,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           finalizeCliStreaming,
           addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,
+          handleVerbSubscriptionUpdate: handleVerbSubscriptionUpdateCb,
           incrementSubagentCount,
           decrementSubagentCount,
         });
@@ -136,6 +144,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       finalizeCliStreaming,
       addCliEntry,
       handleAppProtocolRequestCb,
+      handleVerbSubscriptionUpdateCb,
       incrementSubagentCount,
       decrementSubagentCount,
     ],

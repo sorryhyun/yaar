@@ -99,5 +99,6 @@
   },
   "appProtocol": true,
   "capture": "dom",
-  "description": "Browse and discover recent AI research papers"
+  "description": "Browse and discover recent AI research papers",
+  "permissions": ["yaar://http"]
 }

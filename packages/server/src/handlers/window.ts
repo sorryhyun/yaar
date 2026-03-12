@@ -319,7 +319,12 @@ async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
-          iframeToken: generateIframeToken(actualId, getSessionId() ?? '', appId),
+          iframeToken: generateIframeToken(
+            actualId,
+            getSessionId() ?? '',
+            appId,
+            appMeta?.permissions,
+          ),
         }
       : {}),
   };

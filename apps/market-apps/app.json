@@ -92,5 +92,6 @@
       }
     }
   },
-  "capture": "dom"
+  "capture": "dom",
+  "permissions": ["yaar://http"]
 }

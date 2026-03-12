@@ -165,5 +165,6 @@
       }
     }
   },
-  "appProtocol": true
+  "appProtocol": true,
+  "permissions": ["yaar://http"]
 }

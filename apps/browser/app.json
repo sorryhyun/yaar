@@ -51,5 +51,6 @@
     }
   },
   "variant": "standard",
-  "capture": "canvas"
+  "capture": "canvas",
+  "permissions": ["yaar://browser/"]
 }

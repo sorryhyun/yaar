@@ -97,5 +97,6 @@
       "command": "openFile",
       "paramKey": "fileContent"
     }
-  ]
+  ],
+  "permissions": ["yaar://apps/self/storage/"]
 }

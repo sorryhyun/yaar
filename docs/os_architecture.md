@@ -90,7 +90,7 @@ MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/
 | `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://sandbox/eval` (JS execution), `yaar://config/app/{id}` |
 | `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
 
-System tools (always active): `get_info`, `memorize`, `skill`, `http_get`, `http_post`, `reload_cached`, `list_reload_options`
+System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests use verb layer: `invoke('yaar://http', { url, ... })`
 
 Domain allowlisting moved to verb layer: `invoke('yaar://config/domains', { domain })`
 

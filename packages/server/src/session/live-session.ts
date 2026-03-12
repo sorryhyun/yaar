@@ -32,6 +32,7 @@ import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
+import { subscriptionRegistry } from '../http/subscriptions.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -130,11 +131,11 @@ export class LiveSession {
     };
     actionEmitter.on('app-protocol', this.appProtocolListener);
 
-    // Subscribe to session-scoped event channels (approval requests, user prompts)
+    // Subscribe to session-scoped event channels (approval requests, user prompts, verb subscriptions)
     this.unsubscribeSessionChannels = subscribeSessionChannels(
       sessionId,
       this.broadcast.bind(this),
-      ['approval-request', 'user-prompt'],
+      ['approval-request', 'user-prompt', 'verb-subscription'],
     );
   }
 
@@ -280,6 +281,7 @@ export class LiveSession {
     this.windowState.setOnWindowClose((wid) => {
       reloadCache.invalidateForWindow(wid);
       pool.handleWindowClose(wid);
+      subscriptionRegistry.clearForWindow(wid);
     });
 
     const success = await this.pool.initialize();
@@ -587,6 +589,7 @@ export class LiveSession {
       this.pool = null;
     }
 
+    subscriptionRegistry.clearForSession(this.sessionId);
     this.windowState.clear();
     this.initialized = false;
   }

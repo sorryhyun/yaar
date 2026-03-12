@@ -140,5 +140,6 @@
     }
   },
   "capture": "dom",
-  "appProtocol": true
+  "appProtocol": true,
+  "permissions": ["yaar://apps/self/storage/"]
 }

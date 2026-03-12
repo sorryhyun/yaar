@@ -14,7 +14,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { registerHttpTools, SYSTEM_TOOL_NAMES } from './system/index.js';
+import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
@@ -82,7 +82,6 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
 
   switch (name) {
     case 'system':
-      registerHttpTools(server);
       registerReloadTools(server, getReloadCache, getWindowState);
       break;
     case 'verbs':

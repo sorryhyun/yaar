@@ -2,5 +2,6 @@
   "icon": "📄",
   "name": "PDF Viewer",
   "run": "index.html",
-  "capture": "dom"
+  "capture": "dom",
+  "permissions": ["yaar://apps/self/storage/"]
 }

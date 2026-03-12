@@ -25,6 +25,7 @@ import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-regist
 import type { ResolvedUri } from './uri-resolve.js';
 import { ok, error } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../config.js';
 import {
@@ -146,6 +147,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const skill = await loadAppSkill(appId);
       if (skill === null) return error(`No SKILL.md found for app "${appId}".`);
 
+      // Build up result starting with skill content
+      let result = skill;
+
       // Append static protocol manifest if available
       const apps = await listApps();
       const app = apps.find((a) => a.id === appId);
@@ -169,11 +173,17 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           );
         }
         if (sections.length) {
-          return ok(skill + '\n\n## Protocol\n\n' + sections.join('\n\n'));
+          result += '\n\n## Protocol\n\n' + sections.join('\n\n');
         }
       }
 
-      return ok(skill);
+      // Append permissions section if the app declares URI permissions
+      if (app?.permissions?.length) {
+        const permissionsList = app.permissions.map((p) => `- \`${p}\``).join('\n');
+        result += '\n\n## Permissions\n\n' + permissionsList;
+      }
+
+      return ok(result);
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
@@ -216,6 +226,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           payload.encoding === 'base64' ? Buffer.from(payload.content, 'base64') : payload.content;
         const result = await storageWrite(prefixedPath, content);
         if (!result.success) return error(result.error!);
+        subscriptionRegistry.notifyChange(resolved.sourceUri);
         return ok(`Written to yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
       }
 
@@ -244,6 +255,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
         const result = await storageDelete(prefixedPath);
         if (!result.success) return error(result.error!);
+        subscriptionRegistry.notifyChange(resolved.sourceUri);
         return ok(`Deleted yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
       }
 
