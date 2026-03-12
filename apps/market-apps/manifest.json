@@ -1,7 +1,7 @@
 {
   "id": "market-apps",
   "name": "Market Apps",
-  "icon": "🛍️",
+  "icon": "🛒",
   "description": "Browse and manage marketplace apps",
   "version": "1.0.4",
   "author": "YAAR"

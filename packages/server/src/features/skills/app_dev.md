@@ -82,7 +82,7 @@ All compiled apps automatically include shared CSS custom properties (`--yaar-*`
 | `y-input` | Text input |
 | `y-badge`, `y-badge-success`, `y-badge-error` | Badges |
 | `y-spinner`, `y-spinner-lg` | Loading spinner |
-| `y-scroll` | Styled scrollbar container |
+| `y-scroll` | Styled scrollbar container (needs a fixed height, e.g. set `height` on `#app`) |
 | `y-truncate` | Text ellipsis overflow |
 
 Override any token in your app: `:root { --yaar-accent: #ff6b6b; }`
