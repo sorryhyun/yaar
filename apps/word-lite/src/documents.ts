@@ -3,17 +3,17 @@ import { editorEl, docTitleEl, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 import { debounce } from './utils';
 
-export const STORAGE_KEY = 'word-lite/draft.json';
+export const STORAGE_KEY = 'draft.json';
 
 const _yaar = (window as any).yaar;
 
 async function storageSave(path: string, content: string): Promise<void> {
-  const result = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  const result = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
   if (result.isError) throw new Error(result.content[0]?.text);
 }
 
 async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
-  const result = await _yaar.read(`yaar://storage/${path}`);
+  const result = await _yaar.read(`yaar://apps/self/storage/${path}`);
   if (result.isError) throw new Error(result.content[0]?.text);
   const text = result.content[0]?.text ?? '';
   return as === 'json' ? JSON.parse(text) : text;

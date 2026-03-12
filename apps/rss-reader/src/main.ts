@@ -17,7 +17,7 @@ import './styles.css';
 const MIN_SIDEBAR = 160;
 const MIN_ARTICLE_LIST = 220;
 const MIN_CONTENT = 300;
-const PREFS_PATH = 'rss-reader/prefs.json';
+const PREFS_PATH = 'prefs.json';
 
 // Panel width signals
 const [sidebarW, setSidebarW] = createSignal(240);

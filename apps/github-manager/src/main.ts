@@ -150,7 +150,7 @@ let oauthPendingDeviceCode = '';
 let oauthVerifyUrl = '';
 let oauthPollingAbort = false;
 
-const STORAGE_PATH = 'github-manager/config.json';
+const STORAGE_PATH = 'config.json';
 
 function setStatus(text: string) {
   statusEl.textContent = text;

@@ -51,7 +51,7 @@ export function createToolbar() {
           <option value="doughnut">Doughnut</option>
           <option value="scatter">Scatter</option>
         </select>
-        <input id="storagePathInput" ref=${(el: HTMLInputElement) => { refs.storagePathInput = el; }} title="Storage path" value="excel-lite/sheet.xlsx" />
+        <input id="storagePathInput" ref=${(el: HTMLInputElement) => { refs.storagePathInput = el; }} title="Storage path" value="sheet.xlsx" />
       </div>
       <div class="toolbar-row edit">
         <button class="y-btn y-btn-sm" onClick=${() => undo()} title="Undo" aria-label="Undo">&#x21B6;</button>

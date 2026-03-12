@@ -379,7 +379,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
         description: 'Save current deck JSON to YAAR storage at the given path. Returns { ok, path, slideCount }.',
         params: {
           type: 'object',
-          properties: { path: { type: 'string', description: 'Storage path, e.g. "slides-lite/my-deck.json".' } },
+          properties: { path: { type: 'string', description: 'Storage path, e.g. "my-deck.json".' } },
           required: ['path'],
         },
         handler: async (p: { path: string }) => {

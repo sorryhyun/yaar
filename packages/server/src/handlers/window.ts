@@ -281,20 +281,25 @@ async function handleCreate(
   );
   const actualId = windowId || derivedId;
 
+  // Auto-extract appId from content URI (e.g. yaar://apps/word-lite) when not explicit
+  const appId =
+    (payload.appId as string | undefined) ||
+    (renderer === 'iframe' && typeof data === 'string' && extractAppId(data)) ||
+    undefined;
+
   // Resolve yaar:// URIs for iframe content
   if (renderer === 'iframe' && typeof data === 'string') {
     const resolved = resolveResourceUri(data);
     if (resolved) {
       data = resolved.apiPath;
     } else if (data.startsWith('yaar://')) {
-      const appId = extractAppId(data);
       return error(
         `Unknown app "${appId || data}". Use list to see available apps, or load_skill to learn how to use one.`,
       );
     }
   }
 
-  const appMeta = payload.appId ? await getAppMeta(payload.appId as string) : null;
+  const appMeta = appId ? await getAppMeta(appId) : null;
 
   const osAction: OSAction = {
     type: 'window.create',
@@ -314,11 +319,7 @@ async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
-          iframeToken: generateIframeToken(
-            actualId,
-            getSessionId() ?? '',
-            payload.appId as string | undefined,
-          ),
+          iframeToken: generateIframeToken(actualId, getSessionId() ?? '', appId),
         }
       : {}),
   };

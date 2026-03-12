@@ -210,7 +210,7 @@ let hi = 0;
 async function saveHi(): Promise<void> {
   const storage = (window as any).yaar?.storage;
   if (storage) {
-    try { await storage.save('falling-blocks/hi.json', JSON.stringify({ hi })); } catch { /* ignore */ }
+    try { await storage.save('hi.json', JSON.stringify({ hi })); } catch { /* ignore */ }
   }
 }
 
@@ -218,7 +218,7 @@ async function loadHi(): Promise<void> {
   const storage = (window as any).yaar?.storage;
   if (storage) {
     try {
-      const saved = await storage.read('falling-blocks/hi.json', { as: 'json' });
+      const saved = await storage.read('hi.json', { as: 'json' });
       if (saved && typeof saved.hi === 'number') { hi = saved.hi; setHiS(hi); }
     } catch { /* no save yet */ }
   }

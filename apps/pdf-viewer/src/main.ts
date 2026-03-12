@@ -16,12 +16,12 @@ type StorageEntry = {
 const _yaar = (window as any).yaar;
 
 async function storageSave(path: string, content: string): Promise<void> {
-  const r = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  const r = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
   if (r.isError) throw new Error(r.content[0]?.text);
 }
 
 async function storageReadBinary(path: string): Promise<ArrayBuffer> {
-  const r = await _yaar.read(`yaar://storage/${path}`);
+  const r = await _yaar.read(`yaar://apps/self/storage/${path}`);
   if (r.isError) throw new Error(r.content[0]?.text);
   const b64 = r.content[0]?.data ?? '';
   const binaryStr = atob(b64);
@@ -31,7 +31,7 @@ async function storageReadBinary(path: string): Promise<ArrayBuffer> {
 }
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
-  const r = await _yaar.list(`yaar://storage/${dir}`);
+  const r = await _yaar.list(`yaar://apps/self/storage/${dir}`);
   if (r.isError) return [];
   return JSON.parse(r.content[0]?.text ?? '[]');
 }

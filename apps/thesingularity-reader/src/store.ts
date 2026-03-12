@@ -19,7 +19,7 @@ export const [showSettings, setShowSettings] = createSignal(false);
 
 export async function loadSettings() {
   try {
-    const saved = await window.yaar?.storage.read('thesingularity-reader/settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
+    const saved = await window.yaar?.storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
     if (saved) {
       setSettings(saved);
     }
@@ -31,7 +31,7 @@ export async function loadSettings() {
 export async function saveSettings(newSettings: AppSettings) {
   setSettings(newSettings);
   try {
-    await window.yaar?.storage.save('thesingularity-reader/settings.json', JSON.stringify(newSettings));
+    await window.yaar?.storage.save('settings.json', JSON.stringify(newSettings));
   } catch {
     // ignore
   }

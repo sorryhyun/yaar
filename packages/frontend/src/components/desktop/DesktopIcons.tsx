@@ -126,39 +126,54 @@ export function DesktopIcons({
             actions.push({ type: 'window.focus', windowId: app.id });
             store.applyActions(actions);
           } else {
-            const content = { renderer: 'iframe' as const, data: app.run };
-            store.applyActions([
-              {
-                type: 'window.create',
-                windowId: app.id,
-                title: app.name,
-                bounds: { x: 100, y: 100, w: 500, h: 400 },
-                content,
-                ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
-                ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
-                ...(app.frameless ? { frameless: true } : {}),
-                ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
-              },
-            ]);
-            // Sync window creation to backend so WindowStateRegistry knows about it
-            useDesktopStore.setState((s) => ({
-              pendingInteractions: [
-                ...s.pendingInteractions,
+            // Request iframe token from server so verb SDK can resolve `self`
+            const openWindow = (iframeToken?: string) => {
+              const content = { renderer: 'iframe' as const, data: app.run! };
+              store.applyActions([
                 {
-                  type: 'window.create' as const,
-                  timestamp: Date.now(),
+                  type: 'window.create',
                   windowId: app.id,
-                  windowTitle: app.name,
-                  monitorId,
+                  title: app.name,
                   bounds: { x: 100, y: 100, w: 500, h: 400 },
                   content,
+                  ...(iframeToken ? { iframeToken } : {}),
                   ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
                   ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
                   ...(app.frameless ? { frameless: true } : {}),
                   ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
                 },
-              ],
-            }));
+              ]);
+              useDesktopStore.setState((s) => ({
+                pendingInteractions: [
+                  ...s.pendingInteractions,
+                  {
+                    type: 'window.create' as const,
+                    timestamp: Date.now(),
+                    windowId: app.id,
+                    windowTitle: app.name,
+                    monitorId,
+                    bounds: { x: 100, y: 100, w: 500, h: 400 },
+                    content,
+                    ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
+                    ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
+                    ...(app.frameless ? { frameless: true } : {}),
+                    ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
+                  },
+                ],
+              }));
+            };
+            apiFetch('/api/iframe-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                windowId: app.id,
+                sessionId: store.sessionId,
+                appId: app.id,
+              }),
+            })
+              .then((res) => res.json())
+              .then(({ token }) => openWindow(token))
+              .catch(() => openWindow());
           }
           return;
         }

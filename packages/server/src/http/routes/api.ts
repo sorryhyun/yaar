@@ -64,6 +64,7 @@ import {
 } from '../../features/config/domains.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
+import { generateIframeToken } from '../iframe-tokens.js';
 
 export async function handleApiRoutes(req: Request, url: URL): Promise<Response | null> {
   // Health check
@@ -348,6 +349,25 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       connections: broadcastStats,
       warmPool: warmPoolStats,
     });
+  }
+
+  // Generate an iframe token for client-side window creation (e.g. desktop icon click)
+  if (url.pathname === '/api/iframe-token' && req.method === 'POST') {
+    try {
+      const body = await req.json();
+      const { windowId, sessionId, appId } = body as {
+        windowId?: string;
+        sessionId?: string;
+        appId?: string;
+      };
+      if (!windowId || !sessionId) {
+        return errorResponse('windowId and sessionId are required', 400);
+      }
+      const token = generateIframeToken(windowId, sessionId, appId);
+      return jsonResponse({ token });
+    } catch {
+      return errorResponse('Invalid request body', 400);
+    }
   }
 
   return null;

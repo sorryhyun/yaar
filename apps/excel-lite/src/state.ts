@@ -74,10 +74,10 @@ export async function storageSave(path: string, content: string | Uint8Array): P
     let binary = '';
     for (let i = 0; i < content.length; i++) binary += String.fromCharCode(content[i]);
     data = btoa(binary);
-    const result = await yaar.invoke(`yaar://storage/${path}`, { action: 'write', content: data, encoding: 'base64' });
+    const result = await yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content: data, encoding: 'base64' });
     if (result.isError) throw new Error(`Storage write failed: ${result.content[0]?.text}`);
   } else {
-    const result = await yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+    const result = await yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
     if (result.isError) throw new Error(`Storage write failed: ${result.content[0]?.text}`);
   }
 }
@@ -85,7 +85,7 @@ export async function storageSave(path: string, content: string | Uint8Array): P
 export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuffer' = 'text'): Promise<any> {
   const yaar = _yaar();
   if (!yaar) throw new Error('Storage API unavailable in this runtime.');
-  const result = await yaar.read(`yaar://storage/${path}`);
+  const result = await yaar.read(`yaar://apps/self/storage/${path}`);
   if (result.isError) throw new Error(`Storage read failed: ${result.content[0]?.text}`);
   if (as === 'arraybuffer') {
     // Binary data comes as base64 in content[0].data
@@ -103,7 +103,7 @@ export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuff
 export async function storageList(dir: string): Promise<Array<{ path: string; isDirectory: boolean; size: number; modifiedAt: string }>> {
   const yaar = _yaar();
   if (!yaar) return [];
-  const result = await yaar.list(`yaar://storage/${dir}`);
+  const result = await yaar.list(`yaar://apps/self/storage/${dir}`);
   if (result.isError) return [];
   return JSON.parse(result.content[0]?.text ?? '[]');
 }
@@ -111,7 +111,7 @@ export async function storageList(dir: string): Promise<Array<{ path: string; is
 export async function storageDelete(path: string): Promise<void> {
   const yaar = _yaar();
   if (!yaar) throw new Error('Storage API unavailable in this runtime.');
-  await yaar.delete(`yaar://storage/${path}`);
+  await yaar.delete(`yaar://apps/self/storage/${path}`);
 }
 
 export function storageUrl(path: string): string {
@@ -141,7 +141,7 @@ export function setIoStatus(message: string, isError = false) {
 }
 
 export function storagePath() {
-  const path = (refs.storagePathInput!.value.trim()) || 'excel-lite/sheet.xlsx';
+  const path = (refs.storagePathInput!.value.trim()) || 'sheet.xlsx';
   refs.storagePathInput!.value = path;
   return path;
 }
@@ -319,7 +319,7 @@ export function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
 }
 
 // ── Autosave ──────────────────────────────────────────────────────────
-export const autosavePath = 'excel-lite/autosave.json';
+export const autosavePath = 'autosave.json';
 
 const _autosaveWorkbook = debounce(async () => {
   if (!storageAvailable()) return;

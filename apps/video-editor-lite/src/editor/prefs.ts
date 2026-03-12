@@ -1,14 +1,14 @@
-const PREFS_KEY = 'video-editor-lite/prefs.json';
+const PREFS_KEY = 'prefs.json';
 
 const _yaar = (window as any).yaar;
 
 async function storageSave(path: string, content: string): Promise<void> {
-  const r = await _yaar.invoke(`yaar://storage/${path}`, { action: 'write', content });
+  const r = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
   if (r.isError) throw new Error(r.content[0]?.text);
 }
 
 async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
-  const r = await _yaar.read(`yaar://storage/${path}`);
+  const r = await _yaar.read(`yaar://apps/self/storage/${path}`);
   if (r.isError) throw new Error(r.content[0]?.text);
   const text = r.content[0]?.text ?? '';
   return as === 'json' ? JSON.parse(text) : text;

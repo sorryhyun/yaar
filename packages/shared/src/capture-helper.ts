@@ -506,6 +506,14 @@ export const IFRAME_VERB_SDK_SCRIPT = `
 
   window.yaar = window.yaar || {};
 
+  // Read token from URL query param (available immediately for compiled apps)
+  // before handleLoad injects __YAAR_TOKEN__ via script injection.
+  try {
+    var sp = new URLSearchParams(location.search);
+    var urlToken = sp.get('__yaar_token');
+    if (urlToken && !window.__YAAR_TOKEN__) window.__YAAR_TOKEN__ = urlToken;
+  } catch(e) {}
+
   function tokenHeaders() {
     var t = window.__YAAR_TOKEN__ || '';
     var h = { 'Content-Type': 'application/json' };

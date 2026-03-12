@@ -65,15 +65,19 @@ function IframeRenderer({
     sessionIdRef.current = sessionId;
   }
 
-  // Append sessionId to same-origin iframe URLs so the fetch proxy script
-  // can pass it to /api/fetch for domain permission dialogs
+  // Append sessionId and iframeToken to same-origin iframe URLs.
+  // sessionId: used by the fetch proxy script for domain permission dialogs
+  // iframeToken: read by the verb SDK at init time (before handleLoad injects __YAAR_TOKEN__)
   const url = (() => {
     const sid = sessionIdRef.current;
-    if (!sid || !isSameOrigin(resolved)) return resolved;
+    if (!isSameOrigin(resolved)) return resolved;
     try {
       const u = new URL(resolved, window.location.origin);
-      if (!u.searchParams.has('sessionId')) {
+      if (sid && !u.searchParams.has('sessionId')) {
         u.searchParams.set('sessionId', sid);
+      }
+      if (iframeToken && !u.searchParams.has('__yaar_token')) {
+        u.searchParams.set('__yaar_token', iframeToken);
       }
       // Return pathname + search to keep it relative
       return u.pathname + u.search;

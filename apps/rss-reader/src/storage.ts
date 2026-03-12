@@ -12,8 +12,8 @@ declare const yaar: {
   };
 };
 
-const STATE_PATH = 'rss-reader/feeds.json';
-const FEED_SOURCE_PATHS = ['rss-reader/feeds.txt', 'rss-reader/feed-sources.txt'];
+const STATE_PATH = 'feeds.json';
+const FEED_SOURCE_PATHS = ['feeds.txt', 'feed-sources.txt'];
 
 function hashToId(input: string): string {
   let hash = 5381;
