@@ -13,7 +13,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from './utils.js';
+import { ok, error, extractIdFromUri } from './utils.js';
 
 /** Known topic names — kept in sync with skills/index.ts. */
 const TOPIC_NAMES = ['app_dev', 'sandbox', 'components', 'host_api', 'app_protocol', 'config'];
@@ -23,12 +23,6 @@ async function loadTopic(topic: string): Promise<string | null> {
   // Dynamic import keeps .md text imports out of the static module graph
   const { getTopicContent } = await import('../features/skills/topics.js');
   return getTopicContent(topic);
-}
-
-/** Extract the topic name from a yaar://skills/{topic} URI. */
-function extractTopic(uri: string): string | null {
-  const match = uri.match(/^yaar:\/\/skills\/(.+)$/);
-  return match ? match[1] : null;
 }
 
 export function registerSkillsHandlers(registry: ResourceRegistry): void {
@@ -48,7 +42,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'read'],
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      const topic = extractTopic(resolved.sourceUri);
+      const topic = extractIdFromUri(resolved.sourceUri, 'skills');
       if (!topic) return error('Provide a topic name (e.g. yaar://skills/components).');
 
       const content = await loadTopic(topic);

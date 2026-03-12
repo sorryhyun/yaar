@@ -11,7 +11,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { getAgentId, getMonitorId } from '../agents/session.js';
-import { ok, error, getActivePool } from './utils.js';
+import { ok, error, getActivePool, requireAction } from './utils.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')
@@ -78,9 +78,10 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
       assertSessionAgents(resolved);
-      if (!payload?.action) return error('Payload must include "action".');
+      const actionErr = requireAction(payload);
+      if (actionErr) return actionErr;
 
-      if (payload.action === 'interrupt') {
+      if (payload!.action === 'interrupt') {
         const pool = getPool();
         if (!pool) return error('No agents — session not initialized.');
 
@@ -95,10 +96,10 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         return ok('Interrupted all agents.');
       }
 
-      if (payload.action === 'relay') {
+      if (payload!.action === 'relay') {
         if (!resolved.id || resolved.id !== 'main')
           return error('Relay is only supported on yaar://sessions/current/agents/main.');
-        if (typeof payload.message !== 'string' || !payload.message)
+        if (typeof payload!.message !== 'string' || !payload!.message)
           return error('"message" (string) is required for relay.');
 
         const pool = getPool();
@@ -107,7 +108,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         const agentId = getAgentId() ?? 'unknown';
         const monitorId = getMonitorId() ?? '0';
         const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const content = `<relay from="${agentId}">\n${payload.message}\n</relay>`;
+        const content = `<relay from="${agentId}">\n${payload!.message}\n</relay>`;
 
         pool
           .handleTask({ type: 'main', messageId, content, monitorId })
@@ -116,7 +117,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         return ok(`Relayed to main agent (messageId: ${messageId}).`);
       }
 
-      return error(`Unknown action "${payload.action}".`);
+      return error(`Unknown action "${payload!.action}".`);
     },
   });
 }

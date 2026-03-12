@@ -26,14 +26,8 @@ import {
   isDomainAllowed,
   addAllowedDomain,
 } from '../features/config/domains.js';
-import { ok, error } from './utils.js';
+import { ok, error, assertUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
-
-function assertConfig(
-  resolved: ResolvedUri,
-): asserts resolved is Extract<ResolvedUri, { kind: 'config' }> {
-  if (resolved.kind !== 'config') throw new Error(`Expected config URI, got ${resolved.kind}`);
-}
 
 export function registerConfigHandlers(registry: ResourceRegistry): void {
   // ── yaar://config/ — list all config sections ──
@@ -173,7 +167,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'read', 'delete'],
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       // Return all hooks — the caller can filter by id
       const data = await handleGetHooks();
       const hookId = resolved.id;
@@ -185,7 +179,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'Hook ID required.' }], isError: true };
       return handleRemoveHook(resolved.id);
@@ -223,7 +217,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'delete'],
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'Shortcut ID required.' }], isError: true };
       return handleRemoveShortcut(resolved.id);
@@ -261,7 +255,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'delete'],
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'Mount alias required.' }], isError: true };
       return handleRemoveMount(resolved.id);
@@ -304,7 +298,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
       const data = await handleGetApp(resolved.id);
@@ -312,7 +306,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
       // Wrap payload so handleSetApp sees { appId, config }
@@ -321,7 +315,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertConfig(resolved);
+      assertUri(resolved, 'config');
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
       return handleRemoveApp(resolved.id);

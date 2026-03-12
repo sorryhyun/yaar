@@ -23,7 +23,7 @@ import { rm, unlink } from 'fs/promises';
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, validateRelativePath } from './utils.js';
+import { ok, error, validateRelativePath, extractIdFromUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
@@ -38,12 +38,6 @@ import {
 import { ensureAppShortcut, removeAppShortcut } from '../storage/shortcuts.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
-
-function extractAppIdFromUri(uri: string): string {
-  // yaar://apps/{appId} → appId
-  const match = uri.match(/^yaar:\/\/apps\/([^/]+)/);
-  return match?.[1] ?? '';
-}
 
 /**
  * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.
@@ -141,7 +135,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       }
 
       // ── App skill (existing behavior) ──
-      const appId = extractAppIdFromUri(resolved.sourceUri);
+      const appId = extractIdFromUri(resolved.sourceUri, 'apps');
       if (!appId) return error('App ID required.');
 
       const skill = await loadAppSkill(appId);
@@ -231,7 +225,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       }
 
       // ── App operations (existing behavior) ──
-      const appId = extractAppIdFromUri(resolved.sourceUri);
+      const appId = extractIdFromUri(resolved.sourceUri, 'apps');
       if (!appId) return error('App ID required.');
       if (!payload?.action) return error('Payload must include "action".');
 
@@ -260,7 +254,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       }
 
       // ── App uninstall (existing behavior) ──
-      const appId = extractAppIdFromUri(resolved.sourceUri);
+      const appId = extractIdFromUri(resolved.sourceUri, 'apps');
       if (!appId) return error('App ID required.');
       return uninstallApp(appId);
     },

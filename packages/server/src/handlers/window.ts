@@ -25,17 +25,20 @@ import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-regist
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { ok, error, getActiveSession, validateRelativePath } from './utils.js';
+import {
+  ok,
+  error,
+  getActiveSession,
+  validateRelativePath,
+  assertUri,
+  requireAction,
+} from './utils.js';
 import { getAgentId, getSessionId } from '../agents/session.js';
 import { resolveResourceUri } from './uri-resolve.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import { PROJECT_ROOT } from '../config.js';
 import { enrichManifestWithUris } from '../features/window/manifest-utils.js';
-
-function assertWindow(resolved: ResolvedUri): asserts resolved is ResolvedWindow {
-  if (resolved.kind !== 'window') throw new Error(`Expected window URI, got ${resolved.kind}`);
-}
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -186,7 +189,7 @@ export function registerWindowHandlers(
       }
 
       // Window resource: yaar://windows/{windowId}
-      assertWindow(resolved);
+      assertUri(resolved, 'window');
       const win = getWindowState().getWindow(resolved.windowId);
       if (!win) {
         return error(`Window "${resolved.windowId}" not found. Use list to see available windows.`);
@@ -210,32 +213,35 @@ export function registerWindowHandlers(
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload?.action) return error('Payload must include "action".');
+      const actionErr = requireAction(payload);
+      if (actionErr) return actionErr;
 
-      const action = payload.action as string;
+      // payload is guaranteed non-undefined after requireAction
+      const p = payload!;
+      const action = p.action as string;
 
       // Collection-level invoke: only create/create_component (windowId derived from payload)
       if (isWindowCollection(resolved)) {
-        if (action === 'create') return handleCreate('', payload);
-        if (action === 'create_component') return handleCreateComponent('', payload);
+        if (action === 'create') return handleCreate('', p);
+        if (action === 'create_component') return handleCreateComponent('', p);
         return error(
           `Action "${action}" requires a window URI (yaar://windows/{windowId}). ` +
             'Only "create" and "create_component" can be invoked on a bare windows URI.',
         );
       }
 
-      assertWindow(resolved);
+      assertUri(resolved, 'window');
       const windowId = resolved.windowId;
 
       switch (action) {
         case 'create':
-          return handleCreate(windowId, payload);
+          return handleCreate(windowId, p);
         case 'create_component':
-          return handleCreateComponent(windowId, payload);
+          return handleCreateComponent(windowId, p);
         case 'update':
-          return handleUpdate(getWindowState(), windowId, payload);
+          return handleUpdate(getWindowState(), windowId, p);
         case 'update_component':
-          return handleUpdateComponent(getWindowState(), windowId, payload);
+          return handleUpdateComponent(getWindowState(), windowId, p);
         case 'close':
           return handleManage(getWindowState(), windowId, 'close');
         case 'lock':
@@ -243,20 +249,46 @@ export function registerWindowHandlers(
         case 'unlock':
           return handleManage(getWindowState(), windowId, 'unlock');
         case 'app_query':
-          return handleAppQuery(getWindowState(), windowId, payload);
+          return handleAppQuery(getWindowState(), windowId, p);
         case 'app_command':
-          return handleAppCommand(getWindowState(), windowId, payload);
+          return handleAppCommand(getWindowState(), windowId, p);
         default:
           return error(`Unknown action "${action}".`);
       }
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertWindow(resolved);
+      assertUri(resolved, 'window');
       return handleManage(getWindowState(), resolved.windowId, 'close');
     },
   };
   registry.register('yaar://windows/*', windowHandler);
+}
+
+// ── Helpers ──
+
+/** Extract OS Action overrides from app metadata. */
+function getAppMetaOverrides(
+  appMeta: Awaited<ReturnType<typeof getAppMeta>>,
+): Record<string, unknown> {
+  if (!appMeta) return {};
+  return {
+    ...(appMeta.variant ? { variant: appMeta.variant as WindowVariant } : {}),
+    ...(appMeta.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
+    ...(appMeta.frameless ? { frameless: true } : {}),
+    ...(appMeta.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+  };
+}
+
+/** Emit an action and return an error result if feedback indicates failure. */
+async function emitActionChecked(
+  osAction: Parameters<typeof actionEmitter.emitActionWithFeedback>[0],
+  timeout: number,
+  errorMsg: string,
+): Promise<VerbResult | null> {
+  const feedback = await actionEmitter.emitActionWithFeedback(osAction, timeout);
+  if (feedback && !feedback.success) return error(errorMsg);
+  return null;
 }
 
 // ── Action handlers ──
@@ -310,10 +342,7 @@ async function handleCreate(
       h: (payload.height as number) ?? 400,
     },
     content: { renderer, data },
-    ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
-    ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
-    ...(appMeta?.frameless ? { frameless: true } : {}),
-    ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+    ...getAppMetaOverrides(appMeta),
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
@@ -396,10 +425,7 @@ async function handleCreateComponent(
       h: (payload.height as number) ?? 400,
     },
     content: { renderer: 'component', data: layoutData },
-    ...(appMeta?.variant ? { variant: appMeta.variant as WindowVariant } : {}),
-    ...(appMeta?.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
-    ...(appMeta?.frameless ? { frameless: true } : {}),
-    ...(appMeta?.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+    ...getAppMetaOverrides(appMeta),
     ...(payload.minimized ? { minimized: true } : {}),
   };
 
@@ -452,9 +478,12 @@ async function handleUpdate(
     renderer: payload.renderer as string | undefined,
   };
 
-  const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
-  if (feedback && !feedback.success)
-    return error(`Window "${windowId}" is locked by another agent.`);
+  const err = await emitActionChecked(
+    osAction,
+    500,
+    `Window "${windowId}" is locked by another agent.`,
+  );
+  if (err) return err;
 
   return ok(`Updated window "${formatWindowRef(windowId)}" (${opType})`);
 }
@@ -485,9 +514,12 @@ async function handleUpdateComponent(
     renderer: 'component' as const,
   };
 
-  const feedback = await actionEmitter.emitActionWithFeedback(osAction, 500);
-  if (feedback && !feedback.success)
-    return error(`Window "${windowId}" is locked by another agent.`);
+  const err = await emitActionChecked(
+    osAction,
+    500,
+    `Window "${windowId}" is locked by another agent.`,
+  );
+  if (err) return err;
 
   return ok(`Updated component window "${formatWindowRef(windowId)}"`);
 }
@@ -505,12 +537,12 @@ async function handleManage(
   switch (action) {
     case 'close': {
       if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
-      const feedback = await actionEmitter.emitActionWithFeedback(
+      const closeErr = await emitActionChecked(
         { type: 'window.close', windowId } satisfies OSAction,
         500,
+        `Failed to close window "${windowId}": ${windowId}`,
       );
-      if (feedback && !feedback.success)
-        return error(`Failed to close window "${windowId}": ${feedback.error}`);
+      if (closeErr) return closeErr;
       return ok(`Closed window "${formatWindowRef(windowId)}"`);
     }
 

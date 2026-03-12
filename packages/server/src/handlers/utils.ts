@@ -3,6 +3,7 @@
  */
 
 import type { VerbResult } from './uri-registry.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { getSessionId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import type { LiveSession } from '../session/live-session.js';
@@ -58,6 +59,40 @@ export const okWithImages = (text: string, images: Array<{ data: string; mimeTyp
 /** Prepend a note to a VerbResult (for read/list fallback). */
 export function prependNote(result: VerbResult, note: string): VerbResult {
   return { ...result, content: [{ type: 'text', text: `(${note})` }, ...result.content] };
+}
+
+/** Extract the first path segment after `yaar://{authority}/`. */
+export function extractIdFromUri(uri: string, authority: string): string {
+  const match = uri.match(new RegExp(`^yaar://${authority}/([^/]+)`));
+  return match?.[1] ?? '';
+}
+
+/** Assert that a resolved URI matches the expected kind. */
+export function assertUri<K extends ResolvedUri['kind']>(
+  resolved: ResolvedUri,
+  kind: K,
+): asserts resolved is Extract<ResolvedUri, { kind: K }> {
+  if (resolved.kind !== kind) throw new Error(`Expected ${kind} URI, got ${resolved.kind}`);
+}
+
+/** Check that payload contains a required field. Returns error VerbResult if missing, null if present. */
+export function requireField(
+  payload: Record<string, unknown> | undefined,
+  field: string,
+  context?: string,
+): VerbResult | null {
+  if (!payload?.[field]) {
+    const suffix = context ? ` for ${context}` : '';
+    return error(`"${field}" is required${suffix}.`);
+  }
+  return null;
+}
+
+/** Check that payload includes an "action" field. Returns error VerbResult if missing, null if present. */
+export function requireAction(payload?: Record<string, unknown>): VerbResult | null {
+  return requireField(payload, 'action', undefined)
+    ? error('Payload must include "action".')
+    : null;
 }
 
 export async function applyEdit(

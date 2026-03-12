@@ -24,9 +24,6 @@ export const DEFAULT_VIEWPORT_HEIGHT = 720;
 /** Maximum number of virtual monitors (desktops) allowed per session. */
 export const MAX_MONITORS = 4;
 
-/** ID of the first monitor created automatically for every session. */
-export const DEFAULT_MONITOR_ID = '0';
-
 /** CSS class added to `<html>` during a window drag to suppress text selection. */
 export const DRAGGING_CSS_CLASS = 'yaar-dragging';
 

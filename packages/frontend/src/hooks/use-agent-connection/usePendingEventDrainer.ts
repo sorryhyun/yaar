@@ -6,6 +6,16 @@ import { wsManager } from './transport-manager';
 import { generateMessageId } from './outbound-command-helpers';
 import { getRawWindowId } from '@/store/helpers';
 
+/**
+ * Drain a pending queue: check length, consume, and process items.
+ * Reduces the repetitive if-length-consume pattern across all drain blocks.
+ */
+function drainQueue<T>(queue: T[], consume: () => T[], process: (items: T[]) => void): void {
+  if (queue.length > 0) {
+    process(consume());
+  }
+}
+
 interface Deps {
   send: (event: ClientEvent) => void;
   sendComponentAction: (
@@ -39,8 +49,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
     const unsubscribe = useDesktopStore.subscribe((state) => {
       if (wsManager.ws?.readyState !== WebSocket.OPEN) return;
 
-      if (state.pendingFeedback.length > 0) {
-        const feedback = consumePendingFeedback();
+      drainQueue(state.pendingFeedback, consumePendingFeedback, (feedback) => {
         for (const item of feedback) {
           send({
             type: ClientEventType.RENDERING_FEEDBACK,
@@ -54,10 +63,9 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             imageData: item.imageData,
           });
         }
-      }
+      });
 
-      if (state.pendingAppProtocolResponses.length > 0) {
-        const items = consumePendingAppProtocolResponses();
+      drainQueue(state.pendingAppProtocolResponses, consumePendingAppProtocolResponses, (items) => {
         for (const item of items) {
           send({
             type: ClientEventType.APP_PROTOCOL_RESPONSE,
@@ -66,20 +74,18 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             response: item.response,
           });
         }
-      }
+      });
 
-      if (state.pendingAppProtocolReady.length > 0) {
-        const windowIds = consumeAppProtocolReady();
+      drainQueue(state.pendingAppProtocolReady, consumeAppProtocolReady, (windowIds) => {
         for (const windowId of windowIds) {
           send({
             type: ClientEventType.APP_PROTOCOL_READY,
             windowId: getRawWindowId(windowId),
           });
         }
-      }
+      });
 
-      if (state.pendingAppInteractions.length > 0) {
-        const items = consumePendingAppInteractions();
+      drainQueue(state.pendingAppInteractions, consumePendingAppInteractions, (items) => {
         for (const item of items) {
           const messageId = generateMessageId();
           send({
@@ -89,27 +95,23 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             content: `<app_interaction>${item.content}</app_interaction>${item.instructions ? `\n\n${item.instructions}` : ''}`,
           });
         }
-      }
+      });
 
-      if (state.pendingInteractions.length > 0) {
-        const interactions = consumePendingInteractions();
-        if (interactions.length > 0) {
-          const unscopedInteractions = interactions.map((i) =>
-            i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i,
-          );
-          send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
-        }
-      }
+      drainQueue(state.pendingInteractions, consumePendingInteractions, (interactions) => {
+        const unscopedInteractions = interactions.map((i) =>
+          i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i,
+        );
+        send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
+      });
 
-      if (state.pendingGestureMessages.length > 0) {
-        const messages = consumeGestureMessages();
+      drainQueue(state.pendingGestureMessages, consumeGestureMessages, (messages) => {
         for (const content of messages) {
           const messageId = generateMessageId();
           const monitorId = useDesktopStore.getState().activeMonitorId;
           addCliEntry({ type: 'user', content, monitorId });
           send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
         }
-      }
+      });
     });
     return unsubscribe;
   }, [

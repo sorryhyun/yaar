@@ -11,7 +11,7 @@
 
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from './utils.js';
+import { ok, error, extractIdFromUri } from './utils.js';
 import { installApp } from './apps.js';
 
 const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
@@ -23,11 +23,6 @@ interface MarketApp {
   description: string;
   version: string;
   author: string;
-}
-
-function extractAppIdFromUri(uri: string): string {
-  const match = uri.match(/^yaar:\/\/market\/([^/]+)/);
-  return match?.[1] ?? '';
 }
 
 async function fetchMarketList(): Promise<VerbResult> {
@@ -93,14 +88,14 @@ export function registerMarketHandlers(registry: ResourceRegistry): void {
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      const appId = extractAppIdFromUri(resolved.sourceUri);
+      const appId = extractIdFromUri(resolved.sourceUri, 'market');
       if (!appId) return error('App ID required.');
       return fetchMarketApp(appId);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
       if (payload?.action !== 'install') return error('Only "install" action is supported.');
-      const appId = extractAppIdFromUri(resolved.sourceUri);
+      const appId = extractIdFromUri(resolved.sourceUri, 'market');
       if (!appId) return error('App ID required.');
       return installApp(appId);
     },

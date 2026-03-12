@@ -9,13 +9,13 @@ import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../t
 import type { OSAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
   TITLEBAR_HEIGHT,
   TASKBAR_HEIGHT,
   DEFAULT_VIEWPORT_WIDTH,
   DEFAULT_VIEWPORT_HEIGHT,
   MIN_VISIBLE_WINDOW_EDGE,
-  DEFAULT_MONITOR_ID,
 } from '@/constants/layout';
 
 /**

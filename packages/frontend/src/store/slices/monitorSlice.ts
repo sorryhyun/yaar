@@ -2,7 +2,8 @@
  * Monitor slice - manages virtual desktops (monitors).
  */
 import type { SliceCreator, MonitorSlice, DesktopStore } from '../types';
-import { MAX_MONITORS, DEFAULT_MONITOR_ID } from '@/constants/layout';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { MAX_MONITORS } from '@/constants/layout';
 
 let monitorCounter = 1;
 

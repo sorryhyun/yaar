@@ -11,13 +11,9 @@
 
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
-import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { actionEmitter } from '../session/action-emitter.js';
-import { ok, error } from './utils.js';
-
-function assertSessionUser(resolved: ResolvedUri): asserts resolved is ResolvedSession {
-  if (resolved.kind !== 'session') throw new Error(`Expected session URI, got ${resolved.kind}`);
-}
+import { ok, error, assertUri, requireAction } from './utils.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
   // ── yaar://sessions/current/notifications — show/manage notifications ──
@@ -59,7 +55,7 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'delete'],
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertSessionUser(resolved);
+      assertUri(resolved, 'session');
       if (!resolved.id) return error('Notification ID required.');
       const osAction: OSAction = {
         type: 'notification.dismiss',
@@ -104,21 +100,23 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload?.action) return error('Payload must include "action" ("ask" or "request").');
-      if (!payload.title || !payload.message) return error('"title" and "message" are required.');
+      const actionErr = requireAction(payload);
+      if (actionErr) return actionErr;
+      if (!payload!.title || !payload!.message) return error('"title" and "message" are required.');
 
-      const action = payload.action as string;
+      const p = payload!;
+      const action = p.action as string;
 
       if (action === 'ask') {
-        if (!payload.options || !Array.isArray(payload.options) || payload.options.length < 2) {
+        if (!p.options || !Array.isArray(p.options) || p.options.length < 2) {
           return error('"options" (array of at least 2) is required for "ask".');
         }
         const result = await actionEmitter.showUserPrompt({
-          title: payload.title as string,
-          message: payload.message as string,
-          options: payload.options as Array<{ value: string; label: string; description?: string }>,
-          multiSelect: payload.multiSelect as boolean | undefined,
-          inputField: payload.allowText ? { placeholder: 'Type your answer…' } : undefined,
+          title: p.title as string,
+          message: p.message as string,
+          options: p.options as Array<{ value: string; label: string; description?: string }>,
+          multiSelect: p.multiSelect as boolean | undefined,
+          inputField: p.allowText ? { placeholder: 'Type your answer…' } : undefined,
           allowDismiss: true,
         });
 
@@ -133,12 +131,12 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
 
       if (action === 'request') {
         const result = await actionEmitter.showUserPrompt({
-          title: payload.title as string,
-          message: payload.message as string,
+          title: p.title as string,
+          message: p.message as string,
           inputField: {
-            label: payload.inputLabel as string | undefined,
-            placeholder: payload.inputPlaceholder as string | undefined,
-            type: payload.multiline ? 'textarea' : 'text',
+            label: p.inputLabel as string | undefined,
+            placeholder: p.inputPlaceholder as string | undefined,
+            type: p.multiline ? 'textarea' : 'text',
           },
           allowDismiss: true,
         });

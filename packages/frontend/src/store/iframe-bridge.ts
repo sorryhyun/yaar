@@ -5,7 +5,8 @@
  * iframe message routing, windows SDK handler, and notification broadcasting.
  */
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
-import { WINDOW_ID_DATA_ATTR, DEFAULT_MONITOR_ID } from '@/constants/layout';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { toWindowKey } from './helpers';
 // Circular import — safe because useDesktopStore is only accessed at runtime (live ESM binding)

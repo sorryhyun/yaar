@@ -12,16 +12,12 @@
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
-import type { ResolvedUri, ResolvedBrowser } from './uri-resolve.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { isDomainAllowed, extractDomain } from '../features/config/domains.js';
-import { ok, error, okWithImages } from './utils.js';
+import { ok, error, okWithImages, assertUri, requireAction } from './utils.js';
 import { resolveSession, formatPageState, findMainContent } from '../features/browser/shared.js';
-
-function assertBrowser(resolved: ResolvedUri): asserts resolved is ResolvedBrowser {
-  if (resolved.kind !== 'browser') throw new Error(`Expected browser URI, got ${resolved.kind}`);
-}
 
 export async function registerBrowserHandlers(registry: ResourceRegistry): Promise<void> {
   const pool = getBrowserPool();
@@ -97,7 +93,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
-      assertBrowser(resolved);
+      assertUri(resolved, 'browser');
       try {
         const session = resolveSession(resolved.resource);
         return ok(
@@ -117,16 +113,19 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      assertBrowser(resolved);
-      if (!payload?.action) return error('Payload must include "action".');
+      assertUri(resolved, 'browser');
+      const actionErr = requireAction(payload);
+      if (actionErr) return actionErr;
+      // payload is guaranteed non-undefined after requireAction
+      const p = payload!;
 
-      const action = payload.action as string;
+      const action = p.action as string;
       const browserId = resolved.resource;
 
       try {
         switch (action) {
           case 'open': {
-            const url = payload.url as string;
+            const url = p.url as string;
             if (!url) return error('"url" is required for open.');
             const domain = extractDomain(url);
             if (!domain) return error('Invalid URL');
@@ -140,7 +139,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             session.windowId = windowId;
             const state = await session.navigate(
               url,
-              payload.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
+              p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
             );
             await actionEmitter.emitActionWithFeedback(
               {
@@ -165,44 +164,37 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
 
           case 'click': {
             const session = resolveSession(browserId);
-            if (
-              !payload.selector &&
-              !payload.text &&
-              (payload.x === undefined || payload.y === undefined)
-            ) {
+            if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
               return error('Provide "selector", "text", or both "x" and "y".');
             }
             const state = await session.click(
-              payload.selector as string | undefined,
-              payload.text as string | undefined,
-              payload.x as number | undefined,
-              payload.y as number | undefined,
-              payload.index as number | undefined,
+              p.selector as string | undefined,
+              p.text as string | undefined,
+              p.x as number | undefined,
+              p.y as number | undefined,
+              p.index as number | undefined,
             );
             return ok(formatPageState(state));
           }
 
           case 'type': {
             const session = resolveSession(browserId);
-            if (!payload.selector) return error('"selector" is required for type.');
-            if (!payload.text) return error('"text" is required for type.');
-            const state = await session.type(payload.selector as string, payload.text as string);
-            return ok(`Typed into ${payload.selector}\n\n${formatPageState(state)}`);
+            if (!p.selector) return error('"selector" is required for type.');
+            if (!p.text) return error('"text" is required for type.');
+            const state = await session.type(p.selector as string, p.text as string);
+            return ok(`Typed into ${p.selector}\n\n${formatPageState(state)}`);
           }
 
           case 'press': {
             const session = resolveSession(browserId);
-            if (!payload.key) return error('"key" is required for press.');
-            const state = await session.press(
-              payload.key as string,
-              payload.selector as string | undefined,
-            );
+            if (!p.key) return error('"key" is required for press.');
+            const state = await session.press(p.key as string, p.selector as string | undefined);
             return ok(formatPageState(state));
           }
 
           case 'scroll': {
             const session = resolveSession(browserId);
-            const dir = payload.direction as string;
+            const dir = p.direction as string;
             if (dir !== 'up' && dir !== 'down') return error('"direction" must be "up" or "down".');
             const state = await session.scroll(dir);
             return ok(formatPageState(state));
@@ -210,7 +202,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
 
           case 'navigate': {
             const session = resolveSession(browserId);
-            const dir = payload.direction as string;
+            const dir = p.direction as string;
             if (dir !== 'back' && dir !== 'forward')
               return error('"direction" must be "back" or "forward".');
             const state = await session.navigateHistory(dir);
@@ -219,23 +211,19 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
 
           case 'hover': {
             const session = resolveSession(browserId);
-            if (
-              !payload.selector &&
-              !payload.text &&
-              (payload.x === undefined || payload.y === undefined)
-            ) {
+            if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
               return error('Provide "selector", "text", or both "x" and "y".');
             }
-            const state = await session.hover(payload as Parameters<typeof session.hover>[0]);
+            const state = await session.hover(p as Parameters<typeof session.hover>[0]);
             return ok(formatPageState(state));
           }
 
           case 'wait_for': {
             const session = resolveSession(browserId);
-            if (!payload.selector) return error('"selector" is required for wait_for.');
+            if (!p.selector) return error('"selector" is required for wait_for.');
             const state = await session.waitForSelector(
-              payload.selector as string,
-              payload.timeout as number | undefined,
+              p.selector as string,
+              p.timeout as number | undefined,
             );
             return ok(formatPageState(state));
           }
@@ -243,21 +231,18 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
           case 'screenshot': {
             const session = resolveSession(browserId);
             const hasRegion =
-              payload.x0 !== undefined &&
-              payload.y0 !== undefined &&
-              payload.x1 !== undefined &&
-              payload.y1 !== undefined;
+              p.x0 !== undefined && p.y0 !== undefined && p.x1 !== undefined && p.y1 !== undefined;
             const clip = hasRegion
               ? {
-                  x: payload.x0 as number,
-                  y: payload.y0 as number,
-                  width: (payload.x1 as number) - (payload.x0 as number),
-                  height: (payload.y1 as number) - (payload.y0 as number),
+                  x: p.x0 as number,
+                  y: p.y0 as number,
+                  width: (p.x1 as number) - (p.x0 as number),
+                  height: (p.y1 as number) - (p.y0 as number),
                 }
               : undefined;
             const buffer = await session.screenshot(clip ? { clip } : undefined);
             const label = clip
-              ? `Magnified region (${payload.x0},${payload.y0})→(${payload.x1},${payload.y1}) @4x:`
+              ? `Magnified region (${p.x0},${p.y0})→(${p.x1},${p.y1}) @4x:`
               : 'Current browser screenshot:';
             return okWithImages(label, [
               { data: buffer.toString('base64'), mimeType: 'image/webp' },
@@ -267,12 +252,12 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
           case 'extract': {
             const session = resolveSession(browserId);
             const effectiveSelector =
-              payload.mainContentOnly && !payload.selector
+              p.mainContentOnly && !p.selector
                 ? await findMainContent(session)
-                : (payload.selector as string | undefined);
+                : (p.selector as string | undefined);
             const content = await session.extractContent(effectiveSelector);
-            const maxText = (payload.maxTextLength as number) ?? 3000;
-            const maxLinks = (payload.maxLinks as number) ?? 50;
+            const maxText = (p.maxTextLength as number) ?? 3000;
+            const maxLinks = (p.maxLinks as number) ?? 50;
 
             let result = `URL: ${content.url}\nTitle: ${content.title}\n`;
             if (content.fullText) {
@@ -310,7 +295,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertBrowser(resolved);
+      assertUri(resolved, 'browser');
       const browserId = resolved.resource;
       const session = pool.getSession(browserId);
       if (!session) return error(`No browser with ID ${browserId}.`);

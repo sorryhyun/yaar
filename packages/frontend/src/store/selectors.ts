@@ -3,7 +3,7 @@
  */
 import type { DesktopStore, WindowModel, WindowAgent } from './types';
 import { getRawWindowId } from './helpers';
-import { DEFAULT_MONITOR_ID } from '@/constants/layout';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 
 export const selectWindowsInOrder = (state: DesktopStore) =>
   state.zOrder.map((id) => state.windows[id]).filter(Boolean);

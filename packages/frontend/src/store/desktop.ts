@@ -19,7 +19,7 @@ import type {
   DesktopUpdateShortcutAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
-import { DEFAULT_MONITOR_ID } from '@/constants/layout';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
 import {
   createWindowsSlice,
