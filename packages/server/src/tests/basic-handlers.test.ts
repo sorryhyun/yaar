@@ -117,7 +117,7 @@ describe('Basic domain handlers (storage)', () => {
       const result = await reg.execute('read', 'yaar://storage/notes.md');
       expect(result.isError).toBeFalsy();
       expect(text(result)).toContain('hello');
-      expect(mockStorageRead).toHaveBeenCalledWith('notes.md');
+      expect(mockStorageRead).toHaveBeenCalledWith('notes.md', { raw: true });
     });
 
     it('returns error for storage read failure', async () => {
