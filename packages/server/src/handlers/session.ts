@@ -5,8 +5,8 @@
  *
  *   read('yaar://sessions/current')              → system info
  *   invoke('yaar://sessions/current', { ... })   → memorize
- *   list('yaar://sessions/current/logs')          → list past session logs
- *   read('yaar://sessions/current/logs/{id}')     → read a specific session transcript
+ *   list('yaar://sessions/')                       → list all sessions
+ *   read('yaar://sessions/{id}')                  → read a specific session transcript
  *   read('yaar://sessions/current/context')       → current context tape summary
  */
 
@@ -142,15 +142,17 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/logs — list past sessions or read a specific one ──
-  registry.register('yaar://sessions/current/logs', {
-    description:
-      'Session logs. List to see all past sessions, or read a specific session transcript.',
+  // ── yaar://sessions/ — list all sessions ──
+  registry.register('yaar://sessions/', {
+    description: 'All sessions. List to see past sessions, read a specific one by ID.',
     verbs: ['describe', 'list', 'read'],
 
     async list(): Promise<VerbResult> {
       const sessions = await listSessions();
+      const pool = getActiveSession().getPool();
+      const currentLogId = pool?.getLogSessionId();
       return okJson({
+        currentSessionId: currentLogId ?? null,
         count: sessions.length,
         sessions: sessions.map((s) => ({
           sessionId: s.sessionId,
@@ -163,12 +165,11 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
 
     async read(): Promise<VerbResult> {
-      // Reading the collection itself returns a summary
       const sessions = await listSessions();
       const pool = getActiveSession().getPool();
       const currentLogId = pool?.getLogSessionId();
       return okJson({
-        currentLogSessionId: currentLogId ?? null,
+        currentSessionId: currentLogId ?? null,
         totalSessions: sessions.length,
         latest: sessions.slice(0, 5).map((s) => ({
           sessionId: s.sessionId,
@@ -179,18 +180,21 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/logs/* — read a specific past session transcript ──
-  registry.register('yaar://sessions/current/logs/*', {
-    description: 'Read a specific session transcript by log session ID.',
+  // ── yaar://sessions/* — read a specific session transcript ──
+  registry.register('yaar://sessions/*', {
+    description: 'Read a specific session transcript by session ID.',
     verbs: ['describe', 'read'],
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       const sessionResolved = resolved as ResolvedSession;
-      const logId = sessionResolved.id;
-      if (!logId) return error('Session log ID is required. Use list to see available sessions.');
+      const logId = sessionResolved.id ?? sessionResolved.resource;
+      if (!logId || logId === 'current')
+        return error(
+          'Session ID is required. Use list("yaar://sessions/") to see available sessions.',
+        );
 
       const transcript = await readSessionTranscript(logId);
-      if (transcript === null) return error(`Session log "${logId}" not found.`);
+      if (transcript === null) return error(`Session "${logId}" not found.`);
 
       return ok(transcript);
     },

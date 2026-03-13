@@ -497,7 +497,7 @@ export function buildBrowserUri(resource: string, subResource?: string): string 
 
 // ============ Session URIs ============
 
-export type SessionResource = 'current';
+export type SessionResource = 'current' | (string & {});
 
 export type SessionSubKind =
   | 'agents'
@@ -509,7 +509,7 @@ export type SessionSubKind =
   | 'context';
 
 export interface ParsedSessionUri {
-  resource: 'current';
+  resource: SessionResource;
   subKind?: SessionSubKind;
   id?: string;
   action?: string;
@@ -553,9 +553,10 @@ export function parseSessionUri(uri: string): ParsedSessionUri | null {
 
   // Split path into segments: "current/agents/agent-123/interrupt" → ["current", "agents", "agent-123", "interrupt"]
   const segments = parsed.path.split('/').filter(Boolean);
-  if (segments.length === 0 || segments[0] !== 'current') return null;
+  if (segments.length === 0) return null;
 
-  const result: ParsedSessionUri = { resource: 'current' };
+  const resource = segments[0];
+  const result: ParsedSessionUri = { resource };
 
   if (segments.length >= 2) {
     if (!SESSION_SUB_KINDS.has(segments[1])) return null;
@@ -584,7 +585,7 @@ export function parseSessionUri(uri: string): ParsedSessionUri | null {
  *   buildSessionUri('current', 'monitors', '0')                   → 'yaar://sessions/current/monitors/0'
  */
 export function buildSessionUri(
-  resource: 'current',
+  resource: SessionResource,
   subKind?: SessionSubKind,
   id?: string,
   action?: string,

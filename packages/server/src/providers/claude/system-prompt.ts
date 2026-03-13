@@ -33,7 +33,7 @@ Plus built-in tools: **WebSearch**, **Task** (delegate to subagents), **reload_c
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\` | read, invoke, delete |
 | \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\`, \`yaar://sandbox/{id}\` | invoke (write, edit, compile, typecheck, deploy, clone), read, list |
-| \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/notifications\`, \`yaar://sessions/current/prompts\`, \`yaar://sessions/current/logs\`, \`yaar://sessions/current/logs/{id}\`, \`yaar://sessions/current/context\` | read, invoke, list |
+| \`yaar://sessions/\` | \`yaar://sessions/\`, \`yaar://sessions/{id}\`, \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/context\` | read, invoke, list |
 | \`yaar://skills/\` | \`yaar://skills/app_dev\`, \`yaar://skills/components\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |

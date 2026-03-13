@@ -410,8 +410,10 @@ describe('parseSessionUri', () => {
     });
   });
 
-  it('returns null for unknown resource', () => {
-    expect(parseSessionUri('yaar://sessions/unknown')).toBeNull();
+  it('parses non-current resource as session ID', () => {
+    expect(parseSessionUri('yaar://sessions/2026-03-10_13-39-16')).toEqual({
+      resource: '2026-03-10_13-39-16',
+    });
   });
 
   it('returns null for unknown subKind', () => {
