@@ -127,7 +127,7 @@ export function createFetchHandler() {
         );
       }
       // Per-app route scoping: block cross-app static file access
-      if (tokenEntry?.appId) {
+      if (tokenEntry?.appId && url.pathname.startsWith('/api/apps/')) {
         const appsMatch = url.pathname.match(/^\/api\/apps\/([^/]+)\//);
         if (appsMatch && appsMatch[1] !== tokenEntry.appId) {
           return withCors(

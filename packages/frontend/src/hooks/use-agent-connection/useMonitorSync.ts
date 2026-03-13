@@ -11,7 +11,8 @@ import { wsManager, sendEvent } from './transport-manager';
 export function useMonitorSync() {
   useEffect(() => {
     let previousMonitorId = useDesktopStore.getState().activeMonitorId;
-    let previousMonitorIds = new Set(useDesktopStore.getState().monitors.map((m) => m.id));
+    let previousMonitors = useDesktopStore.getState().monitors;
+    let previousMonitorIds = new Set(previousMonitors.map((m) => m.id));
 
     const unsubscribe = useDesktopStore.subscribe((state) => {
       if (state.activeMonitorId !== previousMonitorId) {
@@ -24,15 +25,19 @@ export function useMonitorSync() {
         }
       }
 
-      const currentMonitorIds = new Set(state.monitors.map((m) => m.id));
-      if (wsManager.ws?.readyState === WebSocket.OPEN) {
-        for (const id of previousMonitorIds) {
-          if (!currentMonitorIds.has(id)) {
-            sendEvent(wsManager, { type: ClientEventType.REMOVE_MONITOR, monitorId: id });
+      // Only rebuild the Set when the monitors array reference changes
+      if (state.monitors !== previousMonitors) {
+        previousMonitors = state.monitors;
+        const currentMonitorIds = new Set(state.monitors.map((m) => m.id));
+        if (wsManager.ws?.readyState === WebSocket.OPEN) {
+          for (const id of previousMonitorIds) {
+            if (!currentMonitorIds.has(id)) {
+              sendEvent(wsManager, { type: ClientEventType.REMOVE_MONITOR, monitorId: id });
+            }
           }
         }
+        previousMonitorIds = currentMonitorIds;
       }
-      previousMonitorIds = currentMonitorIds;
     });
 
     return unsubscribe;

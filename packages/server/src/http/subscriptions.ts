@@ -51,20 +51,37 @@ class SubscriptionRegistry {
 
   /**
    * Find all subscriptions where the subscription URI is a prefix of (or exact match to)
-   * the changed URI. This means a subscription to "yaar://apps/foo/storage/" will be
-   * notified when "yaar://apps/foo/storage/data.json" changes.
+   * the changed URI. Walks up the URI path hierarchy instead of scanning all entries.
    */
   getSubscribers(uri: string): Subscription[] {
     const results: Subscription[] = [];
-    for (const [subUri, ids] of this.uriIndex) {
-      if (uri === subUri || uri.startsWith(subUri)) {
-        for (const id of ids) {
-          const sub = this.subscriptions.get(id);
-          if (sub) results.push(sub);
-        }
+
+    // Check exact match
+    this.collectFromIndex(uri, results);
+
+    // Walk up the URI path to find prefix subscriptions
+    let pos = uri.length;
+    while (pos > 0) {
+      pos = uri.lastIndexOf('/', pos - 1);
+      if (pos < 0) break;
+      const prefix = uri.slice(0, pos + 1);
+      this.collectFromIndex(prefix, results);
+      // Also check without trailing slash
+      if (prefix.length > 1) {
+        this.collectFromIndex(prefix.slice(0, -1), results);
       }
     }
+
     return results;
+  }
+
+  private collectFromIndex(uri: string, results: Subscription[]): void {
+    const ids = this.uriIndex.get(uri);
+    if (!ids) return;
+    for (const id of ids) {
+      const sub = this.subscriptions.get(id);
+      if (sub) results.push(sub);
+    }
   }
 
   clearForWindow(windowId: string): void {

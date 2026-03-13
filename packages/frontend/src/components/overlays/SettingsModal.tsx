@@ -55,10 +55,10 @@ export function SettingsModal() {
         setAllowAllDomains(data.allowAllDomains);
       })
       .catch(() => {});
-    apiFetch('/api/apps')
+    apiFetch('/api/providers')
       .then((r) => r.json())
-      .then((data: { provider?: ProviderSetting }) => {
-        const p = data.provider ?? 'auto';
+      .then((data: { activeProvider?: string }) => {
+        const p = (data.activeProvider ?? 'auto') as ProviderSetting;
         setServerProvider(p);
         setSelectedProvider(p);
       })

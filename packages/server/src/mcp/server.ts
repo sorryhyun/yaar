@@ -32,6 +32,7 @@ export type McpServerName = (typeof CORE_SERVERS)[number];
 interface McpSessionEntry {
   server: McpServer;
   transport: WebStandardStreamableHTTPServerTransport;
+  lastUsed: number;
 }
 
 /**
@@ -39,6 +40,18 @@ interface McpSessionEntry {
  * Created on `initialize` requests, reused for subsequent calls.
  */
 const mcpSessions = new Map<string, McpSessionEntry>();
+
+/** Evict idle MCP sessions every 5 minutes. */
+const MCP_SESSION_TTL_MS = 5 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of mcpSessions) {
+    if (now - entry.lastUsed > MCP_SESSION_TTL_MS) {
+      mcpSessions.delete(key);
+      void entry.server.close();
+    }
+  }
+}, MCP_SESSION_TTL_MS).unref();
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
@@ -151,6 +164,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
       const key = `${serverName}:${mcpSessionId}`;
       const entry = mcpSessions.get(key);
       if (entry) {
+        entry.lastUsed = Date.now();
         return entry.transport.handleRequest(req);
       }
       // Session not found — return 404 per MCP spec
@@ -215,7 +229,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
       enableJsonResponse: true,
       onsessioninitialized: (newSessionId: string) => {
         const key = `${serverName}:${newSessionId}`;
-        mcpSessions.set(key, { server, transport });
+        mcpSessions.set(key, { server, transport, lastUsed: Date.now() });
         console.log(`[MCP] New session for ${serverName}: ${newSessionId}`);
       },
     });

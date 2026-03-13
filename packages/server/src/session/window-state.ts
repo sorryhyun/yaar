@@ -21,6 +21,7 @@ export type { WindowState } from '@yaar/shared';
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
+  private suffixIndex: Map<string, string> = new Map();
   private onWindowCloseCallback?: (windowId: string) => void;
 
   /**
@@ -41,10 +42,13 @@ export class WindowStateRegistry {
     const exact = this.windows.get(windowId);
     if (exact) return [windowId, exact];
 
-    // 2. Scan for suffix match — e.g., looking up "win-storage" matches "0/win-storage"
-    const suffix = `/${windowId}`;
-    for (const [key, state] of this.windows) {
-      if (key.endsWith(suffix)) return [key, state];
+    // 2. O(1) suffix lookup via index
+    const indexed = this.suffixIndex.get(windowId);
+    if (indexed) {
+      const state = this.windows.get(indexed);
+      if (state) return [indexed, state];
+      // Stale index entry
+      this.suffixIndex.delete(windowId);
     }
 
     return undefined;
@@ -80,6 +84,10 @@ export class WindowStateRegistry {
           createdAt: now,
           updatedAt: now,
         });
+        // Index: rawId → scoped key for O(1) suffix lookups
+        if (monitorId) {
+          this.suffixIndex.set(action.windowId, key);
+        }
         break;
       }
 
@@ -87,6 +95,11 @@ export class WindowStateRegistry {
         const key = this.actionKey(action.windowId, monitorId);
         this.windows.delete(key);
         this.appCommands.delete(key);
+        // Clean up suffix index
+        const slashIdx = key.indexOf('/');
+        if (slashIdx !== -1) {
+          this.suffixIndex.delete(key.slice(slashIdx + 1));
+        }
         this.onWindowCloseCallback?.(key);
         break;
       }
@@ -224,6 +237,7 @@ export class WindowStateRegistry {
   clear(): void {
     this.windows.clear();
     this.appCommands.clear();
+    this.suffixIndex.clear();
   }
 
   getWindowCount(): number {

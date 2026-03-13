@@ -228,6 +228,7 @@ export function DesktopSurface() {
       selectionActive.current = false;
 
       const DRAG_THRESHOLD = 5;
+      let rafId = 0;
 
       const handleMouseMove = (e: MouseEvent) => {
         e.preventDefault();
@@ -251,14 +252,32 @@ export function DesktopSurface() {
         };
         setSelectionRect(rect);
 
-        // Sample points on a grid within the rubberband and use elementFromPoint
-        // to find only the TOPMOST window at each point (respects z-order).
-        const STEP = 20;
-        const windowIds = new Set<string>();
-        const endX = rect.x + rect.w;
-        const endY = rect.y + rect.h;
-        for (let sx = rect.x; sx <= endX; sx += STEP) {
-          for (let sy = rect.y; sy <= endY; sy += STEP) {
+        // Coalesce expensive DOM queries to one-per-frame
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          // Sample points on a grid within the rubberband and use elementFromPoint
+          // to find only the TOPMOST window at each point (respects z-order).
+          const STEP = 20;
+          const windowIds = new Set<string>();
+          const endX = rect.x + rect.w;
+          const endY = rect.y + rect.h;
+          for (let sx = rect.x; sx <= endX; sx += STEP) {
+            for (let sy = rect.y; sy <= endY; sy += STEP) {
+              const el = document.elementFromPoint(sx, sy);
+              if (!el) continue;
+              const winEl = (el as HTMLElement).closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
+              if (winEl && winEl.dataset.variant !== 'panel') {
+                windowIds.add(winEl.dataset.windowId!);
+              }
+            }
+          }
+          // Always sample corners + center to catch edges the grid may skip
+          for (const [sx, sy] of [
+            [rect.x + rect.w / 2, rect.y + rect.h / 2],
+            [endX, rect.y],
+            [rect.x, endY],
+            [endX, endY],
+          ]) {
             const el = document.elementFromPoint(sx, sy);
             if (!el) continue;
             const winEl = (el as HTMLElement).closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
@@ -266,55 +285,42 @@ export function DesktopSurface() {
               windowIds.add(winEl.dataset.windowId!);
             }
           }
-        }
-        // Always sample corners + center to catch edges the grid may skip
-        for (const [sx, sy] of [
-          [rect.x + rect.w / 2, rect.y + rect.h / 2],
-          [endX, rect.y],
-          [rect.x, endY],
-          [endX, endY],
-        ]) {
-          const el = document.elementFromPoint(sx, sy);
-          if (!el) continue;
-          const winEl = (el as HTMLElement).closest<HTMLElement>(`[${WINDOW_ID_DATA_ATTR}]`);
-          if (winEl && winEl.dataset.variant !== 'panel') {
-            windowIds.add(winEl.dataset.windowId!);
-          }
-        }
-        setSelectedWindows([...windowIds]);
+          setSelectedWindows([...windowIds]);
 
-        // Compute which app icons intersect
-        const appIds = new Set<string>();
-        document.querySelectorAll<HTMLElement>('[data-app-id]').forEach((el) => {
-          const b = el.getBoundingClientRect();
-          if (
-            !(
-              rect.x > b.right ||
-              rect.x + rect.w < b.left ||
-              rect.y > b.bottom ||
-              rect.y + rect.h < b.top
-            )
-          ) {
-            appIds.add(el.dataset.appId!);
-          }
+          // Compute which app icons intersect
+          const appIds = new Set<string>();
+          document.querySelectorAll<HTMLElement>('[data-app-id]').forEach((el) => {
+            const b = el.getBoundingClientRect();
+            if (
+              !(
+                rect.x > b.right ||
+                rect.x + rect.w < b.left ||
+                rect.y > b.bottom ||
+                rect.y + rect.h < b.top
+              )
+            ) {
+              appIds.add(el.dataset.appId!);
+            }
+          });
+          document.querySelectorAll<HTMLElement>('[data-shortcut-id]').forEach((el) => {
+            const b = el.getBoundingClientRect();
+            if (
+              !(
+                rect.x > b.right ||
+                rect.x + rect.w < b.left ||
+                rect.y > b.bottom ||
+                rect.y + rect.h < b.top
+              )
+            ) {
+              appIds.add(el.dataset.shortcutId!);
+            }
+          });
+          setSelectedAppIds(appIds);
         });
-        document.querySelectorAll<HTMLElement>('[data-shortcut-id]').forEach((el) => {
-          const b = el.getBoundingClientRect();
-          if (
-            !(
-              rect.x > b.right ||
-              rect.x + rect.w < b.left ||
-              rect.y > b.bottom ||
-              rect.y + rect.h < b.top
-            )
-          ) {
-            appIds.add(el.dataset.shortcutId!);
-          }
-        });
-        setSelectedAppIds(appIds);
       };
 
       const handleMouseUp = () => {
+        cancelAnimationFrame(rafId);
         selectionStart.current = null;
         setSelectionRect(null);
         selectionActive.current = false;

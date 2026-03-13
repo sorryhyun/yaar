@@ -78,15 +78,33 @@ export const selectActiveAgents = (state: DesktopStore) => Object.values(state.a
 
 export const selectWindowAgents = (state: DesktopStore) => state.windowAgents;
 
+let windowAgentReverseCache: {
+  agents: Record<string, WindowAgent>;
+  map: Map<string, WindowAgent>;
+} = { agents: {}, map: new Map() };
+
+function getWindowAgentMap(agents: Record<string, WindowAgent>): Map<string, WindowAgent> {
+  if (agents === windowAgentReverseCache.agents) return windowAgentReverseCache.map;
+  const map = new Map<string, WindowAgent>();
+  for (const key in agents) {
+    const wa = agents[key];
+    map.set(wa.windowId, wa);
+    const raw = getRawWindowId(wa.windowId);
+    if (raw !== wa.windowId) map.set(raw, wa);
+  }
+  windowAgentReverseCache = { agents, map };
+  return map;
+}
+
 const windowAgentSelectors = new Map<string, (state: DesktopStore) => WindowAgent | undefined>();
 export const selectWindowAgent = (windowId: string) => {
   let sel = windowAgentSelectors.get(windowId);
   if (!sel) {
     const rawId = getRawWindowId(windowId);
-    sel = (state: DesktopStore) =>
-      Object.values(state.windowAgents).find(
-        (wa) => wa.windowId === rawId || wa.windowId === windowId,
-      );
+    sel = (state: DesktopStore) => {
+      const map = getWindowAgentMap(state.windowAgents);
+      return map.get(windowId) ?? map.get(rawId);
+    };
     windowAgentSelectors.set(windowId, sel);
   }
   return sel;
