@@ -23,7 +23,7 @@ import { rm, unlink } from 'fs/promises';
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, validateRelativePath, extractIdFromUri } from './utils.js';
+import { ok, okJson, error, validateRelativePath, extractIdFromUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
@@ -58,21 +58,18 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
     async list(): Promise<VerbResult> {
       const apps = await listApps();
-      if (apps.length === 0) return ok('No apps found in apps/ directory.');
-
-      const lines = apps.map((app) => {
-        const flags = [];
-        if (app.hasSkill) flags.push('skill');
-        if (app.hasConfig) flags.push('config');
-        if (app.appProtocol) flags.push('app-protocol');
-        if (app.createShortcut === false) flags.push('no-shortcut');
-        const flagStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
-        let line = `- ${app.name} (${app.id})${flagStr}`;
-        if (app.description) line += `\n  ${app.description}`;
-        return line;
-      });
-
-      return ok(`Available apps:\n${lines.join('\n')}`);
+      return okJson(
+        apps.map((app) => ({
+          id: app.id,
+          name: app.name,
+          description: app.description,
+          icon: app.icon,
+          hasSkill: app.hasSkill,
+          hasConfig: app.hasConfig,
+          appProtocol: app.appProtocol,
+          createShortcut: app.createShortcut,
+        })),
+      );
     },
   };
   registry.register('yaar://apps', listHandler);
@@ -111,7 +108,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           // Bare storage root → redirect to list
           const listResult = await storageList(prefixedPath);
           if (!listResult.success) return error(listResult.error!);
-          return ok(JSON.stringify(listResult.entries ?? []));
+          return okJson(listResult.entries ?? []);
         }
         const result = await storageRead(prefixedPath);
         if (!result.success) return error(result.error!);
@@ -193,7 +190,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           size: e.size,
           modifiedAt: e.modifiedAt,
         }));
-        return ok(JSON.stringify(entries));
+        return okJson(entries);
       }
 
       // Non-storage list on a specific app doesn't make sense

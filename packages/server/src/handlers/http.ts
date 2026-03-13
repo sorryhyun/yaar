@@ -8,7 +8,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error } from './utils.js';
+import { okJson, error } from './utils.js';
 import { performFetch } from '../features/http/fetch.js';
 import { getSessionId } from '../agents/session.js';
 
@@ -52,7 +52,7 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
 
       try {
         const result = await performFetch(url, { method, headers, body, sessionId });
-        return ok(JSON.stringify(result));
+        return okJson(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Fetch failed';
         return error(message);

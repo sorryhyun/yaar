@@ -12,6 +12,7 @@
 import { AgentSession } from './session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
+import { getSessionHub } from '../session/session-hub.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -43,6 +44,9 @@ export class AgentPool {
 
   /** Ephemeral agents currently in-flight (disposed after task). */
   private ephemeralAgents = new Set<PooledAgent>();
+
+  /** All agent instanceIds for O(1) lookup. */
+  private agentIds = new Set<string>();
 
   constructor(sessionId: SessionId, broadcast: (event: ServerEvent) => void) {
     this.sessionId = sessionId;
@@ -93,6 +97,9 @@ export class AgentPool {
       idleTimer: null,
     };
 
+    this.agentIds.add(instanceId);
+    getSessionHub().registerAgent(instanceId, this.sessionId);
+
     console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
     return agent;
   }
@@ -133,6 +140,8 @@ export class AgentPool {
    */
   async disposeEphemeral(agent: PooledAgent): Promise<void> {
     this.ephemeralAgents.delete(agent);
+    this.agentIds.delete(agent.instanceId);
+    getSessionHub().unregisterAgent(agent.instanceId);
     try {
       await agent.session.cleanup();
     } finally {
@@ -196,6 +205,8 @@ export class AgentPool {
     if (!agent) return false;
 
     this.mainAgents.delete(monitorId);
+    this.agentIds.delete(agent.instanceId);
+    getSessionHub().unregisterAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -248,6 +259,8 @@ export class AgentPool {
     if (!agent) return;
 
     this.windowAgents.delete(windowId);
+    this.agentIds.delete(agent.instanceId);
+    getSessionHub().unregisterAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -260,16 +273,7 @@ export class AgentPool {
    * Check if an agent with the given instanceId exists in this pool.
    */
   hasAgent(agentId: string): boolean {
-    for (const agent of this.mainAgents.values()) {
-      if (agent.instanceId === agentId) return true;
-    }
-    for (const agent of this.windowAgents.values()) {
-      if (agent.instanceId === agentId) return true;
-    }
-    for (const agent of this.ephemeralAgents) {
-      if (agent.instanceId === agentId) return true;
-    }
-    return false;
+    return this.agentIds.has(agentId);
   }
 
   /**
@@ -424,5 +428,9 @@ export class AgentPool {
     this.mainAgents.clear();
     this.windowAgents.clear();
     this.ephemeralAgents.clear();
+    for (const id of this.agentIds) {
+      getSessionHub().unregisterAgent(id);
+    }
+    this.agentIds.clear();
   }
 }

@@ -30,7 +30,15 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
 
     async list(): Promise<VerbResult> {
       const pool = getPool();
-      if (!pool) return ok('No agents — session not initialized.');
+      if (!pool)
+        return okJson({
+          totalAgents: 0,
+          idleAgents: 0,
+          busyAgents: 0,
+          mainAgent: [],
+          windowAgents: [],
+          ephemeralAgents: [],
+        });
 
       const stats = pool.getStats();
       return okJson({

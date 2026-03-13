@@ -70,7 +70,7 @@ export function registerWindowHandlers(
 
     async list(): Promise<VerbResult> {
       const windows = getWindowState().listWindows();
-      if (windows.length === 0) return ok('No windows are currently open.');
+      if (windows.length === 0) return okJson([]);
 
       const windowList = windows.map((win) => {
         const parsed = parseWindowKey(win.id);

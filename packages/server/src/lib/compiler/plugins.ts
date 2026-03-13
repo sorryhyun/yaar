@@ -20,6 +20,7 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
  */
 const BUNDLED_SHIMS: Record<string, string> = {
   anime: join(PLUGIN_DIR, 'shims', 'anime.ts'),
+  yaar: join(PLUGIN_DIR, 'shims', 'yaar.ts'),
 };
 
 /**
@@ -56,6 +57,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   mammoth: 'mammoth',
   marked: 'marked',
   prismjs: 'prismjs',
+  yaar: 'yaar',
 };
 
 /**

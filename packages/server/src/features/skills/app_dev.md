@@ -159,34 +159,163 @@ render(() => html`
 `, document.getElementById('app')!);
 ```
 
+## App Protocol
+
+To make a deployed app controllable by the agent — so it can read app state and send commands — define an App Protocol. Without it, the app is a static iframe the agent cannot interact with after creation.
+
+`window.yaar.app` is auto-injected at runtime (no import needed). The agent discovers your app's manifest, then queries state or sends commands at any time.
+
+### Registration
+
+Put the registration in `src/protocol.ts` and call it from main.ts inside `onMount()`. Always guard with a null check:
+
+```ts
+// src/protocol.ts
+export function registerProtocol() {
+  if (!window.yaar?.app) return;
+
+  window.yaar.app.register({
+    appId: 'my-app',
+    name: 'My App',
+    state: { /* ... */ },
+    commands: { /* ... */ },
+  });
+}
+```
+
+### State
+
+State keys expose read-only snapshots. Handlers are called on-demand when the agent queries.
+
+```ts
+state: {
+  items: {
+    description: 'All items as an array',
+    handler: () => [...items()],  // read signal, return a copy
+  },
+  selection: {
+    description: 'Currently selected item id or null',
+    handler: () => selectedId(),  // read signal
+  },
+}
+```
+
+- Handlers can be sync or async (promises are auto-awaited)
+- Return JSON-serializable values only (no Date, Map, Set, circular refs)
+- Return copies of objects/arrays (`{...obj}`, `[...arr]`) to prevent mutation
+
+### Commands
+
+Commands are actions the agent can trigger. Use JSON Schema for `params`:
+
+```ts
+commands: {
+  addItem: {
+    description: 'Add a new item',
+    params: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        priority: { type: 'number' },
+      },
+      required: ['title'],
+    },
+    handler: (p: { title: string; priority?: number }) => {
+      const id = nextId++;
+      items([...items(), { id, title: p.title, priority: p.priority ?? 0 }]);
+      return { ok: true, id };
+    },
+  },
+  clear: {
+    description: 'Remove all items',
+    params: { type: 'object', properties: {} },
+    handler: () => {
+      items([]);
+      return { ok: true };
+    },
+  },
+}
+```
+
+- Handlers can be sync or async
+- Return `{ ok: true, ...extraData }` on success
+- Throw on error — the SDK catches and reports it to the agent
+- `params` uses JSON Schema format: `{ type: 'object', properties: { ... }, required: [...] }`
+- `aliases` (optional): alternative command names that resolve to this command. Useful when the agent might guess a synonym (e.g., `sendMessage` instead of `addMessage`):
+
+```ts
+addMessage: {
+  description: 'Add a message to the chat',
+  aliases: ['sendMessage', 'postMessage'],
+  // ...
+}
+```
+
+### Sending Interactions
+
+Call `sendInteraction()` to proactively notify the agent about user actions:
+
+```ts
+window.yaar.app.sendInteraction('User clicked save button');
+window.yaar.app.sendInteraction({ event: 'cell_select', row: 3, col: 'A' });
+```
+
+The interaction is delivered to the window's agent as a `WINDOW_MESSAGE`. Use for significant events the agent should know about — user selections, button clicks, mode changes, etc.
+
 ## Verb API
 
-Available at runtime via `window.yaar` (auto-injected, no import needed). Uses the same `yaar://` URI pattern the agent uses via MCP tools — one mental model for both agent and app code.
+Uses the same `yaar://` URI pattern the agent uses via MCP tools — one mental model for both agent and app code.
 
-| Method | Description |
-|--------|-------------|
-| `invoke(uri, payload?)` | Execute an action on a resource |
-| `read(uri)` | Read a resource's current value |
-| `list(uri)` | List child resources under a URI |
-| `describe(uri)` | Get resource description, supported verbs, and invoke schema |
-| `delete(uri)` | Delete a resource |
+### `@bundled/yaar` SDK (recommended)
 
-Each method returns a `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
+Import typed helpers that auto-parse responses — no manual `result.content[0].text` extraction:
+
+```ts
+import { readJson, readText, invokeJson, listJson, invoke, del, storage, subscribe } from '@bundled/yaar';
+
+// Auto-parsed — returns typed data directly
+const settings = await readJson<Settings>('yaar://config/settings');
+const hooks = await listJson<Hook[]>('yaar://config/hooks') ?? [];
+const html = await readText('yaar://windows/win-notes');
+
+// Raw verbs — returns YaarVerbResult (same as window.yaar.*)
+await invoke('yaar://config/settings', { theme: 'dark' });
+await del('yaar://config/hooks/hook-1');
+
+// Sub-objects
+await storage.save('data.json', JSON.stringify(data));
+const unsub = await subscribe('yaar://storage/scores.json', () => reload());
+```
+
+| Helper | Returns | Description |
+|--------|---------|-------------|
+| `readJson<T>(uri)` | `T` | Read + JSON.parse |
+| `readText(uri)` | `string` | Read + extract text |
+| `invokeJson<T>(uri, payload?)` | `T` | Invoke + JSON.parse |
+| `invokeText(uri, payload?)` | `string` | Invoke + extract text |
+| `listJson<T>(uri)` | `T` | List + JSON.parse |
+| `listText(uri)` | `string` | List + extract text |
+| `deleteText(uri)` | `string` | Delete + extract text |
+| `invoke(uri, payload?)` | `YaarVerbResult` | Raw invoke |
+| `read(uri)` | `YaarVerbResult` | Raw read |
+| `list(uri)` | `YaarVerbResult` | Raw list |
+| `describe(uri)` | `YaarVerbResult` | Raw describe |
+| `del(uri)` | `YaarVerbResult` | Raw delete |
+| `subscribe(uri, cb)` | `() => void` | Reactive subscription |
+| `storage` | `YaarStorage` | `.save()`, `.read()`, `.list()`, `.remove()`, `.url()` |
+| `app` | `YaarApp` | `.register()`, `.sendInteraction()` |
+| `notifications` | object | `.list()`, `.count()`, `.onChange()` |
+| `windows` | object | `.read()`, `.list()` |
+
+### `window.yaar` global (legacy)
+
+Also available without imports. Each method returns `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
 
 **Allowed URI prefixes:** `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403.
 
 Apps use `self` as the appId — the server resolves it to the real appId from the iframe token, so apps can only access their own namespace.
 
 **Error handling:** Methods throw on network errors or when the server returns an error. Always use `.catch()` or try/catch.
-
-```ts
-try {
-  const result = await yaar.invoke('yaar://browser/tab1', { action: 'open', url });
-  const text = result.content[0]?.text;
-} catch (err) {
-  console.error('Verb call failed:', err.message);
-}
-```
 
 ### Storage (`yaar://storage/` and `yaar://apps/self/storage/`)
 
@@ -325,6 +454,14 @@ const result = await yaar.read('yaar://browser/my-tab');
 | `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
 | `permissions` | default allowlist | URI prefixes the app iframe can access. E.g. `["yaar://storage/", "yaar://apps/self/storage/"]` to grant global + app-scoped storage. |
 
+## run_js Sandbox
+
+The `run_js` tool executes code in an isolated Node.js `vm` sandbox. Code runs in an async IIFE — `await` is supported at the top level. Use `return` to return a value.
+
+**Available globals:** `console` (log, info, warn, error, debug — output captured), `fetch`, `Headers`, `Request`, `Response`, `JSON`, `Math`, `Date`, `Object`, `Array`, `String`, `Number`, `Boolean`, `Map`, `Set`, `RegExp`, Error types, `URL`, `URLSearchParams`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`, `parseInt`, `parseFloat`, `isNaN`, `isFinite`, `Promise`, `structuredClone`, `crypto.createHash`.
+
+**NOT available (security):** `process`, `require`, `import`, `setTimeout`, `setInterval`, `eval`, `Function`, `fs`, `child_process`, `os`.
+
 ## Runtime Constraints
 
 Compiled apps run in a **browser iframe sandbox**. They are subject to these hard constraints:
@@ -372,4 +509,3 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 ## Related Skills
 
 - `read('yaar://skills/host_api')` — REST endpoints available to iframe apps
-- `read('yaar://skills/app_protocol')` — Bidirectional agent-iframe communication (state, commands, interactions)

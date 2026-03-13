@@ -1,0 +1,6 @@
+{
+  "icon": "⚙️",
+  "name": "Configurations",
+  "run": "index.html",
+  "permissions": ["yaar://config/"]
+}

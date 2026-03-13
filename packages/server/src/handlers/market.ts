@@ -11,7 +11,7 @@
 
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, extractIdFromUri } from './utils.js';
+import { okJson, error, extractIdFromUri } from './utils.js';
 import { installApp } from './apps.js';
 import { MARKET_URL } from '../config.js';
 
@@ -28,12 +28,7 @@ async function fetchMarketList(): Promise<VerbResult> {
   const res = await fetch(`${MARKET_URL}/api/apps`);
   if (!res.ok) return error(`Failed to fetch marketplace (${res.status})`);
   const data = (await res.json()) as { apps: MarketApp[] };
-  if (!data.apps?.length) return ok('No apps available in the marketplace.');
-  const lines = data.apps.map(
-    (app) =>
-      `- ${app.icon} **${app.name}** (${app.id}) v${app.version}\n  ${app.description} — by ${app.author}`,
-  );
-  return ok(`Marketplace apps:\n${lines.join('\n')}`);
+  return okJson(data.apps ?? []);
 }
 
 async function fetchMarketApp(appId: string): Promise<VerbResult> {
@@ -43,9 +38,7 @@ async function fetchMarketApp(appId: string): Promise<VerbResult> {
     return error(`Failed to fetch app details (${res.status})`);
   }
   const app = (await res.json()) as MarketApp;
-  return ok(
-    `${app.icon} **${app.name}** (${app.id}) v${app.version}\n${app.description}\nAuthor: ${app.author}`,
-  );
+  return okJson(app);
 }
 
 export function registerMarketHandlers(registry: ResourceRegistry): void {

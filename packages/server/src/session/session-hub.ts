@@ -13,6 +13,7 @@ export class SessionHub {
   private sessions = new Map<SessionId, LiveSession>();
   private defaultSessionId: SessionId | null = null;
   private evictionTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
+  private agentToSession = new Map<string, SessionId>();
 
   scheduleEviction(sessionId: SessionId, delayMs = 60_000): void {
     this.cancelEviction(sessionId);
@@ -24,6 +25,14 @@ export class SessionHub {
       });
     }, delayMs);
     this.evictionTimers.set(sessionId, timer);
+  }
+
+  registerAgent(agentId: string, sessionId: SessionId): void {
+    this.agentToSession.set(agentId, sessionId);
+  }
+
+  unregisterAgent(agentId: string): void {
+    this.agentToSession.delete(agentId);
   }
 
   cancelEviction(sessionId: SessionId): void {
@@ -74,12 +83,7 @@ export class SessionHub {
   }
 
   findSessionByAgent(agentId: string): SessionId | undefined {
-    for (const [sessionId, session] of this.sessions) {
-      if (session.getPool()?.hasAgent(agentId)) {
-        return sessionId;
-      }
-    }
-    return undefined;
+    return this.agentToSession.get(agentId);
   }
 
   findMonitorForAgent(agentId: string): string | undefined {
@@ -101,6 +105,10 @@ export class SessionHub {
     const session = this.sessions.get(sessionId);
     if (session) {
       await session.cleanup();
+      // Clean up reverse agent index for this session
+      for (const [aid, sid] of this.agentToSession) {
+        if (sid === sessionId) this.agentToSession.delete(aid);
+      }
       this.sessions.delete(sessionId);
       if (this.defaultSessionId === sessionId) {
         this.defaultSessionId = null;

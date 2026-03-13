@@ -12,7 +12,7 @@ import { parseFileUri } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { storageRead, storageWrite, storageList, storageDelete } from '../storage/index.js';
-import { ok, okWithImages, error } from './utils.js';
+import { ok, okJson, okWithImages, error } from './utils.js';
 import { prependNote, applyEdit } from './utils.js';
 
 // ── Helpers ──
@@ -115,7 +115,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       }
 
       const entries = result.entries!;
-      return ok(JSON.stringify(entries));
+      return okJson(entries);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

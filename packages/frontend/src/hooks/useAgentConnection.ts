@@ -21,6 +21,8 @@ import {
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 import { getRawWindowId } from '@/store/helpers';
 
+let sessionCheckDone = false;
+
 function buildWsUrl(): string {
   const state = useDesktopStore.getState();
   return buildWsUrlFromApi(state.sessionId);
@@ -58,36 +60,35 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     addCliEntry,
     incrementSubagentCount,
     decrementSubagentCount,
-  } = useDesktopStore();
+  } = useDesktopStore.getState();
 
-  const checkForPreviousSession = useCallback(
-    async (currentSessionId: string) => {
-      const currentWindows = useDesktopStore.getState().windows;
-      if (Object.keys(currentWindows).length > 0) return;
+  const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
+    if (sessionCheckDone) return;
+    sessionCheckDone = true;
+    const currentWindows = useDesktopStore.getState().windows;
+    if (Object.keys(currentWindows).length > 0) return;
 
-      try {
-        const response = await apiFetch('/api/sessions');
-        if (!response.ok) return;
+    try {
+      const response = await apiFetch('/api/sessions');
+      if (!response.ok) return;
 
-        const data = await response.json();
-        const sessions = data.sessions || [];
-        const previousSessions = sessions.filter(
-          (s: { sessionId: string }) => s.sessionId !== currentSessionId,
-        );
+      const data = await response.json();
+      const sessions = data.sessions || [];
+      const previousSessions = sessions.filter(
+        (s: { sessionId: string }) => s.sessionId !== currentSessionId,
+      );
 
-        if (previousSessions.length > 0) {
-          const lastSession = previousSessions[0];
-          setRestorePrompt({
-            sessionId: lastSession.sessionId,
-            sessionDate: lastSession.metadata?.createdAt || new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        console.error('Failed to check for previous sessions:', err);
+      if (previousSessions.length > 0) {
+        const lastSession = previousSessions[0];
+        setRestorePrompt({
+          sessionId: lastSession.sessionId,
+          sessionDate: lastSession.metadata?.createdAt || new Date().toISOString(),
+        });
       }
-    },
-    [setRestorePrompt],
-  );
+    } catch (err) {
+      console.error('Failed to check for previous sessions:', err);
+    }
+  }, []);
 
   const handleAppProtocolRequestCb = useCallback(
     (requestId: string, windowId: string, request: AppProtocolRequest) => {
@@ -130,24 +131,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         console.error('Failed to parse message:', e);
       }
     },
-    [
-      applyActions,
-      setConnectionStatus,
-      setSession,
-      addDebugEntry,
-      setAgentActive,
-      clearAgent,
-      registerWindowAgent,
-      updateWindowAgentStatus,
-      checkForPreviousSession,
-      updateCliStreaming,
-      finalizeCliStreaming,
-      addCliEntry,
-      handleAppProtocolRequestCb,
-      handleVerbSubscriptionUpdateCb,
-      incrementSubagentCount,
-      decrementSubagentCount,
-    ],
+    [checkForPreviousSession, handleAppProtocolRequestCb, handleVerbSubscriptionUpdateCb],
   );
 
   const connect = useCallback(() => {
@@ -210,22 +194,19 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
     setConnectionStatus('disconnected');
     clearAllAgents();
-  }, [setConnectionStatus, clearAllAgents]);
+  }, []);
 
-  const send = useCallback(
-    (event: ClientEvent) => {
-      if (sendEvent(wsManager, event)) {
-        addDebugEntry({
-          direction: 'out',
-          type: event.type,
-          data: event,
-        });
-      } else {
-        console.warn('WebSocket not connected, cannot send:', event);
-      }
-    },
-    [addDebugEntry],
-  );
+  const send = useCallback((event: ClientEvent) => {
+    if (sendEvent(wsManager, event)) {
+      addDebugEntry({
+        direction: 'out',
+        type: event.type,
+        data: event,
+      });
+    } else {
+      console.warn('WebSocket not connected, cannot send:', event);
+    }
+  }, []);
 
   const sendMessage = useCallback(
     (content: string) => {
@@ -251,7 +232,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         interactions: interactions.length > 0 ? interactions : undefined,
       });
     },
-    [send, consumeDrawing, consumeAttachedImages, addCliEntry],
+    [send],
   );
 
   const sendWindowMessage = useCallback(

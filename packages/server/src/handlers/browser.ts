@@ -30,7 +30,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
 
     async list(): Promise<VerbResult> {
       const browsers = pool.getAllSessions();
-      if (browsers.size === 0) return ok('No browsers open.');
+      if (browsers.size === 0) return okJson([]);
       const items = [...browsers.entries()].map(([bid, s]) => ({
         uri: `yaar://browser/${bid}`,
         id: bid,

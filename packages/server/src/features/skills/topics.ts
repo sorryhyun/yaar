@@ -17,22 +17,17 @@ import { PUBLIC_ENDPOINTS as browseEndpoints } from '../../http/routes/browse.js
 // @ts-expect-error: Bun text import
 import appDevMd from './app_dev.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
-import sandboxMd from './sandbox.md' with { type: 'text' };
-// @ts-expect-error: Bun text import
 import componentsMd from './components.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
 import hostApiMd from './host_api.md' with { type: 'text' };
-// @ts-expect-error: Bun text import
-import appProtocolMd from './app_protocol.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
 import configMd from './config.md' with { type: 'text' };
 
 export const TOPICS: Record<string, string> = {
   app_dev: appDevMd,
-  sandbox: sandboxMd,
+  sandbox: appDevMd,
   components: componentsMd,
   host_api: hostApiMd,
-  app_protocol: appProtocolMd,
   config: configMd,
 };
 

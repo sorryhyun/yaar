@@ -155,3 +155,46 @@ declare module '@bundled/prismjs' {
 declare module '@bundled/tone' {
   export * from 'tone';
 }
+
+// ── YAAR SDK ────────────────────────────────────────────────────────────────
+
+declare module '@bundled/yaar' {
+  /** Read a URI and auto-parse the text response as JSON. */
+  export function readJson<T = unknown>(uri: string): Promise<T>;
+  /** Read a URI and return the raw text. */
+  export function readText(uri: string): Promise<string>;
+  /** Invoke a URI and auto-parse the response as JSON. */
+  export function invokeJson<T = unknown>(
+    uri: string,
+    payload?: Record<string, unknown>,
+  ): Promise<T>;
+  /** Invoke a URI and return the raw text. */
+  export function invokeText(
+    uri: string,
+    payload?: Record<string, unknown>,
+  ): Promise<string>;
+  /** List a URI and auto-parse as JSON. */
+  export function listJson<T = unknown>(uri: string): Promise<T>;
+  /** List a URI and return the raw text. */
+  export function listText(uri: string): Promise<string>;
+  /** Delete a URI and return the raw text response. */
+  export function deleteText(uri: string): Promise<string>;
+
+  /** Raw verb passthrough — returns YaarVerbResult. */
+  export function invoke(uri: string, payload?: Record<string, unknown>): Promise<YaarVerbResult>;
+  export function read(uri: string): Promise<YaarVerbResult>;
+  export function list(uri: string): Promise<YaarVerbResult>;
+  export function describe(uri: string): Promise<YaarVerbResult>;
+  export function del(uri: string): Promise<YaarVerbResult>;
+  export function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void>;
+
+  /** Re-exported sub-objects from window.yaar. */
+  export const storage: YaarStorage;
+  export const app: YaarApp;
+  export const notifications: YaarNotifications;
+  export const windows: YaarWindows;
+
+  /** The raw window.yaar global. */
+  export const yaar: YaarGlobal;
+  export default YaarGlobal;
+}
