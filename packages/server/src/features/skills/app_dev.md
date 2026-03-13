@@ -329,7 +329,7 @@ Iframe `fetch()` is subject to CORS. Use `invoke('yaar://http', { url, method?, 
 | `appProtocol` | auto-detected | Set explicitly if auto-detection (scanning HTML for `.app.register`) isn't reliable |
 | `capture` | `auto` | Screenshot strategy: `canvas` (toDataURL on largest canvas), `dom` (html2canvas), `svg` (serialize largest SVG), `protocol` (app provides screenshot via App Protocol). Default `auto` tries canvas → svg → dom fallback chain. Set this for faster, more reliable captures. |
 | `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
-| `permissions` | default allowlist | URI prefixes the app iframe can access. E.g. `["yaar://storage/", "yaar://apps/self/storage/"]` to grant global + app-scoped storage. |
+| `permissions` | default allowlist | URI prefixes the app iframe can access. Each entry is either a string (all verbs) or `{ uri, verbs }` to restrict verbs. E.g. `["yaar://storage/", { "uri": "yaar://sessions/", "verbs": ["list"] }]`. |
 
 ## run_js Sandbox
 

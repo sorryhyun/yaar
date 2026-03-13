@@ -6,13 +6,15 @@
  * them to PUBLIC_ENDPOINTS only.
  */
 
+import type { PermissionEntry } from './routes/verb.js';
+
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface TokenEntry {
   windowId: string;
   sessionId: string;
   appId?: string;
-  permissions?: string[];
+  permissions?: PermissionEntry[];
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -27,7 +29,7 @@ export function generateIframeToken(
   windowId: string,
   sessionId: string,
   appId?: string,
-  permissions?: string[],
+  permissions?: PermissionEntry[],
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {

@@ -10,6 +10,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import type { PermissionEntry } from '../../http/routes/verb.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -30,7 +31,7 @@ export interface DeployArgs {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   capture?: 'auto' | 'canvas' | 'dom' | 'svg' | 'protocol';
-  permissions?: string[];
+  permissions?: PermissionEntry[];
 }
 
 export interface DeployResult {

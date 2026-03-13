@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { CommandPalette } from '@/components/command-palette/CommandPalette';
 
@@ -15,50 +15,19 @@ vi.mock('@/hooks/useAgentConnection', () => ({
 describe('CommandPalette', () => {
   beforeEach(() => {
     useDesktopStore.setState({
-      debugPanelOpen: false,
-      recentActionsPanelOpen: false,
-      sessionsModalOpen: false,
       activeAgents: {},
       hasDrawing: false,
       windows: {},
     });
   });
 
-  it('renders the gear settings button', () => {
-    render(<CommandPalette />);
-    expect(screen.getByTitle('Settings')).toBeInTheDocument();
-  });
-
-  it('renders the reset button directly (not in popover)', () => {
+  it('renders the reset button', () => {
     render(<CommandPalette />);
     expect(screen.getByTitle('Reset windows and context')).toBeInTheDocument();
   });
 
-  it('settings popover is hidden by default', () => {
+  it('renders the input field', () => {
     render(<CommandPalette />);
-    expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
-  });
-
-  it('clicking gear button shows settings popover with config buttons', () => {
-    render(<CommandPalette />);
-    fireEvent.click(screen.getByTitle('Settings'));
-    expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(screen.getByText('Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Actions')).toBeInTheDocument();
-  });
-
-  it('clicking gear button again closes settings popover', () => {
-    render(<CommandPalette />);
-    const gearBtn = screen.getByTitle('Settings');
-    fireEvent.click(gearBtn);
-    expect(screen.getByText('Sessions')).toBeInTheDocument();
-    fireEvent.click(gearBtn);
-    expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
-  });
-
-  it('Settings/Sessions/Actions buttons are not visible outside the popover', () => {
-    render(<CommandPalette />);
-    expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
-    expect(screen.queryByText('Actions')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 });

@@ -168,7 +168,13 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       // Append permissions section if the app declares URI permissions
       if (app?.permissions?.length) {
-        const permissionsList = app.permissions.map((p) => `- \`${p}\``).join('\n');
+        const permissionsList = app.permissions
+          .map((p) => {
+            if (typeof p === 'string') return `- \`${p}\``;
+            const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
+            return `- \`${p.uri}\`${verbs}`;
+          })
+          .join('\n');
         result += '\n\n## Permissions\n\n' + permissionsList;
       }
 

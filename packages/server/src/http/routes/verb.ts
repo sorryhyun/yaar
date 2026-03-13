@@ -35,16 +35,29 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
-/** No verb access by default — apps must declare permissions in app.json. */
-const NO_PERMISSIONS: string[] = [];
+/**
+ * A permission entry is either:
+ * - a URI prefix string (allows all verbs), or
+ * - an object with `uri` and optional `verbs` array (restricts to listed verbs).
+ */
+export type PermissionEntry = string | { uri: string; verbs?: Verb[] };
 
-/** Check if a URI is allowed by the given prefixes. */
-function isUriAllowed(uri: string, prefixes: string[]): boolean {
-  return prefixes.some(
-    (entry) =>
-      uri === entry || // exact match
-      (entry.endsWith('/') && uri.startsWith(entry)), // prefix match
-  );
+/** No verb access by default — apps must declare permissions in app.json. */
+const NO_PERMISSIONS: PermissionEntry[] = [];
+
+/** Check if a single permission entry matches the URI. */
+function uriMatches(uri: string, pattern: string): boolean {
+  return uri === pattern || (pattern.endsWith('/') && uri.startsWith(pattern));
+}
+
+/** Check if a URI + verb is allowed by the given permission entries. */
+function isUriAllowed(uri: string, verb: Verb, entries: PermissionEntry[]): boolean {
+  return entries.some((entry) => {
+    if (typeof entry === 'string') {
+      return uriMatches(uri, entry); // string entry → all verbs allowed
+    }
+    return uriMatches(uri, entry.uri) && (!entry.verbs || entry.verbs.includes(verb));
+  });
 }
 
 const VALID_VERBS: Verb[] = ['describe', 'read', 'list', 'invoke', 'delete'];
@@ -95,7 +108,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       }
 
       const effectivePermissions = tokenEntry.permissions ?? NO_PERMISSIONS;
-      if (!isUriAllowed(body.uri, effectivePermissions)) {
+      if (!isUriAllowed(body.uri, 'read', effectivePermissions)) {
         return errorResponse('URI not accessible to iframe apps', 403);
       }
 
@@ -147,7 +160,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const effectivePermissions = tokenEntry?.permissions ?? NO_PERMISSIONS;
 
   // Allowlist check
-  if (!isUriAllowed(uri, effectivePermissions)) {
+  if (!isUriAllowed(uri, verb, effectivePermissions)) {
     return errorResponse('URI not accessible to iframe apps', 403);
   }
 

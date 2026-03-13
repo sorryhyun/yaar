@@ -1,5 +1,4 @@
 export { CliPanel } from './CliPanel';
-export { CliWindowStrip } from './CliWindowStrip';
 export { ConfirmDialog } from './ConfirmDialog';
 export { ConnectionDialog } from './ConnectionDialog';
 export { CursorSpinner } from './CursorSpinner';

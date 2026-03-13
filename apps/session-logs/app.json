@@ -1,0 +1,6 @@
+{
+  "icon": "📋",
+  "name": "Session Logs",
+  "run": "index.html",
+  "permissions": [{ "uri": "yaar://sessions/", "verbs": ["list", "read"] }]
+}

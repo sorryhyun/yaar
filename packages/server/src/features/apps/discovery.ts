@@ -8,11 +8,36 @@ import { PROJECT_ROOT } from '../../config.js';
 import { hasConfig } from './config.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
+import type { PermissionEntry } from '../../http/routes/verb.js';
+import type { Verb } from '../../handlers/uri-registry.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
+
+/** Parse permission entries from app.json, supporting both string and object formats. */
+function parsePermissions(raw: unknown[]): PermissionEntry[] {
+  const result: PermissionEntry[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      result.push(entry);
+    } else if (
+      entry &&
+      typeof entry === 'object' &&
+      'uri' in entry &&
+      typeof (entry as { uri: unknown }).uri === 'string'
+    ) {
+      const obj = entry as { uri: string; verbs?: unknown };
+      const parsed: PermissionEntry = { uri: obj.uri };
+      if (Array.isArray(obj.verbs) && obj.verbs.every((v) => typeof v === 'string')) {
+        parsed.verbs = obj.verbs as Verb[];
+      }
+      result.push(parsed);
+    }
+  }
+  return result;
+}
 
 export type WindowVariantType = 'standard' | 'widget' | 'panel';
 export type DockEdgeType = 'top' | 'bottom';
@@ -35,7 +60,7 @@ export interface AppInfo {
   dockEdge?: DockEdgeType;
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
-  permissions?: string[];
+  permissions?: PermissionEntry[];
 }
 
 /**
@@ -87,7 +112,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let dockEdge: DockEdgeType | undefined;
       let frameless: boolean | undefined;
       let windowStyle: Record<string, string | number> | undefined;
-      let permissions: string[] | undefined;
+      let permissions: PermissionEntry[] | undefined;
       try {
         const metaContent = await Bun.file(join(appPath, 'app.json')).text();
         const meta = JSON.parse(metaContent);
@@ -105,7 +130,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.frameless === true) frameless = true;
         if (meta.windowStyle && typeof meta.windowStyle === 'object')
           windowStyle = meta.windowStyle;
-        if (Array.isArray(meta.permissions)) permissions = meta.permissions;
+        if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
       } catch {
         // No metadata or invalid JSON
       }
@@ -183,7 +208,7 @@ export async function getAppMeta(appId: string): Promise<{
   dockEdge?: DockEdgeType;
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
-  permissions?: string[];
+  permissions?: PermissionEntry[];
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -193,14 +218,14 @@ export async function getAppMeta(appId: string): Promise<{
       dockEdge?: DockEdgeType;
       frameless?: boolean;
       windowStyle?: Record<string, string | number>;
-      permissions?: string[];
+      permissions?: PermissionEntry[];
     } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
     if (meta.frameless === true) result.frameless = true;
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
-    if (Array.isArray(meta.permissions)) result.permissions = meta.permissions;
+    if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
     return Object.keys(result).length > 0 ? result : null;
   } catch {
     return null;

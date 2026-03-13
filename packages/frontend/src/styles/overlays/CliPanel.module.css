@@ -15,7 +15,9 @@
   top: 0;
   left: 0;
   width: 100vw;
-  height: calc(100vh - 100px);
+  height: 100vh;
+  /* bottom padding so content doesn't hide behind command palette */
+  padding-bottom: 100px;
   background: #0a0a0a;
   color: #e0e0e0;
   font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
@@ -24,11 +26,6 @@
   display: grid;
   z-index: var(--z-panel);
   gap: 1px;
-}
-
-/* Shrink terminal when windows are shown in the strip below */
-.cliPanel[data-has-windows='true'] {
-  height: calc(100vh - 100px - 35vh);
 }
 
 .grid1 {

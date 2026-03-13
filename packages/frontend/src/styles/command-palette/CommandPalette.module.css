@@ -78,12 +78,8 @@
   align-items: center;
 }
 
-/* Gear settings button */
-.gearWrapper {
-  position: relative;
-}
-
-.gearButton {
+/* QR code button (remote mode only) */
+.qrButton {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,71 +94,15 @@
   box-shadow: var(--shadow-lg);
 }
 
-.gearButton:hover {
+.qrButton:hover {
   color: var(--color-text);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.gearButton[data-active='true'] {
+.qrButton[data-active='true'] {
   color: var(--color-blue);
   border-color: var(--color-blue);
   background: rgba(137, 180, 250, 0.1);
-}
-
-/* Settings popover - appears above the gear button */
-@keyframes popoverIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.settingsPopover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  min-width: 140px;
-  background: var(--color-base);
-  border: var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
-  animation: popoverIn var(--transition-fast);
-  z-index: 1;
-}
-
-.settingsItem {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: var(--text-base);
-  font-family: inherit;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.settingsItem:hover {
-  background: var(--bg-overlay-light);
-}
-
-.settingsItem[data-active='true'] {
-  color: var(--color-blue);
-}
-
-.settingsDivider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: var(--space-1) 0;
 }
 
 /* Reset button */

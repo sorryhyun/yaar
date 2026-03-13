@@ -15,7 +15,7 @@ import { getSandboxPath } from '../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
 import { ok, okJson, error, validateRelativePath } from './utils.js';
 import { doCompile, doTypecheck } from '../features/dev/compile.js';
-import { doDeploy, doClone } from '../features/dev/deploy.js';
+import { doDeploy, doClone, type DeployArgs } from '../features/dev/deploy.js';
 import { prependNote, applyEdit } from './utils.js';
 
 // ── Helpers ──
@@ -346,7 +346,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           name: payload.name as string | undefined,
           description: payload.description as string | undefined,
           icon: payload.icon as string | undefined,
-          permissions: payload.permissions as string[] | undefined,
+          permissions: payload.permissions as DeployArgs['permissions'],
         });
         if (!result.success) return error(result.error);
         return okJson({
