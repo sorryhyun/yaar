@@ -29,6 +29,7 @@ import {
   WindowContextMenu,
   CursorSpinner,
   CliPanel,
+  CliWindowStrip,
 } from '../overlays';
 import { CommandPalette } from '../command-palette/CommandPalette';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
@@ -455,6 +456,11 @@ export function DesktopSurface() {
       </div>
 
       <DrawingOverlay />
+      {cliMode && (
+        <QueueAwareComponentActionProvider sendComponentAction={sendComponentAction}>
+          <CliWindowStrip />
+        </QueueAwareComponentActionProvider>
+      )}
       <CommandPalette />
       <ToastContainer onToastAction={sendToastAction} />
       <ConfirmDialog />

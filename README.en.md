@@ -11,8 +11,6 @@
 
 > **Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
 
-User actions like button clicks, drawing, and typing are sent not to a program, but to an AI. The AI interprets the user's intent and dynamically creates windows, tables, forms, and visualizations.
-
 ![YAAR Desktop](./docs/image.png)
 
 Just tell the AI what you want — it builds apps, visualizes data, and connects to external services, all within a sandboxed, type-safe environment.
@@ -47,10 +45,9 @@ Once running, start with something like "install essential apps".
 ## What You Can Do
 
 - **"Analyze this CSV"** → AI reads the data and opens a chart window with visualizations
-- **"Check my GitHub issues"** → GitHub Manager app displays and manages your issues
-- **"Make a presentation"** → Slides Lite generates a slide deck
+- **"Make a presentation"** → Slides Lite generates a slide deck with internal (chrome dev tool)
 - **Right-click drag to sketch** → AI interprets your drawing and converts it to code or diagrams
-- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable app
+- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable browser app in a static form.
 
 
 ## How It Works
