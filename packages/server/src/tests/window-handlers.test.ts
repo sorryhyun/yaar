@@ -111,14 +111,14 @@ describe('Window domain handlers', () => {
       const reg = createRegistry();
       const result = await reg.execute('list', 'yaar://windows');
       expect(result.isError).toBeFalsy();
-      expect(text(result)).toContain('No windows');
+      expect(text(result)).toBe('[]');
     });
 
     it('lists empty windows via trailing slash', async () => {
       const reg = createRegistry();
       const result = await reg.execute('list', 'yaar://windows/');
       expect(result.isError).toBeFalsy();
-      expect(text(result)).toContain('No windows');
+      expect(text(result)).toBe('[]');
     });
 
     it('lists windows with details', async () => {

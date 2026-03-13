@@ -91,7 +91,7 @@ describe('Apps domain handlers', () => {
       const reg = createRegistry();
       const result = await reg.execute('list', 'yaar://apps');
       expect(result.isError).toBeFalsy();
-      expect(text(result)).toContain('No apps');
+      expect(text(result)).toBe('[]');
     });
   });
 

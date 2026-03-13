@@ -143,7 +143,7 @@ describe('Browser domain handlers', () => {
       const reg = await createRegistry();
       const result = await reg.execute('list', 'yaar://browser');
       expect(result.isError).toBeFalsy();
-      expect(text(result)).toContain('No browsers');
+      expect(text(result)).toBe('[]');
     });
   });
 
