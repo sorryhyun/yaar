@@ -78,12 +78,28 @@ export class StreamToEventMapper {
         break;
 
       case 'tool_use': {
-        const displayName = formatToolDisplay(message.toolName ?? 'unknown');
+        const rawName = message.toolName ?? 'unknown';
+        let displayName = formatToolDisplay(rawName);
+        let displayInput = message.toolInput;
+
+        // For verb tools, embed URI in the display name and show only the payload
+        if ((VERB_TOOL_NAMES as readonly string[]).includes(rawName)) {
+          const input = message.toolInput as Record<string, unknown> | undefined;
+          const verb = rawName.replace('mcp__verbs__', '');
+          const uri = input?.uri;
+          displayName = uri ? `${verb}:(${uri})` : verb;
+          // Strip uri from display input, show only payload (or nothing)
+          if (input) {
+            const { uri: _uri, ...rest } = input;
+            displayInput = Object.keys(rest).length > 0 ? rest : undefined;
+          }
+        }
+
         await this.sendEvent({
           type: ServerEventType.TOOL_PROGRESS,
           toolName: displayName,
           status: 'running',
-          toolInput: message.toolInput,
+          toolInput: displayInput,
           agentId: this.role,
           monitorId: this.monitorId,
         });
@@ -104,10 +120,8 @@ export class StreamToEventMapper {
         const hookCtx: ToolUseContext = { toolName: displayName };
 
         // For verb tools, extract verb/uri/action from toolInput
-        const rawName = message.toolName ?? '';
         if ((VERB_TOOL_NAMES as readonly string[]).includes(rawName)) {
           const input = message.toolInput as Record<string, unknown> | undefined;
-          // verb = 'invoke', 'read', 'list', 'delete', 'describe'
           hookCtx.verb = rawName.replace('mcp__verbs__', '');
           if (input?.uri && typeof input.uri === 'string') hookCtx.uri = input.uri;
           if (input?.payload && typeof input.payload === 'object' && input.payload !== null) {

@@ -484,6 +484,16 @@ Common mistakes to avoid when building apps:
   // GOOD
   if (loading()) return null;
   ```
+- **Don't rely on `flex: 1` for height inside reactive expressions** — Solid's `html` tagged template inserts invisible comment marker nodes (`<!---->`) around `${() => ...}` reactive expressions. These nodes break CSS flex height chains because they become extra flex children. Use `position: absolute; inset: 0` on the child instead:
+  ```css
+  /* BAD — child gets no height because comment markers break flex chain */
+  .parent { display: flex; flex-direction: column; }
+  .child  { flex: 1; }
+
+  /* GOOD — absolute positioning bypasses flex entirely */
+  .parent { position: relative; flex: 1; min-height: 0; }
+  .child  { position: absolute; inset: 0; }
+  ```
 - **Don't guess API endpoints** — Only use endpoints from `read('yaar://skills/host_api')`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { ... })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.

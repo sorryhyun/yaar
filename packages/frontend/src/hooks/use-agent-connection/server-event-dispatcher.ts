@@ -136,15 +136,17 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       } else if (status === 'complete') {
         handlers.setAgentActive(agentId, 'Thinking...');
       }
-      // Track subagent lifecycle
-      if (toolName === SUBAGENT_TOOL_NAME && status === 'running') {
+      // Track subagent lifecycle (exact match for start/end, startsWith for progress)
+      const isSubagent =
+        toolName === SUBAGENT_TOOL_NAME || toolName.startsWith(`${SUBAGENT_TOOL_NAME}:`);
+      if (isSubagent && status === 'running' && toolName === SUBAGENT_TOOL_NAME) {
         handlers.incrementSubagentCount(agentId);
-      } else if (toolName === SUBAGENT_TOOL_NAME && status === 'complete') {
+      } else if (isSubagent && status === 'complete' && toolName === SUBAGENT_TOOL_NAME) {
         handlers.decrementSubagentCount(agentId);
       }
       // Skip successful results (except subagent completions which carry a summary)
       if (status === 'complete') {
-        if (toolName === SUBAGENT_TOOL_NAME) {
+        if (isSubagent) {
           const summary = (message as { message?: string }).message;
           if (summary) {
             handlers.addCliEntry({

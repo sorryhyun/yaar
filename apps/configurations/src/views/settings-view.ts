@@ -32,8 +32,8 @@ export function SettingsView() {
   };
 
   return html`
-    <div>
-      <p class="cfg-section-title">System Settings</p>
+    <div class="settings-wrapper">
+      <p class="cfg-section-title">⚙️ System Settings</p>
       <textarea
         class="settings-editor"
         value=${raw}

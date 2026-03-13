@@ -17,7 +17,9 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
         caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
       }],
       '@typescript-eslint/no-explicit-any': 'warn',
     },
@@ -29,6 +31,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**', 'src/providers/codex/generated/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**', 'src/lib/compiler/shims/**', 'src/providers/codex/generated/**'],
   }
 )

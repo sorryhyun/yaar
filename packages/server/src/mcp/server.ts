@@ -237,8 +237,12 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
 /**
  * Format a raw MCP tool name for CLI display.
  * "mcp__apps__read_ts" → "apps:read_ts"
+ * "subagent:mcp__verbs__read" → "subagent:read"
  */
 export function formatToolDisplay(raw: string): string {
+  // subagent progress with nested MCP name: "subagent:mcp__verbs__read" → "subagent:read"
+  const sub = raw.match(/^subagent:mcp__\w+__(.+)$/);
+  if (sub) return `subagent:${sub[1]}`;
   const m = raw.match(/^mcp__(\w+)__(.+)$/);
   if (m) return `${m[1]}:${m[2]}`;
   return raw;
