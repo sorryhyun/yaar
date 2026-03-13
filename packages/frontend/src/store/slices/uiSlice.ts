@@ -6,7 +6,6 @@ import type { SliceCreator, UiSlice, DesktopStore } from '../types';
 export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   contextMenu: null,
   sessionsModalOpen: false,
-  settingsModalOpen: false,
   restorePrompt: null,
   selectedWindowIds: [],
 
@@ -35,11 +34,6 @@ export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
   toggleSessionsModal: () =>
     set((state) => {
       state.sessionsModalOpen = !state.sessionsModalOpen;
-    }),
-
-  toggleSettingsModal: () =>
-    set((state) => {
-      state.settingsModalOpen = !state.settingsModalOpen;
     }),
 
   setRestorePrompt: (prompt) =>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>App</title>
+<title>Configurations</title>
 <style>
 @font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
 @font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
@@ -87,22 +87,24 @@
 <body>
 <div id="app"></div>
 <script type="module">
-var A={context:void 0,registry:void 0,effects:void 0,done:!1,getContextId(){return Re(this.context.count)},getNextContextId(){return Re(this.context.count++)}};function Re(e){let t=String(e),n=t.length-1;return A.context.id+(n?String.fromCharCode(96+n):"")+t}function ge(e){A.context=e}function Et(){return{...A.context,id:A.getNextContextId(),count:0}}var Ct=!1,At=(e,t)=>e===t,me=Symbol("solid-proxy"),Tt=typeof Proxy==="function",It=Symbol("solid-track"),$n=Symbol("solid-dev-component"),ae={equals:At},_e=null,Ge=Xe,D=1,Q=2,We={owned:null,cleanups:null,context:null,owner:null};var k=null,h=null,te=null,z=null,T=null,N=null,M=null,le=0;function Z(e,t){let n=T,r=k,s=e.length===0,i=t===void 0?r:t,c=s?We:{owned:null,cleanups:null,context:i?i.context:null,owner:i},a=s?e:()=>e(()=>H(()=>R(c)));k=c,T=null;try{return V(a,!0)}finally{T=n,k=r}}function S(e,t){t=t?Object.assign({},ae,t):ae;let n={value:e,observers:null,observerSlots:null,comparator:t.equals||void 0},r=(s)=>{if(typeof s==="function")if(h&&h.running&&h.sources.has(n))s=s(n.tValue);else s=s(n.value);return Je(n,s)};return[Ke.bind(n),r]}function j(e,t,n){let r=ve(e,t,!1,D);if(te&&h&&h.running)N.push(r);else ne(r)}function Ye(e,t,n){Ge=Lt;let r=ve(e,t,!1,D),s=be&&Pt(be);if(s)r.suspense=s;if(!n||!n.render)r.user=!0;M?M.push(r):ne(r)}function U(e,t,n){n=n?Object.assign({},ae,n):ae;let r=ve(e,t,!0,0);if(r.observers=null,r.observerSlots=null,r.comparator=n.equals||void 0,te&&h&&h.running)r.tState=D,N.push(r);else ne(r);return Ke.bind(r)}function H(e){if(!z&&T===null)return e();let t=T;T=null;try{if(z)return z.untrack(e);return e()}finally{T=t}}function B(e){Ye(()=>H(e))}function ye(e){if(k===null);else if(k.cleanups===null)k.cleanups=[e];else k.cleanups.push(e);return e}function Nt(e){if(h&&h.running)return e(),h.done;let t=T,n=k;return Promise.resolve().then(()=>{T=t,k=n;let r;if(te||be)r=h||(h={sources:new Set,effects:[],promises:new Set,disposed:new Set,queue:new Set,running:!0}),r.done||(r.done=new Promise((s)=>r.resolve=s)),r.running=!0;return V(e,!1),T=k=null,r?r.done:void 0})}var[kn,qe]=S(!1);function Pt(e){let t;return k&&k.context&&(t=k.context[e.id])!==void 0?t:e.defaultValue}var be;function Ke(){let e=h&&h.running;if(this.sources&&(e?this.tState:this.state))if((e?this.tState:this.state)===D)ne(this);else{let t=N;N=null,V(()=>oe(this),!1),N=t}if(T){let t=this.observers?this.observers.length:0;if(!T.sources)T.sources=[this],T.sourceSlots=[t];else T.sources.push(this),T.sourceSlots.push(t);if(!this.observers)this.observers=[T],this.observerSlots=[T.sources.length-1];else this.observers.push(T),this.observerSlots.push(T.sources.length-1)}if(e&&h.sources.has(this))return this.tValue;return this.value}function Je(e,t,n){let r=h&&h.running&&h.sources.has(e)?e.tValue:e.value;if(!e.comparator||!e.comparator(r,t)){if(h){let s=h.running;if(s||!n&&h.sources.has(e))h.sources.add(e),e.tValue=t;if(!s)e.value=t}else e.value=t;if(e.observers&&e.observers.length)V(()=>{for(let s=0;s<e.observers.length;s+=1){let i=e.observers[s],c=h&&h.running;if(c&&h.disposed.has(i))continue;if(c?!i.tState:!i.state){if(i.pure)N.push(i);else M.push(i);if(i.observers)Ze(i)}if(!c)i.state=D;else i.tState=D}if(N.length>1e6)throw N=[],Error()},!1)}return t}function ne(e){if(!e.fn)return;R(e);let t=le;if(ze(e,h&&h.running&&h.sources.has(e)?e.tValue:e.value,t),h&&!h.running&&h.sources.has(e))queueMicrotask(()=>{V(()=>{h&&(h.running=!0),T=k=e,ze(e,e.tValue,t),T=k=null},!1)})}function ze(e,t,n){let r,s=k,i=T;T=k=e;try{r=e.fn(t)}catch(c){if(e.pure)if(h&&h.running)e.tState=D,e.tOwned&&e.tOwned.forEach(R),e.tOwned=void 0;else e.state=D,e.owned&&e.owned.forEach(R),e.owned=null;return e.updatedAt=n+1,we(c)}finally{T=i,k=s}if(!e.updatedAt||e.updatedAt<=n){if(e.updatedAt!=null&&"observers"in e)Je(e,r,!0);else if(h&&h.running&&e.pure)h.sources.add(e),e.tValue=r;else e.value=r;e.updatedAt=n}}function ve(e,t,n,r=D,s){let i={fn:e,state:r,updatedAt:null,owned:null,sources:null,sourceSlots:null,cleanups:null,value:t,owner:k,context:k?k.context:null,pure:n};if(h&&h.running)i.state=0,i.tState=r;if(k===null);else if(k!==We)if(h&&h.running&&k.pure)if(!k.tOwned)k.tOwned=[i];else k.tOwned.push(i);else if(!k.owned)k.owned=[i];else k.owned.push(i);if(z&&i.fn){let[c,a]=S(void 0,{equals:!1}),u=z.factory(i.fn,a);ye(()=>u.dispose());let b=()=>Nt(a).then(()=>g.dispose()),g=z.factory(i.fn,b);i.fn=(p)=>{return c(),h&&h.running?g.track(p):u.track(p)}}return i}function ee(e){let t=h&&h.running;if((t?e.tState:e.state)===0)return;if((t?e.tState:e.state)===Q)return oe(e);if(e.suspense&&H(e.suspense.inFallback))return e.suspense.effects.push(e);let n=[e];while((e=e.owner)&&(!e.updatedAt||e.updatedAt<le)){if(t&&h.disposed.has(e))return;if(t?e.tState:e.state)n.push(e)}for(let r=n.length-1;r>=0;r--){if(e=n[r],t){let s=e,i=n[r+1];while((s=s.owner)&&s!==i)if(h.disposed.has(s))return}if((t?e.tState:e.state)===D)ne(e);else if((t?e.tState:e.state)===Q){let s=N;N=null,V(()=>oe(e,n[0]),!1),N=s}}}function V(e,t){if(N)return e();let n=!1;if(!t)N=[];if(M)n=!0;else M=[];le++;try{let r=e();return Ot(n),r}catch(r){if(!n)M=null;N=null,we(r)}}function Ot(e){if(N){if(te&&h&&h.running)Mt(N);else Xe(N);N=null}if(e)return;let t;if(h){if(!h.promises.size&&!h.queue.size){let{sources:r,disposed:s}=h;M.push.apply(M,h.effects),t=h.resolve;for(let i of M)"tState"in i&&(i.state=i.tState),delete i.tState;h=null,V(()=>{for(let i of s)R(i);for(let i of r){if(i.value=i.tValue,i.owned)for(let c=0,a=i.owned.length;c<a;c++)R(i.owned[c]);if(i.tOwned)i.owned=i.tOwned;delete i.tValue,delete i.tOwned,i.tState=0}qe(!1)},!1)}else if(h.running){h.running=!1,h.effects.push.apply(h.effects,M),M=null,qe(!0);return}}let n=M;if(M=null,n.length)V(()=>Ge(n),!1);if(t)t()}function Xe(e){for(let t=0;t<e.length;t++)ee(e[t])}function Mt(e){for(let t=0;t<e.length;t++){let n=e[t],r=h.queue;if(!r.has(n))r.add(n),te(()=>{r.delete(n),V(()=>{h.running=!0,ee(n)},!1),h&&(h.running=!1)})}}function Lt(e){let t,n=0;for(t=0;t<e.length;t++){let r=e[t];if(!r.user)ee(r);else e[n++]=r}if(A.context){if(A.count){A.effects||(A.effects=[]),A.effects.push(...e.slice(0,n));return}ge()}if(A.effects&&(A.done||!A.count))e=[...A.effects,...e],n+=A.effects.length,delete A.effects;for(t=0;t<n;t++)ee(e[t])}function oe(e,t){let n=h&&h.running;if(n)e.tState=0;else e.state=0;for(let r=0;r<e.sources.length;r+=1){let s=e.sources[r];if(s.sources){let i=n?s.tState:s.state;if(i===D){if(s!==t&&(!s.updatedAt||s.updatedAt<le))ee(s)}else if(i===Q)oe(s,t)}}}function Ze(e){let t=h&&h.running;for(let n=0;n<e.observers.length;n+=1){let r=e.observers[n];if(t?!r.tState:!r.state){if(t)r.tState=Q;else r.state=Q;if(r.pure)N.push(r);else M.push(r);r.observers&&Ze(r)}}}function R(e){let t;if(e.sources)while(e.sources.length){let n=e.sources.pop(),r=e.sourceSlots.pop(),s=n.observers;if(s&&s.length){let i=s.pop(),c=n.observerSlots.pop();if(r<s.length)i.sourceSlots[c]=r,s[r]=i,n.observerSlots[r]=c}}if(e.tOwned){for(t=e.tOwned.length-1;t>=0;t--)R(e.tOwned[t]);delete e.tOwned}if(h&&h.running&&e.pure)Qe(e,!0);else if(e.owned){for(t=e.owned.length-1;t>=0;t--)R(e.owned[t]);e.owned=null}if(e.cleanups){for(t=e.cleanups.length-1;t>=0;t--)e.cleanups[t]();e.cleanups=null}if(h&&h.running)e.tState=0;else e.state=0}function Qe(e,t){if(!t)e.tState=0,h.disposed.add(e);if(e.owned)for(let n=0;n<e.owned.length;n++)Qe(e.owned[n])}function Ht(e){if(e instanceof Error)return e;return Error(typeof e==="string"?e:"Unknown error",{cause:e})}function Ue(e,t,n){try{for(let r of t)r(e)}catch(r){we(r,n&&n.owner||null)}}function we(e,t=k){let n=_e&&t&&t.context&&t.context[_e],r=Ht(e);if(!n)throw r;if(M)M.push({fn(){Ue(r,n,t)},state:D});else Ue(r,n,t)}var Ft=Symbol("fallback");function Be(e){for(let t=0;t<e.length;t++)e[t]()}function Dt(e,t,n={}){let r=[],s=[],i=[],c=0,a=t.length>1?[]:null;return ye(()=>Be(i)),()=>{let u=e()||[],b=u.length,g,p;return u[It],H(()=>{let f,l,o,v,$,w,y,m,d;if(b===0){if(c!==0)Be(i),i=[],r=[],s=[],c=0,a&&(a=[]);if(n.fallback)r=[Ft],s[0]=Z((E)=>{return i[0]=E,n.fallback()}),c=1}else if(c===0){s=Array(b);for(p=0;p<b;p++)r[p]=u[p],s[p]=Z(x);c=b}else{o=Array(b),v=Array(b),a&&($=Array(b));for(w=0,y=Math.min(c,b);w<y&&r[w]===u[w];w++);for(y=c-1,m=b-1;y>=w&&m>=w&&r[y]===u[m];y--,m--)o[m]=s[y],v[m]=i[y],a&&($[m]=a[y]);f=new Map,l=Array(m+1);for(p=m;p>=w;p--)d=u[p],g=f.get(d),l[p]=g===void 0?-1:g,f.set(d,p);for(g=w;g<=y;g++)if(d=r[g],p=f.get(d),p!==void 0&&p!==-1)o[p]=s[g],v[p]=i[g],a&&($[p]=a[g]),p=l[p],f.set(d,p);else i[g]();for(p=w;p<b;p++)if(p in o){if(s[p]=o[p],i[p]=v[p],a)a[p]=$[p],a[p](p)}else s[p]=Z(x);s=s.slice(0,c=b),r=u.slice(0)}return s});function x(f){if(i[p]=f,a){let[l,o]=S(p);return a[p]=o,t(u[p],l)}return t(u[p])}}}var jt=!1;function xe(e,t){if(jt){if(A.context){let n=A.context;ge(Et());let r=H(()=>e(t||{}));return ge(n),r}}return H(()=>e(t||{}))}function ie(){return!0}var Vt={get(e,t,n){if(t===me)return n;return e.get(t)},has(e,t){if(t===me)return!0;return e.has(t)},set:ie,deleteProperty:ie,getOwnPropertyDescriptor(e,t){return{configurable:!0,enumerable:!0,get(){return e.get(t)},set:ie,deleteProperty:ie}},ownKeys(e){return e.keys()}};function he(e){return!(e=typeof e==="function"?e():e)?{}:e}function Rt(){for(let e=0,t=this.length;e<t;++e){let n=this[e]();if(n!==void 0)return n}}function $e(...e){let t=!1;for(let c=0;c<e.length;c++){let a=e[c];t=t||!!a&&me in a,e[c]=typeof a==="function"?(t=!0,U(a)):a}if(Tt&&t)return new Proxy({get(c){for(let a=e.length-1;a>=0;a--){let u=he(e[a])[c];if(u!==void 0)return u}},has(c){for(let a=e.length-1;a>=0;a--)if(c in he(e[a]))return!0;return!1},keys(){let c=[];for(let a=0;a<e.length;a++)c.push(...Object.keys(he(e[a])));return[...new Set(c)]}},Vt);let n={},r=Object.create(null);for(let c=e.length-1;c>=0;c--){let a=e[c];if(!a)continue;let u=Object.getOwnPropertyNames(a);for(let b=u.length-1;b>=0;b--){let g=u[b];if(g==="__proto__"||g==="constructor")continue;let p=Object.getOwnPropertyDescriptor(a,g);if(!r[g])r[g]=p.get?{enumerable:!0,configurable:!0,get:Rt.bind(n[g]=[p.get.bind(a)])}:p.value!==void 0?p:void 0;else{let x=n[g];if(x){if(p.get)x.push(p.get.bind(a));else if(p.value!==void 0)x.push(()=>p.value)}}}}let s={},i=Object.keys(r);for(let c=i.length-1;c>=0;c--){let a=i[c],u=r[a];if(u&&u.get)Object.defineProperty(s,a,u);else s[a]=u?u.value:void 0}return s}var _t=(e)=>`Stale read from <${e}>.`;function G(e){let t="fallback"in e&&{fallback:()=>e.fallback};return U(Dt(()=>e.each,e.children,t||void 0))}function re(e){let t=e.keyed,n=U(()=>e.when,void 0,void 0),r=t?n:U(n,void 0,{equals:(s,i)=>!s===!i});return U(()=>{let s=r();if(s){let i=e.children;return typeof i==="function"&&i.length>0?H(()=>i(t?s:()=>{if(!H(r))throw _t("Show");return n()})):i}return e.fallback},void 0,void 0)}var zt=["allowfullscreen","async","alpha","autofocus","autoplay","checked","controls","default","disabled","formnovalidate","hidden","indeterminate","inert","ismap","loop","multiple","muted","nomodule","novalidate","open","playsinline","readonly","required","reversed","seamless","selected","adauctionheaders","browsingtopics","credentialless","defaultchecked","defaultmuted","defaultselected","defer","disablepictureinpicture","disableremoteplayback","preservespitch","shadowrootclonable","shadowrootcustomelementregistry","shadowrootdelegatesfocus","shadowrootserializable","sharedstoragewritable"],Se=new Set(["className","value","readOnly","noValidate","formNoValidate","isMap","noModule","playsInline","adAuctionHeaders","allowFullscreen","browsingTopics","defaultChecked","defaultMuted","defaultSelected","disablePictureInPicture","disableRemotePlayback","preservesPitch","shadowRootClonable","shadowRootCustomElementRegistry","shadowRootDelegatesFocus","shadowRootSerializable","sharedStorageWritable",...zt]),Ee=new Set(["innerHTML","textContent","innerText","children"]),Ce=Object.assign(Object.create(null),{className:"class",htmlFor:"for"}),Ut=Object.assign(Object.create(null),{class:"className",novalidate:{$:"noValidate",FORM:1},formnovalidate:{$:"formNoValidate",BUTTON:1,INPUT:1},ismap:{$:"isMap",IMG:1},nomodule:{$:"noModule",SCRIPT:1},playsinline:{$:"playsInline",VIDEO:1},readonly:{$:"readOnly",INPUT:1,TEXTAREA:1},adauctionheaders:{$:"adAuctionHeaders",IFRAME:1},allowfullscreen:{$:"allowFullscreen",IFRAME:1},browsingtopics:{$:"browsingTopics",IMG:1},defaultchecked:{$:"defaultChecked",INPUT:1},defaultmuted:{$:"defaultMuted",AUDIO:1,VIDEO:1},defaultselected:{$:"defaultSelected",OPTION:1},disablepictureinpicture:{$:"disablePictureInPicture",VIDEO:1},disableremoteplayback:{$:"disableRemotePlayback",AUDIO:1,VIDEO:1},preservespitch:{$:"preservesPitch",AUDIO:1,VIDEO:1},shadowrootclonable:{$:"shadowRootClonable",TEMPLATE:1},shadowrootdelegatesfocus:{$:"shadowRootDelegatesFocus",TEMPLATE:1},shadowrootserializable:{$:"shadowRootSerializable",TEMPLATE:1},sharedstoragewritable:{$:"sharedStorageWritable",IFRAME:1,IMG:1}});function Ae(e,t){let n=Ut[e];return typeof n==="object"?n[t]?n.$:void 0:n}var Te=new Set(["beforeinput","click","dblclick","contextmenu","focusin","focusout","input","keydown","keyup","mousedown","mousemove","mouseout","mouseover","mouseup","pointerdown","pointermove","pointerout","pointerover","pointerup","touchend","touchmove","touchstart"]),st=new Set(["altGlyph","altGlyphDef","altGlyphItem","animate","animateColor","animateMotion","animateTransform","circle","clipPath","color-profile","cursor","defs","desc","ellipse","feBlend","feColorMatrix","feComponentTransfer","feComposite","feConvolveMatrix","feDiffuseLighting","feDisplacementMap","feDistantLight","feDropShadow","feFlood","feFuncA","feFuncB","feFuncG","feFuncR","feGaussianBlur","feImage","feMerge","feMergeNode","feMorphology","feOffset","fePointLight","feSpecularLighting","feSpotLight","feTile","feTurbulence","filter","font","font-face","font-face-format","font-face-name","font-face-src","font-face-uri","foreignObject","g","glyph","glyphRef","hkern","image","line","linearGradient","marker","mask","metadata","missing-glyph","mpath","path","pattern","polygon","polyline","radialGradient","rect","set","stop","svg","switch","symbol","text","textPath","tref","tspan","use","view","vkern"]),Ie={xlink:"http://www.w3.org/1999/xlink",xml:"http://www.w3.org/XML/1998/namespace"};function Bt(e,t,n){let r=n.length,s=t.length,i=r,c=0,a=0,u=t[s-1].nextSibling,b=null;while(c<s||a<i){if(t[c]===n[a]){c++,a++;continue}while(t[s-1]===n[i-1])s--,i--;if(s===c){let g=i<r?a?n[a-1].nextSibling:n[i-a]:u;while(a<i)e.insertBefore(n[a++],g)}else if(i===a)while(c<s){if(!b||!b.has(t[c]))t[c].remove();c++}else if(t[c]===n[i-1]&&n[a]===t[s-1]){let g=t[--s].nextSibling;e.insertBefore(n[a++],t[c++].nextSibling),e.insertBefore(n[--i],g),t[s]=n[i]}else{if(!b){b=new Map;let p=a;while(p<i)b.set(n[p],p++)}let g=b.get(t[c]);if(g!=null)if(a<g&&g<i){let p=c,x=1,f;while(++p<s&&p<i){if((f=b.get(t[p]))==null||f!==g+x)break;x++}if(x>g-a){let l=t[c];while(a<g)e.insertBefore(n[a++],l)}else e.replaceChild(n[a++],t[c++])}else c++;else t[c++].remove()}}}var et="_$DX_DELEGATE";function it(e,t,n,r={}){let s;return Z((i)=>{s=i,t===document?e():He(t,e(),t.firstChild?null:void 0,n)},r.owner),()=>{s(),t.textContent=""}}function Ne(e,t=window.document){let n=t[et]||(t[et]=new Set);for(let r=0,s=e.length;r<s;r++){let i=e[r];if(!n.has(i))n.add(i),t.addEventListener(i,Xt)}}function se(e,t,n){if(K(e))return;if(n==null)e.removeAttribute(t);else e.setAttribute(t,n)}function Pe(e,t,n,r){if(K(e))return;if(r==null)e.removeAttributeNS(t,n);else e.setAttributeNS(t,n,r)}function Gt(e,t,n){if(K(e))return;n?e.setAttribute(t,""):e.removeAttribute(t)}function Wt(e,t){if(K(e))return;if(t==null)e.removeAttribute("class");else e.className=t}function Oe(e,t,n,r){if(r)if(Array.isArray(n))e[`$$${t}`]=n[0],e[`$$${t}Data`]=n[1];else e[`$$${t}`]=n;else if(Array.isArray(n)){let s=n[0];e.addEventListener(t,n[0]=(i)=>s.call(e,n[1],i))}else e.addEventListener(t,n,typeof n!=="function"&&n)}function Me(e,t,n={}){let r=Object.keys(t||{}),s=Object.keys(n),i,c;for(i=0,c=s.length;i<c;i++){let a=s[i];if(!a||a==="undefined"||t[a])continue;tt(e,a,!1),delete n[a]}for(i=0,c=r.length;i<c;i++){let a=r[i],u=!!t[a];if(!a||a==="undefined"||n[a]===u||!u)continue;tt(e,a,!0),n[a]=u}return n}function Le(e,t,n){if(!t)return n?se(e,"style"):t;let r=e.style;if(typeof t==="string")return r.cssText=t;typeof n==="string"&&(r.cssText=n=void 0),n||(n={}),t||(t={});let s,i;for(i in n)t[i]==null&&r.removeProperty(i),delete n[i];for(i in t)if(s=t[i],s!==n[i])r.setProperty(i,s),n[i]=s;return n}function at(e,t={},n,r){let s={};if(!r)j(()=>s.children=Y(e,t.children,s.children));return j(()=>typeof t.ref==="function"&&Yt(t.ref,e)),j(()=>Kt(e,t,n,!0,s,!0)),s}function ot(e,t){let n=e[t];return Object.defineProperty(e,t,{get(){return n()},enumerable:!0}),e}function Yt(e,t,n){return H(()=>e(t,n))}function He(e,t,n,r){if(n!==void 0&&!r)r=[];if(typeof t!=="function")return Y(e,t,r,n);j((s)=>Y(e,t(),s,n),r)}function Kt(e,t,n,r,s={},i=!1){t||(t={});for(let c in s)if(!(c in t)){if(c==="children")continue;s[c]=nt(e,c,null,s[c],n,i,t)}for(let c in t){if(c==="children"){if(!r)Y(e,t.children);continue}let a=t[c];s[c]=nt(e,c,a,s[c],n,i,t)}}function K(e){return!!A.context&&!A.done&&(!e||e.isConnected)}function Jt(e){return e.toLowerCase().replace(/-([a-z])/g,(t,n)=>n.toUpperCase())}function tt(e,t,n){let r=t.trim().split(/\s+/);for(let s=0,i=r.length;s<i;s++)e.classList.toggle(r[s],n)}function nt(e,t,n,r,s,i,c){let a,u,b,g,p;if(t==="style")return Le(e,n,r);if(t==="classList")return Me(e,n,r);if(n===r)return r;if(t==="ref"){if(!i)n(e)}else if(t.slice(0,3)==="on:"){let x=t.slice(3);r&&e.removeEventListener(x,r,typeof r!=="function"&&r),n&&e.addEventListener(x,n,typeof n!=="function"&&n)}else if(t.slice(0,10)==="oncapture:"){let x=t.slice(10);r&&e.removeEventListener(x,r,!0),n&&e.addEventListener(x,n,!0)}else if(t.slice(0,2)==="on"){let x=t.slice(2).toLowerCase(),f=Te.has(x);if(!f&&r){let l=Array.isArray(r)?r[0]:r;e.removeEventListener(x,l)}if(f||n)Oe(e,x,n,f),f&&Ne([x])}else if(t.slice(0,5)==="attr:")se(e,t.slice(5),n);else if(t.slice(0,5)==="bool:")Gt(e,t.slice(5),n);else if((p=t.slice(0,5)==="prop:")||(b=Ee.has(t))||!s&&((g=Ae(t,e.tagName))||(u=Se.has(t)))||(a=e.nodeName.includes("-")||("is"in c))){if(p)t=t.slice(5),u=!0;else if(K(e))return n;if(t==="class"||t==="className")Wt(e,n);else if(a&&!u&&!b)e[Jt(t)]=n;else e[g||t]=n}else{let x=s&&t.indexOf(":")>-1&&Ie[t.split(":")[0]];if(x)Pe(e,x,t,n);else se(e,Ce[t]||t,n)}return n}function Xt(e){if(A.registry&&A.events){if(A.events.find(([u,b])=>b===e))return}let t=e.target,n=`$$${e.type}`,r=e.target,s=e.currentTarget,i=(u)=>Object.defineProperty(e,"target",{configurable:!0,value:u}),c=()=>{let u=t[n];if(u&&!t.disabled){let b=t[`${n}Data`];if(b!==void 0?u.call(t,b,e):u.call(t,e),e.cancelBubble)return}return t.host&&typeof t.host!=="string"&&!t.host._$host&&t.contains(e.target)&&i(t.host),!0},a=()=>{while(c()&&(t=t._$host||t.parentNode||t.host));};if(Object.defineProperty(e,"currentTarget",{configurable:!0,get(){return t||document}}),A.registry&&!A.done)A.done=_$HY.done=!0;if(e.composedPath){let u=e.composedPath();i(u[0]);for(let b=0;b<u.length-2;b++){if(t=u[b],!c())break;if(t._$host){t=t._$host,a();break}if(t.parentNode===s)break}}else a();i(r)}function Y(e,t,n,r,s){let i=K(e);if(i){!n&&(n=[...e.childNodes]);let u=[];for(let b=0;b<n.length;b++){let g=n[b];if(g.nodeType===8&&g.data.slice(0,2)==="!$")g.remove();else u.push(g)}n=u}while(typeof n==="function")n=n();if(t===n)return n;let c=typeof t,a=r!==void 0;if(e=a&&n[0]&&n[0].parentNode||e,c==="string"||c==="number"){if(i)return n;if(c==="number"){if(t=t.toString(),t===n)return n}if(a){let u=n[0];if(u&&u.nodeType===3)u.data!==t&&(u.data=t);else u=document.createTextNode(t);n=W(e,n,r,u)}else if(n!==""&&typeof n==="string")n=e.firstChild.data=t;else n=e.textContent=t}else if(t==null||c==="boolean"){if(i)return n;n=W(e,n,r)}else if(c==="function")return j(()=>{let u=t();while(typeof u==="function")u=u();n=Y(e,u,n,r)}),()=>n;else if(Array.isArray(t)){let u=[],b=n&&Array.isArray(n);if(ke(u,t,n,s))return j(()=>n=Y(e,u,n,r,!0)),()=>n;if(i){if(!u.length)return n;if(r===void 0)return n=[...e.childNodes];let g=u[0];if(g.parentNode!==e)return n;let p=[g];while((g=g.nextSibling)!==r)p.push(g);return n=p}if(u.length===0){if(n=W(e,n,r),a)return n}else if(b)if(n.length===0)rt(e,u,r);else Bt(e,n,u);else n&&W(e),rt(e,u);n=u}else if(t.nodeType){if(i&&t.parentNode)return n=a?[t]:t;if(Array.isArray(n)){if(a)return n=W(e,n,r,t);W(e,n,null,t)}else if(n==null||n===""||!e.firstChild)e.appendChild(t);else e.replaceChild(t,e.firstChild);n=t}return n}function ke(e,t,n,r){let s=!1;for(let i=0,c=t.length;i<c;i++){let a=t[i],u=n&&n[e.length],b;if(a==null||a===!0||a===!1);else if((b=typeof a)==="object"&&a.nodeType)e.push(a);else if(Array.isArray(a))s=ke(e,a,u)||s;else if(b==="function")if(r){while(typeof a==="function")a=a();s=ke(e,Array.isArray(a)?a:[a],Array.isArray(u)?u:[u])||s}else e.push(a),s=!0;else{let g=String(a);if(u&&u.nodeType===3&&u.data===g)e.push(u);else e.push(document.createTextNode(g))}}return s}function rt(e,t,n=null){for(let r=0,s=t.length;r<s;r++)e.insertBefore(t[r],n)}function W(e,t,n,r){if(n===void 0)return e.textContent="";let s=r||document.createTextNode("");if(t.length){let i=!1;for(let c=t.length-1;c>=0;c--){let a=t[c];if(s!==a){let u=a.parentNode===e;if(!i&&!c)u?e.replaceChild(s,a):e.insertBefore(s,n);else u&&a.remove()}else i=!0}}else e.insertBefore(s,n);return[s]}var Hn=Symbol();var Zt=/(?:<!--[\S\s]*?-->|<(?:"[^"]*"['"]*|'[^']*'['"]*|[^'">])+>)/g,Qt=/(?:\s(?<boolean>[^/\s><=]+?)(?=[\s/>]))|(?:(?<name>\S+?)(?:\s*=\s*(?:(['"])(?<quotedValue>[\s\S]*?)\3|(?<unquotedValue>[^\s>]+))))/g,en={area:!0,base:!0,br:!0,col:!0,embed:!0,hr:!0,img:!0,input:!0,keygen:!0,link:!0,menuitem:!0,meta:!0,param:!0,source:!0,track:!0,wbr:!0};function tn(e){let t={type:"tag",name:"",voidElement:!1,attrs:[],children:[]},n=e.match(/<\/?([^\s]+?)[/\s>]/);if(n){if(t.name=n[1],en[n[1].toLowerCase()]||e.charAt(e.length-2)==="/")t.voidElement=!0;if(t.name.startsWith("!--")){let s=e.indexOf("-->");return{type:"comment",comment:s!==-1?e.slice(4,s):""}}}let r=new RegExp(Qt);for(let s of e.matchAll(r))if((s[1]||s[2]).startsWith("use:"))t.attrs.push({type:"directive",name:s[1]||s[2],value:s[4]||s[5]||""});else t.attrs.push({type:"attr",name:s[1]||s[2],value:s[4]||s[5]||""});return t}function lt(e,t,n){let r=t.indexOf("<",n),s=t.slice(n,r===-1?void 0:r);if(!/^\s*$/.test(s))e.push({type:"text",content:s})}function ct(e,t){let n=t.replace("<!--","").replace("-->","");if(!/^\s*$/.test(n))e.push({type:"comment",content:n})}function nn(e){let t=[],n=void 0,r=-1,s=[],i={};return e.replace(Zt,(c,a)=>{let u=c.charAt(1)!=="/",b=c.slice(0,4)==="<!--",g=a+c.length,p=e.charAt(g),x=void 0;if(u&&!b){if(r++,n=tn(c),!n.voidElement&&p&&p!=="<")lt(n.children,e,g);if(i[n.tagName]=n,r===0)t.push(n);if(x=s[r-1],x)x.children.push(n);s[r]=n}if(b)if(r<0)ct(t,c);else ct(s[r].children,c);if(b||!u||n.voidElement){if(!b)r--;if(p!=="<"&&p)x=r===-1?t:s[r].children,lt(x,e,g)}}),t}function rn(e){let t=[];for(let n of e)t.push(n.name+'="'+n.value.replace(/"/g,"&quot;")+'"');if(!t.length)return"";return" "+t.join(" ")}function dt(e,t){switch(t.type){case"text":return e+t.content;case"tag":if(e+="<"+t.name+(t.attrs?rn(t.attrs):"")+(t.voidElement?"/>":">"),t.voidElement)return e;return e+t.children.reduce(dt,"")+"</"+t.name+">";case"comment":return e+="<!--"+t.content+"-->"}}function sn(e){return e.reduce(function(t,n){return t+dt("",n)},"")}var ut=new Map,an=/^(?:area|base|br|col|embed|hr|img|input|keygen|link|menuitem|meta|param|source|track|wbr)$/i,ce=" \\f\\n\\r\\t",pt="[^"+ce+`\\/>"'=]+`,De="[ "+ce+"]+(?:use:<!--#-->|"+pt+")",ht="<([A-Za-z$#]+[A-Za-z0-9:_-]*)((?:",gt=`(?:\\s*=\\s*(?:'[^']*?'|"[^"]*?"|\\([^)]*?\\)|<[^>]*?>|`+pt+"))?)",on=new RegExp(ht+De+gt+"+)([ "+ce+"]*/?>)","g"),ln=new RegExp("("+De+`\\s*=\\s*)(<!--#-->|['"(]([\\w\\s]*<!--#-->[\\w\\s]*)*['")])`,"gi"),cn=new RegExp(ht+De+gt+"*)([ "+ce+"]*/>)","g"),ft="<!--#-->",un=new Set(["class","on","oncapture","style","use","prop","attr"]);function fn(e,t,n,r){return"<"+t+n.replace(ln,dn)+r}function dn(e,t,n){return t.replace(/<!--#-->/g,"###")+(n[0]==='"'||n[0]==="'"?n.replace(/<!--#-->/g,"###"):'"###"')}function pn(e,t,n){return an.test(t)?e:"<"+t+n+"></"+t+">"}function hn(e){return e.toLowerCase().replace(/-([a-z])/g,(t,n)=>n.toUpperCase())}function Fe(e,t,n,r){if(e==="use:###"&&t==="###"){let s=r.counter++;r.exprs.push(`typeof exprs[${s}] === "function" ? r.use(exprs[${s}], ${n}, exprs[${r.counter++}]) : (()=>{throw new Error("use:### must be a function")})()`)}else throw Error(`Not support syntax ${e} must be use:{function}`)}function gn(e,{delegateEvents:t=!0,functionBuilder:n=(...r)=>Function(...r)}={}){let r=1;e.wrapProps=(f)=>{let l=Object.getOwnPropertyDescriptors(f);for(let o in l)if(typeof l[o].value==="function"&&!l[o].value.length)e.dynamicProperty(f,o);return f};function s(f,l){let o=0,v="";for(;o<f.length-1;o++)v=v+f[o]+"<!--#-->";v=v+f[o],v=[[cn,pn],[/<(<!--#-->)/g,"<###"],[/\.\.\.(<!--#-->)/g,"###"],[on,fn],[/>\n+\s*/g,">"],[/\n+\s*</g,"<"],[/\s+</g," <"],[/>\s+/g,"> "]].reduce((E,C)=>{return E.replace(C[0],C[1])},v);let w=nn(v),[y,m]=p(w,l.funcBuilder),d=[];for(let E=0;E<y.length;E++){d.push(document.createElement("template")),d[E].innerHTML=y[E];let C=d[E].content.querySelectorAll("script,style");for(let F=0;F<C.length;F++){let I=C[F].firstChild?.data||"";if(I.indexOf(ft)>-1){let q=I.split(ft).reduce((_,kt,St)=>{return St&&_.push(""),_.push(kt),_},[]);C[E].firstChild.replaceWith(...q)}}}return d[0].create=m,ut.set(f,d),d}function i(f,l,o,v,$,w,y){let m=v==="###"?`!doNotWrap ? exprs[${y.counter}]() : exprs[${y.counter++}]`:v.split("###").map((I,q)=>q?` + (typeof exprs[${y.counter}] === "function" ? exprs[${y.counter}]() : exprs[${y.counter++}]) + "${I}"`:`"${I}"`).join(""),d,E;if((d=o.split(":"))&&d[1]&&un.has(d[0]))o=d[1],E=d[0];let C=e.ChildProperties.has(o),F=e.Properties.has(o);if(o==="style"){let I=`_$v${r++}`;y.decl.push(`${I}={}`),y.exprs.push(`r.style(${l},${m},${I})`)}else if(o==="classList"){let I=`_$v${r++}`;y.decl.push(`${I}={}`),y.exprs.push(`r.classList(${l},${m},${I})`)}else if(E!=="attr"&&(C||!$&&(e.getPropAlias(o,f.name.toUpperCase())||F)||w||E==="prop")){if(w&&!C&&!F&&E!=="prop")o=hn(o);y.exprs.push(`${l}.${e.getPropAlias(o,f.name.toUpperCase())||o} = ${m}`)}else{let I=$&&o.indexOf(":")>-1&&e.SVGNamespace[o.split(":")[0]];if(I)y.exprs.push(`r.setAttributeNS(${l},"${I}","${o}",${m})`);else y.exprs.push(`r.setAttribute(${l},"${e.Aliases[o]||o}",${m})`)}}function c(f,l,o,v,$,w,y){if(o.slice(0,2)==="on")if(!o.includes(":")){let m=o.slice(2).toLowerCase(),d=t&&e.DelegatedEvents.has(m);y.exprs.push(`r.addEventListener(${l},"${m}",exprs[${y.counter++}],${d})`),d&&y.delegatedEvents.add(m)}else{let m=o.startsWith("oncapture:");y.exprs.push(`${l}.addEventListener("${o.slice(m?10:3)}",exprs[${y.counter++}]${m?",true":""})`)}else if(o==="ref")y.exprs.push(`exprs[${y.counter++}](${l})`);else{let m=Object.assign({},y,{exprs:[]}),d=y.counter;if(i(f,l,o,v,$,w,m),y.decl.push(`_fn${d} = (${v==="###"?"doNotWrap":""}) => {
-${m.exprs.join(`;
+var A={context:void 0,registry:void 0,effects:void 0,done:!1,getContextId(){return Ve(this.context.count)},getNextContextId(){return Ve(this.context.count++)}};function Ve(e){let t=String(e),n=t.length-1;return A.context.id+(n?String.fromCharCode(96+n):"")+t}function he(e){A.context=e}function At(){return{...A.context,id:A.getNextContextId(),count:0}}var Tt=!1,It=(e,t)=>e===t,me=Symbol("solid-proxy"),Nt=typeof Proxy==="function",Ot=Symbol("solid-track"),En=Symbol("solid-dev-component"),ae={equals:It},_e=null,Ge=Xe,R=1,Q=2,We={owned:null,cleanups:null,context:null,owner:null};var S=null,h=null,te=null,q=null,I=null,O=null,M=null,le=0;function Z(e,t){let n=I,r=S,s=e.length===0,i=t===void 0?r:t,c=s?We:{owned:null,cleanups:null,context:i?i.context:null,owner:i},l=s?e:()=>e(()=>H(()=>V(c)));S=c,I=null;try{return D(l,!0)}finally{I=n,S=r}}function k(e,t){t=t?Object.assign({},ae,t):ae;let n={value:e,observers:null,observerSlots:null,comparator:t.equals||void 0},r=(s)=>{if(typeof s==="function")if(h&&h.running&&h.sources.has(n))s=s(n.tValue);else s=s(n.value);return Je(n,s)};return[Ke.bind(n),r]}function F(e,t,n){let r=ve(e,t,!1,R);if(te&&h&&h.running)O.push(r);else ne(r)}function Ye(e,t,n){Ge=jt;let r=ve(e,t,!1,R),s=be&&Mt(be);if(s)r.suspense=s;if(!n||!n.render)r.user=!0;M?M.push(r):ne(r)}function U(e,t,n){n=n?Object.assign({},ae,n):ae;let r=ve(e,t,!0,0);if(r.observers=null,r.observerSlots=null,r.comparator=n.equals||void 0,te&&h&&h.running)r.tState=R,O.push(r);else ne(r);return Ke.bind(r)}function H(e){if(!q&&I===null)return e();let t=I;I=null;try{if(q)return q.untrack(e);return e()}finally{I=t}}function B(e){Ye(()=>H(e))}function ye(e){if(S===null);else if(S.cleanups===null)S.cleanups=[e];else S.cleanups.push(e);return e}function Pt(e){if(h&&h.running)return e(),h.done;let t=I,n=S;return Promise.resolve().then(()=>{I=t,S=n;let r;if(te||be)r=h||(h={sources:new Set,effects:[],promises:new Set,disposed:new Set,queue:new Set,running:!0}),r.done||(r.done=new Promise((s)=>r.resolve=s)),r.running=!0;return D(e,!1),I=S=null,r?r.done:void 0})}var[Cn,ze]=k(!1);function Mt(e){let t;return S&&S.context&&(t=S.context[e.id])!==void 0?t:e.defaultValue}var be;function Ke(){let e=h&&h.running;if(this.sources&&(e?this.tState:this.state))if((e?this.tState:this.state)===R)ne(this);else{let t=O;O=null,D(()=>oe(this),!1),O=t}if(I){let t=this.observers?this.observers.length:0;if(!I.sources)I.sources=[this],I.sourceSlots=[t];else I.sources.push(this),I.sourceSlots.push(t);if(!this.observers)this.observers=[I],this.observerSlots=[I.sources.length-1];else this.observers.push(I),this.observerSlots.push(I.sources.length-1)}if(e&&h.sources.has(this))return this.tValue;return this.value}function Je(e,t,n){let r=h&&h.running&&h.sources.has(e)?e.tValue:e.value;if(!e.comparator||!e.comparator(r,t)){if(h){let s=h.running;if(s||!n&&h.sources.has(e))h.sources.add(e),e.tValue=t;if(!s)e.value=t}else e.value=t;if(e.observers&&e.observers.length)D(()=>{for(let s=0;s<e.observers.length;s+=1){let i=e.observers[s],c=h&&h.running;if(c&&h.disposed.has(i))continue;if(c?!i.tState:!i.state){if(i.pure)O.push(i);else M.push(i);if(i.observers)Ze(i)}if(!c)i.state=R;else i.tState=R}if(O.length>1e6)throw O=[],Error()},!1)}return t}function ne(e){if(!e.fn)return;V(e);let t=le;if(qe(e,h&&h.running&&h.sources.has(e)?e.tValue:e.value,t),h&&!h.running&&h.sources.has(e))queueMicrotask(()=>{D(()=>{h&&(h.running=!0),I=S=e,qe(e,e.tValue,t),I=S=null},!1)})}function qe(e,t,n){let r,s=S,i=I;I=S=e;try{r=e.fn(t)}catch(c){if(e.pure)if(h&&h.running)e.tState=R,e.tOwned&&e.tOwned.forEach(V),e.tOwned=void 0;else e.state=R,e.owned&&e.owned.forEach(V),e.owned=null;return e.updatedAt=n+1,xe(c)}finally{I=i,S=s}if(!e.updatedAt||e.updatedAt<=n){if(e.updatedAt!=null&&"observers"in e)Je(e,r,!0);else if(h&&h.running&&e.pure)h.sources.add(e),e.tValue=r;else e.value=r;e.updatedAt=n}}function ve(e,t,n,r=R,s){let i={fn:e,state:r,updatedAt:null,owned:null,sources:null,sourceSlots:null,cleanups:null,value:t,owner:S,context:S?S.context:null,pure:n};if(h&&h.running)i.state=0,i.tState=r;if(S===null);else if(S!==We)if(h&&h.running&&S.pure)if(!S.tOwned)S.tOwned=[i];else S.tOwned.push(i);else if(!S.owned)S.owned=[i];else S.owned.push(i);if(q&&i.fn){let[c,l]=k(void 0,{equals:!1}),u=q.factory(i.fn,l);ye(()=>u.dispose());let m=()=>Pt(l).then(()=>b.dispose()),b=q.factory(i.fn,m);i.fn=(g)=>{return c(),h&&h.running?b.track(g):u.track(g)}}return i}function ee(e){let t=h&&h.running;if((t?e.tState:e.state)===0)return;if((t?e.tState:e.state)===Q)return oe(e);if(e.suspense&&H(e.suspense.inFallback))return e.suspense.effects.push(e);let n=[e];while((e=e.owner)&&(!e.updatedAt||e.updatedAt<le)){if(t&&h.disposed.has(e))return;if(t?e.tState:e.state)n.push(e)}for(let r=n.length-1;r>=0;r--){if(e=n[r],t){let s=e,i=n[r+1];while((s=s.owner)&&s!==i)if(h.disposed.has(s))return}if((t?e.tState:e.state)===R)ne(e);else if((t?e.tState:e.state)===Q){let s=O;O=null,D(()=>oe(e,n[0]),!1),O=s}}}function D(e,t){if(O)return e();let n=!1;if(!t)O=[];if(M)n=!0;else M=[];le++;try{let r=e();return Lt(n),r}catch(r){if(!n)M=null;O=null,xe(r)}}function Lt(e){if(O){if(te&&h&&h.running)Ht(O);else Xe(O);O=null}if(e)return;let t;if(h){if(!h.promises.size&&!h.queue.size){let{sources:r,disposed:s}=h;M.push.apply(M,h.effects),t=h.resolve;for(let i of M)"tState"in i&&(i.state=i.tState),delete i.tState;h=null,D(()=>{for(let i of s)V(i);for(let i of r){if(i.value=i.tValue,i.owned)for(let c=0,l=i.owned.length;c<l;c++)V(i.owned[c]);if(i.tOwned)i.owned=i.tOwned;delete i.tValue,delete i.tOwned,i.tState=0}ze(!1)},!1)}else if(h.running){h.running=!1,h.effects.push.apply(h.effects,M),M=null,ze(!0);return}}let n=M;if(M=null,n.length)D(()=>Ge(n),!1);if(t)t()}function Xe(e){for(let t=0;t<e.length;t++)ee(e[t])}function Ht(e){for(let t=0;t<e.length;t++){let n=e[t],r=h.queue;if(!r.has(n))r.add(n),te(()=>{r.delete(n),D(()=>{h.running=!0,ee(n)},!1),h&&(h.running=!1)})}}function jt(e){let t,n=0;for(t=0;t<e.length;t++){let r=e[t];if(!r.user)ee(r);else e[n++]=r}if(A.context){if(A.count){A.effects||(A.effects=[]),A.effects.push(...e.slice(0,n));return}he()}if(A.effects&&(A.done||!A.count))e=[...A.effects,...e],n+=A.effects.length,delete A.effects;for(t=0;t<n;t++)ee(e[t])}function oe(e,t){let n=h&&h.running;if(n)e.tState=0;else e.state=0;for(let r=0;r<e.sources.length;r+=1){let s=e.sources[r];if(s.sources){let i=n?s.tState:s.state;if(i===R){if(s!==t&&(!s.updatedAt||s.updatedAt<le))ee(s)}else if(i===Q)oe(s,t)}}}function Ze(e){let t=h&&h.running;for(let n=0;n<e.observers.length;n+=1){let r=e.observers[n];if(t?!r.tState:!r.state){if(t)r.tState=Q;else r.state=Q;if(r.pure)O.push(r);else M.push(r);r.observers&&Ze(r)}}}function V(e){let t;if(e.sources)while(e.sources.length){let n=e.sources.pop(),r=e.sourceSlots.pop(),s=n.observers;if(s&&s.length){let i=s.pop(),c=n.observerSlots.pop();if(r<s.length)i.sourceSlots[c]=r,s[r]=i,n.observerSlots[r]=c}}if(e.tOwned){for(t=e.tOwned.length-1;t>=0;t--)V(e.tOwned[t]);delete e.tOwned}if(h&&h.running&&e.pure)Qe(e,!0);else if(e.owned){for(t=e.owned.length-1;t>=0;t--)V(e.owned[t]);e.owned=null}if(e.cleanups){for(t=e.cleanups.length-1;t>=0;t--)e.cleanups[t]();e.cleanups=null}if(h&&h.running)e.tState=0;else e.state=0}function Qe(e,t){if(!t)e.tState=0,h.disposed.add(e);if(e.owned)for(let n=0;n<e.owned.length;n++)Qe(e.owned[n])}function Rt(e){if(e instanceof Error)return e;return Error(typeof e==="string"?e:"Unknown error",{cause:e})}function Ue(e,t,n){try{for(let r of t)r(e)}catch(r){xe(r,n&&n.owner||null)}}function xe(e,t=S){let n=_e&&t&&t.context&&t.context[_e],r=Rt(e);if(!n)throw r;if(M)M.push({fn(){Ue(r,n,t)},state:R});else Ue(r,n,t)}var Ft=Symbol("fallback");function Be(e){for(let t=0;t<e.length;t++)e[t]()}function Dt(e,t,n={}){let r=[],s=[],i=[],c=0,l=t.length>1?[]:null;return ye(()=>Be(i)),()=>{let u=e()||[],m=u.length,b,g;return u[Ot],H(()=>{let d,a,o,x,$,w,v,y,f;if(m===0){if(c!==0)Be(i),i=[],r=[],s=[],c=0,l&&(l=[]);if(n.fallback)r=[Ft],s[0]=Z((E)=>{return i[0]=E,n.fallback()}),c=1}else if(c===0){s=Array(m);for(g=0;g<m;g++)r[g]=u[g],s[g]=Z(p);c=m}else{o=Array(m),x=Array(m),l&&($=Array(m));for(w=0,v=Math.min(c,m);w<v&&r[w]===u[w];w++);for(v=c-1,y=m-1;v>=w&&y>=w&&r[v]===u[y];v--,y--)o[y]=s[v],x[y]=i[v],l&&($[y]=l[v]);d=new Map,a=Array(y+1);for(g=y;g>=w;g--)f=u[g],b=d.get(f),a[g]=b===void 0?-1:b,d.set(f,g);for(b=w;b<=v;b++)if(f=r[b],g=d.get(f),g!==void 0&&g!==-1)o[g]=s[b],x[g]=i[b],l&&($[g]=l[b]),g=a[g],d.set(f,g);else i[b]();for(g=w;g<m;g++)if(g in o){if(s[g]=o[g],i[g]=x[g],l)l[g]=$[g],l[g](g)}else s[g]=Z(p);s=s.slice(0,c=m),r=u.slice(0)}return s});function p(d){if(i[g]=d,l){let[a,o]=k(g);return l[g]=o,t(u[g],a)}return t(u[g])}}}var Vt=!1;function we(e,t){if(Vt){if(A.context){let n=A.context;he(At());let r=H(()=>e(t||{}));return he(n),r}}return H(()=>e(t||{}))}function ie(){return!0}var _t={get(e,t,n){if(t===me)return n;return e.get(t)},has(e,t){if(t===me)return!0;return e.has(t)},set:ie,deleteProperty:ie,getOwnPropertyDescriptor(e,t){return{configurable:!0,enumerable:!0,get(){return e.get(t)},set:ie,deleteProperty:ie}},ownKeys(e){return e.keys()}};function ge(e){return!(e=typeof e==="function"?e():e)?{}:e}function zt(){for(let e=0,t=this.length;e<t;++e){let n=this[e]();if(n!==void 0)return n}}function $e(...e){let t=!1;for(let c=0;c<e.length;c++){let l=e[c];t=t||!!l&&me in l,e[c]=typeof l==="function"?(t=!0,U(l)):l}if(Nt&&t)return new Proxy({get(c){for(let l=e.length-1;l>=0;l--){let u=ge(e[l])[c];if(u!==void 0)return u}},has(c){for(let l=e.length-1;l>=0;l--)if(c in ge(e[l]))return!0;return!1},keys(){let c=[];for(let l=0;l<e.length;l++)c.push(...Object.keys(ge(e[l])));return[...new Set(c)]}},_t);let n={},r=Object.create(null);for(let c=e.length-1;c>=0;c--){let l=e[c];if(!l)continue;let u=Object.getOwnPropertyNames(l);for(let m=u.length-1;m>=0;m--){let b=u[m];if(b==="__proto__"||b==="constructor")continue;let g=Object.getOwnPropertyDescriptor(l,b);if(!r[b])r[b]=g.get?{enumerable:!0,configurable:!0,get:zt.bind(n[b]=[g.get.bind(l)])}:g.value!==void 0?g:void 0;else{let p=n[b];if(p){if(g.get)p.push(g.get.bind(l));else if(g.value!==void 0)p.push(()=>g.value)}}}}let s={},i=Object.keys(r);for(let c=i.length-1;c>=0;c--){let l=i[c],u=r[l];if(u&&u.get)Object.defineProperty(s,l,u);else s[l]=u?u.value:void 0}return s}var qt=(e)=>`Stale read from <${e}>.`;function G(e){let t="fallback"in e&&{fallback:()=>e.fallback};return U(Dt(()=>e.each,e.children,t||void 0))}function re(e){let t=e.keyed,n=U(()=>e.when,void 0,void 0),r=t?n:U(n,void 0,{equals:(s,i)=>!s===!i});return U(()=>{let s=r();if(s){let i=e.children;return typeof i==="function"&&i.length>0?H(()=>i(t?s:()=>{if(!H(r))throw qt("Show");return n()})):i}return e.fallback},void 0,void 0)}var Bt=["allowfullscreen","async","alpha","autofocus","autoplay","checked","controls","default","disabled","formnovalidate","hidden","indeterminate","inert","ismap","loop","multiple","muted","nomodule","novalidate","open","playsinline","readonly","required","reversed","seamless","selected","adauctionheaders","browsingtopics","credentialless","defaultchecked","defaultmuted","defaultselected","defer","disablepictureinpicture","disableremoteplayback","preservespitch","shadowrootclonable","shadowrootcustomelementregistry","shadowrootdelegatesfocus","shadowrootserializable","sharedstoragewritable"],Se=new Set(["className","value","readOnly","noValidate","formNoValidate","isMap","noModule","playsInline","adAuctionHeaders","allowFullscreen","browsingTopics","defaultChecked","defaultMuted","defaultSelected","disablePictureInPicture","disableRemotePlayback","preservesPitch","shadowRootClonable","shadowRootCustomElementRegistry","shadowRootDelegatesFocus","shadowRootSerializable","sharedStorageWritable",...Bt]),Ee=new Set(["innerHTML","textContent","innerText","children"]),Ce=Object.assign(Object.create(null),{className:"class",htmlFor:"for"}),Gt=Object.assign(Object.create(null),{class:"className",novalidate:{$:"noValidate",FORM:1},formnovalidate:{$:"formNoValidate",BUTTON:1,INPUT:1},ismap:{$:"isMap",IMG:1},nomodule:{$:"noModule",SCRIPT:1},playsinline:{$:"playsInline",VIDEO:1},readonly:{$:"readOnly",INPUT:1,TEXTAREA:1},adauctionheaders:{$:"adAuctionHeaders",IFRAME:1},allowfullscreen:{$:"allowFullscreen",IFRAME:1},browsingtopics:{$:"browsingTopics",IMG:1},defaultchecked:{$:"defaultChecked",INPUT:1},defaultmuted:{$:"defaultMuted",AUDIO:1,VIDEO:1},defaultselected:{$:"defaultSelected",OPTION:1},disablepictureinpicture:{$:"disablePictureInPicture",VIDEO:1},disableremoteplayback:{$:"disableRemotePlayback",AUDIO:1,VIDEO:1},preservespitch:{$:"preservesPitch",AUDIO:1,VIDEO:1},shadowrootclonable:{$:"shadowRootClonable",TEMPLATE:1},shadowrootdelegatesfocus:{$:"shadowRootDelegatesFocus",TEMPLATE:1},shadowrootserializable:{$:"shadowRootSerializable",TEMPLATE:1},sharedstoragewritable:{$:"sharedStorageWritable",IFRAME:1,IMG:1}});function Ae(e,t){let n=Gt[e];return typeof n==="object"?n[t]?n.$:void 0:n}var Te=new Set(["beforeinput","click","dblclick","contextmenu","focusin","focusout","input","keydown","keyup","mousedown","mousemove","mouseout","mouseover","mouseup","pointerdown","pointermove","pointerout","pointerover","pointerup","touchend","touchmove","touchstart"]),st=new Set(["altGlyph","altGlyphDef","altGlyphItem","animate","animateColor","animateMotion","animateTransform","circle","clipPath","color-profile","cursor","defs","desc","ellipse","feBlend","feColorMatrix","feComponentTransfer","feComposite","feConvolveMatrix","feDiffuseLighting","feDisplacementMap","feDistantLight","feDropShadow","feFlood","feFuncA","feFuncB","feFuncG","feFuncR","feGaussianBlur","feImage","feMerge","feMergeNode","feMorphology","feOffset","fePointLight","feSpecularLighting","feSpotLight","feTile","feTurbulence","filter","font","font-face","font-face-format","font-face-name","font-face-src","font-face-uri","foreignObject","g","glyph","glyphRef","hkern","image","line","linearGradient","marker","mask","metadata","missing-glyph","mpath","path","pattern","polygon","polyline","radialGradient","rect","set","stop","svg","switch","symbol","text","textPath","tref","tspan","use","view","vkern"]),Ie={xlink:"http://www.w3.org/1999/xlink",xml:"http://www.w3.org/XML/1998/namespace"};function Wt(e,t,n){let r=n.length,s=t.length,i=r,c=0,l=0,u=t[s-1].nextSibling,m=null;while(c<s||l<i){if(t[c]===n[l]){c++,l++;continue}while(t[s-1]===n[i-1])s--,i--;if(s===c){let b=i<r?l?n[l-1].nextSibling:n[i-l]:u;while(l<i)e.insertBefore(n[l++],b)}else if(i===l)while(c<s){if(!m||!m.has(t[c]))t[c].remove();c++}else if(t[c]===n[i-1]&&n[l]===t[s-1]){let b=t[--s].nextSibling;e.insertBefore(n[l++],t[c++].nextSibling),e.insertBefore(n[--i],b),t[s]=n[i]}else{if(!m){m=new Map;let g=l;while(g<i)m.set(n[g],g++)}let b=m.get(t[c]);if(b!=null)if(l<b&&b<i){let g=c,p=1,d;while(++g<s&&g<i){if((d=m.get(t[g]))==null||d!==b+p)break;p++}if(p>b-l){let a=t[c];while(l<b)e.insertBefore(n[l++],a)}else e.replaceChild(n[l++],t[c++])}else c++;else t[c++].remove()}}}var et="_$DX_DELEGATE";function it(e,t,n,r={}){let s;return Z((i)=>{s=i,t===document?e():He(t,e(),t.firstChild?null:void 0,n)},r.owner),()=>{s(),t.textContent=""}}function Ne(e,t=window.document){let n=t[et]||(t[et]=new Set);for(let r=0,s=e.length;r<s;r++){let i=e[r];if(!n.has(i))n.add(i),t.addEventListener(i,Qt)}}function se(e,t,n){if(K(e))return;if(n==null)e.removeAttribute(t);else e.setAttribute(t,n)}function Oe(e,t,n,r){if(K(e))return;if(r==null)e.removeAttributeNS(t,n);else e.setAttributeNS(t,n,r)}function Yt(e,t,n){if(K(e))return;n?e.setAttribute(t,""):e.removeAttribute(t)}function Kt(e,t){if(K(e))return;if(t==null)e.removeAttribute("class");else e.className=t}function Pe(e,t,n,r){if(r)if(Array.isArray(n))e[`$$${t}`]=n[0],e[`$$${t}Data`]=n[1];else e[`$$${t}`]=n;else if(Array.isArray(n)){let s=n[0];e.addEventListener(t,n[0]=(i)=>s.call(e,n[1],i))}else e.addEventListener(t,n,typeof n!=="function"&&n)}function Me(e,t,n={}){let r=Object.keys(t||{}),s=Object.keys(n),i,c;for(i=0,c=s.length;i<c;i++){let l=s[i];if(!l||l==="undefined"||t[l])continue;tt(e,l,!1),delete n[l]}for(i=0,c=r.length;i<c;i++){let l=r[i],u=!!t[l];if(!l||l==="undefined"||n[l]===u||!u)continue;tt(e,l,!0),n[l]=u}return n}function Le(e,t,n){if(!t)return n?se(e,"style"):t;let r=e.style;if(typeof t==="string")return r.cssText=t;typeof n==="string"&&(r.cssText=n=void 0),n||(n={}),t||(t={});let s,i;for(i in n)t[i]==null&&r.removeProperty(i),delete n[i];for(i in t)if(s=t[i],s!==n[i])r.setProperty(i,s),n[i]=s;return n}function at(e,t={},n,r){let s={};if(!r)F(()=>s.children=Y(e,t.children,s.children));return F(()=>typeof t.ref==="function"&&Jt(t.ref,e)),F(()=>Xt(e,t,n,!0,s,!0)),s}function ot(e,t){let n=e[t];return Object.defineProperty(e,t,{get(){return n()},enumerable:!0}),e}function Jt(e,t,n){return H(()=>e(t,n))}function He(e,t,n,r){if(n!==void 0&&!r)r=[];if(typeof t!=="function")return Y(e,t,r,n);F((s)=>Y(e,t(),s,n),r)}function Xt(e,t,n,r,s={},i=!1){t||(t={});for(let c in s)if(!(c in t)){if(c==="children")continue;s[c]=nt(e,c,null,s[c],n,i,t)}for(let c in t){if(c==="children"){if(!r)Y(e,t.children);continue}let l=t[c];s[c]=nt(e,c,l,s[c],n,i,t)}}function K(e){return!!A.context&&!A.done&&(!e||e.isConnected)}function Zt(e){return e.toLowerCase().replace(/-([a-z])/g,(t,n)=>n.toUpperCase())}function tt(e,t,n){let r=t.trim().split(/\s+/);for(let s=0,i=r.length;s<i;s++)e.classList.toggle(r[s],n)}function nt(e,t,n,r,s,i,c){let l,u,m,b,g;if(t==="style")return Le(e,n,r);if(t==="classList")return Me(e,n,r);if(n===r)return r;if(t==="ref"){if(!i)n(e)}else if(t.slice(0,3)==="on:"){let p=t.slice(3);r&&e.removeEventListener(p,r,typeof r!=="function"&&r),n&&e.addEventListener(p,n,typeof n!=="function"&&n)}else if(t.slice(0,10)==="oncapture:"){let p=t.slice(10);r&&e.removeEventListener(p,r,!0),n&&e.addEventListener(p,n,!0)}else if(t.slice(0,2)==="on"){let p=t.slice(2).toLowerCase(),d=Te.has(p);if(!d&&r){let a=Array.isArray(r)?r[0]:r;e.removeEventListener(p,a)}if(d||n)Pe(e,p,n,d),d&&Ne([p])}else if(t.slice(0,5)==="attr:")se(e,t.slice(5),n);else if(t.slice(0,5)==="bool:")Yt(e,t.slice(5),n);else if((g=t.slice(0,5)==="prop:")||(m=Ee.has(t))||!s&&((b=Ae(t,e.tagName))||(u=Se.has(t)))||(l=e.nodeName.includes("-")||("is"in c))){if(g)t=t.slice(5),u=!0;else if(K(e))return n;if(t==="class"||t==="className")Kt(e,n);else if(l&&!u&&!m)e[Zt(t)]=n;else e[b||t]=n}else{let p=s&&t.indexOf(":")>-1&&Ie[t.split(":")[0]];if(p)Oe(e,p,t,n);else se(e,Ce[t]||t,n)}return n}function Qt(e){if(A.registry&&A.events){if(A.events.find(([u,m])=>m===e))return}let t=e.target,n=`$$${e.type}`,r=e.target,s=e.currentTarget,i=(u)=>Object.defineProperty(e,"target",{configurable:!0,value:u}),c=()=>{let u=t[n];if(u&&!t.disabled){let m=t[`${n}Data`];if(m!==void 0?u.call(t,m,e):u.call(t,e),e.cancelBubble)return}return t.host&&typeof t.host!=="string"&&!t.host._$host&&t.contains(e.target)&&i(t.host),!0},l=()=>{while(c()&&(t=t._$host||t.parentNode||t.host));};if(Object.defineProperty(e,"currentTarget",{configurable:!0,get(){return t||document}}),A.registry&&!A.done)A.done=_$HY.done=!0;if(e.composedPath){let u=e.composedPath();i(u[0]);for(let m=0;m<u.length-2;m++){if(t=u[m],!c())break;if(t._$host){t=t._$host,l();break}if(t.parentNode===s)break}}else l();i(r)}function Y(e,t,n,r,s){let i=K(e);if(i){!n&&(n=[...e.childNodes]);let u=[];for(let m=0;m<n.length;m++){let b=n[m];if(b.nodeType===8&&b.data.slice(0,2)==="!$")b.remove();else u.push(b)}n=u}while(typeof n==="function")n=n();if(t===n)return n;let c=typeof t,l=r!==void 0;if(e=l&&n[0]&&n[0].parentNode||e,c==="string"||c==="number"){if(i)return n;if(c==="number"){if(t=t.toString(),t===n)return n}if(l){let u=n[0];if(u&&u.nodeType===3)u.data!==t&&(u.data=t);else u=document.createTextNode(t);n=W(e,n,r,u)}else if(n!==""&&typeof n==="string")n=e.firstChild.data=t;else n=e.textContent=t}else if(t==null||c==="boolean"){if(i)return n;n=W(e,n,r)}else if(c==="function")return F(()=>{let u=t();while(typeof u==="function")u=u();n=Y(e,u,n,r)}),()=>n;else if(Array.isArray(t)){let u=[],m=n&&Array.isArray(n);if(ke(u,t,n,s))return F(()=>n=Y(e,u,n,r,!0)),()=>n;if(i){if(!u.length)return n;if(r===void 0)return n=[...e.childNodes];let b=u[0];if(b.parentNode!==e)return n;let g=[b];while((b=b.nextSibling)!==r)g.push(b);return n=g}if(u.length===0){if(n=W(e,n,r),l)return n}else if(m)if(n.length===0)rt(e,u,r);else Wt(e,n,u);else n&&W(e),rt(e,u);n=u}else if(t.nodeType){if(i&&t.parentNode)return n=l?[t]:t;if(Array.isArray(n)){if(l)return n=W(e,n,r,t);W(e,n,null,t)}else if(n==null||n===""||!e.firstChild)e.appendChild(t);else e.replaceChild(t,e.firstChild);n=t}return n}function ke(e,t,n,r){let s=!1;for(let i=0,c=t.length;i<c;i++){let l=t[i],u=n&&n[e.length],m;if(l==null||l===!0||l===!1);else if((m=typeof l)==="object"&&l.nodeType)e.push(l);else if(Array.isArray(l))s=ke(e,l,u)||s;else if(m==="function")if(r){while(typeof l==="function")l=l();s=ke(e,Array.isArray(l)?l:[l],Array.isArray(u)?u:[u])||s}else e.push(l),s=!0;else{let b=String(l);if(u&&u.nodeType===3&&u.data===b)e.push(u);else e.push(document.createTextNode(b))}}return s}function rt(e,t,n=null){for(let r=0,s=t.length;r<s;r++)e.insertBefore(t[r],n)}function W(e,t,n,r){if(n===void 0)return e.textContent="";let s=r||document.createTextNode("");if(t.length){let i=!1;for(let c=t.length-1;c>=0;c--){let l=t[c];if(s!==l){let u=l.parentNode===e;if(!i&&!c)u?e.replaceChild(s,l):e.insertBefore(s,n);else u&&l.remove()}else i=!0}}else e.insertBefore(s,n);return[s]}var Fn=Symbol();var en=/(?:<!--[\S\s]*?-->|<(?:"[^"]*"['"]*|'[^']*'['"]*|[^'">])+>)/g,tn=/(?:\s(?<boolean>[^/\s><=]+?)(?=[\s/>]))|(?:(?<name>\S+?)(?:\s*=\s*(?:(['"])(?<quotedValue>[\s\S]*?)\3|(?<unquotedValue>[^\s>]+))))/g,nn={area:!0,base:!0,br:!0,col:!0,embed:!0,hr:!0,img:!0,input:!0,keygen:!0,link:!0,menuitem:!0,meta:!0,param:!0,source:!0,track:!0,wbr:!0};function rn(e){let t={type:"tag",name:"",voidElement:!1,attrs:[],children:[]},n=e.match(/<\/?([^\s]+?)[/\s>]/);if(n){if(t.name=n[1],nn[n[1].toLowerCase()]||e.charAt(e.length-2)==="/")t.voidElement=!0;if(t.name.startsWith("!--")){let s=e.indexOf("-->");return{type:"comment",comment:s!==-1?e.slice(4,s):""}}}let r=new RegExp(tn);for(let s of e.matchAll(r))if((s[1]||s[2]).startsWith("use:"))t.attrs.push({type:"directive",name:s[1]||s[2],value:s[4]||s[5]||""});else t.attrs.push({type:"attr",name:s[1]||s[2],value:s[4]||s[5]||""});return t}function lt(e,t,n){let r=t.indexOf("<",n),s=t.slice(n,r===-1?void 0:r);if(!/^\s*$/.test(s))e.push({type:"text",content:s})}function ct(e,t){let n=t.replace("<!--","").replace("-->","");if(!/^\s*$/.test(n))e.push({type:"comment",content:n})}function sn(e){let t=[],n=void 0,r=-1,s=[],i={};return e.replace(en,(c,l)=>{let u=c.charAt(1)!=="/",m=c.slice(0,4)==="<!--",b=l+c.length,g=e.charAt(b),p=void 0;if(u&&!m){if(r++,n=rn(c),!n.voidElement&&g&&g!=="<")lt(n.children,e,b);if(i[n.tagName]=n,r===0)t.push(n);if(p=s[r-1],p)p.children.push(n);s[r]=n}if(m)if(r<0)ct(t,c);else ct(s[r].children,c);if(m||!u||n.voidElement){if(!m)r--;if(g!=="<"&&g)p=r===-1?t:s[r].children,lt(p,e,b)}}),t}function an(e){let t=[];for(let n of e)t.push(n.name+'="'+n.value.replace(/"/g,"&quot;")+'"');if(!t.length)return"";return" "+t.join(" ")}function ft(e,t){switch(t.type){case"text":return e+t.content;case"tag":if(e+="<"+t.name+(t.attrs?an(t.attrs):"")+(t.voidElement?"/>":">"),t.voidElement)return e;return e+t.children.reduce(ft,"")+"</"+t.name+">";case"comment":return e+="<!--"+t.content+"-->"}}function on(e){return e.reduce(function(t,n){return t+ft("",n)},"")}var ut=new Map,ln=/^(?:area|base|br|col|embed|hr|img|input|keygen|link|menuitem|meta|param|source|track|wbr)$/i,ce=" \\f\\n\\r\\t",pt="[^"+ce+`\\/>"'=]+`,Re="[ "+ce+"]+(?:use:<!--#-->|"+pt+")",gt="<([A-Za-z$#]+[A-Za-z0-9:_-]*)((?:",ht=`(?:\\s*=\\s*(?:'[^']*?'|"[^"]*?"|\\([^)]*?\\)|<[^>]*?>|`+pt+"))?)",cn=new RegExp(gt+Re+ht+"+)([ "+ce+"]*/?>)","g"),un=new RegExp("("+Re+`\\s*=\\s*)(<!--#-->|['"(]([\\w\\s]*<!--#-->[\\w\\s]*)*['")])`,"gi"),dn=new RegExp(gt+Re+ht+"*)([ "+ce+"]*/>)","g"),dt="<!--#-->",fn=new Set(["class","on","oncapture","style","use","prop","attr"]);function pn(e,t,n,r){return"<"+t+n.replace(un,gn)+r}function gn(e,t,n){return t.replace(/<!--#-->/g,"###")+(n[0]==='"'||n[0]==="'"?n.replace(/<!--#-->/g,"###"):'"###"')}function hn(e,t,n){return ln.test(t)?e:"<"+t+n+"></"+t+">"}function mn(e){return e.toLowerCase().replace(/-([a-z])/g,(t,n)=>n.toUpperCase())}function je(e,t,n,r){if(e==="use:###"&&t==="###"){let s=r.counter++;r.exprs.push(`typeof exprs[${s}] === "function" ? r.use(exprs[${s}], ${n}, exprs[${r.counter++}]) : (()=>{throw new Error("use:### must be a function")})()`)}else throw Error(`Not support syntax ${e} must be use:{function}`)}function bn(e,{delegateEvents:t=!0,functionBuilder:n=(...r)=>Function(...r)}={}){let r=1;e.wrapProps=(d)=>{let a=Object.getOwnPropertyDescriptors(d);for(let o in a)if(typeof a[o].value==="function"&&!a[o].value.length)e.dynamicProperty(d,o);return d};function s(d,a){let o=0,x="";for(;o<d.length-1;o++)x=x+d[o]+"<!--#-->";x=x+d[o],x=[[dn,hn],[/<(<!--#-->)/g,"<###"],[/\.\.\.(<!--#-->)/g,"###"],[cn,pn],[/>\n+\s*/g,">"],[/\n+\s*</g,"<"],[/\s+</g," <"],[/>\s+/g,"> "]].reduce((E,C)=>{return E.replace(C[0],C[1])},x);let w=sn(x),[v,y]=g(w,a.funcBuilder),f=[];for(let E=0;E<v.length;E++){f.push(document.createElement("template")),f[E].innerHTML=v[E];let C=f[E].content.querySelectorAll("script,style");for(let j=0;j<C.length;j++){let N=C[j].firstChild?.data||"";if(N.indexOf(dt)>-1){let z=N.split(dt).reduce((_,Et,Ct)=>{return Ct&&_.push(""),_.push(Et),_},[]);C[E].firstChild.replaceWith(...z)}}}return f[0].create=y,ut.set(d,f),f}function i(d,a,o,x,$,w,v){let y=x==="###"?`!doNotWrap ? exprs[${v.counter}]() : exprs[${v.counter++}]`:x.split("###").map((N,z)=>z?` + (typeof exprs[${v.counter}] === "function" ? exprs[${v.counter}]() : exprs[${v.counter++}]) + "${N}"`:`"${N}"`).join(""),f,E;if((f=o.split(":"))&&f[1]&&fn.has(f[0]))o=f[1],E=f[0];let C=e.ChildProperties.has(o),j=e.Properties.has(o);if(o==="style"){let N=`_$v${r++}`;v.decl.push(`${N}={}`),v.exprs.push(`r.style(${a},${y},${N})`)}else if(o==="classList"){let N=`_$v${r++}`;v.decl.push(`${N}={}`),v.exprs.push(`r.classList(${a},${y},${N})`)}else if(E!=="attr"&&(C||!$&&(e.getPropAlias(o,d.name.toUpperCase())||j)||w||E==="prop")){if(w&&!C&&!j&&E!=="prop")o=mn(o);v.exprs.push(`${a}.${e.getPropAlias(o,d.name.toUpperCase())||o} = ${y}`)}else{let N=$&&o.indexOf(":")>-1&&e.SVGNamespace[o.split(":")[0]];if(N)v.exprs.push(`r.setAttributeNS(${a},"${N}","${o}",${y})`);else v.exprs.push(`r.setAttribute(${a},"${e.Aliases[o]||o}",${y})`)}}function c(d,a,o,x,$,w,v){if(o.slice(0,2)==="on")if(!o.includes(":")){let y=o.slice(2).toLowerCase(),f=t&&e.DelegatedEvents.has(y);v.exprs.push(`r.addEventListener(${a},"${y}",exprs[${v.counter++}],${f})`),f&&v.delegatedEvents.add(y)}else{let y=o.startsWith("oncapture:");v.exprs.push(`${a}.addEventListener("${o.slice(y?10:3)}",exprs[${v.counter++}]${y?",true":""})`)}else if(o==="ref")v.exprs.push(`exprs[${v.counter++}](${a})`);else{let y=Object.assign({},v,{exprs:[]}),f=v.counter;if(i(d,a,o,x,$,w,y),v.decl.push(`_fn${f} = (${x==="###"?"doNotWrap":""}) => {
+${y.exprs.join(`;
 `)};
-}`),v==="###")y.exprs.push(`typeof exprs[${d}] === "function" ? r.effect(_fn${d}) : _fn${d}(true)`);else{let E="";for(let C=d;C<m.counter;C++)C!==d&&(E+=" || "),E+=`typeof exprs[${C}] === "function"`;y.exprs.push(E+` ? r.effect(_fn${d}) : _fn${d}()`)}y.counter=m.counter,y.wrap=!1}}function a(f,l){let o=Object.assign({},l,{first:!0,multi:!1,parent:l.path});if(f.children.length>1)for(let $=0;$<f.children.length;$++){let w=f.children[$];if(w.type==="comment"&&w.content==="#"||w.type==="tag"&&w.name==="###"){o.multi=!0;break}}let v=0;while(v<f.children.length){let $=f.children[v];if($.name==="###"){if(o.multi)f.children[v]={type:"comment",content:"#"},v++;else f.children.splice(v,1);b($,o);continue}if(g($,o),!o.multi&&$.type==="comment"&&$.content==="#")f.children.splice(v,1);else v++}l.counter=o.counter,l.templateId=o.templateId,l.hasCustomElement=l.hasCustomElement||o.hasCustomElement,l.isImportNode=l.isImportNode||o.isImportNode}function u(f){let l=[];for(let o of f)if(Array.isArray(o)){if(!o.length)continue;l.push(`r.wrapProps({${o.join(",")||""}})`)}else l.push(o);return l.length>1?`r.mergeProps(${l.join(",")})`:l[0]}function b(f,l){let o=[],v=Object.keys(f.attrs),$=[o],w=l.counter++;for(let m=0;m<v.length;m++){let{type:d,name:E,value:C}=f.attrs[m];if(d==="attr")if(E==="###")$.push(`exprs[${l.counter++}]`),$.push(o=[]);else if(C==="###")o.push(`"${E}": exprs[${l.counter++}]`);else o.push(`"${E}": "${C}"`);else if(d==="directive"){let F=`_$el${r++}`,I=!l.decl.length;l.decl.push(I?"":`${F} = ${l.path}.${l.first?"firstChild":"nextSibling"}`),Fe(E,C,F,l)}}if(f.children.length===1&&f.children[0].type==="comment"&&f.children[0].content==="#")o.push(`children: () => exprs[${l.counter++}]`);else if(f.children.length){let m={type:"fragment",children:f.children},d=Object.assign({},l,{first:!0,decl:[],exprs:[],parent:!1});g(m,d),o.push(`children: () => { ${d.exprs.join(`;
-`)}}`),l.templateId=d.templateId,l.counter=d.counter}let y;if(l.multi)y=`_$el${r++}`,l.decl.push(`${y} = ${l.path}.${l.first?"firstChild":"nextSibling"}`);if(l.parent)l.exprs.push(`r.insert(${l.parent}, r.createComponent(exprs[${w}],${u($)})${y?`, ${y}`:""})`);else l.exprs.push(`${l.fragment?"":"return "}r.createComponent(exprs[${w}],${u($)})`);l.path=y,l.first=!1}function g(f,l){if(f.type==="fragment"){let o=[];f.children.forEach((v)=>{if(v.type==="tag"){if(v.name==="###"){let y=Object.assign({},l,{first:!0,fragment:!0,decl:[],exprs:[]});b(v,y),o.push(y.exprs[0]),l.counter=y.counter,l.templateId=y.templateId;return}l.templateId++;let $=r,w=Object.assign({},l,{first:!0,decl:[],exprs:[]});l.templateNodes.push([v]),g(v,w),o.push(`function() { ${w.decl.join(`,
+}`),x==="###")v.exprs.push(`typeof exprs[${f}] === "function" ? r.effect(_fn${f}) : _fn${f}(true)`);else{let E="";for(let C=f;C<y.counter;C++)C!==f&&(E+=" || "),E+=`typeof exprs[${C}] === "function"`;v.exprs.push(E+` ? r.effect(_fn${f}) : _fn${f}()`)}v.counter=y.counter,v.wrap=!1}}function l(d,a){let o=Object.assign({},a,{first:!0,multi:!1,parent:a.path});if(d.children.length>1)for(let $=0;$<d.children.length;$++){let w=d.children[$];if(w.type==="comment"&&w.content==="#"||w.type==="tag"&&w.name==="###"){o.multi=!0;break}}let x=0;while(x<d.children.length){let $=d.children[x];if($.name==="###"){if(o.multi)d.children[x]={type:"comment",content:"#"},x++;else d.children.splice(x,1);m($,o);continue}if(b($,o),!o.multi&&$.type==="comment"&&$.content==="#")d.children.splice(x,1);else x++}a.counter=o.counter,a.templateId=o.templateId,a.hasCustomElement=a.hasCustomElement||o.hasCustomElement,a.isImportNode=a.isImportNode||o.isImportNode}function u(d){let a=[];for(let o of d)if(Array.isArray(o)){if(!o.length)continue;a.push(`r.wrapProps({${o.join(",")||""}})`)}else a.push(o);return a.length>1?`r.mergeProps(${a.join(",")})`:a[0]}function m(d,a){let o=[],x=Object.keys(d.attrs),$=[o],w=a.counter++;for(let y=0;y<x.length;y++){let{type:f,name:E,value:C}=d.attrs[y];if(f==="attr")if(E==="###")$.push(`exprs[${a.counter++}]`),$.push(o=[]);else if(C==="###")o.push(`"${E}": exprs[${a.counter++}]`);else o.push(`"${E}": "${C}"`);else if(f==="directive"){let j=`_$el${r++}`,N=!a.decl.length;a.decl.push(N?"":`${j} = ${a.path}.${a.first?"firstChild":"nextSibling"}`),je(E,C,j,a)}}if(d.children.length===1&&d.children[0].type==="comment"&&d.children[0].content==="#")o.push(`children: () => exprs[${a.counter++}]`);else if(d.children.length){let y={type:"fragment",children:d.children},f=Object.assign({},a,{first:!0,decl:[],exprs:[],parent:!1});b(y,f),o.push(`children: () => { ${f.exprs.join(`;
+`)}}`),a.templateId=f.templateId,a.counter=f.counter}let v;if(a.multi)v=`_$el${r++}`,a.decl.push(`${v} = ${a.path}.${a.first?"firstChild":"nextSibling"}`);if(a.parent)a.exprs.push(`r.insert(${a.parent}, r.createComponent(exprs[${w}],${u($)})${v?`, ${v}`:""})`);else a.exprs.push(`${a.fragment?"":"return "}r.createComponent(exprs[${w}],${u($)})`);a.path=v,a.first=!1}function b(d,a){if(d.type==="fragment"){let o=[];d.children.forEach((x)=>{if(x.type==="tag"){if(x.name==="###"){let v=Object.assign({},a,{first:!0,fragment:!0,decl:[],exprs:[]});m(x,v),o.push(v.exprs[0]),a.counter=v.counter,a.templateId=v.templateId;return}a.templateId++;let $=r,w=Object.assign({},a,{first:!0,decl:[],exprs:[]});a.templateNodes.push([x]),b(x,w),o.push(`function() { ${w.decl.join(`,
 `)+`;
 `+w.exprs.join(`;
 `)+`;
 return _$el${$};
-`}}()`),l.counter=w.counter,l.templateId=w.templateId}else if(v.type==="text")o.push(`"${v.content}"`);else if(v.type==="comment"){if(v.content==="#")o.push(`exprs[${l.counter++}]`);else if(v.content)for(let $=0;$<v.content.split("###").length-1;$++)o.push(`exprs[${l.counter++}]`)}}),l.exprs.push(`return [${o.join(`, 
-`)}]`)}else if(f.type==="tag"){let o=`_$el${r++}`,v=!l.decl.length,$=l.templateId;l.decl.push(v?"":`${o} = ${l.path}.${l.first?"firstChild":"nextSibling"}`);let w=e.SVGElements.has(f.name),y=f.name.includes("-")||f.attrs.some((m)=>m.name==="is");if(l.hasCustomElement=y,l.isImportNode=(f.name==="img"||f.name==="iframe")&&f.attrs.some((m)=>m.name==="loading"&&m.value==="lazy"),f.attrs.some((m)=>m.name==="###")){let m=[],d="",E=[];for(let C=0;C<f.attrs.length;C++){let{type:F,name:I,value:q}=f.attrs[C];if(F==="attr")if(q.includes("###")){let _=l.counter++;d+=`${I}: ${I!=="ref"?`typeof exprs[${_}] === "function" ? exprs[${_}]() : `:""}exprs[${_}],`}else if(I==="###"){if(d.length)m.push(`()=>({${d}})`),d="";m.push(`exprs[${l.counter++}]`)}else E.push(f.attrs[C]);else if(F==="directive")Fe(I,q,o,l)}if(f.attrs=E,d.length)m.push(`()=>({${d}})`);l.exprs.push(`r.spread(${o},${m.length===1?`typeof ${m[0]} === "function" ? r.mergeProps(${m[0]}) : ${m[0]}`:`r.mergeProps(${m.join(",")})`},${w},${!!f.children.length})`)}else for(let m=0;m<f.attrs.length;m++){let{type:d,name:E,value:C}=f.attrs[m];if(d==="directive")Fe(E,C,o,l),f.attrs.splice(m,1),m--;else if(d==="attr"){if(C.includes("###"))f.attrs.splice(m,1),m--,c(f,o,E,C,w,y,l)}}if(l.path=o,l.first=!1,a(f,l),v)l.decl[0]=l.hasCustomElement||l.isImportNode?`const ${o} = r.untrack(() => document.importNode(tmpls[${$}].content.firstChild, true))`:`const ${o} = tmpls[${$}].content.firstChild.cloneNode(true)`}else if(f.type==="text"){let o=`_$el${r++}`;l.decl.push(`${o} = ${l.path}.${l.first?"firstChild":"nextSibling"}`),l.path=o,l.first=!1}else if(f.type==="comment"){let o=`_$el${r++}`;if(l.decl.push(`${o} = ${l.path}.${l.first?"firstChild":"nextSibling"}`),f.content==="#")if(l.multi)l.exprs.push(`r.insert(${l.parent}, exprs[${l.counter++}], ${o})`);else l.exprs.push(`r.insert(${l.parent}, exprs[${l.counter++}])`);l.path=o,l.first=!1}}function p(f,l){let o={path:"",decl:[],exprs:[],delegatedEvents:new Set,counter:0,first:!0,multi:!1,templateId:0,templateNodes:[]},v=r,$=f,w;if(f.length>1)f=[{type:"fragment",children:f}];if(f[0].name==="###")w=!0,b(f[0],o);else g(f[0],o);return e.delegateEvents(Array.from(o.delegatedEvents)),[[$].concat(o.templateNodes).map((m)=>sn(m)),l("tmpls","exprs","r",o.decl.join(`,
+`}}()`),a.counter=w.counter,a.templateId=w.templateId}else if(x.type==="text")o.push(`"${x.content}"`);else if(x.type==="comment"){if(x.content==="#")o.push(`exprs[${a.counter++}]`);else if(x.content)for(let $=0;$<x.content.split("###").length-1;$++)o.push(`exprs[${a.counter++}]`)}}),a.exprs.push(`return [${o.join(`, 
+`)}]`)}else if(d.type==="tag"){let o=`_$el${r++}`,x=!a.decl.length,$=a.templateId;a.decl.push(x?"":`${o} = ${a.path}.${a.first?"firstChild":"nextSibling"}`);let w=e.SVGElements.has(d.name),v=d.name.includes("-")||d.attrs.some((y)=>y.name==="is");if(a.hasCustomElement=v,a.isImportNode=(d.name==="img"||d.name==="iframe")&&d.attrs.some((y)=>y.name==="loading"&&y.value==="lazy"),d.attrs.some((y)=>y.name==="###")){let y=[],f="",E=[];for(let C=0;C<d.attrs.length;C++){let{type:j,name:N,value:z}=d.attrs[C];if(j==="attr")if(z.includes("###")){let _=a.counter++;f+=`${N}: ${N!=="ref"?`typeof exprs[${_}] === "function" ? exprs[${_}]() : `:""}exprs[${_}],`}else if(N==="###"){if(f.length)y.push(`()=>({${f}})`),f="";y.push(`exprs[${a.counter++}]`)}else E.push(d.attrs[C]);else if(j==="directive")je(N,z,o,a)}if(d.attrs=E,f.length)y.push(`()=>({${f}})`);a.exprs.push(`r.spread(${o},${y.length===1?`typeof ${y[0]} === "function" ? r.mergeProps(${y[0]}) : ${y[0]}`:`r.mergeProps(${y.join(",")})`},${w},${!!d.children.length})`)}else for(let y=0;y<d.attrs.length;y++){let{type:f,name:E,value:C}=d.attrs[y];if(f==="directive")je(E,C,o,a),d.attrs.splice(y,1),y--;else if(f==="attr"){if(C.includes("###"))d.attrs.splice(y,1),y--,c(d,o,E,C,w,v,a)}}if(a.path=o,a.first=!1,l(d,a),x)a.decl[0]=a.hasCustomElement||a.isImportNode?`const ${o} = r.untrack(() => document.importNode(tmpls[${$}].content.firstChild, true))`:`const ${o} = tmpls[${$}].content.firstChild.cloneNode(true)`}else if(d.type==="text"){let o=`_$el${r++}`;a.decl.push(`${o} = ${a.path}.${a.first?"firstChild":"nextSibling"}`),a.path=o,a.first=!1}else if(d.type==="comment"){let o=`_$el${r++}`;if(a.decl.push(`${o} = ${a.path}.${a.first?"firstChild":"nextSibling"}`),d.content==="#")if(a.multi)a.exprs.push(`r.insert(${a.parent}, exprs[${a.counter++}], ${o})`);else a.exprs.push(`r.insert(${a.parent}, exprs[${a.counter++}])`);a.path=o,a.first=!1}}function g(d,a){let o={path:"",decl:[],exprs:[],delegatedEvents:new Set,counter:0,first:!0,multi:!1,templateId:0,templateNodes:[]},x=r,$=d,w;if(d.length>1)d=[{type:"fragment",children:d}];if(d[0].name==="###")w=!0,m(d[0],o);else b(d[0],o);return e.delegateEvents(Array.from(o.delegatedEvents)),[[$].concat(o.templateNodes).map((y)=>on(y)),a("tmpls","exprs","r",o.decl.join(`,
 `)+`;
 `+o.exprs.join(`;
 `)+(w?"":`;
-return _$el${v};
-`))]}function x(f,...l){let o=ut.get(f)||s(f,{funcBuilder:n});return o[0].create(o,l,e)}return x}var P=gn({effect:j,style:Le,insert:He,untrack:H,spread:at,createComponent:xe,delegateEvents:Ne,classList:Me,mergeProps:$e,dynamicProperty:ot,setAttribute:se,setAttributeNS:Pe,addEventListener:Oe,Aliases:Ce,getPropAlias:Ae,Properties:Se,ChildProperties:Ee,DelegatedEvents:Te,SVGElements:st,SVGNamespace:Ie});{let e=document.createElement("style");e.textContent=`html, body, #app {
+return _$el${x};
+`))]}function p(d,...a){let o=ut.get(d)||s(d,{funcBuilder:n});return o[0].create(o,a,e)}return p}var T=bn({effect:F,style:Le,insert:He,untrack:H,spread:at,createComponent:we,delegateEvents:Ne,classList:Me,mergeProps:$e,dynamicProperty:ot,setAttribute:se,setAttributeNS:Oe,addEventListener:Pe,Aliases:Ce,getPropAlias:Ae,Properties:Se,ChildProperties:Ee,DelegatedEvents:Te,SVGElements:st,SVGNamespace:Ie});{let e=document.createElement("style");e.textContent=`html,
+body,
+#app {
   height: 100%;
   margin: 0;
 }
@@ -148,14 +150,13 @@ return _$el${v};
 .cfg-content {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  position: relative;
 }
 
 /* Settings wrapper */
 .settings-wrapper {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
   padding: var(--yaar-sp-4);
 }
@@ -190,10 +191,10 @@ return _$el${v};
 
 /* ── Sidebar view layout ── */
 .view-panel {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 .view-add-section {
@@ -247,11 +248,11 @@ return _$el${v};
 }
 
 .sidebar-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .sidebar-item.active {
-  background: rgba(88,166,255,0.08);
+  background: rgba(88, 166, 255, 0.08);
   border-left-color: var(--yaar-accent);
 }
 
@@ -408,13 +409,13 @@ return _$el${v};
   display: inline-block;
 }
 .item-badge-event {
-  background: rgba(88,166,255,0.1);
-  border-color: rgba(88,166,255,0.3);
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
   color: var(--yaar-accent);
 }
 .item-badge-enabled {
-  background: rgba(63,185,80,0.1);
-  border-color: rgba(63,185,80,0.3);
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.3);
   color: var(--yaar-success);
 }
 .item-badge-disabled {
@@ -455,21 +456,298 @@ return _$el${v};
     transform: translateY(0);
   }
 }
-`,document.head.appendChild(e)}var[ue,bt]=S("settings"),[_n,qn]=S({}),[fe,je]=S([]),[de,Ve]=S([]),[zn,Un]=S(!1),[yt,mt]=S(null);function L(e,t="success"){mt({msg:e,type:t}),setTimeout(()=>mt(null),3000)}var O=window.yaar;function mn(e){return e?.content?.[0]?.text??""}function bn(e){let t=mn(e);return t?JSON.parse(t):void 0}async function J(e){return bn(await O.read(e))}var{storage:Gn,app:Wn,notifications:Yn,windows:Kn}=O,X=O.invoke.bind(O),Jn=O.read.bind(O),Xn=O.list.bind(O),Zn=O.describe.bind(O),pe=O.delete.bind(O),Qn=O.subscribe.bind(O);function vt(){let[e,t]=S(""),[n,r]=S(!1);return B(async()=>{try{let i=await J("yaar://config/settings");t(JSON.stringify(i??{},null,2))}catch{t("{}")}}),P`
+
+/* ── Typed Settings UI ── */
+.s-section {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-3) var(--yaar-sp-4);
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.s-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--yaar-sp-3);
+  padding-bottom: var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.s-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: var(--yaar-sp-3);
+}
+
+.s-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.s-row:first-of-type {
+  padding-top: 0;
+}
+
+.s-row-toggle {
+  align-items: center;
+}
+
+.s-label {
+  font-size: 13px;
+  color: var(--yaar-text);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.s-hint {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  font-weight: 400;
+}
+
+.s-hint-block {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  margin-top: 2px;
+}
+
+.s-input {
+  font-size: 13px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+  padding: 5px 10px;
+  width: 180px;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.s-input:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+
+.s-select {
+  font-size: 13px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+  padding: 5px 10px;
+  width: 180px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.s-select:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+
+/* Toggle switch */
+.s-toggle {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--yaar-border);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.s-toggle.on {
+  background: var(--yaar-accent);
+}
+
+.s-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  display: block;
+}
+
+.s-toggle.on .s-toggle-thumb {
+  transform: translateX(18px);
+}
+
+/* Accent color swatches */
+.s-accent-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.s-accent-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+}
+
+.s-accent-swatch:hover {
+  transform: scale(1.15);
+}
+
+.s-accent-swatch.active {
+  border-color: var(--yaar-text);
+  transform: scale(1.1);
+}
+
+/* Extra/advanced section */
+.s-extra-toggle {
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s;
+}
+
+.s-extra-toggle:hover {
+  color: var(--yaar-text);
+}
+
+.s-extra-badge {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+}
+`,document.head.appendChild(e)}var[ue,bt]=k("settings"),[Un,Bn]=k({}),[de,Fe]=k([]),[fe,De]=k([]),[Gn,Wn]=k(!1),[yt,mt]=k(null);function L(e,t="success"){mt({msg:e,type:t}),setTimeout(()=>mt(null),3000)}var P=window.yaar;function yn(e){return e?.content?.[0]?.text??""}function vn(e){let t=yn(e);return t?JSON.parse(t):void 0}async function J(e){return vn(await P.read(e))}var{storage:Kn,app:Jn,notifications:Xn,windows:Zn}=P,X=P.invoke.bind(P),Qn=P.read.bind(P),er=P.list.bind(P),tr=P.describe.bind(P),pe=P.delete.bind(P),nr=P.subscribe.bind(P);var vt=["userName","language","onboardingCompleted","provider","wallpaper","accentColor","iconSize"],xt={blue:"#58a6ff",lavender:"#b392f0",mauve:"#d2a8ff",pink:"#f778ba",peach:"#ffa28b",yellow:"#e3b341",green:"#3fb950",red:"#f85149"},xn={"dark-blue":"\uD83C\uDF0C Dark Blue",midnight:"\uD83C\uDF03 Midnight",aurora:"\uD83C\uDF20 Aurora",ember:"\uD83D\uDD25 Ember",ocean:"\uD83C\uDF0A Ocean",moss:"\uD83C\uDF3F Moss"};function wt(){let[e,t]=k({}),[n,r]=k(""),[s,i]=k(!1),[c,l]=k(!1);B(async()=>{try{let p=await J("yaar://config/settings"),d=p?.settings??p??{};t(d);let a={};for(let[o,x]of Object.entries(d))if(!vt.includes(o))a[o]=x;if(Object.keys(a).length>0)r(JSON.stringify(a,null,2)),i(!0)}catch{t({})}});let u=(p)=>e()[p],m=(p,d)=>t((a)=>({...a,[p]:d})),b=async()=>{let p={},d=n().trim();if(d)try{p=JSON.parse(d)}catch{L("Invalid JSON in extra settings","error");return}l(!0);try{let a={};for(let o of vt)if(e()[o]!==void 0)a[o]=e()[o];await X("yaar://config/settings",{...a,...p}),L("Settings saved")}catch{L("Failed to save","error")}finally{l(!1)}},g=(p)=>T`
+    <button
+      class=${()=>`s-toggle ${u(p)?"on":""}`}
+      onClick=${()=>m(p,!u(p))}
+      role="switch"
+      aria-checked=${()=>String(!!u(p))}
+    >
+      <span class="s-toggle-thumb"></span>
+    </button>
+  `;return T`
     <div class="settings-wrapper">
-      <p class="cfg-section-title">⚙️ System Settings</p>
-      <textarea
-        class="settings-editor"
-        value=${e}
-        onInput=${(i)=>t(i.target.value)}
-      ></textarea>
-      <div style="margin-top: 12px; display: flex; gap: 8px;">
-        <button class="y-btn y-btn-primary" onClick=${async()=>{let i;try{i=JSON.parse(e())}catch{L("Invalid JSON","error");return}r(!0);try{await X("yaar://config/settings",i),L("Settings saved")}catch{L("Failed to save","error")}finally{r(!1)}}} disabled=${n}>
-          ${()=>n()?"Saving…":"Save Settings"}
+      <div class="s-section">
+        <div class="s-section-title">👤 Profile</div>
+        <div class="s-row">
+          <label class="s-label">Display Name</label>
+          <input class="s-input" type="text" placeholder="Your name"
+            value=${()=>String(u("userName")??"")}
+            onInput=${(p)=>m("userName",p.target.value)}
+          />
+        </div>
+        <div class="s-row">
+          <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
+          <input class="s-input" type="text" placeholder="en"
+            value=${()=>String(u("language")??"en")}
+            onInput=${(p)=>m("language",p.target.value)}
+          />
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-section-title">🎨 Appearance</div>
+        <div class="s-row">
+          <label class="s-label">Wallpaper</label>
+          <select class="s-select"
+            value=${()=>String(u("wallpaper")??"")}
+            onChange=${(p)=>m("wallpaper",p.target.value)}
+          >
+            ${Object.entries(xn).map(([p,d])=>T`<option value=${p}>${d}</option>`)}
+          </select>
+        </div>
+        <div class="s-row">
+          <label class="s-label">Accent Color</label>
+          <div class="s-accent-picker">
+            ${()=>Object.keys(xt).map((p)=>T`
+              <button
+                class=${()=>`s-accent-swatch ${u("accentColor")===p?"active":""}`}
+                style=${`background: ${xt[p]}`}
+                title=${p}
+                onClick=${()=>m("accentColor",p)}
+              ></button>
+            `)}
+          </div>
+        </div>
+        <div class="s-row">
+          <label class="s-label">Icon Size</label>
+          <select class="s-select"
+            value=${()=>String(u("iconSize")??"")}
+            onChange=${(p)=>m("iconSize",p.target.value)}
+          >
+            ${["small","medium","large"].map((p)=>T`<option value=${p}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`)}
+          </select>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-section-title">⚙️ System</div>
+        <div class="s-row">
+          <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
+          <select class="s-select"
+            value=${()=>String(u("provider")??"")}
+            onChange=${(p)=>m("provider",p.target.value)}
+          >
+            ${["auto","claude","codex"].map((p)=>T`<option value=${p}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`)}
+          </select>
+        </div>
+        <div class="s-row s-row-toggle">
+          <div>
+            <label class="s-label">Onboarding Completed</label>
+            <div class="s-hint-block">Mark first-run setup as done</div>
+          </div>
+          ${()=>g("onboardingCompleted")}
+        </div>
+      </div>
+
+      <div class="s-section">
+        <button class="s-extra-toggle" onClick=${()=>i((p)=>!p)}>
+          ${()=>s()?"▾":"▸"} Advanced / Extra Settings
+          ${()=>n().trim()?T`<span class="s-extra-badge">${()=>Object.keys(JSON.parse(n()||"{}")).length} keys</span>`:""}
+        </button>
+        ${()=>s()?T`
+          <textarea
+            class="settings-editor"
+            style="margin-top: 8px; min-height: 120px;"
+            value=${n}
+            onInput=${(p)=>r(p.target.value)}
+            placeholder="{}"
+          ></textarea>
+          <p class="s-hint-block" style="margin-top:4px;">Unknown or custom keys (raw JSON)</p>
+        `:""}
+      </div>
+
+      <div style="padding: 0 0 16px;">
+        <button class="y-btn y-btn-primary" onClick=${b} disabled=${c}>
+          ${()=>c()?"Saving…":"Save Settings"}
         </button>
       </div>
     </div>
-  `}function wt(){let[e,t]=S(""),[n,r]=S("\uD83D\uDD17"),[s,i]=S(""),[c,a]=S(!1),[u,b]=S(!1),[g,p]=S(null),x=async()=>{try{let o=await J("yaar://config/shortcuts");je(o?.shortcuts??[])}catch{je([])}};B(x);let f=async()=>{if(!e()||!s()){L("Fill all fields","error");return}a(!0);try{await X("yaar://config/shortcuts",{label:e(),icon:n(),target:s()}),t(""),r("\uD83D\uDD17"),i(""),b(!1),await x(),L("Shortcut added")}catch{L("Failed to add","error")}finally{a(!1)}},l=async(o)=>{try{await pe(`yaar://config/shortcuts/${o}`),p(null),await x(),L("Deleted")}catch{L("Failed to delete","error")}};return P`
+  `}function $t(){let[e,t]=k(""),[n,r]=k("\uD83D\uDD17"),[s,i]=k(""),[c,l]=k(!1),[u,m]=k(!1),[b,g]=k(null),p=async()=>{try{let o=await J("yaar://config/shortcuts");Fe(o?.shortcuts??[])}catch{Fe([])}};B(p);let d=async()=>{if(!e()||!s()){L("Fill all fields","error");return}l(!0);try{await X("yaar://config/shortcuts",{label:e(),icon:n(),target:s()}),t(""),r("\uD83D\uDD17"),i(""),m(!1),await p(),L("Shortcut added")}catch{L("Failed to add","error")}finally{l(!1)}},a=async(o)=>{try{await pe(`yaar://config/shortcuts/${o}`),g(null),await p(),L("Deleted")}catch{L("Failed to delete","error")}};return T`
     <div class="view-panel">
 
       <!-- Add section at top -->
@@ -477,9 +755,9 @@ return _$el${v};
         <div class="view-add-toggle">
           <span style="font-size:13px;font-weight:600;color:var(--yaar-text)">
             ⚡ Shortcuts
-            <span style="color:var(--yaar-text-muted);font-weight:400;margin-left:4px">${()=>`(${fe().length})`}</span>
+            <span style="color:var(--yaar-text-muted);font-weight:400;margin-left:4px">${()=>`(${de().length})`}</span>
           </span>
-          <button class="y-btn y-btn-sm y-btn-primary" onClick=${()=>b((o)=>!o)}>
+          <button class="y-btn y-btn-sm y-btn-primary" onClick=${()=>m((o)=>!o)}>
             ${()=>u()?"✕ Cancel":"+ New Shortcut"}
           </button>
         </div>
@@ -502,7 +780,7 @@ return _$el${v};
                   value=${s} onInput=${(o)=>i(o.target.value)} />
               </div>
             </div>
-            <button class="y-btn y-btn-primary" onClick=${f} disabled=${c}>
+            <button class="y-btn y-btn-primary" onClick=${d} disabled=${c}>
               ${()=>c()?"Adding…":"+ Add Shortcut"}
             </button>
           </div>
@@ -512,11 +790,11 @@ return _$el${v};
       <!-- Sidebar + Detail -->
       <div class="view-split">
         <div class="view-sidebar">
-          ${()=>fe().length===0?P`<div class="sidebar-empty">⚡ No shortcuts yet</div>`:null}
-          <${G} each=${fe}>${(o)=>P`
+          ${()=>de().length===0?T`<div class="sidebar-empty">⚡ No shortcuts yet</div>`:null}
+          <${G} each=${de}>${(o)=>T`
             <div
-              class=${()=>`sidebar-item${g()?.id===o.id?" active":""}`}
-              onClick=${()=>p(o)}
+              class=${()=>`sidebar-item${b()?.id===o.id?" active":""}`}
+              onClick=${()=>g(o)}
             >
               <span class="sidebar-item-icon">${()=>o.icon}</span>
               <span class="sidebar-item-label">${()=>o.label}</span>
@@ -525,12 +803,12 @@ return _$el${v};
         </div>
 
         <div class="view-detail">
-          ${()=>{let o=g();if(!o)return P`
+          ${()=>{let o=b();if(!o)return T`
               <div class="detail-empty">
                 <span class="detail-empty-icon">⚡</span>
                 <span>Select a shortcut to view details</span>
               </div>
-            `;return P`
+            `;return T`
               <div class="detail-card">
                 <div class="detail-header">
                   <div class="detail-big-icon">${o.icon}</div>
@@ -551,7 +829,7 @@ return _$el${v};
                   <button
                     class="y-btn"
                     style="color:var(--yaar-error);border-color:var(--yaar-error)"
-                    onClick=${()=>l(o.id)}
+                    onClick=${()=>a(o.id)}
                   >
                     🗑 Delete
                   </button>
@@ -561,7 +839,7 @@ return _$el${v};
         </div>
       </div>
     </div>
-  `}var xt=["tool_use","launch","app:open","app:close","window:create","window:close"];function yn(e){if(!e)return"(any)";let t=[];if(e.toolName)return`toolName: ${e.toolName}`;if(e.verb)t.push(e.verb);if(e.uri)t.push(e.uri);if(e.action){let n=Array.isArray(e.action)?e.action.join("|"):e.action;t.push(`→ ${n}`)}return t.join(" ")||"(any)"}function vn(e){if(!e)return"?";if(e.type==="os_action"&&e.payload){let t=e.payload,n=t.type;if(n==="toast.show")return`toast: ${t.message}`;if(n==="window.create")return`window: ${t.title||t.windowId}`;return n}return e.type}function $t(){let[e,t]=S(xt[0]),[n,r]=S(""),[s,i]=S(""),[c,a]=S(""),[u,b]=S(""),[g,p]=S("info"),[x,f]=S(!1),[l,o]=S(!1),[v,$]=S(null),w=async()=>{try{let d=await J("yaar://config/hooks");Ve(d?.hooks??[])}catch{Ve([])}};B(w);let y=async()=>{if(!n()||!u()){L("Fill Label and Toast Message","error");return}f(!0);try{let d={verb:"invoke"};if(s())d.uri=s();if(c())d.action=c();await X("yaar://config/hooks",{event:e(),label:n(),filter:d,action:{type:"os_action",payload:{type:"toast.show",id:`hook-${Date.now()}`,message:u(),variant:g()}}}),r(""),i(""),a(""),b(""),o(!1),await w(),L("Hook added")}catch{L("Failed to add","error")}finally{f(!1)}},m=async(d)=>{try{await pe(`yaar://config/hooks/${d}`),$(null),await w(),L("Hook deleted")}catch{L("Failed to delete","error")}};return P`
+  `}var kt=["tool_use","launch","app:open","app:close","window:create","window:close"];function wn(e){if(!e)return"(any)";let t=[];if(e.toolName)return`toolName: ${e.toolName}`;if(e.verb)t.push(e.verb);if(e.uri)t.push(e.uri);if(e.action){let n=Array.isArray(e.action)?e.action.join("|"):e.action;t.push(`→ ${n}`)}return t.join(" ")||"(any)"}function $n(e){if(!e)return"?";if(e.type==="os_action"&&e.payload){let t=e.payload,n=t.type;if(n==="toast.show")return`toast: ${t.message}`;if(n==="window.create")return`window: ${t.title||t.windowId}`;return n}return e.type}function St(){let[e,t]=k(kt[0]),[n,r]=k(""),[s,i]=k(""),[c,l]=k(""),[u,m]=k(""),[b,g]=k("info"),[p,d]=k(!1),[a,o]=k(!1),[x,$]=k(null),w=async()=>{try{let f=await J("yaar://config/hooks");De(f?.hooks??[])}catch{De([])}};B(w);let v=async()=>{if(!n()||!u()){L("Fill Label and Toast Message","error");return}d(!0);try{let f={verb:"invoke"};if(s())f.uri=s();if(c())f.action=c();await X("yaar://config/hooks",{event:e(),label:n(),filter:f,action:{type:"os_action",payload:{type:"toast.show",id:`hook-${Date.now()}`,message:u(),variant:b()}}}),r(""),i(""),l(""),m(""),o(!1),await w(),L("Hook added")}catch{L("Failed to add","error")}finally{d(!1)}},y=async(f)=>{try{await pe(`yaar://config/hooks/${f}`),$(null),await w(),L("Hook deleted")}catch{L("Failed to delete","error")}};return T`
     <div class="view-panel">
 
       <!-- Add section at top -->
@@ -569,54 +847,54 @@ return _$el${v};
         <div class="view-add-toggle">
           <span style="font-size:13px;font-weight:600;color:var(--yaar-text)">
             🪝 Hooks
-            <span style="color:var(--yaar-text-muted);font-weight:400;margin-left:4px">${()=>`(${de().length})`}</span>
+            <span style="color:var(--yaar-text-muted);font-weight:400;margin-left:4px">${()=>`(${fe().length})`}</span>
           </span>
-          <button class="y-btn y-btn-sm y-btn-primary" onClick=${()=>o((d)=>!d)}>
-            ${()=>l()?"✕ Cancel":"+ New Hook"}
+          <button class="y-btn y-btn-sm y-btn-primary" onClick=${()=>o((f)=>!f)}>
+            ${()=>a()?"✕ Cancel":"+ New Hook"}
           </button>
         </div>
-        <${re} when=${l}>
+        <${re} when=${a}>
           <div class="view-add-form">
             <div class="form-grid">
               <div>
                 <div class="field-label">Label</div>
                 <input class="y-input" style="width:100%" placeholder="My hook"
-                  value=${n} onInput=${(d)=>r(d.target.value)} />
+                  value=${n} onInput=${(f)=>r(f.target.value)} />
               </div>
               <div>
                 <div class="field-label">Event</div>
                 <select class="y-input" style="width:100%"
-                  onChange=${(d)=>t(d.target.value)}>
-                  <${G} each=${xt}>${(d)=>P`<option value=${d}>${d}</option>`}</>
+                  onChange=${(f)=>t(f.target.value)}>
+                  <${G} each=${kt}>${(f)=>T`<option value=${f}>${f}</option>`}</>
                 </select>
               </div>
               <div>
                 <div class="field-label">Filter URI <span style="opacity:.6">(optional)</span></div>
                 <input class="y-input" style="width:100%" placeholder="yaar://sandbox/*"
-                  value=${s} onInput=${(d)=>i(d.target.value)} />
+                  value=${s} onInput=${(f)=>i(f.target.value)} />
               </div>
               <div>
                 <div class="field-label">Filter Action <span style="opacity:.6">(optional)</span></div>
                 <input class="y-input" style="width:100%" placeholder="e.g. compile"
-                  value=${c} onInput=${(d)=>a(d.target.value)} />
+                  value=${c} onInput=${(f)=>l(f.target.value)} />
               </div>
               <div>
                 <div class="field-label">Toast Message</div>
                 <input class="y-input" style="width:100%" placeholder="Something happened!"
-                  value=${u} onInput=${(d)=>b(d.target.value)} />
+                  value=${u} onInput=${(f)=>m(f.target.value)} />
               </div>
               <div>
                 <div class="field-label">Toast Variant</div>
                 <select class="y-input" style="width:100%"
-                  onChange=${(d)=>p(d.target.value)}>
+                  onChange=${(f)=>g(f.target.value)}>
                   <option value="info">info</option>
                   <option value="success">success</option>
                   <option value="error">error</option>
                 </select>
               </div>
             </div>
-            <button class="y-btn y-btn-primary" onClick=${y} disabled=${x}>
-              ${()=>x()?"Adding…":"+ Add Hook"}
+            <button class="y-btn y-btn-primary" onClick=${v} disabled=${p}>
+              ${()=>p()?"Adding…":"+ Add Hook"}
             </button>
           </div>
         </>
@@ -625,58 +903,58 @@ return _$el${v};
       <!-- Sidebar + Detail -->
       <div class="view-split">
         <div class="view-sidebar">
-          ${()=>de().length===0?P`<div class="sidebar-empty">🪝 No hooks yet</div>`:null}
-          <${G} each=${de}>${(d)=>P`
+          ${()=>fe().length===0?T`<div class="sidebar-empty">🪝 No hooks yet</div>`:null}
+          <${G} each=${fe}>${(f)=>T`
             <div
-              class=${()=>`sidebar-item${v()?.id===d.id?" active":""}`}
-              onClick=${()=>$(d)}
+              class=${()=>`sidebar-item${x()?.id===f.id?" active":""}`}
+              onClick=${()=>$(f)}
             >
               <span class="sidebar-item-icon">🪝</span>
               <div style="flex:1;min-width:0">
-                <div class="sidebar-item-label">${()=>d.label}</div>
-                <div class="sidebar-item-sub">${()=>d.event}</div>
+                <div class="sidebar-item-label">${()=>f.label}</div>
+                <div class="sidebar-item-sub">${()=>f.event}</div>
               </div>
             </div>
           `}</>
         </div>
 
         <div class="view-detail">
-          ${()=>{let d=v();if(!d)return P`
+          ${()=>{let f=x();if(!f)return T`
               <div class="detail-empty">
                 <span class="detail-empty-icon">🪝</span>
                 <span>Select a hook to view details</span>
               </div>
-            `;return P`
+            `;return T`
               <div class="detail-card">
                 <div class="detail-header">
                   <div class="detail-big-icon">🪝</div>
                   <div style="flex:1;min-width:0">
-                    <div class="detail-title">${d.label}</div>
+                    <div class="detail-title">${f.label}</div>
                     <div class="detail-title-sub" style="display:flex;gap:6px;margin-top:4px">
-                      <span class="item-badge item-badge-event">${d.event}</span>
-                      <span class=${d.enabled?"item-badge item-badge-enabled":"item-badge item-badge-disabled"}>
-                        ${d.enabled?"✓ enabled":"○ disabled"}
+                      <span class="item-badge item-badge-event">${f.event}</span>
+                      <span class=${f.enabled?"item-badge item-badge-enabled":"item-badge item-badge-disabled"}>
+                        ${f.enabled?"✓ enabled":"○ disabled"}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div class="detail-field">
                   <div class="detail-field-label">Filter</div>
-                  <div class="detail-field-value">${yn(d.filter)}</div>
+                  <div class="detail-field-value">${wn(f.filter)}</div>
                 </div>
                 <div class="detail-field">
                   <div class="detail-field-label">Action</div>
-                  <div class="detail-field-value">${vn(d.action)}</div>
+                  <div class="detail-field-value">${$n(f.action)}</div>
                 </div>
                 <div class="detail-field">
                   <div class="detail-field-label">ID</div>
-                  <div class="detail-field-value" style="color:var(--yaar-text-muted);font-size:11px">${d.id}</div>
+                  <div class="detail-field-value" style="color:var(--yaar-text-muted);font-size:11px">${f.id}</div>
                 </div>
                 <div class="detail-actions">
                   <button
                     class="y-btn"
                     style="color:var(--yaar-error);border-color:var(--yaar-error)"
-                    onClick=${()=>m(d.id)}
+                    onClick=${()=>y(f.id)}
                   >
                     🗑 Delete
                   </button>
@@ -686,10 +964,10 @@ return _$el${v};
         </div>
       </div>
     </div>
-  `}var wn=[{id:"settings",label:"Settings",icon:"⚙️"},{id:"shortcuts",label:"Shortcuts",icon:"⚡"},{id:"hooks",label:"Hooks",icon:"\uD83E\uDE9D"}];function xn(){return P`
+  `}var kn=[{id:"settings",label:"Settings",icon:"⚙️"},{id:"shortcuts",label:"Shortcuts",icon:"⚡"},{id:"hooks",label:"Hooks",icon:"\uD83E\uDE9D"}];function Sn(){return T`
     <div class="cfg-layout">
       <div class="cfg-tabs">
-        ${wn.map((e)=>P`
+        ${kn.map((e)=>T`
           <button
             class=${()=>`cfg-tab${ue()===e.id?" active":""}`}
             onClick=${()=>bt(e.id)}
@@ -700,12 +978,12 @@ return _$el${v};
       </div>
 
       <div class="cfg-content">
-        ${()=>ue()==="settings"?vt():ue()==="shortcuts"?wt():$t()}
+        ${()=>ue()==="settings"?wt():ue()==="shortcuts"?$t():St()}
       </div>
 
-      ${()=>{let e=yt();if(!e)return null;return P`<div class=${`cfg-toast cfg-toast-${e.type}`}>${e.msg}</div>`}}
+      ${()=>{let e=yt();if(!e)return null;return T`<div class=${`cfg-toast cfg-toast-${e.type}`}>${e.msg}</div>`}}
     </div>
-  `}it(xn,document.getElementById("app"));
+  `}it(Sn,document.getElementById("app"));
 
 </script>
 </body>

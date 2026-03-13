@@ -93,6 +93,9 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         userName: settings.userName,
         language: settings.language,
         provider: settings.provider,
+        wallpaper: settings.wallpaper,
+        accentColor: settings.accentColor,
+        iconSize: settings.iconSize,
       });
     } catch {
       return errorResponse('Failed to list apps');

@@ -10,6 +10,9 @@ export interface Settings {
   userName: string;
   language: string;
   provider: 'auto' | 'claude' | 'codex';
+  wallpaper: string;
+  accentColor: string;
+  iconSize: 'small' | 'medium' | 'large';
 }
 
 const DEFAULTS: Settings = {
@@ -17,6 +20,9 @@ const DEFAULTS: Settings = {
   userName: '',
   language: 'en',
   provider: 'auto',
+  wallpaper: 'dark-blue',
+  accentColor: 'blue',
+  iconSize: 'medium',
 };
 
 export const LANGUAGE_CODES = [

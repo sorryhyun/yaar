@@ -105,21 +105,53 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
     i18next.changeLanguage(lang);
   },
 
-  setWallpaper: (value) =>
+  applyServerSettings: (settings) => {
+    set((state) => {
+      if (settings.userName !== undefined) state.userName = settings.userName;
+      if (settings.language !== undefined) state.language = settings.language;
+      if (settings.wallpaper !== undefined) state.wallpaper = settings.wallpaper;
+      if (settings.accentColor !== undefined) state.accentColor = settings.accentColor;
+      if (settings.iconSize !== undefined) state.iconSize = settings.iconSize;
+      saveSettings({ ...getAllSettings(get), ...settings } as PersistedSettings);
+    });
+    if (settings.language !== undefined) {
+      i18next.changeLanguage(settings.language);
+    }
+  },
+
+  setWallpaper: (value) => {
     set((state) => {
       state.wallpaper = value;
       saveSettings({ ...getAllSettings(get), wallpaper: value });
-    }),
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallpaper: value }),
+    }).catch(() => {});
+  },
 
-  setAccentColor: (key) =>
+  setAccentColor: (key) => {
     set((state) => {
       state.accentColor = key;
       saveSettings({ ...getAllSettings(get), accentColor: key });
-    }),
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accentColor: key }),
+    }).catch(() => {});
+  },
 
-  setIconSize: (size) =>
+  setIconSize: (size) => {
     set((state) => {
       state.iconSize = size;
       saveSettings({ ...getAllSettings(get), iconSize: size });
-    }),
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iconSize: size }),
+    }).catch(() => {});
+  },
 });

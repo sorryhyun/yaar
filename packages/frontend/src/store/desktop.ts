@@ -17,6 +17,7 @@ import type {
   DesktopCreateShortcutAction,
   DesktopRemoveShortcutAction,
   DesktopUpdateShortcutAction,
+  DesktopUpdateSettingsAction,
 } from '@yaar/shared';
 import { toWindowKey } from './helpers';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
@@ -159,6 +160,9 @@ export const useDesktopStore = create<DesktopStore>()(
           const sc = state.shortcuts.find((s) => s.id === shortcutId);
           if (sc) Object.assign(sc, updates);
         });
+      } else if (actionType === 'desktop.updateSettings') {
+        const { settings } = action as DesktopUpdateSettingsAction;
+        store.applyServerSettings(settings);
       }
     },
 
@@ -167,7 +171,8 @@ export const useDesktopStore = create<DesktopStore>()(
       const syncActions: OSAction[] = [];
       const asyncActions: OSAction[] = [];
       for (const action of actions) {
-        if (action.type === 'window.capture') asyncActions.push(action);
+        if (action.type === 'window.capture' || action.type === 'desktop.updateSettings')
+          asyncActions.push(action);
         else syncActions.push(action);
       }
 

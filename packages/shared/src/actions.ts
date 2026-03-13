@@ -274,6 +274,17 @@ export interface DesktopUpdateShortcutAction {
   updates: Partial<Omit<DesktopShortcut, 'id' | 'createdAt'>>;
 }
 
+export interface DesktopUpdateSettingsAction {
+  type: 'desktop.updateSettings';
+  settings: {
+    userName?: string;
+    language?: string;
+    wallpaper?: string;
+    accentColor?: string;
+    iconSize?: 'small' | 'medium' | 'large';
+  };
+}
+
 // ============ Union Types ============
 
 export type WindowAction =
@@ -306,7 +317,8 @@ export type DesktopAction =
   | DesktopRefreshAppsAction
   | DesktopCreateShortcutAction
   | DesktopRemoveShortcutAction
-  | DesktopUpdateShortcutAction;
+  | DesktopUpdateShortcutAction
+  | DesktopUpdateSettingsAction;
 
 export type OSAction =
   | WindowAction

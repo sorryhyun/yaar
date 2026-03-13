@@ -3,26 +3,60 @@ import html from '@bundled/solid-js/html';
 import { readJson, invoke } from '@bundled/yaar';
 import { showToast } from '../store';
 
+const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize'];
+
+const ACCENT_COLORS: Record<string, string> = {
+  blue: '#58a6ff', lavender: '#b392f0', mauve: '#d2a8ff',
+  pink: '#f778ba', peach: '#ffa28b', yellow: '#e3b341',
+  green: '#3fb950', red: '#f85149',
+};
+
+const WALLPAPER_LABELS: Record<string, string> = {
+  'dark-blue': '🌌 Dark Blue', midnight: '🌃 Midnight', aurora: '🌠 Aurora',
+  ember: '🔥 Ember', ocean: '🌊 Ocean', moss: '🌿 Moss',
+};
+
 export function SettingsView() {
-  const [raw, setRaw] = createSignal('');
+  const [data, setData] = createSignal<Record<string, unknown>>({});
+  const [extraRaw, setExtraRaw] = createSignal('');
+  const [showExtra, setShowExtra] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
 
   onMount(async () => {
     try {
-      const settings = await readJson<Record<string, unknown>>('yaar://config/settings');
-      setRaw(JSON.stringify(settings ?? {}, null, 2));
+      const raw = await readJson<Record<string, unknown>>('yaar://config/settings');
+      const s: Record<string, unknown> = (raw as { settings?: Record<string, unknown> })?.settings ?? raw ?? {};
+      setData(s);
+      const extra: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(s)) {
+        if (!KNOWN_KEYS.includes(k)) extra[k] = v;
+      }
+      if (Object.keys(extra).length > 0) {
+        setExtraRaw(JSON.stringify(extra, null, 2));
+        setShowExtra(true);
+      }
     } catch {
-      setRaw('{}');
+      setData({});
     }
   });
 
+  const get = (key: string) => data()[key];
+  const set = (key: string, value: unknown) => setData(d => ({ ...d, [key]: value }));
+
   const save = async () => {
-    let parsed: unknown;
-    try { parsed = JSON.parse(raw()); }
-    catch { showToast('Invalid JSON', 'error'); return; }
+    let extra: Record<string, unknown> = {};
+    const rawStr = extraRaw().trim();
+    if (rawStr) {
+      try { extra = JSON.parse(rawStr); }
+      catch { showToast('Invalid JSON in extra settings', 'error'); return; }
+    }
     setSaving(true);
     try {
-      await invoke('yaar://config/settings', parsed as Record<string, unknown>);
+      const payload: Record<string, unknown> = {};
+      for (const k of KNOWN_KEYS) {
+        if (data()[k] !== undefined) payload[k] = data()[k];
+      }
+      await invoke('yaar://config/settings', { ...payload, ...extra });
       showToast('Settings saved');
     } catch {
       showToast('Failed to save', 'error');
@@ -31,15 +65,116 @@ export function SettingsView() {
     }
   };
 
+  const Toggle = (key: string) => html`
+    <button
+      class=${() => `s-toggle ${get(key) ? 'on' : ''}`}
+      onClick=${() => set(key, !get(key))}
+      role="switch"
+      aria-checked=${() => String(!!get(key))}
+    >
+      <span class="s-toggle-thumb"></span>
+    </button>
+  `;
+
   return html`
     <div class="settings-wrapper">
-      <p class="cfg-section-title">⚙️ System Settings</p>
-      <textarea
-        class="settings-editor"
-        value=${raw}
-        onInput=${(e: InputEvent) => setRaw((e.target as HTMLTextAreaElement).value)}
-      ></textarea>
-      <div style="margin-top: 12px; display: flex; gap: 8px;">
+      <div class="s-section">
+        <div class="s-section-title">👤 Profile</div>
+        <div class="s-row">
+          <label class="s-label">Display Name</label>
+          <input class="s-input" type="text" placeholder="Your name"
+            value=${() => String(get('userName') ?? '')}
+            onInput=${(e: InputEvent) => set('userName', (e.target as HTMLInputElement).value)}
+          />
+        </div>
+        <div class="s-row">
+          <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
+          <input class="s-input" type="text" placeholder="en"
+            value=${() => String(get('language') ?? 'en')}
+            onInput=${(e: InputEvent) => set('language', (e.target as HTMLInputElement).value)}
+          />
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-section-title">🎨 Appearance</div>
+        <div class="s-row">
+          <label class="s-label">Wallpaper</label>
+          <select class="s-select"
+            value=${() => String(get('wallpaper') ?? '')}
+            onChange=${(e: Event) => set('wallpaper', (e.target as HTMLSelectElement).value)}
+          >
+            ${Object.entries(WALLPAPER_LABELS).map(([val, label]) =>
+              html`<option value=${val}>${label}</option>`
+            )}
+          </select>
+        </div>
+        <div class="s-row">
+          <label class="s-label">Accent Color</label>
+          <div class="s-accent-picker">
+            ${() => Object.keys(ACCENT_COLORS).map(color => html`
+              <button
+                class=${() => `s-accent-swatch ${get('accentColor') === color ? 'active' : ''}`}
+                style=${`background: ${ACCENT_COLORS[color]}`}
+                title=${color}
+                onClick=${() => set('accentColor', color)}
+              ></button>
+            `)}
+          </div>
+        </div>
+        <div class="s-row">
+          <label class="s-label">Icon Size</label>
+          <select class="s-select"
+            value=${() => String(get('iconSize') ?? '')}
+            onChange=${(e: Event) => set('iconSize', (e.target as HTMLSelectElement).value)}
+          >
+            ${['small', 'medium', 'large'].map(v =>
+              html`<option value=${v}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+            )}
+          </select>
+        </div>
+      </div>
+
+      <div class="s-section">
+        <div class="s-section-title">⚙️ System</div>
+        <div class="s-row">
+          <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
+          <select class="s-select"
+            value=${() => String(get('provider') ?? '')}
+            onChange=${(e: Event) => set('provider', (e.target as HTMLSelectElement).value)}
+          >
+            ${['auto', 'claude', 'codex'].map(v =>
+              html`<option value=${v}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+            )}
+          </select>
+        </div>
+        <div class="s-row s-row-toggle">
+          <div>
+            <label class="s-label">Onboarding Completed</label>
+            <div class="s-hint-block">Mark first-run setup as done</div>
+          </div>
+          ${() => Toggle('onboardingCompleted')}
+        </div>
+      </div>
+
+      <div class="s-section">
+        <button class="s-extra-toggle" onClick=${() => setShowExtra(v => !v)}>
+          ${() => showExtra() ? '▾' : '▸'} Advanced / Extra Settings
+          ${() => extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(JSON.parse(extraRaw() || '{}')).length} keys</span>` : ''}
+        </button>
+        ${() => showExtra() ? html`
+          <textarea
+            class="settings-editor"
+            style="margin-top: 8px; min-height: 120px;"
+            value=${extraRaw}
+            onInput=${(e: InputEvent) => setExtraRaw((e.target as HTMLTextAreaElement).value)}
+            placeholder="{}"
+          ></textarea>
+          <p class="s-hint-block" style="margin-top:4px;">Unknown or custom keys (raw JSON)</p>
+        ` : ''}
+      </div>
+
+      <div style="padding: 0 0 16px;">
         <button class="y-btn y-btn-primary" onClick=${save} disabled=${saving}>
           ${() => saving() ? 'Saving…' : 'Save Settings'}
         </button>

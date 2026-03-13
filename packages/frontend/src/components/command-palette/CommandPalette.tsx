@@ -7,7 +7,6 @@ import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
 import { RecentActionsPanel } from '../overlays/RecentActionsPanel';
 import { SessionsModal } from '../overlays/SessionsModal';
-import { SettingsModal } from '../overlays/SettingsModal';
 import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { apiFetch, isRemoteMode } from '@/lib/api';
@@ -43,8 +42,6 @@ export function CommandPalette() {
   const toggleRecentActionsPanel = useDesktopStore((state) => state.toggleRecentActionsPanel);
   const sessionsModalOpen = useDesktopStore((state) => state.sessionsModalOpen);
   const toggleSessionsModal = useDesktopStore((state) => state.toggleSessionsModal);
-  const settingsModalOpen = useDesktopStore((state) => state.settingsModalOpen);
-  const toggleSettingsModal = useDesktopStore((state) => state.toggleSettingsModal);
   const activeAgents = useDesktopStore((state) => state.activeAgents);
   const applyAction = useDesktopStore((state) => state.applyAction);
   const hasDrawing = useDesktopStore((state) => state.hasDrawing);
@@ -171,7 +168,6 @@ export function CommandPalette() {
     <>
       {recentActionsPanelOpen && <RecentActionsPanel />}
       {sessionsModalOpen && <SessionsModal />}
-      {settingsModalOpen && <SettingsModal />}
       {qrCodeOpen && <QrCodeModal onClose={() => setQrCodeOpen(false)} />}
       <div className={styles.container} data-expanded={isExpanded}>
         {hasDrawing && (
@@ -245,16 +241,6 @@ export function CommandPalette() {
               {/* Settings popover */}
               {settingsOpen && (
                 <div ref={settingsRef} className={styles.settingsPopover}>
-                  <button
-                    className={styles.settingsItem}
-                    onClick={() => {
-                      toggleSettingsModal();
-                      setSettingsOpen(false);
-                    }}
-                    data-active={settingsModalOpen}
-                  >
-                    {t('commandPalette.menu.settings')}
-                  </button>
                   {isRemoteMode() && (
                     <button
                       className={styles.settingsItem}

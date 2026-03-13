@@ -170,7 +170,6 @@ export type AgentsSlice = AgentsSliceState & AgentsSliceActions;
 export interface UiSliceState {
   contextMenu: ContextMenuState | null;
   sessionsModalOpen: boolean;
-  settingsModalOpen: boolean;
   restorePrompt: RestorePrompt | null;
   selectedWindowIds: string[];
 }
@@ -180,7 +179,6 @@ export interface UiSliceActions {
   showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
   hideContextMenu: () => void;
   toggleSessionsModal: () => void;
-  toggleSettingsModal: () => void;
   setRestorePrompt: (prompt: RestorePrompt | null) => void;
   dismissRestorePrompt: () => void;
   setSelectedWindows: (ids: string[]) => void;
@@ -200,6 +198,7 @@ export interface SettingsSliceActions {
   setUserName: (name: string) => void;
   setLanguage: (lang: string) => void;
   applyServerLanguage: (lang: string) => void;
+  applyServerSettings: (settings: Partial<SettingsSliceState>) => void;
   setWallpaper: (value: string) => void;
   setAccentColor: (key: string) => void;
   setIconSize: (size: 'small' | 'medium' | 'large') => void;

@@ -74,6 +74,14 @@ export function DesktopIcons({
           if (data.language && data.language !== useDesktopStore.getState().language) {
             useDesktopStore.getState().applyServerLanguage(data.language);
           }
+          // Apply appearance settings from server if present
+          const appearance: Record<string, string> = {};
+          if (data.wallpaper) appearance.wallpaper = data.wallpaper;
+          if (data.accentColor) appearance.accentColor = data.accentColor;
+          if (data.iconSize) appearance.iconSize = data.iconSize;
+          if (Object.keys(appearance).length > 0) {
+            useDesktopStore.getState().applyServerSettings(appearance);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch apps:', err);

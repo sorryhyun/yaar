@@ -352,3 +352,189 @@ body,
     transform: translateY(0);
   }
 }
+
+/* ── Typed Settings UI ── */
+.s-section {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-3) var(--yaar-sp-4);
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.s-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: var(--yaar-sp-3);
+  padding-bottom: var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.s-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  gap: var(--yaar-sp-3);
+}
+
+.s-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.s-row:first-of-type {
+  padding-top: 0;
+}
+
+.s-row-toggle {
+  align-items: center;
+}
+
+.s-label {
+  font-size: 13px;
+  color: var(--yaar-text);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.s-hint {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  font-weight: 400;
+}
+
+.s-hint-block {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  margin-top: 2px;
+}
+
+.s-input {
+  font-size: 13px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+  padding: 5px 10px;
+  width: 180px;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.s-input:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+
+.s-select {
+  font-size: 13px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+  padding: 5px 10px;
+  width: 180px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.s-select:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+
+/* Toggle switch */
+.s-toggle {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--yaar-border);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.s-toggle.on {
+  background: var(--yaar-accent);
+}
+
+.s-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  display: block;
+}
+
+.s-toggle.on .s-toggle-thumb {
+  transform: translateX(18px);
+}
+
+/* Accent color swatches */
+.s-accent-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.s-accent-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.1s,
+    border-color 0.1s;
+}
+
+.s-accent-swatch:hover {
+  transform: scale(1.15);
+}
+
+.s-accent-swatch.active {
+  border-color: var(--yaar-text);
+  transform: scale(1.1);
+}
+
+/* Extra/advanced section */
+.s-extra-toggle {
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s;
+}
+
+.s-extra-toggle:hover {
+  color: var(--yaar-text);
+}
+
+.s-extra-badge {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+}

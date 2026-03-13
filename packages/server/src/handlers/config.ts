@@ -25,6 +25,7 @@ import {
   isAllDomainsAllowed,
   isDomainAllowed,
   addAllowedDomain,
+  setAllowAllDomains,
 } from '../features/config/domains.js';
 import { ok, okJson, error, assertUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
@@ -58,7 +59,6 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
       type: 'object',
-      required: ['domain'],
       properties: {
         domain: {
           type: 'string',
@@ -67,6 +67,10 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         reason: {
           type: 'string',
           description: 'Optional reason for why this domain access is needed',
+        },
+        allowAll: {
+          type: 'boolean',
+          description: 'Toggle the "allow all domains" flag directly',
         },
       },
     },
@@ -77,8 +81,18 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      // Handle allowAll toggle directly (no permission dialog needed)
+      if (payload?.allowAll !== undefined) {
+        const value = Boolean(payload.allowAll);
+        const success = await setAllowAllDomains(value);
+        if (success) {
+          return ok(`"allow all domains" has been ${value ? 'enabled' : 'disabled'}.`);
+        }
+        return error('Failed to update "allow all domains" setting.');
+      }
+
       const domain = payload?.domain as string | undefined;
-      if (!domain) return error('"domain" is required.');
+      if (!domain) return error('"domain" or "allowAll" is required.');
 
       if (await isDomainAllowed(domain)) {
         return ok(`Domain "${domain}" is already in the allowed list.`);
@@ -107,13 +121,34 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
   // ── yaar://config/settings ──
   registry.register('yaar://config/settings', {
-    description: 'User preferences (language, onboarding, etc.).',
+    description:
+      'User preferences — name, language, provider, appearance (wallpaper, accentColor, iconSize).',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
       type: 'object',
       properties: {
-        language: { type: 'string', description: 'Language code' },
+        userName: { type: 'string', description: 'Display name' },
+        language: { type: 'string', description: 'Language code (e.g. en, ko, ja)' },
         onboardingCompleted: { type: 'boolean' },
+        provider: {
+          type: 'string',
+          enum: ['auto', 'claude', 'codex'],
+          description: 'AI provider (changes require page reload)',
+        },
+        wallpaper: {
+          type: 'string',
+          description:
+            'Wallpaper preset key (dark-blue, midnight, aurora, ember, ocean, moss) or CSS color',
+        },
+        accentColor: {
+          type: 'string',
+          description: 'Accent color key (blue, lavender, mauve, pink, peach, yellow, green, red)',
+        },
+        iconSize: {
+          type: 'string',
+          enum: ['small', 'medium', 'large'],
+          description: 'Desktop icon size',
+        },
       },
     },
 
