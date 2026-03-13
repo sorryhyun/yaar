@@ -499,7 +499,14 @@ export function buildBrowserUri(resource: string, subResource?: string): string 
 
 export type SessionResource = 'current';
 
-export type SessionSubKind = 'agents' | 'notifications' | 'prompts' | 'clipboard' | 'monitors';
+export type SessionSubKind =
+  | 'agents'
+  | 'notifications'
+  | 'prompts'
+  | 'clipboard'
+  | 'monitors'
+  | 'logs'
+  | 'context';
 
 export interface ParsedSessionUri {
   resource: 'current';
@@ -514,6 +521,8 @@ const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
   'prompts',
   'clipboard',
   'monitors',
+  'logs',
+  'context',
 ]);
 
 /**

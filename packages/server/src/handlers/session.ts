@@ -5,16 +5,20 @@
  *
  *   read('yaar://sessions/current')              → system info
  *   invoke('yaar://sessions/current', { ... })   → memorize
+ *   list('yaar://sessions/current/logs')          → list past session logs
+ *   read('yaar://sessions/current/logs/{id}')     → read a specific session transcript
+ *   read('yaar://sessions/current/context')       → current context tape summary
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
-import type { ResolvedUri } from './uri-resolve.js';
+import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJson, error, getActiveSession } from './utils.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { getSessionId, getMonitorId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { parseWindowKey } from '@yaar/shared';
+import { listSessions, readSessionTranscript } from '../logging/session-reader.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -134,6 +138,90 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       return okJson({
         currentMonitorId: getMonitorId() ?? '0',
         monitors,
+      });
+    },
+  });
+
+  // ── yaar://sessions/current/logs — list past sessions or read a specific one ──
+  registry.register('yaar://sessions/current/logs', {
+    description:
+      'Session logs. List to see all past sessions, or read a specific session transcript.',
+    verbs: ['describe', 'list', 'read'],
+
+    async list(): Promise<VerbResult> {
+      const sessions = await listSessions();
+      return okJson({
+        count: sessions.length,
+        sessions: sessions.map((s) => ({
+          sessionId: s.sessionId,
+          createdAt: s.metadata.createdAt,
+          provider: s.metadata.provider,
+          lastActivity: s.metadata.lastActivity,
+          agentCount: Object.keys(s.metadata.agents).length,
+        })),
+      });
+    },
+
+    async read(): Promise<VerbResult> {
+      // Reading the collection itself returns a summary
+      const sessions = await listSessions();
+      const pool = getActiveSession().getPool();
+      const currentLogId = pool?.getLogSessionId();
+      return okJson({
+        currentLogSessionId: currentLogId ?? null,
+        totalSessions: sessions.length,
+        latest: sessions.slice(0, 5).map((s) => ({
+          sessionId: s.sessionId,
+          createdAt: s.metadata.createdAt,
+          provider: s.metadata.provider,
+        })),
+      });
+    },
+  });
+
+  // ── yaar://sessions/current/logs/* — read a specific past session transcript ──
+  registry.register('yaar://sessions/current/logs/*', {
+    description: 'Read a specific session transcript by log session ID.',
+    verbs: ['describe', 'read'],
+
+    async read(resolved: ResolvedUri): Promise<VerbResult> {
+      const sessionResolved = resolved as ResolvedSession;
+      const logId = sessionResolved.id;
+      if (!logId) return error('Session log ID is required. Use list to see available sessions.');
+
+      const transcript = await readSessionTranscript(logId);
+      if (transcript === null) return error(`Session log "${logId}" not found.`);
+
+      return ok(transcript);
+    },
+  });
+
+  // ── yaar://sessions/current/context — current context tape summary ──
+  registry.register('yaar://sessions/current/context', {
+    description:
+      'Current session context tape. Read for a summary of messages tracked by the context system.',
+    verbs: ['describe', 'read'],
+
+    async read(): Promise<VerbResult> {
+      const session = getActiveSession();
+      const pool = session.getPool();
+      if (!pool) return error('Session not initialized.');
+
+      const messages = pool.contextTape.getMessages();
+      const windowMessages = pool.contextTape.getMessages({ includeWindows: true });
+      const mainMessages = pool.contextTape.getMessages({ includeWindows: false });
+
+      return okJson({
+        totalMessages: messages.length,
+        mainMessages: mainMessages.length,
+        windowMessages: windowMessages.length - mainMessages.length,
+        contextTapeSize: pool.contextTape.length,
+        recentMessages: mainMessages.slice(-10).map((m) => ({
+          role: m.role,
+          source: m.source,
+          contentPreview:
+            typeof m.content === 'string' ? m.content.slice(0, 200) : '[non-text content]',
+        })),
       });
     },
   });

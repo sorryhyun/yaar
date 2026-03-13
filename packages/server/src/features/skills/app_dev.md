@@ -2,16 +2,9 @@
 
 ## Workflow
 
-To create a new app from scratch:
-1. `invoke('yaar://sandbox/new/src/main.ts', { action: 'write', content: '...' })` — creates a new sandbox, returns `{ sandboxId }`
-2. `invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: 'my-app' })` — auto-compiles, installs to `apps/`, appears on desktop
-
-To edit an existing app:
-1. `invoke('yaar://sandbox/new', { action: 'clone', uri: 'yaar://apps/{appId}' })` — copies source into a new sandbox, returns sandboxId
-2. Edit with `invoke('yaar://sandbox/{sandboxId}/path', { action: 'edit', old_string: '...', new_string: '...' })` or `action: 'write'` for full replacement
-3. `invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...' })` back to the same appId
-
-Optional: use `invoke('yaar://sandbox/{sandboxId}', { action: 'compile' })` separately if you want a preview URL before deploying.
+**New app:** write to `yaar://sandbox/new/src/main.ts` → deploy with `action: 'deploy'`
+**Edit app:** clone with `action: 'clone', uri: 'yaar://apps/{appId}'` → edit files → deploy back to the same appId
+**Preview:** use `action: 'compile'` separately to get a preview URL before deploying
 
 ## Sandbox Structure
 
@@ -309,135 +302,19 @@ const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 
 ### `window.yaar` global (legacy)
 
-Also available without imports. Each method returns `Promise<{ content: Array<{ type, text?, data?, mimeType? }>, isError? }>`.
+Legacy `window.yaar.*` methods are available without imports but prefer `@bundled/yaar`. Allowed URI prefixes: `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403. Apps use `self` as the appId — the server resolves it to the real appId from the iframe token.
 
-**Allowed URI prefixes:** `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403.
+### Storage Scopes
 
-Apps use `self` as the appId — the server resolves it to the real appId from the iframe token, so apps can only access their own namespace.
-
-**Error handling:** Methods throw on network errors or when the server returns an error. Always use `.catch()` or try/catch.
-
-### Storage (`yaar://storage/` and `yaar://apps/self/storage/`)
-
-Two storage scopes available:
+Two storage scopes available via `@bundled/yaar` or `window.yaar`:
 - `yaar://storage/` — global persistent storage (`storage/` on disk)
 - `yaar://apps/self/storage/` — app-scoped storage (`storage/apps/{appId}/` on disk)
 
-```ts
-// Write
-await yaar.invoke('yaar://storage/scores.json', {
-  action: 'write',
-  content: JSON.stringify(data),
-});
-
-// Read (throws on 404 — always handle missing files)
-const result = await yaar.read('yaar://storage/scores.json').catch(() => null);
-const data = result ? JSON.parse(result.content[0].text) : defaults;
-
-// List directory
-const files = await yaar.list('yaar://storage/');
-
-// Delete
-await yaar.delete('yaar://storage/old-data.json');
-
-// App-scoped (only your app's files):
-await yaar.invoke('yaar://apps/self/storage/prefs.json', { action: 'write', content: '{}' });
-```
-
-For binary content (images, etc.) in `<img src>`, read via verb and create a blob URL:
-```ts
-const result = await yaar.read('yaar://storage/photos/cat.png');
-const base64 = result.content[0].text;
-const blob = await fetch('data:image/png;base64,' + base64).then(r => r.blob());
-const imgUrl = URL.createObjectURL(blob);
-```
-
-### Windows (`yaar://windows`) — Read-Only
-
-Read other windows' content. Apps cannot modify other windows.
-
-```ts
-// List all windows
-const result = await yaar.list('yaar://windows');
-// → content[0].text: [{ id: "win-notes", title: "Notes", renderer: "markdown" }, ...]
-
-// Read a window's content
-const result = await yaar.read('yaar://windows/win-notes');
-// → content[0].text: { id: "win-notes", title: "Notes", content: "# Hello..." }
-```
-
-### Browser (`yaar://browser/`)
-
-Headless Chrome automation.
-
-```ts
-// Open a page in headless Chrome
-const result = await yaar.invoke('yaar://browser/my-tab', {
-  action: 'open',
-  url: 'https://example.com',
-});
-
-// Read the current browser tab content
-const page = await yaar.read('yaar://browser/my-tab');
-
-// List open browser sessions
-const sessions = await yaar.list('yaar://browser');
-```
-
-### Legacy APIs
-
-`window.yaar.windows.*` still works but is internally reimplemented over the verb API. Prefer verb URIs for new code.
-
-| Legacy | Verb equivalent |
-|--------|-----------------|
-| `yaar.windows.read(id)` | `yaar.read('yaar://windows/' + id)` |
-| `yaar.windows.list()` | `yaar.list('yaar://windows')` |
-
-`window.yaar.storage.*` has been removed. Use `yaar://storage/` or `yaar://apps/self/storage/` verbs directly.
+Always handle missing files (read throws on 404). For binary content in `<img src>`, read the base64 result and create a blob URL.
 
 ## HTTP Requests
 
-Iframe apps are subject to CORS. Use `yaar.invoke('yaar://http', ...)` to proxy requests through the server:
-
-```ts
-const result = await yaar.invoke('yaar://http', {
-  url: 'https://example.com/api/data',
-  method: 'GET',                            // optional, default GET
-  headers: { 'Accept': 'application/json' }, // optional, forwarded to target
-  body: '...',                              // optional, for POST/PUT/PATCH
-});
-const data = JSON.parse(result.content[0].text);
-// → { ok: true, status: 200, statusText: "OK", headers: {...}, body: "..." }
-// Binary responses: body is base64, bodyEncoding: "base64"
-```
-
-- First request to a new domain triggers a user permission dialog
-- SSRF protection (blocks internal networks)
-- Max response: 10MB, timeout: 30s
-
-### Headless Chrome (`yaar://browser`)
-
-For JS-rendered pages (SPAs, dynamic content), use headless Chrome via the browser verb:
-
-```ts
-// Open a page
-await yaar.invoke('yaar://browser/my-tab', { action: 'open', url: 'https://example.com/spa-page' });
-
-// Read extracted content
-const result = await yaar.read('yaar://browser/my-tab');
-```
-
-- Requires Chrome/Edge on the server
-- Same domain allowlist as HTTP proxy
-
-### When to Use Which
-
-| Scenario | Use |
-|----------|-----|
-| REST API calls, JSON endpoints | `yaar.invoke('yaar://http', ...)` |
-| Server-rendered HTML scraping | `yaar.invoke('yaar://http', ...)` + `DOMParser` |
-| JS-rendered SPA content | `yaar://browser` |
-| Page screenshots / visual capture | `yaar://browser` with screenshot action |
+Iframe `fetch()` is subject to CORS. Use `invoke('yaar://http', { url, method?, headers?, body? })` to proxy requests through the server. Response: `{ ok, status, statusText, headers, body }`. Binary responses have `bodyEncoding: "base64"`. First request to a new domain triggers a user permission dialog. For JS-rendered pages, use `yaar://browser` instead.
 
 ## Deploy
 
