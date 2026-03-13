@@ -4,21 +4,7 @@
 
 `yaar://` is a unified URI scheme for addressing all internal resources: content (apps, storage, sandbox), windows, configuration, browser instances, and session state (agents, notifications, prompts, monitors).
 
-Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `read`, `list`, `invoke`, `delete`) replace individual MCP tools.
-
----
-
-## Design Principles
-
-1. **URI = identity, not behavior.** A URI identifies a stable thing (a window, a config key, a browser page). Actions like "click" or "navigate" are not resources — they belong in the `invoke` payload, not the URI path.
-
-2. **Logical resources, not raw files.** `yaar://config/settings` maps to the settings domain model with validation — not to `config/settings.json` as arbitrary file I/O.
-
-3. **Session-relative root.** `yaar://` is scoped to the current session.
-
-4. **Actions live in the payload.** If something can only be `invoke`d but never `read` or `list`ed, it's not a resource — it's an action on a resource. Pass it as `{ action: 'navigate', ... }` in the invoke payload.
-
-5. **Session-scoped resources live under `yaar://sessions/`.** Agents, notifications, prompts, clipboard, and monitors are facets of the current session — not independent top-level namespaces.
+Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `read`, `list`, `invoke`, `delete`) operate on them.
 
 ---
 
@@ -85,50 +71,9 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 
 ---
 
-## Implementation Status
-
-### Done
-
-- **URI parsing and building** for all seven authorities (`apps`, `storage`, `sandbox`, `windows`, `monitors`, `config`, `browser`, `sessions`) in `@yaar/shared`
-- **Session sub-resource parsing** — `parseSessionUri()` handles deep paths (`yaar://sessions/current/agents/{id}/interrupt`) via `SessionSubKind` discriminant
-- **Server-side resolution** (`resolveUri`, `resolveResourceUri`) mapping URIs to filesystem paths, window addresses, and typed metadata
-- **Content resolution** — `resolveContentUri()` maps content URIs to API paths, used by window creation and file-serving
-- **Window URIs** — `buildWindowUri` used in window list/lifecycle tools; window resource URIs for app-protocol state/commands
-- **File-operation URIs** — `parseFileUri`/`buildFileUri` used by basic MCP tools (read, write, edit, list, delete)
-- **Legacy compat** — `storage://` and `sandbox://` legacy schemes still accepted by `parseFileUri`
-
-### Verb Layer (Done — All Domains)
-
-- **ResourceRegistry** (`handlers/uri-registry.ts`) — central registry matching URI patterns to handlers (exact > prefix > wildcard priority)
-- **5 verb MCP tools** (`handlers/index.ts`) — `describe`, `read`, `list`, `invoke`, `delete` registered as the `verbs` MCP server
-- **Domain handlers** — all in `handlers/`: `config.ts`, `storage.ts`, `sandbox.ts`, `window.ts`, `agents.ts`, `user.ts`, `session.ts`, `apps.ts`, `browser.ts`, `skills.ts`
-- Legacy tools have been removed — verb mode is now the only mode
-
----
-
-## Strengths
-
-1. **Dramatic tool reduction.** ~30 individual MCP tools collapse into 5 generic verbs. The AI learns one interaction pattern instead of memorizing tool-specific schemas — less prompt surface, fewer mistakes.
-
-2. **Self-describing API.** `describe(uri)` gives the AI runtime discovery of any resource's capabilities and payload schema. No need to hardcode tool documentation in the system prompt for every domain.
-
-3. **Uniform addressing.** Every resource — config, windows, browser pages, agents, storage — uses the same `yaar://` scheme. The AI can reason about resources compositionally (e.g., "read this, then invoke that") without switching between unrelated tool APIs.
-
-4. **Clean migration.** Domain handlers wrap existing business logic functions — no logic duplication, no rewrite. Each domain migrated independently.
-
-5. **Pattern-based extensibility.** Adding a new resource type means registering a handler with a URI pattern. No changes to the verb tools, MCP server setup, or system prompt. The registry's priority system (exact > prefix > wildcard) handles specificity automatically.
-
-6. **Composable for agents.** A single verb vocabulary makes it trivial for agents to chain operations: `describe` to discover, `list` to enumerate, `read` to inspect, `invoke` to act, `delete` to clean up. This is particularly powerful for multi-step workflows where the agent navigates an unfamiliar resource tree.
-
-7. **Testable in isolation.** The `ResourceRegistry` is a pure data structure with no MCP dependency — handlers can be unit-tested without spinning up an MCP server.
-
-8. **Session-scoped coherence.** Agents, notifications, prompts, clipboard, and monitors are all sub-resources of `yaar://sessions/current/` — reflecting the reality that they're facets of a single session, not independent systems. This reduces the top-level namespace count (9 → 7) and makes the URI tree self-documenting.
-
----
-
 ## Verb Layer
 
-Five verbs. The URI identifies the resource, the verb determines the operation, and the payload carries action-specific data.
+Five verbs. The URI identifies the resource, the verb determines the operation.
 
 | Verb | Semantics | Returns |
 |------|-----------|---------
@@ -139,23 +84,6 @@ Five verbs. The URI identifies the resource, the verb determines the operation, 
 | `delete` | Remove a resource | `{ deleted: true }` |
 
 `invoke` covers both data mutation (idempotent merges like config updates) and side-effecting actions (browser navigate, agent interrupt). The URI identifies *what* is being acted on; the payload's `action` field (when needed) specifies *how*.
-
-### The Action Rule
-
-**If you can meaningfully `read` it, it belongs in the URI path. If you can only `invoke` it, it's a payload action.**
-
-Resources like `yaar://config/settings` or `yaar://browser/0` are things you can read, describe, and invoke. But "navigate" or "click" are actions *on* the browser resource — not resources themselves. They go in the invoke payload:
-
-```
-invoke('yaar://browser/0', { action: 'navigate', url: '...' })
-invoke('yaar://sessions/current/agents/agent-1', { action: 'interrupt' })
-```
-
-Sub-resources that are genuinely addressable (like window state keys) stay in the URI:
-
-```
-read('yaar://windows/win-1/state/theme')     -- this IS a readable resource
-```
 
 ### Examples
 
@@ -191,7 +119,7 @@ describe('yaar://browser/0')                            -> { verbs: ['read', 'in
 
 ### MCP Surface
 
-One MCP tool per verb, replacing the ~30 individual tools:
+One MCP tool per verb:
 
 | Tool Name | Parameters |
 |-----------|------------|
@@ -200,8 +128,6 @@ One MCP tool per verb, replacing the ~30 individual tools:
 | `list` | `{ uri }` |
 | `invoke` | `{ uri, payload? }` |
 | `delete` | `{ uri }` |
-
-The AI prompt includes the URI space reference (same table as above), so the model knows which URIs exist. `describe` serves as runtime discovery — the AI can call `describe('yaar://browser/0')` to see available actions and their schemas.
 
 ### ResourceRegistry
 
@@ -251,7 +177,7 @@ class ResourceRegistry {
 
 ### Handler Registration
 
-Each domain registers its handlers during server startup. Handlers live alongside existing tool code — no rewrite needed, just wiring.
+Each domain registers its handlers during server startup.
 
 ```typescript
 // handlers/config.ts
@@ -301,58 +227,20 @@ registry.register('yaar://sessions/current/agents/*', {
 
 ### Window Content
 
-The AI uses bare window IDs in the `create` tool's `uri` parameter, and `yaar://` URIs for content:
+Window `content` fields use `yaar://` URIs. The server resolves them to API paths before sending to the frontend.
 
 ```
-create({
-  uri: "excel-lite",
-  title: "Excel Lite",
-  renderer: "iframe",
-  content: "yaar://apps/excel-lite"
-})
-```
-
-The server resolves the content URI to an API path before sending the action to the frontend, and scopes the window to the agent's monitor automatically. Storage files work the same way:
-
-```
-create({
-  uri: "report",
-  title: "Q4 Report",
-  renderer: "iframe",
-  content: "yaar://storage/reports/q4.pdf"
-})
+create({ uri: "excel-lite", title: "Excel Lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ uri: "report", title: "Q4 Report", renderer: "iframe", content: "yaar://storage/reports/q4.pdf" })
 ```
 
 ### Desktop Shortcuts
 
-Shortcuts use yaar:// URIs as their `target`:
-
-```json
-{
-  "id": "app-excel-lite",
-  "label": "Excel Lite",
-  "icon": "📊",
-  "target": "yaar://apps/excel-lite",
-  "createdAt": 1709600000000
-}
-```
-
-The URI itself communicates what the shortcut points to — `extractAppId()` parses app identity from the target.
+Shortcuts use `yaar://` URIs as their `target`. `extractAppId()` parses app identity from the target.
 
 ### App Discovery API
 
-The `/api/apps` endpoint returns `run` fields as yaar:// URIs:
-
-```json
-{
-  "id": "excel-lite",
-  "name": "Excel Lite",
-  "run": "yaar://apps/excel-lite",
-  ...
-}
-```
-
-Apps with custom `run` paths in `app.json` (e.g., `"run": "index.html"`) get `yaar://apps/{appId}/index.html`. Absolute paths (starting with `/`) are returned as-is.
+`GET /api/apps` returns `run` fields as `yaar://` URIs. Apps with custom `run` paths in `app.json` (e.g., `"run": "index.html"`) get `yaar://apps/{appId}/index.html`. Absolute paths are returned as-is.
 
 ---
 
@@ -428,27 +316,6 @@ extractAppId('yaar://apps/excel-lite')
 | `packages/server/src/handlers/index.ts` | 5 verb MCP tool definitions (describe, read, list, invoke, delete) |
 | `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
 | `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
-
----
-
-## Migration Status
-
-Migration is complete. All domains use the verb layer exclusively — legacy tools have been removed.
-
-| # | Domain | Verb Handlers |
-|---|--------|---------------|
-| 1 | `storage/sandbox` | `yaar://storage/*`, `yaar://sandbox/*` |
-| 2 | `windows` | `yaar://windows/*` |
-| 3 | `config` | `yaar://config/*` (settings, hooks, shortcuts, mounts, app) |
-| 4 | `user` | `yaar://sessions/current/notifications`, `yaar://sessions/current/prompts` |
-| 5 | `apps` | `yaar://apps/*` |
-| 6 | `system` | `yaar://sessions/current` |
-| 7 | `browser` | `yaar://browser/*` (action-dispatched invoke) |
-| 8 | `agents` | `yaar://sessions/current/agents/*` (list, read, interrupt) |
-
-Named system tools that remain alongside verbs: `reload_cached`, `list_reload_options`. HTTP requests now use `invoke('yaar://http', { url, method?, headers?, body? })`.
-
-Domain allowlisting is now via `invoke('yaar://config/domains', { domain })`.
 
 ---
 
