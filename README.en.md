@@ -15,6 +15,18 @@ User actions like button clicks, drawing, and typing are sent not to a program, 
 
 ![YAAR Desktop](./docs/image.png)
 
+Just tell the AI what you want — it builds apps, visualizes data, and connects to external services, all within a sandboxed, type-safe environment.
+
+<details>
+<summary><b>Safe · Capable · Typed · Discoverable</b></summary>
+
+- **Safe** — Code runs in a `node:vm` sandbox; external requests go through a domain allowlist.
+- **Capable** — 50+ bundled libraries, CDP browser automation, single-HTML builds.
+- **Typed** — Every AI ↔ UI message is validated by Zod v4 schemas.
+- **Discoverable** — One folder = one app. One `SKILL.md` = the AI knows how to use it.
+
+</details>
+
 
 ## Quick Start
 
@@ -49,7 +61,15 @@ Browser (UI) ←→ Local Server ←→ Claude Code / Codex (AI)
 
 You're essentially having a 1:1 conversation with Claude Code or Codex, but interacting through a UI instead of plain text.
 
-On startup, the program creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** Place any files you want to provide in these directories.
+Only 7 tools are exposed to the AI — 5 URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) and 2 system tools. All resource access is routed through `yaar://` URIs, so adding apps or handlers never increases the tool count. This keeps the initial system prompt under 8K tokens.
+
+```
+invoke('yaar://storage/data.csv')       # Read a file
+invoke('yaar://windows/main', { ... })  # Create a window
+invoke('yaar://apps/github-manager')    # Load an app skill
+```
+
+On startup, the program creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
 
 
 ## Key Features

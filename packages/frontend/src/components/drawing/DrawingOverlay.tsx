@@ -30,15 +30,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+let suppressContextMenuFlag = false;
+
 function suppressNextContextMenu() {
-  document.addEventListener(
-    'contextmenu',
-    (cm) => {
-      cm.preventDefault();
-      cm.stopPropagation();
-    },
-    { capture: true, once: true },
-  );
+  suppressContextMenuFlag = true;
+}
+
+function consumeSuppressFlag(): boolean {
+  if (suppressContextMenuFlag) {
+    suppressContextMenuFlag = false;
+    return true;
+  }
+  return false;
 }
 
 export function DrawingOverlay() {
@@ -317,6 +320,16 @@ export function DrawingOverlay() {
 
     const onMouseMove = (e: MouseEvent) => {
       if (!rightDrawingRef.current || !rightStartRef.current) return;
+      // Only draw while right button is physically held (bitmask 2).
+      // Guards against browser quirks where mouseup/contextmenu ordering
+      // leaves rightDrawingRef stale after the button is released.
+      if (!(e.buttons & 2)) {
+        rightDrawingRef.current = false;
+        rightStartRef.current = null;
+        rightMovedRef.current = false;
+        rightLastPointRef.current = null;
+        return;
+      }
       const dx = e.clientX - rightStartRef.current.x;
       const dy = e.clientY - rightStartRef.current.y;
       if (!rightMovedRef.current && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD)
@@ -356,7 +369,7 @@ export function DrawingOverlay() {
     // for a simple right-click (no drag).
     const onContextMenu = (e: MouseEvent) => {
       // After a drag: block both native and React context menus
-      if (rightMovedRef.current || rightDragEndedRef.current) {
+      if (rightMovedRef.current || rightDragEndedRef.current || consumeSuppressFlag()) {
         e.preventDefault();
         e.stopPropagation();
         rightDragEndedRef.current = false;

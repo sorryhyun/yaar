@@ -15,6 +15,18 @@
 
 ![YAAR Desktop](./docs/image.png)
 
+말만 하면 AI가 앱을 만들고, 데이터를 시각화하고, 외부 서비스와 연동합니다 — 격리된 샌드박스 위에서, 타입이 검증된 프로토콜로, 안전하게.
+
+<details>
+<summary><b>Safe · Capable · Typed · Discoverable</b></summary>
+
+- **Safe** — 코드는 `node:vm` 샌드박스에서 실행되고, 외부 통신은 허용 목록 기반입니다.
+- **Capable** — 50+ 번들 라이브러리, CDP 브라우저 자동화, 단일 HTML 빌드.
+- **Typed** — AI ↔ UI 사이 모든 통신이 Zod v4 스키마로 검증됩니다.
+- **Discoverable** — 폴더 하나 = 앱 하나. `SKILL.md` 하나면 AI가 사용법을 압니다.
+
+</details>
+
 
 ## 빠른 시작
 
@@ -49,7 +61,15 @@ make dev          # 브라우저가 자동으로 열립니다
 
 사실상 Claude Code나 Codex와 1:1 대화를 하는 것이지만, 텍스트가 아닌 UI 상에서 인터랙션을 할 수 있게 한다는 컨셉입니다.
 
-실행 시 자동으로 `storage/, config/, apps/, session_logs/, sandbox/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 파일을 제공하고 싶다면 해당 폴더에 넣어주세요.
+AI에게 노출되는 도구는 단 7개입니다 — 5개의 URI 동사(`describe`, `read`, `list`, `invoke`, `delete`)와 2개의 시스템 도구. 모든 리소스 접근은 `yaar://` URI로 라우팅되므로, 앱이나 핸들러를 추가해도 도구 수가 늘지 않습니다. 덕분에 초기 시스템 프롬프트가 8K 토큰 이하로 유지됩니다.
+
+```
+invoke('yaar://storage/data.csv')       # 파일 읽기
+invoke('yaar://windows/main', { ... })  # 윈도우 생성
+invoke('yaar://apps/github-manager')    # 앱 스킬 로드
+```
+
+실행 시 자동으로 `storage/, config/, apps/, session_logs/, sandbox/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
 
 
 ## 주요 기능
