@@ -38,6 +38,9 @@ export const ok = (text: string) => ({
   content: [{ type: 'text' as const, text }],
 });
 
+/** Create a successful JSON result (pretty-printed) */
+export const okJson = (data: unknown) => ok(JSON.stringify(data, null, 2));
+
 /** Create an error text result (sets isError: true) */
 export const error = (text: string) => ({
   content: [{ type: 'text' as const, text }],

@@ -13,8 +13,7 @@ import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-regist
 import type { ResolvedUri } from './uri-resolve.js';
 import { ok, error, extractIdFromUri } from './utils.js';
 import { installApp } from './apps.js';
-
-const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
+import { MARKET_URL } from '../config.js';
 
 interface MarketApp {
   id: string;

@@ -5,6 +5,8 @@
  * Uses a waiting queue with optional timeout for graceful backpressure.
  */
 
+import { getEnvInt } from '../config.js';
+
 interface WaitingRequest {
   resolve: () => void;
   reject: (error: Error) => void;
@@ -17,7 +19,7 @@ export class AgentLimiter {
   private waitingQueue: WaitingRequest[] = [];
 
   constructor(maxAgents?: number) {
-    this.maxAgents = maxAgents ?? parseInt(process.env.MAX_AGENTS ?? '10', 10);
+    this.maxAgents = maxAgents ?? getEnvInt('MAX_AGENTS', 10);
   }
 
   /**

@@ -4,6 +4,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { detectSnapZone, getSnapBounds } from '@/lib/snapZones';
+import { registerMouseTracking } from '@/lib/mouseTracking';
 import type { WindowBounds } from '@yaar/shared';
 import type { WindowModel } from '@/types/state';
 import {
@@ -108,8 +109,7 @@ export function useDragWindow({
         }
       };
 
-      const entry = { move: handleMouseMove, up: handleMouseUp };
-      function handleMouseUp(e: MouseEvent) {
+      const handleMouseUp = (e: MouseEvent) => {
         setIsDragging(false);
         document.documentElement.classList.remove(DRAGGING_CSS_CLASS);
 
@@ -123,14 +123,9 @@ export function useDragWindow({
         }
 
         useDesktopStore.getState().queueBoundsUpdate(windowId);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        listenersRef.current = listenersRef.current.filter((e) => e !== entry);
-      }
-
-      listenersRef.current.push(entry);
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+        cleanup();
+      };
+      const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);
     },
     [windowId, bounds.x, bounds.y, variant, frameless, listenersRef],
   );

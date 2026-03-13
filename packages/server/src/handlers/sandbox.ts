@@ -13,7 +13,7 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { getSandboxPath } from '../lib/compiler/index.js';
 import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
-import { ok, error, validateRelativePath } from './utils.js';
+import { ok, okJson, error, validateRelativePath } from './utils.js';
 import { doCompile, doTypecheck } from '../features/dev/compile.js';
 import { doDeploy, doClone } from '../features/dev/deploy.js';
 import { prependNote, applyEdit } from './utils.js';
@@ -233,7 +233,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           if (pathErr) return error(pathErr);
         }
         const files = await listFiles(targetDir, sandboxPath);
-        return ok(JSON.stringify({ sandboxId: parsed.sandboxId, files }, null, 2));
+        return okJson({ sandboxId: parsed.sandboxId, files });
       } catch {
         return error(`Sandbox not found: ${parsed.sandboxId}`);
       }
@@ -268,17 +268,11 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         try {
           await mkdir(dirname(fullPath), { recursive: true });
           await Bun.write(fullPath, payload.content);
-          return ok(
-            JSON.stringify(
-              {
-                sandboxId,
-                path: parsed.path,
-                message: `Written to yaar://sandbox/${sandboxId}/${parsed.path}`,
-              },
-              null,
-              2,
-            ),
-          );
+          return okJson({
+            sandboxId,
+            path: parsed.path,
+            message: `Written to yaar://sandbox/${sandboxId}/${parsed.path}`,
+          });
         } catch (err) {
           return error(err instanceof Error ? err.message : 'Unknown error');
         }
@@ -306,17 +300,11 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         if ('error' in edited) return error(edited.error);
 
         await Bun.write(fullPath, edited.result);
-        return ok(
-          JSON.stringify(
-            {
-              sandboxId: parsed.sandboxId,
-              path: parsed.path,
-              message: `Edited yaar://sandbox/${parsed.sandboxId}/${parsed.path}`,
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          sandboxId: parsed.sandboxId,
+          path: parsed.path,
+          message: `Edited yaar://sandbox/${parsed.sandboxId}/${parsed.path}`,
+        });
       }
 
       if (action === 'compile') {
@@ -325,17 +313,11 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         }
         const result = await doCompile(parsed.sandboxId, { title: payload.title as string });
         if (!result.success) return error(result.error);
-        return ok(
-          JSON.stringify(
-            {
-              success: true,
-              previewUrl: result.previewUrl,
-              message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          success: true,
+          previewUrl: result.previewUrl,
+          message: 'Compilation successful. Use create with renderer: "iframe" to preview.',
+        });
       }
 
       if (action === 'typecheck') {
@@ -361,19 +343,13 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           permissions: payload.permissions as string[] | undefined,
         });
         if (!result.success) return error(result.error);
-        return ok(
-          JSON.stringify(
-            {
-              success: true,
-              appId: result.appId,
-              name: result.name,
-              icon: result.icon,
-              message: `App "${result.name}" deployed! It will appear on the desktop.`,
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          success: true,
+          appId: result.appId,
+          name: result.name,
+          icon: result.icon,
+          message: `App "${result.name}" deployed! It will appear on the desktop.`,
+        });
       }
 
       if (action === 'clone') {
@@ -386,18 +362,12 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         const appId = sourceParsed.path.split('/')[0];
         const result = await doClone(appId);
         if (!result.success) return error(result.error);
-        return ok(
-          JSON.stringify(
-            {
-              sandboxId: result.sandboxId,
-              appId: result.appId,
-              files: result.files,
-              message: `Cloned "${result.appId}" into sandbox ${result.sandboxId}. Use yaar://sandbox/${result.sandboxId}/src/main.ts to edit.`,
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          sandboxId: result.sandboxId,
+          appId: result.appId,
+          files: result.files,
+          message: `Cloned "${result.appId}" into sandbox ${result.sandboxId}. Use yaar://sandbox/${result.sandboxId}/src/main.ts to edit.`,
+        });
       }
 
       return error(

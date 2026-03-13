@@ -6,6 +6,11 @@ import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 
+/** Read an integer from an environment variable with a default. */
+export function getEnvInt(key: string, defaultValue: number): number {
+  return parseInt(process.env[key] ?? String(defaultValue), 10);
+}
+
 // Detect if running as bundled executable
 // __YAAR_BUNDLED is injected at compile time via bun build --define
 declare const __YAAR_BUNDLED: boolean | undefined;
@@ -96,11 +101,11 @@ export const MIME_TYPES: Record<string, string> = {
 
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
-const DEFAULT_PORT = parseInt(process.env.PORT ?? '8000', 10);
+const DEFAULT_PORT = getEnvInt('PORT', 8000);
 
 /** Current server port (may differ from default if the default was in use). */
 export function getPort(): number {
-  return parseInt(process.env.PORT ?? String(DEFAULT_PORT), 10);
+  return getEnvInt('PORT', DEFAULT_PORT);
 }
 
 /** Update the port after the server has bound to a free port. */
@@ -113,16 +118,13 @@ export const PORT = DEFAULT_PORT;
 
 export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
+/** Marketplace base URL. */
+export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
+
 // ── Monitor budget limits ────────────────────────────────────────────
-export const MONITOR_MAX_CONCURRENT = parseInt(process.env.MONITOR_MAX_CONCURRENT ?? '2', 10);
-export const MONITOR_MAX_ACTIONS_PER_MIN = parseInt(
-  process.env.MONITOR_MAX_ACTIONS_PER_MIN ?? '30',
-  10,
-);
-export const MONITOR_MAX_OUTPUT_PER_MIN = parseInt(
-  process.env.MONITOR_MAX_OUTPUT_PER_MIN ?? '50000',
-  10,
-);
+export const MONITOR_MAX_CONCURRENT = getEnvInt('MONITOR_MAX_CONCURRENT', 2);
+export const MONITOR_MAX_ACTIONS_PER_MIN = getEnvInt('MONITOR_MAX_ACTIONS_PER_MIN', 30);
+export const MONITOR_MAX_OUTPUT_PER_MIN = getEnvInt('MONITOR_MAX_OUTPUT_PER_MIN', 50000);
 
 /**
  * Resolve the absolute path to the claude binary (exe/binary only, not .cmd wrappers).
@@ -211,7 +213,7 @@ export function getCodexBin(): string {
 // ── Codex app-server configuration ────────────────────────────────────
 
 /** Default port for the codex app-server WebSocket listener. */
-export const CODEX_WS_PORT = parseInt(process.env.CODEX_WS_PORT ?? '4510', 10);
+export const CODEX_WS_PORT = getEnvInt('CODEX_WS_PORT', 4510);
 
 /** Get the codex app-server WebSocket port (env override or default). */
 export function getCodexWsPort(): number {

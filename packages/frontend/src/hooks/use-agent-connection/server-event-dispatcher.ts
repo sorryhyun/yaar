@@ -42,6 +42,10 @@ export interface ServerEventDispatchHandlers {
   decrementSubagentCount: (agentId: string) => void;
 }
 
+function extractAgentId(message: ServerEvent): string {
+  return (message as { agentId?: string }).agentId || 'default';
+}
+
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
   const shouldLog =
     message.type === ServerEventType.ACTIONS ||
@@ -96,14 +100,14 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       }
       break;
     case ServerEventType.AGENT_THINKING: {
-      const agentId = (message as { agentId?: string }).agentId || 'default';
+      const agentId = extractAgentId(message);
       const monitorId = (message as { monitorId?: string }).monitorId;
       handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...');
       handlers.updateCliStreaming(agentId, message.content ?? '', 'thinking', monitorId);
       break;
     }
     case ServerEventType.AGENT_RESPONSE: {
-      const agentId = (message as { agentId?: string }).agentId || 'default';
+      const agentId = extractAgentId(message);
       const isComplete = (message as { isComplete?: boolean }).isComplete;
       const monitorId = (message as { monitorId?: string }).monitorId;
       if (isComplete) {
@@ -116,7 +120,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       break;
     }
     case ServerEventType.TOOL_PROGRESS: {
-      const agentId = (message as { agentId?: string }).agentId || 'default';
+      const agentId = extractAgentId(message);
       const toolName = (message as { toolName?: string }).toolName || 'tool';
       const status = (message as { status?: string }).status;
       const toolInput = (message as { toolInput?: unknown }).toolInput;

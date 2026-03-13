@@ -26,7 +26,7 @@ import {
   isDomainAllowed,
   addAllowedDomain,
 } from '../features/config/domains.js';
-import { ok, error, assertUri } from './utils.js';
+import { ok, okJson, error, assertUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 export function registerConfigHandlers(registry: ResourceRegistry): void {
@@ -37,7 +37,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async list() {
       const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app', 'domains'];
-      return ok(JSON.stringify({ sections: sections.map((s) => `yaar://config/${s}`) }, null, 2));
+      return okJson({ sections: sections.map((s) => `yaar://config/${s}`) });
     },
 
     async read() {
@@ -47,7 +47,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         handleGetShortcuts(),
         handleGetMounts(),
       ]);
-      return ok(JSON.stringify({ ...hooks, ...settings, ...shortcuts, ...mounts }, null, 2));
+      return okJson({ ...hooks, ...settings, ...shortcuts, ...mounts });
     },
   });
 
@@ -73,7 +73,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const [domains, allowAll] = await Promise.all([readAllowedDomains(), isAllDomainsAllowed()]);
-      return ok(JSON.stringify({ allow_all_domains: allowAll, allowed_domains: domains }, null, 2));
+      return okJson({ allow_all_domains: allowAll, allowed_domains: domains });
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -119,7 +119,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetSettings();
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -149,7 +149,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetHooks();
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -175,7 +175,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       const hook = hookId ? hooks.find((h) => h.id === hookId) : null;
       if (!hook)
         return { content: [{ type: 'text', text: `Hook "${hookId}" not found.` }], isError: true };
-      return ok(JSON.stringify(hook, null, 2));
+      return okJson(hook);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
@@ -202,7 +202,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetShortcuts();
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -240,7 +240,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetMounts();
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -277,7 +277,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetApp();
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -302,7 +302,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
       const data = await handleGetApp(resolved.id);
-      return ok(JSON.stringify(data, null, 2));
+      return okJson(data);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

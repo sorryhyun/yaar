@@ -13,7 +13,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, extractIdFromUri } from './utils.js';
+import { ok, okJson, error, extractIdFromUri } from './utils.js';
 
 /** Known topic names — kept in sync with skills/index.ts. */
 const TOPIC_NAMES = ['app_dev', 'sandbox', 'components', 'host_api', 'app_protocol', 'config'];
@@ -32,7 +32,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
-      return ok(JSON.stringify({ topics: TOPIC_NAMES }, null, 2));
+      return okJson({ topics: TOPIC_NAMES });
     },
   });
 

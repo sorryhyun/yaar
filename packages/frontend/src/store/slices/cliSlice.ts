@@ -2,6 +2,7 @@
  * CLI slice - manages terminal-like CLI mode state.
  */
 import type { SliceCreator, CliSlice } from '../types';
+import { generateId, capArray } from '../helpers';
 
 const MAX_CLI_ENTRIES = 5000;
 
@@ -27,14 +28,11 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
       }
       state.cliHistory[monitorId].push({
         ...entry,
-        id: `cli-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: generateId('cli'),
         monitorId,
         timestamp: Date.now(),
       });
-      // FIFO cap
-      if (state.cliHistory[monitorId].length > MAX_CLI_ENTRIES) {
-        state.cliHistory[monitorId] = state.cliHistory[monitorId].slice(-MAX_CLI_ENTRIES);
-      }
+      state.cliHistory[monitorId] = capArray(state.cliHistory[monitorId], MAX_CLI_ENTRIES);
     }),
 
   updateCliStreaming: (agentId, content, type, monitorId) =>
@@ -60,12 +58,10 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
         }
         state.cliHistory[monitorId].push({
           ...streaming,
-          id: `cli-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          id: generateId('cli'),
           timestamp: Date.now(),
         });
-        if (state.cliHistory[monitorId].length > MAX_CLI_ENTRIES) {
-          state.cliHistory[monitorId] = state.cliHistory[monitorId].slice(-MAX_CLI_ENTRIES);
-        }
+        state.cliHistory[monitorId] = capArray(state.cliHistory[monitorId], MAX_CLI_ENTRIES);
       }
       delete state.cliStreaming[agentId];
     }),

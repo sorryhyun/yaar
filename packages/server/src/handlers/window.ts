@@ -27,6 +27,7 @@ import { actionEmitter } from '../session/action-emitter.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import {
   ok,
+  okJson,
   error,
   getActiveSession,
   validateRelativePath,
@@ -83,13 +84,11 @@ export function registerWindowHandlers(
           renderer: win.content.renderer,
           locked: win.locked,
           lockedBy: win.lockedBy,
-          ...(win.appProtocol ? { appProtocol: true } : {}),
-          ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
-          ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
+          ...formatWindowFlags(win),
         };
       });
 
-      return ok(JSON.stringify(windowList, null, 2));
+      return okJson(windowList);
     },
   };
   registry.register('yaar://windows', listHandler);
@@ -168,24 +167,18 @@ export function registerWindowHandlers(
             return parsed?.monitorId === monitorId;
           });
 
-        return ok(
-          JSON.stringify(
-            {
-              monitorId,
-              hasMainAgent: pool.hasMainAgent(monitorId),
-              windows: windows.map((w) => ({
-                id: w.id,
-                title: w.title,
-              })),
-              stats: {
-                totalAgents: stats.totalAgents,
-                mainQueueSize: stats.mainQueueSize,
-              },
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          monitorId,
+          hasMainAgent: pool.hasMainAgent(monitorId),
+          windows: windows.map((w) => ({
+            id: w.id,
+            title: w.title,
+          })),
+          stats: {
+            totalAgents: stats.totalAgents,
+            mainQueueSize: stats.mainQueueSize,
+          },
+        });
       }
 
       // Window resource: yaar://windows/{windowId}
@@ -204,12 +197,10 @@ export function registerWindowHandlers(
         size: { width: win.bounds.w, height: win.bounds.h },
         locked: win.locked,
         lockedBy: win.lockedBy,
-        ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
-        ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
-        ...(win.appProtocol ? { appProtocol: true } : {}),
+        ...formatWindowFlags(win),
       };
 
-      return ok(JSON.stringify(windowInfo, null, 2));
+      return okJson(windowInfo);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -266,6 +257,48 @@ export function registerWindowHandlers(
 }
 
 // ── Helpers ──
+
+/** Check that a window exists, returning an error result if not. */
+function requireWindowExists(
+  windowState: WindowStateRegistry,
+  windowId: string,
+): VerbResult | null {
+  if (!windowState.hasWindow(windowId)) return error(`Window "${windowId}" does not exist.`);
+  return null;
+}
+
+/** Check that a window is not locked by another agent. Returns error if locked. */
+function requireWindowUnlocked(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  agentId: string | undefined,
+): VerbResult | null {
+  const lockedBy = windowState.isLockedByOther(windowId, agentId);
+  if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+  return null;
+}
+
+/** Ensure app protocol is ready, waiting if needed. Returns error on timeout. */
+async function requireAppReady(
+  windowState: WindowStateRegistry,
+  windowId: string,
+): Promise<VerbResult | null> {
+  const win = windowState.getWindow(windowId);
+  if (win && !win.appProtocol) {
+    const ready = await actionEmitter.waitForAppReady(windowId, 5000);
+    if (!ready) return error('App did not register with the App Protocol (timeout).');
+  }
+  return null;
+}
+
+/** Extract common window info fields (appProtocol, variant, dockEdge). */
+function formatWindowFlags(win: { appProtocol?: boolean; variant?: string; dockEdge?: string }) {
+  return {
+    ...(win.appProtocol ? { appProtocol: true } : {}),
+    ...(win.variant && win.variant !== 'standard' ? { variant: win.variant } : {}),
+    ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
+  };
+}
 
 /** Extract OS Action overrides from app metadata. */
 function getAppMetaOverrides(
@@ -438,11 +471,12 @@ async function handleUpdate(
   windowId: string,
   payload: Record<string, unknown>,
 ): Promise<VerbResult> {
-  if (!windowState.hasWindow(windowId)) return error(`Window "${windowId}" does not exist.`);
+  const existsErr = requireWindowExists(windowState, windowId);
+  if (existsErr) return existsErr;
 
   const agentId = getAgentId();
-  const lockedBy = windowState.isLockedByOther(windowId, agentId);
-  if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+  const lockErr = requireWindowUnlocked(windowState, windowId, agentId);
+  if (lockErr) return lockErr;
 
   const opType = payload.operation as string;
   if (!opType) return error('"operation" is required (append, prepend, replace, insertAt, clear).');
@@ -493,11 +527,12 @@ async function handleUpdateComponent(
   windowId: string,
   payload: Record<string, unknown>,
 ): Promise<VerbResult> {
-  if (!windowState.hasWindow(windowId)) return error(`Window "${windowId}" does not exist.`);
+  const existsErr = requireWindowExists(windowState, windowId);
+  if (existsErr) return existsErr;
 
   const agentId = getAgentId();
-  const lockedBy = windowState.isLockedByOther(windowId, agentId);
-  if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+  const lockErr = requireWindowUnlocked(windowState, windowId, agentId);
+  if (lockErr) return lockErr;
 
   if (!payload.components) return error('"components" is required for update_component.');
 
@@ -529,7 +564,8 @@ async function handleManage(
   windowId: string,
   action: 'close' | 'lock' | 'unlock',
 ): Promise<VerbResult> {
-  if (!windowState.hasWindow(windowId)) return error(`Window "${windowId}" does not exist.`);
+  const existsErr = requireWindowExists(windowState, windowId);
+  if (existsErr) return existsErr;
 
   const agentId = getAgentId();
   const lockedBy = windowState.isLockedByOther(windowId, agentId);
@@ -571,11 +607,8 @@ async function handleAppQuery(
   if (!win) return error(`Window "${windowId}" not found.`);
   if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
 
-  // Ensure app protocol is ready
-  if (!win.appProtocol) {
-    const ready = await actionEmitter.waitForAppReady(windowId, 5000);
-    if (!ready) return error('App did not register with the App Protocol (timeout).');
-  }
+  const readyErr = await requireAppReady(windowState, windowId);
+  if (readyErr) return readyErr;
 
   const stateKey = (payload.stateKey as string) || 'manifest';
 
@@ -589,7 +622,7 @@ async function handleAppQuery(
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
     if (response.manifest) enrichManifestWithUris(response.manifest, win.id);
-    return ok(JSON.stringify(response.manifest, null, 2));
+    return okJson(response.manifest);
   }
 
   const response = await actionEmitter.emitAppProtocolRequest(
@@ -600,7 +633,7 @@ async function handleAppQuery(
   if (!response) return error('App did not respond (timeout).');
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  return ok(JSON.stringify(response.data, null, 2));
+  return okJson(response.data);
 }
 
 async function handleAppCommand(
@@ -614,10 +647,8 @@ async function handleAppCommand(
 
   if (!payload.command) return error('"command" is required for app_command.');
 
-  if (!win.appProtocol) {
-    const ready = await actionEmitter.waitForAppReady(windowId, 5000);
-    if (!ready) return error('App did not register with the App Protocol (timeout).');
-  }
+  const readyErr = await requireAppReady(windowState, windowId);
+  if (readyErr) return readyErr;
 
   const request: AppProtocolRequest = {
     kind: 'command',
@@ -630,5 +661,5 @@ async function handleAppCommand(
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   windowState.recordAppCommand(windowId, request);
-  return ok(JSON.stringify(response.result, null, 2));
+  return okJson(response.result);
 }

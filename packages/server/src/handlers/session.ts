@@ -9,7 +9,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, getActiveSession } from './utils.js';
+import { ok, okJson, error, getActiveSession } from './utils.js';
 import { configRead, configWrite } from '../storage/storage-manager.js';
 import { getSessionId, getMonitorId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
@@ -30,46 +30,34 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const stats = pool?.getStats();
       const browserPool = getBrowserPool();
 
-      return ok(
-        JSON.stringify(
-          {
-            sessionId: sid ?? session?.sessionId ?? null,
-            platform: process.platform,
-            uptime: Math.floor(process.uptime()),
-            agents: stats
-              ? {
-                  total: stats.totalAgents,
-                  idle: stats.idleAgents,
-                  busy: stats.busyAgents,
-                }
-              : null,
-            windows: session?.windowState.listWindows().length ?? 0,
-            browsers: browserPool.getAllSessions().size,
-          },
-          null,
-          2,
-        ),
-      );
+      return okJson({
+        sessionId: sid ?? session?.sessionId ?? null,
+        platform: process.platform,
+        uptime: Math.floor(process.uptime()),
+        agents: stats
+          ? {
+              total: stats.totalAgents,
+              idle: stats.idleAgents,
+              busy: stats.busyAgents,
+            }
+          : null,
+        windows: session?.windowState.listWindows().length ?? 0,
+        browsers: browserPool.getAllSessions().size,
+      });
     },
 
     async list(): Promise<VerbResult> {
-      return ok(
-        JSON.stringify(
-          {
-            namespaces: [
-              'yaar://apps/',
-              'yaar://storage/',
-              'yaar://sandbox/',
-              'yaar://windows/',
-              'yaar://config/',
-              'yaar://browser/',
-              'yaar://sessions/',
-            ],
-          },
-          null,
-          2,
-        ),
-      );
+      return okJson({
+        namespaces: [
+          'yaar://apps/',
+          'yaar://storage/',
+          'yaar://sandbox/',
+          'yaar://windows/',
+          'yaar://config/',
+          'yaar://browser/',
+          'yaar://sessions/',
+        ],
+      });
     },
   });
 
@@ -95,7 +83,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         memoryUsage: process.memoryUsage(),
         cwd: process.cwd(),
       };
-      return ok(JSON.stringify(info, null, 2));
+      return okJson(info);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -143,16 +131,10 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         };
       });
 
-      return ok(
-        JSON.stringify(
-          {
-            currentMonitorId: getMonitorId() ?? '0',
-            monitors,
-          },
-          null,
-          2,
-        ),
-      );
+      return okJson({
+        currentMonitorId: getMonitorId() ?? '0',
+        monitors,
+      });
     },
   });
 }

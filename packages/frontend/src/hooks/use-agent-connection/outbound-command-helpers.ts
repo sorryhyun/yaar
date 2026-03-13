@@ -1,8 +1,10 @@
+import { generateId } from '@/store/helpers';
+
 export function generateMessageId(): string {
-  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  return generateId('msg');
 }
 
 export function generateActionId(parallel?: boolean): string | undefined {
   if (!parallel) return undefined;
-  return `action-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  return generateId('action');
 }

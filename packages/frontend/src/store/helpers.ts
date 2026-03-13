@@ -3,6 +3,16 @@
  */
 import type { DebugSliceState, DesktopStore } from './types';
 
+/** Generate a unique ID with a prefix (e.g. generateId('cli') → 'cli-lx3k9f2-a7b3m'). */
+export function generateId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Cap an array to a maximum length, keeping the most recent entries. */
+export function capArray<T>(arr: T[], max: number): T[] {
+  return arr.length > max ? arr.slice(-max) : arr;
+}
+
 /**
  * Create a monitor-scoped window key for the store.
  * Format: "monitorId/rawWindowId"
@@ -46,15 +56,13 @@ export function emptyContentByRenderer(renderer: string): unknown {
  */
 export function addDebugLogEntry(state: DebugSliceState, type: string, data: unknown): void {
   state.debugLog.push({
-    id: `debug-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: generateId('debug'),
     timestamp: Date.now(),
     direction: 'in',
     type,
     data,
   });
-  if (state.debugLog.length > 100) {
-    state.debugLog = state.debugLog.slice(-100);
-  }
+  state.debugLog = capArray(state.debugLog, 100);
 }
 
 /**

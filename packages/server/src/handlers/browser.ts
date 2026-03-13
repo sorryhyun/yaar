@@ -16,7 +16,7 @@ import type { ResolvedUri } from './uri-resolve.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { isDomainAllowed, extractDomain } from '../features/config/domains.js';
-import { ok, error, okWithImages, assertUri, requireAction } from './utils.js';
+import { ok, okJson, error, okWithImages, assertUri, requireAction } from './utils.js';
 import { resolveSession, formatPageState, findMainContent } from '../features/browser/shared.js';
 
 export async function registerBrowserHandlers(registry: ResourceRegistry): Promise<void> {
@@ -37,7 +37,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
         url: s.currentUrl,
         title: s.currentTitle || '(no title)',
       }));
-      return ok(JSON.stringify(items, null, 2));
+      return okJson(items);
     },
   });
 
@@ -96,17 +96,11 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
       assertUri(resolved, 'browser');
       try {
         const session = resolveSession(resolved.resource);
-        return ok(
-          JSON.stringify(
-            {
-              id: resolved.resource,
-              url: session.currentUrl,
-              title: session.currentTitle,
-            },
-            null,
-            2,
-          ),
-        );
+        return okJson({
+          id: resolved.resource,
+          url: session.currentUrl,
+          title: session.currentTitle,
+        });
       } catch (err) {
         return error(err instanceof Error ? err.message : String(err));
       }

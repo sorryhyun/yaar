@@ -27,7 +27,7 @@ import { ok, error, validateRelativePath, extractIdFromUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
-import { PROJECT_ROOT } from '../config.js';
+import { PROJECT_ROOT, MARKET_URL } from '../config.js';
 import {
   getConfigDir,
   storageRead,
@@ -36,8 +36,6 @@ import {
   storageDelete,
 } from '../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../storage/shortcuts.js';
-
-const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
 /**
  * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.

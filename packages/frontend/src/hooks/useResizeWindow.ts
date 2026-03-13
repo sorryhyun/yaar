@@ -4,6 +4,7 @@
 import { useCallback, useState } from 'react';
 import type { WindowBounds } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
+import { registerMouseTracking } from '@/lib/mouseTracking';
 
 interface UseResizeWindowOptions {
   windowId: string;
@@ -98,19 +99,13 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
           );
       };
 
-      const entry = { move: handleMouseMove, up: handleMouseUp };
-      function handleMouseUp() {
+      const handleMouseUp = () => {
         setIsResizing(false);
         document.documentElement.classList.remove('yaar-dragging');
         useDesktopStore.getState().queueBoundsUpdate(windowId);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        listenersRef.current = listenersRef.current.filter((e) => e !== entry);
-      }
-
-      listenersRef.current.push(entry);
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+        cleanup();
+      };
+      const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);
     },
     [windowId, bounds, listenersRef],
   );

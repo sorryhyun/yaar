@@ -11,7 +11,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { getAgentId, getMonitorId } from '../agents/session.js';
-import { ok, error, getActivePool, requireAction } from './utils.js';
+import { ok, okJson, error, getActivePool, requireAction } from './utils.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')
@@ -33,20 +33,14 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       if (!pool) return ok('No agents — session not initialized.');
 
       const stats = pool.getStats();
-      return ok(
-        JSON.stringify(
-          {
-            totalAgents: stats.totalAgents,
-            idleAgents: stats.idleAgents,
-            busyAgents: stats.busyAgents,
-            mainAgent: stats.mainAgent,
-            windowAgents: stats.windowAgents,
-            ephemeralAgents: stats.ephemeralAgents,
-          },
-          null,
-          2,
-        ),
-      );
+      return okJson({
+        totalAgents: stats.totalAgents,
+        idleAgents: stats.idleAgents,
+        busyAgents: stats.busyAgents,
+        mainAgent: stats.mainAgent,
+        windowAgents: stats.windowAgents,
+        ephemeralAgents: stats.ephemeralAgents,
+      });
     },
   });
 
@@ -73,7 +67,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       const exists = pool.hasAgent(resolved.id);
       if (!exists) return error(`Agent "${resolved.id}" not found.`);
 
-      return ok(JSON.stringify({ id: resolved.id, exists: true }, null, 2));
+      return okJson({ id: resolved.id, exists: true });
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
