@@ -600,6 +600,15 @@ export class BrowserSession extends EventEmitter {
     return this.takeScreenshot();
   }
 
+  /** Return raw innerHTML of a selector (or document.body). */
+  async getHtml(selector?: string): Promise<string> {
+    this.touch();
+    const expr = selector
+      ? `(document.querySelector(${JSON.stringify(selector)}) || document.body).innerHTML`
+      : `document.body.innerHTML`;
+    return (await this.eval<string>(expr)) || '';
+  }
+
   async extractContent(selector?: string): Promise<PageContent> {
     this.touch();
 

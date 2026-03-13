@@ -326,6 +326,12 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         }
         const result = await doTypecheck(parsed.sandboxId);
         if (!result.success) return error(result.error);
+        if (result.warnings?.length) {
+          return ok(
+            'Type check passed — no type errors found.\n\n⚠ Permission warnings:\n' +
+              result.warnings.map((w) => `  • ${w}`).join('\n'),
+          );
+        }
         return ok('Type check passed — no errors found.');
       }
 

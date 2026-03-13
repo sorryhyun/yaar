@@ -45,7 +45,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
   registry.register('yaar://browser/*', {
     description:
       'Browser instance. Read for current state (URL, title). ' +
-      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract. ' +
+      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, html. ' +
       'Delete to close.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -65,6 +65,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             'wait_for',
             'screenshot',
             'extract',
+            'html',
           ],
         },
         url: { type: 'string', description: 'URL for open action' },
@@ -77,6 +78,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
         x: { type: 'number' },
         y: { type: 'number' },
         index: { type: 'number' },
+        visible: { type: 'boolean', description: 'Show browser window on open (default: true)' },
         key: { type: 'string', description: 'Key for press action' },
         direction: { type: 'string', enum: ['up', 'down', 'back', 'forward'] },
         timeout: { type: 'number' },
@@ -128,31 +130,46 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
                 `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
               );
             }
-            const { session, browserId: bid } = await pool.createSession(browserId);
+
+            // Reuse existing session if one exists with this browserId
+            const existing = pool.getSession(browserId);
+            let session: typeof existing & {};
+            let bid: string;
+            if (existing) {
+              session = existing;
+              bid = browserId;
+            } else {
+              const created = await pool.createSession(browserId);
+              session = created.session;
+              bid = created.browserId;
+            }
+
             const windowId = `browser-${bid}`;
             session.windowId = windowId;
             const state = await session.navigate(
               url,
               p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
             );
-            await actionEmitter.emitActionWithFeedback(
-              {
-                type: 'window.create' as const,
-                windowId,
-                title: `Browser — ${state.title || domain}`,
-                bounds: {
-                  x: 80 + Number(bid) * 30,
-                  y: 60 + Number(bid) * 30,
-                  w: 900,
-                  h: 650,
+            if (p.visible !== false && !existing) {
+              await actionEmitter.emitActionWithFeedback(
+                {
+                  type: 'window.create' as const,
+                  windowId,
+                  title: `Browser — ${state.title || domain}`,
+                  bounds: {
+                    x: 80 + Number(bid) * 30,
+                    y: 60 + Number(bid) * 30,
+                    w: 900,
+                    h: 650,
+                  },
+                  content: {
+                    renderer: 'iframe',
+                    data: `/api/apps/browser/index.html?browserId=${bid}`,
+                  },
                 },
-                content: {
-                  renderer: 'iframe',
-                  data: `/api/apps/browser/index.html?browserId=${bid}`,
-                },
-              },
-              3000,
-            );
+                3000,
+              );
+            }
             return ok(`[browser:${bid}]\n${formatPageState(state)}`);
           }
 
@@ -278,6 +295,12 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
               result += `\n--- Forms (${content.forms.length}) ---\n${formLines.join('\n')}\n`;
             }
             return ok(result.trim());
+          }
+
+          case 'html': {
+            const session = resolveSession(browserId);
+            const html = await session.getHtml(p.selector as string | undefined);
+            return ok(html);
           }
 
           default:

@@ -1,6 +1,6 @@
 {
-  "icon": "🔮",
+  "icon": "✨",
   "name": "특이점이 온다",
   "run": "index.html",
-  "permissions": []
+  "permissions": ["yaar://browser/", "yaar://storage/", "yaar://apps/self/storage/"]
 }
