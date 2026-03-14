@@ -98,7 +98,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, create_component, update (requires operation), update_component, close, lock, unlock, app_query, app_command.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -106,21 +106,14 @@ export function registerWindowHandlers(
       properties: {
         action: {
           type: 'string',
-          enum: [
-            'create',
-            'create_component',
-            'update',
-            'update_component',
-            'close',
-            'lock',
-            'unlock',
-            'app_query',
-            'app_command',
-          ],
+          enum: ['create', 'update', 'close', 'lock', 'unlock', 'app_query', 'app_command'],
         },
         // create fields
         title: { type: 'string' },
-        renderer: { type: 'string', enum: ['markdown', 'html', 'text', 'table', 'iframe'] },
+        renderer: {
+          type: 'string',
+          enum: ['markdown', 'html', 'text', 'table', 'iframe', 'component'],
+        },
         content: {},
         x: { type: 'number' },
         y: { type: 'number' },
@@ -128,10 +121,6 @@ export function registerWindowHandlers(
         height: { type: 'number' },
         appId: { type: 'string' },
         minimized: { type: 'boolean' },
-        // create_component fields
-        components: { type: 'array' },
-        cols: {},
-        gap: { type: 'string', enum: ['none', 'sm', 'md', 'lg'] },
         jsonfile: { type: 'string' },
         // update fields
         operation: {
@@ -211,13 +200,16 @@ export function registerWindowHandlers(
       const p = payload!;
       const action = p.action as string;
 
-      // Collection-level invoke: only create/create_component (windowId derived from payload)
+      // Collection-level invoke: only create (windowId derived from payload)
       if (isWindowCollection(resolved)) {
-        if (action === 'create') return handleCreate('', p);
-        if (action === 'create_component') return handleCreateComponent('', p);
+        if (action === 'create' || action === 'create_component')
+          return handleCreate(
+            '',
+            action === 'create_component' ? { ...p, renderer: 'component' } : p,
+          );
         return error(
           `Action "${action}" requires a window URI (yaar://windows/{windowId}). ` +
-            'Only "create" and "create_component" can be invoked on a bare windows URI.',
+            'Only "create" can be invoked on a bare windows URI.',
         );
       }
 
@@ -227,12 +219,17 @@ export function registerWindowHandlers(
       switch (action) {
         case 'create':
           return handleCreate(windowId, p);
-        case 'create_component':
-          return handleCreateComponent(windowId, p);
+        case 'create_component': // deprecated alias
+          return handleCreate(windowId, { ...p, renderer: 'component' });
         case 'update':
           return handleUpdate(getWindowState(), windowId, p);
-        case 'update_component':
-          return handleUpdateComponent(getWindowState(), windowId, p);
+        case 'update_component': // deprecated alias
+          return handleUpdate(getWindowState(), windowId, {
+            ...p,
+            operation: 'replace',
+            renderer: 'component',
+            content: { components: p.components, cols: p.cols, gap: p.gap },
+          });
         case 'close':
           return handleManage(getWindowState(), windowId, 'close');
         case 'lock':
@@ -336,13 +333,85 @@ async function handleCreate(
   const renderer = payload.renderer as string;
   if (!renderer) return error('"renderer" is required for create.');
 
-  let data = payload.content as string | { headers: string[]; rows: string[][] };
   const derivedId = deriveWindowId(
     payload.appId as string | undefined,
     payload.name as string | undefined,
     title,
   );
   const actualId = windowId || derivedId;
+
+  // Component renderer: content is a ComponentLayout object or loaded from jsonfile
+  if (renderer === 'component') {
+    let layoutData: ComponentLayout;
+
+    if (payload.jsonfile) {
+      const filePath = payload.jsonfile as string;
+      if (!filePath.endsWith('.yaarcomponent.json'))
+        return error('jsonfile must end with .yaarcomponent.json');
+      const pathErr = validateRelativePath(filePath);
+      if (pathErr) return error(pathErr);
+
+      const fullPath = join(PROJECT_ROOT, 'apps', filePath);
+      try {
+        const raw = await Bun.file(fullPath).text();
+        const parsed = JSON.parse(raw);
+        const result = componentLayoutSchema.safeParse(parsed);
+        if (!result.success) return error(`Invalid .yaarcomponent.json: ${result.error.message}`);
+        layoutData = result.data;
+      } catch (err) {
+        return error(
+          `Error reading jsonfile: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      }
+    } else if (
+      payload.content &&
+      typeof payload.content === 'object' &&
+      !Array.isArray(payload.content)
+    ) {
+      const contentObj = payload.content as Record<string, unknown>;
+      if (!contentObj.components)
+        return error('"content.components" is required for component renderer.');
+      layoutData = {
+        components: contentObj.components as ComponentLayout['components'],
+        cols: contentObj.cols as ComponentLayout['cols'],
+        gap: contentObj.gap as ComponentLayout['gap'],
+      };
+    } else if (payload.components) {
+      // Legacy: top-level components/cols/gap (from deprecated create_component)
+      layoutData = {
+        components: payload.components as ComponentLayout['components'],
+        cols: payload.cols as ComponentLayout['cols'],
+        gap: payload.gap as ComponentLayout['gap'],
+      };
+    } else {
+      return error(
+        'Provide "content" with { components: [...] } or "jsonfile" for component renderer.',
+      );
+    }
+
+    const appMeta = payload.appId ? await getAppMeta(payload.appId as string) : null;
+
+    const osAction: OSAction = {
+      type: 'window.create',
+      windowId: actualId,
+      title,
+      bounds: {
+        x: (payload.x as number) ?? 100,
+        y: (payload.y as number) ?? 100,
+        w: (payload.width as number) ?? 500,
+        h: (payload.height as number) ?? 400,
+      },
+      content: { renderer: 'component', data: layoutData },
+      ...getAppMetaOverrides(appMeta),
+      ...(payload.minimized ? { minimized: true } : {}),
+    };
+
+    actionEmitter.emitAction(osAction);
+    return ok(`Created component window "${formatWindowRef(actualId)}"`);
+  }
+
+  // Non-component renderers
+  let data = payload.content as string | { headers: string[]; rows: string[][] };
 
   // Auto-extract appId from content URI (e.g. yaar://apps/word-lite) when not explicit
   const appId =
@@ -400,72 +469,6 @@ async function handleCreate(
   return ok(`Created window "${formatWindowRef(actualId)}"`);
 }
 
-async function handleCreateComponent(
-  windowId: string,
-  payload: Record<string, unknown>,
-): Promise<VerbResult> {
-  const title = payload.title as string;
-  if (!title) return error('"title" is required for create_component.');
-
-  const derivedId = deriveWindowId(
-    payload.appId as string | undefined,
-    payload.name as string | undefined,
-    title,
-  );
-  const actualId = windowId || derivedId;
-
-  let layoutData: ComponentLayout;
-
-  if (payload.jsonfile) {
-    const filePath = payload.jsonfile as string;
-    if (!filePath.endsWith('.yaarcomponent.json'))
-      return error('jsonfile must end with .yaarcomponent.json');
-    const pathErr = validateRelativePath(filePath);
-    if (pathErr) return error(pathErr);
-
-    const fullPath = join(PROJECT_ROOT, 'apps', filePath);
-    try {
-      const raw = await Bun.file(fullPath).text();
-      const parsed = JSON.parse(raw);
-      const result = componentLayoutSchema.safeParse(parsed);
-      if (!result.success) return error(`Invalid .yaarcomponent.json: ${result.error.message}`);
-      layoutData = result.data;
-    } catch (err) {
-      return error(
-        `Error reading jsonfile: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
-    }
-  } else if (payload.components) {
-    layoutData = {
-      components: payload.components as ComponentLayout['components'],
-      cols: payload.cols as ComponentLayout['cols'],
-      gap: payload.gap as ComponentLayout['gap'],
-    };
-  } else {
-    return error('Provide either jsonfile or components.');
-  }
-
-  const appMeta = payload.appId ? await getAppMeta(payload.appId as string) : null;
-
-  const osAction: OSAction = {
-    type: 'window.create',
-    windowId: actualId,
-    title,
-    bounds: {
-      x: (payload.x as number) ?? 100,
-      y: (payload.y as number) ?? 100,
-      w: (payload.width as number) ?? 500,
-      h: (payload.height as number) ?? 400,
-    },
-    content: { renderer: 'component', data: layoutData },
-    ...getAppMetaOverrides(appMeta),
-    ...(payload.minimized ? { minimized: true } : {}),
-  };
-
-  actionEmitter.emitAction(osAction);
-  return ok(`Created component window "${formatWindowRef(actualId)}"`);
-}
-
 async function handleUpdate(
   windowState: WindowStateRegistry,
   windowId: string,
@@ -520,43 +523,6 @@ async function handleUpdate(
   if (err) return err;
 
   return ok(`Updated window "${formatWindowRef(windowId)}" (${opType})`);
-}
-
-async function handleUpdateComponent(
-  windowState: WindowStateRegistry,
-  windowId: string,
-  payload: Record<string, unknown>,
-): Promise<VerbResult> {
-  const existsErr = requireWindowExists(windowState, windowId);
-  if (existsErr) return existsErr;
-
-  const agentId = getAgentId();
-  const lockErr = requireWindowUnlocked(windowState, windowId, agentId);
-  if (lockErr) return lockErr;
-
-  if (!payload.components) return error('"components" is required for update_component.');
-
-  const layoutData: ComponentLayout = {
-    components: payload.components as ComponentLayout['components'],
-    cols: payload.cols as ComponentLayout['cols'],
-    gap: payload.gap as ComponentLayout['gap'],
-  };
-
-  const osAction = {
-    type: 'window.updateContent' as const,
-    windowId,
-    operation: { op: 'replace' as const, data: layoutData },
-    renderer: 'component' as const,
-  };
-
-  const err = await emitActionChecked(
-    osAction,
-    500,
-    `Window "${windowId}" is locked by another agent.`,
-  );
-  if (err) return err;
-
-  return ok(`Updated component window "${formatWindowRef(windowId)}"`);
 }
 
 async function handleManage(

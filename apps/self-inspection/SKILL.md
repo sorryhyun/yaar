@@ -53,7 +53,7 @@ Open 5 windows simultaneously using different renderers via `invoke`, verify all
 invoke('yaar://windows/si-v-md', { action: "create", title: "Test: Markdown", width: 300, height: 200, renderer: "markdown", content: "# Markdown\n\n**Bold** and *italic*." })
 invoke('yaar://windows/si-v-html', { action: "create", title: "Test: HTML", width: 300, height: 200, renderer: "html", content: "<div style='padding:16px'><h2>HTML</h2><p style='color:green'>Styled content.</p></div>" })
 invoke('yaar://windows/si-v-text', { action: "create", title: "Test: Text", width: 300, height: 200, renderer: "text", content: "Plain text content.\nLine 2.\nLine 3." })
-invoke('yaar://windows/si-v-comp', { action: "create_component", title: "Test: Component", width: 300, height: 200, components: [{ "type": "text", "content": "Component DSL", "variant": "heading" }, { "type": "badge", "label": "OK", "variant": "success" }, { "type": "progress", "value": 75, "label": "Progress" }] })
+invoke('yaar://windows/si-v-comp', { action: "create", title: "Test: Component", width: 300, height: 200, renderer: "component", content: { components: [{ "type": "text", "content": "Component DSL", "variant": "heading" }, { "type": "badge", "label": "OK", "variant": "success" }, { "type": "progress", "value": 75, "label": "Progress" }] } })
 invoke('yaar://windows/si-v-tbl', { action: "create", title: "Test: Table", width: 300, height: 200, renderer: "table", content: { "headers": ["Col A", "Col B"], "rows": [["1", "2"], ["3", "4"]] } })
 ```
 
@@ -117,16 +117,19 @@ Create a component window with a form and ask the user to fill it:
 
 ```
 invoke('yaar://windows/si-v-form', {
-  action: "create_component",
+  action: "create",
   title: "Form Test",
+  renderer: "component",
   width: 400, height: 300,
-  components: [
-    { "type": "text", "content": "Fill out this form and click Submit.", "variant": "heading" },
-    { "type": "input", "name": "username", "formId": "test-form", "label": "Username", "placeholder": "Enter anything" },
-    { "type": "select", "name": "color", "formId": "test-form", "label": "Favorite Color", "options": [{ "value": "red", "label": "Red" }, { "value": "blue", "label": "Blue" }, { "value": "green", "label": "Green" }] },
-    { "type": "input", "name": "notes", "formId": "test-form", "label": "Notes", "placeholder": "Optional", "rows": 2 },
-    { "type": "button", "label": "Submit", "submitForm": "test-form", "action": "form-submitted", "variant": "primary" }
-  ]
+  content: {
+    components: [
+      { "type": "text", "content": "Fill out this form and click Submit.", "variant": "heading" },
+      { "type": "input", "name": "username", "formId": "test-form", "label": "Username", "placeholder": "Enter anything" },
+      { "type": "select", "name": "color", "formId": "test-form", "label": "Favorite Color", "options": [{ "value": "red", "label": "Red" }, { "value": "blue", "label": "Blue" }, { "value": "green", "label": "Green" }] },
+      { "type": "input", "name": "notes", "formId": "test-form", "label": "Notes", "placeholder": "Optional", "rows": 2 },
+      { "type": "button", "label": "Submit", "submitForm": "test-form", "action": "form-submitted", "variant": "primary" }
+    ]
+  }
 })
 ```
 
@@ -318,25 +321,32 @@ Create a component window, then replace its entire layout:
 
 ```
 invoke('yaar://windows/si-v-comp-upd', {
-  action: "create_component",
+  action: "create",
   title: "Component Update Test",
+  renderer: "component",
   width: 350, height: 200,
-  components: [
-    { "type": "text", "content": "Version 1", "variant": "heading" },
-    { "type": "progress", "value": 25, "label": "Progress" }
-  ]
+  content: {
+    components: [
+      { "type": "text", "content": "Version 1", "variant": "heading" },
+      { "type": "progress", "value": 25, "label": "Progress" }
+    ]
+  }
 })
 ```
 
 Update the components:
 ```
 invoke('yaar://windows/si-v-comp-upd', {
-  action: "update_component",
-  components: [
-    { "type": "text", "content": "Version 2", "variant": "heading" },
-    { "type": "progress", "value": 100, "label": "Complete", "variant": "success" },
-    { "type": "badge", "label": "Updated", "variant": "info" }
-  ]
+  action: "update",
+  operation: "replace",
+  renderer: "component",
+  content: {
+    components: [
+      { "type": "text", "content": "Version 2", "variant": "heading" },
+      { "type": "progress", "value": 100, "label": "Complete", "variant": "success" },
+      { "type": "badge", "label": "Updated", "variant": "info" }
+    ]
+  }
 })
 ```
 
@@ -344,7 +354,7 @@ invoke('yaar://windows/si-v-comp-upd', {
 delete('yaar://windows/si-v-comp-upd')
 ```
 
-**PASS** if update_component succeeds without error.
+**PASS** if component update succeeds without error.
 
 ### 14. Storage Directory Operations via URI
 

@@ -35,7 +35,7 @@ export function toDisplayName(appId: string): string {
 /**
  * Generate the Launch section based on what the app has.
  * - Compiled apps (index.html) → invoke create on yaar://windows/
- * - Component apps (.yaarcomponent.json) → invoke create_component on yaar://windows/
+ * - Component apps (.yaarcomponent.json) → invoke create with renderer: "component" on yaar://windows/
  * - Both → shows both options
  */
 function generateLaunchSection(
@@ -63,7 +63,8 @@ invoke('yaar://windows/${appId}', {
     for (const f of componentFiles) {
       parts.push(`\`\`\`
 invoke('yaar://windows/', {
-  action: "create_component",
+  action: "create",
+  renderer: "component",
   jsonfile: "${appId}/${f}",
   title: "${appName}"
 })

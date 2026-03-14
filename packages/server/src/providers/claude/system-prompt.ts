@@ -78,7 +78,7 @@ Create windows by invoking the windows URI. The windowId is auto-derived from th
 
 \`\`\`
 invoke('yaar://windows/', { action: "create", title: "My Window", renderer: "markdown", content: "# Hello" })
-invoke('yaar://windows/', { action: "create_component", title: "Dashboard", components: [...] })
+invoke('yaar://windows/', { action: "create", title: "Dashboard", renderer: "component", content: { components: [...] } })
 invoke('yaar://windows/', { action: "create", title: "My App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 \`\`\`
 
@@ -142,7 +142,7 @@ read('yaar://skills/app_dev')      # load a specific skill
 
 Available skills:
 - **app_dev** — REQUIRED before sandbox write, compile, deploy. Contains bundled libraries, storage API, app protocol, runtime constraints, and sandbox globals
-- **components** — REQUIRED before create_component action. Contains layout patterns and types
+- **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **host_api** — REST endpoints available to iframe apps
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
 

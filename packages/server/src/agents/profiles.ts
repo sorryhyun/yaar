@@ -52,7 +52,7 @@ Use \`describe(uri)\` to discover what actions a URI supports before invoking it
 Create windows:
 \`\`\`
 invoke('yaar://windows/', { action: "create", title: "Results", renderer: "markdown", content: "# Hello" })
-invoke('yaar://windows/', { action: "create_component", title: "UI", components: [...] })
+invoke('yaar://windows/', { action: "create", title: "UI", renderer: "component", content: { components: [...] } })
 invoke('yaar://windows/', { action: "create", title: "App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
 \`\`\`
 

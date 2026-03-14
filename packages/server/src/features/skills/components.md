@@ -27,4 +27,9 @@ Prefer multi-column layouts (`cols: 2` or ratio like `[7, 3]`) for richer UIs; u
 
 ## Loading from File
 
-You can provide components inline OR load from a `.yaarcomponent.json` file via the `jsonfile` param (e.g., `jsonfile: "myapp/dashboard.yaarcomponent.json"`). The path is relative to `apps/`.
+Create a component window using `action: "create"` with `renderer: "component"`. The `content` field is the layout object:
+```
+invoke('yaar://windows/', { action: "create", title: "Dashboard", renderer: "component", content: { cols: [7, 3], components: [...] } })
+```
+
+Alternatively, load from a `.yaarcomponent.json` file via the `jsonfile` param (e.g., `jsonfile: "myapp/dashboard.yaarcomponent.json"`). The path is relative to `apps/`.
