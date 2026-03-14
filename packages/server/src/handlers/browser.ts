@@ -45,7 +45,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
   registry.register('yaar://browser/*', {
     description:
       'Browser instance. Read for current state (URL, title). ' +
-      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, html. ' +
+      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html. ' +
       'Delete to close.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -65,6 +65,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             'wait_for',
             'screenshot',
             'extract',
+            'extract_images',
             'html',
           ],
         },
@@ -295,6 +296,44 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
               result += `\n--- Forms (${content.forms.length}) ---\n${formLines.join('\n')}\n`;
             }
             return ok(result.trim());
+          }
+
+          case 'extract_images': {
+            const session = resolveSession(browserId);
+            const effectiveSelector =
+              p.mainContentOnly && !p.selector
+                ? await findMainContent(session)
+                : (p.selector as string | undefined);
+            const images = await session.extractImages(effectiveSelector ?? undefined);
+            if (images.length === 0) return ok('No images found.');
+
+            // Separate images that were successfully captured vs cross-origin failures
+            const captured = images.filter((img) => img.dataUrl);
+            const crossOrigin = images.filter((img) => !img.dataUrl);
+
+            let text = `Found ${images.length} image(s).`;
+            if (crossOrigin.length > 0) {
+              text += `\n${crossOrigin.length} cross-origin image(s) could not be captured:`;
+              for (const img of crossOrigin) {
+                text += `\n  - ${img.src} (${img.width}x${img.height})${img.alt ? ` alt="${img.alt}"` : ''}`;
+              }
+            }
+            if (captured.length > 0) {
+              text += `\n${captured.length} image(s) extracted:`;
+              for (const img of captured) {
+                text += `\n  - ${img.src} (${img.width}x${img.height})${img.alt ? ` alt="${img.alt}"` : ''}`;
+              }
+            }
+
+            if (captured.length === 0) return ok(text);
+
+            return okWithImages(
+              text,
+              captured.map((img) => ({
+                data: img.dataUrl!.replace(/^data:image\/\w+;base64,/, ''),
+                mimeType: 'image/png',
+              })),
+            );
           }
 
           case 'html': {

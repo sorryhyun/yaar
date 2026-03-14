@@ -17,6 +17,7 @@ import { initRegistry } from '../../handlers/index.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
+import { getSessionHub } from '../../session/session-hub.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -171,6 +172,20 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
     }
     resolvedUri = uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
+  }
+
+  // Log to session logs
+  if (tokenEntry?.sessionId) {
+    const session = getSessionHub().get(tokenEntry.sessionId);
+    const logger = session?.getPool()?.getSessionLogger();
+    if (logger) {
+      const appLabel = tokenEntry.appId ?? 'unknown';
+      logger.logToolUse(
+        `iframe:${appLabel}`,
+        { verb, uri: resolvedUri, ...(body.payload ?? {}) },
+        undefined,
+      );
+    }
   }
 
   // Dispatch to ResourceRegistry

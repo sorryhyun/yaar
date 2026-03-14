@@ -19,7 +19,7 @@ import {
   type ChromeInstance,
 } from './chrome.js';
 
-const MAX_SESSIONS = 3;
+const MAX_SESSIONS = 5;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CLEANUP_INTERVAL_MS = 60 * 1000; // check every minute
 

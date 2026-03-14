@@ -17,6 +17,24 @@ export const [postLoading, setPostLoading] = createSignal(false);
 export const [countdown, setCountdown] = createSignal(0);
 export const [showSettings, setShowSettings] = createSignal(false);
 
+// 원본 보기 (screenshot)
+export const [showOriginal, setShowOriginal] = createSignal(false);
+export const [screenshotSrc, setScreenshotSrc] = createSignal<string | null>(null);
+export const [screenshotLoading, setScreenshotLoading] = createSignal(false);
+
+// 도배기 안 보기 (localStorage에 저장)
+const HIDE_SPAMMER_KEY = 'singularity-hide-spammer';
+const savedHideSpammer = localStorage.getItem(HIDE_SPAMMER_KEY);
+export const [hideSpammer, setHideSpammer] = createSignal<boolean>(
+  savedHideSpammer !== null ? savedHideSpammer === 'true' : true
+);
+
+export function toggleHideSpammer() {
+  const next = !hideSpammer();
+  setHideSpammer(next);
+  localStorage.setItem(HIDE_SPAMMER_KEY, String(next));
+}
+
 export async function loadSettings() {
   try {
     const saved = await window.yaar?.storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;

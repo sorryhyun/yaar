@@ -340,6 +340,53 @@ export const REMOVE_ANNOTATIONS = `(function() {
   if (el) el.remove();
 })()`;
 
+// ── extractImages ─────────────────────────────────────────────────────
+
+/**
+ * Function(sel) → Array<{src, alt, width, height, dataUrl}>
+ * Finds all <img> elements (optionally scoped by selector), draws each to a
+ * canvas to capture the rendered pixel data, and returns base64 data URLs.
+ * Skips tiny images (< 10px), broken images, and tracking pixels.
+ */
+export const EXTRACT_IMAGES = `function(sel) {
+  var root = sel ? document.querySelector(sel) : document.body;
+  if (!root) return [];
+  var imgs = root.querySelectorAll('img');
+  var results = [];
+  for (var i = 0; i < imgs.length; i++) {
+    var img = imgs[i];
+    if (!img.complete || !img.naturalWidth) continue;
+    if (img.naturalWidth < 10 || img.naturalHeight < 10) continue;
+    var src = img.src || '';
+    var alt = (img.alt || '').trim();
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      var dataUrl = canvas.toDataURL('image/png');
+      results.push({
+        src: src,
+        alt: alt,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        dataUrl: dataUrl
+      });
+    } catch (e) {
+      // Cross-origin images will throw on canvas — skip them
+      results.push({
+        src: src,
+        alt: alt,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        dataUrl: null
+      });
+    }
+  }
+  return results;
+}`;
+
 // ── findMainContentSelector ───────────────────────────────────────────
 
 /**

@@ -25,6 +25,7 @@ import {
   FOCUS_AND_CLEAR,
   FIRE_CHANGE_EVENTS,
   EXTRACT_CONTENT,
+  EXTRACT_IMAGES,
   FIND_MAIN_CONTENT,
 } from './page-scripts.js';
 
@@ -653,6 +654,15 @@ export class BrowserSession extends EventEmitter {
   /** Remove the annotation overlay injected by annotateElements(). */
   async removeAnnotations(): Promise<void> {
     await this.eval(REMOVE_ANNOTATIONS).catch(() => {});
+  }
+
+  async extractImages(
+    selector?: string,
+  ): Promise<
+    Array<{ src: string; alt: string; width: number; height: number; dataUrl: string | null }>
+  > {
+    this.touch();
+    return (await this.evalFn(EXTRACT_IMAGES, selector ?? null)) || [];
   }
 
   async close(): Promise<void> {

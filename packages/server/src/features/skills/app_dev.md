@@ -371,11 +371,38 @@ Common mistakes to avoid when building apps:
   .parent { position: relative; flex: 1; min-height: 0; }
   .child  { position: absolute; inset: 0; }
   ```
+- **Don't pass event handlers as component props** — SolidJS's `html` tagged template wraps component props in reactive getters. Passing `onClick=${() => handler()}` as a prop causes the handler to be **called during rendering** instead of being set as an event listener. Use event delegation on a parent DOM element instead:
+  ```ts
+  // BAD — handler is invoked during For rendering for every item
+  function Item(props: { post: Post; onClick: () => void }) {
+    return html`<div onClick=${props.onClick}>...</div>`;
+  }
+  html`<${For} each=${items}>${(item) => html`
+    <${Item} post=${item} onClick=${() => selectItem(item)} />
+  `}</${For}>`;
+
+  // GOOD — event delegation on a parent DOM element
+  html`<div onClick=${(e: MouseEvent) => {
+    const el = (e.target as HTMLElement).closest('[data-id]') as HTMLElement;
+    if (el) selectItem(items().find(i => i.id === el.dataset.id)!);
+  }}>
+    <${For} each=${items}>${(item) => html`
+      <div data-id=${item.id}>...</div>
+    `}</${For}>
+  </div>`;
+  ```
 - **Don't guess API endpoints** — Only use endpoints from `read('yaar://skills/host_api')`. If an endpoint isn't listed there, it doesn't exist. Never try multiple speculative URL patterns hoping one works.
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { ... })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
+- **Don't use Unicode escape sequences** — Write actual characters, not `\uXXXX` escapes. The sandbox write path preserves UTF-8 correctly. Escapes make source code unreadable:
+  ```ts
+  // BAD — unreadable unicode escapes
+  html`<span>\u26a1</span><span>\ud2b9\uc774\uc810\uc774 \uc628\ub2e4</span>`
+  // GOOD — actual characters
+  html`<span>⚡</span><span>특이점이 온다</span>`
+  ```
 
 ### Right Pattern for External Service Integration
 
