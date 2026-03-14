@@ -38,6 +38,9 @@ export interface ServerEventDispatchHandlers {
     request: AppProtocolRequest,
   ) => void;
   handleVerbSubscriptionUpdate: (windowId: string, subscriptionId: string, uri: string) => void;
+  acceptMessage: (messageId: string, agentId: string) => void;
+  queueMessage: (messageId: string, position: number) => void;
+  clearAllMessageStatuses: () => void;
   incrementSubagentCount: (agentId: string) => void;
   decrementSubagentCount: (agentId: string) => void;
 }
@@ -104,6 +107,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const monitorId = (message as { monitorId?: string }).monitorId;
       handlers.setAgentActive(agentId, message.content ? 'Reasoning...' : 'Thinking...');
       handlers.updateCliStreaming(agentId, message.content ?? '', 'thinking', monitorId);
+      handlers.clearAllMessageStatuses();
       break;
     }
     case ServerEventType.AGENT_RESPONSE: {
@@ -258,5 +262,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       handlers.handleVerbSubscriptionUpdate(m.windowId, m.subscriptionId, m.uri);
       break;
     }
+    case ServerEventType.MESSAGE_ACCEPTED:
+      handlers.acceptMessage(message.messageId, message.agentId);
+      break;
+    case ServerEventType.MESSAGE_QUEUED:
+      handlers.queueMessage(message.messageId, message.position);
+      break;
   }
 }

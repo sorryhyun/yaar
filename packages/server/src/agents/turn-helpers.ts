@@ -43,7 +43,7 @@ export function buildReloadContext(
 export interface AgentTurnOptions {
   agent: PooledAgent;
   role: string;
-  source: ContextSource | 'main';
+  source: ContextSource;
   task: Task;
   prompt: string;
   fp: Fingerprint;

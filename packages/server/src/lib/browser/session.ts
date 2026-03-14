@@ -29,10 +29,17 @@ import {
   FIND_MAIN_CONTENT,
 } from './page-scripts.js';
 
-const SCREENSHOT_WIDTH = 1280;
-const SCREENSHOT_HEIGHT = 800;
+const DESKTOP_WIDTH = 1280;
+const DESKTOP_HEIGHT = 800;
+const MOBILE_WIDTH = 390;
+const MOBILE_HEIGHT = 844;
 const SCREENSHOT_QUALITY = 95;
 const TEXT_SNIPPET_LENGTH = 500;
+
+const DESKTOP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const MOBILE_UA =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
 
 export interface BrowserSessionUpdate {
   url: string;
@@ -40,8 +47,13 @@ export interface BrowserSessionUpdate {
   version: number;
 }
 
+export interface BrowserSessionOptions {
+  mobile?: boolean;
+}
+
 export class BrowserSession extends EventEmitter {
   readonly id: string;
+  readonly mobile: boolean;
   windowId: string | undefined;
   openerBrowserId: string | undefined;
   currentUrl = 'about:blank';
@@ -53,15 +65,21 @@ export class BrowserSession extends EventEmitter {
   private cdp: CDPClient;
   private closed = false;
 
-  private constructor(id: string, cdp: CDPClient) {
+  private constructor(id: string, cdp: CDPClient, mobile: boolean) {
     super();
     this.id = id;
     this.cdp = cdp;
+    this.mobile = mobile;
   }
 
-  static async create(id: string, debuggerUrl: string): Promise<BrowserSession> {
+  static async create(
+    id: string,
+    debuggerUrl: string,
+    options?: BrowserSessionOptions,
+  ): Promise<BrowserSession> {
+    const mobile = options?.mobile ?? false;
     const cdp = await CDPClient.connect(debuggerUrl);
-    const session = new BrowserSession(id, cdp);
+    const session = new BrowserSession(id, cdp, mobile);
 
     // Enable required CDP domains
     await cdp.send('Page.enable');
@@ -76,17 +94,26 @@ export class BrowserSession extends EventEmitter {
     });
 
     // Set viewport
+    const width = mobile ? MOBILE_WIDTH : DESKTOP_WIDTH;
+    const height = mobile ? MOBILE_HEIGHT : DESKTOP_HEIGHT;
     await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width: SCREENSHOT_WIDTH,
-      height: SCREENSHOT_HEIGHT,
-      deviceScaleFactor: 1,
-      mobile: false,
+      width,
+      height,
+      deviceScaleFactor: mobile ? 3 : 1,
+      mobile,
     });
+
+    // Enable touch emulation for mobile
+    if (mobile) {
+      await cdp.send('Emulation.setTouchEmulationEnabled', {
+        enabled: true,
+        maxTouchPoints: 5,
+      });
+    }
 
     // Set user agent
     await cdp.send('Emulation.setUserAgentOverride', {
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      userAgent: mobile ? MOBILE_UA : DESKTOP_UA,
     });
 
     return session;

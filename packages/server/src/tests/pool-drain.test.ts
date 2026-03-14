@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { InteractionTimeline } from '../agents/interaction-timeline.js';
-import { ContextTape } from '../agents/context.js';
+import { ContextTape, mainSource, windowSource } from '../agents/context.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 
 // ── AppServer turn queue drain ──────────────────────────────────────────
@@ -413,12 +413,12 @@ describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
     const tape = new ContextTape();
     const policy = new ContextAssemblyPolicy();
 
-    tape.append('user', 'Hello', 'main');
-    tape.append('assistant', 'Hi there!', 'main');
-    tape.append('user', 'Open calendar', 'main');
-    tape.append('assistant', 'Opening calendar...', 'main');
-    tape.append('user', 'Show settings', 'main');
-    tape.append('assistant', 'Here are your settings.', 'main');
+    tape.append('user', 'Hello', mainSource('0'));
+    tape.append('assistant', 'Hi there!', mainSource('0'));
+    tape.append('user', 'Open calendar', mainSource('0'));
+    tape.append('assistant', 'Opening calendar...', mainSource('0'));
+    tape.append('user', 'Show settings', mainSource('0'));
+    tape.append('assistant', 'Here are your settings.', mainSource('0'));
 
     // Default 3 turns = 6 messages
     const context = policy.buildWindowInitialContext(tape, 3);
@@ -438,10 +438,10 @@ describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
     const tape = new ContextTape();
     const policy = new ContextAssemblyPolicy();
 
-    tape.append('user', 'Main message', 'main');
-    tape.append('assistant', 'Main response', 'main');
-    tape.append('user', 'Window message', { window: 'win-1' });
-    tape.append('assistant', 'Window response', { window: 'win-1' });
+    tape.append('user', 'Main message', mainSource('0'));
+    tape.append('assistant', 'Main response', mainSource('0'));
+    tape.append('user', 'Window message', windowSource('win-1'));
+    tape.append('assistant', 'Window response', windowSource('win-1'));
 
     const context = policy.buildWindowInitialContext(tape, 3);
     expect(context).toContain('Main message');

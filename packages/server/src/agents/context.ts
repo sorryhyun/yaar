@@ -2,19 +2,47 @@
  * Hierarchical context management for agent conversations.
  *
  * Context is the central organizing principle in the new architecture.
- * Messages are tagged with their source (main conversation or specific window)
- * to enable:
+ * Messages are tagged with their source URI (monitor or window) to enable:
  * - Window agents to see relevant conversation history
  * - Manual pruning of window-specific context
  * - Clear separation between main flow and window branches
  */
 
+const MONITOR_PREFIX = 'yaar://monitors/';
+const WINDOW_PREFIX = 'yaar://windows/';
+
 /**
- * The source of a context message.
- * - 'main': Messages from the main conversation flow
- * - { window: string }: Messages from a specific window's conversation
+ * URI-based context source addressing.
+ * - `yaar://monitors/{monitorId}`: Messages from a monitor's main conversation
+ * - `yaar://windows/{windowId}`: Messages from a specific window's conversation
  */
-export type ContextSource = 'main' | { window: string };
+export type ContextSource = `yaar://monitors/${string}` | `yaar://windows/${string}`;
+
+export function mainSource(monitorId: string): ContextSource {
+  return `yaar://monitors/${monitorId}`;
+}
+
+export function windowSource(windowId: string): ContextSource {
+  return `yaar://windows/${windowId}`;
+}
+
+export function isMainSource(source: ContextSource): source is `yaar://monitors/${string}` {
+  return source.startsWith(MONITOR_PREFIX);
+}
+
+export function isWindowSource(source: ContextSource): source is `yaar://windows/${string}` {
+  return source.startsWith(WINDOW_PREFIX);
+}
+
+export function extractWindowId(source: ContextSource): string | null {
+  if (!isWindowSource(source)) return null;
+  return source.slice(WINDOW_PREFIX.length);
+}
+
+export function extractMonitorId(source: ContextSource): string | null {
+  if (!isMainSource(source)) return null;
+  return source.slice(MONITOR_PREFIX.length);
+}
 
 /**
  * A message in the context tape.
@@ -57,7 +85,7 @@ const MAX_MAIN_MESSAGES = 200;
 /**
  * ContextTape manages the hierarchical conversation history.
  *
- * Messages are stored with their source (main or window) and can be:
+ * Messages are stored with their source (monitor or window) and can be:
  * - Retrieved with optional filtering
  * - Pruned by window (manual operation)
  * - Formatted for prompt injection
@@ -87,7 +115,7 @@ export class ContextTape {
    * Preserves window messages (they are pruned separately on window close).
    */
   private pruneIfNeeded(): void {
-    const mainMessages = this.messages.filter((m) => m.source === 'main');
+    const mainMessages = this.messages.filter((m) => isMainSource(m.source));
     if (mainMessages.length <= MAX_MAIN_MESSAGES) return;
 
     // Remove the oldest main messages to bring count back to the limit.
@@ -108,26 +136,14 @@ export class ContextTape {
     const { includeWindows = true, windowIds, excludeWindowIds } = options ?? {};
 
     return this.messages.filter((msg) => {
-      // Check if this is a window message
-      const isWindowMessage = typeof msg.source === 'object' && 'window' in msg.source;
+      if (!isWindowSource(msg.source)) return true;
 
-      if (!includeWindows && isWindowMessage) {
-        return false;
-      }
+      if (!includeWindows) return false;
 
-      if (isWindowMessage) {
-        const windowId = (msg.source as { window: string }).window;
+      const wid = extractWindowId(msg.source)!;
 
-        // Filter by specific window IDs if provided
-        if (windowIds && !windowIds.includes(windowId)) {
-          return false;
-        }
-
-        // Exclude specific window IDs if provided
-        if (excludeWindowIds && excludeWindowIds.includes(windowId)) {
-          return false;
-        }
-      }
+      if (windowIds && !windowIds.includes(wid)) return false;
+      if (excludeWindowIds && excludeWindowIds.includes(wid)) return false;
 
       return true;
     });
@@ -147,9 +163,10 @@ export class ContextTape {
    * Note: This is a manual operation, not triggered automatically on window close.
    */
   pruneWindow(windowId: string): ContextMessage[] {
+    const target = windowSource(windowId);
     const pruned: ContextMessage[] = [];
     this.messages = this.messages.filter((msg) => {
-      if (typeof msg.source === 'object' && msg.source.window === windowId) {
+      if (msg.source === target) {
         pruned.push(msg);
         return false;
       }
@@ -168,22 +185,9 @@ export class ContextTape {
     const { includeWindows = false, windowId } = options ?? {};
 
     const filtered = this.messages.filter((msg) => {
-      const isWindowMessage = typeof msg.source === 'object' && 'window' in msg.source;
-
-      if (!isWindowMessage) {
-        // Always include main messages
-        return true;
-      }
-
-      if (!includeWindows) {
-        return false;
-      }
-
-      // If a specific window is requested, only include that window's messages
-      if (windowId) {
-        return (msg.source as { window: string }).window === windowId;
-      }
-
+      if (!isWindowSource(msg.source)) return true;
+      if (!includeWindows) return false;
+      if (windowId) return extractWindowId(msg.source) === windowId;
       return true;
     });
 
@@ -193,7 +197,8 @@ export class ContextTape {
 
     const formatted = filtered
       .map((m) => {
-        const tag = typeof m.source === 'object' ? `${m.role}:${m.source.window}` : m.role;
+        const wid = extractWindowId(m.source);
+        const tag = wid ? `${m.role}:${wid}` : m.role;
         return `<${tag}>${m.content}</${tag}>`;
       })
       .join('\n\n');

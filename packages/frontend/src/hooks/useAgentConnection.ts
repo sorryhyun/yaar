@@ -60,6 +60,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     addCliEntry,
     incrementSubagentCount,
     decrementSubagentCount,
+    trackMessage,
+    acceptMessage,
+    queueMessage,
+    clearAllMessageStatuses,
   } = useDesktopStore.getState();
 
   const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
@@ -124,6 +128,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,
           handleVerbSubscriptionUpdate: handleVerbSubscriptionUpdateCb,
+          acceptMessage,
+          queueMessage,
+          clearAllMessageStatuses,
           incrementSubagentCount,
           decrementSubagentCount,
         });
@@ -214,6 +221,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       const images = consumeAttachedImages();
       const messageId = generateMessageId();
       const monitorId = useDesktopStore.getState().activeMonitorId;
+      trackMessage(messageId);
       addCliEntry({ type: 'user', content, monitorId });
 
       const interactions: Array<{ type: 'draw'; timestamp: number; imageData: string }> = [];
@@ -238,6 +246,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const sendWindowMessage = useCallback(
     (windowId: string, content: string) => {
       const messageId = generateMessageId();
+      trackMessage(messageId);
       send({
         type: ClientEventType.WINDOW_MESSAGE,
         messageId,

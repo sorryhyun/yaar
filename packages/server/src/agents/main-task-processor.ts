@@ -10,6 +10,7 @@ import type { PoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
 import { getDeveloperAllowedTools } from './profiles.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
+import { mainSource } from './context.js';
 
 const MAX_QUEUE_SIZE = 10;
 
@@ -45,7 +46,11 @@ export class MainTaskProcessor {
       console.log(
         `[ContextPool] Steered active turn for ${monitorId} with message ${task.messageId}`,
       );
-      this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, 'main');
+      this.ctx.contextAssembly.appendUserMessage(
+        this.ctx.contextTape,
+        task.content,
+        mainSource(monitorId),
+      );
       const agent = this.ctx.agentPool.getMainAgent(monitorId)!;
       await this.ctx.sendEvent({
         type: ServerEventType.MESSAGE_ACCEPTED,
@@ -108,7 +113,7 @@ export class MainTaskProcessor {
     this.ctx.contextAssembly.appendUserMessage(
       this.ctx.contextTape,
       mainContext.contextContent,
-      'main',
+      mainSource(monitorId),
     );
 
     const canonicalMain = `main-${monitorId}`;
@@ -118,7 +123,7 @@ export class MainTaskProcessor {
     await runAgentTurn(this.ctx, {
       agent,
       role: mainRole,
-      source: 'main',
+      source: mainSource(monitorId),
       task,
       prompt: mainContext.prompt,
       fp,
@@ -152,13 +157,17 @@ export class MainTaskProcessor {
 
     const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const prompt = openWindowsContext + reloadPrefix + task.content;
-    this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, 'main');
+    this.ctx.contextAssembly.appendUserMessage(
+      this.ctx.contextTape,
+      task.content,
+      mainSource(monitorId),
+    );
 
     try {
       await runAgentTurn(this.ctx, {
         agent,
         role: ephemeralRole,
-        source: 'main',
+        source: mainSource(monitorId),
         task,
         prompt,
         fp,

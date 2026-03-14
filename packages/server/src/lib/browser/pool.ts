@@ -8,7 +8,7 @@
  * Uses the system Chrome/Edge — no bundled browser binary needed.
  */
 
-import { BrowserSession } from './session.js';
+import { BrowserSession, type BrowserSessionOptions } from './session.js';
 import { CDPClient } from './cdp.js';
 import {
   findChrome,
@@ -234,7 +234,10 @@ export class BrowserPool {
   /**
    * Create a new browser tab. Auto-assigns the next browserId if omitted.
    */
-  async createSession(browserId?: string): Promise<{ session: BrowserSession; browserId: string }> {
+  async createSession(
+    browserId?: string,
+    options?: BrowserSessionOptions,
+  ): Promise<{ session: BrowserSession; browserId: string }> {
     if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) {
       throw new Error(
         `Browser limit reached (max ${MAX_SESSIONS}). Close an existing browser first.`,
@@ -262,7 +265,7 @@ export class BrowserPool {
       }
       const target = (await resp.json()) as { id: string; webSocketDebuggerUrl: string };
 
-      const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl);
+      const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, options);
       this.knownTargetIds.add(target.id);
       this.sessions.set(browserId, session);
       return { session, browserId };

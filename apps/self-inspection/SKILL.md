@@ -90,23 +90,26 @@ delete('yaar://windows/si-v-update')
 
 ### 5. Window Lock/Unlock
 
+Lock semantics: a locked window can only be modified by the agent that locked it. Other agents are rejected.
+
 ```
 invoke('yaar://windows/si-v-lock', { action: "create", title: "Lock Test", renderer: "text", content: "Locked window test." })
 invoke('yaar://windows/si-v-lock', { action: "lock" })
+read('yaar://windows/si-v-lock')            # verify locked: true and lockedBy matches current agent
 ```
-Attempt to update the locked window — it should return a lock error or feedback:
+The locking agent can still update its own locked window:
 ```
-invoke('yaar://windows/si-v-lock', { action: "update", operation: "replace", content: "Should fail." })
+invoke('yaar://windows/si-v-lock', { action: "update", operation: "replace", content: "Updated by locking agent." })
+read('yaar://windows/si-v-lock')            # should contain "Updated by locking agent."
 ```
-Then unlock and update successfully:
+Unlock and verify state change:
 ```
 invoke('yaar://windows/si-v-lock', { action: "unlock" })
-invoke('yaar://windows/si-v-lock', { action: "update", operation: "replace", content: "Unlocked and updated." })
-read('yaar://windows/si-v-lock')            # should contain "Unlocked and updated."
+read('yaar://windows/si-v-lock')            # verify locked: false
 delete('yaar://windows/si-v-lock')
 ```
 
-**PASS** if locked update is rejected and unlocked update succeeds.
+**PASS** if lock metadata is correct, locking agent can update, and unlock clears the lock.
 
 ### 6. Component Form Submission (interactive)
 
@@ -441,7 +444,7 @@ invoke('yaar://windows/self-inspection-report', {
   title: "Self Inspection Report (Verb Mode)",
   width: 750, height: 750,
   renderer: "markdown",
-  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock rejected update, unlock allowed |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
+  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock metadata correct, owner update allowed, unlock cleared |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
 })
 ```
 

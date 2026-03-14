@@ -18,3 +18,4 @@ export { createDrawingSlice } from './drawingSlice';
 export { createImageAttachSlice } from './imageAttachSlice';
 export { createCliSlice } from './cliSlice';
 export { createMonitorSlice } from './monitorSlice';
+export { createMessageStatusSlice } from './messageStatusSlice';

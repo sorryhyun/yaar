@@ -23,7 +23,7 @@ vi.mock('../lib/browser/chrome.js', () => ({
 
 vi.mock('../lib/browser/session.js', () => ({
   BrowserSession: {
-    create: vi.fn().mockImplementation((id: string, _debuggerUrl: string) => {
+    create: vi.fn().mockImplementation((id: string, _debuggerUrl: string, _options?: unknown) => {
       return Promise.resolve({
         id,
         windowId: undefined,
@@ -88,6 +88,7 @@ describe('BrowserPool', () => {
     expect(BrowserSession.create).toHaveBeenCalledWith(
       '0',
       'ws://127.0.0.1:9222/devtools/page/mock',
+      undefined,
     );
 
     const { launchChrome } = await import('../lib/browser/chrome.js');
@@ -117,13 +118,15 @@ describe('BrowserPool', () => {
     expect(pool.getSession('custom')).toBeDefined();
   });
 
-  it('enforces max sessions limit (3)', async () => {
+  it('enforces max sessions limit (5)', async () => {
+    await pool.createSession();
+    await pool.createSession();
     await pool.createSession();
     await pool.createSession();
     await pool.createSession();
 
     await expect(pool.createSession()).rejects.toThrow(/limit reached/i);
-    expect(pool.getStats().activeSessions).toBe(3);
+    expect(pool.getStats().activeSessions).toBe(5);
   });
 
   it('findByWindowId returns the correct session', async () => {

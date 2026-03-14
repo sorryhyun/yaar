@@ -10,7 +10,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { ContextTape } from '@yaar/server/agents/context';
+import { ContextTape, mainSource, windowSource } from '@yaar/server/agents/context';
 import { MonitorBudgetPolicy } from '@yaar/server/agents/context-pool-policies/monitor-budget-policy';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -25,12 +25,10 @@ const WIN_MSG = 'Component rendered with 12 data points on an interactive line c
 function buildTape(mainCount: number, windowCount: number): ContextTape {
   const tape = new ContextTape();
   for (let i = 0; i < mainCount; i++) {
-    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, 'main');
+    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, mainSource('0'));
   }
   for (let i = 0; i < windowCount; i++) {
-    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, {
-      window: `win-${i % 5}`,
-    });
+    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, windowSource(`win-${i % 5}`));
   }
   return tape;
 }
@@ -45,16 +43,14 @@ describe('ContextTape.append', () => {
   bench('100 main messages', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, 'main');
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, mainSource('0'));
     }
   });
 
   bench('100 window messages across 5 windows', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, {
-        window: `win-${i % 5}`,
-      });
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, windowSource(`win-${i % 5}`));
     }
   });
 
@@ -63,7 +59,7 @@ describe('ContextTape.append', () => {
     // to exercise the pruneIfNeeded() path.
     const tape = buildTape(195, 0);
     for (let i = 0; i < 10; i++) {
-      tape.append('user', `extra message ${i}`, 'main');
+      tape.append('user', `extra message ${i}`, mainSource('0'));
     }
   });
 });

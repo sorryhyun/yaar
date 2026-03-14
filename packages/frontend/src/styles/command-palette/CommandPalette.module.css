@@ -344,6 +344,47 @@
   color: var(--color-blue);
 }
 
+/* Message status indicators */
+.messageStatusQueued,
+.messageStatusAccepted {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: var(--space-1) var(--space-3);
+  text-align: center;
+  animation: statusFadeIn 0.15s ease-out;
+}
+
+.messageStatusQueued {
+  color: rgb(249, 226, 175);
+}
+
+.messageStatusAccepted {
+  color: var(--color-green);
+  animation:
+    statusFadeIn 0.15s ease-out,
+    statusFadeOut 1.5s ease-in 0.5s forwards;
+}
+
+@keyframes statusFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes statusFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 /* Drop target feedback */
 .inputWrapper[data-dragover='true'] {
   border-color: var(--color-blue);

@@ -9,6 +9,7 @@ import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import { getToolNames } from '../mcp/server.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
+import { windowSource } from './context.js';
 
 export class WindowTaskProcessor {
   constructor(private readonly ctx: PoolContext) {}
@@ -70,7 +71,7 @@ export class WindowTaskProcessor {
       const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task, {
         currentWindowId: windowId,
       });
-      const source = { window: windowId } as const;
+      const source = windowSource(windowId);
 
       // Record user message immediately
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);

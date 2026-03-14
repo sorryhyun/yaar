@@ -19,57 +19,68 @@ In YAAR, you tell the AI what to build and it creates the app. TypeScript author
 
 Users don't need to write code. The AI writes TypeScript in a sandbox, compiles with Bun, previews the result, and deploys it as an app. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies.
 
-## MCP Tools
+## URI Verbs
 
-### App Development Tools
+All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describe`) on `yaar://` URIs.
 
-| Tool | Description |
-|------|-------------|
-| `write` | Write files to sandbox (`yaar://sandbox/` URI) |
-| `read` | Read sandbox files (`yaar://sandbox/` URI) |
-| `list` | List sandbox files (`yaar://sandbox/` URI) |
-| `edit` | Apply search-and-replace edits to sandbox files (`yaar://sandbox/` URI) |
-| `invoke('yaar://sandbox/{id}', { action: "compile" })` | Bundle `src/main.ts` → single HTML (Bun) |
-| `invoke('yaar://sandbox/{id}', { action: "typecheck" })` | Run TypeScript type checking on sandbox code |
-| `invoke('yaar://sandbox/{id}', { action: "deploy", appId, ... })` | Deploy compiled app to desktop |
-| `invoke('yaar://sandbox/{id}', { action: "clone", uri })` | Clone a deployed app's source into a sandbox for editing |
+### Sandbox — `yaar://sandbox/`
 
-### Code Execution Tools
+| Verb | URI | Description |
+|------|-----|-------------|
+| `invoke` | `yaar://sandbox/new/src/main.ts`, `{ action: "write", content }` | Write file to new sandbox (auto-creates ID) |
+| `invoke` | `yaar://sandbox/{id}/src/main.ts`, `{ action: "write", content }` | Write file to existing sandbox |
+| `invoke` | `yaar://sandbox/{id}/src/main.ts`, `{ action: "edit", old_string, new_string }` | Search-and-replace edit |
+| `read` | `yaar://sandbox/{id}/src/main.ts` | Read sandbox file |
+| `list` | `yaar://sandbox/{id}/` | List sandbox files |
+| `invoke` | `yaar://sandbox/{id}`, `{ action: "compile" }` | Bundle `src/main.ts` → single HTML (Bun) |
+| `invoke` | `yaar://sandbox/{id}`, `{ action: "typecheck" }` | Run TypeScript type checking |
+| `invoke` | `yaar://sandbox/{id}`, `{ action: "deploy", appId, ... }` | Deploy compiled app to desktop |
+| `invoke` | `yaar://sandbox/new`, `{ action: "clone", uri }` | Clone a deployed app's source into a new sandbox |
+| `invoke` | `yaar://sandbox/eval`, `{ code }` | Execute JavaScript in sandboxed VM |
 
-| Tool | Description |
-|------|-------------|
-| `invoke('yaar://sandbox/eval', { code })` | Execute JavaScript in sandboxed VM |
+### Apps — `yaar://apps/`
 
-### Reference Tools
+| Verb | URI | Description |
+|------|-----|-------------|
+| `list` | `yaar://apps` | List all installed apps |
+| `read` | `yaar://apps/{appId}` | Load an app's SKILL.md |
+| `invoke` | `yaar://apps/{appId}`, `{ action: "set_badge", count }` | Set badge count on app icon |
+| `delete` | `yaar://apps/{appId}` | Uninstall app |
 
-| Tool | Description |
-|------|-------------|
-| `skill` | Load reference docs by topic (`app_dev`, `sandbox`, `components`, `host_api`, `app_protocol`) |
+### App Config — `yaar://config/app/`
 
-### App Management Tools
+| Verb | URI | Description |
+|------|-----|-------------|
+| `invoke` | `yaar://config/app/{appId}`, `{ config }` | Save app config/credentials |
+| `read` | `yaar://config/app/{appId}` | Read app config |
+| `delete` | `yaar://config/app/{appId}` | Remove app config |
 
-| Tool | Description |
-|------|-------------|
-| `apps_list` | List apps |
-| `apps_load_skill` | Load an app's SKILL.md |
-| `invoke('yaar://config/app/{appId}', { config })` | Save app config |
-| `read('yaar://config/app/{appId}')` | Read app config |
-| `delete('yaar://config/app/{appId}')` | Remove app config |
-| `market_list` | List apps available in the marketplace |
-| `market_get` | Download and install an app from the marketplace |
-| `market_delete` | Uninstall an app and its credentials |
+### Marketplace — `yaar://market/`
+
+| Verb | URI | Description |
+|------|-----|-------------|
+| `list` | `yaar://market` | Browse marketplace apps |
+| `read` | `yaar://market/{appId}` | Get details for a marketplace app |
+| `invoke` | `yaar://market/{appId}`, `{ action: "install" }` | Install app from marketplace |
+
+### Skills — `yaar://skills/`
+
+| Verb | URI | Description |
+|------|-----|-------------|
+| `list` | `yaar://skills` | List available skill topics |
+| `read` | `yaar://skills/{topic}` | Load reference docs (`app_dev`, `sandbox`, `components`, `host_api`, `app_protocol`) |
 
 ## Development Workflow in Detail
 
-### Step 1: Write Code — `write`
+### Step 1: Write Code
 
 ```
-write(uri: "yaar://sandbox/src/main.ts", content: "...")        // new sandbox auto-created
-write(uri: "yaar://sandbox/1739xxx/src/main.ts", content: "...") // write to existing sandbox
+invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })        // new sandbox auto-created
+invoke('yaar://sandbox/1739xxx/src/main.ts', { action: "write", content: "..." })     // write to existing sandbox
 ```
 
 - Creates files in an isolated sandbox directory
-- `yaar://sandbox/{path}` without a sandbox ID auto-generates a new sandbox ID
+- `yaar://sandbox/new/{path}` auto-generates a new sandbox ID
 - Supports multiple files (`src/main.ts`, `src/utils.ts`, ...)
 
 ### Step 2: Compile

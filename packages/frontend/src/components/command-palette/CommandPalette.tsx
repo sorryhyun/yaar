@@ -1,10 +1,11 @@
 /**
  * CommandPalette - Input for sending messages to the agent.
  */
-import { useState, useCallback, KeyboardEvent } from 'react';
+import { useState, useCallback, useMemo, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
+import type { MessageStatus } from '@/store/types';
 import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { apiFetch, isRemoteMode } from '@/lib/api';
@@ -44,6 +45,19 @@ export function CommandPalette() {
   const addAttachedImages = useDesktopStore((state) => state.addAttachedImages);
   const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
   const clearAttachedImages = useDesktopStore((state) => state.clearAttachedImages);
+  const messageStatuses = useDesktopStore((state) => state.messageStatuses);
+
+  // Derive the most relevant active status to display
+  const activeStatus = useMemo((): MessageStatus | null => {
+    const entries = Object.values(messageStatuses);
+    if (entries.length === 0) return null;
+    // Prioritize queued over accepted over sent
+    const queued = entries.find((e) => e.status === 'queued');
+    if (queued) return queued;
+    const accepted = entries.find((e) => e.status === 'accepted');
+    if (accepted) return accepted;
+    return null; // Don't show 'sent' — avoid flicker for fast responses
+  }, [messageStatuses]);
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -375,6 +389,19 @@ export function CommandPalette() {
             </button>
           </div>
         </div>
+        {activeStatus && (
+          <div
+            className={
+              activeStatus.status === 'queued'
+                ? styles.messageStatusQueued
+                : styles.messageStatusAccepted
+            }
+          >
+            {activeStatus.status === 'queued'
+              ? `Queued (position ${activeStatus.position})`
+              : 'Accepted'}
+          </div>
+        )}
         {/* Fixed slot for minimized window tabs */}
         <div className={styles.taskbarSlot}>
           <Taskbar />

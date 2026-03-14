@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ContextTape } from '../agents/context.js';
+import {
+  ContextTape,
+  mainSource,
+  windowSource,
+  isWindowSource,
+  extractWindowId,
+} from '../agents/context.js';
 
 /**
  * MAX_MAIN_MESSAGES is 200 (not exported), pruning keeps the most recent half (100).
@@ -15,7 +21,7 @@ describe('ContextTape auto-pruning', () => {
 
   it('does not prune when below the limit', () => {
     for (let i = 0; i < MAX_MAIN_MESSAGES - 1; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`, 'main');
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`, mainSource('0'));
     }
 
     expect(tape.length).toBe(199);
@@ -26,7 +32,7 @@ describe('ContextTape auto-pruning', () => {
 
   it('prunes to ~half when exceeding MAX_MAIN_MESSAGES', () => {
     for (let i = 0; i < MAX_MAIN_MESSAGES + 1; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`, 'main');
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`, mainSource('0'));
     }
 
     // 201 main messages added; pruneIfNeeded keeps the most recent 100,
@@ -45,13 +51,13 @@ describe('ContextTape auto-pruning', () => {
     // Interleave window messages among main messages
     const windowContents: string[] = [];
     for (let i = 0; i < MAX_MAIN_MESSAGES + 1; i++) {
-      tape.append('user', `main-${i}`, 'main');
+      tape.append('user', `main-${i}`, mainSource('0'));
 
       // Sprinkle window messages at regular intervals
       if (i % 50 === 0) {
         const winContent = `win-${i}`;
         windowContents.push(winContent);
-        tape.append('user', winContent, { window: 'w1' });
+        tape.append('user', winContent, windowSource('w1'));
       }
     }
 
@@ -63,7 +69,7 @@ describe('ContextTape auto-pruning', () => {
     // All window messages must survive
     const windowMessages = tape
       .getAllMessages()
-      .filter((m) => typeof m.source === 'object' && m.source.window === 'w1');
+      .filter((m) => isWindowSource(m.source) && extractWindowId(m.source) === 'w1');
     expect(windowMessages).toHaveLength(windowContents.length);
     for (const expected of windowContents) {
       expect(windowMessages.some((m) => m.content === expected)).toBe(true);
@@ -75,13 +81,13 @@ describe('ContextTape auto-pruning', () => {
 
     // First cycle: add 201 messages to trigger pruning -> 100 remain
     for (let i = 0; i < MAX_MAIN_MESSAGES + 1; i++) {
-      tape.append('user', `batch1-${i}`, 'main');
+      tape.append('user', `batch1-${i}`, mainSource('0'));
     }
     expect(tape.length).toBe(keepCount);
 
     // Second cycle: add another 101 messages to reach 201 again -> prunes to 100
     for (let i = 0; i < keepCount + 1; i++) {
-      tape.append('assistant', `batch2-${i}`, 'main');
+      tape.append('assistant', `batch2-${i}`, mainSource('0'));
     }
     expect(tape.length).toBe(keepCount);
 

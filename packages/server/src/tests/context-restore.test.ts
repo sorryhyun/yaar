@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ContextTape } from '../agents/context.js';
+import { ContextTape, windowSource, extractWindowId } from '../agents/context.js';
 import {
   getContextRestoreMessages,
   type ContextRestorePolicy,
@@ -73,15 +73,15 @@ describe('context restore pipeline', () => {
 
     const restored = getContextRestoreMessages(parseSessionMessages(legacyJsonl));
     expect(restored).toHaveLength(1);
-    expect(restored[0].source).toEqual({ window: 'legacy' });
+    expect(restored[0].source).toBe(windowSource('legacy'));
   });
   it('restores full multi-window history and preserves source + timestamp after restart', () => {
     const messages = parseSessionMessages(makeSessionJsonl());
     const restored = getContextRestoreMessages(messages);
 
     expect(restored).toHaveLength(6);
-    expect(restored[2].source).toEqual({ window: 'w1' });
-    expect(restored[4].source).toEqual({ window: 'w2' });
+    expect(restored[2].source).toBe(windowSource('w1'));
+    expect(restored[4].source).toBe(windowSource('w2'));
     expect(restored[3].timestamp).toBe('2026-01-01T00:00:03.000Z');
 
     const tape = new ContextTape();
@@ -107,9 +107,7 @@ describe('context restore pipeline', () => {
 
     const restored = getContextRestoreMessages(messages, policy);
     expect(restored).toHaveLength(4);
-    expect(restored.some((m) => typeof m.source === 'object' && m.source.window === 'w2')).toBe(
-      false,
-    );
+    expect(restored.some((m) => extractWindowId(m.source) === 'w2')).toBe(false);
   });
 
   it('supports branch summarization for old windows', () => {

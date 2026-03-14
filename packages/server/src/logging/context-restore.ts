@@ -1,5 +1,11 @@
 import type { ParsedMessage } from './types.js';
-import type { ContextMessage } from '../agents/context.js';
+import {
+  type ContextMessage,
+  type ContextSource,
+  mainSource,
+  windowSource,
+  extractWindowId,
+} from '../agents/context.js';
 
 export interface ContextRestorePolicy {
   mode: 'full' | 'main_and_selected_windows' | 'summarize_old_windows';
@@ -12,12 +18,29 @@ export const FULL_RESTORE_POLICY: ContextRestorePolicy = {
   mode: 'full',
 };
 
-function inferWindowSource(agentId: string): { window: string } | null {
+/**
+ * Normalize a source value from old or new log formats into a ContextSource URI.
+ * Old formats: 'main' or { window: string }
+ * New format: 'yaar://monitors/...' or 'yaar://windows/...'
+ */
+function normalizeSource(raw: unknown): ContextSource {
+  if (typeof raw === 'string') {
+    if (raw === 'main') return mainSource('0');
+    if (raw.startsWith('yaar://')) return raw as ContextSource;
+    return mainSource('0');
+  }
+  if (typeof raw === 'object' && raw !== null && 'window' in raw) {
+    return windowSource((raw as { window: string }).window);
+  }
+  return mainSource('0');
+}
+
+function inferWindowSource(agentId: string): ContextSource | null {
   if (!agentId.startsWith('window-')) {
     return null;
   }
 
-  return { window: agentId.slice('window-'.length) };
+  return windowSource(agentId.slice('window-'.length));
 }
 
 function toContextMessage(msg: ParsedMessage): ContextMessage | null {
@@ -25,7 +48,9 @@ function toContextMessage(msg: ParsedMessage): ContextMessage | null {
     return null;
   }
 
-  const source = msg.source ?? inferWindowSource(msg.agentId) ?? 'main';
+  const source = msg.source
+    ? normalizeSource(msg.source)
+    : (inferWindowSource(msg.agentId) ?? mainSource('0'));
 
   return {
     role: msg.type,
@@ -36,7 +61,7 @@ function toContextMessage(msg: ParsedMessage): ContextMessage | null {
 }
 
 function sourceWindowId(msg: ContextMessage): string | null {
-  return typeof msg.source === 'object' ? msg.source.window : null;
+  return extractWindowId(msg.source);
 }
 
 /**
@@ -89,7 +114,7 @@ export function getContextRestoreMessages(
       role: 'assistant',
       content: `[window_summary:${windowId}] ${summary}`,
       timestamp,
-      source: { window: windowId },
+      source: windowSource(windowId),
     });
   }
 

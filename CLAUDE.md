@@ -196,7 +196,7 @@ Each app folder can contain an `app.json` with optional metadata:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Display name (defaults to title-cased folder name) |
-| `description` | string | Brief description shown in `apps_list` output |
+| `description` | string | Brief description shown in `list('yaar://apps')` output |
 | `icon` | string | Emoji icon (overridden by `icon.png` if present) |
 | `createShortcut` | boolean | Create desktop shortcut on install (default: true). `hidden: true` treated as `createShortcut: false` for backward compat |
 | `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
@@ -211,7 +211,7 @@ Each app folder can contain an `app.json` with optional metadata:
 
 ### System Apps
 
-All apps are listed in the AI system prompt. Apps with `"createShortcut": false` in `app.json` won't get a desktop shortcut on install, but they're still fully accessible via `apps_list` and `load_skill`. Use this for system capabilities (like the dock or storage) that should run without a desktop icon.
+All apps are listed in the AI system prompt. Apps with `"createShortcut": false` in `app.json` won't get a desktop shortcut on install, but they're still fully accessible via `list('yaar://apps')` and `read('yaar://apps/{appId}')`. Use this for system capabilities (like the dock or storage) that should run without a desktop icon.
 
 ### Creating a New App
 
@@ -224,21 +224,20 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
 4. (Optional) Use `invoke('yaar://config/app/{appId}', { config })` to store credentials (saved to `config/{appId}.json`, git-ignored)
 
-### Apps Tools (MCP)
+### Apps URI Verbs
 
-| Tool | Description |
-|------|-------------|
-| `apps_list` | List all available apps |
-| `apps_load_skill` | Load SKILL.md for an app |
-| `apps_set_app_badge` | Set badge count on a desktop app icon |
-| `apps_market_list` | List apps available in the marketplace |
-| `apps_market_get` | Download and install an app from the marketplace |
-| `apps_market_delete` | Uninstall an app and its credentials |
-
-App config (credentials, preferences) is managed via verb tools:
-- `invoke('yaar://config/app/{appId}', { config })` — merge config into `config/{appId}.json`
-- `read('yaar://config/app/{appId}')` — read app config
-- `delete('yaar://config/app/{appId}')` — remove app config key or entire file
+| Verb | URI | Description |
+|------|-----|-------------|
+| `list` | `yaar://apps` | List all available apps |
+| `read` | `yaar://apps/{appId}` | Load SKILL.md for an app |
+| `invoke` | `yaar://apps/{appId}`, `{ action: "set_badge", count }` | Set badge count on app icon |
+| `delete` | `yaar://apps/{appId}` | Uninstall app |
+| `invoke` | `yaar://config/app/{appId}`, `{ config }` | Save app config/credentials |
+| `read` | `yaar://config/app/{appId}` | Read app config |
+| `delete` | `yaar://config/app/{appId}` | Remove app config |
+| `list` | `yaar://market` | Browse marketplace apps |
+| `read` | `yaar://market/{appId}` | Get marketplace app details |
+| `invoke` | `yaar://market/{appId}`, `{ action: "install" }` | Install from marketplace |
 
 ### Example: GitHub Manager App
 

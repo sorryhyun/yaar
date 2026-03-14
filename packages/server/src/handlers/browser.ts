@@ -80,6 +80,10 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
         y: { type: 'number' },
         index: { type: 'number' },
         visible: { type: 'boolean', description: 'Show browser window on open (default: true)' },
+        mobile: {
+          type: 'boolean',
+          description: 'Open in mobile mode with phone viewport and user-agent (default: false)',
+        },
         key: { type: 'string', description: 'Key for press action' },
         direction: { type: 'string', enum: ['up', 'down', 'back', 'forward'] },
         timeout: { type: 'number' },
@@ -132,6 +136,8 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
               );
             }
 
+            const mobile = p.mobile === true;
+
             // Reuse existing session if one exists with this browserId
             const existing = pool.getSession(browserId);
             let session: typeof existing & {};
@@ -140,7 +146,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
               session = existing;
               bid = browserId;
             } else {
-              const created = await pool.createSession(browserId);
+              const created = await pool.createSession(browserId, { mobile });
               session = created.session;
               bid = created.browserId;
             }
@@ -152,6 +158,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
               p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
             );
             if (p.visible !== false && !existing) {
+              const isMobile = session.mobile;
               await actionEmitter.emitActionWithFeedback(
                 {
                   type: 'window.create' as const,
@@ -160,8 +167,8 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
                   bounds: {
                     x: 80 + Number(bid) * 30,
                     y: 60 + Number(bid) * 30,
-                    w: 900,
-                    h: 650,
+                    w: isMobile ? 430 : 900,
+                    h: isMobile ? 750 : 650,
                   },
                   content: {
                     renderer: 'iframe',
@@ -171,7 +178,9 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
                 3000,
               );
             }
-            return ok(`[browser:${bid}]\n${formatPageState(state)}`);
+            return ok(
+              `[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`,
+            );
           }
 
           case 'click': {

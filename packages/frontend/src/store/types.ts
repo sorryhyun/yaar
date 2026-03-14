@@ -332,6 +332,27 @@ export interface MonitorSliceActions {
 
 export type MonitorSlice = MonitorSliceState & MonitorSliceActions;
 
+export interface MessageStatus {
+  status: 'sent' | 'accepted' | 'queued';
+  agentId?: string;
+  position?: number;
+  timestamp: number;
+}
+
+export interface MessageStatusSliceState {
+  messageStatuses: Record<string, MessageStatus>;
+}
+
+export interface MessageStatusSliceActions {
+  trackMessage: (messageId: string) => void;
+  acceptMessage: (messageId: string, agentId: string) => void;
+  queueMessage: (messageId: string, position: number) => void;
+  clearMessageStatus: (messageId: string) => void;
+  clearAllMessageStatuses: () => void;
+}
+
+export type MessageStatusSlice = MessageStatusSliceState & MessageStatusSliceActions;
+
 // ============ Combined Store Type ============
 
 export type DesktopStore = WindowsSlice &
@@ -350,7 +371,8 @@ export type DesktopStore = WindowsSlice &
   DrawingSlice &
   ImageAttachSlice &
   CliSlice &
-  MonitorSlice & {
+  MonitorSlice &
+  MessageStatusSlice & {
     appBadges: Record<string, number>;
     appsVersion: number;
     shortcuts: DesktopShortcut[];

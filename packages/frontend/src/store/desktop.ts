@@ -40,6 +40,7 @@ import {
   createCliSlice,
   createMonitorSlice,
   createUserPromptsSlice,
+  createMessageStatusSlice,
 } from './slices';
 
 // Import pure mutation functions for batched action processing
@@ -77,6 +78,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createImageAttachSlice(...a),
     ...createCliSlice(...a),
     ...createMonitorSlice(...a),
+    ...createMessageStatusSlice(...a),
 
     // Desktop-level state
     appBadges: {} as Record<string, number>,
@@ -236,6 +238,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.selectedWindowIds = [];
         state.attachedImages = [];
         state.cliStreaming = {};
+        state.messageStatuses = {};
       });
     },
 
@@ -268,6 +271,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.cliMode = false;
         state.cliHistory = {};
         state.cliStreaming = {};
+        state.messageStatuses = {};
         state.monitors = [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1', createdAt: Date.now() }];
         state.activeMonitorId = DEFAULT_MONITOR_ID;
       });
