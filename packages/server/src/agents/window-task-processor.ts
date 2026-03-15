@@ -10,6 +10,7 @@ import type { PoolContext, Task } from './pool-types.js';
 import { getToolNames } from '../mcp/server.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource } from './context.js';
+import { WINDOW_PROFILE } from './profiles/index.js';
 
 export class WindowTaskProcessor {
   constructor(private readonly ctx: PoolContext) {}
@@ -112,6 +113,7 @@ export class WindowTaskProcessor {
         resumeSessionId,
         monitorId: task.monitorId,
         allowedTools: getToolNames(),
+        systemPromptOverride: WINDOW_PROFILE.systemPrompt,
         onBeforeRun: async () => {
           await this.ctx.sharedLogger?.registerAgent(
             agentRole,

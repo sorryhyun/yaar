@@ -12,9 +12,9 @@ import { mapClaudeMessage } from './message-mapper.js';
 import { getToolNames, getMcpToken, getActiveServers } from '../../mcp/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath, getPort } from '../../config.js';
-import { getSystemPrompt } from './system-prompt.js';
+import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
-import { buildAgentDefinitions } from '../../agents/profiles.js';
+import { buildAgentDefinitions } from '../../agents/profiles/index.js';
 
 interface ImageContentBlock {
   type: 'image';

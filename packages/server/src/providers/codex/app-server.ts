@@ -23,7 +23,7 @@ import {
   getCodexWsPort,
   STORAGE_DIR,
 } from '../../config.js';
-import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles.js';
+import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles/index.js';
 import type {
   InitializeParams,
   InitializeResponse,

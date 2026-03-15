@@ -1,0 +1,261 @@
+/**
+ * Browser action implementations extracted from the browser handler.
+ *
+ * Each function corresponds to one `action` value in the
+ * `invoke('yaar://browser/{id}', { action, ... })` dispatch table.
+ */
+
+import type { BrowserPool } from '../../lib/browser/index.js';
+import type { VerbResult } from '../../handlers/uri-registry.js';
+import { ok, okWithImages, error } from '../../handlers/utils.js';
+import { resolveSession, formatPageState, findMainContent } from './shared.js';
+import { actionEmitter } from '../../session/action-emitter.js';
+import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
+import { getSessionId } from '../../agents/session.js';
+import { getSessionHub } from '../../session/session-hub.js';
+
+type Payload = Record<string, unknown>;
+
+export async function handleOpen(
+  pool: BrowserPool,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const url = p.url as string;
+  if (!url) return error('"url" is required for open.');
+  const domain = extractDomain(url);
+  if (!domain) return error('Invalid URL');
+  if (!(await isDomainAllowed(domain))) {
+    // Try to show permission dialog instead of returning a static error
+    const hub = getSessionHub();
+    let sessionId = getSessionId();
+    if (!sessionId || !hub.get(sessionId)) {
+      sessionId = hub.getDefault()?.sessionId;
+    }
+    if (!sessionId) {
+      return error(
+        `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
+      );
+    }
+    const confirmed = await actionEmitter.showPermissionDialogToSession(
+      sessionId,
+      'Allow Domain Access',
+      `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
+      'http_domain',
+      domain,
+    );
+    if (!confirmed) {
+      return error(`User denied access to domain "${domain}".`);
+    }
+    await addAllowedDomain(domain);
+  }
+
+  const mobile = p.mobile === true;
+
+  // Reuse existing session if one exists with this browserId
+  const existing = pool.getSession(browserId);
+  let session: typeof existing & {};
+  let bid: string;
+  if (existing) {
+    session = existing;
+    bid = browserId;
+  } else {
+    const created = await pool.createSession(browserId, { mobile });
+    session = created.session;
+    bid = created.browserId;
+  }
+
+  const windowId = `browser-${bid}`;
+  session.windowId = windowId;
+  const state = await session.navigate(
+    url,
+    p.waitUntil as 'load' | 'domcontentloaded' | 'networkidle' | undefined,
+  );
+  if (p.visible !== false && !existing) {
+    const isMobile = session.mobile;
+    await actionEmitter.emitActionWithFeedback(
+      {
+        type: 'window.create' as const,
+        windowId,
+        title: `Browser — ${state.title || domain}`,
+        bounds: {
+          x: 80 + Number(bid) * 30,
+          y: 60 + Number(bid) * 30,
+          w: isMobile ? 430 : 900,
+          h: isMobile ? 750 : 650,
+        },
+        content: {
+          renderer: 'iframe',
+          data: `/api/apps/browser/index.html?browserId=${bid}`,
+        },
+      },
+      3000,
+    );
+  }
+  return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`);
+}
+
+export async function handleClick(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
+    return error('Provide "selector", "text", or both "x" and "y".');
+  }
+  const state = await session.click(
+    p.selector as string | undefined,
+    p.text as string | undefined,
+    p.x as number | undefined,
+    p.y as number | undefined,
+    p.index as number | undefined,
+  );
+  return ok(formatPageState(state));
+}
+
+export async function handleType(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.selector) return error('"selector" is required for type.');
+  if (!p.text) return error('"text" is required for type.');
+  const state = await session.type(p.selector as string, p.text as string);
+  return ok(`Typed into ${p.selector}\n\n${formatPageState(state)}`);
+}
+
+export async function handlePress(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.key) return error('"key" is required for press.');
+  const state = await session.press(p.key as string, p.selector as string | undefined);
+  return ok(formatPageState(state));
+}
+
+export async function handleScroll(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const dir = p.direction as string;
+  if (dir !== 'up' && dir !== 'down') return error('"direction" must be "up" or "down".');
+  const state = await session.scroll(dir);
+  return ok(formatPageState(state));
+}
+
+export async function handleNavigate(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const dir = p.direction as string;
+  if (dir !== 'back' && dir !== 'forward') return error('"direction" must be "back" or "forward".');
+  const state = await session.navigateHistory(dir);
+  return ok(formatPageState(state));
+}
+
+export async function handleHover(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
+    return error('Provide "selector", "text", or both "x" and "y".');
+  }
+  const state = await session.hover(p as Parameters<typeof session.hover>[0]);
+  return ok(formatPageState(state));
+}
+
+export async function handleWaitFor(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.selector) return error('"selector" is required for wait_for.');
+  const state = await session.waitForSelector(
+    p.selector as string,
+    p.timeout as number | undefined,
+  );
+  return ok(formatPageState(state));
+}
+
+export async function handleScreenshot(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const hasRegion =
+    p.x0 !== undefined && p.y0 !== undefined && p.x1 !== undefined && p.y1 !== undefined;
+  const clip = hasRegion
+    ? {
+        x: p.x0 as number,
+        y: p.y0 as number,
+        width: (p.x1 as number) - (p.x0 as number),
+        height: (p.y1 as number) - (p.y0 as number),
+      }
+    : undefined;
+  const buffer = await session.screenshot(clip ? { clip } : undefined);
+  const label = clip
+    ? `Magnified region (${p.x0},${p.y0})→(${p.x1},${p.y1}) @4x:`
+    : 'Current browser screenshot:';
+  return okWithImages(label, [{ data: buffer.toString('base64'), mimeType: 'image/webp' }]);
+}
+
+export async function handleExtract(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const effectiveSelector =
+    p.mainContentOnly && !p.selector
+      ? await findMainContent(session)
+      : (p.selector as string | undefined);
+  const content = await session.extractContent(effectiveSelector);
+  const maxText = (p.maxTextLength as number) ?? 3000;
+  const maxLinks = (p.maxLinks as number) ?? 50;
+
+  let result = `URL: ${content.url}\nTitle: ${content.title}\n`;
+  if (content.fullText) {
+    const text =
+      content.fullText.length > maxText
+        ? content.fullText.slice(0, maxText) + '\n... (truncated)'
+        : content.fullText;
+    result += `\n--- Text ---\n${text}\n`;
+  }
+  if (content.links.length > 0) {
+    const linkLines = content.links
+      .slice(0, maxLinks)
+      .map((l) => `  [${l.text}](${l.href})`)
+      .join('\n');
+    result += `\n--- Links (${content.links.length}) ---\n${linkLines}\n`;
+    if (content.links.length > maxLinks)
+      result += `  ... and ${content.links.length - maxLinks} more\n`;
+  }
+  if (content.forms.length > 0) {
+    const formLines = content.forms.map((f, i) => {
+      const fields = f.fields.map((fld) => `    ${fld.name} (${fld.type})`).join('\n');
+      return `  Form ${i + 1}: action=${f.action}\n${fields}`;
+    });
+    result += `\n--- Forms (${content.forms.length}) ---\n${formLines.join('\n')}\n`;
+  }
+  return ok(result.trim());
+}
+
+export async function handleExtractImages(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const effectiveSelector =
+    p.mainContentOnly && !p.selector
+      ? await findMainContent(session)
+      : (p.selector as string | undefined);
+  const images = await session.extractImages(effectiveSelector ?? undefined);
+  if (images.length === 0) return ok('No images found.');
+
+  // Separate images that were successfully captured vs cross-origin failures
+  const captured = images.filter((img) => img.dataUrl);
+  const crossOrigin = images.filter((img) => !img.dataUrl);
+
+  let text = `Found ${images.length} image(s).`;
+  if (crossOrigin.length > 0) {
+    text += `\n${crossOrigin.length} cross-origin image(s) could not be captured:`;
+    for (const img of crossOrigin) {
+      text += `\n  - ${img.src} (${img.width}x${img.height})${img.alt ? ` alt="${img.alt}"` : ''}`;
+    }
+  }
+  if (captured.length > 0) {
+    text += `\n${captured.length} image(s) extracted:`;
+    for (const img of captured) {
+      text += `\n  - ${img.src} (${img.width}x${img.height})${img.alt ? ` alt="${img.alt}"` : ''}`;
+    }
+  }
+
+  if (captured.length === 0) return ok(text);
+
+  return okWithImages(
+    text,
+    captured.map((img) => ({
+      data: img.dataUrl!.replace(/^data:image\/\w+;base64,/, ''),
+      mimeType: 'image/png',
+    })),
+  );
+}
+
+export async function handleHtml(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const html = await session.getHtml(p.selector as string | undefined);
+  return ok(html);
+}

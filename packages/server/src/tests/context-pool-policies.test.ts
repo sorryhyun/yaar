@@ -4,7 +4,7 @@ import { WindowQueuePolicy } from '../agents/context-pool-policies/window-queue-
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
 import { WindowConnectionPolicy } from '../agents/context-pool-policies/window-connection-policy.js';
-import { ContextTape } from '../agents/context.js';
+import { ContextTape, mainSource } from '../agents/context.js';
 import type { Task } from '../agents/pool-types.js';
 
 describe('MainQueuePolicy', () => {
@@ -90,8 +90,8 @@ describe('ContextAssemblyPolicy', () => {
     function buildTape(turnCount: number) {
       const tape = new ContextTape();
       for (let i = 1; i <= turnCount; i++) {
-        tape.append('user', `User message ${i}`, 'main');
-        tape.append('assistant', `Assistant reply ${i}`, 'main');
+        tape.append('user', `User message ${i}`, mainSource('0'));
+        tape.append('assistant', `Assistant reply ${i}`, mainSource('0'));
       }
       return tape;
     }

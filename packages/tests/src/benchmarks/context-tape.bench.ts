@@ -28,7 +28,11 @@ function buildTape(mainCount: number, windowCount: number): ContextTape {
     tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, mainSource('0'));
   }
   for (let i = 0; i < windowCount; i++) {
-    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, windowSource(`win-${i % 5}`));
+    tape.append(
+      i % 2 === 0 ? 'user' : 'assistant',
+      `${WIN_MSG} (${i})`,
+      windowSource(`win-${i % 5}`),
+    );
   }
   return tape;
 }
@@ -50,7 +54,11 @@ describe('ContextTape.append', () => {
   bench('100 window messages across 5 windows', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${WIN_MSG} (${i})`, windowSource(`win-${i % 5}`));
+      tape.append(
+        i % 2 === 0 ? 'user' : 'assistant',
+        `${WIN_MSG} (${i})`,
+        windowSource(`win-${i % 5}`),
+      );
     }
   });
 

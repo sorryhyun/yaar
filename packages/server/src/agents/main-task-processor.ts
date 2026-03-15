@@ -8,7 +8,7 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
-import { getDeveloperAllowedTools } from './profiles.js';
+import { getDeveloperAllowedTools } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { mainSource } from './context.js';
 

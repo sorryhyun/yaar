@@ -17,7 +17,7 @@ import type { StreamMessage, TransportOptions, ProviderType } from '../types.js'
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
-import { SYSTEM_PROMPT } from './system-prompt.js';
+import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import type {
   ThreadStartParams,

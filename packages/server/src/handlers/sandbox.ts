@@ -6,89 +6,20 @@
  *   yaar://sandbox/*    — sandbox file operations + dev pipeline
  */
 
-import { stat, unlink, mkdir, readdir } from 'fs/promises';
-import { join, dirname } from 'path';
 import { parseFileUri, parseYaarUri } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { getSandboxPath } from '../lib/compiler/index.js';
-import { generateSandboxId, isValidPath } from '../features/dev/helpers.js';
-import { ok, okJson, error, validateRelativePath } from './utils.js';
+import { ok, okJson, error, prependNote } from './utils.js';
+import { formatSandboxResult } from '../features/sandbox/eval.js';
+import {
+  readSandboxFile,
+  listSandboxFiles,
+  writeSandboxFile,
+  editSandboxFile,
+  deleteSandboxFile,
+} from '../features/sandbox/files.js';
 import { doCompile, doTypecheck } from '../features/dev/compile.js';
 import { doDeploy, doClone, type DeployArgs } from '../features/dev/deploy.js';
-import { prependNote, applyEdit } from './utils.js';
-
-// ── Helpers ──
-
-function validateSandboxPath(path: string, sandboxPath: string): string | null {
-  const pathErr = validateRelativePath(path);
-  if (pathErr) return pathErr;
-  if (!isValidPath(sandboxPath, path)) {
-    return 'Path escapes sandbox directory.';
-  }
-  return null;
-}
-
-async function listFiles(dir: string, base: string): Promise<string[]> {
-  const { relative } = await import('path');
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await listFiles(full, base)));
-    } else {
-      files.push(relative(base, full));
-    }
-  }
-  return files;
-}
-
-// ── Sandbox eval helpers ──
-
-/** Common sandbox-escape patterns -> short hint */
-const SANDBOX_HINTS: [RegExp, string][] = [
-  [
-    /\brequire\b/,
-    'require() is not available. This sandbox uses ESM — only built-in globals and fetch (for allowed domains) are provided.',
-  ],
-  [/\bDeno\b/, 'Deno APIs are not available. This is a Node.js vm sandbox, not Deno.'],
-  [
-    /\b(readFile|writeFile|readdir)\b/,
-    'Node.js fs APIs are not available in the sandbox. Use storage tools for file access.',
-  ],
-  [/\bprocess\b/, 'process is not available. The sandbox has no access to the host environment.'],
-  [/\bimport\s*\(/, 'Dynamic import() is not available in the sandbox.'],
-];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatSandboxResult(result: any, code: string): string {
-  const parts: string[] = [];
-
-  if (result.logsFormatted) {
-    parts.push('Console output:');
-    parts.push(result.logsFormatted);
-    parts.push('');
-  }
-
-  if (result.success) {
-    parts.push(`Result: ${result.result !== undefined ? result.result : 'undefined'}`);
-  } else {
-    parts.push(`Error: ${result.error}`);
-
-    if (result.error?.includes('is not defined') || result.error?.includes('is not a function')) {
-      for (const [pattern, hint] of SANDBOX_HINTS) {
-        if (pattern.test(code)) {
-          parts.push(`Hint: ${hint}`);
-          break;
-        }
-      }
-    }
-  }
-
-  parts.push(`Execution time: ${Math.round(result.executionTimeMs)}ms`);
-  return parts.join('\n');
-}
 
 // ── Registration ──
 
@@ -190,33 +121,12 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           'Cannot read from a new sandbox (yaar://sandbox/new/...). Provide a sandbox ID.',
         );
       }
-      if (!parsed.path)
-        return this.list!(resolved).then((r) =>
-          prependNote(r, 'This is a folder — used list instead.'),
-        );
-
-      const sandboxPath = getSandboxPath(parsed.sandboxId);
-      const pathErr = validateSandboxPath(parsed.path, sandboxPath);
-      if (pathErr) return error(pathErr);
-
-      const fullPath = join(sandboxPath, parsed.path);
-
-      try {
-        const info = await stat(fullPath);
-        if (info.isDirectory())
-          return this.list!(resolved).then((r) =>
-            prependNote(r, 'This is a folder — used list instead.'),
-          );
-        const content = await Bun.file(fullPath).text();
-        const lines = content.split('\n');
-        const width = String(lines.length).length;
-        const numbered = lines
-          .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
-          .join('\n');
-        return ok(`── ${parsed.path} (${lines.length} lines) ──\n${numbered}`);
-      } catch {
-        return error(`File not found: ${parsed.path}`);
+      if (!parsed.path) {
+        const listing = await listSandboxFiles(parsed.sandboxId);
+        return prependNote(listing, 'This is a folder — used list instead.');
       }
+
+      return readSandboxFile(parsed.sandboxId, parsed.path);
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
@@ -227,19 +137,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
         return error('Cannot list a new sandbox. Provide a sandbox ID.');
       }
 
-      const sandboxPath = getSandboxPath(parsed.sandboxId);
-
-      try {
-        const targetDir = parsed.path ? join(sandboxPath, parsed.path) : sandboxPath;
-        if (parsed.path) {
-          const pathErr = validateSandboxPath(parsed.path, sandboxPath);
-          if (pathErr) return error(pathErr);
-        }
-        const files = await listFiles(targetDir, sandboxPath);
-        return okJson({ sandboxId: parsed.sandboxId, files });
-      } catch {
-        return error(`Sandbox not found: ${parsed.sandboxId}`);
-      }
+      return listSandboxFiles(parsed.sandboxId, parsed.path || undefined);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -250,35 +148,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
       const action = payload.action as string;
 
       if (action === 'write') {
-        let sandboxId: string;
-        if (parsed.sandboxId === null) {
-          if (!parsed.path)
-            return error('Provide a file path (e.g. yaar://sandbox/new/src/main.ts).');
-          sandboxId = generateSandboxId();
-        } else {
-          if (!parsed.path) return error('Provide a file path within the sandbox.');
-          sandboxId = parsed.sandboxId;
-        }
-
-        if (typeof payload.content !== 'string')
-          return error('"content" (string) is required for write.');
-
-        const sandboxPath = getSandboxPath(sandboxId);
-        const pathErr = validateSandboxPath(parsed.path, sandboxPath);
-        if (pathErr) return error(pathErr);
-
-        const fullPath = join(sandboxPath, parsed.path);
-        try {
-          await mkdir(dirname(fullPath), { recursive: true });
-          await Bun.write(fullPath, payload.content);
-          return okJson({
-            sandboxId,
-            path: parsed.path,
-            message: `Written to yaar://sandbox/${sandboxId}/${parsed.path}`,
-          });
-        } catch (err) {
-          return error(err instanceof Error ? err.message : 'Unknown error');
-        }
+        return writeSandboxFile(parsed.sandboxId, parsed.path, payload.content);
       }
 
       if (action === 'edit') {
@@ -286,28 +156,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           return error('Cannot edit a new sandbox file. Write first, then edit.');
         }
         if (!parsed.path) return error('Provide a file path to edit.');
-
-        const sandboxPath = getSandboxPath(parsed.sandboxId);
-        const pathErr = validateSandboxPath(parsed.path, sandboxPath);
-        if (pathErr) return error(pathErr);
-
-        const fullPath = join(sandboxPath, parsed.path);
-        let content: string;
-        try {
-          content = await Bun.file(fullPath).text();
-        } catch {
-          return error(`File not found: ${parsed.path}`);
-        }
-
-        const edited = await applyEdit(content, payload);
-        if ('error' in edited) return error(edited.error);
-
-        await Bun.write(fullPath, edited.result);
-        return okJson({
-          sandboxId: parsed.sandboxId,
-          path: parsed.path,
-          message: `Edited yaar://sandbox/${parsed.sandboxId}/${parsed.path}`,
-        });
+        return editSandboxFile(parsed.sandboxId, parsed.path, payload);
       }
 
       if (action === 'compile') {
@@ -393,17 +242,7 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
       }
       if (!parsed.path) return error('Provide a file path to delete.');
 
-      const sandboxPath = getSandboxPath(parsed.sandboxId);
-      const pathErr = validateSandboxPath(parsed.path, sandboxPath);
-      if (pathErr) return error(pathErr);
-
-      const fullPath = join(sandboxPath, parsed.path);
-      try {
-        await unlink(fullPath);
-        return ok(`Deleted yaar://sandbox/${parsed.sandboxId}/${parsed.path}`);
-      } catch {
-        return error(`File not found: ${parsed.path}`);
-      }
+      return deleteSandboxFile(parsed.sandboxId, parsed.path);
     },
   });
 }

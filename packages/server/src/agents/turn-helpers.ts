@@ -52,6 +52,8 @@ export interface AgentTurnOptions {
   resumeSessionId?: string;
   monitorId?: string;
   allowedTools?: string[];
+  /** Override the provider's base system prompt (used by window agents with profile prompts) */
+  systemPromptOverride?: string;
   onBeforeRun?: () => Promise<void> | void;
   onAfterRun?: (recordedActions: OSAction[]) => Promise<void> | void;
   onFinally?: () => Promise<void> | void;
@@ -91,6 +93,7 @@ export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Pr
       canonicalAgent: opts.canonicalAgent,
       resumeSessionId: opts.resumeSessionId,
       allowedTools: opts.allowedTools,
+      systemPromptOverride: opts.systemPromptOverride,
       onContextMessage: (msgRole, content) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);
