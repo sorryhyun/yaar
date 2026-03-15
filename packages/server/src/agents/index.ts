@@ -8,7 +8,7 @@
  * - ContextPool: Unified pool with dynamic role assignment
  * - ContextTape: Hierarchical conversation context management
  * - PoolContext: Shared interface for ContextPool processors
- * - MainTaskProcessor, WindowTaskProcessor: Extracted processors
+ * - MainTaskProcessor: Extracted processor for main task queue
  * - Turn helpers: buildReloadContext, runAgentTurn, createBudgetOutputCallback
  */
 
@@ -19,5 +19,4 @@ export * from './agent-pool.js';
 export * from './pool-types.js';
 export * from './context-pool.js';
 export * from './main-task-processor.js';
-export * from './window-task-processor.js';
 export * from './turn-helpers.js';

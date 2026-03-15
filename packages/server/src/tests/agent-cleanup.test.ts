@@ -73,29 +73,6 @@ describe('AgentPool limiter slot release on error', () => {
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });
 
-  it('disposeWindowAgent releases limiter even when interrupt() throws', async () => {
-    const pool = new AgentPool('test-session' as SessionId, vi.fn());
-
-    // Create a window agent
-    const agent = await pool.getOrCreateWindowAgent('win-1');
-    expect(agent).not.toBeNull();
-
-    // Make the agent appear to be running so interrupt() is called
-    mockIsRunning.mockReturnValue(true);
-    // Make interrupt throw
-    mockInterrupt.mockRejectedValueOnce(new Error('interrupt exploded'));
-
-    // disposeWindowAgent currently does NOT wrap in try/finally,
-    // so if interrupt() throws, cleanup() and release() are never called.
-    // This documents the current (buggy) behavior.
-    await expect(pool.disposeWindowAgent('win-1')).rejects.toThrow('interrupt exploded');
-
-    // BUG: release() is NOT called because interrupt() threw before reaching it.
-    // This test documents the slot leak. When the bug is fixed (by adding try/finally),
-    // change the assertion below to: expect(mockRelease).toHaveBeenCalledTimes(1);
-    expect(mockRelease).not.toHaveBeenCalled();
-  });
-
   it('pool-wide cleanup() releases all limiter slots even when individual cleanups throw', async () => {
     const pool = new AgentPool('test-session' as SessionId, vi.fn());
 

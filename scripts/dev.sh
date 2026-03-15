@@ -66,7 +66,7 @@ wait_for_server() {
 
 # Start server first
 echo "Starting server..."
-PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server dev 2>&1 &
+PROVIDER="$PROVIDER_ARG" REMOTE="${REMOTE:-}" bun run --filter @yaar/server dev --elide-lines=0 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to be ready

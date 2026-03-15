@@ -29,20 +29,10 @@ export function handleSubscribe(
   if (!agentId) return error('No agent context — subscribe must be called from an agent.');
 
   // Determine subscriber type and key from agentId pattern
-  // Main agents: "main-{monitorId}", Window agents: "window-{windowId}" or "window-{windowId}/{actionId}"
-  const isWindowAgent = agentId.startsWith('window-');
-  const subscriberType = isWindowAgent ? 'window' : 'main';
-
-  // For window agents, extract the window ID (the agentKey used by WindowTaskProcessor)
-  let subscriberAgentKey: string;
-  let subscriberWindowId: string | undefined;
-  if (isWindowAgent) {
-    const windowPart = agentId.replace(/^window-/, '').replace(/\/.*$/, '');
-    subscriberAgentKey = windowPart;
-    subscriberWindowId = windowPart;
-  } else {
-    subscriberAgentKey = `main-${monitorId}`;
-  }
+  // Main agents: "main-{monitorId}", App agents: "app-{appId}"
+  const subscriberType = 'main';
+  const subscriberAgentKey = `main-${monitorId}`;
+  const subscriberWindowId: string | undefined = undefined;
 
   // Parse events from payload
   const rawEvents = payload.events;

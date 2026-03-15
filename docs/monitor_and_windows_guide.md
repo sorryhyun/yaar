@@ -6,8 +6,8 @@ YAAR's runtime is organized into three nested abstractions. Understanding them i
 Session
 ├── Monitor 0 ("Desktop 1")
 │   ├── Main Agent (persistent, sequential)
-│   ├── Window A ──── Window Agent (persistent, parallel)
-│   ├── Window B ──── Window Agent
+│   ├── Window A
+│   ├── Window B
 │   └── CLI history
 ├── Monitor 1 ("Desktop 2")
 │   ├── Main Agent (independent)
@@ -147,19 +147,16 @@ Windows display content through pluggable renderers:
 | `iframe` | `string` or `{url}` | Embedded web content |
 | `component` | `ComponentLayout` | Interactive React components from a flat JSON array |
 
-The `component` renderer uses a flat Component DSL (no recursive nesting) designed for LLM simplicity. Components support forms (`formId`/`submitForm`), buttons with `action` strings sent to the window agent, and CSS grid layout (`cols`, `gap`).
+The `component` renderer uses a flat Component DSL (no recursive nesting) designed for LLM simplicity. Components support forms (`formId`/`submitForm`), buttons with `action` strings, and CSS grid layout (`cols`, `gap`).
 
-### Window agents
+### Window interactions
 
-Each window can have a **persistent window agent** — a dedicated AI agent that handles interactions specific to that window:
+Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route based on window type:
 
-- **Created** on the first `WINDOW_MESSAGE` or `COMPONENT_ACTION` for that window
-- **First turn** receives recent main conversation context from `ContextTape`
-- **Subsequent turns** use provider session continuity
-- **Window groups** — child windows created by a window agent share the parent's agent
-- **Cleanup** — agent disposed when last window in its group closes
+- **Plain windows** (markdown, table, component, etc.) — interactions route to the **main agent** for the window's monitor. The main agent has the full conversation context.
+- **App windows** — interactions route to a **dedicated app agent** via `AppTaskProcessor`. App agents are persistent per app (keyed by `appId`) and survive window close/reopen.
 
-Window agents run **in parallel** with the main agent and with each other. Same-window tasks are serialized via `WindowQueuePolicy`.
+Same-window tasks are serialized via `WindowQueuePolicy`.
 
 ### Window subscriptions
 
@@ -188,11 +185,11 @@ AI emits window.create action
 
 User interacts (drag, resize, click button, close)
   → Frontend: local state updated immediately
-  → Server: routed to window agent (if interaction needs AI), recorded in InteractionTimeline
+  → Server: routed to main agent (or app agent for app windows), recorded in InteractionTimeline
 
 AI emits window.close / user clicks X
   → Frontend: removed from store
-  → Server: window agent disposed, reload cache invalidated
+  → Server: subscriptions cleared, context pruned, reload cache invalidated
 ```
 
 ### Server-side tracking
@@ -209,7 +206,6 @@ Session (1 per conversation)
  ├── has 1–4 Monitors (defaults to 1)
  │    ├── each has 1 Main Agent (persistent, sequential within monitor)
  │    ├── each has N Windows (AI-created, user-interactable)
- │    │    └── each may have 1 Window Agent (persistent, parallel)
  │    └── each has its own CLI history
  ├── has 1 WindowStateRegistry (tracks all windows across all monitors)
  ├── has 1 ReloadCache (fingerprint-based action caching)

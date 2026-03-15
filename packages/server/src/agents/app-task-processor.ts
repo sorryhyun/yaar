@@ -162,7 +162,6 @@ export class AppTaskProcessor {
     agentId: string,
     status: 'assigned' | 'active' | 'released',
   ): Promise<void> {
-    this.ctx.windowAgentMap.set(windowId, agentId);
     await this.ctx.sendEvent({
       type: ServerEventType.WINDOW_AGENT_STATUS,
       windowId,

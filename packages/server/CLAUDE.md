@@ -38,10 +38,10 @@ src/
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
 │   ├── session.ts        # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
-│   ├── main-task-processor.ts / window-task-processor.ts
+│   ├── main-task-processor.ts / app-task-processor.ts
 │   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
-│   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowConnection, WindowSubscription
+│   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions
 │   ├── factory.ts        # Auto-detect provider, warm pool init
@@ -87,7 +87,7 @@ SessionHub (singleton registry)
         ├── AgentPool
         │   ├── Main Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
-        │   └── Window Agents: Map<agentKey, PooledAgent>  ← persistent per window/group
+        │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages

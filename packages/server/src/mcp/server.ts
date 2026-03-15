@@ -158,98 +158,102 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);
+  const windowId = hub.findWindowForAgent(agentId);
 
-  return runWithAgentContext({ agentId, sessionId: yaarSessionId, monitorId }, async () => {
-    // Check for existing MCP session
-    const mcpSessionId = req.headers.get('mcp-session-id') ?? undefined;
+  return runWithAgentContext(
+    { agentId, sessionId: yaarSessionId, monitorId, windowId },
+    async () => {
+      // Check for existing MCP session
+      const mcpSessionId = req.headers.get('mcp-session-id') ?? undefined;
 
-    if (mcpSessionId) {
-      // Existing session — look up transport
-      const key = `${serverName}:${mcpSessionId}`;
-      const entry = mcpSessions.get(key);
-      if (entry) {
-        entry.lastUsed = Date.now();
-        return entry.transport.handleRequest(req);
-      }
-      // Session not found — return 404 per MCP spec
-      return Response.json(
-        {
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Session not found' },
-          id: null,
-        },
-        { status: 404 },
-      );
-    }
-
-    // No session ID — must be an initialize request (or invalid).
-    if (req.method !== 'POST') {
-      return Response.json(
-        {
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Method not allowed' },
-          id: null,
-        },
-        { status: 405 },
-      );
-    }
-
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return Response.json(
-        {
-          jsonrpc: '2.0',
-          error: { code: -32700, message: 'Parse error' },
-          id: null,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Validate it is an initialize request
-    const messages = Array.isArray(body) ? body : [body];
-    const isInit = messages.some((m) => isInitializeRequest(m));
-
-    if (!isInit) {
-      return Response.json(
-        {
-          jsonrpc: '2.0',
-          error: {
-            code: -32600,
-            message: 'Bad Request: No session ID and not an initialize request',
+      if (mcpSessionId) {
+        // Existing session — look up transport
+        const key = `${serverName}:${mcpSessionId}`;
+        const entry = mcpSessions.get(key);
+        if (entry) {
+          entry.lastUsed = Date.now();
+          return entry.transport.handleRequest(req);
+        }
+        // Session not found — return 404 per MCP spec
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Session not found' },
+            id: null,
           },
-          id: null,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Create new McpServer + transport for this session
-    const server = await createServerForName(serverName);
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-      enableJsonResponse: true,
-      onsessioninitialized: (newSessionId: string) => {
-        const key = `${serverName}:${newSessionId}`;
-        mcpSessions.set(key, { server, transport, lastUsed: Date.now() });
-        console.log(`[MCP] New session for ${serverName}: ${newSessionId}`);
-      },
-    });
-
-    // Clean up session when transport closes
-    transport.onclose = () => {
-      const sid = transport.sessionId;
-      if (sid) {
-        const key = `${serverName}:${sid}`;
-        mcpSessions.delete(key);
+          { status: 404 },
+        );
       }
-    };
 
-    await server.connect(transport);
-    return transport.handleRequest(req, { parsedBody: body });
-  });
+      // No session ID — must be an initialize request (or invalid).
+      if (req.method !== 'POST') {
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Method not allowed' },
+            id: null,
+          },
+          { status: 405 },
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32700, message: 'Parse error' },
+            id: null,
+          },
+          { status: 400 },
+        );
+      }
+
+      // Validate it is an initialize request
+      const messages = Array.isArray(body) ? body : [body];
+      const isInit = messages.some((m) => isInitializeRequest(m));
+
+      if (!isInit) {
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            error: {
+              code: -32600,
+              message: 'Bad Request: No session ID and not an initialize request',
+            },
+            id: null,
+          },
+          { status: 400 },
+        );
+      }
+
+      // Create new McpServer + transport for this session
+      const server = await createServerForName(serverName);
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        enableJsonResponse: true,
+        onsessioninitialized: (newSessionId: string) => {
+          const key = `${serverName}:${newSessionId}`;
+          mcpSessions.set(key, { server, transport, lastUsed: Date.now() });
+          console.log(`[MCP] New session for ${serverName}: ${newSessionId}`);
+        },
+      });
+
+      // Clean up session when transport closes
+      transport.onclose = () => {
+        const sid = transport.sessionId;
+        if (sid) {
+          const key = `${serverName}:${sid}`;
+          mcpSessions.delete(key);
+        }
+      };
+
+      await server.connect(transport);
+      return transport.handleRequest(req, { parsedBody: body });
+    },
+  );
 }
 
 /**

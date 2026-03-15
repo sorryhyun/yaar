@@ -499,6 +499,7 @@ export class LiveSession {
                   dockEdge: interaction.dockEdge as 'top' | 'bottom' | undefined,
                   frameless: interaction.frameless,
                   windowStyle: interaction.windowStyle,
+                  appId: interaction.appId,
                 };
                 this.windowState.handleAction(createAction, interaction.monitorId ?? '0');
                 logger?.logAction(createAction);

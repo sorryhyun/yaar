@@ -25,7 +25,7 @@ function getPool() {
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://sessions/current/agents — list all agents ──
   registry.register('yaar://sessions/current/agents', {
-    description: 'List all active agents (main, window, ephemeral).',
+    description: 'List all active agents (main, app, ephemeral).',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -36,7 +36,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           idleAgents: 0,
           busyAgents: 0,
           mainAgent: [],
-          windowAgents: [],
+          appAgents: 0,
           ephemeralAgents: [],
         });
 
@@ -46,7 +46,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         idleAgents: stats.idleAgents,
         busyAgents: stats.busyAgents,
         mainAgent: stats.mainAgent,
-        windowAgents: stats.windowAgents,
+        appAgents: stats.appAgents,
         ephemeralAgents: stats.ephemeralAgents,
       });
     },

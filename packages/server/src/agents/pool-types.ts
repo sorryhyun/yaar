@@ -1,9 +1,8 @@
 /**
  * Shared types and interface for ContextPool processors.
  *
- * - `Task` — moved here to break circular imports between context-pool ↔ policies.
- * - `PoolContext` — the contract that MainTaskProcessor, WindowTaskProcessor,
- *   and WindowTaskProcessor depend on.
+ * - `Task` — moved here to break circular imports between context-pool <-> policies.
+ * - `PoolContext` — the contract that MainTaskProcessor and AppTaskProcessor depend on.
  */
 
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
@@ -18,7 +17,6 @@ import type {
   WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
-  WindowConnectionPolicy,
   MonitorBudgetPolicy,
   WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
@@ -52,10 +50,8 @@ export interface PoolContext {
   readonly contextAssembly: ContextAssemblyPolicy;
   readonly reloadPolicy: ReloadCachePolicy;
   readonly windowQueuePolicy: WindowQueuePolicy;
-  readonly windowConnectionPolicy: WindowConnectionPolicy;
   readonly budgetPolicy: MonitorBudgetPolicy;
   readonly windowSubscriptionPolicy: WindowSubscriptionPolicy;
-  readonly windowAgentMap: Map<string, string>;
 
   // Methods processors call back into
   getOrCreateMainQueue(monitorId: string): MainQueuePolicy;

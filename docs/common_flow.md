@@ -20,15 +20,15 @@ This document describes how YAAR manages concurrent AI agents through unified po
 │  │  │  │            │  │ (message    │  │ line (user +     │  │  │  │
 │  │  │  │ Main(1/mon)│  │  history by │  │ AI events,       │  │  │  │
 │  │  │  │ Ephemeral* │  │  source)    │  │ drained on main  │  │  │  │
-│  │  │  │ Window*    │  │             │  │ agent's turn)    │  │  │  │
+│  │  │  │ App*       │  │             │  │ agent's turn)    │  │  │  │
 │  │  │  │ Task*      │  │             │  │                  │  │  │  │
 │  │  │  └────────────┘  └─────────────┘  └──────────────────┘  │  │  │
 │  │  │                                                          │  │  │
 │  │  │  ┌──────────────────────────────────────────────────┐    │  │  │
 │  │  │  │ Policies                                         │    │  │  │
 │  │  │  │ MainQueue(per monitor) · WindowQueue ·           │    │  │  │
-│  │  │  │ ContextAssembly · ReloadCache · WindowConnection │    │  │  │
-│  │  │  │ MonitorBudget                                    │    │  │  │
+│  │  │  │ ContextAssembly · ReloadCache ·                  │    │  │  │
+│  │  │  │ MonitorBudget · WindowSubscription               │    │  │  │
 │  │  │  └──────────────────────────────────────────────────┘    │  │  │
 │  │  └──────────────────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────────────────┘  │
@@ -91,15 +91,15 @@ A temporary agent spawned when the main agent is busy and a new main task arrive
 - **Context**: No conversation history — receives open windows + reload options + task content
 - **Lifecycle**: Created → process task → push to InteractionTimeline → disposed
 
-### 3. Window Agent
+### 3. App Agent
 
-A persistent agent for handling window-specific interactions (button clicks, context menu messages). Each window (or window group) gets its own agent with its own provider session.
+A persistent agent for handling interactions within app windows. One agent per app (`appId`), surviving window close and reopen.
 
-- **Role**: `window-{windowId}` or `window-{windowId}/{actionId}` (for parallel button actions)
-- **Creation**: On first `COMPONENT_ACTION` or `WINDOW_MESSAGE` for that window
-- **Context**: First interaction receives recent main conversation from ContextTape; subsequent interactions use provider session continuity
-- **Grouping**: Child windows created by a window agent join the parent's group, sharing one agent
-- **Canonical ID**: `window-{agentKey}` (where agentKey = groupId or windowId)
+- **Role**: `app-{appId}-{messageId}` (set per-message)
+- **Creation**: On first `COMPONENT_ACTION` or `WINDOW_MESSAGE` targeting an app window
+- **Context**: First interaction bootstraps with app skill and manifest; subsequent interactions use provider session continuity
+- **Scope**: Scoped to the app's `appId` — all windows for the same app share one agent
+- **Canonical ID**: `app-{appId}`
 - **URI**: `yaar://agents/{instanceId}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md)
 
 ### 4. Task Agent
@@ -180,7 +180,7 @@ Frontend                    Server                          AI Provider
    │                          │                                  │
 ```
 
-### Button Click → Window Agent
+### Button Click → Main Agent or App Agent
 
 ```
 Frontend                    Server                          AI Provider
@@ -190,17 +190,17 @@ Frontend                    Server                          AI Provider
    │    actionId?, formData?} │                                  │
    ├─────────────────────────>│                                  │
    │                          │                                  │
-   │                          │  Resolve group: windowId →       │
-   │                          │  agentKey (groupId or windowId)  │
+   │                          │  App window?                     │
+   │                          │  ├─ No: route to main agent      │
+   │                          │  │   (monitor's main queue)      │
+   │                          │  └─ Yes: AppTaskProcessor        │
+   │                          │      App agent exists?           │
+   │                          │      ├─ Yes: Reuse               │
+   │                          │      └─ No: Create (fresh prov.) │
    │                          │                                  │
-   │                          │  Agent exists for agentKey?      │
-   │                          │  ├─ Yes: Reuse                   │
-   │                          │  └─ No: Create (fresh provider)  │
-   │                          │                                  │
-   │  WINDOW_AGENT_STATUS     │  First message?                  │
-   │  { status: 'active' }    │  ├─ Yes: inject recent main      │
-   │<─────────────────────────│  │  context from ContextTape     │
-   │                          │  └─ No: session continuity       │
+   │  WINDOW_AGENT_STATUS     │  App agent first message?        │
+   │  { status: 'active' }    │  ├─ Yes: bootstrap with skill    │
+   │<─────────────────────────│  └─ No: session continuity       │
    │                          │                                  │
    │                          │  provider.query(prompt, {        │
    │                          │    sessionId                     │
@@ -209,7 +209,6 @@ Frontend                    Server                          AI Provider
    │                          │                                  │
    │  AGENT_RESPONSE          │  After completion:               │
    │<─────────────────────────│  - Record to InteractionTimeline │
-   │                          │  - Track child window groups     │
    │                          │  - Cache actions for reload      │
    │                          │                                  │
 ```
@@ -231,7 +230,7 @@ interface ContextMessage {
 
 **Usage:**
 - **Main agent prompt**: Does not inject ContextTape (relies on provider session continuity)
-- **Window agent first turn**: Injects last 3 main conversation turns via `buildWindowInitialContext()`
+- **App agent first turn**: Injects skill context and manifest via `AppTaskProcessor`
 - **Window close**: Prunes that window's messages from the tape
 - **Session restore**: ContextTape can be restored from a previous session's log
 
@@ -241,7 +240,7 @@ A chronological timeline interleaving user-originated events and AI agent action
 
 ```
 User closes window → pushUser({ type: 'window.close', windowId: '...' })
-Window agent runs  → pushAI(role, task, actions, windowId)
+App agent runs     → pushAI(role, task, actions, windowId)
 Ephemeral agent    → pushAI(role, task, actions)
 Task agent runs    → pushAI(role, task, actions)
 
@@ -262,16 +261,13 @@ FIFO queue (max 10) per monitor for main tasks when the main agent is busy and n
 Per-window queues. Tasks for the same window are serialized (one active at a time). Tasks for different windows run in parallel. Parallel button actions (`actionId`) bypass the queue.
 
 ### ContextAssemblyPolicy
-Builds prompts for both main and window agents:
+Builds prompts for main and app agents:
 - **Main**: `timeline + openWindows + reloadOptions + content`
-- **Window (first turn)**: `recentMainContext + openWindows + reloadOptions + content`
-- **Window (subsequent)**: `openWindows + reloadOptions + content`
+- **App (first turn)**: `skillContext + manifest + openWindows + reloadOptions + content`
+- **App (subsequent)**: `openWindows + reloadOptions + content`
 
 ### ReloadCachePolicy
 Fingerprint-based caching of action sequences. After each task, the actions are recorded with a fingerprint (content hash + window state hash). On the next similar task, matching cached actions are injected as `<reload_options>` so the AI can replay them instantly.
-
-### WindowConnectionPolicy
-Tracks window groups. When a window agent creates a child window, the child joins the parent's group. All windows in a group share one agent. The group's agent is only disposed when the last window closes.
 
 ### MonitorBudgetPolicy
 Per-monitor rate limiting for background monitors. Three budget dimensions:
@@ -301,11 +297,10 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │   └────────────────────────────────────────────────────────┘  │
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
-│   │ Window Agents (persistent per group/window)            │  │
-│   │ - Created on first interaction for a window            │  │
-│   │ - Keyed by agentKey (groupId for grouped, windowId     │  │
-│   │   for standalone)                                      │  │
-│   │ - Disposed when last window in group closes            │  │
+│   │ App Agents (persistent per app)                        │  │
+│   │ - Created on first interaction for an app window       │  │
+│   │ - Keyed by appId — survives window close/reopen        │  │
+│   │ - Session lifetime                                     │  │
 │   └────────────────────────────────────────────────────────┘  │
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
@@ -320,22 +315,21 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## Window Agent Lifecycle
+## App Agent Lifecycle
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     Window Agent Lifecycle                        │
+│                      App Agent Lifecycle                          │
 │                                                                   │
-│   COMPONENT_ACTION / WINDOW_MESSAGE                               │
+│   COMPONENT_ACTION / WINDOW_MESSAGE (app window)                  │
 │        │                                                          │
 │        ▼                                                          │
-│   WindowConnectionPolicy: resolve agentKey                        │
-│   (groupId if window belongs to group, else windowId)             │
+│   AppTaskProcessor: resolve appId from windowId                   │
 │        │                                                          │
 │        ▼                                                          │
 │   ┌─────────────┐                                                │
-│   │ Agent exists │ No ──> getOrCreateWindowAgent(agentKey)        │
-│   │ for key?    │        + acquireWarmProvider()                  │
+│   │ Agent exists │ No ──> getOrCreateAppAgent(appId)             │
+│   │ for appId?  │        + acquireWarmProvider()                  │
 │   └──────┬──────┘                                                │
 │          │ Yes                                                    │
 │          ▼                                                        │
@@ -347,18 +341,16 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │          ▼                                                        │
 │   ┌─────────────────────────────────────────────┐                │
 │   │ Process:                                     │                │
-│   │  First msg → ContextTape initial context     │                │
+│   │  First msg → load skill + query manifest     │                │
 │   │  Later msgs → provider session continuity    │                │
 │   │                                              │                │
 │   │  After completion:                           │                │
 │   │  - Record actions → ReloadCache              │                │
-│   │  - Connect child windows → group             │                │
 │   │  - Push to InteractionTimeline               │                │
 │   └─────────────────────────────────────────────┘                │
 │                                                                   │
-│   Window closed → WindowConnectionPolicy.handleClose()            │
-│     ├─ Last in group → disposeWindowAgent() + prune ContextTape  │
-│     └─ Others remain → agent survives, prune window's context    │
+│   Window closed → subscriptions cleared, context pruned          │
+│   Agent survives (keyed by appId, not windowId)                  │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -370,8 +362,8 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 | Event | Description |
 |-------|-------------|
 | `USER_MESSAGE` | Main input → ContextPool main queue (sequential per monitor) |
-| `WINDOW_MESSAGE` | Context menu "Send to window" → Window agent |
-| `COMPONENT_ACTION` | Button click with optional formData, componentPath → Window agent |
+| `WINDOW_MESSAGE` | Context menu "Send to window" → main agent (or app agent for app windows) |
+| `COMPONENT_ACTION` | Button click with optional formData, componentPath → main agent (or app agent for app windows) |
 | `INTERRUPT` | Stop all agents |
 | `INTERRUPT_AGENT` | Stop specific agent by role |
 | `RESET` | Interrupt all, clear context, recreate main agent |
@@ -396,7 +388,7 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 | `CONNECTION_STATUS` | connected/disconnected/error (with provider name) |
 | `TOOL_PROGRESS` | Tool execution status (running/complete/error) |
 | `ERROR` | Error message (with optional agentId) |
-| `WINDOW_AGENT_STATUS` | Window agent lifecycle: assigned/active/released |
+| `WINDOW_AGENT_STATUS` | App agent lifecycle: assigned/active/released |
 | `MESSAGE_ACCEPTED` | Message assigned to an agent |
 | `MESSAGE_QUEUED` | Message queued (agent busy or limit reached) |
 | `APPROVAL_REQUEST` | Permission dialog for user approval |
@@ -429,13 +421,13 @@ Each log entry includes `agentId` for filtering:
 | `session/live-session.ts` | LiveSession — session container, owns pool + window state + reload cache |
 | `session/session-hub.ts` | SessionHub — singleton registry of active sessions (create, get, evict) |
 | `agents/context-pool.ts` | ContextPool — unified task orchestration |
-| `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, window, and task agents |
+| `agents/agent-pool.ts` | AgentPool — manages main (per monitor), ephemeral, app, and task agents |
 | `agents/session.ts` | AgentSession — individual agent with provider + stream mapping |
 | `agents/context.ts` | ContextTape — hierarchical message history |
 | `agents/interaction-timeline.ts` | InteractionTimeline — user + AI event chronicle |
 | `agents/limiter.ts` | AgentLimiter — global semaphore for agent limit |
 | `agents/session-policies/` | StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge |
-| `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, WindowConnection, MonitorBudget |
+| `agents/context-pool-policies/` | MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription |
 | `providers/factory.ts` | Provider auto-detection and creation |
 | `providers/warm-pool.ts` | Pre-initialized providers for fast first response |
 | `session/broadcast-center.ts` | BroadcastCenter — routes events to all connections in a session |
@@ -455,16 +447,16 @@ Each log entry includes `agentId` for filtering:
 Timeline:
 ──────────────────────────────────────────────────────────────────────────>
 
-User types "Hello"          User clicks Save in Window A
+User types "Hello"          User clicks Save in App Window
        │                              │
        ▼                              ▼
 ┌──────────────┐              ┌──────────────┐
-│ Main Agent   │              │ Window Agent │
-│ (monitor 0)  │              │ (group-A)    │
+│ Main Agent   │              │ App Agent    │
+│ (monitor 0)  │              │ (app-notes)  │
 │              │              │              │
 │ Processing   │              │ First turn:  │
-│ "Hello" with │              │ ContextTape  │
-│ full session │              │ initial ctx  │
+│ "Hello" with │              │ skill + mani-│
+│ full session │              │ fest context │
 │ history      │              │              │
 │              │              │ Processing   │
 │              │              │ Save action  │
@@ -472,10 +464,10 @@ User types "Hello"          User clicks Save in Window A
        │                              │
        ▼                              ▼
    Response                    Response updates
-   to user                     Window A
+   to user                     App window
                                     │
                                     ▼
                          InteractionTimeline records:
-                         "window-A: Updated content"
+                         "app-notes: Updated content"
                          (main agent sees this next turn)
 ```

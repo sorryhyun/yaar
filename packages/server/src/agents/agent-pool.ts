@@ -1,10 +1,10 @@
 /**
  * AgentPool - manages agents with role-based lifecycle.
  *
- * Three agent types:
+ * Agent types:
  * - Main agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
- * - Window agents: persistent per-window, fresh provider + initial context
+ * - App agents: persistent per-app, handle app protocol communication
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
@@ -26,7 +26,7 @@ export interface PooledAgent {
   id: number;
   instanceId: string;
   lastUsed: number;
-  currentRole: string | null; // 'main-{messageId}' or 'window-{id}' when active
+  currentRole: string | null; // 'main-{messageId}' or 'app-{id}' when active
   idleTimer: NodeJS.Timeout | null;
 }
 
@@ -38,9 +38,6 @@ export class AgentPool {
 
   /** Persistent main agents, keyed by monitorId. */
   private mainAgents = new Map<string, PooledAgent>();
-
-  /** Persistent per-window agents, keyed by windowId. */
-  private windowAgents = new Map<string, PooledAgent>();
 
   /** Persistent per-app agents, keyed by appId. */
   private appAgents = new Map<string, PooledAgent>();
@@ -222,56 +219,6 @@ export class AgentPool {
     return true;
   }
 
-  // ── Window agents ──────────────────────────────────────────────────
-
-  /**
-   * Get or create a persistent window agent.
-   * First call for a windowId creates a fresh agent; subsequent calls reuse it.
-   */
-  async getOrCreateWindowAgent(windowId: string): Promise<PooledAgent | null> {
-    const existing = this.windowAgents.get(windowId);
-    if (existing) {
-      console.log(`[AgentPool] Reusing window agent for ${windowId}: ${existing.instanceId}`);
-      return existing;
-    }
-
-    const provider = await acquireWarmProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
-
-    this.windowAgents.set(windowId, agent);
-    console.log(`[AgentPool] Window agent created for ${windowId}: ${agent.instanceId}`);
-    return agent;
-  }
-
-  /**
-   * Check if a window agent exists for the given windowId.
-   */
-  hasWindowAgent(windowId: string): boolean {
-    return this.windowAgents.has(windowId);
-  }
-
-  /**
-   * Dispose the window agent for a given windowId.
-   */
-  async disposeWindowAgent(windowId: string): Promise<void> {
-    const agent = this.windowAgents.get(windowId);
-    if (!agent) return;
-
-    this.windowAgents.delete(windowId);
-    this.agentIds.delete(agent.instanceId);
-    getSessionHub().unregisterAgent(agent.instanceId);
-    if (agent.session.isRunning()) {
-      await agent.session.interrupt();
-    }
-    await agent.session.cleanup();
-    getAgentLimiter().release();
-    console.log(`[AgentPool] Window agent disposed for ${windowId}: ${agent.instanceId}`);
-  }
-
   // ── App agents ───────────────────────────────────────────────────
 
   /**
@@ -346,6 +293,16 @@ export class AgentPool {
     return undefined;
   }
 
+  /**
+   * Find the appId for a given agent instanceId (app agents only).
+   */
+  findAppIdForAgent(agentId: string): string | undefined {
+    for (const [appId, agent] of this.appAgents) {
+      if (agent.instanceId === agentId) return appId;
+    }
+    return undefined;
+  }
+
   // ── Steer ──────────────────────────────────────────────────────────
 
   /**
@@ -361,13 +318,10 @@ export class AgentPool {
   // ── Query / interrupt ───────────────────────────────────────────────
 
   /**
-   * Interrupt all running agents (main, window, ephemeral).
+   * Interrupt all running agents (main, app, ephemeral).
    */
   async interruptAll(): Promise<void> {
     for (const agent of this.mainAgents.values()) {
-      await agent.session.interrupt();
-    }
-    for (const agent of this.windowAgents.values()) {
       await agent.session.interrupt();
     }
     for (const agent of this.appAgents.values()) {
@@ -384,13 +338,6 @@ export class AgentPool {
   async interruptByRole(role: string): Promise<boolean> {
     // Check main agents
     for (const agent of this.mainAgents.values()) {
-      if (agent.currentRole === role) {
-        await agent.session.interrupt();
-        return true;
-      }
-    }
-    // Check window agents
-    for (const agent of this.windowAgents.values()) {
       if (agent.currentRole === role) {
         await agent.session.interrupt();
         return true;
@@ -420,9 +367,6 @@ export class AgentPool {
     for (const agent of this.mainAgents.values()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
-    for (const agent of this.windowAgents.values()) {
-      if (agent.currentRole?.startsWith(prefix)) return true;
-    }
     for (const agent of this.appAgents.values()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
@@ -443,7 +387,6 @@ export class AgentPool {
     busyAgents: number;
     mainAgent: boolean;
     mainAgents: number;
-    windowAgents: number;
     appAgents: number;
     ephemeralAgents: number;
   } {
@@ -461,7 +404,6 @@ export class AgentPool {
     };
 
     for (const agent of this.mainAgents.values()) countAgent(agent);
-    for (const agent of this.windowAgents.values()) countAgent(agent);
     for (const agent of this.appAgents.values()) countAgent(agent);
     for (const agent of this.ephemeralAgents) countAgent(agent);
 
@@ -471,7 +413,6 @@ export class AgentPool {
       busyAgents: busy,
       mainAgent: this.mainAgents.size > 0,
       mainAgents: this.mainAgents.size,
-      windowAgents: this.windowAgents.size,
       appAgents: this.appAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
     };
@@ -487,7 +428,6 @@ export class AgentPool {
     const allAgents: PooledAgent[] = [];
 
     for (const agent of this.mainAgents.values()) allAgents.push(agent);
-    for (const agent of this.windowAgents.values()) allAgents.push(agent);
     for (const agent of this.appAgents.values()) allAgents.push(agent);
     for (const agent of this.ephemeralAgents) allAgents.push(agent);
 
@@ -503,7 +443,6 @@ export class AgentPool {
     }
 
     this.mainAgents.clear();
-    this.windowAgents.clear();
     this.appAgents.clear();
     this.ephemeralAgents.clear();
     for (const id of this.agentIds) {

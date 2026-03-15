@@ -83,6 +83,7 @@ export interface UserInteraction {
   dockEdge?: string; // Dock edge for window.create (panel variant)
   frameless?: boolean; // Frameless flag for window.create
   windowStyle?: Record<string, string | number>; // Custom styles for window.create
+  appId?: string; // App ID for window.create
 }
 
 /**

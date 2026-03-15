@@ -3,13 +3,14 @@
  *
  * Routes tasks to agents via AgentPool:
  * - Main tasks: main agent (idle) or ephemeral agent (busy) — sequential queue
- * - Window tasks: persistent per-window agents — parallel across windows, sequential within
+ * - App tasks: persistent per-app agents for app protocol windows
+ * - Plain window tasks: routed to the main agent with full conversation context
  * - InteractionTimeline: user interactions and agent actions accumulated, drained on main agent's next turn
- * - ContextTape: kept for logging/debugging and providing initial context to new window agents
+ * - ContextTape: kept for logging/debugging
  *
  * Processing logic is delegated to:
  * - MainTaskProcessor: main queue, ephemeral overflow, budget enforcement
- * - WindowTaskProcessor: window agents, window queue, window close lifecycle
+ * - AppTaskProcessor: app agent lifecycle and task execution
  * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
  */
 
@@ -29,13 +30,11 @@ import {
   WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
-  WindowConnectionPolicy,
   MonitorBudgetPolicy,
   WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import { MainTaskProcessor } from './main-task-processor.js';
-import { WindowTaskProcessor } from './window-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
 import type { PoolContext, Task } from './pool-types.js';
 
@@ -61,10 +60,8 @@ export class ContextPool implements PoolContext {
   readonly contextAssembly = new ContextAssemblyPolicy();
   readonly reloadPolicy: ReloadCachePolicy;
   readonly windowQueuePolicy = new WindowQueuePolicy();
-  readonly windowConnectionPolicy = new WindowConnectionPolicy();
   readonly budgetPolicy = new MonitorBudgetPolicy();
   readonly windowSubscriptionPolicy = new WindowSubscriptionPolicy();
-  readonly windowAgentMap: Map<string, string> = new Map();
   sharedLogger: SessionLogger | null = null;
   savedThreadIds?: Record<string, string>;
   providerType: ProviderType | null = null;
@@ -78,7 +75,6 @@ export class ContextPool implements PoolContext {
 
   // ── Processors ────────────────────────────────────────────────────
   private mainProcessor: MainTaskProcessor;
-  private windowProcessor: WindowTaskProcessor;
   private appProcessor: AppTaskProcessor;
 
   constructor(
@@ -105,7 +101,6 @@ export class ContextPool implements PoolContext {
 
     // Create processors
     this.mainProcessor = new MainTaskProcessor(this);
-    this.windowProcessor = new WindowTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
   }
 
@@ -249,9 +244,9 @@ export class ContextPool implements PoolContext {
       if (task.type === 'main') {
         await this.mainProcessor.queueMainTask(task);
       } else {
-        // Check if this window belongs to an appProtocol app
+        // Check if this window belongs to an app (appId set on window.create)
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
-        if (appId && task.windowId && this.windowState.isAppProtocolWindow(task.windowId)) {
+        if (appId && task.windowId) {
           await this.appProcessor.handleAppTask(task, appId);
         } else {
           // Plain window → route to main agent with full conversation context
@@ -261,6 +256,18 @@ export class ContextPool implements PoolContext {
     } finally {
       this.inflightExit();
     }
+  }
+
+  /**
+   * Find the windowId for a given agent instanceId.
+   * Checks app agents via AppTaskProcessor.
+   */
+  findWindowForAgent(agentId: string): string | undefined {
+    // App agent -> look up active window via AppTaskProcessor
+    const appId = this.agentPool.findAppIdForAgent(agentId);
+    if (appId) return this.appProcessor.getActiveWindowId(appId);
+
+    return undefined;
   }
 
   recordMonitorAction(monitorId: string): void {
@@ -281,17 +288,9 @@ export class ContextPool implements PoolContext {
   }
 
   handleWindowClose(windowId: string): void {
-    // Check if this is an app protocol window — app agents persist
-    const appId = this.windowState.getAppIdForWindow(windowId);
-    if (appId && this.windowState.isAppProtocolWindow(windowId)) {
-      // App agent persists — only clean up subscriptions and prune context
-      this.windowSubscriptionPolicy.clearForWindow(windowId);
-      this.contextTape.pruneWindow(windowId);
-      this.windowAgentMap.delete(windowId);
-    } else {
-      // Plain/non-app windows use legacy window processor cleanup
-      this.windowProcessor.handleWindowClose(windowId);
-    }
+    // Clean up subscriptions and prune context for this window
+    this.windowSubscriptionPolicy.clearForWindow(windowId);
+    this.contextTape.pruneWindow(windowId);
   }
 
   // ── Query methods ──────────────────────────────────────────────────
@@ -339,14 +338,11 @@ export class ContextPool implements PoolContext {
   hasActiveAgent(windowId: string): boolean {
     // Check app agents via appId lookup
     const appId = this.windowState.getAppIdForWindow(windowId);
-    if (appId && this.windowState.isAppProtocolWindow(windowId)) {
+    if (appId) {
       return this.agentPool.hasRolePrefix(`app-${appId}`);
     }
-    return this.agentPool.hasRolePrefix(`window-${windowId}`);
-  }
-
-  getWindowAgentId(windowId: string): string | undefined {
-    return this.windowAgentMap.get(windowId);
+    // Plain windows are handled by the main agent, so check for main agent activity
+    return false;
   }
 
   getStats(): {
@@ -358,7 +354,6 @@ export class ContextPool implements PoolContext {
     contextTapeSize: number;
     timelineSize: number;
     mainAgent: boolean;
-    windowAgents: number;
     appAgents: number;
     ephemeralAgents: number;
     monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
@@ -431,8 +426,6 @@ export class ContextPool implements PoolContext {
     // 7. Clear remaining state
     this.contextTape.clear();
     this.timeline.clear();
-    this.windowAgentMap.clear();
-    this.windowConnectionPolicy.clear();
     this.windowSubscriptionPolicy.clear();
     this.appProcessor.disposeAll();
     if (closeWindows) {

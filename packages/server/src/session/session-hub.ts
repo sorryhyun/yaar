@@ -94,6 +94,14 @@ export class SessionHub {
     return undefined;
   }
 
+  findWindowForAgent(agentId: string): string | undefined {
+    for (const session of this.sessions.values()) {
+      const windowId = session.getPool()?.findWindowForAgent(agentId);
+      if (windowId) return windowId;
+    }
+    return undefined;
+  }
+
   getDefault(): LiveSession | undefined {
     if (this.defaultSessionId) {
       return this.sessions.get(this.defaultSessionId);

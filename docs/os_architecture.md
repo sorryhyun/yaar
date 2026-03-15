@@ -10,7 +10,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 |---|---|---|---|
 | Kernel | `LiveSession` + `ContextPool` | `yaar://sessions/current` | `session/live-session.ts`, `agents/context-pool.ts` |
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
-| Process types | Main (init), window (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
+| Process types | Main (init), app (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
 | Syscalls | 8 MCP tool namespaces | — | `mcp/server.ts` |
 | Instruction set | System prompt (~108 lines) | — | `providers/claude/system-prompt.ts` |
@@ -50,7 +50,7 @@ Agents are processes. `AgentPool` manages their lifecycle.
 | Agent type | OS analogy | Lifecycle | Key | URI |
 |---|---|---|---|---|
 | **Main** | `init` / PID 1 | Persistent per monitor | `monitorId` | `yaar://agents/{instanceId}` |
-| **Window** | Daemon | Created on first interaction, persists | `windowId` | `yaar://agents/{instanceId}` |
+| **App** | Daemon | Persistent per app (session lifetime) | `appId` | `yaar://agents/{instanceId}` |
 | **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
 
 Main agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
@@ -74,7 +74,7 @@ Three policies in `agents/context-pool-policies/` control task dispatch:
 
 The primary monitor is never throttled.
 
-**`ContextAssemblyPolicy`** builds prompts — drains `InteractionTimeline` into `<timeline>` XML and injects recent conversation context into new window agents. **`ReloadCachePolicy`** manages fingerprint-based cache prefix injection into prompts for hot-reload.
+**`ContextAssemblyPolicy`** builds prompts — drains `InteractionTimeline` into `<timeline>` XML and injects skill context into new app agents. **`ReloadCachePolicy`** manages fingerprint-based cache prefix injection into prompts for hot-reload.
 
 ---
 
@@ -236,7 +236,7 @@ See [`claude_codex.md`](./claude_codex.md) for behavioral differences between pr
 │  ReloadCache                                        │
 ├──────────────────────┬──────────────────────────────┤
 │   Scheduler          │     Agents (Processes)       │
-│  MainQueuePolicy     │  Main · Window · Ephemeral · │
+│  MainQueuePolicy     │  Main · App · Ephemeral ·    │
 │  WindowQueuePolicy   │  Task subagents              │
 │  MonitorBudgetPolicy │                              │
 ├──────────────────────┴──────────────────────────────┤

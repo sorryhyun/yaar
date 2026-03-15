@@ -1,9 +1,9 @@
 /**
  * Shared helpers for agent turn orchestration.
  *
- * Extracts common patterns from MainTaskProcessor and WindowTaskProcessor:
- * - Reload context assembly (windowSnapshot → fingerprint → reloadPrefix)
- * - Agent turn lifecycle (role setup → MESSAGE_ACCEPTED → handleMessage → record actions → cleanup)
+ * Extracts common patterns from MainTaskProcessor and AppTaskProcessor:
+ * - Reload context assembly (windowSnapshot -> fingerprint -> reloadPrefix)
+ * - Agent turn lifecycle (role setup -> MESSAGE_ACCEPTED -> handleMessage -> record actions -> cleanup)
  * - Budget output callback creation
  */
 
