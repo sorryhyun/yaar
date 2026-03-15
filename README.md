@@ -100,7 +100,6 @@ YAAR Market에서 바로 설치할 수 있는 번들 앱:
 | 📝 Word Lite | DOCX/Markdown 문서 편집기 |
 | 🎞️ Slides Lite | 프레젠테이션 편집기 |
 | 📄 PDF Viewer | PDF 뷰어 |
-| 🐙 GitHub Manager | GitHub 이슈/PR 관리 |
 | 📰 RSS Reader | 멀티 피드 RSS 리더 |
 | 🖼️ Image Viewer | 이미지 뷰어 |
 | 🎬 Video Editor / Viewer | 영상 편집 및 재생 |
