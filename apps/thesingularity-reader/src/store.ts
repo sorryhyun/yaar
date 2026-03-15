@@ -1,5 +1,5 @@
 import { createSignal, batch } from '@bundled/solid-js';
-import type { Post, AppSettings } from './types';
+import type { Post, AppSettings, Recommendation } from './types';
 
 const DEFAULT_SETTINGS: AppSettings = {
   refreshInterval: 300, // 5 minutes
@@ -34,6 +34,14 @@ export function toggleHideSpammer() {
   setHideSpammer(next);
   localStorage.setItem(HIDE_SPAMMER_KEY, String(next));
 }
+
+// AI 추천
+export const [recommendation, setRecommendation] = createSignal<Recommendation | null>(null);
+export const [recLoading, setRecLoading] = createSignal(false);
+export const [showRec, setShowRec] = createSignal(false);
+
+// 키워드 필터 (파든 주제 클릭 시)
+export const [filterKeyword, setFilterKeyword] = createSignal<string | null>(null);
 
 export async function loadSettings() {
   try {

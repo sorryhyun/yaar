@@ -81,15 +81,27 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
       <span className={styles.paneBadge}>{index}</span>
       <div className={styles.paneHeader}>
         <span className={styles.paneLabel}>{monitorLabel}</span>
-        <button
-          className={styles.cliClearButton}
-          onClick={(e) => {
-            e.stopPropagation();
-            clearCliHistory(monitorId);
-          }}
-        >
-          Clear
-        </button>
+        <div className={styles.paneHeaderActions}>
+          <button
+            className={styles.cliClearButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              const text = history.map((entry) => entry.content).join('\n');
+              navigator.clipboard.writeText(text);
+            }}
+          >
+            Copy
+          </button>
+          <button
+            className={styles.cliClearButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              clearCliHistory(monitorId);
+            }}
+          >
+            Clear
+          </button>
+        </div>
       </div>
       <div className={styles.cliBody} ref={bodyRef} onScroll={handleScroll}>
         {history.map((entry) => (

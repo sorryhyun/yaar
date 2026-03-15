@@ -26,3 +26,10 @@ export type AppState = {
   postContent: string | null;
   postLoading: boolean;
 };
+
+export type Recommendation = {
+  topics: string[];
+  bestPostNum: string | null;
+  bestPostReason: string | null;
+  analyzedAt: Date;
+};

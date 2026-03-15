@@ -295,6 +295,7 @@ const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 | `describe(uri)` | `YaarVerbResult` | Raw describe |
 | `del(uri)` | `YaarVerbResult` | Raw delete |
 | `subscribe(uri, cb)` | `() => void` | Reactive subscription |
+| `wait(ms)` | `Promise<void>` | Delay execution (setTimeout wrapper) |
 | `storage` | `YaarStorage` | `.save()`, `.read()`, `.list()`, `.remove()`, `.url()` |
 | `app` | `YaarApp` | `.register()`, `.sendInteraction()` |
 | `notifications` | object | `.list()`, `.count()`, `.onChange()` |

@@ -54,7 +54,6 @@ export async function fetchPosts(): Promise<Post[]> {
 
     const aEl = titEl.querySelector('a:not(.reply_num)');
 
-    // 말머리 (카테고리) 요소 파싱
     const categoryEl =
       titEl.querySelector('.말머리') ??
       titEl.querySelector('.badge') ??
@@ -64,15 +63,11 @@ export async function fetchPosts(): Promise<Post[]> {
       categoryEl?.getAttribute('title') ||
       categoryEl?.getAttribute('alt') ||
       '';
-    // 대괄호 제거 ex) [도배기] → 도배기
     const categoryFromEl = categoryRaw ? categoryRaw.replace(/^\[|\]$/g, '').trim() : '';
 
-    // a 태그 전체 텍스트에서 제목 추출 (말머리가 포함될 수 있음)
     const titleRaw = aEl?.textContent?.trim() ?? '(제목 없음)';
-    // 제목이 [유형]으로 시작하면 카테고리로 추출
     const titleCategoryMatch = titleRaw.match(/^\[([^\]]+)\]/);
     const categoryFromTitle = titleCategoryMatch ? titleCategoryMatch[1].trim() : '';
-    // 제목에서 [카테고리] 부분 제거
     const title = titleCategoryMatch ? titleRaw.slice(titleCategoryMatch[0].length).trim() : titleRaw;
     const category = categoryFromEl || categoryFromTitle || undefined;
 
@@ -128,18 +123,13 @@ export async function fetchPostContent(post: Post): Promise<string> {
     doc.querySelector('#thum-ph');
 
   if (contentEl) {
-    // 스크립트 / 광고 제거
     contentEl.querySelectorAll('script, iframe, ins').forEach((el) => el.remove());
 
-    // DC Inside 원본 HTML의 인라인 이벤트 핸들러 제거
-    // (onerror, onclick, onload, onmouseover, onmouseout 등 — img_numbering_toggle 같은
-    //  DCInside 전용 함수가 앱 컨텍스트에 존재하지 않아 ReferenceError 발생 방지)
     const inlineHandlers = ['onerror', 'onclick', 'onload', 'onmouseover', 'onmouseout', 'onmouseenter', 'onmouseleave'];
     contentEl.querySelectorAll('*').forEach((el) => {
       inlineHandlers.forEach(attr => el.removeAttribute(attr));
     });
 
-    // 이미지 src 절대경로 변환 후 Referer 헤더 포함 프록시로 교체 (403 방지)
     const imgEls = Array.from(contentEl.querySelectorAll('img'));
     await Promise.all(imgEls.map(async (img) => {
       const rawSrc = img.getAttribute('src') || img.getAttribute('data-src') || '';
@@ -153,7 +143,6 @@ export async function fetchPostContent(post: Post): Promise<string> {
 
       img.removeAttribute('data-src');
 
-      // dcinside 이미지는 Referer 없이 403 → 프록시로 우회
       const dataUrl = await proxyImage(absoluteSrc, post.url);
       img.setAttribute('src', dataUrl ?? absoluteSrc);
       img.style.maxWidth = '100%';
@@ -163,4 +152,52 @@ export async function fetchPostContent(post: Post): Promise<string> {
   }
 
   return '<p style="color:#8b949e">내용을 불러올 수 없습니다.</p>';
+}
+
+/**
+ * 분석용: 상위 N개 게시물 내용 가져오기
+ * 3개 탭을 1초 간격으로 병렬 실행
+ */
+export async function fetchTopPostsForAnalysis(
+  allPosts: Post[],
+  count = 5,
+): Promise<Array<{ post: Post; text: string }>> {
+  // 추천수 내림차순으로 정렬
+  const candidates = [...allPosts]
+    .sort((a, b) => (parseInt(b.recommend) || 0) - (parseInt(a.recommend) || 0))
+    .slice(0, count);
+
+  const results = await Promise.all(
+    candidates.map(
+      (post, i) =>
+        new Promise<{ post: Post; text: string }>(resolve => {
+          setTimeout(async () => {
+            try {
+              const tabId = `singularity-rec-${i % 3}`;
+              await window.yaar.invoke('yaar://browser/' + tabId, {
+                action: 'open',
+                url: post.url,
+                visible: false,
+              });
+              const result = await window.yaar.invoke('yaar://browser/' + tabId, { action: 'html' });
+              const rawHtml = result.content[0]?.text ?? '';
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(rawHtml, 'text/html');
+              const el =
+                doc.querySelector('.write_div') ??
+                doc.querySelector('#thum-ph') ??
+                doc.querySelector('#writing_part');
+              const text = el
+                ? (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 600)
+                : '';
+              resolve({ post, text });
+            } catch {
+              resolve({ post, text: '' });
+            }
+          }, i * 1000);
+        }),
+    ),
+  );
+
+  return results;
 }

@@ -17,7 +17,7 @@
   width: 100vw;
   height: 100vh;
   /* bottom padding so content doesn't hide behind command palette */
-  padding-bottom: 100px;
+  padding-bottom: 200px;
   background: #0a0a0a;
   color: #e0e0e0;
   font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
@@ -97,6 +97,11 @@
 
 .pane[data-focused='true'] .paneLabel {
   color: #888;
+}
+
+.paneHeaderActions {
+  display: flex;
+  gap: 4px;
 }
 
 .cliClearButton {

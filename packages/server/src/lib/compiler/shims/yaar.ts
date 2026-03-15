@@ -77,6 +77,12 @@ export const describe = y.describe.bind(y);
 export const del = y.delete.bind(y);
 export const subscribe = y.subscribe.bind(y);
 
+// ── Timing utilities ────────────────────────────────────────────
+
+/** Returns a promise that resolves after `ms` milliseconds. */
+export const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 // ── Default export: the raw global ───────────────────────────────
 
 export const yaar = y;

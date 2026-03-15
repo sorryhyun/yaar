@@ -13,8 +13,13 @@ import {
   screenshotSrc, setScreenshotSrc,
   screenshotLoading, setScreenshotLoading,
   hideSpammer, toggleHideSpammer,
+  recommendation, setRecommendation,
+  recLoading, setRecLoading,
+  showRec, setShowRec,
+  filterKeyword, setFilterKeyword,
 } from './store';
-import { fetchPosts, fetchPostContent } from './fetcher';
+import { fetchPosts, fetchPostContent, fetchTopPostsForAnalysis } from './fetcher';
+import { registerProtocol } from './protocol';
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -79,12 +84,52 @@ async function selectPost(post: Post) {
   }
 }
 
+/** AI 분석 트리거: 상위 5개 게시물 내용을 읽어서 에이전트에게 전달 */
+async function triggerAnalysis() {
+  if (recLoading()) return;
+  const currentPosts = posts();
+  if (currentPosts.length === 0) return;
+
+  setRecLoading(true);
+  try {
+    // 3개 탭 병렬, 1초 간격으로 상위 5개 게시물 내용 가져오기
+    const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
+
+    if (!window.yaar?.app) {
+      setRecLoading(false);
+      return;
+    }
+
+    window.yaar.app.sendInteraction({
+      type: 'analyze_posts',
+      description: '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 커맨드로 결과를 돌려주세요',
+      allPosts: currentPosts.map(p => ({
+        num: p.num,
+        title: p.title,
+        author: p.author,
+        views: p.views,
+        recommend: p.recommend,
+        category: p.category ?? null,
+      })),
+      topPosts: topPostsData.map(({ post, text }) => ({
+        num: post.num,
+        title: post.title,
+        views: post.views,
+        recommend: post.recommend,
+        contentText: text,
+      })),
+    });
+  } catch (e: any) {
+    console.error('Analysis trigger failed:', e);
+    setRecLoading(false);
+  }
+}
+
 /** HTML 콘텐츠에서 img를 제거하고 텍스트만 반환 */
 function stripImages(html: string): string {
   const div = document.createElement('div');
   div.innerHTML = html;
   div.querySelectorAll('img').forEach(img => {
-    // 이미지 자리에 [이미지] 플레이스홀더 표시
     const placeholder = document.createElement('span');
     placeholder.textContent = '[이미지]';
     placeholder.style.cssText = 'display:inline-block;padding:2px 6px;background:var(--yaar-surface-2,#2a2a2a);border-radius:4px;font-size:0.8em;color:var(--yaar-text-2,#888);margin:2px';
@@ -113,7 +158,6 @@ async function takeScreenshot(post: Post) {
   try {
     const mobileUrl = toMobileUrl(post.url);
     await window.yaar.invoke('yaar://browser/pages', { action: 'open', url: mobileUrl, visible: false, mobile: true, waitUntil: 'networkidle' });
-    // 조회수/추천/댓글 영역이 보이도록 350px 스크롤 다운
     await window.yaar.invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
     const result = await window.yaar.invoke('yaar://browser/pages', { action: 'screenshot' });
     const contents: any[] = result?.content ?? [];
@@ -141,6 +185,68 @@ function formatCountdown(secs: number): string {
 function formatTime(date: Date | null): string {
   if (!date) return '';
   return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+/** AI 추천 패널 */
+function RecommendPanel() {
+  return html`
+    <div class="rec-panel">
+      ${() => recLoading() ? html`
+        <div class="rec-loading">
+          <span class="y-spinner"></span>
+          <span>AI가 게시물 분석 중... (약 5초 소요)</span>
+        </div>
+      ` : null}
+      ${() => {
+        const rec = recommendation();
+        if (!rec || recLoading()) return null;
+
+        const bestNum = rec.bestPostNum;
+        const best = bestNum ? posts().find(p => p.num === bestNum) : null;
+
+        return html`
+          <div class="rec-content">
+            <div class="rec-section">
+              <div class="rec-section-title">🔥 현재 뜨는 주제</div>
+              <div class="rec-topics" onClick=${(e: MouseEvent) => {
+                const el = (e.target as HTMLElement).closest('[data-topic]') as HTMLElement | null;
+                if (el?.dataset.topic) {
+                  setFilterKeyword(el.dataset.topic);
+                  setShowRec(false);
+                }
+              }}>
+                <${For} each=${() => rec.topics}>${(topic: string) => html`
+                  <span class="topic-chip" data-topic=${topic}>${topic}</span>
+                `}</${For}>
+              </div>
+            </div>
+            ${() => best ? html`
+              <div class="rec-section">
+                <div class="rec-section-title">⭐ 오늘의 베스트</div>
+                <div class="best-post-card" onClick=${() => { selectPost(best!); setShowRec(false); }}>
+                  <div class="best-post-title">${best.title}</div>
+                  <div class="best-post-reason">${rec.bestPostReason}</div>
+                  <div class="best-post-stats">
+                    <span>👁 ${best.views}</span>
+                    <span>👍 ${best.recommend}</span>
+                    ${best.author ? html`<span>${best.author}</span>` : null}
+                  </div>
+                </div>
+              </div>
+            ` : null}
+            <div class="rec-footer">
+              <span>분석 시각: ${rec.analyzedAt.toLocaleTimeString('ko-KR')}</span>
+              <button
+                class="y-btn y-btn-sm y-btn-ghost"
+                style="font-size:11px;padding:2px 8px"
+                onClick=${() => triggerAnalysis()}
+              >🔄 다시 분석</button>
+            </div>
+          </div>
+        `;
+      }}
+    </div>
+  `;
 }
 
 function PostItem(props: { post: Post }) {
@@ -211,6 +317,7 @@ function SettingsPanel() {
 
 function App() {
   onMount(async () => {
+    registerProtocol();
     await loadSettings();
     await doRefresh();
     startRefreshTimer();
@@ -235,6 +342,19 @@ function App() {
       <div class="header-actions">
         <span class="countdown">${() => formatCountdown(countdown())}</span>
         <button
+          class=${() => 'y-btn y-btn-sm ' + (showRec() ? 'rec-btn-active' : 'y-btn-ghost')}
+          onClick=${() => {
+            const willShow = !showRec();
+            setShowRec(willShow);
+            if (willShow && !recommendation() && !recLoading()) {
+              triggerAnalysis();
+            }
+          }}
+          title="AI 추천 분석"
+        >
+          ${() => recLoading() && !showRec() ? html`<span class="y-spinner"></span>` : '🤖'}
+        </button>
+        <button
           class="y-btn y-btn-sm y-btn-ghost"
           onClick=${() => doRefresh()}
           disabled=${loading}
@@ -253,10 +373,17 @@ function App() {
     </header>
   `;
 
-  // 도배기 필터링: category가 '도배기'인 포스트 숨김
+  // 도배기 + 키워드 필터
   const filteredPosts = createMemo(() => {
-    if (!hideSpammer()) return posts();
-    return posts().filter(p => !(p.category && p.category.includes('도배기')));
+    let result = posts();
+    if (hideSpammer()) {
+      result = result.filter(p => !(p.category && p.category.includes('도배기')));
+    }
+    const kw = filterKeyword();
+    if (kw) {
+      result = result.filter(p => p.title.includes(kw));
+    }
+    return result;
   });
 
   const PostList = () => html`
@@ -269,6 +396,16 @@ function App() {
         >
           ${() => hideSpammer() ? '🚫 도배기 안 보기' : '🟢 도배기 보기'}
         </button>
+        ${() => {
+          const kw = filterKeyword();
+          if (!kw) return null;
+          return html`
+            <span class="filter-chip">
+              🔍 ${kw}
+              <button class="filter-chip-close" onClick=${() => setFilterKeyword(null)}>✕</button>
+            </span>
+          `;
+        }}
       </div>
       ${() => {
         if (loading() && posts().length === 0) return html`
@@ -295,6 +432,11 @@ function App() {
             <${For} each=${filteredPosts}>${(post: Post) => html`
               <${PostItem} post=${post} />
             `}</${For}>
+            ${() => filterKeyword() && filteredPosts().length === 0 ? html`
+              <div class="loading-center" style="padding:var(--yaar-sp-4);color:var(--yaar-text-muted);font-size:13px">
+                "검색 결과 없음"
+              </div>
+            ` : null}
           </div>
         `;
       }}
@@ -343,7 +485,6 @@ function App() {
           </div>
           <div class="detail-content">
             ${() => {
-              // 원본 보기 모드
               if (showOriginal()) {
                 if (screenshotLoading()) return html`
                   <div class="loading-center">
@@ -361,7 +502,6 @@ function App() {
                 return html`<div class="loading-center"><span style="color:var(--yaar-text-2)">스크린샷 실패</span></div>`;
               }
 
-              // 텍스트 보기 모드 (이미지 제거)
               if (postLoading()) return html`
                 <div class="loading-center">
                   <span class="y-spinner"></span>
@@ -384,6 +524,7 @@ function App() {
     <div class="y-app">
       <${Header} />
       ${() => showSettings() ? html`<${SettingsPanel} />` : null}
+      ${() => showRec() ? html`<${RecommendPanel} />` : null}
       <div class="main-layout">
         <${PostList} />
         <${DetailPanel} />

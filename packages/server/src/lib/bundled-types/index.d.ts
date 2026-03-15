@@ -194,6 +194,9 @@ declare module '@bundled/yaar' {
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
 
+  /** Returns a promise that resolves after `ms` milliseconds. */
+  export function wait(ms: number): Promise<void>;
+
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;
   export default YaarGlobal;
