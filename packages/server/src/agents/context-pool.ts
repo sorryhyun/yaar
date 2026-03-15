@@ -31,7 +31,9 @@ import {
   ReloadCachePolicy,
   WindowConnectionPolicy,
   MonitorBudgetPolicy,
+  WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
+import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import { MainTaskProcessor } from './main-task-processor.js';
 import { WindowTaskProcessor } from './window-task-processor.js';
 import type { PoolContext, Task } from './pool-types.js';
@@ -60,6 +62,7 @@ export class ContextPool implements PoolContext {
   readonly windowQueuePolicy = new WindowQueuePolicy();
   readonly windowConnectionPolicy = new WindowConnectionPolicy();
   readonly budgetPolicy = new MonitorBudgetPolicy();
+  readonly windowSubscriptionPolicy = new WindowSubscriptionPolicy();
   readonly windowAgentMap: Map<string, string> = new Map();
   sharedLogger: SessionLogger | null = null;
   savedThreadIds?: Record<string, string>;
@@ -254,6 +257,19 @@ export class ContextPool implements PoolContext {
     this.mainProcessor.recordMonitorAction(monitorId);
   }
 
+  notifyWindowSubscribers(
+    windowId: string,
+    event: WindowChangeEvent,
+    summary: string,
+    sourceAgentKey?: string,
+  ): void {
+    this.windowSubscriptionPolicy.notifyChange(windowId, event, summary, sourceAgentKey, (task) => {
+      this.handleTask(task).catch((err) => {
+        console.error('[ContextPool] Error delivering subscription notification:', err);
+      });
+    });
+  }
+
   handleWindowClose(windowId: string): void {
     this.windowProcessor.handleWindowClose(windowId);
   }
@@ -391,6 +407,7 @@ export class ContextPool implements PoolContext {
     this.timeline.clear();
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
+    this.windowSubscriptionPolicy.clear();
     if (closeWindows) {
       this.windowState.clear();
     }

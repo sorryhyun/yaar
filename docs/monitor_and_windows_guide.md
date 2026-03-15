@@ -161,6 +161,15 @@ Each window can have a **persistent window agent** — a dedicated AI agent that
 
 Window agents run **in parallel** with the main agent and with each other. Same-window tasks are serialized via `WindowQueuePolicy`.
 
+### Window subscriptions
+
+Agents can subscribe to changes on other windows via `invoke('yaar://windows/{id}', { action: 'subscribe', events: [...] })`. When the target window changes, the subscribing agent receives a synthetic `<window:change>` message automatically.
+
+- **Events**: `content`, `interaction`, `close`, `lock`, `unlock`, `move`, `resize`, `title`
+- **Debounced** at 500ms per subscription to coalesce rapid updates (e.g., streaming appends)
+- **Self-skip**: an agent modifying its own subscribed window won't trigger its own subscription
+- **Cleanup**: subscriptions auto-removed on window close, agent dispose, or session teardown
+
 ### Locking
 
 Locking prevents concurrent modification of a window's content by multiple agents:

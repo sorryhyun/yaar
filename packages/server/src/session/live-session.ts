@@ -34,6 +34,11 @@ import { getWarmPool } from '../providers/warm-pool.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
+import {
+  normalizeAgentKey,
+  mapActionToSubscriptionEvent,
+  summarizeAction,
+} from '../features/window/subscription-events.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -114,6 +119,21 @@ export class LiveSession {
       // Record action against the monitor's budget (if monitorId present)
       if (event.monitorId && this.pool) {
         this.pool.recordMonitorAction(event.monitorId);
+      }
+      // Notify window subscribers of state changes
+      if (this.pool) {
+        const changeEvent = mapActionToSubscriptionEvent(event.action);
+        if (changeEvent) {
+          const windowId = (event.action as { windowId?: string }).windowId;
+          if (windowId) {
+            this.pool.notifyWindowSubscribers(
+              windowId,
+              changeEvent,
+              summarizeAction(event.action, changeEvent),
+              normalizeAgentKey(event.agentId),
+            );
+          }
+        }
       }
     });
 
@@ -368,6 +388,13 @@ export class LiveSession {
           content,
           actionId: event.actionId,
         });
+        // Notify other agents subscribed to this window's interactions
+        this.pool?.notifyWindowSubscribers(
+          event.windowId,
+          'interaction',
+          `User clicked "${event.action}" ${windowContext}`,
+          undefined, // no source agent — this is a user interaction
+        );
         break;
       }
 

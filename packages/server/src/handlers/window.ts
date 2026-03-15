@@ -20,6 +20,7 @@ import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
+import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -71,7 +72,17 @@ export function registerWindowHandlers(
       properties: {
         action: {
           type: 'string',
-          enum: ['create', 'update', 'close', 'lock', 'unlock', 'app_query', 'app_command'],
+          enum: [
+            'create',
+            'update',
+            'close',
+            'lock',
+            'unlock',
+            'app_query',
+            'app_command',
+            'subscribe',
+            'unsubscribe',
+          ],
         },
         // create fields
         title: { type: 'string' },
@@ -98,6 +109,17 @@ export function registerWindowHandlers(
         command: { type: 'string' },
         params: { type: 'object' },
         stateKey: { type: 'string' },
+        // subscribe fields
+        events: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['content', 'interaction', 'close', 'lock', 'unlock', 'move', 'resize', 'title'],
+          },
+          description: 'Event types to subscribe to (default: content, interaction, close).',
+        },
+        debounceMs: { type: 'number', description: 'Debounce interval in ms (default: 500).' },
+        subscriptionId: { type: 'string', description: 'Subscription ID for unsubscribe.' },
       },
     },
 
@@ -205,6 +227,10 @@ export function registerWindowHandlers(
           return handleAppQuery(getWindowState(), windowId, p);
         case 'app_command':
           return handleAppCommand(getWindowState(), windowId, p);
+        case 'subscribe':
+          return handleSubscribe(getWindowState(), windowId, p);
+        case 'unsubscribe':
+          return handleUnsubscribe(p);
         default:
           return error(`Unknown action "${action}".`);
       }

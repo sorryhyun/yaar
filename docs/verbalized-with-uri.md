@@ -95,6 +95,8 @@ delete('yaar://config/app/github')                      -> remove app config
 read('yaar://windows/win-1')                            -> window state
 invoke('yaar://windows/', { action: 'create', title: 'Notes', renderer: 'markdown', content: '# Hello' })
 invoke('yaar://windows/win-1', { action: 'update', operation: 'append', content: '...' })
+invoke('yaar://windows/win-1', { action: 'subscribe', events: ['content', 'interaction'] })  -> { subscriptionId }
+invoke('yaar://windows/win-1', { action: 'unsubscribe', subscriptionId: 'wsub-...' })
 delete('yaar://windows/win-1')                          -> close window
 
 read('yaar://browser/0')                                -> { url, title }

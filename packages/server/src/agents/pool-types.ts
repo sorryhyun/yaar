@@ -20,6 +20,7 @@ import type {
   ReloadCachePolicy,
   WindowConnectionPolicy,
   MonitorBudgetPolicy,
+  WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
 
 /**
@@ -53,6 +54,7 @@ export interface PoolContext {
   readonly windowQueuePolicy: WindowQueuePolicy;
   readonly windowConnectionPolicy: WindowConnectionPolicy;
   readonly budgetPolicy: MonitorBudgetPolicy;
+  readonly windowSubscriptionPolicy: WindowSubscriptionPolicy;
   readonly windowAgentMap: Map<string, string>;
 
   // Methods processors call back into

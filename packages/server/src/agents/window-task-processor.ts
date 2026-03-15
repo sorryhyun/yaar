@@ -181,8 +181,12 @@ export class WindowTaskProcessor {
       this.ctx.agentPool.disposeWindowAgent(agentKey).catch((err) => {
         console.error(`[ContextPool] Error disposing window agent for ${agentKey}:`, err);
       });
+      this.ctx.windowSubscriptionPolicy.clearForAgent(agentKey);
     }
     // Agent survives if other windows remain in the group
+
+    // Clear subscriptions targeting or owned by this window
+    this.ctx.windowSubscriptionPolicy.clearForWindow(windowId);
 
     // Prune this window's context from tape (regardless of group status)
     const pruned = this.ctx.contextTape.pruneWindow(windowId);

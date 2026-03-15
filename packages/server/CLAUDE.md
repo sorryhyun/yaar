@@ -41,7 +41,7 @@ src/
 │   ├── main-task-processor.ts / window-task-processor.ts
 │   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
-│   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowConnection
+│   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowConnection, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions
 │   ├── factory.ts        # Auto-detect provider, warm pool init
@@ -65,7 +65,7 @@ src/
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone
 │   ├── http/             # fetch.ts — proxied HTTP fetch
-│   └── window/           # Window create/update/manage, app protocol, app query/command
+│   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
