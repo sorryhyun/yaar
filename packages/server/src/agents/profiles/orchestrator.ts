@@ -1,5 +1,5 @@
 /**
- * Orchestrator (main agent) system prompt.
+ * Orchestrator (monitor agent) system prompt.
  *
  * Lean routing-focused prompt. The orchestrator understands intent,
  * decides approach, and dispatches work to specialist sub-agents.

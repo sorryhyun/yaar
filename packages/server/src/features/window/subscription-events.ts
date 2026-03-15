@@ -21,7 +21,7 @@ const ACTION_TO_EVENT: Record<string, WindowChangeEvent> = {
 /**
  * Normalize an agentId (role) to the agentKey used by WindowSubscriptionPolicy.
  * Window agents: "window-{windowId}/action-123" → "{windowId}"
- * Main agents: "main-{monitorId}" → "main-{monitorId}"
+ * Monitor agents: "monitor-{monitorId}" → "monitor-{monitorId}"
  */
 export function normalizeAgentKey(agentId: string | undefined): string | undefined {
   if (!agentId) return undefined;

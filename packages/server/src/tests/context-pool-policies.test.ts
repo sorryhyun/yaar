@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { MainQueuePolicy } from '../agents/context-pool-policies/main-queue-policy.js';
+import { MonitorQueuePolicy } from '../agents/context-pool-policies/monitor-queue-policy.js';
 import { WindowQueuePolicy } from '../agents/context-pool-policies/window-queue-policy.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
-import { ContextTape, mainSource } from '../agents/context.js';
+import { ContextTape, monitorSource } from '../agents/context.js';
 import type { Task } from '../agents/pool-types.js';
 
-describe('MainQueuePolicy', () => {
+describe('MonitorQueuePolicy', () => {
   it('preserves FIFO ordering', () => {
-    const policy = new MainQueuePolicy(3);
-    const t1: Task = { type: 'main', messageId: '1', content: 'a' };
-    const t2: Task = { type: 'main', messageId: '2', content: 'b' };
+    const policy = new MonitorQueuePolicy(3);
+    const t1: Task = { type: 'monitor', messageId: '1', content: 'a' };
+    const t2: Task = { type: 'monitor', messageId: '2', content: 'b' };
 
     policy.enqueue(t1);
     policy.enqueue(t2);
@@ -20,8 +20,8 @@ describe('MainQueuePolicy', () => {
   });
 
   it('enforces queue size limit checks', () => {
-    const policy = new MainQueuePolicy(1);
-    policy.enqueue({ type: 'main', messageId: '1', content: 'a' });
+    const policy = new MonitorQueuePolicy(1);
+    policy.enqueue({ type: 'monitor', messageId: '1', content: 'a' });
     expect(policy.canEnqueue()).toBe(false);
   });
 });
@@ -89,8 +89,8 @@ describe('ContextAssemblyPolicy', () => {
     function buildTape(turnCount: number) {
       const tape = new ContextTape();
       for (let i = 1; i <= turnCount; i++) {
-        tape.append('user', `User message ${i}`, mainSource('0'));
-        tape.append('assistant', `Assistant reply ${i}`, mainSource('0'));
+        tape.append('user', `User message ${i}`, monitorSource('0'));
+        tape.append('assistant', `Assistant reply ${i}`, monitorSource('0'));
       }
       return tape;
     }
@@ -146,7 +146,7 @@ describe('ReloadCachePolicy', () => {
     // Pass a minimal mock cache — only generateCacheLabel is tested here
     const policy = new ReloadCachePolicy({ findMatches: () => [], record: () => {} } as any);
     expect(
-      policy.generateCacheLabel({ type: 'main', messageId: '1', content: 'app: moltbook' }),
+      policy.generateCacheLabel({ type: 'monitor', messageId: '1', content: 'app: moltbook' }),
     ).toBe('Open moltbook app');
     expect(
       policy.generateCacheLabel({

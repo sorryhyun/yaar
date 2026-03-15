@@ -184,7 +184,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       if (status === 'running' && toolInput) {
         let inputStr: string;
         if (isAgentTool) {
-          // Agent tool_use: show subagent type + prompt from main agent
+          // Agent tool_use: show subagent type + prompt from monitor agent
           const input = toolInput as Record<string, unknown>;
           const agentType = (input.subagent_type ?? '') as string;
           const prompt = (input.prompt ?? input.description ?? '') as string;

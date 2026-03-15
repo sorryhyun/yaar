@@ -29,9 +29,9 @@ export function handleSubscribe(
   if (!agentId) return error('No agent context — subscribe must be called from an agent.');
 
   // Determine subscriber type and key from agentId pattern
-  // Main agents: "main-{monitorId}", App agents: "app-{appId}"
-  const subscriberType = 'main';
-  const subscriberAgentKey = `main-${monitorId}`;
+  // Monitor agents: "monitor-{monitorId}", App agents: "app-{appId}"
+  const subscriberType = 'monitor';
+  const subscriberAgentKey = `monitor-${monitorId}`;
   const subscriberWindowId: string | undefined = undefined;
 
   // Parse events from payload

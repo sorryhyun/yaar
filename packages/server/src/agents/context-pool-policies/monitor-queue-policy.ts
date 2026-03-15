@@ -5,7 +5,7 @@ export interface QueuedTask {
   timestamp: number;
 }
 
-export class MainQueuePolicy {
+export class MonitorQueuePolicy {
   private readonly maxQueueSize: number;
   private queue: QueuedTask[] = [];
   private processing = false;

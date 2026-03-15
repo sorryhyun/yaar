@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ContextTape, mainSource, windowSource } from '../agents/context.js';
+import { ContextTape, monitorSource, windowSource } from '../agents/context.js';
 
 describe('ContextTape', () => {
   let tape: ContextTape;
@@ -9,8 +9,8 @@ describe('ContextTape', () => {
   });
 
   it('appends and retrieves messages', () => {
-    tape.append('user', 'hello', mainSource('0'));
-    tape.append('assistant', 'hi', mainSource('0'));
+    tape.append('user', 'hello', monitorSource('0'));
+    tape.append('assistant', 'hi', monitorSource('0'));
 
     expect(tape.length).toBe(2);
     const all = tape.getAllMessages();
@@ -21,7 +21,7 @@ describe('ContextTape', () => {
 
   describe('filtering', () => {
     beforeEach(() => {
-      tape.append('user', 'main msg', mainSource('0'));
+      tape.append('user', 'monitor msg', monitorSource('0'));
       tape.append('user', 'win1 msg', windowSource('w1'));
       tape.append('user', 'win2 msg', windowSource('w2'));
     });
@@ -29,7 +29,7 @@ describe('ContextTape', () => {
     it('excludes window messages when includeWindows=false', () => {
       const msgs = tape.getMessages({ includeWindows: false });
       expect(msgs).toHaveLength(1);
-      expect(msgs[0].content).toBe('main msg');
+      expect(msgs[0].content).toBe('monitor msg');
     });
 
     it('filters by specific window IDs', () => {
@@ -46,7 +46,7 @@ describe('ContextTape', () => {
 
   describe('pruneWindow', () => {
     it('removes messages for a window and returns them', () => {
-      tape.append('user', 'main', mainSource('0'));
+      tape.append('user', 'main', monitorSource('0'));
       tape.append('user', 'win msg', windowSource('w1'));
       tape.append('assistant', 'win reply', windowSource('w1'));
 
@@ -63,8 +63,8 @@ describe('ContextTape', () => {
     });
 
     it('formats main messages with role tags', () => {
-      tape.append('user', 'hello', mainSource('0'));
-      tape.append('assistant', 'hi', mainSource('0'));
+      tape.append('user', 'hello', monitorSource('0'));
+      tape.append('assistant', 'hi', monitorSource('0'));
 
       const formatted = tape.formatForPrompt();
       expect(formatted).toContain('<user>hello</user>');
@@ -73,7 +73,7 @@ describe('ContextTape', () => {
     });
 
     it('excludes window messages by default', () => {
-      tape.append('user', 'main', mainSource('0'));
+      tape.append('user', 'main', monitorSource('0'));
       tape.append('user', 'window', windowSource('w1'));
 
       const formatted = tape.formatForPrompt();
@@ -81,7 +81,7 @@ describe('ContextTape', () => {
     });
 
     it('includes specific window when requested', () => {
-      tape.append('user', 'main', mainSource('0'));
+      tape.append('user', 'main', monitorSource('0'));
       tape.append('user', 'win1', windowSource('w1'));
 
       const formatted = tape.formatForPrompt({ includeWindows: true, windowId: 'w1' });
@@ -91,7 +91,7 @@ describe('ContextTape', () => {
   });
 
   it('clear empties all messages', () => {
-    tape.append('user', 'msg', mainSource('0'));
+    tape.append('user', 'msg', monitorSource('0'));
     tape.clear();
     expect(tape.length).toBe(0);
   });

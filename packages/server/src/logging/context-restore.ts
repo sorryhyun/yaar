@@ -2,13 +2,13 @@ import type { ParsedMessage } from './types.js';
 import {
   type ContextMessage,
   type ContextSource,
-  mainSource,
+  monitorSource,
   windowSource,
   extractWindowId,
 } from '../agents/context.js';
 
 export interface ContextRestorePolicy {
-  mode: 'full' | 'main_and_selected_windows' | 'summarize_old_windows';
+  mode: 'full' | 'monitor_and_selected_windows' | 'summarize_old_windows';
   selectedWindowIds?: string[];
   activeWindowIds?: string[];
   summaryTextByWindow?: Record<string, string>;
@@ -22,17 +22,18 @@ export const FULL_RESTORE_POLICY: ContextRestorePolicy = {
  * Normalize a source value from old or new log formats into a ContextSource URI.
  * Old formats: 'main' or { window: string }
  * New format: 'yaar://monitors/...' or 'yaar://windows/...'
+ * Note: 'main' is kept for backward compatibility with old session logs.
  */
 function normalizeSource(raw: unknown): ContextSource {
   if (typeof raw === 'string') {
-    if (raw === 'main') return mainSource('0');
+    if (raw === 'main') return monitorSource('0');
     if (raw.startsWith('yaar://')) return raw as ContextSource;
-    return mainSource('0');
+    return monitorSource('0');
   }
   if (typeof raw === 'object' && raw !== null && 'window' in raw) {
     return windowSource((raw as { window: string }).window);
   }
-  return mainSource('0');
+  return monitorSource('0');
 }
 
 function inferWindowSource(agentId: string): ContextSource | null {
@@ -50,7 +51,7 @@ function toContextMessage(msg: ParsedMessage): ContextMessage | null {
 
   const source = msg.source
     ? normalizeSource(msg.source)
-    : (inferWindowSource(msg.agentId) ?? mainSource('0'));
+    : (inferWindowSource(msg.agentId) ?? monitorSource('0'));
 
   return {
     role: msg.type,
@@ -79,7 +80,7 @@ export function getContextRestoreMessages(
     return parsed;
   }
 
-  if (policy.mode === 'main_and_selected_windows') {
+  if (policy.mode === 'monitor_and_selected_windows') {
     const selected = new Set(policy.selectedWindowIds ?? []);
     return parsed.filter((msg) => {
       const windowId = sourceWindowId(msg);

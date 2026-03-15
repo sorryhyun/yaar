@@ -3,7 +3,7 @@
  *
  * App agents:
  * - Persist for the session lifetime (not tied to window close)
- * - Have only app_query, app_command, and relay tools
+ * - Have only query, command, and relay tools
  * - Get a dynamic system prompt from SKILL.md and protocol manifest
  * - Track the most recently interacted window for tool resolution
  */
@@ -105,7 +105,7 @@ export class AppTaskProcessor {
         onBeforeRun: async () => {
           await this.ctx.sharedLogger?.registerAgent(
             agentRole,
-            `main-${task.monitorId ?? '0'}`,
+            `monitor-${task.monitorId ?? '0'}`,
             windowId,
           );
           await this.sendWindowStatus(windowId, agentRole, 'assigned');

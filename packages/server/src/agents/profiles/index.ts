@@ -46,10 +46,10 @@ export function getProfile(id: string): AgentProfile {
   return profiles[id] ?? profiles.default;
 }
 
-// ── Developer profile (main agent) ───────────────────────────────────
+// ── Developer profile (monitor agent) ────────────────────────────────
 
 /**
- * Developer profile — applied to the main agent.
+ * Developer profile — applied to the monitor agent.
  * Can handle quick actions directly and delegates complex work via Task tool.
  */
 export const DEVELOPER_PROFILE: AgentProfile = {

@@ -145,14 +145,14 @@ export function registerWindowHandlers(
 
         return okJson({
           monitorId,
-          hasMainAgent: pool.hasMainAgent(monitorId),
+          hasMonitorAgent: pool.hasMonitorAgent(monitorId),
           windows: windows.map((w) => ({
             id: w.id,
             title: w.title,
           })),
           stats: {
             totalAgents: stats.totalAgents,
-            mainQueueSize: stats.mainQueueSize,
+            monitorQueueSize: stats.monitorQueueSize,
           },
         });
       }

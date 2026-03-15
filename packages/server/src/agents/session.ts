@@ -28,7 +28,7 @@ import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
  * Options for handling a message with dynamic role assignment.
  */
 export interface HandleMessageOptions {
-  /** Role to use for this message ('main-{messageId}' or 'window-{id}') */
+  /** Role to use for this message ('monitor-{messageId}' or 'window-{id}') */
   role: string;
   /** Source for context recording */
   source: ContextSource;
@@ -117,7 +117,7 @@ export function runWithAgentContext<T>(
 
 /**
  * Build a scope context section so the agent knows its place in the hierarchy.
- * - Main agents: scoped to a monitor, use bare window IDs
+ * - Monitor agents: scoped to a monitor, use bare window IDs
  * - Window agents: scoped to a specific window within a monitor
  */
 function buildScopeSection(role: string, monitorId?: string): string {
@@ -128,7 +128,7 @@ function buildScopeSection(role: string, monitorId?: string): string {
     return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`. Your actions are limited to this window. Use \`yaar://windows/${windowId}\` to address it.`;
   }
 
-  // Main/ephemeral agent with monitorId
+  // Monitor/ephemeral agent with monitorId
   if (monitorId) {
     return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. Use \`yaar://windows/\` URIs to create and manage windows (e.g. \`yaar://windows/my-window\`). The monitor is assigned automatically.`;
   }

@@ -2,7 +2,7 @@
  * Shared types and interface for ContextPool processors.
  *
  * - `Task` — moved here to break circular imports between context-pool <-> policies.
- * - `PoolContext` — the contract that MainTaskProcessor and AppTaskProcessor depend on.
+ * - `PoolContext` — the contract that MonitorTaskProcessor and AppTaskProcessor depend on.
  */
 
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
@@ -13,7 +13,7 @@ import type { WindowStateRegistry } from '../session/window-state.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { ProviderType } from '../providers/types.js';
 import type {
-  MainQueuePolicy,
+  MonitorQueuePolicy,
   WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
@@ -25,7 +25,7 @@ import type {
  * A task to be processed by the pool.
  */
 export interface Task {
-  type: 'main' | 'window';
+  type: 'monitor' | 'window';
   messageId: string;
   windowId?: string;
   content: string;
@@ -54,6 +54,6 @@ export interface PoolContext {
   readonly windowSubscriptionPolicy: WindowSubscriptionPolicy;
 
   // Methods processors call back into
-  getOrCreateMainQueue(monitorId: string): MainQueuePolicy;
+  getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
   sendEvent(event: ServerEvent): Promise<void>;
 }

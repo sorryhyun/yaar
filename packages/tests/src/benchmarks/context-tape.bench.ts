@@ -10,7 +10,7 @@
  */
 
 import { bench, describe } from 'vitest';
-import { ContextTape, mainSource, windowSource } from '@yaar/server/agents/context';
+import { ContextTape, monitorSource, windowSource } from '@yaar/server/agents/context';
 import { MonitorBudgetPolicy } from '@yaar/server/agents/context-pool-policies/monitor-budget-policy';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -19,13 +19,13 @@ const MAIN_MSG = 'The user asked about dashboard metrics for Q4 revenue analysis
 const WIN_MSG = 'Component rendered with 12 data points on an interactive line chart.';
 
 /**
- * Build a tape pre-populated with `mainCount` main messages and
+ * Build a tape pre-populated with `mainCount` monitor messages and
  * `windowCount` window messages spread across 5 windows.
  */
 function buildTape(mainCount: number, windowCount: number): ContextTape {
   const tape = new ContextTape();
   for (let i = 0; i < mainCount; i++) {
-    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, mainSource('0'));
+    tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, monitorSource('0'));
   }
   for (let i = 0; i < windowCount; i++) {
     tape.append(
@@ -38,16 +38,16 @@ function buildTape(mainCount: number, windowCount: number): ContextTape {
 }
 
 // Read-only tapes used for filter / format benchmarks.
-const TAPE_200 = buildTape(150, 50); // 200 messages: 150 main + 50 window
-const TAPE_400 = buildTape(200, 200); // 400 messages: close to the 200-main prune threshold
+const TAPE_200 = buildTape(150, 50); // 200 messages: 150 monitor + 50 window
+const TAPE_400 = buildTape(200, 200); // 400 messages: close to the 200-monitor prune threshold
 
 // ── ContextTape append ────────────────────────────────────────────────────────
 
 describe('ContextTape.append', () => {
-  bench('100 main messages', () => {
+  bench('100 monitor messages', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
-      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, mainSource('0'));
+      tape.append(i % 2 === 0 ? 'user' : 'assistant', `${MAIN_MSG} (${i})`, monitorSource('0'));
     }
   });
 
@@ -62,12 +62,12 @@ describe('ContextTape.append', () => {
     }
   });
 
-  bench('append past the 200-main prune boundary (triggers prune)', () => {
-    // Creates a tape that already has 195 main messages, then appends 10 more
+  bench('append past the 200-monitor prune boundary (triggers prune)', () => {
+    // Creates a tape that already has 195 monitor messages, then appends 10 more
     // to exercise the pruneIfNeeded() path.
     const tape = buildTape(195, 0);
     for (let i = 0; i < 10; i++) {
-      tape.append('user', `extra message ${i}`, mainSource('0'));
+      tape.append('user', `extra message ${i}`, monitorSource('0'));
     }
   });
 });
@@ -95,7 +95,7 @@ describe('ContextTape.getMessages (200 messages)', () => {
 // ── ContextTape formatForPrompt ───────────────────────────────────────────────
 
 describe('ContextTape.formatForPrompt (200 messages)', () => {
-  bench('main-only (default for main agents)', () => {
+  bench('monitor-only (default for monitor agents)', () => {
     TAPE_200.formatForPrompt({ includeWindows: false });
   });
 
@@ -109,7 +109,7 @@ describe('ContextTape.formatForPrompt (200 messages)', () => {
 });
 
 describe('ContextTape.formatForPrompt (400 messages)', () => {
-  bench('main-only on large tape', () => {
+  bench('monitor-only on large tape', () => {
     TAPE_400.formatForPrompt({ includeWindows: false });
   });
 });

@@ -8,7 +8,7 @@
 import type { OSAction } from '@yaar/shared';
 
 export interface Fingerprint {
-  triggerType: 'main' | 'window';
+  triggerType: 'monitor' | 'window';
   triggerTarget?: string; // windowId for window tasks
   ngrams: string[]; // Word n-grams from normalized content
   contentHash: string; // SHA-256 for exact match fast path

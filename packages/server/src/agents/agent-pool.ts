@@ -2,7 +2,7 @@
  * AgentPool - manages agents with role-based lifecycle.
  *
  * Agent types:
- * - Main agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
+ * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - App agents: persistent per-app, handle app protocol communication
  *
@@ -26,7 +26,7 @@ export interface PooledAgent {
   id: number;
   instanceId: string;
   lastUsed: number;
-  currentRole: string | null; // 'main-{messageId}' or 'app-{id}' when active
+  currentRole: string | null; // 'monitor-{messageId}' or 'app-{id}' when active
   idleTimer: NodeJS.Timeout | null;
 }
 
@@ -36,8 +36,8 @@ export class AgentPool {
   private logger: SessionLogger | null = null;
   private broadcastFn: (event: ServerEvent) => void;
 
-  /** Persistent main agents, keyed by monitorId. */
-  private mainAgents = new Map<string, PooledAgent>();
+  /** Persistent monitor agents, keyed by monitorId. */
+  private monitorAgents = new Map<string, PooledAgent>();
 
   /** Persistent per-app agents, keyed by appId. */
   private appAgents = new Map<string, PooledAgent>();
@@ -105,16 +105,16 @@ export class AgentPool {
   }
 
   /**
-   * Create a main agent for the given monitor with the given provider.
+   * Create a monitor agent for the given monitor with the given provider.
    */
-  async createMainAgent(
+  async createMonitorAgent(
     monitorId = '0',
     preWarmedProvider?: AITransport,
   ): Promise<PooledAgent | null> {
     const agent = await this.createAgentCore(preWarmedProvider);
     if (agent) {
-      this.mainAgents.set(monitorId, agent);
-      console.log(`[AgentPool] Main agent created for ${monitorId}: ${agent.instanceId}`);
+      this.monitorAgents.set(monitorId, agent);
+      console.log(`[AgentPool] Monitor agent created for ${monitorId}: ${agent.instanceId}`);
     }
     return agent;
   }
@@ -150,61 +150,61 @@ export class AgentPool {
     console.log(`[AgentPool] Ephemeral agent disposed: ${agent.instanceId}`);
   }
 
-  // ── Main agent ─────────────────────────────────────────────────────
+  // ── Monitor agent ─────────────────────────────────────────────────────
 
   /**
-   * Get the main agent for a monitor.
+   * Get the monitor agent for a monitor.
    */
-  getMainAgent(monitorId = '0'): PooledAgent | null {
-    return this.mainAgents.get(monitorId) ?? null;
+  getMonitorAgent(monitorId = '0'): PooledAgent | null {
+    return this.monitorAgents.get(monitorId) ?? null;
   }
 
   /**
-   * Check if the main agent for a monitor is currently busy.
+   * Check if the monitor agent for a monitor is currently busy.
    */
-  isMainAgentBusy(monitorId = '0'): boolean {
-    const agent = this.mainAgents.get(monitorId);
-    if (!agent) return true; // no main agent = effectively busy
+  isMonitorAgentBusy(monitorId = '0'): boolean {
+    const agent = this.monitorAgents.get(monitorId);
+    if (!agent) return true; // no monitor agent = effectively busy
     return agent.session.isRunning() || agent.currentRole !== null;
   }
 
   /**
-   * Get the main agent's session for a monitor.
+   * Get the monitor agent's session for a monitor.
    */
-  getMainAgentSession(monitorId = '0'): AgentSession | null {
-    return this.mainAgents.get(monitorId)?.session ?? null;
+  getMonitorAgentSession(monitorId = '0'): AgentSession | null {
+    return this.monitorAgents.get(monitorId)?.session ?? null;
   }
 
   /**
-   * Check if a main agent exists for the given monitor.
+   * Check if a monitor agent exists for the given monitor.
    */
-  hasMainAgent(monitorId: string): boolean {
-    return this.mainAgents.has(monitorId);
+  hasMonitorAgent(monitorId: string): boolean {
+    return this.monitorAgents.has(monitorId);
   }
 
   /**
-   * Return the number of active main agents (one per monitor).
+   * Return the number of active monitor agents (one per monitor).
    */
-  getMainAgentCount(): number {
-    return this.mainAgents.size;
+  getMonitorAgentCount(): number {
+    return this.monitorAgents.size;
   }
 
   /**
-   * Return the monitor IDs that have main agents.
+   * Return the monitor IDs that have monitor agents.
    */
-  getMainAgentMonitorIds(): string[] {
-    return [...this.mainAgents.keys()];
+  getMonitorAgentIds(): string[] {
+    return [...this.monitorAgents.keys()];
   }
 
   /**
-   * Remove and dispose the main agent for a given monitor.
+   * Remove and dispose the monitor agent for a given monitor.
    * Releases the limiter slot. Returns true if an agent was removed.
    */
-  async removeMainAgent(monitorId: string): Promise<boolean> {
-    const agent = this.mainAgents.get(monitorId);
+  async removeMonitorAgent(monitorId: string): Promise<boolean> {
+    const agent = this.monitorAgents.get(monitorId);
     if (!agent) return false;
 
-    this.mainAgents.delete(monitorId);
+    this.monitorAgents.delete(monitorId);
     this.agentIds.delete(agent.instanceId);
     getSessionHub().unregisterAgent(agent.instanceId);
     if (agent.session.isRunning()) {
@@ -215,7 +215,7 @@ export class AgentPool {
     } finally {
       getAgentLimiter().release();
     }
-    console.log(`[AgentPool] Main agent removed for ${monitorId}: ${agent.instanceId}`);
+    console.log(`[AgentPool] Monitor agent removed for ${monitorId}: ${agent.instanceId}`);
     return true;
   }
 
@@ -287,7 +287,7 @@ export class AgentPool {
    * Find the monitorId for a given agent instanceId.
    */
   findMonitorForAgent(agentId: string): string | undefined {
-    for (const [monitorId, agent] of this.mainAgents) {
+    for (const [monitorId, agent] of this.monitorAgents) {
       if (agent.instanceId === agentId) return monitorId;
     }
     return undefined;
@@ -306,11 +306,11 @@ export class AgentPool {
   // ── Steer ──────────────────────────────────────────────────────────
 
   /**
-   * Try to steer the main agent's active turn with additional input.
+   * Try to steer the monitor agent's active turn with additional input.
    * Returns true if steering succeeded, false otherwise.
    */
-  async steerMainAgent(monitorId = '0', content: string): Promise<boolean> {
-    const agent = this.mainAgents.get(monitorId);
+  async steerMonitorAgent(monitorId = '0', content: string): Promise<boolean> {
+    const agent = this.monitorAgents.get(monitorId);
     if (!agent || !agent.session.isRunning()) return false;
     return agent.session.steer(content);
   }
@@ -318,10 +318,10 @@ export class AgentPool {
   // ── Query / interrupt ───────────────────────────────────────────────
 
   /**
-   * Interrupt all running agents (main, app, ephemeral).
+   * Interrupt all running agents (monitor, app, ephemeral).
    */
   async interruptAll(): Promise<void> {
-    for (const agent of this.mainAgents.values()) {
+    for (const agent of this.monitorAgents.values()) {
       await agent.session.interrupt();
     }
     for (const agent of this.appAgents.values()) {
@@ -336,8 +336,8 @@ export class AgentPool {
    * Interrupt a specific agent by its current role.
    */
   async interruptByRole(role: string): Promise<boolean> {
-    // Check main agents
-    for (const agent of this.mainAgents.values()) {
+    // Check monitor agents
+    for (const agent of this.monitorAgents.values()) {
       if (agent.currentRole === role) {
         await agent.session.interrupt();
         return true;
@@ -364,7 +364,7 @@ export class AgentPool {
    * Check if any agent has a role starting with the given prefix.
    */
   hasRolePrefix(prefix: string): boolean {
-    for (const agent of this.mainAgents.values()) {
+    for (const agent of this.monitorAgents.values()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
     for (const agent of this.appAgents.values()) {
@@ -385,8 +385,8 @@ export class AgentPool {
     totalAgents: number;
     idleAgents: number;
     busyAgents: number;
-    mainAgent: boolean;
-    mainAgents: number;
+    monitorAgent: boolean;
+    monitorAgents: number;
     appAgents: number;
     ephemeralAgents: number;
   } {
@@ -403,7 +403,7 @@ export class AgentPool {
       }
     };
 
-    for (const agent of this.mainAgents.values()) countAgent(agent);
+    for (const agent of this.monitorAgents.values()) countAgent(agent);
     for (const agent of this.appAgents.values()) countAgent(agent);
     for (const agent of this.ephemeralAgents) countAgent(agent);
 
@@ -411,8 +411,8 @@ export class AgentPool {
       totalAgents: total,
       idleAgents: idle,
       busyAgents: busy,
-      mainAgent: this.mainAgents.size > 0,
-      mainAgents: this.mainAgents.size,
+      monitorAgent: this.monitorAgents.size > 0,
+      monitorAgents: this.monitorAgents.size,
       appAgents: this.appAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
     };
@@ -427,7 +427,7 @@ export class AgentPool {
     const limiter = getAgentLimiter();
     const allAgents: PooledAgent[] = [];
 
-    for (const agent of this.mainAgents.values()) allAgents.push(agent);
+    for (const agent of this.monitorAgents.values()) allAgents.push(agent);
     for (const agent of this.appAgents.values()) allAgents.push(agent);
     for (const agent of this.ephemeralAgents) allAgents.push(agent);
 
@@ -442,7 +442,7 @@ export class AgentPool {
       limiter.release();
     }
 
-    this.mainAgents.clear();
+    this.monitorAgents.clear();
     this.appAgents.clear();
     this.ephemeralAgents.clear();
     for (const id of this.agentIds) {

@@ -25,7 +25,7 @@ function getPool() {
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://sessions/current/agents — list all agents ──
   registry.register('yaar://sessions/current/agents', {
-    description: 'List all active agents (main, app, ephemeral).',
+    description: 'List all active agents (monitor, app, ephemeral).',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -35,7 +35,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           totalAgents: 0,
           idleAgents: 0,
           busyAgents: 0,
-          mainAgent: [],
+          monitorAgent: [],
           appAgents: 0,
           ephemeralAgents: [],
         });
@@ -45,7 +45,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         totalAgents: stats.totalAgents,
         idleAgents: stats.idleAgents,
         busyAgents: stats.busyAgents,
-        mainAgent: stats.mainAgent,
+        monitorAgent: stats.monitorAgent,
         appAgents: stats.appAgents,
         ephemeralAgents: stats.ephemeralAgents,
       });
@@ -55,7 +55,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://sessions/current/agents/* — agent instance operations ──
   registry.register('yaar://sessions/current/agents/*', {
     description:
-      'Agent instance. Read for agent info, invoke to interrupt or relay a message to main.',
+      'Agent instance. Read for agent info, invoke to interrupt or relay a message to monitor agent.',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
       type: 'object',
@@ -99,8 +99,8 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       }
 
       if (payload!.action === 'relay') {
-        if (!resolved.id || resolved.id !== 'main')
-          return error('Relay is only supported on yaar://sessions/current/agents/main.');
+        if (!resolved.id || resolved.id !== 'monitor')
+          return error('Relay is only supported on yaar://sessions/current/agents/monitor.');
         if (typeof payload!.message !== 'string' || !payload!.message)
           return error('"message" (string) is required for relay.');
 
@@ -113,10 +113,10 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         const content = `<relay from="${agentId}">\n${payload!.message}\n</relay>`;
 
         pool
-          .handleTask({ type: 'main', messageId, content, monitorId })
+          .handleTask({ type: 'monitor', messageId, content, monitorId })
           .catch((err: unknown) => console.error('[relay_to_main] Failed:', err));
 
-        return ok(`Relayed to main agent (messageId: ${messageId}).`);
+        return ok(`Relayed to monitor agent (messageId: ${messageId}).`);
       }
 
       return error(`Unknown action "${payload!.action}".`);

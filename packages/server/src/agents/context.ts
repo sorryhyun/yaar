@@ -5,7 +5,7 @@
  * Messages are tagged with their source URI (monitor or window) to enable:
  * - Window agents to see relevant conversation history
  * - Manual pruning of window-specific context
- * - Clear separation between main flow and window branches
+ * - Clear separation between monitor flow and window branches
  */
 
 const MONITOR_PREFIX = 'yaar://monitors/';
@@ -13,12 +13,12 @@ const WINDOW_PREFIX = 'yaar://windows/';
 
 /**
  * URI-based context source addressing.
- * - `yaar://monitors/{monitorId}`: Messages from a monitor's main conversation
+ * - `yaar://monitors/{monitorId}`: Messages from a monitor's conversation
  * - `yaar://windows/{windowId}`: Messages from a specific window's conversation
  */
 export type ContextSource = `yaar://monitors/${string}` | `yaar://windows/${string}`;
 
-export function mainSource(monitorId: string): ContextSource {
+export function monitorSource(monitorId: string): ContextSource {
   return `yaar://monitors/${monitorId}`;
 }
 
@@ -26,7 +26,7 @@ export function windowSource(windowId: string): ContextSource {
   return `yaar://windows/${windowId}`;
 }
 
-export function isMainSource(source: ContextSource): source is `yaar://monitors/${string}` {
+export function isMonitorSource(source: ContextSource): source is `yaar://monitors/${string}` {
   return source.startsWith(MONITOR_PREFIX);
 }
 
@@ -40,7 +40,7 @@ export function extractWindowId(source: ContextSource): string | null {
 }
 
 export function extractMonitorId(source: ContextSource): string | null {
-  if (!isMainSource(source)) return null;
+  if (!isMonitorSource(source)) return null;
   return source.slice(MONITOR_PREFIX.length);
 }
 
@@ -77,10 +77,10 @@ export interface FormatOptions {
 }
 
 /**
- * Maximum number of main messages before pruning.
- * Window messages are pruned on window close, so only main messages accumulate unbounded.
+ * Maximum number of monitor messages before pruning.
+ * Window messages are pruned on window close, so only monitor messages accumulate unbounded.
  */
-const MAX_MAIN_MESSAGES = 200;
+const MAX_MONITOR_MESSAGES = 200;
 
 /**
  * ContextTape manages the hierarchical conversation history.
@@ -90,14 +90,14 @@ const MAX_MAIN_MESSAGES = 200;
  * - Pruned by window (manual operation)
  * - Formatted for prompt injection
  *
- * A sliding window limits main-source messages to prevent unbounded memory growth.
+ * A sliding window limits monitor-source messages to prevent unbounded memory growth.
  */
 export class ContextTape {
   private messages: ContextMessage[] = [];
 
   /**
    * Append a message to the context tape.
-   * Automatically prunes oldest main messages when the limit is exceeded.
+   * Automatically prunes oldest monitor messages when the limit is exceeded.
    */
   append(role: 'user' | 'assistant', content: string, source: ContextSource): void {
     this.messages.push({
@@ -111,21 +111,21 @@ export class ContextTape {
   }
 
   /**
-   * Prune oldest main messages when the tape exceeds the limit.
+   * Prune oldest monitor messages when the tape exceeds the limit.
    * Preserves window messages (they are pruned separately on window close).
    */
   private pruneIfNeeded(): void {
-    const mainMessages = this.messages.filter((m) => isMainSource(m.source));
-    if (mainMessages.length <= MAX_MAIN_MESSAGES) return;
+    const monitorMessages = this.messages.filter((m) => isMonitorSource(m.source));
+    if (monitorMessages.length <= MAX_MONITOR_MESSAGES) return;
 
-    // Remove the oldest main messages to bring count back to the limit.
+    // Remove the oldest monitor messages to bring count back to the limit.
     // We keep the most recent half to preserve context continuity.
-    const keepCount = Math.floor(MAX_MAIN_MESSAGES / 2);
-    const mainToRemove = new Set(mainMessages.slice(0, mainMessages.length - keepCount));
+    const keepCount = Math.floor(MAX_MONITOR_MESSAGES / 2);
+    const monitorToRemove = new Set(monitorMessages.slice(0, monitorMessages.length - keepCount));
     const before = this.messages.length;
-    this.messages = this.messages.filter((m) => !mainToRemove.has(m));
+    this.messages = this.messages.filter((m) => !monitorToRemove.has(m));
     console.log(
-      `[ContextTape] Pruned ${before - this.messages.length} oldest main messages (${this.messages.length} remaining)`,
+      `[ContextTape] Pruned ${before - this.messages.length} oldest monitor messages (${this.messages.length} remaining)`,
     );
   }
 
@@ -178,8 +178,8 @@ export class ContextTape {
   /**
    * Format messages for injection into agent prompts.
    *
-   * For main agents: Include only main conversation (default)
-   * For window agents: Include main + optionally their own window history
+   * For monitor agents: Include only monitor conversation (default)
+   * For window agents: Include monitor + optionally their own window history
    */
   formatForPrompt(options?: FormatOptions): string {
     const { includeWindows = false, windowId } = options ?? {};

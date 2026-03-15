@@ -120,7 +120,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const pool = session.getPool();
       if (!pool) return error('Session not initialized.');
 
-      const monitorIds = pool.getMainAgentMonitorIds();
+      const monitorIds = pool.getMonitorAgentIds();
       const allWindows = session.windowState.listWindows();
 
       const monitors = monitorIds.map((id) => {
@@ -130,7 +130,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         });
         return {
           monitorId: id,
-          hasMainAgent: pool.hasMainAgent(id),
+          hasMonitorAgent: pool.hasMonitorAgent(id),
           windowCount: windows.length,
         };
       });

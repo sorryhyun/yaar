@@ -12,7 +12,7 @@ export interface AgentProfile {
   allowedTools: string[];
 }
 
-// Inlined to avoid circular dependency: handlers/index → session-hub → live-session → context-pool → main-task-processor → profiles → handlers/index
+// Inlined to avoid circular dependency: handlers/index → session-hub → live-session → context-pool → monitor-task-processor → profiles → handlers/index
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
   'mcp__verbs__read',
@@ -24,7 +24,7 @@ export const VERB_TOOL_NAMES = [
 export const VERB_TOOLS = ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES] as const;
 
 export const APP_AGENT_TOOL_NAMES = [
-  'mcp__app__app_query',
-  'mcp__app__app_command',
+  'mcp__app__query',
+  'mcp__app__command',
   'mcp__app__relay',
 ] as const;

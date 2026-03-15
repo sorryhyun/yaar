@@ -2,9 +2,9 @@
  * MCP tools for app agents — scoped tools for app protocol communication.
  *
  * Three tools:
- * - app_query: read app state via app protocol
- * - app_command: send commands to the app via app protocol
- * - relay: hand off a message to the main agent
+ * - query: read app state via app protocol
+ * - command: send commands to the app via app protocol
+ * - relay: hand off a message to the monitor agent
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -14,11 +14,7 @@ import { getWindowId, getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 
-export const APP_TOOL_NAMES = [
-  'mcp__app__app_query',
-  'mcp__app__app_command',
-  'mcp__app__relay',
-] as const;
+export const APP_TOOL_NAMES = ['mcp__app__query', 'mcp__app__command', 'mcp__app__relay'] as const;
 
 export function registerAppAgentTools(server: McpServer): void {
   const getWindowState = (): WindowStateRegistry => {
@@ -28,9 +24,9 @@ export function registerAppAgentTools(server: McpServer): void {
     return session.windowState;
   };
 
-  // app_query — query app state or manifest
+  // query — query app state or manifest
   server.registerTool(
-    'app_query',
+    'query',
     {
       description:
         'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest.',
@@ -61,9 +57,9 @@ export function registerAppAgentTools(server: McpServer): void {
     },
   );
 
-  // app_command — send a command to the app
+  // command — send a command to the app
   server.registerTool(
-    'app_command',
+    'command',
     {
       description: 'Send a command to the app. Specify the command name and optional parameters.',
       inputSchema: {
@@ -95,14 +91,14 @@ export function registerAppAgentTools(server: McpServer): void {
     },
   );
 
-  // relay — hand off to the main agent
+  // relay — hand off to the monitor agent
   server.registerTool(
     'relay',
     {
       description:
-        'Hand off a message to the main agent when the request is outside your app domain.',
+        'Hand off a message to the monitor agent when the request is outside your app domain.',
       inputSchema: {
-        message: z.string().describe('Message to send to the main agent'),
+        message: z.string().describe('Message to send to the monitor agent'),
       },
     },
     async (args) => {
@@ -120,7 +116,7 @@ export function registerAppAgentTools(server: McpServer): void {
       const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       pool
         .handleTask({
-          type: 'main',
+          type: 'monitor',
           messageId,
           content: args.message,
         })
@@ -129,7 +125,7 @@ export function registerAppAgentTools(server: McpServer): void {
         });
 
       return {
-        content: [{ type: 'text', text: 'Message relayed to main agent.' }],
+        content: [{ type: 'text', text: 'Message relayed to monitor agent.' }],
       };
     },
   );

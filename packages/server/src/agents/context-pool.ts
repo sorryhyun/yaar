@@ -2,14 +2,14 @@
  * ContextPool - Unified task orchestration facade.
  *
  * Routes tasks to agents via AgentPool:
- * - Main tasks: main agent (idle) or ephemeral agent (busy) — sequential queue
+ * - Monitor tasks: monitor agent (idle) or ephemeral agent (busy) — sequential queue
  * - App tasks: persistent per-app agents for app protocol windows
  * - Plain window tasks: routed to the main agent with full conversation context
- * - InteractionTimeline: user interactions and agent actions accumulated, drained on main agent's next turn
+ * - InteractionTimeline: user interactions and agent actions accumulated, drained on monitor agent's next turn
  * - ContextTape: kept for logging/debugging
  *
  * Processing logic is delegated to:
- * - MainTaskProcessor: main queue, ephemeral overflow, budget enforcement
+ * - MonitorTaskProcessor: main queue, ephemeral overflow, budget enforcement
  * - AppTaskProcessor: app agent lifecycle and task execution
  * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
  */
@@ -26,7 +26,7 @@ import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import {
-  MainQueuePolicy,
+  MonitorQueuePolicy,
   WindowQueuePolicy,
   ContextAssemblyPolicy,
   ReloadCachePolicy,
@@ -34,7 +34,7 @@ import {
   WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
-import { MainTaskProcessor } from './main-task-processor.js';
+import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
 import type { PoolContext, Task } from './pool-types.js';
 
@@ -44,7 +44,7 @@ export type { Task } from './pool-types.js';
 const MAX_QUEUE_SIZE = 10;
 
 /**
- * ContextPool manages task orchestration with a persistent main agent,
+ * ContextPool manages task orchestration with a persistent monitor agent,
  * ephemeral overflow agents, and persistent per-window agents.
  *
  * Implements PoolContext so processors can access shared state and policies.
@@ -68,13 +68,13 @@ export class ContextPool implements PoolContext {
 
   // ── Internal state ────────────────────────────────────────────────
   private broadcastFn: (event: ServerEvent) => void;
-  private mainQueues = new Map<string, MainQueuePolicy>();
+  private monitorQueues = new Map<string, MonitorQueuePolicy>();
   private resetting = false;
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
 
   // ── Processors ────────────────────────────────────────────────────
-  private mainProcessor: MainTaskProcessor;
+  private monitorProcessor: MonitorTaskProcessor;
   private appProcessor: AppTaskProcessor;
 
   constructor(
@@ -100,17 +100,17 @@ export class ContextPool implements PoolContext {
     this.agentPool = new AgentPool(sessionId, broadcast);
 
     // Create processors
-    this.mainProcessor = new MainTaskProcessor(this);
+    this.monitorProcessor = new MonitorTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
   }
 
   // ── PoolContext methods ─────────────────────────────────────────────
 
-  getOrCreateMainQueue(monitorId: string): MainQueuePolicy {
-    let queue = this.mainQueues.get(monitorId);
+  getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy {
+    let queue = this.monitorQueues.get(monitorId);
     if (!queue) {
-      queue = new MainQueuePolicy(MAX_QUEUE_SIZE);
-      this.mainQueues.set(monitorId, queue);
+      queue = new MonitorQueuePolicy(MAX_QUEUE_SIZE);
+      this.monitorQueues.set(monitorId, queue);
     }
     return queue;
   }
@@ -137,8 +137,8 @@ export class ContextPool implements PoolContext {
     this.logSessionId = sessionInfo.sessionId;
     this.agentPool.setLogger(this.sharedLogger);
 
-    const mainAgent = await this.agentPool.createMainAgent('0', provider);
-    if (!mainAgent) {
+    const monitorAgent = await this.agentPool.createMonitorAgent('0', provider);
+    if (!monitorAgent) {
       await provider.dispose();
       return false;
     }
@@ -166,7 +166,7 @@ export class ContextPool implements PoolContext {
       return false;
     }
 
-    const agent = await this.agentPool.createMainAgent(monitorId, provider);
+    const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
     if (!agent) {
       await provider.dispose();
       await this.sendEvent({
@@ -181,16 +181,16 @@ export class ContextPool implements PoolContext {
     return true;
   }
 
-  hasMainAgent(monitorId: string): boolean {
-    return this.agentPool.hasMainAgent(monitorId);
+  hasMonitorAgent(monitorId: string): boolean {
+    return this.agentPool.hasMonitorAgent(monitorId);
   }
 
-  getMainAgentCount(): number {
-    return this.agentPool.getMainAgentCount();
+  getMonitorAgentCount(): number {
+    return this.agentPool.getMonitorAgentCount();
   }
 
-  getMainAgentMonitorIds(): string[] {
-    return this.agentPool.getMainAgentMonitorIds();
+  getMonitorAgentIds(): string[] {
+    return this.agentPool.getMonitorAgentIds();
   }
 
   getLogSessionId(): string | null {
@@ -198,13 +198,13 @@ export class ContextPool implements PoolContext {
   }
 
   async removeMonitorAgent(monitorId: string): Promise<void> {
-    const queue = this.mainQueues.get(monitorId);
+    const queue = this.monitorQueues.get(monitorId);
     if (queue) {
       queue.clear();
-      this.mainQueues.delete(monitorId);
+      this.monitorQueues.delete(monitorId);
     }
 
-    const removed = await this.agentPool.removeMainAgent(monitorId);
+    const removed = await this.agentPool.removeMonitorAgent(monitorId);
     if (removed) {
       console.log(`[ContextPool] Removed monitor agent for ${monitorId}`);
     }
@@ -241,16 +241,16 @@ export class ContextPool implements PoolContext {
 
     this.inflightEnter();
     try {
-      if (task.type === 'main') {
-        await this.mainProcessor.queueMainTask(task);
+      if (task.type === 'monitor') {
+        await this.monitorProcessor.queueMonitorTask(task);
       } else {
         // Check if this window belongs to an app (appId set on window.create)
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
         if (appId && task.windowId) {
           await this.appProcessor.handleAppTask(task, appId);
         } else {
-          // Plain window → route to main agent with full conversation context
-          await this.mainProcessor.queueMainTask({ ...task, type: 'main' });
+          // Plain window → route to monitor agent with full conversation context
+          await this.monitorProcessor.queueMonitorTask({ ...task, type: 'monitor' });
         }
       }
     } finally {
@@ -271,7 +271,7 @@ export class ContextPool implements PoolContext {
   }
 
   recordMonitorAction(monitorId: string): void {
-    this.mainProcessor.recordMonitorAction(monitorId);
+    this.monitorProcessor.recordMonitorAction(monitorId);
   }
 
   notifyWindowSubscribers(
@@ -320,7 +320,7 @@ export class ContextPool implements PoolContext {
   }
 
   getPrimaryAgent(monitorId?: string): import('./session.js').AgentSession | null {
-    return this.agentPool.getMainAgentSession(monitorId);
+    return this.agentPool.getMonitorAgentSession(monitorId);
   }
 
   async interruptAll(): Promise<void> {
@@ -341,7 +341,7 @@ export class ContextPool implements PoolContext {
     if (appId) {
       return this.agentPool.hasRolePrefix(`app-${appId}`);
     }
-    // Plain windows are handled by the main agent, so check for main agent activity
+    // Plain windows are handled by the monitor agent, so check for monitor agent activity
     return false;
   }
 
@@ -349,11 +349,11 @@ export class ContextPool implements PoolContext {
     totalAgents: number;
     idleAgents: number;
     busyAgents: number;
-    mainQueueSize: number;
+    monitorQueueSize: number;
     windowQueueSizes: Record<string, number>;
     contextTapeSize: number;
     timelineSize: number;
-    mainAgent: boolean;
+    monitorAgent: boolean;
     appAgents: number;
     ephemeralAgents: number;
     monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
@@ -362,7 +362,10 @@ export class ContextPool implements PoolContext {
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
     return {
       ...poolStats,
-      mainQueueSize: Array.from(this.mainQueues.values()).reduce((sum, q) => sum + q.size(), 0),
+      monitorQueueSize: Array.from(this.monitorQueues.values()).reduce(
+        (sum, q) => sum + q.size(),
+        0,
+      ),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
       timelineSize: this.timeline.size,
@@ -379,8 +382,8 @@ export class ContextPool implements PoolContext {
   private async teardown(options?: { closeWindows?: boolean }): Promise<void> {
     const closeWindows = options?.closeWindows ?? true;
     // 1. Clear queues so no new tasks start from dequeue
-    this.mainQueues.forEach((q) => q.clear());
-    this.mainQueues.clear();
+    this.monitorQueues.forEach((q) => q.clear());
+    this.monitorQueues.clear();
     this.windowQueuePolicy.clear();
 
     // 2. Reject blocked limiter/budget waiters so they unblock and exit
@@ -439,8 +442,8 @@ export class ContextPool implements PoolContext {
     this.resetting = true;
 
     // Save active monitor IDs before clearing so we can recreate agents for all of them
-    const activeMonitorIds = [...this.mainQueues.keys()];
-    for (const monitorId of this.agentPool.getMainAgentMonitorIds()) {
+    const activeMonitorIds = [...this.monitorQueues.keys()];
+    for (const monitorId of this.agentPool.getMonitorAgentIds()) {
       if (!activeMonitorIds.includes(monitorId)) {
         activeMonitorIds.push(monitorId);
       }
@@ -465,7 +468,7 @@ export class ContextPool implements PoolContext {
     for (const monitorId of activeMonitorIds) {
       const provider = await acquireWarmProvider();
       if (provider) {
-        const agent = await this.agentPool.createMainAgent(monitorId, provider);
+        const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
         if (agent) {
           if (monitorId === '0') {
             await this.sendEvent({

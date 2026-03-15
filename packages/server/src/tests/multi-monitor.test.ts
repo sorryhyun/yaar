@@ -1,7 +1,7 @@
 /**
  * Tests for multi-monitor lifecycle in ContextPool.
  *
- * Validates createMonitorAgent, removeMonitorAgent, hasMainAgent,
+ * Validates createMonitorAgent, removeMonitorAgent, hasMonitorAgent,
  * and independent coexistence of multiple monitors.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -147,52 +147,52 @@ describe('Multi-monitor lifecycle', () => {
   });
 
   it('createMonitorAgent creates a new agent for a monitor', async () => {
-    expect(pool.hasMainAgent('0')).toBe(true);
-    expect(pool.hasMainAgent('1')).toBe(false);
+    expect(pool.hasMonitorAgent('0')).toBe(true);
+    expect(pool.hasMonitorAgent('1')).toBe(false);
 
     const created = await pool.createMonitorAgent('1');
 
     expect(created).toBe(true);
-    expect(pool.hasMainAgent('1')).toBe(true);
-    expect(pool.getMainAgentCount()).toBe(2);
+    expect(pool.hasMonitorAgent('1')).toBe(true);
+    expect(pool.getMonitorAgentCount()).toBe(2);
   });
 
   it('removeMonitorAgent cleans up the agent and queue', async () => {
     await pool.createMonitorAgent('1');
-    expect(pool.hasMainAgent('1')).toBe(true);
-    expect(pool.getMainAgentCount()).toBe(2);
+    expect(pool.hasMonitorAgent('1')).toBe(true);
+    expect(pool.getMonitorAgentCount()).toBe(2);
 
     await pool.removeMonitorAgent('1');
 
-    expect(pool.hasMainAgent('1')).toBe(false);
-    expect(pool.getMainAgentCount()).toBe(1);
+    expect(pool.hasMonitorAgent('1')).toBe(false);
+    expect(pool.getMonitorAgentCount()).toBe(1);
     // Only default monitor should remain
-    expect(pool.hasMainAgent('0')).toBe(true);
+    expect(pool.hasMonitorAgent('0')).toBe(true);
   });
 
   it('multiple monitors can coexist independently', async () => {
     await pool.createMonitorAgent('1');
 
-    expect(pool.hasMainAgent('0')).toBe(true);
-    expect(pool.hasMainAgent('1')).toBe(true);
-    expect(pool.getMainAgentCount()).toBe(2);
+    expect(pool.hasMonitorAgent('0')).toBe(true);
+    expect(pool.hasMonitorAgent('1')).toBe(true);
+    expect(pool.getMonitorAgentCount()).toBe(2);
 
     // Removing default monitor should not affect monitor 1
     await pool.removeMonitorAgent('0');
 
-    expect(pool.hasMainAgent('0')).toBe(false);
-    expect(pool.hasMainAgent('1')).toBe(true);
-    expect(pool.getMainAgentCount()).toBe(1);
+    expect(pool.hasMonitorAgent('0')).toBe(false);
+    expect(pool.hasMonitorAgent('1')).toBe(true);
+    expect(pool.getMonitorAgentCount()).toBe(1);
   });
 
-  it('hasMainAgent returns false after removal', async () => {
+  it('hasMonitorAgent returns false after removal', async () => {
     await pool.createMonitorAgent('1');
-    expect(pool.hasMainAgent('1')).toBe(true);
+    expect(pool.hasMonitorAgent('1')).toBe(true);
 
     await pool.removeMonitorAgent('1');
-    expect(pool.hasMainAgent('1')).toBe(false);
+    expect(pool.hasMonitorAgent('1')).toBe(false);
 
     // Verify a never-created monitor also returns false
-    expect(pool.hasMainAgent('99')).toBe(false);
+    expect(pool.hasMonitorAgent('99')).toBe(false);
   });
 });

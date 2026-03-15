@@ -2,7 +2,7 @@ import type { UserInteraction, WindowState } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
 
-export interface MainPromptContext {
+export interface MonitorPromptContext {
   prompt: string;
   contextContent: string;
 }
@@ -31,9 +31,9 @@ export class ContextAssemblyPolicy {
   }
 
   /**
-   * Build main agent prompt, draining and injecting timeline from parallel agents and user interactions.
+   * Build monitor agent prompt, draining and injecting timeline from parallel agents and user interactions.
    */
-  buildMainPrompt(
+  buildMonitorPrompt(
     content: string,
     options: {
       interactions?: UserInteraction[];
@@ -41,7 +41,7 @@ export class ContextAssemblyPolicy {
       reloadPrefix: string;
       timeline?: InteractionTimeline;
     },
-  ): MainPromptContext {
+  ): MonitorPromptContext {
     // Add drawing as timeline entry if present
     const hasDrawing = options.interactions?.some((i) => i.type === 'draw' && i.imageData);
 
@@ -75,8 +75,8 @@ export class ContextAssemblyPolicy {
 
   /**
    * Build initial context for a new window agent.
-   * Includes the last N main conversation turns so the window agent has context
-   * about what the user and main agent have been discussing.
+   * Includes the last N monitor conversation turns so the window agent has context
+   * about what the user and monitor agent have been discussing.
    */
   buildWindowInitialContext(
     tape: ContextTape,

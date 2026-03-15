@@ -33,15 +33,15 @@ src/
 ├── session/              # LiveSession, SessionHub, BroadcastCenter, ActionEmitter, WindowStateRegistry, types
 ├── websocket/            # WebSocket server + connection registry
 ├── agents/               # Agent lifecycle, pooling, context management
-│   ├── agent-pool.ts     # AgentPool — per-monitor and window agent registry
+│   ├── agent-pool.ts     # AgentPool — per-monitor and app agent registry
 │   ├── context-pool.ts   # ContextPool — unified task orchestration
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
 │   ├── session.ts        # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
-│   ├── main-task-processor.ts / app-task-processor.ts
+│   ├── monitor-task-processor.ts / app-task-processor.ts
 │   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
-│   └── context-pool-policies/  # MainQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
+│   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions
 │   ├── factory.ts        # Auto-detect provider, warm pool init
@@ -85,13 +85,13 @@ SessionHub (singleton registry)
     ├── ReloadCache                                 ← fingerprint-based action caching
     └── ContextPool (unified pool)
         ├── AgentPool
-        │   ├── Main Agents: Map<monitorId, PooledAgent>  ← one per monitor
+        │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
         │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages
-        └── Policies (MainQueue per monitor, WindowQueue, ContextAssembly, ...)
+        └── Policies (MonitorQueue per monitor, WindowQueue, ContextAssembly, ...)
 ```
 
 ### Message Flow
@@ -154,7 +154,7 @@ Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
-**App Protocol:** Bidirectional agent-iframe communication via `app_query`/`app_command` tools. Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
+**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
 
 ## REST API
 

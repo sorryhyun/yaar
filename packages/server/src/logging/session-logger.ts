@@ -38,8 +38,8 @@ export async function createSession(provider: string): Promise<SessionInfo> {
     provider,
     lastActivity: now,
     agents: {
-      'main-0': {
-        agentId: 'main-0',
+      'monitor-0': {
+        agentId: 'monitor-0',
         parentAgentId: null,
         createdAt: now,
       },
@@ -111,7 +111,7 @@ export class SessionLogger {
     agentId: string | undefined,
     fields: Record<string, unknown>,
   ): void {
-    const agent = agentId ?? 'main-0';
+    const agent = agentId ?? 'monitor-0';
     const parentAgentId = this.sessionInfo.metadata.agents[agent]?.parentAgentId ?? null;
     const entry = {
       type,

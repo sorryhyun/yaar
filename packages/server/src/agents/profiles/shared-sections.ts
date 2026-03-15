@@ -102,9 +102,9 @@ Available skills:
 - **host_api** — REST endpoints available to iframe apps
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)`;
 
-export const RELAY_SECTION = `## Relay to Main
+export const RELAY_SECTION = `## Relay to Monitor Agent
 
-After completing a significant task, call relay_to_main to hand results back to the main agent. Only relay when the main agent needs to take further action.`;
+After completing a significant task, call relay to hand results back to the monitor agent. Only relay when the monitor agent needs to take further action.`;
 
 export const BACKGROUND_APPS_SECTION = `## Background Apps
 

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { InteractionTimeline } from '../agents/interaction-timeline.js';
-import { ContextTape, mainSource, windowSource } from '../agents/context.js';
+import { ContextTape, monitorSource, windowSource } from '../agents/context.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 
 // ── AppServer turn queue drain ──────────────────────────────────────────
@@ -262,52 +262,52 @@ describe('Reset integration: interrupt → await inflight → dispose', () => {
   });
 });
 
-// ── Main agent routing: idle → main, busy → ephemeral ───────────────────
+// ── Monitor agent routing: idle → main, busy → ephemeral ───────────────────
 
-describe('Main agent routing logic', () => {
-  it('routes to main when idle, ephemeral when busy', () => {
+describe('Monitor agent routing logic', () => {
+  it('routes to monitor when idle, ephemeral when busy', () => {
     // Simulate the routing decision
-    let mainBusy = false;
+    let monitorBusy = false;
     const routeLog: string[] = [];
 
-    function routeMainTask(taskId: string): void {
-      if (!mainBusy) {
-        routeLog.push(`main:${taskId}`);
-        mainBusy = true;
+    function routeMonitorTask(taskId: string): void {
+      if (!monitorBusy) {
+        routeLog.push(`monitor:${taskId}`);
+        monitorBusy = true;
       } else {
         routeLog.push(`ephemeral:${taskId}`);
       }
     }
 
-    routeMainTask('msg-1'); // main is idle → goes to main
-    routeMainTask('msg-2'); // main is busy → goes to ephemeral
-    routeMainTask('msg-3'); // main still busy → goes to ephemeral
+    routeMonitorTask('msg-1'); // monitor is idle → goes to main
+    routeMonitorTask('msg-2'); // monitor is busy → goes to ephemeral
+    routeMonitorTask('msg-3'); // monitor still busy → goes to ephemeral
 
-    expect(routeLog).toEqual(['main:msg-1', 'ephemeral:msg-2', 'ephemeral:msg-3']);
+    expect(routeLog).toEqual(['monitor:msg-1', 'ephemeral:msg-2', 'ephemeral:msg-3']);
   });
 
-  it('main agent becomes available after task completes', () => {
-    let mainBusy = false;
+  it('monitor agent becomes available after task completes', () => {
+    let monitorBusy = false;
     const routeLog: string[] = [];
 
-    function routeMainTask(taskId: string): void {
-      if (!mainBusy) {
-        routeLog.push(`main:${taskId}`);
-        mainBusy = true;
+    function routeMonitorTask(taskId: string): void {
+      if (!monitorBusy) {
+        routeLog.push(`monitor:${taskId}`);
+        monitorBusy = true;
       } else {
         routeLog.push(`ephemeral:${taskId}`);
       }
     }
 
-    function completeMainTask(): void {
-      mainBusy = false;
+    function completeMonitorTask(): void {
+      monitorBusy = false;
     }
 
-    routeMainTask('msg-1'); // → main
-    completeMainTask();
-    routeMainTask('msg-2'); // → main (idle again)
+    routeMonitorTask('msg-1'); // → main
+    completeMonitorTask();
+    routeMonitorTask('msg-2'); // → main (monitor idle again)
 
-    expect(routeLog).toEqual(['main:msg-1', 'main:msg-2']);
+    expect(routeLog).toEqual(['monitor:msg-1', 'monitor:msg-2']);
   });
 });
 
@@ -413,12 +413,12 @@ describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
     const tape = new ContextTape();
     const policy = new ContextAssemblyPolicy();
 
-    tape.append('user', 'Hello', mainSource('0'));
-    tape.append('assistant', 'Hi there!', mainSource('0'));
-    tape.append('user', 'Open calendar', mainSource('0'));
-    tape.append('assistant', 'Opening calendar...', mainSource('0'));
-    tape.append('user', 'Show settings', mainSource('0'));
-    tape.append('assistant', 'Here are your settings.', mainSource('0'));
+    tape.append('user', 'Hello', monitorSource('0'));
+    tape.append('assistant', 'Hi there!', monitorSource('0'));
+    tape.append('user', 'Open calendar', monitorSource('0'));
+    tape.append('assistant', 'Opening calendar...', monitorSource('0'));
+    tape.append('user', 'Show settings', monitorSource('0'));
+    tape.append('assistant', 'Here are your settings.', monitorSource('0'));
 
     // Default 3 turns = 6 messages
     const context = policy.buildWindowInitialContext(tape, 3);
@@ -438,8 +438,8 @@ describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
     const tape = new ContextTape();
     const policy = new ContextAssemblyPolicy();
 
-    tape.append('user', 'Main message', mainSource('0'));
-    tape.append('assistant', 'Main response', mainSource('0'));
+    tape.append('user', 'Main message', monitorSource('0'));
+    tape.append('assistant', 'Main response', monitorSource('0'));
     tape.append('user', 'Window message', windowSource('win-1'));
     tape.append('assistant', 'Window response', windowSource('win-1'));
 

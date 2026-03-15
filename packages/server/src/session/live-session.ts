@@ -337,8 +337,8 @@ export class LiveSession {
       case ClientEventType.USER_MESSAGE: {
         const monitorId = event.monitorId ?? '0';
         // Auto-create monitor agent if needed (max 4 monitors)
-        if (monitorId !== '0' && this.pool && !this.pool.hasMainAgent(monitorId)) {
-          if (this.pool.getMainAgentCount() >= 4) {
+        if (monitorId !== '0' && this.pool && !this.pool.hasMonitorAgent(monitorId)) {
+          if (this.pool.getMonitorAgentCount() >= 4) {
             console.warn(
               `[LiveSession ${this.sessionId}] Monitor limit reached (4), ignoring ${monitorId}`,
             );
@@ -347,7 +347,7 @@ export class LiveSession {
           await this.pool.createMonitorAgent(monitorId);
         }
         await this.pool?.handleTask({
-          type: 'main',
+          type: 'monitor',
           messageId: event.messageId,
           content: event.content,
           interactions: event.interactions,

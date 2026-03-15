@@ -98,10 +98,10 @@ describe('context restore pipeline', () => {
     expect(promptForW2).not.toContain('w1 ask');
   });
 
-  it('supports restore policy for main + selected windows', () => {
+  it('supports restore policy for monitor + selected windows', () => {
     const messages = parseSessionMessages(makeSessionJsonl());
     const policy: ContextRestorePolicy = {
-      mode: 'main_and_selected_windows',
+      mode: 'monitor_and_selected_windows',
       selectedWindowIds: ['w1'],
     };
 
