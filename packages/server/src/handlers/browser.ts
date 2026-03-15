@@ -15,7 +15,9 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { actionEmitter } from '../session/action-emitter.js';
-import { isDomainAllowed, extractDomain } from '../features/config/domains.js';
+import { isDomainAllowed, extractDomain, addAllowedDomain } from '../features/config/domains.js';
+import { getSessionId } from '../agents/session.js';
+import { getSessionHub } from '../session/session-hub.js';
 import { ok, okJson, error, okWithImages, assertUri, requireAction } from './utils.js';
 import { resolveSession, formatPageState, findMainContent } from '../features/browser/shared.js';
 
@@ -131,9 +133,28 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             const domain = extractDomain(url);
             if (!domain) return error('Invalid URL');
             if (!(await isDomainAllowed(domain))) {
-              return error(
-                `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
+              // Try to show permission dialog instead of returning a static error
+              const hub = getSessionHub();
+              let sessionId = getSessionId();
+              if (!sessionId || !hub.get(sessionId)) {
+                sessionId = hub.getDefault()?.sessionId;
+              }
+              if (!sessionId) {
+                return error(
+                  `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
+                );
+              }
+              const confirmed = await actionEmitter.showPermissionDialogToSession(
+                sessionId,
+                'Allow Domain Access',
+                `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
+                'http_domain',
+                domain,
               );
+              if (!confirmed) {
+                return error(`User denied access to domain "${domain}".`);
+              }
+              await addAllowedDomain(domain);
             }
 
             const mobile = p.mobile === true;

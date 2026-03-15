@@ -150,14 +150,6 @@ function openAppWindow() {
   }
 }
 
-// Wait for the server to be fully ready, then open the app window.
-ready
-  .then(() => openAppWindow())
-  .catch((err) => {
-    console.error('Server failed to start:', err);
-    process.exit(1);
-  });
-
 // Keep the process running
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
@@ -168,3 +160,12 @@ process.on('SIGTERM', () => {
   console.log('\nShutting down...');
   process.exit(0);
 });
+
+// Wait for the server to be fully ready, then open the app window.
+try {
+  await ready;
+  openAppWindow();
+} catch (err) {
+  console.error('Server failed to start:', err);
+  process.exit(1);
+}

@@ -6,13 +6,15 @@ import { activeTab, setActiveTab, toast } from './store';
 import { SettingsView } from './views/settings-view';
 import { ShortcutsView } from './views/shortcuts-view';
 import { HooksView } from './views/hooks-view';
+import { DomainsView } from './views/domains-view';
 
-type Tab = 'settings' | 'shortcuts' | 'hooks';
+type Tab = 'settings' | 'shortcuts' | 'hooks' | 'domains';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
   { id: 'shortcuts', label: 'Shortcuts', icon: '⚡' },
   { id: 'hooks', label: 'Hooks', icon: '🪝' },
+  { id: 'domains', label: 'Domains', icon: '🌐' },
 ];
 
 function App() {
@@ -22,7 +24,7 @@ function App() {
         ${TABS.map(tab => html`
           <button
             class=${() => `cfg-tab${activeTab() === tab.id ? ' active' : ''}`}
-            onClick=${() => setActiveTab(tab.id)}
+            onClick=${() => setActiveTab(tab.id as any)}
           >
             ${tab.icon} ${tab.label}
           </button>
@@ -32,7 +34,8 @@ function App() {
       <div class="cfg-content">
         ${() => activeTab() === 'settings' ? SettingsView() :
                  activeTab() === 'shortcuts' ? ShortcutsView() :
-                 HooksView()}
+                 activeTab() === 'hooks' ? HooksView() :
+                 DomainsView()}
       </div>
 
       ${() => {

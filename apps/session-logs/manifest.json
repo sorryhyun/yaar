@@ -2,7 +2,7 @@
   "id": "session-logs",
   "name": "Session Logs",
   "icon": "📋",
-  "description": "",
+  "description": "Mandatory system app",
   "version": "1.0.0",
   "author": "YAAR"
 }

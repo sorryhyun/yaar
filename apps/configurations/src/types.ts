@@ -1,4 +1,4 @@
-export type Tab = 'settings' | 'shortcuts' | 'hooks';
+export type Tab = 'settings' | 'shortcuts' | 'hooks' | 'domains';
 
 export interface Shortcut {
   id: string;

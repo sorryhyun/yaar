@@ -538,3 +538,41 @@ body,
   font-size: 10px;
   color: var(--yaar-text-muted);
 }
+
+/* Domains view */
+.domain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.domain-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  gap: 8px;
+}
+
+.domain-name {
+  font-size: 13px;
+  color: var(--yaar-text);
+  font-family: 'Consolas', 'Monaco', monospace;
+  word-break: break-all;
+  flex: 1;
+}
+
+.domain-del {
+  color: var(--yaar-text-muted);
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.domain-del:hover {
+  color: var(--yaar-error);
+  border-color: var(--yaar-error);
+}
