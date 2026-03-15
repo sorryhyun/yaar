@@ -153,9 +153,12 @@ export function registerSandboxHandlers(registry: ResourceRegistry): void {
           type: 'string',
           enum: ['write', 'edit', 'compile', 'typecheck', 'deploy', 'clone'],
         },
-        content: { type: 'string', description: 'File content (for write)' },
+        content: { type: 'string', description: 'File content (for write or edit replacement)' },
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
-        new_string: { type: 'string', description: 'Replacement text (edit)' },
+        new_string: {
+          type: 'string',
+          description: 'Replacement text (edit); "content" also accepted',
+        },
         start_line: {
           type: 'number',
           description: 'First line to replace (edit line mode, 1-based)',

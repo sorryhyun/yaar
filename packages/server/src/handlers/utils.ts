@@ -104,10 +104,14 @@ export async function applyEdit(
 ): Promise<{ result: string } | { error: string }> {
   const { old_string, new_string, start_line, end_line } = params as {
     old_string?: string;
-    new_string: string;
+    new_string?: string;
     start_line?: number;
     end_line?: number;
   };
+  const replacement = new_string ?? (params.content as string | undefined);
+  if (replacement === undefined) {
+    return { error: 'Provide new_string (or content) with the replacement text.' };
+  }
 
   if (old_string !== undefined && start_line !== undefined) {
     return {
@@ -130,7 +134,7 @@ export async function applyEdit(
         error: `old_string found ${count} times. Provide more surrounding context to make it unique.`,
       };
     }
-    return { result: content.replace(old_string, new_string) };
+    return { result: content.replace(old_string, replacement) };
   }
 
   // Line mode
@@ -149,5 +153,5 @@ export async function applyEdit(
 
   const before = lines.slice(0, start_line! - 1);
   const after = lines.slice(endLine);
-  return { result: [...before, new_string, ...after].join('\n') };
+  return { result: [...before, replacement, ...after].join('\n') };
 }

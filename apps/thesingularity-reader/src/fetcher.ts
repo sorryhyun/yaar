@@ -131,10 +131,13 @@ export async function fetchPostContent(post: Post): Promise<string> {
     // 스크립트 / 광고 제거
     contentEl.querySelectorAll('script, iframe, ins').forEach((el) => el.remove());
 
-    // DC Inside 원본 HTML의 onerror, onclick 등 인라인 핸들러 제거 (reload_img 미정의 오류 방지)
-    contentEl.querySelectorAll('[onerror]').forEach((el) => el.removeAttribute('onerror'));
-    contentEl.querySelectorAll('[onclick]').forEach((el) => el.removeAttribute('onclick'));
-    contentEl.querySelectorAll('[onload]').forEach((el) => el.removeAttribute('onload'));
+    // DC Inside 원본 HTML의 인라인 이벤트 핸들러 제거
+    // (onerror, onclick, onload, onmouseover, onmouseout 등 — img_numbering_toggle 같은
+    //  DCInside 전용 함수가 앱 컨텍스트에 존재하지 않아 ReferenceError 발생 방지)
+    const inlineHandlers = ['onerror', 'onclick', 'onload', 'onmouseover', 'onmouseout', 'onmouseenter', 'onmouseleave'];
+    contentEl.querySelectorAll('*').forEach((el) => {
+      inlineHandlers.forEach(attr => el.removeAttribute(attr));
+    });
 
     // 이미지 src 절대경로 변환 후 Referer 헤더 포함 프록시로 교체 (403 방지)
     const imgEls = Array.from(contentEl.querySelectorAll('img'));

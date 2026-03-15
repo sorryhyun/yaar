@@ -104,32 +104,25 @@ function toMobileUrl(url: string): string {
   return url;
 }
 
-/** 브라우저 탭으로 포스트 URL 스크린샷 찍기 */
+/** 모바일 브라우저로 포스트 URL 스크린샷 찍기 */
 async function takeScreenshot(post: Post) {
   batch(() => {
     setScreenshotLoading(true);
     setScreenshotSrc(null);
   });
   try {
-    const tabId = 'singularity-screenshot';
-    // 탭에 모바일 URL 열기
     const mobileUrl = toMobileUrl(post.url);
-    await window.yaar.invoke('yaar://browser/' + tabId, { action: 'open', url: mobileUrl, visible: false });
-    // 페이지 로드 대기
-    await new Promise<void>(r => setTimeout(r, 2500));
-    // 스크린샷 찍기
-    const result = await window.yaar.invoke('yaar://browser/' + tabId, { action: 'screenshot' });
+    await window.yaar.invoke('yaar://browser/pages', { action: 'open', url: mobileUrl, visible: false, mobile: true, waitUntil: 'networkidle' });
+    // 조회수/추천/댓글 영역이 보이도록 350px 스크롤 다운
+    await window.yaar.invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
+    const result = await window.yaar.invoke('yaar://browser/pages', { action: 'screenshot' });
     const contents: any[] = result?.content ?? [];
-    // image 타입 항목을 우선 탐색
     const imageItem = contents.find((i: any) => i?.type === 'image');
     if (imageItem) {
       setScreenshotSrc(`data:${imageItem.mimeType ?? 'image/png'};base64,${imageItem.data}`);
     } else {
-      // base64 데이터가 text 타입으로 오는 경우 (실제 base64인지 확인)
       const textItem = contents.find((i: any) => i?.type === 'text' && /^[A-Za-z0-9+/]{20}/.test(i.text ?? ''));
-      if (textItem) {
-        setScreenshotSrc(`data:image/png;base64,${textItem.text}`);
-      }
+      if (textItem) setScreenshotSrc(`data:image/png;base64,${textItem.text}`);
     }
   } catch (e: any) {
     console.error('Screenshot failed:', e);
@@ -388,7 +381,7 @@ function App() {
   `;
 
   return html`
-    <div id="app-root" style="position: relative; display: contents">
+    <div class="y-app">
       <${Header} />
       ${() => showSettings() ? html`<${SettingsPanel} />` : null}
       <div class="main-layout">
