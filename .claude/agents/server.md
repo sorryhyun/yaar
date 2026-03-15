@@ -42,7 +42,7 @@ SessionHub (singleton registry)
 - **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections (observer pattern).
 - **Warm Pool** (`providers/warm-pool.ts`): Providers pre-initialized at startup. Auto-replenishes when acquired.
 - **actionEmitter**: Tools emit actions via `actionEmitter.emitAction()`, which broadcasts to frontend and optionally waits for rendering feedback.
-- **Session forking**: Window/task agents fork from the main agent's session, inheriting context but running independently.
+- **Session forking**: Window/task agents fork from the monitor agent's session, inheriting context but running independently.
 
 ### Provider System
 

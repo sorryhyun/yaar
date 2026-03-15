@@ -4,19 +4,19 @@
 
 Window agents created unnecessary complexity and context disconnects:
 
-1. **Context disconnect for plain windows**: A window agent handled button clicks and form submissions separately from the main agent that created the window. The main agent had full conversation context; the window agent started fresh with only a few recent turns.
+1. **Context disconnect for plain windows**: A window agent handled button clicks and form submissions separately from the monitor agent that created the window. The monitor agent had full conversation context; the window agent started fresh with only a few recent turns.
 
 2. **Context bloat for app windows**: An app's window agent bootstrapped with main conversation history and all verb tools across every `yaar://` namespace. Two discovery round-trips were burned before the agent could do real work.
 
 3. **No app continuity**: Window agents were keyed by windowId. Close the window, lose the agent.
 
-**Solution**: Window agents were removed. Plain window interactions now route to the **main agent** (full conversation context). App windows route to persistent **app agents** (keyed by appId, session lifetime) via `AppTaskProcessor`.
+**Solution**: Window agents were removed. Plain window interactions now route to the **monitor agent** (full conversation context). App windows route to persistent **app agents** (keyed by appId, session lifetime) via `AppTaskProcessor`.
 
 ## Architecture
 
 | Agent type | Scoped to | Lifecycle |
 |------------|-----------|-----------|
-| **Main agent** | A monitor (virtual desktop) | Monitor lifetime |
+| **Monitor agent** | A monitor (virtual desktop) | Monitor lifetime |
 | **App agent** | An app (by appId) | Session lifetime |
 
 App agents are persistent per-app — closing and reopening the same app reuses the same agent with full conversation history.
@@ -41,7 +41,7 @@ The verb tools (`describe`, `read`, `list`, `invoke`, `delete`) are generic — 
 |------|-------------|
 | `query(stateKey?)` | Read app state. WindowId resolved from AsyncLocalStorage context. |
 | `command(command, params?)` | Execute an app command. WindowId resolved automatically. |
-| `relay(message)` | Enqueue a message to the main agent for out-of-scope requests. |
+| `relay(message)` | Enqueue a message to the monitor agent for out-of-scope requests. |
 
 ### Registration
 
@@ -49,11 +49,4 @@ The `app` server is registered in `CORE_SERVERS` (`mcp/server.ts`) and tools are
 
 ## Remaining Work
 
-### Rename main → monitor (Separate PR)
-
-With window agents removed, rename "main agent" to **monitor agent** for clarity:
-
-- `MainTaskProcessor` → `MonitorTaskProcessor`
-- `MainQueuePolicy` → `MonitorQueuePolicy`
-- `MAIN_PROFILE` → `MONITOR_PROFILE`
-- References in `ContextPool`, `AgentPool`, profiles, and docs
+The "main agent" → "monitor agent" rename has been completed. No pending work.

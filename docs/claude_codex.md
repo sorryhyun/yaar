@@ -128,7 +128,7 @@ A dedicated JSON-RPC method that appends input to an in-flight turn:
 
 ### Server Integration
 
-Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the main agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/common_flow.md`](./common_flow.md) for the full concurrency strategy.
+Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the monitor agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/common_flow.md`](./common_flow.md) for the full concurrency strategy.
 
 ## Warmup
 
@@ -293,7 +293,7 @@ WarmPool (owns the AppServer singleton)
 ├── AppServer (one process, WebSocket listener on port 4510)
 │   ├── Control client (WS conn for auth/account operations)
 │   └── Process lifecycle management (spawn, stop)
-├── CodexProvider (main agent, monitor 0)
+├── CodexProvider (monitor agent, monitor 0)
 │   └── Own WS connection → own thread → own turns
 ├── CodexProvider (window agent)
 │   └── Own WS connection → forked thread → own turns

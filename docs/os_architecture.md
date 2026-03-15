@@ -49,11 +49,11 @@ Agents are processes. `AgentPool` manages their lifecycle.
 
 | Agent type | OS analogy | Lifecycle | Key | URI |
 |---|---|---|---|---|
-| **Main** | `init` / PID 1 | Persistent per monitor | `monitorId` | `yaar://agents/{instanceId}` |
+| **Monitor** | `init` / PID 1 | Persistent per monitor | `monitorId` | `yaar://agents/{instanceId}` |
 | **App** | Daemon | Persistent per app (session lifetime) | `appId` | `yaar://agents/{instanceId}` |
 | **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
 
-Main agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
+Monitor agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
 
 Global process limit: `AgentLimiter` enforces `MAX_AGENTS` (default 10).
 
@@ -181,7 +181,7 @@ Four IPC mechanisms:
 
 **`BroadcastCenter`** (`session/broadcast-center.ts`) — Display server. Routes serialized events to WebSocket connections, scoped by session or monitor. Connections with no monitor subscription receive all events (backward compat).
 
-**`InteractionTimeline`** (`agents/interaction-timeline.ts`) — Unified chronological log of user UI interactions and AI action summaries. Drained into `<timeline>` XML by `ContextAssemblyPolicy` and prepended to the next main agent prompt. Deduplicates redundant events (e.g., focus before resize).
+**`InteractionTimeline`** (`agents/interaction-timeline.ts`) — Unified chronological log of user UI interactions and AI action summaries. Drained into `<timeline>` XML by `ContextAssemblyPolicy` and prepended to the next monitor agent prompt. Deduplicates redundant events (e.g., focus before resize).
 
 **App Protocol** — Bidirectional agent↔iframe communication for apps with `"appProtocol": true`. Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](./app_protocol_reference.md).
 

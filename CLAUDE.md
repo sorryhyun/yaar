@@ -104,7 +104,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 ### Key Architectural Concepts
 
 1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
-2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own main agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own monitor agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, app window messages via AppTaskProcessor. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
@@ -137,7 +137,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
   → New session: LiveSession created with auto-generated ID
   → Reconnection: existing LiveSession returned (state preserved)
   → First message → ContextPool initialized → AgentPool created → Warm provider acquired
-  → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE/COMPONENT_ACTION → main agent (plain windows) or AppTaskProcessor (app windows)
+  → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE/COMPONENT_ACTION → monitor agent (plain windows) or AppTaskProcessor (app windows)
   → App window interaction → persistent app agent created on first interaction (keyed by appId)
   → WebSocket disconnects → session stays alive for reconnection
 ```

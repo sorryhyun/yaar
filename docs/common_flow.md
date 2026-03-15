@@ -18,9 +18,10 @@ This document describes how YAAR manages concurrent AI agents through unified po
 │  │  │  ┌────────────┐  ┌─────────────┐  ┌──────────────────┐  │  │  │
 │  │  │  │ AgentPool  │  │ ContextTape │  │ InteractionTime- │  │  │  │
 │  │  │  │            │  │ (message    │  │ line (user +     │  │  │  │
-│  │  │  │ Main(1/mon)│  │  history by │  │ AI events,       │  │  │  │
-│  │  │  │ Ephemeral* │  │  source)    │  │ drained on main  │  │  │  │
-│  │  │  │ App*       │  │             │  │ agent's turn)    │  │  │  │
+│  │  │  │ Monitor    │  │  history by │  │ AI events,       │  │  │  │
+│  │  │  │ (1/mon)    │  │  source)    │  │ drained on mon.  │  │  │  │
+│  │  │  │ Ephemeral* │  │             │  │ agent's turn)    │  │  │  │
+│  │  │  │ App*       │  │             │  │                  │  │  │  │
 │  │  │  │ Task*      │  │             │  │                  │  │  │  │
 │  │  │  └────────────┘  └─────────────┘  └──────────────────┘  │  │  │
 │  │  │                                                          │  │  │
@@ -37,15 +38,15 @@ This document describes how YAAR manages concurrent AI agents through unified po
 
 ## Delegation Model
 
-The main agent acts as an **orchestrator** — it understands user intent, decides the approach, and dispatches work. The design intentionally restricts the main agent's tool set to quick actions (windows, notifications, storage reads, memory, config) and gives it a single delegation primitive (Task tool for Claude, collaboration system for Codex).
+The monitor agent acts as an **orchestrator** — it understands user intent, decides the approach, and dispatches work. The design intentionally restricts the monitor agent's tool set to quick actions (windows, notifications, storage reads, memory, config) and gives it a single delegation primitive (Task tool for Claude, collaboration system for Codex).
 
 ```
 User Request
      │
      ▼
 ┌──────────────┐
-│  Main Agent  │  Understands intent, decides approach
-│ (orchestrator)│
+│ Monitor Agent│  Understands intent, decides approach
+│ (orchestrator) │
 └──────┬───────┘
        │
        ├─ Trivial? ──────────────────────> Handle directly (1-2 tool calls)
@@ -65,13 +66,13 @@ User Request
           • "research X and build Y"       (web + app simultaneously)
 ```
 
-**Why delegate by default?** Task agents fork the main agent's session (full conversation history) and run with a focused tool set matching their profile. This keeps the main agent responsive — it can accept the next user message while subagents work. It also reduces token waste by keeping the main agent's turns short and action-oriented.
+**Why delegate by default?** Task agents fork the monitor agent's session (full conversation history) and run with a focused tool set matching their profile. This keeps the monitor agent responsive — it can accept the next user message while subagents work. It also reduces token waste by keeping the monitor agent's turns short and action-oriented.
 
-**What stays on the main agent?** Anything that takes 1-2 tool calls using only the main agent's tools: showing notifications, opening/updating windows, loading app skills, reading storage, memory operations, config hooks, and cache replay.
+**What stays on the monitor agent?** Anything that takes 1-2 tool calls using only the monitor agent's tools: showing notifications, opening/updating windows, loading app skills, reading storage, memory operations, config hooks, and cache replay.
 
 ## Agent Types
 
-### 1. Main Agent
+### 1. Monitor Agent
 
 The persistent orchestrator handling the main conversation flow per monitor. Maintains provider session continuity across messages. Has a restricted tool set focused on quick actions and delegation.
 
@@ -84,10 +85,10 @@ The persistent orchestrator handling the main conversation flow per monitor. Mai
 
 ### 2. Ephemeral Agent
 
-A temporary agent spawned when the main agent is busy and a new main task arrives. Gets a fresh provider with no conversation history, and is disposed immediately after the task completes.
+A temporary agent spawned when the monitor agent is busy and a new main task arrives. Gets a fresh provider with no conversation history, and is disposed immediately after the task completes.
 
 - **Role**: `ephemeral-{monitorId}-{messageId}`
-- **Creation**: On demand when main agent is busy (limited by global `AgentLimiter`)
+- **Creation**: On demand when monitor agent is busy (limited by global `AgentLimiter`)
 - **Context**: No conversation history — receives open windows + reload options + task content
 - **Lifecycle**: Created → process task → push to InteractionTimeline → disposed
 
@@ -104,36 +105,36 @@ A persistent agent for handling interactions within app windows. One agent per a
 
 ### 4. Task Agent
 
-A temporary agent spawned by the main agent to handle delegated work. Forks the main agent's provider session (inheriting full conversation context) and runs with a profile-specific tool subset and system prompt.
+A temporary agent spawned by the monitor agent to handle delegated work. Forks the monitor agent's provider session (inheriting full conversation context) and runs with a profile-specific tool subset and system prompt.
 
 - **Role**: `task-{messageId}-{timestamp}`
 - **Creation**: Via Task tool (Claude) or collaboration system (Codex). Limited by global `AgentLimiter`
-- **Context**: Forks main agent's session — inherits full conversation history
+- **Context**: Forks monitor agent's session — inherits full conversation history
 - **Profiles**: `default` (all tools), `web` (HTTP + search), `code` (sandbox), `app` (dev + deploy)
 - **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
 - **Parallel**: Multiple task agents can run concurrently for independent sub-tasks
 
 ## Multi-Monitor Architecture
 
-Monitors are virtual desktops within a single session. Each has its own main agent and sequential queue.
+Monitors are virtual desktops within a single session. Each has its own monitor agent and sequential queue.
 
 - **Primary monitor** (`0`): Always exists, never throttled
 - **Background monitors** (`1`, `2`, ...): Auto-created on demand when a `USER_MESSAGE` targets a new monitorId, up to 4 total
-- **Independence**: Each monitor has its own main agent and main queue, but all monitors share the same window state, context tape, timeline, and reload cache
+- **Independence**: Each monitor has its own monitor agent and main queue, but all monitors share the same window state, context tape, timeline, and reload cache
 - **Budget limits**: Background monitors are rate-limited by `MonitorBudgetPolicy` (concurrent tasks, actions/min, output/min). The primary monitor bypasses all limits.
 
 ## Message Flow
 
-### User Message → Main Agent
+### User Message → Monitor Agent
 
 When a user message arrives, the system tries strategies in priority order:
 
 ```
 USER_MESSAGE arrives for monitorId
 │
-├─ Main agent idle → processMainTask() directly
+├─ Monitor agent idle → processMainTask() directly
 │
-└─ Main agent busy:
+└─ Monitor agent busy:
    │
    ├─ 1. Steer → inject into active turn (Codex: turn/steer, Claude: streamInput)
    │     Success: AI incorporates new input mid-response, MESSAGE_ACCEPTED
@@ -144,7 +145,7 @@ USER_MESSAGE arrives for monitorId
    │     Fail: global agent limit reached
    │
    └─ 3. Queue → MainQueuePolicy.enqueue()
-         Success: MESSAGE_QUEUED, processed when main agent finishes
+         Success: MESSAGE_QUEUED, processed when monitor agent finishes
          Fail: queue full (10 per monitor)
 ```
 
@@ -156,7 +157,7 @@ Frontend                    Server                          AI Provider
    │  USER_MESSAGE            │                                  │
    ├─────────────────────────>│                                  │
    │                          │  Budget check (background only)  │
-   │                          │  Main agent idle?                │
+   │                          │  Monitor agent idle?             │
    │                          │  ├─ Yes: processMainTask()       │
    │                          │  └─ No: steer / ephemeral / queue│
    │                          │                                  │
@@ -180,7 +181,7 @@ Frontend                    Server                          AI Provider
    │                          │                                  │
 ```
 
-### Button Click → Main Agent or App Agent
+### Button Click → Monitor Agent or App Agent
 
 ```
 Frontend                    Server                          AI Provider
@@ -191,7 +192,7 @@ Frontend                    Server                          AI Provider
    ├─────────────────────────>│                                  │
    │                          │                                  │
    │                          │  App window?                     │
-   │                          │  ├─ No: route to main agent      │
+   │                          │  ├─ No: route to monitor agent   │
    │                          │  │   (monitor's main queue)      │
    │                          │  └─ Yes: AppTaskProcessor        │
    │                          │      App agent exists?           │
@@ -229,14 +230,14 @@ interface ContextMessage {
 ```
 
 **Usage:**
-- **Main agent prompt**: Does not inject ContextTape (relies on provider session continuity)
+- **Monitor agent prompt**: Does not inject ContextTape (relies on provider session continuity)
 - **App agent first turn**: Injects skill context and manifest via `AppTaskProcessor`
 - **Window close**: Prunes that window's messages from the tape
 - **Session restore**: ContextTape can be restored from a previous session's log
 
 ## InteractionTimeline
 
-A chronological timeline interleaving user-originated events and AI agent action summaries. The main agent drains this on its next turn to see everything that happened while it was idle.
+A chronological timeline interleaving user-originated events and AI agent action summaries. The monitor agent drains this on its next turn to see everything that happened while it was idle.
 
 ```
 User closes window → pushUser({ type: 'window.close', windowId: '...' })
@@ -244,7 +245,7 @@ App agent runs     → pushAI(role, task, actions, windowId)
 Ephemeral agent    → pushAI(role, task, actions)
 Task agent runs    → pushAI(role, task, actions)
 
-Main agent's turn  → timeline.format() → drain()
+Monitor agent's turn  → timeline.format() → drain()
   Produces:
   <timeline>
   <ui:close>settings-win</ui:close>
@@ -255,14 +256,14 @@ Main agent's turn  → timeline.format() → drain()
 ## Policies
 
 ### MainQueuePolicy
-FIFO queue (max 10) per monitor for main tasks when the main agent is busy and no ephemeral agent can be created. Mutual exclusion ensures the queue is drained sequentially.
+FIFO queue (max 10) per monitor for main tasks when the monitor agent is busy and no ephemeral agent can be created. Mutual exclusion ensures the queue is drained sequentially.
 
 ### WindowQueuePolicy
 Per-window queues. Tasks for the same window are serialized (one active at a time). Tasks for different windows run in parallel. Parallel button actions (`actionId`) bypass the queue.
 
 ### ContextAssemblyPolicy
-Builds prompts for main and app agents:
-- **Main**: `timeline + openWindows + reloadOptions + content`
+Builds prompts for monitor and app agents:
+- **Monitor**: `timeline + openWindows + reloadOptions + content`
 - **App (first turn)**: `skillContext + manifest + openWindows + reloadOptions + content`
 - **App (subsequent)**: `openWindows + reloadOptions + content`
 
@@ -282,7 +283,7 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │                         AgentPool                             │
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
-│   │ Main Agents (persistent, one per monitor)              │  │
+│   │ Monitor Agents (persistent, one per monitor)           │  │
 │   │ - Primary (monitor 0) created at pool init             │  │
 │   │ - Additional monitors auto-created on demand (max 4)   │  │
 │   │ - Provider session continuity across messages          │  │
@@ -291,7 +292,7 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │                                                               │
 │   ┌────────────────────────────────────────────────────────┐  │
 │   │ Ephemeral Agents (temporary)                           │  │
-│   │ - Created when main is busy + global limit allows      │  │
+│   │ - Created when monitor is busy + global limit allows   │  │
 │   │ - Fresh provider, no conversation context              │  │
 │   │ - Disposed immediately after task                      │  │
 │   └────────────────────────────────────────────────────────┘  │
@@ -306,7 +307,7 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 │   ┌────────────────────────────────────────────────────────┐  │
 │   │ Task Agents (temporary, forked context)                │  │
 │   │ - Created via Task tool (Claude) / collab (Codex)     │  │
-│   │ - Forks main agent's provider session                  │  │
+│   │ - Forks monitor agent's provider session               │  │
 │   │ - Profile-specific tools (default/web/code/app)       │  │
 │   │ - Disposed immediately after task                      │  │
 │   └────────────────────────────────────────────────────────┘  │
@@ -362,11 +363,11 @@ Per-monitor rate limiting for background monitors. Three budget dimensions:
 | Event | Description |
 |-------|-------------|
 | `USER_MESSAGE` | Main input → ContextPool main queue (sequential per monitor) |
-| `WINDOW_MESSAGE` | Context menu "Send to window" → main agent (or app agent for app windows) |
-| `COMPONENT_ACTION` | Button click with optional formData, componentPath → main agent (or app agent for app windows) |
+| `WINDOW_MESSAGE` | Context menu "Send to window" → monitor agent (or app agent for app windows) |
+| `COMPONENT_ACTION` | Button click with optional formData, componentPath → monitor agent (or app agent for app windows) |
 | `INTERRUPT` | Stop all agents |
 | `INTERRUPT_AGENT` | Stop specific agent by role |
-| `RESET` | Interrupt all, clear context, recreate main agent |
+| `RESET` | Interrupt all, clear context, recreate monitor agent |
 | `SET_PROVIDER` | Switch AI provider (claude/codex) |
 | `RENDERING_FEEDBACK` | Frontend reports window render success/failure |
 | `DIALOG_FEEDBACK` | User response to approval dialog |
@@ -451,7 +452,7 @@ User types "Hello"          User clicks Save in App Window
        │                              │
        ▼                              ▼
 ┌──────────────┐              ┌──────────────┐
-│ Main Agent   │              │ App Agent    │
+│Monitor Agent │              │ App Agent    │
 │ (monitor 0)  │              │ (app-notes)  │
 │              │              │              │
 │ Processing   │              │ First turn:  │
@@ -469,5 +470,5 @@ User types "Hello"          User clicks Save in App Window
                                     ▼
                          InteractionTimeline records:
                          "app-notes: Updated content"
-                         (main agent sees this next turn)
+                         (monitor agent sees this next turn)
 ```

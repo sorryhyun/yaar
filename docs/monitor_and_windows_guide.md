@@ -5,12 +5,12 @@ YAAR's runtime is organized into three nested abstractions. Understanding them i
 ```
 Session
 ├── Monitor 0 ("Desktop 1")
-│   ├── Main Agent (persistent, sequential)
+│   ├── Monitor Agent (persistent, sequential)
 │   ├── Window A
 │   ├── Window B
 │   └── CLI history
 ├── Monitor 1 ("Desktop 2")
-│   ├── Main Agent (independent)
+│   ├── Monitor Agent (independent)
 │   ├── Window C
 │   └── CLI history
 └── Event log (messages.jsonl)
@@ -56,13 +56,13 @@ Tab 3 ──┘
 
 ## Monitor
 
-A **monitor** is a virtual desktop workspace within a session (up to 4 per session). Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own main agent.
+A **monitor** is a virtual desktop workspace within a session (up to 4 per session). Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own monitor agent.
 
 ### Why monitors exist
 
 Monitors enable parallel, independent AI workflows. A user can run a long background task on Monitor 2 while continuing to interact on Monitor 1. Each monitor maintains its own:
 
-- **Main agent** — persistent agent with its own provider session
+- **Monitor agent** — persistent agent with its own provider session
 - **Main queue** — sequential message processing, independent of other monitors
 - **CLI history** — per-monitor command log
 - **Windows** — each window belongs to exactly one monitor
@@ -90,7 +90,7 @@ interface Monitor {
 
 ### Server
 
-Each monitor gets its own main agent and queue:
+Each monitor gets its own monitor agent and queue:
 
 ```typescript
 // agent-pool.ts
@@ -100,7 +100,7 @@ private mainAgents = new Map<string, PooledAgent>();  // Key: monitorId
 private getOrCreateMainQueue(monitorId: string): MainQueuePolicy
 ```
 
-When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen before, it auto-creates a new main agent for that monitor.
+When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen before, it auto-creates a new monitor agent for that monitor.
 
 ### Event plumbing
 
@@ -153,7 +153,7 @@ The `component` renderer uses a flat Component DSL (no recursive nesting) design
 
 Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route based on window type:
 
-- **Plain windows** (markdown, table, component, etc.) — interactions route to the **main agent** for the window's monitor. The main agent has the full conversation context.
+- **Plain windows** (markdown, table, component, etc.) — interactions route to the **monitor agent** for the window's monitor. The monitor agent has the full conversation context.
 - **App windows** — interactions route to a **dedicated app agent** via `AppTaskProcessor`. App agents are persistent per app (keyed by `appId`) and survive window close/reopen.
 
 Same-window tasks are serialized via `WindowQueuePolicy`.
@@ -185,7 +185,7 @@ AI emits window.create action
 
 User interacts (drag, resize, click button, close)
   → Frontend: local state updated immediately
-  → Server: routed to main agent (or app agent for app windows), recorded in InteractionTimeline
+  → Server: routed to monitor agent (or app agent for app windows), recorded in InteractionTimeline
 
 AI emits window.close / user clicks X
   → Frontend: removed from store
@@ -204,7 +204,7 @@ AI emits window.close / user clicks X
 Session (1 per conversation)
  ├── owns SessionHub registration, SessionLogger
  ├── has 1–4 Monitors (defaults to 1)
- │    ├── each has 1 Main Agent (persistent, sequential within monitor)
+ │    ├── each has 1 Monitor Agent (persistent, sequential within monitor)
  │    ├── each has N Windows (AI-created, user-interactable)
  │    └── each has its own CLI history
  ├── has 1 WindowStateRegistry (tracks all windows across all monitors)

@@ -111,7 +111,7 @@ You can also develop your own apps. Bundled libraries (lodash, anime.js, Konva, 
 
 ### Multi-Monitor & Sessions
 
-Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own main agent and conversation history. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
+Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own monitor agent and conversation history. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
 
 
 ### Remote Access

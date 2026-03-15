@@ -65,7 +65,7 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 | `yaar://sessions/current/notifications/{id}` | Dismiss notification (delete) |
 | `yaar://sessions/current/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
 | `yaar://sessions/current/clipboard` | Clipboard contents |
-| `yaar://sessions/current/monitors/{monitorId}` | Monitor status (main agent, window list, queue stats) |
+| `yaar://sessions/current/monitors/{monitorId}` | Monitor status (monitor agent, window list, queue stats) |
 | `yaar://sessions/current/logs` | Session logs |
 | `yaar://sessions/current/context` | Context state |
 
