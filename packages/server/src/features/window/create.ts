@@ -88,6 +88,7 @@ export async function handleCreate(
 
     const appMeta = payload.appId ? await getAppMeta(payload.appId as string) : null;
 
+    const componentAppId = payload.appId as string | undefined;
     const osAction: OSAction = {
       type: 'window.create',
       windowId: actualId,
@@ -100,6 +101,7 @@ export async function handleCreate(
       },
       content: { renderer: 'component', data: layoutData },
       ...getAppMetaOverrides(appMeta),
+      ...(componentAppId ? { appId: componentAppId } : {}),
       ...(payload.minimized ? { minimized: true } : {}),
     };
 
@@ -142,6 +144,7 @@ export async function handleCreate(
     },
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
+    ...(appId ? { appId } : {}),
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {

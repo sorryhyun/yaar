@@ -76,6 +76,7 @@ export class WindowStateRegistry {
           bounds: { ...action.bounds },
           content: { ...action.content },
           locked: false,
+          ...(action.appId ? { appId: action.appId } : {}),
           variant: action.variant,
           dockEdge: action.dockEdge,
           frameless: action.frameless,
@@ -232,6 +233,17 @@ export class WindowStateRegistry {
     if (!win.locked) return null;
     if (agentId && win.lockedBy === agentId) return null;
     return win.lockedBy ?? 'unknown';
+  }
+
+  getAppIdForWindow(windowId: string): string | undefined {
+    const resolved = this.resolve(windowId);
+    return resolved ? resolved[1].appId : undefined;
+  }
+
+  isAppProtocolWindow(windowId: string): boolean {
+    const resolved = this.resolve(windowId);
+    if (!resolved) return false;
+    return resolved[1].appProtocol === true && !!resolved[1].appId;
   }
 
   clear(): void {

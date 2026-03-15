@@ -94,6 +94,7 @@ export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Pr
       resumeSessionId: opts.resumeSessionId,
       allowedTools: opts.allowedTools,
       systemPromptOverride: opts.systemPromptOverride,
+      windowId: opts.windowId,
       onContextMessage: (msgRole, content) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);

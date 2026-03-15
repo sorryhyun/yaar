@@ -1,4 +1,5 @@
 import { createSignal, batch } from '@bundled/solid-js';
+import { storage } from '@bundled/yaar';
 import type { Post, AppSettings, Recommendation } from './types';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -45,7 +46,7 @@ export const [filterKeyword, setFilterKeyword] = createSignal<string | null>(nul
 
 export async function loadSettings() {
   try {
-    const saved = await window.yaar?.storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
+    const saved = await storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
     if (saved) {
       setSettings(saved);
     }
@@ -57,7 +58,7 @@ export async function loadSettings() {
 export async function saveSettings(newSettings: AppSettings) {
   setSettings(newSettings);
   try {
-    await window.yaar?.storage.save('settings.json', JSON.stringify(newSettings));
+    await storage.save('settings.json', JSON.stringify(newSettings));
   } catch {
     // ignore
   }

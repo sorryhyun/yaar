@@ -36,6 +36,7 @@ import {
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import { MainTaskProcessor } from './main-task-processor.js';
 import { WindowTaskProcessor } from './window-task-processor.js';
+import { AppTaskProcessor } from './app-task-processor.js';
 import type { PoolContext, Task } from './pool-types.js';
 
 // Re-export Task for barrel compatibility
@@ -78,6 +79,7 @@ export class ContextPool implements PoolContext {
   // ── Processors ────────────────────────────────────────────────────
   private mainProcessor: MainTaskProcessor;
   private windowProcessor: WindowTaskProcessor;
+  private appProcessor: AppTaskProcessor;
 
   constructor(
     sessionId: SessionId,
@@ -104,6 +106,7 @@ export class ContextPool implements PoolContext {
     // Create processors
     this.mainProcessor = new MainTaskProcessor(this);
     this.windowProcessor = new WindowTaskProcessor(this);
+    this.appProcessor = new AppTaskProcessor(this);
   }
 
   // ── PoolContext methods ─────────────────────────────────────────────
@@ -246,7 +249,14 @@ export class ContextPool implements PoolContext {
       if (task.type === 'main') {
         await this.mainProcessor.queueMainTask(task);
       } else {
-        await this.windowProcessor.handleWindowTask(task);
+        // Check if this window belongs to an appProtocol app
+        const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
+        if (appId && task.windowId && this.windowState.isAppProtocolWindow(task.windowId)) {
+          await this.appProcessor.handleAppTask(task, appId);
+        } else {
+          // Plain window → route to main agent with full conversation context
+          await this.mainProcessor.queueMainTask({ ...task, type: 'main' });
+        }
       }
     } finally {
       this.inflightExit();
@@ -271,7 +281,17 @@ export class ContextPool implements PoolContext {
   }
 
   handleWindowClose(windowId: string): void {
-    this.windowProcessor.handleWindowClose(windowId);
+    // Check if this is an app protocol window — app agents persist
+    const appId = this.windowState.getAppIdForWindow(windowId);
+    if (appId && this.windowState.isAppProtocolWindow(windowId)) {
+      // App agent persists — only clean up subscriptions and prune context
+      this.windowSubscriptionPolicy.clearForWindow(windowId);
+      this.contextTape.pruneWindow(windowId);
+      this.windowAgentMap.delete(windowId);
+    } else {
+      // Plain/non-app windows use legacy window processor cleanup
+      this.windowProcessor.handleWindowClose(windowId);
+    }
   }
 
   // ── Query methods ──────────────────────────────────────────────────
@@ -317,6 +337,11 @@ export class ContextPool implements PoolContext {
   }
 
   hasActiveAgent(windowId: string): boolean {
+    // Check app agents via appId lookup
+    const appId = this.windowState.getAppIdForWindow(windowId);
+    if (appId && this.windowState.isAppProtocolWindow(windowId)) {
+      return this.agentPool.hasRolePrefix(`app-${appId}`);
+    }
     return this.agentPool.hasRolePrefix(`window-${windowId}`);
   }
 
@@ -334,6 +359,7 @@ export class ContextPool implements PoolContext {
     timelineSize: number;
     mainAgent: boolean;
     windowAgents: number;
+    appAgents: number;
     ephemeralAgents: number;
     monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
   } {
@@ -408,6 +434,7 @@ export class ContextPool implements PoolContext {
     this.windowAgentMap.clear();
     this.windowConnectionPolicy.clear();
     this.windowSubscriptionPolicy.clear();
+    this.appProcessor.disposeAll();
     if (closeWindows) {
       this.windowState.clear();
     }

@@ -15,7 +15,10 @@ import { APP_PROFILE } from './app.js';
 
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
-export { VERB_TOOL_NAMES, VERB_TOOLS } from './types.js';
+export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
+
+// App agent profile builder
+export { buildAppAgentProfile } from './app-agent.js';
 
 // Re-export individual profiles
 export { DEFAULT_PROFILE } from './default.js';

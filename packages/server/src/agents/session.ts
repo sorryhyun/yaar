@@ -52,6 +52,8 @@ export interface HandleMessageOptions {
   systemPromptOverride?: string;
   /** Profile-specific tool subset (passed through to transport) */
   allowedTools?: string[];
+  /** Window ID for app agent tool resolution (set in AsyncLocalStorage context) */
+  windowId?: string;
 }
 
 interface AgentContext {
@@ -59,6 +61,7 @@ interface AgentContext {
   connectionId: ConnectionId;
   sessionId: SessionId;
   monitorId?: string;
+  windowId?: string;
 }
 
 const agentContext = new AsyncLocalStorage<AgentContext>();
@@ -79,6 +82,10 @@ export function getMonitorId(): string | undefined {
   return agentContext.getStore()?.monitorId;
 }
 
+export function getWindowId(): string | undefined {
+  return agentContext.getStore()?.windowId;
+}
+
 /**
  * Run a function within a specific agent context.
  * Used to restore agent identity from HTTP headers (e.g., X-Agent-Id in MCP requests).
@@ -92,7 +99,7 @@ export function runWithAgentId<T>(agentId: string, fn: () => T): T {
  * Used by the MCP HTTP handler to restore both identity and session scope.
  */
 export function runWithAgentContext<T>(
-  ctx: { agentId: string; sessionId?: SessionId; monitorId?: string },
+  ctx: { agentId: string; sessionId?: SessionId; monitorId?: string; windowId?: string },
   fn: () => T,
 ): T {
   const existing = agentContext.getStore();
@@ -102,6 +109,7 @@ export function runWithAgentContext<T>(
       connectionId: existing?.connectionId ?? ('' as ConnectionId),
       sessionId: ctx.sessionId ?? existing?.sessionId ?? ('' as SessionId),
       monitorId: ctx.monitorId ?? existing?.monitorId,
+      windowId: ctx.windowId ?? existing?.windowId,
     },
     fn,
   );
@@ -379,6 +387,7 @@ export class AgentSession {
           connectionId: this.connectionId,
           sessionId: this.liveSessionId,
           monitorId: options.monitorId,
+          windowId: options.windowId,
         },
         async () => {
           console.log(`[AgentSession] ${role} entered agentContext.run`);

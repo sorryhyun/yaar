@@ -156,18 +156,20 @@ render(() => html`
 
 To make a deployed app controllable by the agent — so it can read app state and send commands — define an App Protocol. Without it, the app is a static iframe the agent cannot interact with after creation.
 
-`window.yaar.app` is auto-injected at runtime (no import needed). The agent discovers your app's manifest, then queries state or sends commands at any time.
+The agent discovers your app's manifest, then queries state or sends commands at any time.
 
 ### Registration
 
-Put the registration in `src/protocol.ts` and call it from main.ts inside `onMount()`. Always guard with a null check:
+Put the registration in `src/protocol.ts` and call it from main.ts inside `onMount()`. Use `@bundled/yaar` for the `app` object:
 
 ```ts
 // src/protocol.ts
-export function registerProtocol() {
-  if (!window.yaar?.app) return;
+import { app } from '@bundled/yaar';
 
-  window.yaar.app.register({
+export function registerProtocol() {
+  if (!app) return;
+
+  app.register({
     appId: 'my-app',
     name: 'My App',
     state: { /* ... */ },
@@ -249,8 +251,10 @@ addMessage: {
 Call `sendInteraction()` to proactively notify the agent about user actions:
 
 ```ts
-window.yaar.app.sendInteraction('User clicked save button');
-window.yaar.app.sendInteraction({ event: 'cell_select', row: 3, col: 'A' });
+import { app } from '@bundled/yaar';
+
+app.sendInteraction('User clicked save button');
+app.sendInteraction({ event: 'cell_select', row: 3, col: 'A' });
 ```
 
 The interaction is delivered to the window's agent as a `WINDOW_MESSAGE`. Use for significant events the agent should know about — user selections, button clicks, mode changes, etc.
@@ -303,7 +307,7 @@ const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 
 ### `window.yaar` global (legacy)
 
-Legacy `window.yaar.*` methods are available without imports but prefer `@bundled/yaar`. Allowed URI prefixes: `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403. Apps use `self` as the appId — the server resolves it to the real appId from the iframe token.
+Legacy `window.yaar.*` methods are available without imports but prefer `@bundled/yaar` — it provides typed helpers, auto-parsed responses, and cleaner code. Allowed URI prefixes: `yaar://browser/`, `yaar://storage/`, `yaar://apps/self/storage/`, `yaar://windows`. Other URIs return 403. Apps use `self` as the appId — the server resolves it to the real appId from the iframe token.
 
 ### Storage Scopes
 

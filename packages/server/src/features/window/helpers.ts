@@ -68,6 +68,7 @@ export function getAppMetaOverrides(
     ...(appMeta.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
     ...(appMeta.frameless ? { frameless: true } : {}),
     ...(appMeta.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
+    ...(appMeta.appProtocol ? { appProtocol: true } : {}),
   };
 }
 

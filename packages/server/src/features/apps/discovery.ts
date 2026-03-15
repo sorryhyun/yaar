@@ -209,6 +209,7 @@ export async function getAppMeta(appId: string): Promise<{
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
+  appProtocol?: boolean;
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -219,6 +220,7 @@ export async function getAppMeta(appId: string): Promise<{
       frameless?: boolean;
       windowStyle?: Record<string, string | number>;
       permissions?: PermissionEntry[];
+      appProtocol?: boolean;
     } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
@@ -226,6 +228,7 @@ export async function getAppMeta(appId: string): Promise<{
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
+    if (meta.appProtocol) result.appProtocol = true;
     return Object.keys(result).length > 0 ? result : null;
   } catch {
     return null;

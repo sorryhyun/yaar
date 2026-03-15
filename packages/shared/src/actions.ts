@@ -54,6 +54,7 @@ export interface WindowState {
   content: WindowContent;
   locked: boolean;
   lockedBy?: string;
+  appId?: string;
   appProtocol?: boolean;
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
@@ -71,6 +72,7 @@ export interface WindowCreateAction {
   bounds: WindowBounds;
   content: WindowContent;
   requestId?: string; // For tracking iframe load feedback
+  appId?: string;
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;

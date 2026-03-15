@@ -22,3 +22,9 @@ export const VERB_TOOL_NAMES = [
 ] as const;
 
 export const VERB_TOOLS = ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES] as const;
+
+export const APP_AGENT_TOOL_NAMES = [
+  'mcp__app__app_query',
+  'mcp__app__app_command',
+  'mcp__app__relay',
+] as const;

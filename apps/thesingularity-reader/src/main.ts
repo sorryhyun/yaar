@@ -1,6 +1,7 @@
 import { createEffect, createMemo, onCleanup, onMount, Show, For, batch } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { app, invoke } from '@bundled/yaar';
 import './styles.css';
 import type { Post } from './types';
 import {
@@ -95,12 +96,12 @@ async function triggerAnalysis() {
     // 3개 탭 병렬, 1초 간격으로 상위 5개 게시물 내용 가져오기
     const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
 
-    if (!window.yaar?.app) {
+    if (!app) {
       setRecLoading(false);
       return;
     }
 
-    window.yaar.app.sendInteraction({
+    app.sendInteraction({
       type: 'analyze_posts',
       description: '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 커맨드로 결과를 돌려주세요',
       allPosts: currentPosts.map(p => ({
@@ -157,9 +158,9 @@ async function takeScreenshot(post: Post) {
   });
   try {
     const mobileUrl = toMobileUrl(post.url);
-    await window.yaar.invoke('yaar://browser/pages', { action: 'open', url: mobileUrl, visible: false, mobile: true, waitUntil: 'networkidle' });
-    await window.yaar.invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
-    const result = await window.yaar.invoke('yaar://browser/pages', { action: 'screenshot' });
+    await invoke('yaar://browser/pages', { action: 'open', url: mobileUrl, visible: false, mobile: true, waitUntil: 'networkidle' });
+    await invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
+    const result = await invoke('yaar://browser/pages', { action: 'screenshot' });
     const contents: any[] = result?.content ?? [];
     const imageItem = contents.find((i: any) => i?.type === 'image');
     if (imageItem) {
