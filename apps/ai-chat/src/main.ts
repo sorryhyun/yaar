@@ -82,7 +82,7 @@ const MessageBubble = (props: { msg: ChatMessage }) => {
   return html`
     <div class=${() => `message-row ${isUser() ? 'user' : 'assistant'}`}>
       <div class="message-avatar">${() => isUser() ? '🙂' : '🤖'}</div>
-      <div>
+      <div class="message-content">
         <div class=${() => `message-bubble ${props.msg.status === 'error' ? 'error' : ''}`}>
           <${Show} when=${() => !isLoading()} fallback=${html`
             <div class="typing-indicator">

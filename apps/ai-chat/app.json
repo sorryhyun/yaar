@@ -1,5 +1,5 @@
 {
-  "icon": "🤖",
+  "icon": "💬",
   "name": "AI Chat",
   "run": "index.html",
   "appProtocol": true,
