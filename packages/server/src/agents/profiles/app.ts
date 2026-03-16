@@ -37,11 +37,13 @@ ${SANDBOX_SECTION}
 3. **Type check**: \`invoke('yaar://sandbox/{id}', { action: "typecheck" })\` — validate before compiling
 4. **Compile**: \`invoke('yaar://sandbox/{id}', { action: "compile" })\` — builds to HTML
 5. **Preview**: Open compiled app in an iframe window to test
-6. **Deploy**: \`invoke('yaar://sandbox/{id}', { action: "deploy", appId: "my-app", name: "My App", icon: "🎯" })\`
+6. **Deploy**: \`invoke('yaar://sandbox/{id}', { action: "deploy", appId: "my-app", name: "My App", icon: "🎯" })\` — pass \`permissions\` array for URI prefixes the app iframe can access (e.g. \`["yaar://storage/", "yaar://http"]\`)
 
 ### Editing Existing Apps
+App source code is **not directly readable** — \`read('yaar://apps/{appId}')\` only returns the SKILL.md, not source files.
+To read or edit an app's code, **clone it to the sandbox first**:
 - Clone: \`invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })\` — creates sandbox from installed app
-- Edit files, typecheck, compile, redeploy
+- Then browse/edit files under \`yaar://sandbox/{id}/src/...\`, typecheck, compile, redeploy
 
 ### App Protocol (Bidirectional Communication)
 For iframe apps that support app protocol:

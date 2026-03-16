@@ -137,6 +137,14 @@ export async function doDeploy(
     return { success: false, error: 'Nothing to deploy. Run compile first.' };
   }
 
+  // Read SKILL.md from sandbox if it exists (editable during development)
+  let sandboxSkill: string | undefined;
+  try {
+    sandboxSkill = await Bun.file(join(sandboxPath, 'SKILL.md')).text();
+  } catch {
+    // No sandbox SKILL.md
+  }
+
   let existingMeta: Record<string, unknown> = {};
   let existingManifest: Record<string, unknown> = {};
   try {
@@ -182,15 +190,20 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    const skillContent = generateSkillMd(
-      appId,
-      displayName,
-      hasCompiledApp,
-      componentFiles,
-      skill,
-      hasAppProtocol,
-    );
-    await Bun.write(join(appPath, 'SKILL.md'), skillContent);
+    if (sandboxSkill) {
+      // Use SKILL.md from sandbox directly
+      await Bun.write(join(appPath, 'SKILL.md'), sandboxSkill);
+    } else {
+      const skillContent = generateSkillMd(
+        appId,
+        displayName,
+        hasCompiledApp,
+        componentFiles,
+        skill,
+        hasAppProtocol,
+      );
+      await Bun.write(join(appPath, 'SKILL.md'), skillContent);
+    }
 
     const metadata: Record<string, unknown> = { ...existingMeta };
     metadata.icon = resolvedIcon;
@@ -294,6 +307,9 @@ export interface CloneResult {
   files: string[];
 }
 
+/** Files to clone from the app directory root (alongside src/). */
+const CLONE_ROOT_FILES = ['SKILL.md'];
+
 export async function doClone(
   appId: string,
 ): Promise<CloneResult | { success: false; error: string }> {
@@ -324,6 +340,16 @@ export async function doClone(
     const fileList = (files as string[])
       .filter((f) => !f.includes('node_modules'))
       .map((f) => `src/${f}`);
+
+    // Copy root-level metadata files (app.json, manifest.json, SKILL.md)
+    for (const file of CLONE_ROOT_FILES) {
+      try {
+        await cp(join(appPath, file), join(sandboxPath, file));
+        fileList.push(file);
+      } catch {
+        // File doesn't exist — skip
+      }
+    }
 
     return { success: true, sandboxId, appId, files: fileList };
   } catch (err) {

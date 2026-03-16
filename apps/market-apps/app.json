@@ -93,5 +93,5 @@
     }
   },
   "capture": "dom",
-  "permissions": ["yaar://http"]
+  "permissions": ["yaar://storage/", "yaar://apps/", "yaar://market/"]
 }

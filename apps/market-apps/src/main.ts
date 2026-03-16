@@ -1,6 +1,7 @@
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { invoke, del, listJson, storage } from '@bundled/yaar';
 import './styles.css';
 import './protocol.js';
 
@@ -12,6 +13,7 @@ export type ListedApp = {
   description?: string;
   version?: string;
   author?: string;
+  icon?: string;
   installed?: boolean;
 };
 
@@ -64,14 +66,6 @@ function parseMarket(payload: ApiPayload): ListedApp[] {
     ? payload.marketApps
     : Array.isArray(payload.apps)
     ? payload.apps
-    : [];
-}
-
-function parseInstalled(payload: ApiPayload): InstalledApp[] {
-  return Array.isArray(payload.installedApps)
-    ? payload.installedApps
-    : Array.isArray(payload.installed)
-    ? payload.installed
     : [];
 }
 
@@ -180,10 +174,7 @@ function markInstalledSignal(app: { id: string; name: string }, installed: boole
 export function setDomain(nextDomain: string) {
   const d = normalizeDomain(nextDomain);
   setApiBase(d);
-  const storage = (window as any).yaar?.storage;
-  if (storage) {
-    if (d) void storage.save(STORAGE_DOMAIN_KEY, d);
-  }
+  if (d) void storage.save(STORAGE_DOMAIN_KEY, d);
   setStatus(d ? `Domain set: ${d}` : 'Domain cleared');
 }
 
@@ -197,75 +188,31 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function apiPost<T>(path: string, body: object): Promise<T> {
-  const base = apiBase();
-  if (!base) throw new Error('No domain configured. Set a domain first.');
-  const res = await fetch(`${base}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`POST ${path} failed (${res.status})`);
-  return res.json();
+// ── Host verb helpers ────────────────────────────────────────────────────────
+
+/**
+ * Install an app by invoking yaar://market/{appId} with action:'install'.
+ * Requires the yaar://market permission in app.json.
+ */
+async function hostInstall(app: { id: string; name: string }): Promise<void> {
+  await invoke('yaar://market/' + app.id, { action: 'install' });
 }
 
-async function apiPostAny<T>(paths: string[], body: object): Promise<T> {
-  let lastErr: any;
-  for (const path of paths) {
-    try {
-      return await apiPost<T>(path, body);
-    } catch (err: any) {
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('All POST endpoints failed');
+/**
+ * Delete an app by calling del('yaar://apps/{appId}').
+ * Requires the yaar://apps/ permission in app.json.
+ */
+async function hostDelete(app: { id: string; name: string }): Promise<void> {
+  await del('yaar://apps/' + app.id);
 }
 
-async function getInstalledFromLocalApi(): Promise<InstalledApp[]> {
-  const candidates = ['/api/apps', '/api/apps/list', '/api/apps/installed', '/api/installed'];
-  for (const path of candidates) {
-    try {
-      const res = await fetch(path, { method: 'GET' });
-      if (!res.ok) continue;
-
-      const contentType = (res.headers.get('content-type') || '').toLowerCase();
-      if (contentType.includes('application/json')) {
-        const payload = await res.json();
-        const parsed = parseInstalledAny(payload);
-        if (parsed.length) return parsed;
-      } else {
-        const text = await res.text();
-        const parsed = parseInstalledAny(text);
-        if (parsed.length) return parsed;
-      }
-    } catch {
-      // ignore and try next endpoint
-    }
-  }
-  return [];
-}
-
-async function hostAction(action: 'install' | 'uninstall', app: { id: string; name: string }) {
-  const yaarAny = (window as any).yaar;
-
-  if (typeof yaarAny?.os?.action === 'function') {
-    const toolName = action === 'install' ? 'apps:market_get' : 'apps:market_delete';
-    await yaarAny.os.action(toolName, { appId: app.id });
-    return 'os-action' as const;
-  }
-
-  if (typeof yaarAny?.app?.sendInteraction === 'function') {
-    yaarAny.app.sendInteraction({
-      event: 'market-apps:request',
-      action,
-      appId: app.id,
-      appName: app.name,
-      requestedAt: new Date().toISOString(),
-    });
-    return 'interaction' as const;
-  }
-
-  throw new Error('Host install/uninstall API is unavailable.');
+/**
+ * Fetch the list of installed apps via yaar://apps/ list verb.
+ * Requires the yaar://apps/ permission in app.json.
+ */
+async function hostListInstalled(): Promise<InstalledApp[]> {
+  const result = await listJson('yaar://apps');
+  return parseInstalledAny(result);
 }
 
 // ── Business logic ───────────────────────────────────────────────────────────
@@ -283,20 +230,13 @@ export async function refreshData() {
     const marketPayload = await apiGet<ApiPayload>('/api/apps/');
     const apps = parseMarket(marketPayload);
 
-    const yaarAny = (window as any).yaar;
-    if (typeof yaarAny?.os?.action === 'function') {
-      try {
-        const localInstalled = await yaarAny.os.action('apps:list', {});
-        setInstalledApps(parseInstalledAny(localInstalled));
-        setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps (apps:list)`);
-      } catch {
-        setInstalledApps([]);
-        setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
-      }
-    } else {
-      const localApiInstalled = await getInstalledFromLocalApi();
-      setInstalledApps(localApiInstalled);
-      setStatus(`Loaded ${apps.length} market / ${installedApps().length} installed apps`);
+    try {
+      const localInstalled = await hostListInstalled();
+      setInstalledApps(localInstalled);
+      setStatus(`Loaded ${apps.length} market / ${localInstalled.length} installed apps`);
+    } catch {
+      setInstalledApps([]);
+      setStatus(`Loaded ${apps.length} market apps (installed list unavailable)`);
     }
 
     setMarketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
@@ -311,20 +251,13 @@ async function installApp(app: ListedApp) {
   try {
     setLoading(true);
     setStatus(`Installing ${app.name}…`, false);
-
-    const hostMode = await hostAction('install', app);
-    if (hostMode === 'os-action') {
-      markInstalledSignal(app, true);
-      setStatus(`Installed ${app.name} via apps:market_get`);
-      setLoading(false);
-      return;
-    }
-
-    setStatus(`Install request sent for ${app.name} (waiting for agent)`);
-    setLoading(false);
+    await hostInstall(app);
+    markInstalledSignal(app, true);
+    setStatus(`Installed ${app.name}`);
   } catch (err: any) {
-    setLoading(false);
     setStatus(`Install failed: ${err?.message || String(err)}`);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -332,20 +265,13 @@ async function uninstallApp(app: InstalledApp) {
   try {
     setLoading(true);
     setStatus(`Uninstalling ${app.name}…`, false);
-
-    const hostMode = await hostAction('uninstall', app);
-    if (hostMode === 'os-action') {
-      markInstalledSignal(app, false);
-      setStatus(`Uninstalled ${app.name} via apps:market_delete`);
-      setLoading(false);
-      return;
-    }
-
-    setStatus(`Uninstall request sent for ${app.name} (waiting for agent)`);
-    setLoading(false);
+    await hostDelete(app);
+    markInstalledSignal(app, false);
+    setStatus(`Uninstalled ${app.name}`);
   } catch (err: any) {
-    setLoading(false);
     setStatus(`Uninstall failed: ${err?.message || String(err)}`);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -435,16 +361,15 @@ render(() => html`
 // ── Async initialization ─────────────────────────────────────────────────────
 
 onMount(async () => {
-  const storage = (window as any).yaar?.storage;
   let domain = '';
 
   const fromQuery = new URLSearchParams(window.location.search).get('domain');
   const fromGlobal = (window as any).__MARKET_APPS_DOMAIN__ as string | undefined;
   domain = normalizeDomain(fromQuery || fromGlobal || '');
 
-  if (!domain && storage) {
+  if (!domain) {
     try {
-      const saved = await storage.read(STORAGE_DOMAIN_KEY, { as: 'text' });
+      const saved = await storage.read(STORAGE_DOMAIN_KEY);
       if (typeof saved === 'string' && saved.trim()) domain = normalizeDomain(saved.trim());
     } catch {
       // no saved domain

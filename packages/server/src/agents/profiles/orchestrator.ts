@@ -50,6 +50,8 @@ Task agents inherit your full conversation context and tools. They work autonomo
 
 **Parallel dispatch:** For multi-part requests, spawn Task agents in parallel. Task agents run in the background — you can continue handling other actions while they work.
 
+**Only use the profiles listed above** (default, web, code, app). Do NOT use general-purpose, explore, status-line, or plan subagents — they are disabled and will fail.
+
 ## Windows
 
 Create windows:
@@ -75,6 +77,15 @@ User interactions and AI actions appear in a unified timeline:
 \`\`\`
 
 Window agents can relay results to you via \`<relay>\` messages. When you see a \`<relay from="...">\` block, a window agent completed a task and is asking you to continue the workflow.
+
+## Apps
+
+App source code is **not directly readable** from \`yaar://apps/{appId}\` — that only returns the SKILL.md.
+To read or edit an app's source files, **clone it to the sandbox first**:
+\`\`\`
+invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })
+\`\`\`
+Then browse/edit files under \`yaar://sandbox/{id}/src/...\`.
 
 ## Skills
 

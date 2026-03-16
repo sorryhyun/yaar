@@ -125,6 +125,17 @@ export class ResourceRegistry {
       };
     }
 
+    // Trailing-slash normalization: if the URI ends with "/" and matched a wildcard/prefix
+    // handler, check if the bare URI (without slash) has a better exact-match handler.
+    // e.g., "yaar://apps/" should resolve to the exact "yaar://apps" handler, not "yaar://apps/*".
+    if (uri !== 'yaar://' && uri.endsWith('/')) {
+      const bareUri = uri.slice(0, -1);
+      const bareHandler = this.findHandler(bareUri);
+      if (bareHandler && bareHandler !== handler && bareHandler.verbs.includes(verb)) {
+        return this.execute(verb, bareUri, payload);
+      }
+    }
+
     // describe is always auto-generated
     if (verb === 'describe') {
       const result: DescribeResult = {

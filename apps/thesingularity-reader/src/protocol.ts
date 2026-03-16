@@ -1,10 +1,9 @@
-import { app } from '@bundled/yaar';
 import { setRecommendation, setRecLoading } from './store';
 
 export function registerProtocol() {
-  if (!app) return;
+  if (!window.yaar?.app) return;
 
-  app.register({
+  window.yaar.app.register({
     appId: 'thesingularity-reader',
     name: '특이점이 온다',
     state: {},

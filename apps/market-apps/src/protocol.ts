@@ -4,6 +4,7 @@
 // focused on UI.  The compiler auto-extracts the protocol manifest from this
 // file and embeds it into app.json at deploy time.
 
+import { app } from '@bundled/yaar';
 import {
   marketApps,
   setMarketApps,
@@ -22,9 +23,8 @@ import {
   type InstalledApp,
 } from './main.js';
 
-const appApi = (window as any).yaar?.app;
-if (appApi) {
-  appApi.register({
+if (app) {
+  app.register({
     appId: 'market-apps',
     name: 'Market Apps',
     state: {

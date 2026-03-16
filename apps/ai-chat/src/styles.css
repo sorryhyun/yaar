@@ -121,14 +121,8 @@
   background: linear-gradient(135deg, #3fb950, #58a6ff);
 }
 
-.message-content {
-  max-width: 80%;
-  min-width: 0;
-}
-
 .message-bubble {
-  width: 100%;
-  box-sizing: border-box;
+  max-width: 72%;
   padding: 10px 14px;
   border-radius: 18px;
   font-size: 14px;

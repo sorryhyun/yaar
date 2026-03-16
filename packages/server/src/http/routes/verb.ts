@@ -48,7 +48,9 @@ const NO_PERMISSIONS: PermissionEntry[] = [];
 
 /** Check if a single permission entry matches the URI. */
 function uriMatches(uri: string, pattern: string): boolean {
-  return uri === pattern || (pattern.endsWith('/') && uri.startsWith(pattern));
+  return (
+    uri === pattern || (pattern.endsWith('/') && (uri.startsWith(pattern) || uri + '/' === pattern))
+  );
 }
 
 /** Check if a URI + verb is allowed by the given permission entries. */

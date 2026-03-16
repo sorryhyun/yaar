@@ -12,6 +12,32 @@ import { listApps } from './discovery.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import type { PermissionEntry } from '../../http/routes/verb.js';
+
+/** Format permission entries into a human-readable string for the dialog. */
+function formatPermissions(permissions: PermissionEntry[]): string {
+  return permissions
+    .map((p) => {
+      if (typeof p === 'string') return `  • ${p}`;
+      const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
+      return `  • ${p.uri}${verbs}`;
+    })
+    .join('\n');
+}
+
+/** Read permissions from an extracted app's app.json. */
+async function readAppPermissions(appDir: string): Promise<PermissionEntry[] | null> {
+  try {
+    const metaContent = await Bun.file(join(appDir, 'app.json')).text();
+    const meta = JSON.parse(metaContent);
+    if (Array.isArray(meta.permissions) && meta.permissions.length > 0) {
+      return meta.permissions;
+    }
+  } catch {
+    // No app.json or invalid JSON
+  }
+  return null;
+}
 
 export async function installApp(appId: string): Promise<VerbResult> {
   const appsDir = join(PROJECT_ROOT, 'apps');
@@ -24,27 +50,68 @@ export async function installApp(appId: string): Promise<VerbResult> {
     return error(`Failed to download app (${res.status})`);
   }
 
+  // Extract to a staging directory first so we can inspect permissions before finalizing
   const tmpDir = join(PROJECT_ROOT, 'storage', '.tmp');
   await mkdir(tmpDir, { recursive: true });
   const tmpFile = join(tmpDir, `${appId}.tar.gz`);
+  const stagingDir = join(tmpDir, `staging-${appId}`);
 
   const buffer = Buffer.from(await res.arrayBuffer());
   await Bun.write(tmpFile, buffer);
 
-  await mkdir(appDir, { recursive: true });
+  await mkdir(stagingDir, { recursive: true });
   try {
-    const tarProc = Bun.spawnSync(['tar', 'xzf', tmpFile, '--strip-components=1', '-C', appDir]);
+    const tarProc = Bun.spawnSync([
+      'tar',
+      'xzf',
+      tmpFile,
+      '--strip-components=1',
+      '-C',
+      stagingDir,
+    ]);
     if (tarProc.exitCode !== 0) {
       throw new Error(
         tarProc.stderr.toString().trim() || `tar exited with code ${tarProc.exitCode}`,
       );
     }
   } catch (err: unknown) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
     return error(
       `Failed to extract app archive: ${err instanceof Error ? err.message : String(err)}`,
     );
   } finally {
     await unlink(tmpFile).catch(() => {});
+  }
+
+  // Check for permissions and prompt user before installing
+  if (!isUpdate) {
+    const permissions = await readAppPermissions(stagingDir);
+    if (permissions && permissions.length > 0) {
+      const confirmed = await actionEmitter.showPermissionDialog(
+        'App Permissions',
+        `"${appId}" requests the following permissions:\n\n${formatPermissions(permissions)}\n\nDo you want to allow this?`,
+        'app_install',
+        appId,
+        'Install',
+        'Cancel',
+      );
+
+      if (!confirmed) {
+        await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+        return error(`Installation of "${appId}" was cancelled by the user.`);
+      }
+    }
+  }
+
+  // Move from staging to final app directory
+  if (isUpdate) {
+    await rm(appDir, { recursive: true, force: true });
+  }
+  await mkdir(join(appDir, '..'), { recursive: true });
+  const mvProc = Bun.spawnSync(['mv', stagingDir, appDir]);
+  if (mvProc.exitCode !== 0) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    return error('Failed to move app to install directory.');
   }
 
   actionEmitter.emitAction({ type: 'desktop.refreshApps' });

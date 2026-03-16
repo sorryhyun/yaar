@@ -10,6 +10,8 @@
 
 Entry point is `src/main.ts`. Split code into multiple files (e.g., `src/utils.ts`, `src/renderer.ts`) and import them from main.ts — avoid putting everything in one file.
 
+When cloning an existing app, `SKILL.md` is copied into the sandbox root alongside `src/`. **Edit `SKILL.md` in the sandbox** whenever you change an app's behavior, add features, or update its protocol — this is the documentation the agent reads when users open the app. On deploy, the sandbox `SKILL.md` is used directly if present.
+
 If the app uses App Protocol, put the `.register()` call in `src/protocol.ts`. The compiler auto-extracts the protocol manifest from `src/main.ts` or `src/protocol.ts` and embeds it into `app.json` at deploy time.
 
 If `main.ts` has no `import` statements, add `export {};` at the top so TypeScript treats it as a module (prevents variable name collisions across apps).
@@ -17,13 +19,14 @@ If `main.ts` has no `import` statements, add `export {};` at the top so TypeScri
 ## Recommended File Structure
 
 ```
+SKILL.md               # App documentation for the agent (cloned from app, editable)
 src/
-├── main.ts          # Entry point: mount(), onMount(), top-level wiring
-├── styles.css       # All CSS (imported via `import './styles.css'`)
-├── protocol.ts      # App Protocol registration (if using App Protocol)
-├── store.ts         # Signals and shared state
-├── types.ts         # Type definitions
-└── helpers.ts       # Pure utility functions
+├── main.ts            # Entry point: mount(), onMount(), top-level wiring
+├── styles.css         # All CSS (imported via `import './styles.css'`)
+├── protocol.ts        # App Protocol registration (if using App Protocol)
+├── store.ts           # Signals and shared state
+├── types.ts           # Type definitions
+└── helpers.ts         # Pure utility functions
 ```
 
 Split code across files — avoid putting everything in `main.ts`. Import CSS via `import './styles.css'` rather than using inline `css` tags (except for the smallest snippets).
@@ -323,14 +326,16 @@ Iframe `fetch()` is subject to CORS. Use `invoke('yaar://http', { url, method?, 
 
 ## Deploy
 
-`invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...', ... })` creates the app folder in `apps/`, copies compiled files, and generates `SKILL.md` so the app appears on the desktop.
+`invoke('yaar://sandbox/{sandboxId}', { action: 'deploy', appId: '...', ... })` creates the app folder in `apps/`, copies compiled files, and uses `SKILL.md` from sandbox (or generates one) so the app appears on the desktop.
+
+**Permissions:** If the app uses Verb API (`@bundled/yaar` or `window.yaar`) to access URIs, pass the `permissions` array at deploy time. Without it, the iframe gets only the default allowlist and verb calls will return 403.
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
 | `name` | Title-cased appId | Display name shown on desktop |
 | `icon` | "🎮" | Emoji icon |
 | `keepSource` | `true` | Include `src/` so the app can be cloned later |
-| `skill` | auto-generated | Custom SKILL.md body. The `## Launch` section with the correct iframe URL is always auto-appended — only write app-specific instructions, usage guides, etc. |
+| `skill` | auto-generated | Custom SKILL.md body (only used if no `SKILL.md` file exists in the sandbox). Prefer writing `SKILL.md` directly in the sandbox instead of passing this parameter. |
 | `appProtocol` | auto-detected | Set explicitly if auto-detection (scanning HTML for `.app.register`) isn't reliable |
 | `capture` | `auto` | Screenshot strategy: `canvas` (toDataURL on largest canvas), `dom` (html2canvas), `svg` (serialize largest SVG), `protocol` (app provides screenshot via App Protocol). Default `auto` tries canvas → svg → dom fallback chain. Set this for faster, more reliable captures. |
 | `fileAssociations` | none | File types this app can open. Array of `{ extensions: string[], command: string, paramKey: string }`. Each entry maps file extensions to an `app_command` call — `command` is the command name and `paramKey` is the parameter key for the file content. |
