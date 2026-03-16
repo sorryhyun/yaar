@@ -61,6 +61,53 @@ export async function deleteText(uri: string): Promise<string> {
   return text(await y.delete(uri));
 }
 
+// ── App-scoped storage ──────────────────────────────────────────
+
+function appStorageUri(path: string): string {
+  const clean = path.replace(/^\//, '');
+  return clean ? `yaar://apps/self/storage/${clean}` : 'yaar://apps/self/storage/';
+}
+
+export const appStorage = {
+  async save(
+    path: string,
+    content: string,
+    options?: { encoding?: 'utf-8' | 'base64' },
+  ): Promise<void> {
+    const payload: Record<string, unknown> = { action: 'write', content };
+    if (options?.encoding) payload.encoding = options.encoding;
+    const result = await y.invoke(appStorageUri(path), payload);
+    if (result?.isError) throw new Error(text(result) || 'Save failed');
+  },
+  async read(path: string): Promise<string> {
+    const result = await y.read(appStorageUri(path));
+    if (result?.isError) throw new Error(text(result) || 'Read failed');
+    return text(result);
+  },
+  async readJson<T = unknown>(path: string): Promise<T> {
+    const raw = await appStorage.read(path);
+    return JSON.parse(raw);
+  },
+  async readBinary(path: string): Promise<{ data: string; mimeType: string }> {
+    const result = await y.read(appStorageUri(path));
+    if (result?.isError) throw new Error(text(result) || 'Read failed');
+    const items = result?.content ?? [];
+    const img = items.find((c: any) => c?.type === 'image' && c.data);
+    if (img) return { data: img.data, mimeType: img.mimeType ?? 'application/octet-stream' };
+    // Fallback: text content is the base64 data itself
+    return { data: text(result), mimeType: 'application/octet-stream' };
+  },
+  async list(dirPath?: string): Promise<unknown[]> {
+    const result = await y.list(appStorageUri(dirPath ?? ''));
+    if (result?.isError) return [];
+    return json(result) ?? [];
+  },
+  async remove(path: string): Promise<void> {
+    const result = await y.delete(appStorageUri(path));
+    if (result?.isError) throw new Error(text(result) || 'Remove failed');
+  },
+};
+
 // ── Sub-object re-exports ────────────────────────────────────────
 
 export const storage = y.storage;

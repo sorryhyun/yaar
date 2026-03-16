@@ -35,21 +35,23 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
     },
     sendInteraction: function(description) {
-      var content, instructions;
+      var content, instructions, toMonitor;
       if (typeof description === 'string') {
         content = description;
       } else {
         instructions = description.instructions;
+        toMonitor = description.toMonitor;
         var payload = {};
         for (var k in description) {
-          if (k !== 'instructions') payload[k] = description[k];
+          if (k !== 'instructions' && k !== 'toMonitor') payload[k] = description[k];
         }
         content = JSON.stringify(payload);
       }
       window.parent.postMessage({
         type: 'yaar:app-interaction',
         content: content,
-        instructions: instructions
+        instructions: instructions,
+        toMonitor: !!toMonitor
       }, '*');
     }
   };

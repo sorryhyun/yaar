@@ -216,6 +216,7 @@ export interface AppInteractionItem {
   windowId: string;
   content: string;
   instructions?: string;
+  toMonitor?: boolean;
 }
 
 export interface FeedbackSliceState {

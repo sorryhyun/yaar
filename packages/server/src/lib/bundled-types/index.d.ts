@@ -188,6 +188,9 @@ declare module '@bundled/yaar' {
   export function del(uri: string): Promise<YaarVerbResult>;
   export function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void>;
 
+  /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). */
+  export const appStorage: YaarAppStorage;
+
   /** Re-exported sub-objects from window.yaar. */
   export const storage: YaarStorage;
   export const app: YaarApp;

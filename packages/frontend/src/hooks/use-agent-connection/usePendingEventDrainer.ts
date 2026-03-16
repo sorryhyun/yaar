@@ -100,12 +100,18 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
       drainQueue(state.pendingAppInteractions, consumePendingAppInteractions, (items) => {
         for (const item of items) {
           const messageId = generateMessageId();
-          send({
-            type: ClientEventType.WINDOW_MESSAGE,
-            messageId,
-            windowId: getRawWindowId(item.windowId),
-            content: `<app_interaction>${item.content}</app_interaction>${item.instructions ? `\n\n${item.instructions}` : ''}`,
-          });
+          const content = `<app_interaction>${item.content}</app_interaction>${item.instructions ? `\n\n${item.instructions}` : ''}`;
+          if (item.toMonitor) {
+            const monitorId = useDesktopStore.getState().activeMonitorId;
+            send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
+          } else {
+            send({
+              type: ClientEventType.WINDOW_MESSAGE,
+              messageId,
+              windowId: getRawWindowId(item.windowId),
+              content,
+            });
+          }
         }
       });
 

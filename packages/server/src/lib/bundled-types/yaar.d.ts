@@ -31,7 +31,7 @@ interface YaarAppRegistration {
 
 interface YaarApp {
   register(config: YaarAppRegistration): void;
-  sendInteraction(description: string | (Record<string, unknown> & { instructions?: string })): void;
+  sendInteraction(description: string | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean })): void;
 }
 
 // ── Storage SDK ─────────────────────────────────────────────────
@@ -46,6 +46,21 @@ interface YaarStorage {
   list(dirPath?: string): Promise<string[]>;
   remove(path: string): Promise<{ ok: boolean }>;
   url(path: string): string;
+}
+
+// ── App-scoped Storage SDK ──────────────────────────────────────
+
+interface YaarAppStorageSaveOptions {
+  encoding?: 'utf-8' | 'base64';
+}
+
+interface YaarAppStorage {
+  save(path: string, content: string, options?: YaarAppStorageSaveOptions): Promise<void>;
+  read(path: string): Promise<string>;
+  readJson<T = unknown>(path: string): Promise<T>;
+  readBinary(path: string): Promise<{ data: string; mimeType: string }>;
+  list(dirPath?: string): Promise<unknown[]>;
+  remove(path: string): Promise<void>;
 }
 
 // ── Notifications SDK ───────────────────────────────────────────

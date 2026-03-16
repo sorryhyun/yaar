@@ -1,7 +1,7 @@
 import { createSignal } from '@bundled/solid-js';
 import { format } from '@bundled/date-fns';
 import { debounce } from '@bundled/lodash';
-import { storage, invoke } from '@bundled/yaar';
+import { appStorage } from '@bundled/yaar';
 import { createFormulaEngine } from './formula-utils';
 import { cloneMap } from './data-utils';
 import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
@@ -60,71 +60,40 @@ export const history: Snapshot[] = [];
 export const future: Snapshot[] = [];
 
 // ── Storage helpers using @bundled/yaar ───────────────────────────────
-export function storageAvailable(): boolean {
-  return !!storage;
-}
 
 export async function storageSave(path: string, content: string | Uint8Array): Promise<void> {
-  if (!storage) throw new Error('Storage API unavailable in this runtime.');
   if (content instanceof Uint8Array) {
-    // Encode binary as base64
     let binary = '';
     for (let i = 0; i < content.length; i++) binary += String.fromCharCode(content[i]);
-    const data = btoa(binary);
-    const result = await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content: data, encoding: 'base64' });
-    if (result.isError) throw new Error(`Storage write failed: ${result.content[0]?.text}`);
+    await appStorage.save(path, btoa(binary), { encoding: 'base64' });
   } else {
-    await storage.save(path, content);
+    await appStorage.save(path, content);
   }
 }
 
 export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuffer' = 'text'): Promise<any> {
-  if (!storage) throw new Error('Storage API unavailable in this runtime.');
   if (as === 'arraybuffer') {
-    // Binary data comes as base64 — must use raw invoke
-    const result = await invoke(`yaar://apps/self/storage/${path}`, { action: 'read' });
-    if (result.isError) throw new Error(`Storage read failed: ${result.content[0]?.text}`);
-    const b64 = result.content[0]?.data ?? '';
-    const bin = atob(b64);
+    const { data } = await appStorage.readBinary(path);
+    const bin = atob(data);
     const buf = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
     return buf.buffer;
   }
-  const raw = await storage.read(path);
-  // storage.read may return an already-parsed object (if the server pre-parses JSON files)
-  // or a raw string. Normalize to a string so callers can parse uniformly.
-  let text: string;
-  if (typeof raw === 'string') {
-    text = raw;
-  } else if (raw !== null && raw !== undefined && typeof raw === 'object') {
-    text = JSON.stringify(raw);
-  } else {
-    text = String(raw ?? '');
-  }
+  const text = await appStorage.read(path);
   if (as === 'json') return JSON.parse(text);
   return text;
 }
 
 export async function storageList(dir: string): Promise<Array<{ path: string; isDirectory: boolean; size: number; modifiedAt: string }>> {
-  if (!storage) return [];
   try {
-    const result = await storage.list(dir);
-    // storage.list returns string[] of names; fall back to raw invoke for full metadata
-    const raw = await invoke(`yaar://apps/self/storage/${dir}`, { action: 'list' });
-    if (raw.isError) return [];
-    return JSON.parse(raw.content[0]?.text ?? '[]');
+    return (await appStorage.list(dir)) as any[];
   } catch {
     return [];
   }
 }
 
 export async function storageDelete(path: string): Promise<void> {
-  if (!storage) throw new Error('Storage API unavailable in this runtime.');
-  await storage.remove(path);
-}
-
-export function storageUrl(path: string): string {
-  return `/api/storage/${path}`;
+  await appStorage.remove(path);
 }
 
 // ── Formula Engine ────────────────────────────────────────────────────
@@ -331,7 +300,6 @@ export function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
 export const autosavePath = 'autosave.json';
 
 const _autosaveWorkbook = debounce(async () => {
-  if (!storageAvailable()) return;
   try {
     await storageSave(autosavePath, serializeWorkbook());
   } catch {

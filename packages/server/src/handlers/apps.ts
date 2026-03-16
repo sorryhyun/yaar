@@ -20,7 +20,15 @@
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, error, validateRelativePath, extractIdFromUri } from './utils.js';
+import {
+  ok,
+  okJson,
+  okWithImages,
+  error,
+  validateRelativePath,
+  extractIdFromUri,
+} from './utils.js';
+import { resolvePath } from '../storage/storage-manager.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps, loadAppSkill } from '../features/apps/discovery.js';
@@ -105,23 +113,24 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           if (!listResult.success) return error(listResult.error!);
           return okJson(listResult.entries ?? []);
         }
-        const result = await storageRead(prefixedPath);
+        const result = await storageRead(prefixedPath, { raw: true });
         if (!result.success) return error(result.error!);
-        // Return raw content for app consumption (strip line numbers)
-        // storageRead adds "── path (N lines) ──\n" header + "N│" line numbers for text
-        // Extract raw content by checking if it has the header pattern
-        const content = result.content!;
-        const headerEnd = content.indexOf('\n');
-        if (headerEnd !== -1 && content.startsWith('── ')) {
-          // Text file with line numbers — strip them
-          const lines = content.slice(headerEnd + 1).split('\n');
-          const raw = lines.map((line) => {
-            const pipeIdx = line.indexOf('│');
-            return pipeIdx !== -1 ? line.slice(pipeIdx + 1) : line;
-          });
-          return ok(raw.join('\n'));
+        // Images / PDFs — return base64 content items
+        if (result.images?.length) {
+          return okWithImages(result.content!, result.images);
         }
-        return ok(content);
+        // Unknown binary — read raw bytes and return as base64
+        if (result.content?.startsWith('Binary file')) {
+          const resolvedFile = resolvePath(prefixedPath);
+          if (resolvedFile) {
+            const buf = Buffer.from(await Bun.file(resolvedFile.absolutePath).arrayBuffer());
+            return okWithImages('', [
+              { data: buf.toString('base64'), mimeType: 'application/octet-stream' },
+            ]);
+          }
+        }
+        // Text content — raw (no line numbers)
+        return ok(result.content!);
       }
 
       // ── App skill (existing behavior) ──

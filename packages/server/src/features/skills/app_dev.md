@@ -258,9 +258,12 @@ import { app } from '@bundled/yaar';
 
 app.sendInteraction('User clicked save button');
 app.sendInteraction({ event: 'cell_select', row: 3, col: 'A' });
+app.sendInteraction({ event: 'analyze', data: '...', toMonitor: true });
 ```
 
 The interaction is delivered to the window's agent as a `WINDOW_MESSAGE`. Use for significant events the agent should know about — user selections, button clicks, mode changes, etc.
+
+Pass `toMonitor: true` to send the interaction to the monitor agent instead of the app's window agent. Useful when the app needs the main AI to process something (e.g., analysis tasks that benefit from the monitor's full context).
 
 ## Verb API
 
@@ -303,7 +306,8 @@ const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 | `del(uri)` | `YaarVerbResult` | Raw delete |
 | `subscribe(uri, cb)` | `() => void` | Reactive subscription |
 | `wait(ms)` | `Promise<void>` | Delay execution (setTimeout wrapper) |
-| `storage` | `YaarStorage` | `.save()`, `.read()`, `.list()`, `.remove()`, `.url()` |
+| `storage` | `YaarStorage` | `.save()`, `.read()`, `.list()`, `.remove()`, `.url()` — global storage |
+| `appStorage` | `YaarAppStorage` | `.save()`, `.read()`, `.readJson()`, `.list()`, `.remove()` — app-scoped storage |
 | `app` | `YaarApp` | `.register()`, `.sendInteraction()` |
 | `notifications` | object | `.list()`, `.count()`, `.onChange()` |
 | `windows` | object | `.read()`, `.list()` |
@@ -315,8 +319,20 @@ Legacy `window.yaar.*` methods are available without imports but prefer `@bundle
 ### Storage Scopes
 
 Two storage scopes available via `@bundled/yaar` or `window.yaar`:
-- `yaar://storage/` — global persistent storage (`storage/` on disk)
-- `yaar://apps/self/storage/` — app-scoped storage (`storage/apps/{appId}/` on disk)
+- **`appStorage`** (recommended) — app-scoped storage (`storage/apps/{appId}/` on disk). Wraps `yaar://apps/self/storage/` verbs.
+- **`storage`** — global persistent storage (`storage/` on disk). Uses `/api/storage/` REST endpoints.
+
+```ts
+import { appStorage } from '@bundled/yaar';
+
+await appStorage.save('settings.json', JSON.stringify({ theme: 'dark' }));
+const settings = await appStorage.readJson<Settings>('settings.json');
+const files = await appStorage.list();
+await appStorage.remove('old-file.txt');
+
+// Binary (base64)
+await appStorage.save('image.png', base64Data, { encoding: 'base64' });
+```
 
 Always handle missing files (read throws on 404). For binary content in `<img src>`, read the base64 result and create a blob URL.
 

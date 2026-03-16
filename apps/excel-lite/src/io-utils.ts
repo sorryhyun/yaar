@@ -6,7 +6,7 @@ import { createXlsxWorkbook, parseXlsxWorkbook } from './xlsx-utils';
 import { parseRef, key as cellKey } from './ref-utils';
 import { csvEscape } from './data-utils';
 import {
-  storageAvailable, storageSave, storageRead,
+  storageSave, storageRead,
   storagePath,
   cells, setIoStatus,
   tryImportWorkbook, importWorkbook,
@@ -14,10 +14,6 @@ import {
 } from './state';
 
 export async function saveWorkbookToStorage() {
-  if (!storageAvailable()) {
-    setIoStatus('Storage API unavailable in this runtime.', true);
-    return;
-  }
   try {
     const path = storagePath();
     const binary = createXlsxWorkbook(cells);
@@ -30,10 +26,6 @@ export async function saveWorkbookToStorage() {
 }
 
 export async function openWorkbookFromStorage() {
-  if (!storageAvailable()) {
-    setIoStatus('Storage API unavailable in this runtime.', true);
-    return;
-  }
   try {
     const path = storagePath();
     const lower = path.toLowerCase();

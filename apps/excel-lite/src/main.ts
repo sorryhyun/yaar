@@ -2,7 +2,7 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import {
-  storageAvailable, storageRead,
+  storageRead,
   autosavePath,
   cells, mutable, refs,
   setIoStatus, tryImportWorkbook,
@@ -91,7 +91,6 @@ document.addEventListener('keydown', (e) => {
 
 // ── Autosave recovery ─────────────────────────────────────────────────
 async function tryRecoverAutosave() {
-  if (!storageAvailable()) return;
   if (Object.keys(cells).length > 0) return;
   try {
     const raw = await storageRead(autosavePath, 'text');
@@ -105,10 +104,6 @@ async function tryRecoverAutosave() {
 }
 
 void tryRecoverAutosave();
-
-if (!storageAvailable()) {
-  setIoStatus('Storage API unavailable in this runtime.', true);
-}
 
 // ── App Protocol ────────────────────────────────────────────────────
 registerAppProtocol();

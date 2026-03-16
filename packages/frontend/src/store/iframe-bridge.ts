@@ -335,6 +335,7 @@ export function initIframeMessageHandlers() {
       windowId: ctx.source.windowId,
       content,
       instructions,
+      toMonitor: !!ctx.data.toMonitor,
     });
   });
 
