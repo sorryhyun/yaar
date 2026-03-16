@@ -1,9 +1,10 @@
 import { setRecommendation, setRecLoading } from './store';
+import { app } from '@bundled/yaar';
 
 export function registerProtocol() {
-  if (!window.yaar?.app) return;
+  if (!app) return;
 
-  window.yaar.app.register({
+  app.register({
     appId: 'thesingularity-reader',
     name: '특이점이 온다',
     state: {},
@@ -30,12 +31,14 @@ export function registerProtocol() {
           },
           required: ['topics'],
         },
-        handler: (p: { topics: string[]; bestPost?: { num: string; reason: string } }) => {
+        handler: (p: Record<string, unknown>) => {
+          const topics = p.topics as string[];
+          const bestPost = p.bestPost as { num: string; reason: string } | undefined;
           setRecLoading(false);
           setRecommendation({
-            topics: p.topics,
-            bestPostNum: p.bestPost?.num ?? null,
-            bestPostReason: p.bestPost?.reason ?? null,
+            topics,
+            bestPostNum: bestPost?.num ?? null,
+            bestPostReason: bestPost?.reason ?? null,
             analyzedAt: new Date(),
           });
           return { ok: true };

@@ -1,16 +1,7 @@
 import type { AppState, Feed } from './types';
 import { FALLBACK_FEEDS, feeds, setFeeds, readArticleIds, setReadArticleIds } from './store';
 import { extractDomainName } from './utils';
-
-declare const yaar: {
-  storage: {
-    save(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<void>;
-    read(path: string, opts?: { as?: 'text' | 'blob' | 'arraybuffer' | 'json' | 'auto' }): Promise<any>;
-    list(dirPath?: string): Promise<Array<{ path: string; isDirectory: boolean; size: number; modifiedAt: string }>>;
-    remove(path: string): Promise<void>;
-    url(path: string): string;
-  };
-};
+import { storage } from '@bundled/yaar';
 
 const STATE_PATH = 'feeds.json';
 const FEED_SOURCE_PATHS = ['feeds.txt', 'feed-sources.txt'];
@@ -50,9 +41,10 @@ function parseFeedSourcesText(text: string): Feed[] {
 }
 
 async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
+  if (!storage) return null;
   for (const path of FEED_SOURCE_PATHS) {
     try {
-      const text = await yaar.storage.read(path, { as: 'text' });
+      const text = await storage.read(path, { as: 'text' }) as unknown as string;
       const parsed = parseFeedSourcesText(String(text || ''));
       if (parsed.length > 0) return parsed;
     } catch { /* missing file ok */ }
@@ -62,10 +54,12 @@ async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
 
 export async function loadState(): Promise<void> {
   let saved: AppState | null = null;
-  try {
-    const data = await yaar.storage.read(STATE_PATH, { as: 'json' });
-    if (data && typeof data === 'object') saved = data as AppState;
-  } catch { /* use defaults */ }
+  if (storage) {
+    try {
+      const data = await storage.read(STATE_PATH, { as: 'json' });
+      if (data && typeof data === 'object') saved = data as AppState;
+    } catch { /* use defaults */ }
+  }
 
   const sourceFeeds = await loadFeedsFromSourceFile();
   if (sourceFeeds && sourceFeeds.length > 0) setFeeds(sourceFeeds);
@@ -76,8 +70,9 @@ export async function loadState(): Promise<void> {
 }
 
 export async function saveState(): Promise<void> {
+  if (!storage) return;
   try {
     const state: AppState = { feeds: feeds(), readArticleIds: readArticleIds() };
-    await yaar.storage.save(STATE_PATH, JSON.stringify(state));
+    await storage.save(STATE_PATH, JSON.stringify(state));
   } catch (e) { console.error('Failed to save state:', e); }
 }

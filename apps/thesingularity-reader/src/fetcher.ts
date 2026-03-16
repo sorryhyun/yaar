@@ -1,19 +1,20 @@
 import type { Post } from './types';
+import { invoke } from '@bundled/yaar';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://gall.dcinside.com/mgallery/board/lists/?id=${GALLERY_ID}`;
 const POST_BASE_URL = `https://gall.dcinside.com/mgallery/board/view/?id=${GALLERY_ID}&no=`;
 
 async function browseUrl(url: string, tabId: string): Promise<string> {
-  await window.yaar.invoke('yaar://browser/' + tabId, { action: 'open', url, visible: false });
-  const result = await window.yaar.invoke('yaar://browser/' + tabId, { action: 'html' });
+  await invoke('yaar://browser/' + tabId, { action: 'open', url, visible: false });
+  const result = await invoke('yaar://browser/' + tabId, { action: 'html' });
   return result.content[0]?.text ?? '';
 }
 
 /** 이미지를 yaar://http 프록시로 가져와 data URL로 변환 (Referer 헤더 포함) */
 async function proxyImage(src: string, referer: string): Promise<string | null> {
   try {
-    const result = await window.yaar.invoke('yaar://http', {
+    const result = await invoke('yaar://http', {
       url: src,
       method: 'GET',
       headers: { Referer: referer },
@@ -174,12 +175,12 @@ export async function fetchTopPostsForAnalysis(
           setTimeout(async () => {
             try {
               const tabId = `singularity-rec-${i % 3}`;
-              await window.yaar.invoke('yaar://browser/' + tabId, {
+              await invoke('yaar://browser/' + tabId, {
                 action: 'open',
                 url: post.url,
                 visible: false,
               });
-              const result = await window.yaar.invoke('yaar://browser/' + tabId, { action: 'html' });
+              const result = await invoke('yaar://browser/' + tabId, { action: 'html' });
               const rawHtml = result.content[0]?.text ?? '';
               const parser = new DOMParser();
               const doc = parser.parseFromString(rawHtml, 'text/html');

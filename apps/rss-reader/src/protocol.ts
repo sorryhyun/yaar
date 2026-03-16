@@ -2,6 +2,7 @@ import type { Article } from './types';
 import {
   feeds, articles, unreadCounts, readArticleIds, selectedFeedId, selectedArticle
 } from './store';
+import { app } from '@bundled/yaar';
 
 export interface ProtocolActions {
   refresh: () => Promise<{ ok: boolean; totalUnread: number }>;
@@ -26,10 +27,9 @@ function getCurrentArticles(): Article[] {
 }
 
 export function registerAppProtocol(actions: ProtocolActions) {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'rss-reader',
     name: 'RSS Reader',
     state: {
@@ -63,19 +63,18 @@ export function registerAppProtocol(actions: ProtocolActions) {
       selectFeed: {
         description: 'Select a feed by ID',
         params: { type: 'object', properties: { feedId: { type: 'string' } }, required: ['feedId'] },
-        handler: (p: { feedId: string }) => actions.selectFeed(p.feedId),
+        handler: (p: Record<string, unknown>) => actions.selectFeed(p.feedId as string),
       },
       addFeed: {
         description: 'Add a new feed by URL',
         params: { type: 'object', properties: { url: { type: 'string' }, name: { type: 'string' } }, required: ['url'] },
-        handler: (p: { url: string; name?: string }) => actions.addFeed(p.url, p.name),
+        handler: (p: Record<string, unknown>) => actions.addFeed(p.url as string, p.name as string | undefined),
       },
     },
   });
 }
 
 export function notifyUnreadUpdate(totalUnread: number) {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
-  appApi.sendInteraction({ event: 'unread_update', totalUnread });
+  if (!app) return;
+  app.sendInteraction({ event: 'unread_update', totalUnread });
 }

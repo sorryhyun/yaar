@@ -1,5 +1,5 @@
 {
-  "icon": "🎬",
+  "icon": "🎥",
   "name": "Video Editor Lite",
   "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
   "run": "index.html",
@@ -134,7 +134,7 @@
             },
             "props": {
               "type": "object",
-              "description": "Scene-specific properties. solid: {color, colorEnd, gradient}. text: {text, fontSize, fontFamily, color, x, y, align, animation, shadow}. shape: {shape, x, y, width, height, radius, color, strokeColor, keyframes}. image: {src, fit, kenBurns}. video-clip: {src, trimStart, trimEnd}."
+              "description": "Scene-specific properties."
             }
           },
           "required": ["type"],

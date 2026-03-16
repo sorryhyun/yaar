@@ -7,6 +7,7 @@
 import { createSignal, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { app } from '@bundled/yaar';
 import { registerBrowserProtocol } from './protocol';
 import './styles.css';
 
@@ -99,13 +100,11 @@ function clearDisplay() {
 // ── Event handlers ────────────────────────────────────────────────────
 
 function handleBack() {
-  const y = (window as any).yaar;
-  y?.app?.sendInteraction?.({ event: 'navigate_back' });
+  app?.sendInteraction({ event: 'navigate_back' });
 }
 
 function handleForward() {
-  const y = (window as any).yaar;
-  y?.app?.sendInteraction?.({ event: 'navigate_forward' });
+  app?.sendInteraction({ event: 'navigate_forward' });
 }
 
 function handleReload() {

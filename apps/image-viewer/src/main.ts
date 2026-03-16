@@ -5,20 +5,7 @@ import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { ImageItem, LayoutMode } from './types';
 import { setupProtocol } from './protocol';
-
-type YaarStorage = {
-  list: (dirPath?: string) => Promise<Array<{ path: string; isDirectory: boolean }>>;
-  url: (path: string) => string;
-};
-
-type AppApi = {
-  register: (manifest: any) => void;
-  sendInteraction: (payload: string | object) => void;
-};
-
-const yaar: any = (window as any).yaar ?? {};
-const storage: YaarStorage | undefined = yaar.storage;
-const appApi: AppApi | undefined = yaar.app;
+import { app, storage, list } from '@bundled/yaar';
 
 // signals
 const [images, setImages_] = createSignal<ImageItem[]>([]);
@@ -60,21 +47,27 @@ async function loadStoragePaths(paths: string[], replace = false) {
     setStatus('Storage API unavailable.');
     return;
   }
-  const loaded = paths.map((p) => ({ id: nextId++, name: baseName(p), source: storage.url(p), path: p }));
+  const loaded = paths.map((p) => ({ id: nextId++, name: baseName(p), source: storage!.url(p), path: p }));
   setImages(loaded, replace);
 }
 
 async function loadAllStorageImages() {
-  if (!storage?.list || !storage?.url) {
+  if (!storage?.url) {
     setStatus('Storage API unavailable.');
     return;
   }
-  const entries = await storage.list('');
-  const paths = entries
-    .filter((e) => !e.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(e.path))
-    .map((e) => e.path);
-  await loadStoragePaths(paths, true);
-  setStatus(`Loaded ${paths.length} image(s) from storage.`);
+  try {
+    const r = await list('yaar://apps/self/storage/');
+    if (r.isError) { setStatus('Storage list failed.'); return; }
+    const entries = JSON.parse(r.content[0]?.text ?? '[]') as Array<{ path: string; isDirectory: boolean }>;
+    const paths = entries
+      .filter((e) => !e.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(e.path))
+      .map((e) => e.path);
+    await loadStoragePaths(paths, true);
+    setStatus(`Loaded ${paths.length} image(s) from storage.`);
+  } catch {
+    setStatus('Storage API unavailable.');
+  }
 }
 
 function getShowItems(): ImageItem[] {
@@ -189,8 +182,8 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-if (appApi) {
-  setupProtocol(appApi, {
+if (app) {
+  setupProtocol(app, {
     images,
     setImages_,
     selectedIds,

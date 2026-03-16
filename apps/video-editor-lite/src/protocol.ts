@@ -1,3 +1,4 @@
+import { app } from '@bundled/yaar';
 import type { Composition } from './core/types';
 import type { SceneProps } from './core/scene-registry';
 
@@ -29,37 +30,10 @@ export interface EditorControllerApi {
   getLayers: () => { layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; sceneIds: string[] }> };
 }
 
-type AppProtocolStateEntry = {
-  description: string;
-  handler: () => unknown | Promise<unknown>;
-};
-
-type AppProtocolCommandEntry = {
-  description: string;
-  aliases?: string[];
-  params: {
-    type: 'object';
-    properties: Record<string, unknown>;
-    required?: string[];
-    additionalProperties?: boolean;
-  };
-  handler: (params: Record<string, unknown>) => unknown | Promise<unknown>;
-};
-
-type YaarAppApi = {
-  register: (manifest: {
-    appId: string;
-    name: string;
-    state: Record<string, AppProtocolStateEntry>;
-    commands: Record<string, AppProtocolCommandEntry>;
-  }) => void;
-};
-
 export function registerProtocol(controller: EditorControllerApi): void {
-  const appApi = (window as { yaar?: { app?: unknown } }).yaar?.app as YaarAppApi | undefined;
-  if (!appApi || typeof appApi.register !== 'function') return;
+  if (!app || typeof app.register !== 'function') return;
 
-  appApi.register({
+  app.register({
     appId: 'video-editor-lite',
     name: 'Video Editor Lite',
     state: {
@@ -99,7 +73,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           },
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.loadSource({
             url: typeof params.url === 'string' ? params.url : undefined,
             path: typeof params.path === 'string' ? params.path : undefined,
@@ -123,7 +97,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['time'],
           additionalProperties: false,
         },
-        handler: (params) => {
+        handler: (params: Record<string, unknown>) => {
           const time = typeof params.time === 'number' ? params.time : Number.NaN;
           return controller.seek(time);
         },
@@ -136,7 +110,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['rate'],
           additionalProperties: false,
         },
-        handler: (params) => {
+        handler: (params: Record<string, unknown>) => {
           const rate = typeof params.rate === 'number' ? params.rate : Number.NaN;
           return controller.setPlaybackRate(rate);
         },
@@ -153,7 +127,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           },
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.createComposition({
             width: typeof params.width === 'number' ? params.width : undefined,
             height: typeof params.height === 'number' ? params.height : undefined,
@@ -172,13 +146,13 @@ export function registerProtocol(controller: EditorControllerApi): void {
             layerId: { type: 'string', description: 'Target layer ID (default: currently selected layer)' },
             props: {
               type: 'object',
-              description: 'Scene-specific properties. solid: {color, colorEnd, gradient}. text: {text, fontSize, fontFamily, color, x, y, align, animation, shadow}. shape: {shape, x, y, width, height, radius, color, strokeColor, keyframes}. image: {src, fit, kenBurns}. video-clip: {src, trimStart, trimEnd}.',
+              description: 'Scene-specific properties.',
             },
           },
           required: ['type'],
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.addScene({
             type: params.type as string,
             from: typeof params.from === 'number' ? params.from : undefined,
@@ -200,7 +174,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.updateScene({
             id: params.id as string,
             from: typeof params.from === 'number' ? params.from : undefined,
@@ -217,7 +191,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params) => controller.removeScene({ id: params.id as string }),
+        handler: (params: Record<string, unknown>) => controller.removeScene({ id: params.id as string }),
       },
       reorderScenes: {
         description: 'Reorder scenes by providing an array of IDs in the desired order.',
@@ -227,7 +201,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['ids'],
           additionalProperties: false,
         },
-        handler: (params) => controller.reorderScenes({ ids: params.ids as string[] }),
+        handler: (params: Record<string, unknown>) => controller.reorderScenes({ ids: params.ids as string[] }),
       },
       preview: {
         description: 'Switch to Create mode and start playing the composition preview.',
@@ -254,7 +228,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           },
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.addLayer({
             name: typeof params.name === 'string' ? params.name : undefined,
             index: typeof params.index === 'number' ? params.index : undefined,
@@ -271,7 +245,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params) => controller.removeLayer({ id: params.id as string }),
+        handler: (params: Record<string, unknown>) => controller.removeLayer({ id: params.id as string }),
       },
       updateLayer: {
         description: 'Update layer properties: rename, toggle visibility, or toggle lock.',
@@ -286,7 +260,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.updateLayer({
             id: params.id as string,
             name: typeof params.name === 'string' ? params.name : undefined,
@@ -304,7 +278,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['ids'],
           additionalProperties: false,
         },
-        handler: (params) => controller.reorderLayers({ ids: params.ids as string[] }),
+        handler: (params: Record<string, unknown>) => controller.reorderLayers({ ids: params.ids as string[] }),
       },
       selectLayer: {
         description: 'Select the active layer. New scenes added via addScene will go into this layer.',
@@ -316,7 +290,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params) => controller.selectLayer({ id: params.id as string }),
+        handler: (params: Record<string, unknown>) => controller.selectLayer({ id: params.id as string }),
       },
       moveSceneToLayer: {
         description: 'Move a scene from its current layer to a different layer.',
@@ -329,7 +303,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['sceneId', 'layerId'],
           additionalProperties: false,
         },
-        handler: (params) =>
+        handler: (params: Record<string, unknown>) =>
           controller.moveSceneToLayer({
             sceneId: params.sceneId as string,
             layerId: params.layerId as string,

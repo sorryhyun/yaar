@@ -1,10 +1,5 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
-import type { AppSDK } from './types';
-
-// ── Runtime SDK references ─────────────────────────────────────────────
-const yaar = (window as unknown as { yaar?: { app?: AppSDK } }).yaar;
-export const appApi = yaar?.app;
 
 // ── Signals ───────────────────────────────────────────────────────────
 export const [currentPath, setCurrentPath] = createSignal('');

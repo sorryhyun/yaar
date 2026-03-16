@@ -1,5 +1,6 @@
 import { createSignal, batch } from '@bundled/solid-js';
 import type { Post, AppSettings, Recommendation } from './types';
+import { storage } from '@bundled/yaar';
 
 const DEFAULT_SETTINGS: AppSettings = {
   refreshInterval: 300, // 5 minutes
@@ -40,12 +41,13 @@ export const [recommendation, setRecommendation] = createSignal<Recommendation |
 export const [recLoading, setRecLoading] = createSignal(false);
 export const [showRec, setShowRec] = createSignal(false);
 
-// 키워드 필터 (파든 주제 클릭 시)
+// 키워드 필터 (파던 주제 클릭 시)
 export const [filterKeyword, setFilterKeyword] = createSignal<string | null>(null);
 
 export async function loadSettings() {
+  if (!storage) return;
   try {
-    const saved = await window.yaar?.storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
+    const saved = await storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
     if (saved) {
       setSettings(saved);
     }
@@ -56,8 +58,9 @@ export async function loadSettings() {
 
 export async function saveSettings(newSettings: AppSettings) {
   setSettings(newSettings);
+  if (!storage) return;
   try {
-    await window.yaar?.storage.save('settings.json', JSON.stringify(newSettings));
+    await storage.save('settings.json', JSON.stringify(newSettings));
   } catch {
     // ignore
   }

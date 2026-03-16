@@ -2,6 +2,7 @@ import { normalizeAspectRatio } from './aspect-ratio';
 import { isFontSize, newSlide, normalizeDeck, normalizeSlideInput } from './deck-utils';
 import { isThemeId } from './theme';
 import type { Deck, FontSize, Slide, ThemeId } from './types';
+import { app, storage } from '@bundled/yaar';
 
 // === Types used only in protocol ===
 type StorageReadMode = 'text' | 'json' | 'auto';
@@ -110,10 +111,9 @@ function parseDeckOrSlidesFromStorage(
 
 // === Register App Protocol ===
 export function registerProtocol(ctx: ProtocolContext): void {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'slides-lite',
     name: 'Slides Lite',
     state: {
@@ -208,8 +208,8 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['deck'],
         },
-        handler: (p: { deck: Deck }) => {
-          ctx.setDeck(normalizeDeck(p.deck));
+        handler: (p: Record<string, unknown>) => {
+          ctx.setDeck(normalizeDeck(p.deck as Deck));
           ctx.setFilterQuery('');
           ctx.persist(false);
           ctx.bumpDeck();
@@ -240,10 +240,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['slides'],
         },
-        handler: (p: { slides: Partial<Slide>[]; mode?: StorageMergeMode }) => {
+        handler: (p: Record<string, unknown>) => {
           const deck = ctx.getDeck();
-          const slides = (Array.isArray(p.slides) ? p.slides : []).map((s) => normalizeSlideInput(s));
-          if ((p.mode || 'replace') === 'append') {
+          const slides = (Array.isArray(p.slides) ? p.slides as Partial<Slide>[] : []).map((s) => normalizeSlideInput(s));
+          const mode = (p.mode as StorageMergeMode) || 'replace';
+          if (mode === 'append') {
             if (slides.length) deck.slides.push(...slides);
             deck.activeIndex = Math.max(0, deck.slides.length - 1);
           } else {
@@ -254,7 +255,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.persist(false);
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
-          return { ok: true, mode: p.mode || 'replace', slideCount: deck.slides.length };
+          return { ok: true, mode, slideCount: deck.slides.length };
         },
       },
       appendSlides: {
@@ -274,9 +275,9 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['slides'],
         },
-        handler: (p: { slides: Partial<Slide>[] }) => {
+        handler: (p: Record<string, unknown>) => {
           const deck = ctx.getDeck();
-          const slides = (Array.isArray(p.slides) ? p.slides : []).map((s) => normalizeSlideInput(s));
+          const slides = (Array.isArray(p.slides) ? p.slides as Partial<Slide>[] : []).map((s) => normalizeSlideInput(s));
           if (slides.length) {
             deck.slides.push(...slides);
             deck.activeIndex = deck.slides.length - 1;
@@ -292,9 +293,9 @@ export function registerProtocol(ctx: ProtocolContext): void {
         description: 'Select a slide by zero-based index. Clamped to valid range. Returns { ok, activeIndex }.',
         aliases: ['selectSlide', 'goToSlide', 'jumpToSlide'],
         params: { type: 'object', properties: { index: { type: 'number', description: 'Zero-based slide index.' } }, required: ['index'] },
-        handler: (p: { index: number }) => {
+        handler: (p: Record<string, unknown>) => {
           const deck = ctx.getDeck();
-          deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index), deck.slides.length - 1));
+          deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index as number), deck.slides.length - 1));
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
           return { ok: true, activeIndex: deck.activeIndex };
@@ -320,9 +321,10 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['themeId'],
         },
-        handler: (p: { themeId: ThemeId }) => {
-          if (!isThemeId(p.themeId)) return { ok: false, error: `Invalid themeId: ${String(p.themeId)}` };
-          ctx.getDeck().themeId = p.themeId;
+        handler: (p: Record<string, unknown>) => {
+          const themeId = p.themeId as ThemeId;
+          if (!isThemeId(themeId)) return { ok: false, error: `Invalid themeId: ${String(themeId)}` };
+          ctx.getDeck().themeId = themeId;
           ctx.persist(false);
           ctx.bumpDeck();
           return { ok: true, themeId: ctx.getDeck().themeId };
@@ -343,8 +345,8 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['aspectRatio'],
         },
-        handler: (p: { aspectRatio: string }) => {
-          ctx.getDeck().aspectRatio = normalizeAspectRatio(p.aspectRatio);
+        handler: (p: Record<string, unknown>) => {
+          ctx.getDeck().aspectRatio = normalizeAspectRatio(p.aspectRatio as string);
           ctx.persist(false);
           ctx.bumpDeck();
           return { ok: true, aspectRatio: ctx.getDeck().aspectRatio };
@@ -367,9 +369,10 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['size'],
         },
-        handler: (p: { size: FontSize }) => {
-          if (!isFontSize(p.size)) return { ok: false, error: `Invalid size: ${String(p.size)}` };
-          ctx.getDeck().fontSize = p.size;
+        handler: (p: Record<string, unknown>) => {
+          const size = p.size as FontSize;
+          if (!isFontSize(size)) return { ok: false, error: `Invalid size: ${String(size)}` };
+          ctx.getDeck().fontSize = size;
           ctx.persist(false);
           ctx.bumpDeck();
           return { ok: true, fontSize: ctx.getDeck().fontSize };
@@ -382,10 +385,9 @@ export function registerProtocol(ctx: ProtocolContext): void {
           properties: { path: { type: 'string', description: 'Storage path, e.g. "my-deck.json".' } },
           required: ['path'],
         },
-        handler: async (p: { path: string }) => {
-          const yaarStorage = (window as any).yaar?.storage;
-          if (!yaarStorage) return { ok: false, error: 'Storage API not available' };
-          await yaarStorage.save(p.path, JSON.stringify(ctx.getDeck(), null, 2));
+        handler: async (p: Record<string, unknown>) => {
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          await storage.save(p.path as string, JSON.stringify(ctx.getDeck(), null, 2));
           return { ok: true, path: p.path, slideCount: ctx.getDeck().slides.length };
         },
       },
@@ -402,26 +404,25 @@ export function registerProtocol(ctx: ProtocolContext): void {
             mode: { type: 'string', enum: ['replace', 'append'], description: 'Merge mode.' },
           },
         },
-        handler: async (p: { path?: string; paths?: string[]; mode?: StorageMergeMode }) => {
-          const yaarStorage = (window as any).yaar?.storage;
-          if (!yaarStorage) return { ok: false, error: 'Storage API not available' };
+        handler: async (p: Record<string, unknown>) => {
+          if (!storage) return { ok: false, error: 'Storage API not available' };
           const candidatePaths = [
-            ...(p.path ? [p.path] : []),
-            ...(Array.isArray(p.paths) ? p.paths : []),
+            ...(p.path ? [p.path as string] : []),
+            ...(Array.isArray(p.paths) ? p.paths as string[] : []),
           ].filter(Boolean);
           if (!candidatePaths.length) return { ok: false, error: 'Provide path or paths' };
           const deck = ctx.getDeck();
           const loadedSlides: Slide[] = [];
           let firstTitle = deck.title;
           for (const path of candidatePaths) {
-            const raw: string = await yaarStorage.read(path, { as: 'text' });
+            const raw = await storage.read(path, { as: 'text' }) as unknown as string;
             const fallbackTitle =
               (path.split('/').pop() || path).replace(/\.[^/.]+$/, '') || 'Imported Deck';
             const parsed = parseDeckOrSlidesFromStorage(raw, fallbackTitle);
             if (!firstTitle || firstTitle === 'Untitled Deck') firstTitle = parsed.title || firstTitle;
             loadedSlides.push(...parsed.slides);
           }
-          const mode = p.mode || 'replace';
+          const mode = (p.mode as StorageMergeMode) || 'replace';
           if (mode === 'append') {
             if (loadedSlides.length) deck.slides.push(...loadedSlides);
             deck.activeIndex = Math.max(0, deck.slides.length - 1);
@@ -447,11 +448,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['path'],
         },
-        handler: async (p: { path: string; as?: StorageReadMode }) => {
-          const yaarStorage = (window as any).yaar?.storage;
-          if (!yaarStorage) return { ok: false, error: 'Storage API not available' };
-          const content = await yaarStorage.read(p.path, { as: p.as || 'text' });
-          return { ok: true, path: p.path, as: p.as || 'text', content };
+        handler: async (p: Record<string, unknown>) => {
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          const as = (p.as as StorageReadMode) || 'text';
+          const content = await storage.read(p.path as string, { as });
+          return { ok: true, path: p.path, as, content };
         },
       },
       readStorageFiles: {
@@ -464,17 +465,17 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['paths'],
         },
-        handler: async (p: { paths: string[]; as?: StorageReadMode }) => {
-          const yaarStorage = (window as any).yaar?.storage;
-          if (!yaarStorage) return { ok: false, error: 'Storage API not available' };
-          const paths = (Array.isArray(p.paths) ? p.paths : []).filter(Boolean);
+        handler: async (p: Record<string, unknown>) => {
+          if (!storage) return { ok: false, error: 'Storage API not available' };
+          const as = (p.as as StorageReadMode) || 'text';
+          const paths = (Array.isArray(p.paths) ? p.paths as string[] : []).filter(Boolean);
           const files = await Promise.all(
             paths.map(async (path) => ({
               path,
-              content: await yaarStorage.read(path, { as: p.as || 'text' }),
+              content: await storage!.read(path, { as }),
             })),
           );
-          return { ok: true, as: p.as || 'text', files };
+          return { ok: true, as, files };
         },
       },
     },

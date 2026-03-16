@@ -1,6 +1,7 @@
 export {};
+import { app } from '@bundled/yaar';
 import type { StorageEntry } from './types';
-import { appApi, setStatusText } from './state';
+import { setStatusText } from './state';
 import { basename, getExtension, buildDragMetadata } from './helpers';
 
 export function safeSetDragData(dt: DataTransfer, type: string, value: string) {
@@ -8,10 +9,10 @@ export function safeSetDragData(dt: DataTransfer, type: string, value: string) {
 }
 
 export function requestOpenByAgent(entry: StorageEntry) {
-  if (!appApi?.sendInteraction) return;
+  if (!app?.sendInteraction) return;
   const name = basename(entry.path);
   const extension = getExtension(name);
-  appApi.sendInteraction({
+  app.sendInteraction({
     event: 'open_file_request',
     source: 'storage',
     path: entry.path,

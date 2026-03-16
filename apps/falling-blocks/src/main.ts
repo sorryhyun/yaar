@@ -1,6 +1,7 @@
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { storage } from '@bundled/yaar';
 import './styles.css';
 
 // --- Types and constants ---
@@ -208,18 +209,16 @@ let hi = 0;
 // --- Persistence ---
 
 async function saveHi(): Promise<void> {
-  const storage = (window as any).yaar?.storage;
   if (storage) {
     try { await storage.save('hi.json', JSON.stringify({ hi })); } catch { /* ignore */ }
   }
 }
 
 async function loadHi(): Promise<void> {
-  const storage = (window as any).yaar?.storage;
   if (storage) {
     try {
       const saved = await storage.read('hi.json', { as: 'json' });
-      if (saved && typeof saved.hi === 'number') { hi = saved.hi; setHiS(hi); }
+      if (saved && typeof (saved as any).hi === 'number') { hi = (saved as any).hi; setHiS(hi); }
     } catch { /* no save yet */ }
   }
 }

@@ -2,6 +2,7 @@
  * App Protocol registration for the Browser app.
  * Separated to keep main.ts focused on rendering and event logic.
  */
+import { app } from '@bundled/yaar';
 
 export interface BrowserProtocolDeps {
   getCurrentUrl: () => string;
@@ -13,10 +14,9 @@ export interface BrowserProtocolDeps {
 }
 
 export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'browser',
     name: 'Browser',
     state: {

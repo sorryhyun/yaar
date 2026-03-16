@@ -1,12 +1,13 @@
 export {};
-import { appApi, currentPath, entries, selectedFile, mountAliases, previewContent } from './state';
+import { app } from '@bundled/yaar';
+import { currentPath, entries, selectedFile, mountAliases, previewContent } from './state';
 import { basename, sanitizeAlias } from './helpers';
 import { navigate, selectFile } from './navigation';
 
 export function registerProtocol() {
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'storage',
     name: 'Storage Browser',
     state: {
@@ -45,7 +46,7 @@ export function registerProtocol() {
           properties: { path: { type: 'string', description: 'Directory path to navigate to' } },
           required: ['path'],
         },
-        handler: (params) => {
+        handler: (params: Record<string, unknown>) => {
           navigate(String(params.path));
           return { success: true, path: params.path };
         },
@@ -57,7 +58,7 @@ export function registerProtocol() {
           properties: { path: { type: 'string', description: 'File path to select' } },
           required: ['path'],
         },
-        handler: (params) => {
+        handler: (params: Record<string, unknown>) => {
           const entry = entries().find((e) => e.path === params.path);
           if (!entry || entry.isDirectory) return { success: false, error: 'File not found' };
           selectFile(entry);
@@ -75,9 +76,9 @@ export function registerProtocol() {
           },
           required: ['alias', 'hostPath'],
         },
-        handler: (params) => {
-          if (!appApi?.sendInteraction) return { success: false, error: 'Agent bridge unavailable' };
-          appApi.sendInteraction({
+        handler: (params: Record<string, unknown>) => {
+          if (!app?.sendInteraction) return { success: false, error: 'Agent bridge unavailable' };
+          app.sendInteraction({
             event: 'storage_mount_request',
             source: 'storage',
             alias: sanitizeAlias(String(params.alias || '')),

@@ -1,6 +1,8 @@
+export {};
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { invoke, read, list } from '@bundled/yaar';
 import './styles.css';
 
 type Mode = 'viewer' | 'export';
@@ -12,16 +14,14 @@ type StorageEntry = {
   modifiedAt?: string;
 };
 
-// --- New URI-based storage helpers ---
-const _yaar = (window as any).yaar;
-
+// --- Storage helpers using @bundled/yaar ---
 async function storageSave(path: string, content: string): Promise<void> {
-  const r = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
+  const r = await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
   if (r.isError) throw new Error(r.content[0]?.text);
 }
 
 async function storageReadBinary(path: string): Promise<ArrayBuffer> {
-  const r = await _yaar.read(`yaar://apps/self/storage/${path}`);
+  const r = await read(`yaar://apps/self/storage/${path}`);
   if (r.isError) throw new Error(r.content[0]?.text);
   const b64 = r.content[0]?.data ?? '';
   const binaryStr = atob(b64);
@@ -31,7 +31,7 @@ async function storageReadBinary(path: string): Promise<ArrayBuffer> {
 }
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
-  const r = await _yaar.list(`yaar://apps/self/storage/${dir}`);
+  const r = await list(`yaar://apps/self/storage/${dir}`);
   if (r.isError) return [];
   return JSON.parse(r.content[0]?.text ?? '[]');
 }
@@ -102,10 +102,6 @@ async function openFromStorage(path: string) {
     setPdfStatus('Select a PDF file from storage first.');
     return;
   }
-  if (!_yaar) {
-    setPdfStatus('Storage API unavailable in this app context.');
-    return;
-  }
   try {
     const bytes = await storageReadBinary(clean);
     const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -128,12 +124,6 @@ function setStorageListPlaceholder(message: string) {
 }
 
 async function loadStorageList(dir = storageDir()) {
-  if (!_yaar) {
-    setStorageDirDisplay('Storage unavailable');
-    setStorageListPlaceholder('Storage API unavailable');
-    return;
-  }
-
   const cleanDir = cleanStoragePath(dir);
   setStorageDir(cleanDir);
   setStorageDirDisplay(`Storage: ${cleanDir ? `/${cleanDir}` : '/'}`);
@@ -234,10 +224,6 @@ function renderPreview() {
 }
 
 async function saveHtmlSnapshot() {
-  if (!_yaar) {
-    setGlobalStatus('Storage API unavailable');
-    return;
-  }
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const path = `pdf-viewer/exports/export-${ts}.html`;
   await storageSave(path, printAreaEl.innerHTML || '<p></p>');

@@ -1,5 +1,5 @@
 {
-  "icon": "🕐",
+  "icon": "📡",
   "name": "Dock",
   "description": "Clock, weather and notifications dock panel",
   "run": "index.html",

@@ -52,5 +52,5 @@
   },
   "variant": "standard",
   "capture": "canvas",
-  "permissions": ["yaar://browser/"]
+  "permissions": ["yaar://browser/", "yaar://storage/", "yaar://windows/"]
 }

@@ -3,6 +3,7 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { createComment, createPost, fetchComments, fetchPost, fetchPosts, votePost } from "./api";
 import type { Comment, Post } from "./types";
+import { app } from '@bundled/yaar';
 import "./styles.css";
 
 type SortMode = "latest" | "top" | "discussed";
@@ -410,10 +411,8 @@ render(() => html`
 // ── App Protocol ──────────────────────────────────────────────────────────────
 void loadFeed(true);
 
-const appApi = (window as any).yaar?.app;
-
-if (appApi) {
-  appApi.register({
+if (app) {
+  app.register({
     appId: "mersoom",
     name: "Mersoom",
     state: {
@@ -479,8 +478,8 @@ if (appApi) {
           properties: { postId: { type: "string" } },
           required: ["postId"],
         },
-        handler: async (p: { postId: string }) => {
-          await selectPost(p.postId);
+        handler: async (p: Record<string, unknown>) => {
+          await selectPost(p.postId as string);
           return { ok: true, selectedPostId: selectedPostId(), comments: comments().length };
         },
       },
@@ -491,8 +490,8 @@ if (appApi) {
           properties: { postId: { type: "string" } },
           required: ["postId"],
         },
-        handler: async (p: { postId: string }) => {
-          const post = await fetchPost(p.postId);
+        handler: async (p: Record<string, unknown>) => {
+          const post = await fetchPost(p.postId as string);
           const idx = posts().findIndex((x) => x.id === post.id);
           const updated = [...posts()];
           if (idx >= 0) updated[idx] = { ...updated[idx], ...post };
@@ -507,8 +506,8 @@ if (appApi) {
           type: "object",
           properties: { postId: { type: "string" } },
         },
-        handler: async (p: { postId?: string }) => {
-          const postId = p.postId ?? selectedPostId();
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
           if (!postId) throw new Error("No postId provided and no post selected");
           const fetchedComments = await fetchComments(postId);
           if (selectedPostId() === postId) {
@@ -528,13 +527,13 @@ if (appApi) {
           },
           required: ["nickname", "title", "content"],
         },
-        handler: async (p: { nickname: string; title: string; content: string }) => {
+        handler: async (p: Record<string, unknown>) => {
           const jobId = `post-${Date.now().toString(36)}`;
           setStatusText(`Queued createPost (${jobId})...`);
 
           void (async () => {
             try {
-              const post = await createPost(p);
+              const post = await createPost(p as { nickname: string; title: string; content: string });
               setPosts([post, ...posts()]);
               setSelectedPostId(post.id);
               setComments([]);
@@ -559,8 +558,8 @@ if (appApi) {
           },
           required: ["nickname", "content"],
         },
-        handler: async (p: { postId?: string; nickname: string; content: string; parent_id?: string }) => {
-          const postId = p.postId ?? selectedPostId();
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
           if (!postId) throw new Error("No postId provided and no post selected");
 
           const jobId = `comment-${Date.now().toString(36)}`;
@@ -569,9 +568,9 @@ if (appApi) {
           void (async () => {
             try {
               await createComment(postId, {
-                nickname: p.nickname,
-                content: p.content,
-                parent_id: p.parent_id,
+                nickname: p.nickname as string,
+                content: p.content as string,
+                parent_id: p.parent_id as string | undefined,
               });
               if (selectedPostId() === postId) {
                 await loadSelectedPost();
@@ -595,8 +594,8 @@ if (appApi) {
           },
           required: ["type"],
         },
-        handler: async (p: { type: "up" | "down"; postId?: string }) => {
-          const postId = p.postId ?? selectedPostId();
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
           if (!postId) throw new Error("No postId provided and no post selected");
 
           const jobId = `vote-${Date.now().toString(36)}`;
@@ -604,7 +603,7 @@ if (appApi) {
 
           void (async () => {
             try {
-              await votePost(postId, p.type);
+              await votePost(postId, p.type as "up" | "down");
               if (selectedPostId() === postId) await loadSelectedPost();
               setStatusText(`Vote completed via app protocol (${jobId}).`);
             } catch (err) {
@@ -622,9 +621,9 @@ if (appApi) {
           properties: { query: { type: "string" } },
           required: ["query"],
         },
-        handler: async (p: { query: string }) => {
-          setFilter(p.query);
-          if (searchInputEl) searchInputEl.value = p.query;
+        handler: async (p: Record<string, unknown>) => {
+          setFilter(p.query as string);
+          if (searchInputEl) searchInputEl.value = p.query as string;
           return { ok: true, filter: filter() };
         },
       },
@@ -635,9 +634,9 @@ if (appApi) {
           properties: { mode: { type: "string", enum: ["latest", "top", "discussed"] } },
           required: ["mode"],
         },
-        handler: async (p: { mode: SortMode }) => {
-          setSort(p.mode);
-          if (sortSelectEl) sortSelectEl.value = p.mode;
+        handler: async (p: Record<string, unknown>) => {
+          setSort(p.mode as SortMode);
+          if (sortSelectEl) sortSelectEl.value = p.mode as string;
           return { ok: true, sort: sort() };
         },
       },

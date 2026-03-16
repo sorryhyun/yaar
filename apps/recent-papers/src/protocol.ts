@@ -1,3 +1,4 @@
+import { app } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation, PaperDetails } from './types';
 import { fetchPaperDetailsById } from './data';
 import { paperId, paperTitle, paperSummary, getUpvotes, getComments, getSource } from './paper-utils';
@@ -13,15 +14,14 @@ export type ProtocolDeps = {
 };
 
 export function registerProtocol(deps: ProtocolDeps): void {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
   const {
     getPapers, getSourcePapers, getRecommendations, setRecommendations,
     loadPapers, requestRecommendationsFromAgent, paperDetailsCache,
   } = deps;
 
-  appApi.register({
+  app.register({
     appId: 'recent-papers',
     name: 'Recent Papers',
     state: {
@@ -70,8 +70,8 @@ export function registerProtocol(deps: ProtocolDeps): void {
           properties: { id: { type: 'string' } },
           required: ['id'],
         },
-        handler: async (p: { id: string }) => {
-          const detail = await fetchPaperDetailsById(p.id, paperDetailsCache);
+        handler: async (p: Record<string, unknown>) => {
+          const detail = await fetchPaperDetailsById(p.id as string, paperDetailsCache);
           return { ok: true, detail };
         },
       },
@@ -82,8 +82,8 @@ export function registerProtocol(deps: ProtocolDeps): void {
           properties: { ids: { type: 'array', items: { type: 'string' } } },
           required: ['ids'],
         },
-        handler: async (p: { ids: string[] }) => {
-          const ids = Array.isArray(p.ids) ? p.ids.filter(Boolean).slice(0, 20) : [];
+        handler: async (p: Record<string, unknown>) => {
+          const ids = Array.isArray(p.ids) ? (p.ids as string[]).filter(Boolean).slice(0, 20) : [];
           const details: any[] = [];
           for (const id of ids) {
             try {
@@ -119,9 +119,9 @@ export function registerProtocol(deps: ProtocolDeps): void {
           },
           required: ['recommendations'],
         },
-        handler: async (p: { recommendations: Recommendation[] }) => {
+        handler: async (p: Record<string, unknown>) => {
           setRecommendations(
-            (p.recommendations || []).slice(0, 2).map((r) => ({
+            ((p.recommendations as Recommendation[]) || []).slice(0, 2).map((r) => ({
               id: String(r.id || ''),
               title: String(r.title || 'Untitled paper'),
               reason: String(r.reason || ''),

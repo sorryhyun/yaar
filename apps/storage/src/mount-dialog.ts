@@ -1,5 +1,6 @@
 export {};
-import { appApi, setMountAliases, setShowModal, setStatusText, elMountAlias, elMountHostPath, elMountReadonly } from './state';
+import { app } from '@bundled/yaar';
+import { setMountAliases, setShowModal, setStatusText, elMountAlias, elMountHostPath, elMountReadonly } from './state';
 import { basename, sanitizeAlias } from './helpers';
 import { storageList } from './storage-api';
 
@@ -21,11 +22,11 @@ export async function submitMountRequest(e: Event) {
   const hostPath = elMountHostPath.value.trim();
   if (!alias) { setStatusText('Mount alias is required'); return; }
   if (!hostPath) { setStatusText('Host folder path is required'); return; }
-  if (!appApi?.sendInteraction) {
+  if (!app?.sendInteraction) {
     setStatusText('Agent bridge unavailable: cannot send mount request');
     return;
   }
-  appApi.sendInteraction({
+  app.sendInteraction({
     event: 'storage_mount_request',
     source: 'storage',
     alias,

@@ -1,10 +1,11 @@
 import { createSignal, onMount, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { notifications } from '@bundled/yaar';
 import { registerDockProtocol } from './protocol';
 import './styles.css';
 
-// ── WMO code → emoji ────────────────────────────────────────────
+// ── WMO code → emoji ─────────────────────────────────────────────────────────────────
 function wmoEmoji(code: number): string {
   if (code === 0) return '☀️';
   if (code === 1) return '🌤️';
@@ -21,7 +22,7 @@ function wmoEmoji(code: number): string {
   return '🌡️';
 }
 
-// ── Signals ─────────────────────────────────────────────────────
+// ── Signals ───────────────────────────────────────────────────────────────────
 const [timeStr, setTimeStr] = createSignal('');
 const [dateStr, setDateStr] = createSignal('');
 const [nowIso, setNowIso] = createSignal('');
@@ -36,7 +37,7 @@ const [showPanel, setShowPanel] = createSignal(false);
 const [panelOpacity, setPanelOpacity] = createSignal(0.45);
 const [panelBlurPx, setPanelBlurPx] = createSignal(10);
 
-// ── Panel style (reactive) ───────────────────────────────────────
+// ── Panel style (reactive) ───────────────────────────────────────────────────────────────
 function panelStyle(): string {
   if (!showPanel()) {
     return [
@@ -58,7 +59,7 @@ function panelStyle(): string {
   ].join(';');
 }
 
-// ── Clock ────────────────────────────────────────────────────────
+// ── Clock ──────────────────────────────────────────────────────────────────────────────
 function renderNow() {
   const now = new Date();
   setNowIso(now.toISOString());
@@ -75,7 +76,7 @@ function renderNow() {
   }));
 }
 
-// ── Weather ──────────────────────────────────────────────────────
+// ── Weather ───────────────────────────────────────────────────────────────────────────
 const SEOUL_LAT = 37.5665;
 const SEOUL_LON = 126.978;
 
@@ -135,7 +136,7 @@ async function initWeather() {
   );
 }
 
-// ── App Component ────────────────────────────────────────────────
+// ── App Component ──────────────────────────────────────────────────────────────────
 function App() {
   // Lifecycle
   onMount(() => {
@@ -150,9 +151,8 @@ function App() {
     onCleanup(() => clearInterval(weatherTimer));
 
     // Notifications subscription
-    const notifApi = (window as any).yaar?.notifications;
-    if (notifApi) {
-      notifApi.onChange((items: unknown[]) => {
+    if (notifications) {
+      notifications.onChange((items: unknown[]) => {
         setNotifCount(items.length);
       });
     }
@@ -187,10 +187,10 @@ function App() {
   `;
 }
 
-// ── Mount ────────────────────────────────────────────────────────
+// ── Mount ──────────────────────────────────────────────────────────────────────────────
 render(() => html`<${App} />`, document.getElementById('app')!);
 
-// ── App Protocol ─────────────────────────────────────────────────
+// ── App Protocol ────────────────────────────────────────────────────────────────────────────
 registerDockProtocol({
   getNowIso:       () => nowIso(),
   getTimeStr:      () => timeStr(),

@@ -1,3 +1,4 @@
+import { app, storage, windows } from '@bundled/yaar';
 import { countTextStats, nowLabel } from './utils';
 import { editorEl, docTitleEl, saveStateText, setSaveStateText } from './state';
 import { refreshStats } from './editor';
@@ -12,11 +13,12 @@ import {
   BatchDocInput,
 } from './documents';
 
-export function registerAppProtocol() {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+type StorageReadAs = 'text' | 'json' | 'auto' | 'blob' | 'arraybuffer';
 
-  appApi.register({
+export function registerAppProtocol() {
+  if (!app) return;
+
+  app.register({
     appId: 'word-lite',
     name: 'Word Lite',
     state: {
@@ -52,11 +54,11 @@ export function registerAppProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: { content: string; renderer?: 'html' | 'text' }) => {
-          if ((p.renderer ?? 'html') === 'text') {
-            setEditorFromPlainText(p.content || '');
+        handler: (p: Record<string, unknown>) => {
+          if (((p.renderer as string) ?? 'html') === 'text') {
+            setEditorFromPlainText((p.content as string) || '');
           } else {
-            setEditorFromHtml(p.content || '<p></p>');
+            setEditorFromHtml((p.content as string) || '<p></p>');
           }
           setSaveStateText('Updated via app protocol');
           saveDoc();
@@ -70,8 +72,8 @@ export function registerAppProtocol() {
           properties: { title: { type: 'string' } },
           required: ['title'],
         },
-        handler: (p: { title: string }) => {
-          docTitleEl.value = (p.title || '').trim() || 'Untitled Document';
+        handler: (p: Record<string, unknown>) => {
+          docTitleEl.value = ((p.title as string) || '').trim() || 'Untitled Document';
           setSaveStateText('Updated via app protocol');
           saveDoc();
           return { ok: true };
@@ -87,9 +89,9 @@ export function registerAppProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: { content: string; renderer?: 'html' | 'text' }) => {
-          if ((p.renderer ?? 'html') === 'text') {
-            const escaped = (p.content || '')
+        handler: (p: Record<string, unknown>) => {
+          if (((p.renderer as string) ?? 'html') === 'text') {
+            const escaped = ((p.content as string) || '')
               .replace(/&/g, '&amp;')
               .replace(/</g, '&lt;')
               .replace(/>/g, '&gt;')
@@ -99,7 +101,7 @@ export function registerAppProtocol() {
             editorEl.appendChild(para);
             refreshStats();
           } else {
-            appendHtmlFragment(p.content || '');
+            appendHtmlFragment((p.content as string) || '');
           }
           setSaveStateText('Updated via app protocol');
           saveDoc();
@@ -125,8 +127,8 @@ export function registerAppProtocol() {
           },
           required: ['docs'],
         },
-        handler: (p: { docs: BatchDocInput[] }) => {
-          const docs = Array.isArray(p.docs) ? p.docs : [];
+        handler: (p: Record<string, unknown>) => {
+          const docs = Array.isArray(p.docs) ? (p.docs as BatchDocInput[]) : [];
           setEditorFromHtml(docsToMergedHtml(docs));
           setSaveStateText(`Loaded ${docs.length} document(s) via app protocol`);
           saveDoc();
@@ -152,8 +154,8 @@ export function registerAppProtocol() {
           },
           required: ['docs'],
         },
-        handler: (p: { docs: BatchDocInput[] }) => {
-          const docs = Array.isArray(p.docs) ? p.docs : [];
+        handler: (p: Record<string, unknown>) => {
+          const docs = Array.isArray(p.docs) ? (p.docs as BatchDocInput[]) : [];
           appendHtmlFragment(docsToMergedHtml(docs));
           setSaveStateText(`Appended ${docs.length} document(s) via app protocol`);
           saveDoc();
@@ -167,12 +169,11 @@ export function registerAppProtocol() {
           properties: { path: { type: 'string' } },
           required: ['path'],
         },
-        handler: async (p: { path: string }) => {
-          const storage = (window as any).yaar?.storage;
+        handler: async (p: Record<string, unknown>) => {
           if (!storage) return { ok: false, error: 'Storage API not available' };
           const title = getTitle();
           const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
-          await storage.save(p.path, htmlContent);
+          await storage.save(p.path as string, htmlContent);
           setSaveStateText(`Saved to storage: ${p.path}`);
           return { ok: true, path: p.path, savedAt: nowLabel() };
         },
@@ -187,13 +188,12 @@ export function registerAppProtocol() {
             mode: { type: 'string', enum: ['replace', 'append'] },
           },
         },
-        handler: async (p: { path?: string; paths?: string[]; mode?: 'replace' | 'append' }) => {
-          const storage = (window as any).yaar?.storage;
+        handler: async (p: Record<string, unknown>) => {
           if (!storage) return { ok: false, error: 'Storage API not available' };
 
           const candidatePaths = [
-            ...(p.path ? [p.path] : []),
-            ...(Array.isArray(p.paths) ? p.paths : []),
+            ...(p.path ? [p.path as string] : []),
+            ...(Array.isArray(p.paths) ? (p.paths as string[]) : []),
           ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 
           if (!candidatePaths.length) {
@@ -202,14 +202,14 @@ export function registerAppProtocol() {
 
           const loadedDocs: BatchDocInput[] = [];
           for (const path of candidatePaths) {
-            const raw: string = await storage.read(path, { as: 'text' });
+            const raw = await storage.read(path, { as: 'text' as StorageReadAs }) as unknown as string;
             const body = extractBodyHtml(raw);
             const filename = path.split('/').pop() || path;
             const title = filename.replace(/\.[^/.]+$/, '') || 'Untitled Document';
             loadedDocs.push({ title, html: body });
           }
 
-          const mode = p.mode || 'replace';
+          const mode = (p.mode as string) || 'replace';
           const merged = docsToMergedHtml(loadedDocs);
           if (mode === 'append') {
             appendHtmlFragment(merged);
@@ -232,11 +232,10 @@ export function registerAppProtocol() {
           },
           required: ['path'],
         },
-        handler: async (p: { path: string; as?: 'text' | 'json' | 'auto' }) => {
-          const storage = (window as any).yaar?.storage;
+        handler: async (p: Record<string, unknown>) => {
           if (!storage) return { ok: false, error: 'Storage API not available' };
-          const readAs = p.as || 'text';
-          const content = await storage.read(p.path, { as: readAs });
+          const readAs = ((p.as as string) || 'text') as StorageReadAs;
+          const content = await storage.read(p.path as string, { as: readAs });
           return { ok: true, path: p.path, as: readAs, content };
         },
       },
@@ -250,19 +249,18 @@ export function registerAppProtocol() {
           },
           required: ['paths'],
         },
-        handler: async (p: { paths: string[]; as?: 'text' | 'json' | 'auto' }) => {
-          const storage = (window as any).yaar?.storage;
+        handler: async (p: Record<string, unknown>) => {
           if (!storage) return { ok: false, error: 'Storage API not available' };
 
-          const paths = (Array.isArray(p.paths) ? p.paths : []).filter(
+          const paths = (Array.isArray(p.paths) ? (p.paths as string[]) : []).filter(
             (v): v is string => typeof v === 'string' && v.trim().length > 0,
           );
-          const readAs = p.as || 'text';
+          const readAs = ((p.as as string) || 'text') as StorageReadAs;
 
           const files = await Promise.all(
             paths.map(async (path) => ({
               path,
-              content: await storage.read(path, { as: readAs }),
+              content: await storage!.read(path, { as: readAs }),
             })),
           );
 
@@ -299,14 +297,13 @@ export function registerAppProtocol() {
           },
           required: ['windowId'],
         },
-        handler: async (p: { windowId: string; mode?: 'replace' | 'append'; includeImage?: boolean }) => {
-          const wins = (window as any).yaar?.windows;
-          if (!wins) return { ok: false, error: 'yaar.windows API not available' };
+        handler: async (p: Record<string, unknown>) => {
+          if (!windows) return { ok: false, error: 'yaar.windows API not available' };
 
-          const result = await wins.read(p.windowId, { includeImage: p.includeImage ?? false });
+          const result = await (windows as any).read(p.windowId as string, { includeImage: (p.includeImage as boolean) ?? false });
           if (!result) return { ok: false, error: `Window "${p.windowId}" not found or returned no data` };
 
-          const mode = p.mode ?? 'append';
+          const mode = (p.mode as string) ?? 'append';
           let html = '';
 
           // Build HTML from window content

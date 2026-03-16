@@ -2,6 +2,7 @@ export {};
 import { createSignal, createEffect, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { app } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation } from './types';
 import {
   getComments, getPublishedAt, getPublishedMs, getSource, getUpvotes,
@@ -12,7 +13,7 @@ import { registerProtocol } from './protocol';
 import { renderActivityChart, destroyChart } from './chart';
 import './styles.css';
 
-// ── Signals ──────────────────────────────────────────────────────────────────
+// ── Signals ───────────────────────────────────────────────────────────────────────
 const [sourcePapers, setSourcePapers] = createSignal<DailyPaperItem[]>([]);
 const [papers, setPapers] = createSignal<DailyPaperItem[]>([]);
 const [recommendations, setRecommendations] = createSignal<Recommendation[]>([]);
@@ -27,7 +28,7 @@ const [chartOpen, setChartOpen] = createSignal(false);
 let chartCanvasRef: HTMLCanvasElement | undefined;
 const paperDetailsCache: Record<string, import('./types').PaperDetails> = {};
 
-// ── Logic ────────────────────────────────────────────────────────────────────
+// ── Logic ──────────────────────────────────────────────────────────────────────────
 function applyFiltersAndSort() {
   let result = [...sourcePapers()];
   const dr = dayRange();
@@ -119,10 +120,10 @@ function requestRecommendationsFromAgent(source: 'button' | 'app-command') {
       },
     })),
   };
-  (window as any).yaar?.app?.sendInteraction?.(payload);
+  app?.sendInteraction?.(payload);
 }
 
-// ── Chart Effect ──────────────────────────────────────────────────────────────
+// ── Chart Effect ────────────────────────────────────────────────────────────────────────
 createEffect(() => {
   if (!chartOpen()) return;
   papers(); // track papers changes
@@ -132,7 +133,7 @@ createEffect(() => {
   }, 0);
 });
 
-// ── Components ────────────────────────────────────────────────────────────────
+// ── Components ─────────────────────────────────────────────────────────────────────────
 function PaperCard(props: { item: DailyPaperItem }) {
   const item = props.item;
   const source = getSource(item);
@@ -185,7 +186,7 @@ function Section(props: { title: string; items: DailyPaperItem[] }) {
   `;
 }
 
-// ── Mount ────────────────────────────────────────────────────────────────────
+// ── Mount ────────────────────────────────────────────────────────────────────────────
 render(() => html`
   <div class="wrap y-app">
     <div class="top">
@@ -296,7 +297,7 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-// ── App Protocol ──────────────────────────────────────────────────────────────
+// ── App Protocol ──────────────────────────────────────────────────────────────────────────
 registerProtocol({
   getPapers: () => papers(),
   getSourcePapers: () => sourcePapers(),

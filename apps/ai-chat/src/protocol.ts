@@ -1,11 +1,12 @@
 import { v4 as uuid } from '@bundled/uuid';
+import { app } from '@bundled/yaar';
 import { messages, setMessages, isWaiting, setIsWaiting } from './store';
 import type { ChatMessage } from './types';
 
 export function registerProtocol() {
-  if (!window.yaar?.app) return;
+  if (!app) return;
 
-  window.yaar.app.register({
+  app.register({
     appId: 'ai-chat',
     name: 'AI Chat',
     state: {
@@ -30,11 +31,11 @@ export function registerProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: { content: string; id?: string }) => {
+        handler: (p: Record<string, unknown>) => {
           const newMsg: ChatMessage = {
-            id: p.id ?? uuid(),
+            id: (p.id as string) ?? uuid(),
             role: 'assistant',
-            content: p.content,
+            content: p.content as string,
             status: 'done',
             timestamp: Date.now(),
           };
@@ -51,11 +52,11 @@ export function registerProtocol() {
           properties: { content: { type: 'string' } },
           required: ['content'],
         },
-        handler: (p: { content: string }) => {
+        handler: (p: Record<string, unknown>) => {
           setMessages(prev => [...prev.filter(m => m.id !== 'typing-indicator'), {
             id: uuid(),
             role: 'assistant',
-            content: p.content,
+            content: p.content as string,
             status: 'error',
             timestamp: Date.now(),
           }]);

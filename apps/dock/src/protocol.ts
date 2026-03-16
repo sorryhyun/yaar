@@ -2,9 +2,10 @@
  * App Protocol registration for the Dock app.
  * Separated to keep main.ts focused on rendering and lifecycle logic.
  */
+import { app } from '@bundled/yaar';
 
 export interface DockProtocolDeps {
-  /* ── State getters ───────────────────────── */
+  /* ── State getters ───────────────────── */
   getNowIso: () => string;
   getTimeStr: () => string;
   getDateStr: () => string;
@@ -15,21 +16,20 @@ export interface DockProtocolDeps {
   getPanelOpacity: () => number;
   getPanelBlurPx: () => number;
 
-  /* ── State setters ───────────────────────── */
+  /* ── State setters ───────────────────── */
   setShowPanel: (v: boolean) => void;
   setPanelOpacity: (v: number) => void;
   setPanelBlurPx: (v: number) => void;
 
-  /* ── Actions ─────────────────────────────── */
+  /* ── Actions ───────────────────────── */
   renderNow: () => void;
   initWeather: () => Promise<void>;
 }
 
 export function registerDockProtocol(deps: DockProtocolDeps): void {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'dock',
     name: 'Dock',
     state: {
@@ -96,12 +96,12 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
             panelBlurPx: { type: 'number', minimum: 0, maximum: 40 },
           },
         },
-        handler: (p: { showPanel?: boolean; panelOpacity?: number; panelBlurPx?: number }) => {
-          if (typeof p?.showPanel === 'boolean') deps.setShowPanel(p.showPanel);
+        handler: (p: Record<string, unknown>) => {
+          if (typeof p?.showPanel === 'boolean') deps.setShowPanel(p.showPanel as boolean);
           if (typeof p?.panelOpacity === 'number')
-            deps.setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity)));
+            deps.setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity as number)));
           if (typeof p?.panelBlurPx === 'number')
-            deps.setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx)));
+            deps.setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx as number)));
           // Signals are reactive — DOM updates automatically, no applyAppearance() needed
           return {
             ok: true,
