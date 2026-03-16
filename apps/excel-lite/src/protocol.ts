@@ -1,3 +1,4 @@
+import { app } from '@bundled/yaar';
 import {
   cells, styles, mutable,
   pushHistory, refreshAll, scheduleAutosave,
@@ -9,10 +10,9 @@ import { rangeRect, refsInRect } from './ref-utils';
 import type { CellStyle } from './types';
 
 export function registerAppProtocol() {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
+  if (!app) return;
 
-  appApi.register({
+  app.register({
     appId: 'excel-lite',
     name: 'Excel Lite',
     state: {

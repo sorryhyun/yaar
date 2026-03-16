@@ -1,6 +1,7 @@
 import { createSignal } from '@bundled/solid-js';
 import { format } from '@bundled/date-fns';
 import { debounce } from '@bundled/lodash';
+import { storage, invoke } from '@bundled/yaar';
 import { createFormulaEngine } from './formula-utils';
 import { cloneMap } from './data-utils';
 import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
@@ -58,60 +59,59 @@ fillHandle.className = 'fill-handle';
 export const history: Snapshot[] = [];
 export const future: Snapshot[] = [];
 
-// ── Storage helpers using URI-based API ───────────────────────────────
-const _yaar = () => (window as any).yaar;
-
+// ── Storage helpers using @bundled/yaar ───────────────────────────────
 export function storageAvailable(): boolean {
-  return !!_yaar();
+  return !!storage;
 }
 
 export async function storageSave(path: string, content: string | Uint8Array): Promise<void> {
-  const yaar = _yaar();
-  if (!yaar) throw new Error('Storage API unavailable in this runtime.');
-  let data: string;
+  if (!storage) throw new Error('Storage API unavailable in this runtime.');
   if (content instanceof Uint8Array) {
     // Encode binary as base64
     let binary = '';
     for (let i = 0; i < content.length; i++) binary += String.fromCharCode(content[i]);
-    data = btoa(binary);
-    const result = await yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content: data, encoding: 'base64' });
+    const data = btoa(binary);
+    const result = await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content: data, encoding: 'base64' });
     if (result.isError) throw new Error(`Storage write failed: ${result.content[0]?.text}`);
   } else {
-    const result = await yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
-    if (result.isError) throw new Error(`Storage write failed: ${result.content[0]?.text}`);
+    await storage.save(path, content);
   }
 }
 
 export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuffer' = 'text'): Promise<any> {
-  const yaar = _yaar();
-  if (!yaar) throw new Error('Storage API unavailable in this runtime.');
-  const result = await yaar.read(`yaar://apps/self/storage/${path}`);
-  if (result.isError) throw new Error(`Storage read failed: ${result.content[0]?.text}`);
+  if (!storage) throw new Error('Storage API unavailable in this runtime.');
   if (as === 'arraybuffer') {
-    // Binary data comes as base64 in content[0].data
+    // Binary data comes as base64 — must use raw invoke
+    const result = await invoke(`yaar://apps/self/storage/${path}`, { action: 'read' });
+    if (result.isError) throw new Error(`Storage read failed: ${result.content[0]?.text}`);
     const b64 = result.content[0]?.data ?? '';
     const bin = atob(b64);
     const buf = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
     return buf.buffer;
   }
-  const text = result.content[0]?.text ?? '';
+  const raw = await storage.read(path);
+  const text = String(raw ?? '');
   if (as === 'json') return JSON.parse(text);
   return text;
 }
 
 export async function storageList(dir: string): Promise<Array<{ path: string; isDirectory: boolean; size: number; modifiedAt: string }>> {
-  const yaar = _yaar();
-  if (!yaar) return [];
-  const result = await yaar.list(`yaar://apps/self/storage/${dir}`);
-  if (result.isError) return [];
-  return JSON.parse(result.content[0]?.text ?? '[]');
+  if (!storage) return [];
+  try {
+    const result = await storage.list(dir);
+    // storage.list returns string[] of names; fall back to raw invoke for full metadata
+    const raw = await invoke(`yaar://apps/self/storage/${dir}`, { action: 'list' });
+    if (raw.isError) return [];
+    return JSON.parse(raw.content[0]?.text ?? '[]');
+  } catch {
+    return [];
+  }
 }
 
 export async function storageDelete(path: string): Promise<void> {
-  const yaar = _yaar();
-  if (!yaar) throw new Error('Storage API unavailable in this runtime.');
-  await yaar.delete(`yaar://apps/self/storage/${path}`);
+  if (!storage) throw new Error('Storage API unavailable in this runtime.');
+  await storage.remove(path);
 }
 
 export function storageUrl(path: string): string {

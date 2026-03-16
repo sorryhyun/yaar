@@ -8,7 +8,7 @@ Shared types between frontend and server.
 - `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants, `formatCompactInteraction()`
 - `components.ts` - Component schemas, types, type guards (Zod v4), `DisplayContent`/`displayContentSchema`
 - `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
-- `capture-helper.ts` - Inline iframe scripts: `IFRAME_CAPTURE_HELPER_SCRIPT`, `IFRAME_STORAGE_SDK_SCRIPT`, `IFRAME_FETCH_PROXY_SCRIPT`, `IFRAME_CONTEXTMENU_SCRIPT`, `IFRAME_NOTIFICATIONS_SDK_SCRIPT`
+- `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
 
 ## OS Actions
 

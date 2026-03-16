@@ -13,12 +13,14 @@ export type MonitorId = string;
 export const DEFAULT_MONITOR_ID = '0';
 export {
   IFRAME_CAPTURE_HELPER_SCRIPT,
+  IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
-} from './capture-helper.js';
+  IFRAME_APP_PROTOCOL_SCRIPT,
+} from './iframe-scripts/index.js';
 export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 export {
   type YaarAuthority,

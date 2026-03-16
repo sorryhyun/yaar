@@ -1,7 +1,7 @@
 {
   "id": "excel-lite",
   "name": "Excel Lite",
-  "icon": "📈",
+  "icon": "📊",
   "description": "Lightweight spreadsheet with 30+ formulas (IF, ROUND, STDEV, CONCAT, text/date functions), charting, and XLSX import/export",
   "version": "1.0.0",
   "author": "YAAR"
