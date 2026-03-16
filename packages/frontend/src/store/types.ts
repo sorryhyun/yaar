@@ -315,6 +315,15 @@ export interface CliSliceActions {
   ) => void;
   finalizeCliStreaming: (agentId: string) => void;
   clearCliHistory: (monitorId?: string) => void;
+  restoreCliHistory: (
+    entries: {
+      type: CliEntry['type'];
+      content: string;
+      agentId?: string;
+      monitorId: string;
+      timestamp: number;
+    }[],
+  ) => void;
 }
 
 export type CliSlice = CliSliceState & CliSliceActions;

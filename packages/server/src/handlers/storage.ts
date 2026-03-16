@@ -9,11 +9,11 @@
  */
 
 import { parseFileUri } from '@yaar/shared';
-import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResourceRegistry, VerbResult, ReadOptions } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { storageRead, storageWrite, storageList, storageDelete } from '../storage/index.js';
 import { ok, okJson, okWithImages, error } from './utils.js';
-import { prependNote, applyEdit } from './utils.js';
+import { prependNote, applyEdit, applyReadOptions } from './utils.js';
 
 // ── Helpers ──
 
@@ -56,7 +56,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       },
     },
 
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
+    async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {
       const parsed = parseFileUri(resolved.sourceUri);
       if (!parsed) {
         if (resolved.sourceUri === 'yaar://storage')
@@ -94,7 +94,8 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         );
       }
 
-      return ok(result.content!);
+      // Apply line range / pattern filtering for text files
+      return ok(applyReadOptions(result.content!, parsed.path, options));
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {

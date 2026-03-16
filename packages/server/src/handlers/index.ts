@@ -21,6 +21,7 @@ import { registerBrowserHandlers } from './browser.js';
 import { registerAgentsHandlers } from './agents.js';
 import { registerSkillsHandlers } from './skills.js';
 import { registerHttpHandlers } from './http.js';
+import { recordVerbCall } from '../mcp/tool-call-buffer.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
@@ -67,6 +68,8 @@ export function initRegistry(): ResourceRegistry {
 
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
+  const [verb, uri, payload] = args;
+  recordVerbCall(verb, uri, payload);
   const result = await reg.execute(...args);
   return { ...result };
 };
@@ -90,12 +93,27 @@ export function registerVerbTools(server: McpServer): void {
   server.registerTool(
     'read',
     {
-      description: 'Read the current value/state of a yaar:// resource.',
+      description:
+        'Read the current value/state of a yaar:// resource. ' +
+        'For text files, optionally filter by line range or regex pattern.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to read'),
+        lines: z
+          .string()
+          .optional()
+          .describe('Line range to read (1-based, inclusive). E.g. "10-20", "50", "100-"'),
+        pattern: z
+          .string()
+          .optional()
+          .describe('Regex pattern — returns only matching lines with line numbers'),
+        context: z
+          .number()
+          .optional()
+          .describe('Context lines around pattern matches (default: 0)'),
       },
     },
-    async ({ uri }) => exec(reg, 'read', uri),
+    async ({ uri, lines, pattern, context }) =>
+      exec(reg, 'read', uri, undefined, { lines, pattern, context }),
   );
 
   server.registerTool(

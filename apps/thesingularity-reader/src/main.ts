@@ -138,10 +138,13 @@ function stripImages(html: string): string {
   return div.innerHTML;
 }
 
-/** DCinside PC URL → 모바일 URL 변환 */
+/** URL을 모바일 URL로 변환 (이미 모바일 URL이면 그대로 반환) */
 function toMobileUrl(url: string): string {
   try {
     const u = new URL(url);
+    // 이미 모바일 URL이면 그대로 반환
+    if (u.hostname === 'm.dcinside.com') return url;
+    // PC URL → 모바일 URL 변환
     const id = u.searchParams.get('id');
     const no = u.searchParams.get('no');
     if (id && no) return `https://m.dcinside.com/board/${id}/${no}`;

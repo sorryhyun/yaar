@@ -10,7 +10,12 @@ import type { LiveSessionOptions } from '../session/live-session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
-import { ServerEventType, type ClientEvent, type OSAction } from '@yaar/shared';
+import {
+  ServerEventType,
+  type ClientEvent,
+  type OSAction,
+  type CliRestoreEntry,
+} from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
 import { checkWsAuth } from '../http/auth.js';
 
@@ -18,6 +23,7 @@ export interface WebSocketServerOptions {
   restoreActions: OSAction[];
   contextMessages: ContextMessage[];
   savedThreadIds?: Record<string, string>;
+  cliEntries?: CliRestoreEntry[];
 }
 
 export interface WsData {
@@ -71,6 +77,15 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       const snapshotActions = await session.generateSnapshot();
       if (snapshotActions.length > 0) {
         session.sendTo(connectionId, { type: ServerEventType.ACTIONS, actions: snapshotActions });
+      }
+
+      // Send CLI history restore entries (only once, then clear)
+      if (options.cliEntries && options.cliEntries.length > 0) {
+        session.sendTo(connectionId, {
+          type: ServerEventType.CLI_RESTORE,
+          entries: options.cliEntries,
+        });
+        options.cliEntries = undefined;
       }
 
       // Execute launch hooks for fresh sessions (not reconnections)

@@ -25,6 +25,16 @@ export interface DescribeResult {
   invokeSchema?: Record<string, unknown>;
 }
 
+/** Optional filtering params for the read verb (ripgrep-style). */
+export interface ReadOptions {
+  /** Line range to read, e.g. "10-20" or "50" (1-based, inclusive). */
+  lines?: string;
+  /** Regex pattern to filter matching lines. */
+  pattern?: string;
+  /** Number of context lines around pattern matches (default: 0). */
+  context?: number;
+}
+
 export interface ResourceHandler {
   /** Human-readable description of this resource. */
   description: string;
@@ -33,7 +43,7 @@ export interface ResourceHandler {
   /** Optional JSON schema for invoke payloads. */
   invokeSchema?: Record<string, unknown>;
 
-  read?(resolved: ResolvedUri): Promise<VerbResult>;
+  read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
   list?(resolved: ResolvedUri): Promise<VerbResult>;
   invoke?(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult>;
   delete?(resolved: ResolvedUri): Promise<VerbResult>;
@@ -116,7 +126,12 @@ export class ResourceRegistry {
   /**
    * Execute a verb against a URI.
    */
-  async execute(verb: Verb, uri: string, payload?: Record<string, unknown>): Promise<VerbResult> {
+  async execute(
+    verb: Verb,
+    uri: string,
+    payload?: Record<string, unknown>,
+    readOptions?: ReadOptions,
+  ): Promise<VerbResult> {
     const handler = this.findHandler(uri);
     if (!handler) {
       return {
@@ -132,7 +147,7 @@ export class ResourceRegistry {
       const bareUri = uri.slice(0, -1);
       const bareHandler = this.findHandler(bareUri);
       if (bareHandler && bareHandler !== handler && bareHandler.verbs.includes(verb)) {
-        return this.execute(verb, bareUri, payload);
+        return this.execute(verb, bareUri, payload, readOptions);
       }
     }
 
@@ -152,7 +167,7 @@ export class ResourceRegistry {
     if (!handler.verbs.includes(verb)) {
       // Trailing-slash fallback: "yaar://apps/" → retry as "yaar://apps"
       if (uri !== 'yaar://' && uri.endsWith('/')) {
-        return this.execute(verb, uri.slice(0, -1), payload);
+        return this.execute(verb, uri.slice(0, -1), payload, readOptions);
       }
       // Cross-verb fallback: read↔list
       if (verb === 'read' && handler.verbs.includes('list') && handler.list) {
@@ -211,6 +226,9 @@ export class ResourceRegistry {
 
     if (verb === 'invoke') {
       return handler.invoke!.call(handler, resolved, payload);
+    }
+    if (verb === 'read') {
+      return handler.read!.call(handler, resolved, readOptions);
     }
     return (method as (resolved: ResolvedUri) => Promise<VerbResult>).call(handler, resolved);
   }

@@ -74,4 +74,23 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
         state.cliHistory = {};
       }
     }),
+
+  restoreCliHistory: (entries) =>
+    set((state) => {
+      for (const entry of entries) {
+        const monitorId = entry.monitorId || '0';
+        if (!state.cliHistory[monitorId]) {
+          state.cliHistory[monitorId] = [];
+        }
+        state.cliHistory[monitorId].push({
+          ...entry,
+          id: generateId('cli'),
+          monitorId,
+        });
+      }
+      // Cap each monitor's history
+      for (const monitorId of Object.keys(state.cliHistory)) {
+        state.cliHistory[monitorId] = capArray(state.cliHistory[monitorId], MAX_CLI_ENTRIES);
+      }
+    }),
 });

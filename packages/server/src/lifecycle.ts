@@ -18,6 +18,7 @@ import {
   parseSessionMessages,
   getWindowRestoreActions,
   getContextRestoreMessages,
+  getCliRestoreEntries,
 } from './logging/index.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, getPort } from './config.js';
 import type { WebSocketServerOptions } from './websocket/index.js';
@@ -119,6 +120,13 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
           options.contextMessages = contextMessages;
           console.log(
             `Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`,
+          );
+        }
+        const cliEntries = getCliRestoreEntries(messages);
+        if (cliEntries.length > 0) {
+          options.cliEntries = cliEntries;
+          console.log(
+            `Restored ${cliEntries.length} CLI entries from session ${lastSession.sessionId}`,
           );
         }
       }

@@ -23,6 +23,7 @@ function createHandlers() {
     addCliEntry: vi.fn(),
     handleAppProtocolRequest: vi.fn(),
     handleVerbSubscriptionUpdate: vi.fn(),
+    restoreCliHistory: vi.fn(),
     acceptMessage: vi.fn(),
     queueMessage: vi.fn(),
     clearAllMessageStatuses: vi.fn(),

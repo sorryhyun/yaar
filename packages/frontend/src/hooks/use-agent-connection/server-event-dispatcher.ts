@@ -38,6 +38,15 @@ export interface ServerEventDispatchHandlers {
     request: AppProtocolRequest,
   ) => void;
   handleVerbSubscriptionUpdate: (windowId: string, subscriptionId: string, uri: string) => void;
+  restoreCliHistory: (
+    entries: {
+      type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
+      content: string;
+      agentId?: string;
+      monitorId: string;
+      timestamp: number;
+    }[],
+  ) => void;
   acceptMessage: (messageId: string, agentId: string) => void;
   queueMessage: (messageId: string, position: number) => void;
   clearAllMessageStatuses: () => void;
@@ -145,7 +154,10 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
             statusText = `Subagent (${agentType})${shortDesc ? ': ' + shortDesc : ''}`;
           } else if (toolName.startsWith(`${SUBAGENT_TOOL_NAME}:`)) {
             const innerTool = toolName.replace(`${SUBAGENT_TOOL_NAME}:`, '');
-            statusText = `Subagent → ${innerTool}${shortDesc ? ': ' + shortDesc : ''}`;
+            // Prefer URI over description for status text
+            const uri = (input.uri ?? '') as string;
+            const detail = uri || shortDesc;
+            statusText = `Subagent → ${innerTool}${detail ? ': ' + detail : ''}`;
           } else if (shortDesc) {
             statusText = `Subagent: ${shortDesc}`;
           }
@@ -191,9 +203,16 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
           inputStr = agentType ? `(${agentType}) ${prompt}` : prompt;
           if (!inputStr) inputStr = JSON.stringify(toolInput);
         } else if (isSubagent) {
-          // Subagent lifecycle: extract description/prompt
+          // Subagent tool progress: prefer URI (enriched by server) over description
           const input = toolInput as Record<string, unknown>;
-          inputStr = (input.description ?? input.prompt ?? '') as string;
+          if (input.uri) {
+            // Rich info from MCP buffer: show verb:(uri) format
+            const payload = input.payload as Record<string, unknown> | undefined;
+            const action = payload?.action;
+            inputStr = action ? `${input.uri} (${action})` : (input.uri as string);
+          } else {
+            inputStr = (input.description ?? input.prompt ?? '') as string;
+          }
           if (!inputStr) inputStr = JSON.stringify(toolInput);
         } else {
           inputStr = typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput);
@@ -260,6 +279,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.VERB_SUBSCRIPTION_UPDATE: {
       const m = message as { windowId: string; subscriptionId: string; uri: string };
       handlers.handleVerbSubscriptionUpdate(m.windowId, m.subscriptionId, m.uri);
+      break;
+    }
+    case ServerEventType.CLI_RESTORE: {
+      const { entries } = message as { entries: Parameters<typeof handlers.restoreCliHistory>[0] };
+      handlers.restoreCliHistory(entries);
       break;
     }
     case ServerEventType.MESSAGE_ACCEPTED:

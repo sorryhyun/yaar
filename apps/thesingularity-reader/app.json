@@ -1,8 +1,8 @@
 {
-  "icon": "🔮",
+  "icon": "⚡",
   "name": "특이점이 온다",
   "run": "index.html",
-  "permissions": ["yaar://browser/", "yaar://http"],
+  "permissions": ["yaar://browser/", "yaar://storage/", "yaar://http", "yaar://apps/self/storage/"],
   "appProtocol": true,
   "protocol": {
     "state": {},

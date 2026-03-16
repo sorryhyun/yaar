@@ -237,6 +237,7 @@ export const useDesktopStore = create<DesktopStore>()(
         state.pendingAppInteractions = [];
         state.selectedWindowIds = [];
         state.attachedImages = [];
+        state.cliHistory = {};
         state.cliStreaming = {};
         state.messageStatuses = {};
       });

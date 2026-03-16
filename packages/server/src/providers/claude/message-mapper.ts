@@ -7,6 +7,7 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage } from '../types.js';
+import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
 
 /** Track tool_use_id → toolName from content_block_start events */
 const toolNameById = new Map<string, string>();
@@ -51,11 +52,19 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   if (msg.type === 'system' && msg.subtype === 'task_progress') {
     const m = msg as { task_id?: string; last_tool_name?: string; description?: string };
     if (m.last_tool_name) {
+      // Try to enrich with actual tool call details from the MCP buffer
+      const verb = m.last_tool_name.replace(/^mcp__\w+__/, '');
+      const callDetails = consumeLastCall(verb);
+      const toolInput: Record<string, unknown> = { description: m.description };
+      if (callDetails) {
+        toolInput.uri = callDetails.uri;
+        if (callDetails.payload) toolInput.payload = callDetails.payload;
+      }
       return {
         type: 'tool_use',
         toolName: `${SUBAGENT_TOOL_NAME}:${m.last_tool_name}`,
         toolUseId: m.task_id,
-        toolInput: { description: m.description },
+        toolInput,
       };
     }
     if (m.description) {

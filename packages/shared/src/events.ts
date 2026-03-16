@@ -26,6 +26,7 @@ export const ServerEventType = {
   APPROVAL_REQUEST: 'APPROVAL_REQUEST',
   APP_PROTOCOL_REQUEST: 'APP_PROTOCOL_REQUEST',
   VERB_SUBSCRIPTION_UPDATE: 'VERB_SUBSCRIPTION_UPDATE',
+  CLI_RESTORE: 'CLI_RESTORE',
 } as const;
 
 /** Client → Server event type discriminants. */
@@ -320,6 +321,19 @@ export interface VerbSubscriptionUpdateEvent {
   uri: string;
 }
 
+export interface CliRestoreEntry {
+  type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
+  content: string;
+  agentId?: string;
+  monitorId: string;
+  timestamp: number;
+}
+
+export interface CliRestoreEvent {
+  type: typeof ServerEventType.CLI_RESTORE;
+  entries: CliRestoreEntry[];
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -332,4 +346,5 @@ export type ServerEvent =
   | MessageQueuedEvent
   | ApprovalRequestEvent
   | AppProtocolRequestEvent
-  | VerbSubscriptionUpdateEvent;
+  | VerbSubscriptionUpdateEvent
+  | CliRestoreEvent;

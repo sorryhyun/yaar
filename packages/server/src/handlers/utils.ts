@@ -98,6 +98,104 @@ export function requireAction(payload?: Record<string, unknown>): VerbResult | n
     : null;
 }
 
+/**
+ * Parse a line range string like "10-20", "50", or "100-" into [start, end] (1-based inclusive).
+ * Returns null on invalid input.
+ */
+function parseLineRange(range: string): [start: number, end: number | null] | null {
+  const m = range.match(/^(\d+)(?:-(\d*))?$/);
+  if (!m) return null;
+  const start = parseInt(m[1], 10);
+  if (start < 1) return null;
+  if (m[2] === undefined) return [start, start]; // single line "50"
+  if (m[2] === '') return [start, null]; // open-ended "100-"
+  const end = parseInt(m[2], 10);
+  if (end < start) return null;
+  return [start, end];
+}
+
+/**
+ * Apply read filtering (line range and/or pattern) to raw text content.
+ * Returns formatted text with line numbers, or the original content if no options apply.
+ */
+export function applyReadOptions(
+  rawContent: string,
+  filePath: string,
+  options?: import('./uri-registry.js').ReadOptions,
+): string {
+  const lines = rawContent.split('\n');
+  const totalLines = lines.length;
+  const width = String(totalLines).length;
+  const formatLine = (line: string, num: number) => `${String(num).padStart(width)}│${line}`;
+
+  // No filtering — return full file with line numbers
+  if (!options?.lines && !options?.pattern) {
+    const numbered = lines.map((line, i) => formatLine(line, i + 1)).join('\n');
+    return `── ${filePath} (${totalLines} lines) ──\n${numbered}`;
+  }
+
+  // Step 1: Apply line range filter
+  let startLine = 1;
+  let endLine = totalLines;
+  if (options.lines) {
+    const parsed = parseLineRange(options.lines);
+    if (!parsed) return `Invalid line range: "${options.lines}". Use "10-20", "50", or "100-".`;
+    startLine = parsed[0];
+    endLine = parsed[1] ?? totalLines;
+    endLine = Math.min(endLine, totalLines);
+    if (startLine > totalLines) {
+      return `Line ${startLine} exceeds file length (${totalLines} lines).`;
+    }
+  }
+
+  // Step 2: Apply pattern filter
+  if (options.pattern) {
+    let regex: RegExp;
+    try {
+      regex = new RegExp(options.pattern);
+    } catch {
+      return `Invalid regex pattern: "${options.pattern}"`;
+    }
+
+    const ctx = options.context ?? 0;
+    const matchedLineNums = new Set<number>();
+
+    for (let i = startLine - 1; i < endLine; i++) {
+      if (regex.test(lines[i])) {
+        // Add the match and its context lines (clamped to line range)
+        const ctxStart = Math.max(i - ctx, startLine - 1);
+        const ctxEnd = Math.min(i + ctx, endLine - 1);
+        for (let j = ctxStart; j <= ctxEnd; j++) {
+          matchedLineNums.add(j);
+        }
+      }
+    }
+
+    if (matchedLineNums.size === 0) {
+      const scope = options.lines ? ` in lines ${startLine}-${endLine}` : '';
+      return `No matches for /${options.pattern}/${scope} in ${filePath}`;
+    }
+
+    // Build output with group separators
+    const sorted = Array.from(matchedLineNums).sort((a, b) => a - b);
+    const outputLines: string[] = [];
+    for (let k = 0; k < sorted.length; k++) {
+      if (k > 0 && sorted[k] - sorted[k - 1] > 1) {
+        outputLines.push('──');
+      }
+      outputLines.push(formatLine(lines[sorted[k]], sorted[k] + 1));
+    }
+
+    const label = options.lines ? ` lines ${startLine}-${endLine}` : '';
+    return `── ${filePath}${label} (${matchedLineNums.size} matching lines) ──\n${outputLines.join('\n')}`;
+  }
+
+  // Line range only (no pattern)
+  const sliced = lines.slice(startLine - 1, endLine);
+  const numbered = sliced.map((line, i) => formatLine(line, startLine + i)).join('\n');
+  return `── ${filePath} lines ${startLine}-${endLine} of ${totalLines} ──\n${numbered}`;
+}
+
 export async function applyEdit(
   content: string,
   params: Record<string, unknown>,
