@@ -6,7 +6,7 @@
  *   list('yaar://windows/')               → list all windows
  *   invoke('yaar://windows/', ...)        → create window (windowId auto-derived from payload)
  *   read('yaar://windows/{w}')            → view window content/metadata
- *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, message
  *   delete('yaar://windows/{w}')          → close window
  */
 
@@ -14,13 +14,14 @@ import { parseWindowKey } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { okJson, error, getActiveSession, assertUri, requireAction } from './utils.js';
+import { ok, okJson, error, getActiveSession, assertUri, requireAction } from './utils.js';
 import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
 import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
+import { getMonitorId } from '../agents/session.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -64,7 +65,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command, message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -80,6 +81,7 @@ export function registerWindowHandlers(
             'unlock',
             'app_query',
             'app_command',
+            'message',
             'subscribe',
             'unsubscribe',
           ],
@@ -109,6 +111,11 @@ export function registerWindowHandlers(
         command: { type: 'string' },
         params: { type: 'object' },
         stateKey: { type: 'string' },
+        // message fields
+        message: {
+          type: 'string',
+          description: 'Message to send to the app agent (for message action)',
+        },
         // subscribe fields
         events: {
           type: 'array',
@@ -227,6 +234,31 @@ export function registerWindowHandlers(
           return handleAppQuery(getWindowState(), windowId, p);
         case 'app_command':
           return handleAppCommand(getWindowState(), windowId, p);
+        case 'message': {
+          const appId = getWindowState().getAppIdForWindow(windowId);
+          if (!appId) return error(`Window "${windowId}" is not an app window.`);
+          if (typeof p.message !== 'string' || !p.message)
+            return error('"message" (string) is required for message action.');
+
+          const session = getActiveSession();
+          const pool = session.getPool();
+          if (!pool) return error('Session not initialized.');
+
+          const messageId = `agent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          pool
+            .handleTask({
+              type: 'window',
+              messageId,
+              windowId,
+              content: p.message as string,
+              monitorId: getMonitorId() ?? undefined,
+            })
+            .catch((err: unknown) => console.error('[window.message] Failed:', err));
+
+          return ok(
+            `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId}).`,
+          );
+        }
         case 'subscribe':
           return handleSubscribe(getWindowState(), windowId, p);
         case 'unsubscribe':

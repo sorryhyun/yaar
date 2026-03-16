@@ -444,6 +444,7 @@ Option B: Compiled app + AI-mediated API (for rich UI)
   App Protocol bridges the two:
     app_query → display data from AI to app
     app_command → user actions from app to AI
+    message → monitor agent delegates task to app agent (fire-and-forget)
 ```
 
 ## Related Skills

@@ -296,8 +296,11 @@ export function registerProtocol() {
 |------|-------------|
 | `invoke('yaar://windows/{id}', { action: 'app_query', key })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
 | `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | Execute a command on the app |
+| `invoke('yaar://windows/{id}', { action: 'message', message })` | Send a message to the app agent (monitor → app agent delegation). Fire-and-forget — same code path as user interaction. |
 
 The agent first calls `app_query` with a bare window URI to discover capabilities (manifest), then uses `app_query` and `app_command` with resource URIs to interact.
+
+The `message` action lets **monitor agents delegate tasks to app agents** via the window URI. It queues a task through `AppTaskProcessor` exactly like a user `WINDOW_MESSAGE`, creating the app agent on demand if needed. Combine with `subscribe` to get notified when the app agent completes.
 
 ### Example: Excel Lite
 
@@ -305,6 +308,7 @@ The agent first calls `app_query` with a bare window URI to discover capabilitie
 invoke('yaar://windows/excel-lite', { action: 'app_query' })
 invoke('yaar://windows/excel-lite', { action: 'app_query', key: 'cells' })
 invoke('yaar://windows/excel-lite', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "Hello" } } })
+invoke('yaar://windows/excel-lite', { action: 'message', message: 'Summarize column A' })
 ```
 
 ## Credential Management

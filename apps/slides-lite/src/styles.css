@@ -8,6 +8,8 @@
   --yaar-border: #d0d7de;
   --yaar-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
   --yaar-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* Panel height — canvas gets all remaining space above it */
+  --panel-h: 210px;
 }
 * {
   box-sizing: border-box;
@@ -28,6 +30,7 @@ select {
 }
 .root {
   height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-rows: 62px 1fr;
   background: var(--yaar-bg);
@@ -51,14 +54,24 @@ select {
   background: #fef3c7;
   color: #92400e;
 }
+/*
+  Main layout:
+    col 1 — thumbnail list (260px fixed)
+    col 2 — canvas + panel stacked vertically
+*/
 .main {
   display: grid;
-  grid-template-columns: 260px 1fr 320px;
-  height: calc(100vh - 62px);
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 1fr var(--panel-h);
+  min-height: 0;
+  overflow: hidden;
 }
 .left {
+  grid-column: 1;
+  grid-row: 1 / 3;
   border-right: 1px solid var(--yaar-border);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px;
   background: var(--yaar-bg-surface);
 }
@@ -117,28 +130,57 @@ select {
   display: flex;
   gap: 4px;
 }
+/*
+  Canvas area: row 1 of col 2.
+  - overflow: auto so the slide can be scrolled if it exceeds the
+    container in either dimension.
+  - flex centering keeps the slide centred when it fits.
+*/
 .center {
-  display: grid;
-  place-items: center;
-  padding: 18px;
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
   transition: background 0.18s ease;
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
 }
-/* --slide-fs-scale is injected per-slide via inline style (default 1.0 = md) */
+/*
+  Slide card:
+  - aspect-ratio is set dynamically by JS (from deck.aspectRatio),
+    defaulting to 16/9. The CSS fallback here matches that default.
+  - width: 100% + max-width let the slide shrink on narrow canvases.
+  - max-height: 100% ensures the slide never exceeds the canvas height
+    when the aspect-ratio property is in effect — the browser will
+    respect BOTH constraints and pick the smaller dimension, so the
+    slide always fits inside the canvas without overflowing.
+  - No fixed height or max-height calc() — those fight aspect-ratio.
+  - overflow: hidden (not auto) because the outer .center now scrolls;
+    internal slide content should not double-scroll.
+*/
 .slide {
   --slide-fs-scale: 1;
-  width: min(980px, 100%);
+  /* fallback aspect ratio — JS overwrites via inline style */
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: 860px;
+  max-height: 100%;
+  flex-shrink: 0;
   border-radius: 16px;
-  padding: 38px;
-  overflow: auto;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.18);
+  padding: 32px 38px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 .slide h1 {
   margin-top: 0;
-  margin-bottom: 14px;
-  font-size: calc(clamp(24px, 4vw, 44px) * var(--slide-fs-scale));
+  margin-bottom: 12px;
+  font-size: calc(clamp(20px, 3.2vw, 40px) * var(--slide-fs-scale));
 }
 .slide-body {
-  font-size: calc(clamp(14px, 1.7vw, 26px) * var(--slide-fs-scale));
+  font-size: calc(clamp(13px, 1.5vw, 22px) * var(--slide-fs-scale));
   line-height: 1.35;
 }
 .slide-body p {
@@ -191,16 +233,33 @@ select {
   color: #2563eb;
   text-decoration: underline;
 }
+/*
+  Panel — fixed height strip below the canvas.
+*/
 .panel {
-  border-left: 1px solid var(--yaar-border);
-  padding: 12px;
-  overflow: auto;
+  grid-column: 2;
+  grid-row: 2;
+  height: var(--panel-h);
+  border-top: 1px solid var(--yaar-border);
+  padding: 10px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: var(--yaar-bg-surface);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 14px;
+  align-content: start;
+  align-items: start;
+}
+/* Action buttons row and hint text span full width */
+.panel > div[style],
+.panel > .small {
+  grid-column: 1 / -1;
 }
 .field {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 .field label {
   font-size: 12px;
@@ -210,8 +269,9 @@ select {
   justify-content: space-between;
 }
 .panel textarea {
-  min-height: 120px;
-  resize: vertical;
+  min-height: 56px;
+  max-height: 80px;
+  resize: none;
 }
 .small {
   font-size: 11px;

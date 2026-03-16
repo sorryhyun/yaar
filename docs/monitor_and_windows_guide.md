@@ -155,8 +155,21 @@ Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route based on window
 
 - **Plain windows** (markdown, table, component, etc.) — interactions route to the **monitor agent** for the window's monitor. The monitor agent has the full conversation context.
 - **App windows** — interactions route to a **dedicated app agent** via `AppTaskProcessor`. App agents are persistent per app (keyed by `appId`) and survive window close/reopen.
+- **Monitor → App agent**: Monitor agents can send messages to app agents via `invoke('yaar://windows/{windowId}', { action: 'message', message: '...' })`. This takes the same code path as user interaction — the task is queued to the app agent through `AppTaskProcessor`. The call is fire-and-forget; combine with `subscribe` to get notified when the app agent finishes.
 
 Same-window tasks are serialized via `WindowQueuePolicy`.
+
+### App agent tools
+
+App agents use a dedicated `app` MCP server (`mcp__app__*`) instead of the generic `yaar://` verb tools. This avoids requiring the agent to know its windowId (resolved via `AsyncLocalStorage`), limits tool access to exactly what's needed, and eliminates URI discovery round-trips.
+
+| Tool | Description |
+|------|-------------|
+| `query(stateKey?)` | Read app state. WindowId resolved from AsyncLocalStorage context. |
+| `command(command, params?)` | Execute an app command. WindowId resolved automatically. |
+| `relay(message)` | Enqueue a message to the monitor agent for out-of-scope requests. |
+
+Tools are defined in `mcp/app-agent/index.ts`. The windowId is set in `AgentContext` by `AppTaskProcessor` before each agent turn.
 
 ### Window subscriptions
 
