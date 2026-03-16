@@ -91,7 +91,16 @@ export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuff
     return buf.buffer;
   }
   const raw = await storage.read(path);
-  const text = String(raw ?? '');
+  // storage.read may return an already-parsed object (if the server pre-parses JSON files)
+  // or a raw string. Normalize to a string so callers can parse uniformly.
+  let text: string;
+  if (typeof raw === 'string') {
+    text = raw;
+  } else if (raw !== null && raw !== undefined && typeof raw === 'object') {
+    text = JSON.stringify(raw);
+  } else {
+    text = String(raw ?? '');
+  }
   if (as === 'json') return JSON.parse(text);
   return text;
 }

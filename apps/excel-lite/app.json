@@ -98,5 +98,5 @@
       "paramKey": "fileContent"
     }
   ],
-  "permissions": ["yaar://apps/self/storage/"]
+  "permissions": ["yaar://storage/", "yaar://apps/self/storage/", "yaar://http"]
 }
