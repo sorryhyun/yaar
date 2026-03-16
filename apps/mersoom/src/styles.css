@@ -3,7 +3,7 @@
 }
 body {
   margin: 0;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--yaar-font);
   background: var(--yaar-bg);
   color: var(--yaar-text);
   height: 100dvh;

@@ -4,7 +4,7 @@
     height: 100vh;
     background: var(--yaar-bg);
     color: var(--yaar-text);
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: var(--yaar-font);
     font-size: 13px;
     overflow: hidden;
   }
@@ -184,7 +184,7 @@
   .preview-body pre {
     white-space: pre-wrap;
     word-break: break-all;
-    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-family: var(--yaar-font-mono);
     font-size: 12px;
     line-height: 1.5;
     color: var(--yaar-text);
@@ -231,11 +231,11 @@
 .md-preview a:hover { text-decoration: underline; }
 .md-preview code {
   background: rgba(110,118,129,0.2);
-  color: #a5d6ff;
+  color: var(--yaar-accent);
   border-radius: 3px;
   padding: 2px 5px;
   font-size: 11px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--yaar-font-mono);
 }
 .md-preview pre {
   background: var(--yaar-bg);
@@ -269,7 +269,7 @@
 /* ── Code Preview with Prism ─────────────────────────────────────────── */
 .code-preview {
   margin: 0;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--yaar-font-mono);
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -278,18 +278,3 @@
   color: var(--yaar-text);
 }
 .code-preview code { font-family: inherit; }
-
-/* Prism token colours — GitHub-dark-ish on YAAR background */
-.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #6e7781; font-style: italic; }
-.token.punctuation { color: #8b949e; }
-.token.namespace { opacity: 0.7; }
-.token.property, .token.tag, .token.boolean, .token.number,
-.token.constant, .token.symbol, .token.deleted { color: #79c0ff; }
-.token.selector, .token.attr-name, .token.string,
-.token.char, .token.builtin, .token.inserted { color: #a5d6ff; }
-.token.operator, .token.entity, .token.url { color: #d2a8ff; }
-.token.atrule, .token.attr-value, .token.keyword { color: #ff7b72; }
-.token.function, .token.class-name { color: #d2a8ff; }
-.token.regex, .token.important, .token.variable { color: #ffa657; }
-.token.important, .token.bold { font-weight: bold; }
-.token.italic { font-style: italic; }

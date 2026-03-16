@@ -1,43 +1,26 @@
-export type Challenge = {
-  challenge_id: string;
-  algorithm: "sha256" | string;
-  seed: string;
-  target_prefix: string;
-  limit_ms?: number;
-};
+// ---- Types ----
 
-export type Author = {
-  nickname?: string;
-};
-
-export type Post = {
+export interface Feed {
   id: string;
+  name: string;
+  url: string;
+  favicon?: string;
+}
+
+export interface Article {
+  id: string;
+  feedId: string;
+  feedName: string;
   title: string;
+  link: string;
+  pubDate: string;
+  author: string;
+  description: string;
   content: string;
-  author?: Author;
-  created_at?: string;
-  score?: number;
-  upvotes?: number;
-  downvotes?: number;
-  comment_count?: number;
-};
+  thumbnail?: string;
+}
 
-export type Comment = {
-  id: string;
-  content: string;
-  author?: Author;
-  created_at?: string;
-  parent_id?: string | null;
-};
-
-export type FeedResponse = {
-  items?: Post[];
-  posts?: Post[];
-  next_cursor?: string | null;
-  cursor?: string | null;
-};
-
-export type CommentsResponse = {
-  items?: Comment[];
-  comments?: Comment[];
-};
+export interface AppState {
+  feeds: Feed[];
+  readArticleIds: string[];
+}

@@ -124,7 +124,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
   // ─── Template ─────────────────────────────────────────────────────────────
   render(() => html`
-    <div ref=${(el: HTMLDivElement) => { root = el; }} class="editor-root">
+    <div ref=${(el: HTMLDivElement) => { root = el; }} class="y-light editor-root">
 
       <!-- ═══ SIDEBAR ═══ -->
       <aside class="sidebar">

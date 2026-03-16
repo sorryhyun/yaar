@@ -68,20 +68,65 @@ All compiled apps automatically include shared CSS custom properties (`--yaar-*`
 | Class | Description |
 |-------|-------------|
 | `y-app` | Root container (flex column, full height, themed) |
+| `y-light` | Light theme preset — apply on root element to override all `--yaar-*` color tokens for light-themed apps |
 | `y-flex`, `y-flex-col`, `y-flex-center`, `y-flex-between` | Flex layouts |
 | `y-gap-{1-4}` | Gap spacing |
 | `y-p-{1-4}`, `y-px-{2-4}`, `y-py-{2-3}` | Padding |
 | `y-text-{xs,sm,base,lg,xl}` | Font sizes |
 | `y-text-muted`, `y-text-dim`, `y-text-accent` | Text colors |
 | `y-card` | Surface with border + padding |
+| `y-surface` | Surface background |
 | `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-sm` | Buttons |
 | `y-input` | Text input |
-| `y-badge`, `y-badge-success`, `y-badge-error` | Badges |
+| `y-select` | Styled dropdown (matches `y-input`) |
+| `y-badge`, `y-badge-success`, `y-badge-error`, `y-badge-warning`, `y-badge-accent` | Badges |
 | `y-spinner`, `y-spinner-lg` | Loading spinner |
 | `y-scroll` | Styled scrollbar container (needs a fixed height, e.g. set `height` on `#app`) |
 | `y-truncate` | Text ellipsis overflow |
+| `y-toolbar` | Flex row with surface background, border-bottom, standard padding |
+| `y-sidebar` | Flex column with border-right, overflow hidden |
+| `y-statusbar` | Space-between flex row, border-top, muted text |
+| `y-tabs` / `y-tab` | Tab bar with underline active indicator (`.active` or `[aria-selected]`) |
+| `y-overlay` / `y-modal` | Fixed overlay + centered card for dialogs |
+| `y-divider` | Horizontal rule with border color |
+| `y-border`, `y-border-b`, `y-border-t` | Border utilities |
+| `y-rounded`, `y-rounded-lg` | Border radius |
+| `y-toast`, `y-toast-visible`, `y-toast-info/success/error` | Toast notifications |
+| Prism `.token.*` classes | Shared syntax highlighting theme (comment, keyword, string, etc.) |
 
-Override any token in your app: `:root { --yaar-accent: #ff6b6b; }`
+**DO / DON'T — Design Token Rules:**
+
+DO:
+- Use `var(--yaar-bg)`, `var(--yaar-font)`, `var(--yaar-sp-N)` for all styling
+- Use `y-toolbar`, `y-sidebar`, `y-statusbar`, `y-modal`, `y-tabs` for common layouts
+- Use `y-light` class on root element for light-themed apps (excel, slides, word, pdf-viewer)
+- Use `y-btn`, `y-input`, `y-select`, `y-scroll` for interactive elements
+- Use shared Prism `.token.*` classes instead of writing custom syntax highlighting CSS
+
+DON'T:
+- Declare own `:root { --bg: ...; --panel: ...; }` custom properties — use `--yaar-*` variables
+- Write `font-family: Inter, system-ui, ...` — use `var(--yaar-font)` instead
+- Hardcode hex color values that match token values (e.g. `#0f1117`, `#161b22`, `#e6edf3`)
+- Reimplement scrollbar, button, modal, or toolbar CSS from scratch — use the `y-*` classes
+- Write custom Prism/syntax-highlighting token CSS — the shared theme is injected automatically
+
+**Light-theme app example (`styles.css`):**
+```css
+#app { height: 100%; }
+.app-shell { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+/* .y-light is applied on the root div, so all --yaar-* tokens are light */
+.editor-wrap { overflow: auto; padding: 24px; background: var(--yaar-bg); }
+.page { max-width: 860px; margin: 0 auto; background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border); border-radius: var(--yaar-radius-lg);
+  box-shadow: var(--yaar-shadow); color: var(--yaar-text); padding: 36px 44px; }
+```
+```html
+<div class="y-app y-light">
+  <div class="y-toolbar">...</div>
+  <div class="editor-wrap"><div class="page" contenteditable>...</div></div>
+  <div class="y-statusbar"><span>Words: 0</span><span>Ready</span></div>
+</div>
+```
 
 ## `@bundled/solid-js` — Reactive DOM Library
 

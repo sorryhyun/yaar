@@ -1,18 +1,6 @@
-:root {
-  color-scheme: light;
-  --yaar-bg: #f8f9fa;
-  --yaar-bg-surface: #ffffff;
-  --yaar-bg-surface-hover: #f0f1f3;
-  --yaar-text: #1f2328;
-  --yaar-text-muted: #656d76;
-  --yaar-text-dim: #8b949e;
-  --yaar-border: #d0d7de;
-  --yaar-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --yaar-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
 body {
   margin: 0;
-  font-family: Inter, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', Arial, sans-serif;
+  font-family: var(--yaar-font);
   background: var(--yaar-bg);
   user-select: none;
   color: var(--yaar-text);
@@ -87,8 +75,8 @@ select {
   padding: 2px;
 }
 button.active {
-  background: #dce8ff;
-  border-color: #89abf0;
+  background: color-mix(in srgb, var(--yaar-accent) 15%, var(--yaar-bg-surface));
+  border-color: var(--yaar-accent);
 }
 .sheetWrap {
   overflow: auto;
@@ -158,19 +146,19 @@ table {
 }
 th,
 td {
-  border: 1px solid #e7ecf5;
+  border: 1px solid var(--yaar-border);
 }
 th {
   position: sticky;
   top: 0;
-  background: #f8faff;
+  background: var(--yaar-bg-surface-hover);
   z-index: 2;
   font-weight: 600;
 }
 .rowHead {
   position: sticky;
   left: 0;
-  background: #f8faff;
+  background: var(--yaar-bg-surface-hover);
   z-index: 1;
   text-align: right;
   padding: 6px 8px;
@@ -181,7 +169,7 @@ th {
   left: 0;
   top: 0;
   z-index: 3;
-  background: #eef3ff;
+  background: var(--yaar-bg-surface-hover);
   min-width: 46px;
 }
 td {
@@ -197,11 +185,11 @@ td input {
   background: transparent;
 }
 td.selected {
-  background: #dce8ff;
-  box-shadow: inset 0 0 0 1px #93b4f4;
+  background: color-mix(in srgb, var(--yaar-accent) 15%, var(--yaar-bg-surface));
+  box-shadow: inset 0 0 0 1px var(--yaar-accent);
 }
 td.active {
-  box-shadow: inset 0 0 0 2px #2a6df6;
+  box-shadow: inset 0 0 0 2px var(--yaar-accent);
   z-index: 1;
 }
 .fill-handle {
@@ -211,16 +199,16 @@ td.active {
   right: -4px;
   bottom: -4px;
   border-radius: 1px;
-  background: #2a6df6;
+  background: var(--yaar-accent);
   cursor: crosshair;
   z-index: 5;
 }
 td.fill-preview {
-  background: #c7dcff;
-  box-shadow: inset 0 0 0 1px #79a3ff;
+  background: color-mix(in srgb, var(--yaar-accent) 20%, var(--yaar-bg-surface));
+  box-shadow: inset 0 0 0 1px var(--yaar-accent);
 }
 .hint {
-  color: #5c6475;
+  color: var(--yaar-text-muted);
   font-size: 12px;
   display: none;
 }

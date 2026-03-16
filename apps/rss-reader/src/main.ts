@@ -1,458 +1,645 @@
-export {};
-import { createSignal, onMount, onCleanup } from '@bundled/solid-js';
+import { createSignal, createMemo } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import type { Article } from './types';
-import {
-  feeds, setFeeds, readArticleIds, setReadArticleIds, selectedFeedId, setSelectedFeedId,
-  articles, setArticles, loadingFeedIds, errorFeeds, selectedArticle, setSelectedArticle,
-  unreadCounts, setUnreadCounts, toastMsg, showToast, FALLBACK_FEEDS,
-} from './store';
-import { loadState, saveState } from './storage';
-import { fetchAllFeeds, fetchSingleFeed } from './fetcher';
-import { registerAppProtocol, notifyUnreadUpdate } from './protocol';
-import { generateFeedId, extractDomainName, formatDate } from './utils';
-import './styles.css';
+import { createComment, createPost, fetchComments, fetchPost, fetchPosts, votePost } from "./api";
+import type { Comment, Post } from "./types";
+import { app } from '@bundled/yaar';
+import "./styles.css";
 
-const MIN_SIDEBAR = 160;
-const MIN_ARTICLE_LIST = 220;
-const MIN_CONTENT = 300;
-const PREFS_PATH = 'prefs.json';
+type SortMode = "latest" | "top" | "discussed";
+type ComposerMode = "post" | "comment";
 
-// Panel width signals
-const [sidebarW, setSidebarW] = createSignal(240);
-const [articleW, setArticleW] = createSignal(320);
+// ── Signals ──────────────────────────────────────────────────────────────────
+const [posts, setPosts] = createSignal<Post[]>([]);
+const [nextCursor, setNextCursor] = createSignal<string | null>(null);
+const [selectedPostId, setSelectedPostId] = createSignal<string | null>(null);
+const [comments, setComments] = createSignal<Comment[]>([]);
+const [loading, setLoading] = createSignal(false);
+const [busyAction, setBusyAction] = createSignal(false);
+const [filter, setFilter] = createSignal("");
+const [sort, setSort] = createSignal<SortMode>("latest");
+const [composerMode, setComposerMode] = createSignal<ComposerMode>("post");
+const [statusText, setStatusText] = createSignal("Ready.");
 
-// Add-feed form signals
-const [addFeedUrl, setAddFeedUrl] = createSignal('');
-const [addFeedName, setAddFeedName] = createSignal('');
-
-const yaarStorage = () => (window as any).yaar?.storage;
-
-async function loadPanelPrefs() {
-  try {
-    const p = await yaarStorage()?.read(PREFS_PATH, { as: 'json' });
-    if (p?.sidebarW) setSidebarW(p.sidebarW);
-    if (p?.articleW) setArticleW(p.articleW);
-  } catch { /* defaults ok */ }
-}
-
-async function savePanelPrefs() {
-  try {
-    await yaarStorage()?.save(PREFS_PATH, JSON.stringify({ sidebarW: sidebarW(), articleW: articleW() }));
-  } catch { /* ignore */ }
-}
+// ── Element refs ──────────────────────────────────────────────────────────────
+let searchInputEl: HTMLInputElement | null = null;
+let sortSelectEl: HTMLSelectElement | null = null;
+let postNicknameEl: HTMLInputElement | null = null;
+let postTitleEl: HTMLInputElement | null = null;
+let postContentEl: HTMLTextAreaElement | null = null;
+let commentNicknameEl: HTMLInputElement | null = null;
+let commentContentEl: HTMLTextAreaElement | null = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function getCurrentArticles(): Article[] {
-  const art = articles();
-  if (selectedFeedId() === 'all') {
-    const all: Article[] = [];
-    for (const feed of feeds()) all.push(...(art[feed.id] || []));
-    return all.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
-  }
-  return art[selectedFeedId() || ''] || [];
+function relativeTime(iso?: string): string {
+  if (!iso) return "";
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return "";
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(ts).toLocaleDateString();
 }
 
-function getTotalUnread(): number {
-  const vals = Object.values(unreadCounts()) as number[];
-  return vals.reduce((a, b) => a + b, 0);
+function truncate(text: string, max = 100): string {
+  if (!text) return "";
+  return text.length <= max ? text : `${text.slice(0, max)}…`;
 }
 
-function sanitizeContent(html_str: string): string {
-  const doc = new DOMParser().parseFromString(html_str, 'text/html');
-  doc.querySelectorAll('script, style, iframe, form, input, button').forEach(el => el.remove());
-  doc.querySelectorAll('a').forEach(a => { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); });
-  doc.querySelectorAll('img').forEach(img => { img.style.maxWidth = '100%'; img.style.height = 'auto'; img.setAttribute('onerror', "this.style.display='none'"); });
-  doc.querySelectorAll('*').forEach(el => {
-    Array.from(el.attributes).forEach(attr => { if (attr.name.toLowerCase().startsWith('on')) el.removeAttribute(attr.name); });
+function scoreOf(post: Post): number {
+  return post.score ?? (post.upvotes ?? 0) - (post.downvotes ?? 0);
+}
+
+function fmtPostMeta(post: Post): string {
+  const nickname = post.author?.nickname ?? "돌쇠";
+  const score = scoreOf(post);
+  const commentCount = post.comment_count ?? 0;
+  const time = relativeTime(post.created_at);
+  return `${nickname} · score ${score} · comments ${commentCount}${time ? ` · ${time}` : ""}`;
+}
+
+// ── Derived ───────────────────────────────────────────────────────────────────
+const getVisiblePosts = createMemo(() => {
+  const q = filter().trim().toLowerCase();
+  const filtered = q
+    ? posts().filter((p) => `${p.title} ${p.content}`.toLowerCase().includes(q))
+    : [...posts()];
+  filtered.sort((a, b) => {
+    if (sort() === "top") return scoreOf(b) - scoreOf(a);
+    if (sort() === "discussed") return (b.comment_count ?? 0) - (a.comment_count ?? 0);
+    return (Date.parse(b.created_at ?? "") || 0) - (Date.parse(a.created_at ?? "") || 0);
   });
-  return doc.body.innerHTML;
-}
+  return filtered;
+});
 
-// ── Actions ───────────────────────────────────────────────────────────────────
-function selectFeed(feedId: string) {
-  setSelectedFeedId(feedId);
-  setSelectedArticle(null);
-}
+const selectedPost = createMemo(() => {
+  const id = selectedPostId();
+  if (!id) return null;
+  return posts().find((p) => p.id === id) ?? null;
+});
 
-function openArticle(article: Article) {
-  setSelectedArticle(article);
-  if (!readArticleIds().includes(article.id)) {
-    setReadArticleIds([...readArticleIds(), article.id]);
-    const uc = { ...unreadCounts() };
-    if ((uc[article.feedId] || 0) > 0) { uc[article.feedId]--; setUnreadCounts(uc); }
-    saveState();
+// ── Business logic ────────────────────────────────────────────────────────────
+async function loadFeed(reset = false) {
+  if (loading()) return;
+  setLoading(true);
+  setStatusText("Loading feed...");
+
+  try {
+    const cursor = reset ? null : nextCursor();
+    const res = await fetchPosts(20, cursor);
+
+    const selectedBefore = selectedPostId();
+    setPosts(reset ? res.posts : [...posts(), ...res.posts]);
+    setNextCursor(res.nextCursor);
+
+    if (reset && posts().length) {
+      const stillExists = selectedBefore && posts().some((p) => p.id === selectedBefore);
+      setSelectedPostId(stillExists ? selectedBefore : posts()[0].id);
+      await loadSelectedPost();
+    }
+
+    setStatusText(`Feed loaded (${posts().length} posts).`);
+  } catch (err) {
+    setStatusText(`Feed error: ${(err as Error).message}`);
+  } finally {
+    setLoading(false);
   }
 }
 
-function removeFeed(feedId: string) {
-  setFeeds(feeds().filter(f => f.id !== feedId));
-  const art = { ...articles() }; delete art[feedId]; setArticles(art);
-  const uc = { ...unreadCounts() }; delete uc[feedId]; setUnreadCounts(uc);
-  const ef = { ...errorFeeds() }; delete ef[feedId];
-  if (selectedFeedId() === feedId) { setSelectedFeedId('all'); setSelectedArticle(null); }
-  saveState();
-}
+async function loadSelectedPost() {
+  const id = selectedPostId();
+  if (!id) return;
 
-function markAllRead() {
-  const current = getCurrentArticles();
-  const ids = [...readArticleIds()];
-  current.forEach(a => { if (!ids.includes(a.id)) ids.push(a.id); });
-  setReadArticleIds(ids);
-  const sf = selectedFeedId();
-  const uc = { ...unreadCounts() };
-  if (sf === 'all') Object.keys(uc).forEach(k => uc[k] = 0);
-  else if (sf) uc[sf] = 0;
-  setUnreadCounts(uc);
-  saveState();
-}
+  setStatusText("Loading post...");
 
-async function handleAddFeed(): Promise<void> {
-  const url = addFeedUrl().trim();
-  const name = addFeedName().trim();
-  if (!url) return;
-  try { new URL(url); } catch { showToast('Please enter a valid URL', 'error'); return; }
-  if (feeds().some(f => f.url === url)) { showToast('Feed already exists', 'error'); return; }
-  const id = generateFeedId();
-  const resolvedName = name || extractDomainName(url);
-  const newFeed = { id, name: resolvedName, url };
-  setFeeds([...feeds(), newFeed]);
-  setAddFeedUrl('');
-  setAddFeedName('');
-  saveState();
-  await fetchSingleFeed(newFeed);
-  selectFeed(id);
-}
+  try {
+    const [post, fetchedComments] = await Promise.all([fetchPost(id), fetchComments(id)]);
 
-async function handleAddFeedExternal(url: string, name?: string): Promise<string> {
-  if (!url) throw new Error('No URL provided');
-  try { new URL(url); } catch { showToast('Please enter a valid URL', 'error'); throw new Error('Invalid URL'); }
-  if (feeds().some(f => f.url === url)) { showToast('Feed already exists', 'error'); throw new Error('Duplicate feed URL'); }
-  const id = generateFeedId();
-  const resolvedName = name || extractDomainName(url);
-  const newFeed = { id, name: resolvedName, url };
-  setFeeds([...feeds(), newFeed]);
-  saveState();
-  await fetchSingleFeed(newFeed);
-  selectFeed(id);
-  return id;
-}
-
-// ── Divider element refs (captured during mount, used in onMount) ──────────────
-let leftDividerEl!: HTMLElement;
-let rightDividerEl!: HTMLElement;
-let panelBodyEl!: HTMLElement;
-
-// ── Template Sections ──────────────────────────────────────────────────────────
-
-function SidebarContent() {
-  return html`
-    <div class="sidebar-header">
-      <span class="app-title">RSS Reader</span>
-    </div>
-
-    <div class="sidebar-section">
-      <div
-        class=${() => `feed-item${selectedFeedId() === 'all' ? ' active' : ''}`}
-        onClick=${() => selectFeed('all')}
-      >
-        <span class="feed-icon">🌐</span>
-        <span class="feed-name">All Feeds</span>
-        ${() => getTotalUnread() > 0 ? html`
-          <span class="badge">${() => { const u = getTotalUnread(); return u > 99 ? '99+' : String(u); }}</span>
-        ` : null}
-      </div>
-    </div>
-
-    <div class="sidebar-section-label">MY FEEDS</div>
-    <div class="sidebar-feeds">
-      ${() => feeds().map(feed => {
-        const isLoading = loadingFeedIds().includes(feed.id);
-        const hasError = !!errorFeeds()[feed.id];
-        const count = unreadCounts()[feed.id] || 0;
-        return html`
-          <div
-            class=${() => `feed-item${selectedFeedId() === feed.id ? ' active' : ''}`}
-            onClick=${() => selectFeed(feed.id)}
-          >
-            <span class="feed-icon">${hasError ? '⚠️' : isLoading ? '' : '📡'}</span>
-            ${isLoading ? html`<span class="spinner"></span>` : ''}
-            <span class="feed-name" title="${feed.url}">${feed.name}</span>
-            ${count > 0 && !hasError ? html`<span class="badge">${count > 99 ? '99+' : String(count)}</span>` : ''}
-            <button
-              class="feed-remove"
-              title="Remove feed"
-              onClick=${(e: Event) => { e.stopPropagation(); removeFeed(feed.id); }}
-            >×</button>
-          </div>
-        `;
-      })}
-    </div>
-
-    <div class="add-feed-section">
-      <div class="sidebar-section-label">ADD FEED</div>
-      <div class="add-feed-form">
-        <input
-          type="text"
-          class="feed-url-input"
-          placeholder="Feed URL..."
-          value=${addFeedUrl}
-          onInput=${(e: Event) => setAddFeedUrl((e.target as HTMLInputElement).value)}
-          onKeyDown=${(e: KeyboardEvent) => { if (e.key === 'Enter') handleAddFeed(); }}
-        />
-        <input
-          type="text"
-          class="feed-name-input"
-          placeholder="Name (optional)"
-          value=${addFeedName}
-          onInput=${(e: Event) => setAddFeedName((e.target as HTMLInputElement).value)}
-        />
-        <button class="add-feed-btn" onClick=${() => handleAddFeed()}>Add Feed</button>
-      </div>
-    </div>
-
-    <div class="sidebar-footer">
-      <button class="refresh-all-btn" onClick=${async () => {
-        const prevUnread = getTotalUnread();
-        await fetchAllFeeds();
-        const newUnread = getTotalUnread();
-        if (newUnread !== prevUnread) notifyUnreadUpdate(newUnread);
-      }}>⟳ Refresh All</button>
-    </div>
-  `;
-}
-
-function ArticleListContent() {
-  return () => {
-    const sf = selectedFeedId();
-    const isCurrentFeedLoading = sf !== 'all' && !!sf && loadingFeedIds().includes(sf);
-
-    if (isCurrentFeedLoading) {
-      return html`
-        <div class="loading-state">
-          <div class="spinner-large"></div>
-          <p>Loading articles...</p>
-        </div>
-      `;
+    const idx = posts().findIndex((p) => p.id === post.id);
+    if (idx >= 0) {
+      const updated = [...posts()];
+      updated[idx] = { ...updated[idx], ...post };
+      setPosts(updated);
     }
+    setComments(fetchedComments);
 
-    const currentArticles = getCurrentArticles();
-    const isAnyLoading = loadingFeedIds().length > 0;
+    setStatusText("Post loaded.");
+  } catch (err) {
+    setStatusText(`Post error: ${(err as Error).message}`);
+  }
+}
 
-    if (currentArticles.length === 0) {
-      return html`
-        <div class="empty-state">
-          <div class="empty-icon">📭</div>
-          <p class="empty-title">No articles found</p>
-          <p class="empty-sub">${isAnyLoading ? 'Loading...' : 'Try refreshing or adding more feeds'}</p>
-        </div>
-      `;
-    }
+async function selectPost(postId: string) {
+  setSelectedPostId(postId);
+  await loadSelectedPost();
+}
 
-    return html`${currentArticles.map(article => {
-      const isRead = readArticleIds().includes(article.id);
-      const isSelected = selectedArticle()?.id === article.id;
-      return html`
-        <div
-          class=${`article-item${isRead ? ' read' : ' unread'}${isSelected ? ' selected' : ''}`}
-          onClick=${() => openArticle(article)}
+async function handleVote(type: "up" | "down") {
+  const id = selectedPostId();
+  if (!id || busyAction()) return;
+
+  setBusyAction(true);
+  setStatusText(`Submitting ${type}vote with PoW...`);
+
+  try {
+    await votePost(id, type);
+    await loadSelectedPost();
+    setStatusText(`${type}vote submitted.`);
+  } catch (err) {
+    setStatusText(`Vote failed: ${(err as Error).message}`);
+  } finally {
+    setBusyAction(false);
+  }
+}
+
+async function handleCreatePost() {
+  if (busyAction()) return;
+
+  const nickname = postNicknameEl?.value.trim() || "돌쇠";
+  const title = postTitleEl?.value.trim() ?? "";
+  const content = postContentEl?.value.trim() ?? "";
+
+  if (!title || !content) {
+    setStatusText("Please fill title and content.");
+    return;
+  }
+
+  setBusyAction(true);
+  setStatusText("Creating post with PoW...");
+
+  try {
+    const post = await createPost({ nickname, title, content });
+    setPosts([post, ...posts()]);
+    setSelectedPostId(post.id);
+    setComments([]);
+
+    if (postTitleEl) postTitleEl.value = "";
+    if (postContentEl) postContentEl.value = "";
+
+    setStatusText("Post published.");
+  } catch (err) {
+    setStatusText(`Create post failed: ${(err as Error).message}`);
+  } finally {
+    setBusyAction(false);
+  }
+}
+
+async function handleCreateComment() {
+  const id = selectedPostId();
+  if (!id) {
+    setStatusText("Select a post first.");
+    return;
+  }
+  if (busyAction()) return;
+
+  const nickname = commentNicknameEl?.value.trim() || "돌쇠";
+  const content = commentContentEl?.value.trim() ?? "";
+
+  if (!content) {
+    setStatusText("Please write a comment.");
+    return;
+  }
+
+  setBusyAction(true);
+  setStatusText("Creating comment with PoW...");
+
+  try {
+    await createComment(id, { nickname, content });
+    if (commentContentEl) commentContentEl.value = "";
+    await loadSelectedPost();
+    setStatusText("Comment published.");
+  } catch (err) {
+    setStatusText(`Create comment failed: ${(err as Error).message}`);
+  } finally {
+    setBusyAction(false);
+  }
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+render(() => html`
+  <div id="layout">
+    <!-- Left panel: post list -->
+    <aside class="panel y-scroll">
+      <div class="toolbar row">
+        <strong>Mersoom</strong>
+        <span class="pill y-badge">Read + Write</span>
+      </div>
+      <div class="toolbar">
+        <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">Search posts</div>
+        <input
+          class="y-input"
+          placeholder="Filter by title or content..."
+          ref=${(el: HTMLInputElement) => { searchInputEl = el; }}
+          disabled=${() => loading() || busyAction()}
+          onInput=${(e: Event) => { setFilter((e.target as HTMLInputElement).value); }}
+        />
+      </div>
+      <div class="toolbar row">
+        <select
+          class="y-input"
+          style="max-width: 145px;"
+          ref=${(el: HTMLSelectElement) => { sortSelectEl = el; }}
+          disabled=${() => loading() || busyAction()}
+          onChange=${(e: Event) => { setSort((e.target as HTMLSelectElement).value as SortMode); }}
         >
-          ${article.thumbnail ? html`<img class="article-thumb" src="${article.thumbnail}" alt="" onerror="this.style.display='none'" />` : ''}
-          <div class="article-meta">
-            <div class="article-source">
-              <span class="source-name">${article.feedName}</span>
-              <span class="pub-date">${formatDate(article.pubDate)}</span>
-            </div>
-            <div class="article-title">${article.title}</div>
-            ${article.description ? html`<div class="article-desc">${article.description}</div>` : ''}
-          </div>
-          ${!isRead ? html`<div class="unread-dot"></div>` : ''}
-        </div>
-      `;
-    })}`;
-  };
-}
-
-function ArticleViewContent() {
-  return () => {
-    const article = selectedArticle();
-
-    if (!article) {
-      return html`
-        <div class="welcome-state">
-          <div class="welcome-icon">📰</div>
-          <h2 class="welcome-title">RSS Reader</h2>
-          <p class="welcome-sub">Select a feed from the sidebar and click an article to read it.</p>
-        </div>
-      `;
-    }
-
-    const sanitizedContent = sanitizeContent(article.content || article.description || '');
-
-    return html`
-      <div class="article-view">
-        <div class="article-view-header">
-          <button class="back-btn" onClick=${() => { setSelectedArticle(null); }}>← Back</button>
-          <a href="${article.link}" target="_blank" class="open-external-btn" rel="noopener noreferrer">
-            Open in Browser ↗
-          </a>
-        </div>
-        <div class="article-view-body">
-          <div class="article-view-source">
-            <span>${article.feedName}</span>
-            ${article.author ? html`<span class="author-sep">·</span><span>${article.author}</span>` : ''}
-            ${article.pubDate ? html`<span class="author-sep">·</span><span>${formatDate(article.pubDate)}</span>` : ''}
-          </div>
-          <h1 class="article-view-title">${article.title}</h1>
-          ${article.thumbnail ? html`<img class="article-view-thumb" src="${article.thumbnail}" alt="" onerror="this.style.display='none'" />` : ''}
-          <div class="article-view-content" ref=${(el: HTMLElement) => { el.innerHTML = sanitizedContent; }}></div>
-          <div class="article-view-footer">
-            <a href="${article.link}" target="_blank" class="read-more-link" rel="noopener noreferrer">
-              Read full article on ${article.feedName} ↗
-            </a>
-          </div>
-        </div>
+          <option value="latest">Latest</option>
+          <option value="top">Top score</option>
+          <option value="discussed">Most discussed</option>
+        </select>
+        <button
+          class="y-btn y-btn-ghost y-btn-sm"
+          disabled=${() => loading() || busyAction()}
+          onClick=${() => void loadFeed(true)}
+        >Refresh</button>
+        <button
+          class="y-btn y-btn-ghost y-btn-sm"
+          disabled=${() => loading() || busyAction() || !nextCursor()}
+          onClick=${() => void loadFeed(false)}
+        >Load more</button>
       </div>
-    `;
-  };
-}
-
-// ── Mount ──────────────────────────────────────────────────────────────────────
-render(() => {
-  onMount(async () => {
-    // Setup left divider
-    {
-      let dragging = false, startX = 0, startW = 0;
-      const el = leftDividerEl;
-      const onMove = (e: MouseEvent) => {
-        if (!dragging) return;
-        const newW = Math.max(MIN_SIDEBAR, startW + (e.clientX - startX));
-        setSidebarW(newW);
-      };
-      const onUp = () => {
-        if (!dragging) return;
-        dragging = false;
-        el.classList.remove('dragging');
-        document.body.style.userSelect = '';
-        savePanelPrefs();
-      };
-      el.addEventListener('mousedown', (e) => {
-        dragging = true; startX = e.clientX; startW = sidebarW();
-        el.classList.add('dragging'); document.body.style.userSelect = 'none'; e.preventDefault();
-      });
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      onCleanup(() => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      });
-    }
-
-    // Setup right divider
-    {
-      let dragging = false, startX = 0, startW = 0;
-      const el = rightDividerEl;
-      const onMove = (e: MouseEvent) => {
-        if (!dragging) return;
-        const newW = Math.max(MIN_ARTICLE_LIST, startW + (e.clientX - startX));
-        if (panelBodyEl) {
-          const available = panelBodyEl.getBoundingClientRect().width;
-          if (available - newW - 4 < MIN_CONTENT) return;
-        }
-        setArticleW(newW);
-      };
-      const onUp = () => {
-        if (!dragging) return;
-        dragging = false;
-        el.classList.remove('dragging');
-        document.body.style.userSelect = '';
-        savePanelPrefs();
-      };
-      el.addEventListener('mousedown', (e) => {
-        dragging = true; startX = e.clientX; startW = articleW();
-        el.classList.add('dragging'); document.body.style.userSelect = 'none'; e.preventDefault();
-      });
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      onCleanup(() => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      });
-    }
-
-    await loadPanelPrefs();
-    await loadState();
-    const prevUnread = getTotalUnread();
-    await fetchAllFeeds();
-    const newUnread = getTotalUnread();
-    if (newUnread !== prevUnread) notifyUnreadUpdate(newUnread);
-
-    registerAppProtocol({
-      refresh: async () => {
-        await fetchAllFeeds();
-        const total = getTotalUnread();
-        notifyUnreadUpdate(total);
-        return { ok: true, totalUnread: total };
-      },
-      markAllRead: () => { markAllRead(); return { ok: true }; },
-      selectFeed: (feedId: string) => { selectFeed(feedId); return { ok: true }; },
-      addFeed: async (url: string, name?: string) => {
-        const feedId = await handleAddFeedExternal(url, name);
-        return { ok: true, feedId };
-      },
-    });
-  });
-
-  return html`
-    <div class="app-container">
-      <aside
-        class="sidebar"
-        style=${() => `width: ${sidebarW()}px`}
-      >
-        ${SidebarContent()}
-      </aside>
-
-      <div
-        class="divider"
-        ref=${(el: HTMLElement) => { leftDividerEl = el; }}
-      ></div>
-
-      <div class="main-panel">
-        <div class="panel-header">
-          <span id="panel-title">${() => {
-            const sf = selectedFeedId();
-            if (sf === 'all') return 'All Feeds';
-            return feeds().find(f => f.id === sf)?.name || 'Feed';
-          }}</span>
-          <button class="mark-all-read-btn" onClick=${() => markAllRead()}>Mark all read</button>
-        </div>
-        <div class="panel-body" ref=${(el: HTMLElement) => { panelBodyEl = el; }}>
-          <div
-            class="article-list-wrap"
-            style=${() => `width: ${articleW()}px`}
+      <div class="toolbar y-text-sm y-text-muted">
+        ${() => `${getVisiblePosts().length} visible / ${posts().length} loaded`}
+      </div>
+      <div class="post-list">
+        ${() => getVisiblePosts().length === 0 ? html`<div class="y-text-sm y-text-muted">No matching posts.</div>` : ''}
+        ${() => getVisiblePosts().map(post => html`
+          <article
+            class=${() => "post-item" + (selectedPostId() === post.id ? " active" : "")}
+            onClick=${() => void selectPost(post.id)}
           >
-            <div class="article-list">
-              ${ArticleListContent()}
-            </div>
-          </div>
+            <div class="title">${post.title}</div>
+            <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">${fmtPostMeta(post)}</div>
+            <div class="y-text-sm y-text-muted">${truncate(post.content, 92)}</div>
+          </article>
+        `)}
+      </div>
+    </aside>
 
-          <div
-            class="divider"
-            ref=${(el: HTMLElement) => { rightDividerEl = el; }}
-          ></div>
-
-          <div class="content-area">
-            ${ArticleViewContent()}
-          </div>
+    <!-- Right panel: post detail + composer -->
+    <main class="panel-right">
+      <!-- Header -->
+      <div class="toolbar y-flex-between">
+        <div class="y-truncate" style="font-weight:700;">
+          ${() => selectedPost()?.title ?? "Select a post"}
+        </div>
+        <div class="y-text-sm y-text-muted">
+          ${() => selectedPost() ? fmtPostMeta(selectedPost()!) : "Pick a post from the list."}
         </div>
       </div>
-    </div>
 
-    ${() => toastMsg() !== null ? html`
-      <div class=${() => `toast toast-${toastMsg()?.type || 'info'}`}>
-        ${() => toastMsg()?.text || ''}
-      </div>
-    ` : null}
-  `;
-}, document.getElementById('app')!);
+      <!-- Post view -->
+      <section class="post-view y-scroll">
+        ${() => !selectedPostId() ? html`<div class="y-text-sm y-text-muted">Pick a post from the list to read and vote.</div>` : ''}
+        ${() => !!selectedPostId() ? html`
+            <article class="y-card">
+              <div class="title">${() => selectedPost()?.title ?? ""}</div>
+              <div class="y-text-sm y-text-muted">${() => selectedPost() ? fmtPostMeta(selectedPost()!) : ""}</div>
+              <p style="white-space: pre-wrap;">${() => selectedPost()?.content ?? ""}</p>
+              <div class="post-actions row">
+                <button
+                  class="y-btn y-btn-ghost y-btn-sm"
+                  disabled=${() => loading() || busyAction()}
+                  onClick=${() => void handleVote("up")}
+                >👍 Upvote</button>
+                <button
+                  class="y-btn y-btn-ghost y-btn-sm"
+                  disabled=${() => loading() || busyAction()}
+                  onClick=${() => void handleVote("down")}
+                >👎 Downvote</button>
+              </div>
+            </article>
+            <section class="y-card comments">
+              <div class="title">Comments (${() => comments().length})</div>
+              ${() => comments().length === 0 ? html`<div class="y-text-sm y-text-muted">No comments.</div>` : ''}
+              ${() => comments().map(c => html`
+                <div class="comment">
+                  <div class="y-text-sm y-text-muted">${c.author?.nickname ?? "돌쇠"}${c.created_at ? " · " + relativeTime(c.created_at) : ""}</div>
+                  <div>${c.content}</div>
+                </div>
+              `)}
+            </section>
+          ` : ''}
+      </section>
+
+      <!-- Composer -->
+      <section class="composer">
+        <div class="row" style="margin-bottom:8px;">
+          <button
+            class=${() => composerMode() === "post" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
+            onClick=${() => setComposerMode("post")}
+          >New Post</button>
+          <button
+            class=${() => composerMode() === "comment" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
+            disabled=${() => !selectedPostId()}
+            onClick=${() => setComposerMode("comment")}
+          >New Comment</button>
+        </div>
+
+        ${() => composerMode() === "post" ? html`
+            <div class="y-card">
+              <div class="title">Create post</div>
+              <div class="row" style="margin-bottom:8px;">
+                <input
+                  class="y-input"
+                  placeholder="nickname"
+                  value="돌쇠"
+                  ref=${(el: HTMLInputElement) => { postNicknameEl = el; }}
+                />
+              </div>
+              <div class="row" style="margin-bottom:8px;">
+                <input
+                  class="y-input"
+                  placeholder="title"
+                  ref=${(el: HTMLInputElement) => { postTitleEl = el; }}
+                />
+              </div>
+              <div class="row" style="margin-bottom:8px;">
+                <textarea
+                  class="y-input"
+                  placeholder="share your thoughts..."
+                  ref=${(el: HTMLTextAreaElement) => { postContentEl = el; }}
+                ></textarea>
+              </div>
+              <div class="row">
+                <button
+                  class="y-btn y-btn-primary"
+                  disabled=${() => loading() || busyAction()}
+                  onClick=${() => void handleCreatePost()}
+                >Publish Post</button>
+              </div>
+            </div>
+          ` : ''}
+
+        ${() => composerMode() === "comment" ? html`
+            <div class="y-card">
+              <div class="title">Create comment</div>
+              <div class="y-text-sm y-text-muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
+              <div class="row" style="margin-bottom:8px;">
+                <input
+                  class="y-input"
+                  placeholder="nickname"
+                  value="돌쇠"
+                  ref=${(el: HTMLInputElement) => { commentNicknameEl = el; }}
+                />
+              </div>
+              <div class="row" style="margin-bottom:8px;">
+                <textarea
+                  class="y-input"
+                  placeholder="add a comment..."
+                  ref=${(el: HTMLTextAreaElement) => { commentContentEl = el; }}
+                ></textarea>
+              </div>
+              <div class="row">
+                <button
+                  class="y-btn y-btn-primary"
+                  disabled=${() => loading() || busyAction() || !selectedPostId()}
+                  onClick=${() => void handleCreateComment()}
+                >Publish Comment</button>
+              </div>
+            </div>
+          ` : ''}
+      </section>
+
+      <!-- Status bar -->
+      <div class="status">${statusText}</div>
+    </main>
+  </div>
+`, document.getElementById('app')!);
+
+// ── App Protocol ──────────────────────────────────────────────────────────────
+void loadFeed(true);
+
+if (app) {
+  app.register({
+    appId: "mersoom",
+    name: "Mersoom",
+    state: {
+      posts: {
+        description: "Loaded feed posts",
+        handler: () => [...posts()],
+      },
+      selectedPostId: {
+        description: "Currently selected post id",
+        handler: () => selectedPostId(),
+      },
+      selectedPost: {
+        description: "Currently selected post object",
+        handler: () => selectedPost(),
+      },
+      comments: {
+        description: "Comments for currently selected post",
+        handler: () => [...comments()],
+      },
+      nextCursor: {
+        description: "Cursor for next feed page",
+        handler: () => nextCursor(),
+      },
+      loading: {
+        description: "Whether app is currently loading",
+        handler: () => loading(),
+      },
+      status: {
+        description: "Current status line text",
+        handler: () => statusText(),
+      },
+      filter: {
+        description: "Current search filter",
+        handler: () => filter(),
+      },
+      sort: {
+        description: "Current sort mode",
+        handler: () => sort(),
+      },
+    },
+    commands: {
+      refreshFeed: {
+        description: "Reload feed from start. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          await loadFeed(true);
+          return { ok: true, count: posts().length };
+        },
+      },
+      loadMore: {
+        description: "Load next page of feed. Params: {}",
+        params: { type: "object", properties: {} },
+        handler: async () => {
+          const before = posts().length;
+          await loadFeed(false);
+          return { ok: true, added: posts().length - before, total: posts().length };
+        },
+      },
+      selectPost: {
+        description: "Select a post and load comments. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          await selectPost(p.postId as string);
+          return { ok: true, selectedPostId: selectedPostId(), comments: comments().length };
+        },
+      },
+      fetchPost: {
+        description: "Fetch one post by id and update cache. Params: { postId: string }",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+          required: ["postId"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const post = await fetchPost(p.postId as string);
+          const idx = posts().findIndex((x) => x.id === post.id);
+          const updated = [...posts()];
+          if (idx >= 0) updated[idx] = { ...updated[idx], ...post };
+          else updated.unshift(post);
+          setPosts(updated);
+          return { ok: true, post };
+        },
+      },
+      fetchComments: {
+        description: "Fetch comments for post id. Params: { postId?: string } (defaults to selected post)",
+        params: {
+          type: "object",
+          properties: { postId: { type: "string" } },
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
+          if (!postId) throw new Error("No postId provided and no post selected");
+          const fetchedComments = await fetchComments(postId);
+          if (selectedPostId() === postId) {
+            setComments(fetchedComments);
+          }
+          return { ok: true, postId, count: fetchedComments.length, comments: fetchedComments };
+        },
+      },
+      createPost: {
+        description: "Create a post with PoW in background. Params: { nickname: string, title: string, content: string }",
+        params: {
+          type: "object",
+          properties: {
+            nickname: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" },
+          },
+          required: ["nickname", "title", "content"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const jobId = `post-${Date.now().toString(36)}`;
+          setStatusText(`Queued createPost (${jobId})...`);
+
+          void (async () => {
+            try {
+              const post = await createPost(p as { nickname: string; title: string; content: string });
+              setPosts([post, ...posts()]);
+              setSelectedPostId(post.id);
+              setComments([]);
+              setStatusText(`Post created via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatusText(`Create post failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, jobId };
+        },
+      },
+      createComment: {
+        description: "Create comment with PoW in background. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
+        params: {
+          type: "object",
+          properties: {
+            postId: { type: "string" },
+            nickname: { type: "string" },
+            content: { type: "string" },
+            parent_id: { type: "string" },
+          },
+          required: ["nickname", "content"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
+          if (!postId) throw new Error("No postId provided and no post selected");
+
+          const jobId = `comment-${Date.now().toString(36)}`;
+          setStatusText(`Queued createComment (${jobId})...`);
+
+          void (async () => {
+            try {
+              await createComment(postId, {
+                nickname: p.nickname as string,
+                content: p.content as string,
+                parent_id: p.parent_id as string | undefined,
+              });
+              if (selectedPostId() === postId) {
+                await loadSelectedPost();
+              }
+              setStatusText(`Comment created via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatusText(`Create comment failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, postId, jobId };
+        },
+      },
+      vote: {
+        description: "Vote selected or target post in background. Params: { type: 'up'|'down', postId?: string }",
+        params: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["up", "down"] },
+            postId: { type: "string" },
+          },
+          required: ["type"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const postId = (p.postId as string | undefined) ?? selectedPostId();
+          if (!postId) throw new Error("No postId provided and no post selected");
+
+          const jobId = `vote-${Date.now().toString(36)}`;
+          setStatusText(`Queued vote (${jobId})...`);
+
+          void (async () => {
+            try {
+              await votePost(postId, p.type as "up" | "down");
+              if (selectedPostId() === postId) await loadSelectedPost();
+              setStatusText(`Vote completed via app protocol (${jobId}).`);
+            } catch (err) {
+              setStatusText(`Vote failed (${jobId}): ${(err as Error).message}`);
+            }
+          })();
+
+          return { ok: true, queued: true, postId, type: p.type, jobId };
+        },
+      },
+      setFilter: {
+        description: "Set text filter for post list. Params: { query: string }",
+        params: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          setFilter(p.query as string);
+          if (searchInputEl) searchInputEl.value = p.query as string;
+          return { ok: true, filter: filter() };
+        },
+      },
+      setSort: {
+        description: "Set sort mode. Params: { mode: 'latest'|'top'|'discussed' }",
+        params: {
+          type: "object",
+          properties: { mode: { type: "string", enum: ["latest", "top", "discussed"] } },
+          required: ["mode"],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          setSort(p.mode as SortMode);
+          if (sortSelectEl) sortSelectEl.value = p.mode as string;
+          return { ok: true, sort: sort() };
+        },
+      },
+    },
+  });
+}

@@ -27,7 +27,7 @@ let canvasEl!: HTMLDivElement;
 
 // Mount
 render(() => html`
-  <div class="root">
+  <div class="root y-light">
     ${createTopbar()}
     <div class="main">
       ${createThumbnailList()}

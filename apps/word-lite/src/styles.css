@@ -5,14 +5,7 @@ html,
 body {
   margin: 0;
   height: 100%;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    Arial,
-    sans-serif;
+  font-family: var(--yaar-font);
   background: var(--yaar-bg);
 }
 #app {
@@ -22,7 +15,7 @@ body {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   height: 100%;
-  color: #e5e7eb;
+  color: var(--yaar-text);
 }
 .topbar {
   display: flex;
@@ -85,11 +78,11 @@ body {
   max-width: 860px;
   min-height: calc(100% - 4px);
   margin: 0 auto;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
   border-radius: 10px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-  color: #111827;
+  color: var(--yaar-text);
   padding: 36px 44px;
   outline: none;
   line-height: 1.5;
@@ -110,7 +103,7 @@ body {
 }
 .page:empty:before {
   content: attr(data-placeholder);
-  color: #9ca3af;
+  color: var(--yaar-text-dim);
 }
 .statusbar {
   display: flex;

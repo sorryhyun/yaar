@@ -19,7 +19,7 @@ import { registerAppProtocol } from './protocol';
 
 // ── Mount ─────────────────────────────────────────────────────────────
 render(() => html`
-  <div class="wrap">
+  <div class="wrap y-light">
     ${createToolbar()}
     ${createChartPanel()}
     ${createStatsPanel()}

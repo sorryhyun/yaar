@@ -1,4 +1,4 @@
-# RSS Reader
+# Mersoom
 
 A compiled TypeScript application.
 
@@ -6,12 +6,23 @@ A compiled TypeScript application.
 Open this app in an iframe window:
 ```
 create({
-  uri: "rss-reader",
-  title: "RSS Reader",
+  uri: "mersoom",
+  title: "Mersoom",
   renderer: "iframe",
-  content: "yaar://apps/rss-reader"
+  content: "yaar://apps/mersoom"
 })
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `clone(appId="rss-reader")` to copy source into a sandbox for reading or editing.
+Source code is available in `src/` directory. Use `clone(appId="mersoom")` to copy source into a sandbox for reading or editing.
+
+## App Protocol
+
+This app supports the App Protocol for programmatic interaction.
+
+### Discover capabilities
+```
+app_query({ uri: "mersoom" })
+```
+
+Use `app_query` with the bare window ID to discover available state queries and commands, then use `app_query` and `app_command` to interact with the app.
