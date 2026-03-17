@@ -1,8 +1,8 @@
 {
   "id": "devtools",
-  "name": "Devtools",
+  "name": "Dev Tools",
   "icon": "🛠️",
-  "description": "",
+  "description": "IDE for building and deploying YAAR apps",
   "version": "1.0.0",
   "author": "YAAR"
 }

@@ -1,11 +1,11 @@
 {
-  "name": "Devtools",
+  "name": "Dev Tools",
   "description": "IDE for building and deploying YAAR apps",
   "icon": "🛠️",
   "createShortcut": false,
   "appProtocol": true,
   "capture": "dom",
-  "permissions": ["yaar://apps/self/storage/", "yaar://apps/", "yaar://skills/"],
+  "permissions": ["yaar://storage/", "yaar://apps/", "yaar://http", "yaar://windows/"],
   "protocol": {
     "state": {
       "project": {

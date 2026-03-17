@@ -1,8 +1,8 @@
 {
   "id": "falling-blocks",
   "name": "Falling Blocks",
-  "icon": "🏠",
-  "description": "Canvas-based Tetris game with reactive UI via @bundled/solid-js signals",
+  "icon": "🟦",
+  "description": "Canvas-based Tetris game with gradient/glow blocks, particle effects, sound effects via Tone.js, ghost piece, hold system, combo scoring, and animated starfield background",
   "version": "1.0.0",
   "author": "YAAR"
 }

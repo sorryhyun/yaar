@@ -60,6 +60,42 @@ function projectPath(projectId: string, sub?: string): string {
   return sub ? `projects/${projectId}/${sub}` : `projects/${projectId}`;
 }
 
+// Recursively list all files and directories under a storage path.
+// appStorage.list() is shallow — only returns direct children.
+// This function walks subdirectories and returns a flat list of all entries
+// with paths relative to the given prefix.
+async function listAllFiles(storagePath: string, prefix: string): Promise<FileEntry[]> {
+  let entries: FileEntry[];
+  try {
+    entries = (await appStorage.list(storagePath)) as FileEntry[];
+  } catch {
+    return [];
+  }
+
+  const result: FileEntry[] = [];
+  for (const entry of entries) {
+    // Strip the storage prefix to get a display-relative path
+    const relativePath = entry.path.startsWith(prefix + '/')
+      ? entry.path.slice(prefix.length + 1)
+      : entry.path.startsWith(prefix)
+      ? entry.path.slice(prefix.length)
+      : entry.path;
+
+    // Normalize: remove trailing slash from directory paths
+    const cleanPath = relativePath.replace(/\/$/, '');
+
+    result.push({ path: cleanPath, isDirectory: entry.isDirectory, size: entry.size });
+
+    // Recurse into subdirectories
+    if (entry.isDirectory) {
+      const subPath = entry.path.replace(/\/$/, '');
+      const children = await listAllFiles(subPath, prefix);
+      result.push(...children);
+    }
+  }
+  return result;
+}
+
 // ── Project Management ──
 
 export async function loadProjects(): Promise<void> {
@@ -88,7 +124,7 @@ export async function createProject(name: string): Promise<string> {
   const id = Date.now().toString();
   await appStorage.save(
     projectPath(id, 'src/main.ts'),
-    `export {};\nimport { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => html\`\n  <div class="y-app y-p-3">\n    <h1>Hello, ${name}!</h1>\n  </div>\n\`;\n\nrender(App, document.getElementById('app')!);\n`
+    `export {};\nimport { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => html\`\n  <div class="y-app y-p-3">\n    <h1>Hello, ${name}!</h1>\n  </div>\`\n;\n\nrender(App, document.getElementById('app')!);\n`
   );
   await appStorage.save(projectPath(id, 'src/styles.css'), `#app { height: 100%; }\n`);
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
@@ -188,15 +224,9 @@ export function closeTab(id: string): void {
 export async function refreshFiles(projectId?: string): Promise<void> {
   const id = projectId ?? activeProject()?.id;
   if (!id) return;
+  const basePath = projectPath(id);
   try {
-    const entries = await appStorage.list(projectPath(id));
-    const mapped = (entries as FileEntry[]).map((e) => ({
-      ...e,
-      // Strip the projects/{id}/ prefix for display
-      path: e.path.startsWith(`projects/${id}/`)
-        ? e.path.slice(`projects/${id}/`.length)
-        : e.path,
-    }));
+    const mapped = await listAllFiles(basePath, basePath);
     setFiles(mapped);
   } catch {
     setFiles([]);
