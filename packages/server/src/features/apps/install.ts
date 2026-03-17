@@ -12,6 +12,7 @@ import { listApps } from './discovery.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
+import { readSettings } from '../../storage/settings.js';
 import type { PermissionEntry } from '../../http/routes/verb.js';
 
 /** Format permission entries into a human-readable string for the dialog. */
@@ -83,22 +84,27 @@ export async function installApp(appId: string): Promise<VerbResult> {
     await unlink(tmpFile).catch(() => {});
   }
 
-  // Check for permissions and prompt user before installing
+  // Check for permissions and prompt user before installing.
+  // Skip the permission dialog during onboarding — the user is being guided through
+  // initial setup and shouldn't be interrupted by permission modals for each app.
   if (!isUpdate) {
     const permissions = await readAppPermissions(stagingDir);
     if (permissions && permissions.length > 0) {
-      const confirmed = await actionEmitter.showPermissionDialog(
-        'App Permissions',
-        `"${appId}" requests the following permissions:\n\n${formatPermissions(permissions)}\n\nDo you want to allow this?`,
-        'app_install',
-        appId,
-        'Install',
-        'Cancel',
-      );
+      const settings = await readSettings();
+      if (settings.onboardingCompleted) {
+        const confirmed = await actionEmitter.showPermissionDialog(
+          'App Permissions',
+          `"${appId}" requests the following permissions:\n\n${formatPermissions(permissions)}\n\nDo you want to allow this?`,
+          'app_install',
+          appId,
+          'Install',
+          'Cancel',
+        );
 
-      if (!confirmed) {
-        await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-        return error(`Installation of "${appId}" was cancelled by the user.`);
+        if (!confirmed) {
+          await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+          return error(`Installation of "${appId}" was cancelled by the user.`);
+        }
       }
     }
   }

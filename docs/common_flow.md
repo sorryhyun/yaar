@@ -80,6 +80,134 @@ A temporary agent spawned by the monitor agent to handle delegated work. Forks t
 - **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
 - **Parallel**: Multiple task agents can run concurrently for independent sub-tasks
 
+## Monitor Agent ↔ App Agent: Division of Responsibility
+
+The monitor agent and app agents have complementary roles with a clear boundary: the monitor agent is the **generalist orchestrator** that knows the user and conversation; app agents are **specialist operators** that know their app's internal state and commands.
+
+### What the Monitor Agent Knows
+
+- **Full conversation history** — provider session continuity across all messages
+- **All open windows** — markdown summary of every window on its monitor
+- **User intent** — receives user messages first, decides how to route them
+- **App catalog** — can load any app's SKILL.md, create app windows, install/uninstall apps
+- **System state** — storage, memory, config, shortcuts, hooks
+
+### What the Monitor Agent Does NOT Know
+
+- App-internal state (spreadsheet cells, browser URL, slide deck contents)
+- App-specific commands (how to set cells, navigate browser, insert slides)
+- How to communicate with an iframe via app protocol
+
+### What the App Agent Knows
+
+- **App manifest** — state keys and commands declared by the app at registration
+- **App skill** — SKILL.md loaded on first interaction (domain knowledge, API docs, workflows)
+- **Conversation within the app** — provider session continuity for the app's interaction history
+
+### What the App Agent Does NOT Know
+
+- Other windows, user's broader conversation, system state
+- How to search the web, run code, or access tools outside the app's scope
+- It uses `relay()` to hand off anything outside its domain to the monitor agent
+
+### The Handoff Pattern
+
+```
+User clicks app icon
+       │
+       ▼
+Monitor Agent                          App Agent (created lazily)
+  │                                      │
+  │  Loads SKILL.md                      │
+  │  Creates iframe window               │
+  │  (appId, appProtocol: true)          │
+  │                                      │
+  │  [done — monitor returns to idle]    │
+  │                                      │
+  │  User clicks button in app ────────> │  First interaction:
+  │                                      │  • Bootstrap with SKILL.md + manifest
+  │                                      │  • query() app state
+  │                                      │  • command() app actions
+  │                                      │  • Subsequent interactions reuse session
+  │                                      │
+  │  <── relay("search the web for X") ──│  Outside app's domain
+  │                                      │
+  │  Monitor handles the relay           │
+  │  (enqueued as a monitor task)        │
+  │                                      │
+```
+
+### App Protocol: How Agent Talks to Iframe
+
+Apps with `appProtocol: true` in `app.json` declare a self-describing contract — state keys to query and commands to invoke. The agent discovers and uses these dynamically.
+
+```
+App Protocol Communication Chain:
+
+Agent calls query('cells') or command('setCells', { data })
+  │
+  ▼
+MCP app-agent tool handler
+  │
+  ▼
+ActionEmitter.emitAppProtocolRequest(windowId, request)
+  │  (5-second timeout)
+  ▼
+WebSocket: APP_PROTOCOL_REQUEST → Frontend
+  │
+  ▼
+Frontend: postMessage → Iframe
+  │  yaar:app-query-request / yaar:app-command-request
+  ▼
+Iframe processes request, responds via postMessage
+  │  yaar:app-query-response / yaar:app-command-response
+  ▼
+Frontend: APP_PROTOCOL_RESPONSE → WebSocket → Server
+  │
+  ▼
+ActionEmitter resolves pending promise → result returned to agent
+```
+
+**Registration flow**: When an iframe loads, the injected app protocol script exposes `window.yaar.app.register(manifest)`. The app calls this with its capabilities (state keys + commands). The server stores readiness per window, and subsequent `query`/`command` calls proceed without waiting.
+
+### App Agent Tools (Minimal by Design)
+
+App agents have only 3 tools, keeping them focused:
+
+| Tool | Purpose |
+|------|---------|
+| `query(stateKey?)` | Read app state — omit key for manifest, pass key for specific state |
+| `command(command, params?)` | Invoke an app command (e.g., `setCells`, `refresh`, `setTheme`) |
+| `relay(message)` | Hand off to monitor agent for anything outside app's domain |
+
+### Complex App Example: DevTool-style Apps
+
+Apps like the browser or slides editor use app protocol for rich bidirectional communication:
+
+```
+Browser App (appProtocol: true):
+  State: currentUrl, browserId
+  Commands: refresh, clear, attach
+
+  Agent flow:
+  1. User: "Go to example.com"
+  2. App agent: command('refresh', { url: 'https://example.com' })
+  3. Iframe: navigates Chrome via CDP, takes screenshot, responds
+  4. App agent: sees result, can query('currentUrl') to verify
+
+Slides App (appProtocol: true):
+  State: deck, activeSlide, theme, slideCount, ...
+  Commands: setDeck, appendSlides, setActiveIndex, setTheme, ...
+
+  Agent flow:
+  1. User: "Add 3 slides about AI"
+  2. App agent: query('deck') to see current state
+  3. App agent: command('appendSlides', { slides: [...] })
+  4. Iframe: renders new slides, responds with updated deck
+```
+
+The monitor agent never needs to understand these app internals — it just opens the window and lets the app agent handle all interactions.
+
 ## Message Flow
 
 ### User Message → Monitor Agent
