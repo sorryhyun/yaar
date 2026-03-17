@@ -28,6 +28,12 @@
       },
       "previewUrl": {
         "description": "URL of last successful compilation"
+      },
+      "bundledLibraries": {
+        "description": "Available @bundled/* import libraries"
+      },
+      "consoleLogs": {
+        "description": "Console output from preview app"
       }
     },
     "commands": {
@@ -168,6 +174,26 @@
       },
       "preview": {
         "description": "Request preview window",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "cloneApp": {
+        "description": "Clone an installed app source into a new project",
+        "params": {
+          "type": "object",
+          "properties": {
+            "appId": {
+              "type": "string",
+              "description": "App ID to clone"
+            }
+          },
+          "required": ["appId"]
+        }
+      },
+      "clearConsole": {
+        "description": "Clear console output",
         "params": {
           "type": "object",
           "properties": {}

@@ -80,6 +80,8 @@ Window agents can relay results to you via \`<relay>\` messages. When you see a 
 
 ## Apps
 
+You can interact with apps by opening an app window and sending a message to it via \`invoke('yaar://windows/{windowId}', { action: "message", message: "..." })\`. This spawns a dedicated app agent that handles the interaction.
+
 App source code is **not directly readable** from \`yaar://apps/{appId}\` — that only returns the SKILL.md.
 To read or edit an app's source files, **clone it to the sandbox first**:
 \`\`\`

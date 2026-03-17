@@ -10,6 +10,8 @@ import {
   compileErrors,
   previewUrl,
   files,
+  bundledLibs,
+  consoleLogs,
   createProject,
   openProject,
   deleteProject,
@@ -20,6 +22,8 @@ import {
   compile,
   typecheck,
   deploy,
+  cloneApp,
+  clearConsoleLogs,
 } from './project';
 
 export function registerProtocol() {
@@ -65,6 +69,14 @@ export function registerProtocol() {
       previewUrl: {
         description: 'URL of last successful compilation',
         handler: () => previewUrl(),
+      },
+      bundledLibraries: {
+        description: 'Available @bundled/* import libraries',
+        handler: () => [...bundledLibs()],
+      },
+      consoleLogs: {
+        description: 'Console output from preview app',
+        handler: () => [...consoleLogs()],
       },
     },
     commands: {
@@ -220,6 +232,28 @@ export function registerProtocol() {
             projectName: activeProject()?.name ?? 'Preview',
           });
           return { ok: true, previewUrl: url };
+        },
+      },
+      cloneApp: {
+        description: 'Clone an installed app source into a new project',
+        params: {
+          type: 'object',
+          properties: {
+            appId: { type: 'string', description: 'App ID to clone' },
+          },
+          required: ['appId'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const projectId = await cloneApp(String(p.appId));
+          return { ok: true, projectId };
+        },
+      },
+      clearConsole: {
+        description: 'Clear console output',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          clearConsoleLogs();
+          return { ok: true };
         },
       },
     },

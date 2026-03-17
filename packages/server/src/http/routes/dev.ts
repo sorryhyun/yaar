@@ -26,6 +26,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description: 'Typecheck a project',
   },
   { method: 'POST', path: '/api/dev/deploy', response: 'json', description: 'Deploy a project' },
+  {
+    method: 'GET',
+    path: '/api/dev/bundled-libraries',
+    response: 'json',
+    description: 'List bundled libraries',
+  },
 ];
 
 /** Resolve and validate a path relative to app storage. Returns absolute path or null. */
@@ -35,7 +41,15 @@ function resolveAppPath(appId: string, path: string): string | null {
 }
 
 export async function handleDevRoutes(req: Request, url: URL): Promise<Response | null> {
-  if (!url.pathname.startsWith('/api/dev/') || req.method !== 'POST') return null;
+  if (!url.pathname.startsWith('/api/dev/')) return null;
+
+  // GET /api/dev/bundled-libraries — no auth required (static list)
+  if (url.pathname === '/api/dev/bundled-libraries' && req.method === 'GET') {
+    const { getAvailableBundledLibraries } = await import('../../lib/compiler/plugins.js');
+    return jsonResponse(getAvailableBundledLibraries());
+  }
+
+  if (req.method !== 'POST') return null;
 
   const action = url.pathname.slice('/api/dev/'.length);
   if (action !== 'compile' && action !== 'typecheck' && action !== 'deploy') return null;

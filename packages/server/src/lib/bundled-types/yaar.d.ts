@@ -136,6 +136,7 @@ interface YaarDev {
   compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
   deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
+  bundledLibraries(): Promise<string[]>;
 }
 
 // ── Verb SDK ─────────────────────────────────────────────────────

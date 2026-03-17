@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, dev } from '@bundled/yaar';
+import { appStorage, dev, invokeJson } from '@bundled/yaar';
 
 // ── Types ──
 
@@ -23,6 +23,12 @@ export interface Diagnostic {
   severity: 'error' | 'warning';
 }
 
+export interface ConsoleEntry {
+  level: string;
+  args: string[];
+  timestamp: number;
+}
+
 // ── Signals ──
 
 export const [activeProject, setActiveProject] = createSignal<ProjectMeta | null>(null);
@@ -37,6 +43,16 @@ export const [compileStatus, setCompileStatus] = createSignal<
 export const [compileErrors, setCompileErrors] = createSignal<string[]>([]);
 export const [previewUrl, setPreviewUrl] = createSignal<string | null>(null);
 export const [statusText, setStatusText] = createSignal('Ready');
+
+// ── Feature: Multi-Project Tabs ──
+export const [openTabs, setOpenTabs] = createSignal<string[]>([]);
+
+// ── Feature: Bundled Libraries ──
+export const [bundledLibs, setBundledLibs] = createSignal<string[]>([]);
+
+// ── Feature: Console Capture ──
+export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
+export const [previewIframeUrl, setPreviewIframeUrl] = createSignal<string | null>(null);
 
 // ── Helpers ──
 
@@ -82,9 +98,31 @@ export async function createProject(name: string): Promise<string> {
   return id;
 }
 
+export async function cloneApp(appId: string): Promise<string> {
+  setStatusText(`Cloning "${appId}"...`);
+  const result = await invokeJson<{
+    files: { path: string; content: string }[];
+    meta: { name: string };
+  }>('yaar://apps/' + appId, { action: 'clone' });
+  const name = result?.meta?.name ?? appId;
+  const id = Date.now().toString();
+  await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
+  if (result?.files) {
+    for (const file of result.files) {
+      await appStorage.save(projectPath(id, file.path), file.content);
+    }
+  }
+  await loadProjects();
+  await openProject(id);
+  setStatusText(`Cloned "${name}"`);
+  return id;
+}
+
 export async function openProject(id: string): Promise<void> {
   const proj = projects().find((p) => p.id === id);
   if (!proj) return;
+  // Add to tabs if not present
+  if (!openTabs().includes(id)) setOpenTabs([...openTabs(), id]);
   setActiveProject(proj);
   await refreshFiles(id);
   // Open main.ts by default
@@ -105,19 +143,46 @@ export async function deleteProject(id: string): Promise<void> {
   } catch {
     /* best effort */
   }
+  // Remove from tabs
+  setOpenTabs(openTabs().filter((t) => t !== id));
   if (activeProject()?.id === id) {
-    batch(() => {
-      setActiveProject(null);
-      setFiles([]);
-      setOpenFilePath(null);
-      setOpenFileContent(null);
-      setDiagnostics([]);
-      setCompileStatus('idle');
-      setPreviewUrl(null);
-    });
+    const remaining = openTabs();
+    if (remaining.length > 0) {
+      await openProject(remaining[remaining.length - 1]);
+    } else {
+      batch(() => {
+        setActiveProject(null);
+        setFiles([]);
+        setOpenFilePath(null);
+        setOpenFileContent(null);
+        setDiagnostics([]);
+        setCompileStatus('idle');
+        setPreviewUrl(null);
+      });
+    }
   }
   await loadProjects();
   setStatusText('Project deleted');
+}
+
+export function closeTab(id: string): void {
+  const tabs = openTabs().filter((t) => t !== id);
+  setOpenTabs(tabs);
+  if (activeProject()?.id === id) {
+    if (tabs.length > 0) {
+      openProject(tabs[tabs.length - 1]);
+    } else {
+      batch(() => {
+        setActiveProject(null);
+        setFiles([]);
+        setOpenFilePath(null);
+        setOpenFileContent(null);
+        setDiagnostics([]);
+        setCompileStatus('idle');
+        setPreviewUrl(null);
+      });
+    }
+  }
 }
 
 export async function refreshFiles(projectId?: string): Promise<void> {
@@ -204,6 +269,8 @@ export async function compile(): Promise<void> {
         setCompileStatus('success');
         setCompileErrors([]);
         setPreviewUrl(result.previewUrl ?? null);
+        setPreviewIframeUrl(result.previewUrl ?? null);
+        setConsoleLogs([]);
         setStatusText('Compilation successful');
       });
     } else {
@@ -264,6 +331,30 @@ export async function deploy(opts: {
   } catch (err) {
     setStatusText(`Deploy failed: ${err instanceof Error ? err.message : 'Unknown'}`);
   }
+}
+
+// ── Bundled Libraries ──
+
+export async function loadBundledLibraries(): Promise<void> {
+  try {
+    const libs = await dev.bundledLibraries();
+    setBundledLibs(libs);
+  } catch {
+    /* non-fatal */
+  }
+}
+
+// ── Console ──
+
+export function clearConsoleLogs(): void {
+  setConsoleLogs([]);
+}
+
+export function addConsoleEntry(entry: ConsoleEntry): void {
+  setConsoleLogs((prev) => {
+    const next = [...prev, entry];
+    return next.length > 200 ? next.slice(-200) : next;
+  });
 }
 
 // ── Diagnostic parsing ──

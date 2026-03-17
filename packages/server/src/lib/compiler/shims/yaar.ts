@@ -171,6 +171,10 @@ export const dev = {
       error?: string;
     }>('deploy', { path, ...opts });
   },
+  async bundledLibraries(): Promise<string[]> {
+    const res = await fetch('/api/dev/bundled-libraries', { headers: devHeaders() });
+    return res.json();
+  },
 };
 
 // ── Timing utilities ────────────────────────────────────────────

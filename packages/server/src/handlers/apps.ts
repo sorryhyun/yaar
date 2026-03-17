@@ -89,8 +89,8 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       properties: {
         action: {
           type: 'string',
-          enum: ['set_badge', 'write'],
-          description: 'set_badge for app badge, write for app storage',
+          enum: ['set_badge', 'write', 'clone'],
+          description: 'set_badge for app badge, write for app storage, clone for source cloning',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for write)' },
@@ -283,6 +283,13 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         return ok(
           count > 0 ? `Badge set to ${count} on "${appId}"` : `Badge cleared on "${appId}"`,
         );
+      }
+
+      if (payload.action === 'clone') {
+        const { cloneAppSource } = await import('../features/dev/clone.js');
+        const result = await cloneAppSource(appId);
+        if (!result.success) return error(result.error!);
+        return okJson({ files: result.files, meta: result.meta });
       }
 
       return error(`Unknown action "${payload.action}".`);

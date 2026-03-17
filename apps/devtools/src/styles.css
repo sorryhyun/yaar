@@ -4,7 +4,7 @@
 
 .devtools {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   height: 100%;
   background: var(--yaar-bg);
   color: var(--yaar-text);
@@ -25,6 +25,56 @@
 .toolbar .project-select {
   flex: 1;
   min-width: 0;
+}
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  overflow-x: auto;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+  min-height: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: 4px 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  border-bottom: 2px solid transparent;
+  user-select: none;
+}
+
+.tab:hover {
+  color: var(--yaar-text);
+  background: var(--yaar-bg-hover);
+}
+
+.tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.tab-close {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.tab:hover .tab-close {
+  opacity: 0.6;
+}
+
+.tab-close:hover {
+  opacity: 1 !important;
+  background: var(--yaar-bg-hover);
 }
 
 /* ── Main area ── */
@@ -106,6 +156,9 @@
 }
 
 .editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
   padding: var(--yaar-sp-1) var(--yaar-sp-2);
   border-bottom: 1px solid var(--yaar-border);
   background: var(--yaar-bg-surface);
@@ -113,26 +166,38 @@
 
 .editor-content {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
 }
 
-.editor-pre {
+.editor-textarea {
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: var(--yaar-sp-2);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.5;
   tab-size: 2;
-  white-space: pre-wrap;
-  word-break: break-all;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border: none;
+  outline: none;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
 }
 
-.editor-pre code {
-  font-family: inherit;
+.dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yaar-accent);
+  display: inline-block;
+  flex-shrink: 0;
 }
 
-/* ── Diagnostics ── */
+/* ── Diagnostics / Bottom Panel ── */
 .diagnostics {
   border-top: 1px solid var(--yaar-border);
   max-height: 150px;
@@ -140,14 +205,49 @@
   flex-direction: column;
 }
 
-.diagnostics-header {
+.bottom-tabs {
   display: flex;
   align-items: center;
-  gap: var(--yaar-sp-1);
-  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  gap: 0;
   background: var(--yaar-bg-surface);
   border-bottom: 1px solid var(--yaar-border);
+}
+
+.bottom-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
   font-weight: 600;
+  font-family: inherit;
+}
+
+.bottom-tab:hover {
+  color: var(--yaar-text);
+}
+
+.bottom-tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.bottom-tab-action {
+  margin-left: auto;
+  padding: 2px var(--yaar-sp-2);
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.bottom-tab-action:hover {
+  color: var(--yaar-text);
 }
 
 .diagnostics-count {
@@ -155,7 +255,8 @@
   padding: 1px 5px;
 }
 
-.diagnostics-list {
+.diagnostics-list,
+.console-list {
   overflow-y: auto;
   flex: 1;
 }
@@ -200,6 +301,42 @@
 .diag-message {
   flex: 1;
   min-width: 0;
+}
+
+/* ── Console entries ── */
+.console-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-1);
+  padding: 2px var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.console-entry.warn {
+  color: var(--yaar-warning, #d29922);
+}
+
+.console-entry.error {
+  color: var(--yaar-error);
+}
+
+.console-level {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.console-time {
+  flex-shrink: 0;
+  opacity: 0.5;
+  font-family: monospace;
+}
+
+.console-args {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* ── Statusbar ── */

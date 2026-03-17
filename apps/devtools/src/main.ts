@@ -1,7 +1,6 @@
 export {};
-import { Show } from '@bundled/solid-js';
+import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
 import { app } from '@bundled/yaar';
 import './styles.css';
 import {
@@ -10,9 +9,13 @@ import {
   compileStatus,
   statusText,
   previewUrl,
+  openTabs,
+  previewIframeUrl,
   loadProjects,
+  loadBundledLibraries,
   createProject,
   openProject,
+  closeTab,
   compile,
   typecheck,
 } from './project';
@@ -20,6 +23,33 @@ import { FileTree } from './file-tree';
 import { Editor } from './editor';
 import { DiagnosticsPanel } from './diagnostics';
 import { registerProtocol } from './protocol';
+
+// ── Tab Bar ──
+
+const TabBar = () => html`
+  <div class="tab-bar">
+    <${For} each=${openTabs}>
+      ${(tabId: string) => {
+        const proj = () => projects().find((p) => p.id === tabId);
+        return html`
+          <div
+            class=${() => `tab${activeProject()?.id === tabId ? ' active' : ''}`}
+            onClick=${() => openProject(tabId)}
+          >
+            <span class="tab-name">${() => proj()?.name ?? tabId}</span>
+            <span
+              class="tab-close"
+              onClick=${(e: Event) => {
+                e.stopPropagation();
+                closeTab(tabId);
+              }}
+            >\u00d7</span>
+          </div>
+        `;
+      }}
+    <//>
+  </div>
+`;
 
 // ── App Shell ──
 
@@ -39,7 +69,7 @@ const App = () => html`
           }
         }}
       >
-        <option value="" disabled>Select project...</option>
+        <option value="" disabled>Open project...</option>
         ${() =>
           projects().map(
             (p) => html`
@@ -86,6 +116,10 @@ const App = () => html`
       </button>
     </div>
 
+    <${Show} when=${() => openTabs().length > 0}>
+      <${TabBar} />
+    <//>
+
     <div class="main-area">
       <${FileTree} />
       <div class="editor-area">
@@ -107,11 +141,18 @@ const App = () => html`
       <//>
     </div>
   </div>
+
+  <iframe
+    src=${() => previewIframeUrl() ?? 'about:blank'}
+    style="display:none;width:0;height:0;border:none"
+  ></iframe>
 `;
 
 render(App, document.getElementById('app')!);
 
 // ── Init ──
 
+import { render } from '@bundled/solid-js/web';
 registerProtocol();
 loadProjects();
+loadBundledLibraries();
