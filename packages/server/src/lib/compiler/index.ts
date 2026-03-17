@@ -135,8 +135,12 @@ async function compileWithBun(entryPoint: string, minify: boolean): Promise<stri
 
   if (!result.success) {
     const errors = result.logs
-      .filter((l) => l.level === 'error')
-      .map((l) => l.message || String(l));
+      .filter((l) => l.level === 'error' || l.level === 'warning')
+      .map((l) => {
+        const pos = l.position;
+        const loc = pos ? `${pos.file ?? entryPoint}:${pos.line}:${pos.column}: ` : '';
+        return `${loc}${l.message || String(l)}`;
+      });
     throw new Error(errors.join('\n') || `Bun.build() failed for ${entryPoint}`);
   }
 

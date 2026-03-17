@@ -15,6 +15,18 @@ import { MAX_UPLOAD_SIZE, PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { validateIframeToken } from '../iframe-tokens.js';
+import type { EndpointMeta } from '../utils.js';
+
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
+  { method: 'POST', path: '/api/dev/compile', response: 'json', description: 'Compile a project' },
+  {
+    method: 'POST',
+    path: '/api/dev/typecheck',
+    response: 'json',
+    description: 'Typecheck a project',
+  },
+  { method: 'POST', path: '/api/dev/deploy', response: 'json', description: 'Deploy a project' },
+];
 
 /** Resolve and validate a path relative to app storage. Returns absolute path or null. */
 function resolveAppPath(appId: string, path: string): string | null {

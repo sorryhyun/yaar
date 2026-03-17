@@ -233,6 +233,16 @@ Fully additive — no changes to existing sandbox or agent code. Both paths work
 - **Dynamic imports** — `compileTypeScript`, `typecheckSandbox`, and `doDeploy` are dynamically imported in the route handler to avoid loading heavy modules at startup.
 - **Path traversal prevention** — path is validated to not contain `..` or start with `/`.
 
+### Phase 1.5: AGENT.md for app agents (done)
+
+Added `AGENT.md` support for app agents. When `apps/{appId}/AGENT.md` exists, it replaces the generic hardcoded system prompt. Protocol manifest from `app.json` is still appended.
+
+- `features/apps/discovery.ts` — added `loadAppAgentDoc(appId)` loader
+- `agents/profiles/app-agent.ts` — loads AGENT.md as base prompt, falls back to generic prompt
+- `apps/devtools/AGENT.md` — full app development reference adapted from the `app_dev` skill doc, reframed for command-based workflow
+
+**Deferred: bundled libraries as protocol state** — Currently the bundled library list is hardcoded in `AGENT.md`. A cleaner approach is to expose it as a protocol state key (e.g., `query("bundledLibraries")`) so the agent always gets the live list from the compiler. This requires adding a `bundledLibraries` state handler in `apps/devtools/src/protocol.ts` backed by a new `/api/dev/bundled-libraries` endpoint (or a command that calls the server). Low priority since the library list changes infrequently.
+
 ### Phase 2: Advanced features
 
 - **LSP-lite**: `tsc --watch` in background, pipe diagnostics to devtools via `yaar://` subscription

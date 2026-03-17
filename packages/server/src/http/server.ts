@@ -21,6 +21,7 @@ import {
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
+import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
 import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from './routes/verb.js';
@@ -36,7 +37,7 @@ interface PublicRoute {
 }
 
 function buildPublicRoutes(): PublicRoute[] {
-  const all = [...API_PUBLIC, ...FILES_PUBLIC, ...PROXY_PUBLIC, ...VERB_PUBLIC];
+  const all = [...API_PUBLIC, ...DEV_PUBLIC, ...FILES_PUBLIC, ...PROXY_PUBLIC, ...VERB_PUBLIC];
   return all.map((ep) => {
     // Strip query string from path pattern
     const pathOnly = ep.path.split('?')[0];

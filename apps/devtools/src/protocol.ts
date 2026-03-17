@@ -7,6 +7,7 @@ import {
   openFileContent,
   diagnostics,
   compileStatus,
+  compileErrors,
   previewUrl,
   files,
   createProject,
@@ -56,6 +57,10 @@ export function registerProtocol() {
       compileStatus: {
         description: 'Compilation state',
         handler: () => compileStatus(),
+      },
+      compileErrors: {
+        description: 'Compilation errors (if any)',
+        handler: () => [...compileErrors()],
       },
       previewUrl: {
         description: 'URL of last successful compilation',
@@ -161,7 +166,14 @@ export function registerProtocol() {
         params: { type: 'object', properties: {} },
         handler: async () => {
           await compile();
-          return { ok: true, status: compileStatus(), previewUrl: previewUrl() };
+          const status = compileStatus();
+          const errors = compileErrors();
+          return {
+            ok: true,
+            status,
+            previewUrl: previewUrl(),
+            ...(status === 'error' && errors.length > 0 ? { errors } : {}),
+          };
         },
       },
       typecheck: {

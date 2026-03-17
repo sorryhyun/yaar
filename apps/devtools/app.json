@@ -23,6 +23,9 @@
       "compileStatus": {
         "description": "Compilation state"
       },
+      "compileErrors": {
+        "description": "Compilation errors (if any)"
+      },
       "previewUrl": {
         "description": "URL of last successful compilation"
       }

@@ -34,6 +34,7 @@ export const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>([]);
 export const [compileStatus, setCompileStatus] = createSignal<
   'idle' | 'compiling' | 'success' | 'error'
 >('idle');
+export const [compileErrors, setCompileErrors] = createSignal<string[]>([]);
 export const [previewUrl, setPreviewUrl] = createSignal<string | null>(null);
 export const [statusText, setStatusText] = createSignal('Ready');
 
@@ -194,22 +195,32 @@ export async function compile(): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
   setCompileStatus('compiling');
+  setCompileErrors([]);
   setStatusText('Compiling...');
   try {
     const result = await dev.compile(projectPath(proj.id), { title: proj.name });
     if (result.success) {
       batch(() => {
         setCompileStatus('success');
+        setCompileErrors([]);
         setPreviewUrl(result.previewUrl ?? null);
         setStatusText('Compilation successful');
       });
     } else {
-      setCompileStatus('error');
-      setStatusText(result.errors?.join('\n') ?? 'Compilation failed');
+      const errors = result.errors ?? [(result as { error?: string }).error ?? 'Compilation failed'];
+      batch(() => {
+        setCompileStatus('error');
+        setCompileErrors(errors);
+        setStatusText(errors.join('\n'));
+      });
     }
   } catch (err) {
-    setCompileStatus('error');
-    setStatusText(`Compile error: ${err instanceof Error ? err.message : 'Unknown'}`);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    batch(() => {
+      setCompileStatus('error');
+      setCompileErrors([msg]);
+      setStatusText(`Compile error: ${msg}`);
+    });
   }
 }
 
@@ -223,9 +234,10 @@ export async function typecheck(): Promise<void> {
       setDiagnostics([]);
       setStatusText('No type errors');
     } else {
-      const parsed = parseDiagnostics(result.diagnostics.join('\n'));
-      setDiagnostics(parsed);
-      setStatusText(`${parsed.length} type error(s)`);
+      const raw = result.diagnostics ?? [(result as { error?: string }).error ?? 'Unknown error'];
+      const parsed = parseDiagnostics(raw.join('\n'));
+      setDiagnostics(parsed.length > 0 ? parsed : raw.map((m) => ({ file: '?', line: 0, message: m, severity: 'error' as const })));
+      setStatusText(`${parsed.length || raw.length} type error(s)`);
     }
   } catch (err) {
     setStatusText(`Typecheck error: ${err instanceof Error ? err.message : 'Unknown'}`);
