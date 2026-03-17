@@ -5,7 +5,6 @@
  * Uses generated types from the Codex schema for type-safe notification handling.
  */
 
-import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage } from '../types.js';
 import type {
   AgentMessageDeltaNotification,
@@ -15,20 +14,6 @@ import type {
   ItemStartedNotification,
   ItemCompletedNotification,
   ThreadItem,
-  EventMsg,
-  AgentStatus,
-  CollabAgentSpawnBeginEvent,
-  CollabAgentSpawnEndEvent,
-  CollabAgentInteractionBeginEvent,
-  CollabAgentInteractionEndEvent,
-  CollabWaitingBeginEvent,
-  CollabWaitingEndEvent,
-  CollabCloseBeginEvent,
-  CollabCloseEndEvent,
-  CollabResumeBeginEvent,
-  CollabResumeEndEvent,
-  WebSearchBeginEvent,
-  WebSearchEndEvent,
 } from './types.js';
 
 /** Extract the mcpToolCall variant from ThreadItem */
@@ -267,14 +252,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     }
 
     // ========================================================================
-    // Event message (v1 events, includes collaboration/subagent events)
-    // ========================================================================
-
-    case 'event_msg': {
-      return mapEventMsg(params as EventMsg);
-    }
-
-    // ========================================================================
     // Unknown/unhandled events
     // ========================================================================
 
@@ -299,6 +276,8 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
         method === 'item/reasoning/summaryTextDelta' ||
         method === 'item/reasoning/summaryPartAdded' ||
         method === 'item/plan/delta' ||
+        method === 'item/autoApprovalReview/started' ||
+        method === 'item/autoApprovalReview/completed' ||
         method === 'rawResponseItem/completed'
       ) {
         return null;
@@ -343,160 +322,6 @@ function formatMcpResult(item: Partial<McpToolCallItem> | undefined): string {
   }
 
   return 'Tool completed';
-}
-
-/**
- * Map an EventMsg (v1 event) to a StreamMessage.
- * Primarily handles collaboration/subagent events.
- */
-function mapEventMsg(event: EventMsg): StreamMessage | null {
-  switch (event.type) {
-    case 'collab_agent_spawn_begin': {
-      const e = event as CollabAgentSpawnBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: SUBAGENT_TOOL_NAME,
-        toolUseId: e.call_id,
-        toolInput: { prompt: e.prompt },
-      };
-    }
-    case 'collab_agent_spawn_end': {
-      const e = event as CollabAgentSpawnEndEvent & { type: string };
-      return {
-        type: 'tool_result',
-        toolName: SUBAGENT_TOOL_NAME,
-        toolUseId: e.call_id,
-        content: `status: ${formatAgentStatus(e.status)}${e.new_thread_id ? `, thread: ${e.new_thread_id}` : ''}`,
-      };
-    }
-    case 'collab_agent_interaction_begin': {
-      const e = event as CollabAgentInteractionBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: 'collab:sendInput',
-        toolUseId: e.call_id,
-        toolInput: { receiver: e.receiver_thread_id, prompt: e.prompt },
-      };
-    }
-    case 'collab_agent_interaction_end': {
-      const e = event as CollabAgentInteractionEndEvent & { type: string };
-      return {
-        type: 'tool_result',
-        toolName: 'collab:sendInput',
-        toolUseId: e.call_id,
-        content: `status: ${formatAgentStatus(e.status)}`,
-      };
-    }
-    case 'collab_waiting_begin': {
-      const e = event as CollabWaitingBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: 'collab:wait',
-        toolUseId: e.call_id,
-        toolInput: { agents: e.receiver_thread_ids },
-      };
-    }
-    case 'collab_waiting_end': {
-      const e = event as CollabWaitingEndEvent & { type: string };
-      const statusEntries = Object.entries(e.statuses)
-        .map(([tid, s]) => `${tid}: ${formatAgentStatus(s!)}`)
-        .join(', ');
-      return {
-        type: 'tool_result',
-        toolName: 'collab:wait',
-        toolUseId: e.call_id,
-        content: statusEntries || 'all agents completed',
-      };
-    }
-    case 'collab_close_begin': {
-      const e = event as CollabCloseBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: SUBAGENT_TOOL_NAME,
-        toolUseId: e.call_id,
-        toolInput: { agent: e.receiver_thread_id },
-      };
-    }
-    case 'collab_close_end': {
-      const e = event as CollabCloseEndEvent & { type: string };
-      return {
-        type: 'tool_result',
-        toolName: SUBAGENT_TOOL_NAME,
-        toolUseId: e.call_id,
-        content: `status: ${formatAgentStatus(e.status)}`,
-      };
-    }
-    case 'collab_resume_begin': {
-      const e = event as CollabResumeBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: 'collab:resumeAgent',
-        toolUseId: e.call_id,
-        toolInput: { agent: e.receiver_thread_id },
-      };
-    }
-    case 'collab_resume_end': {
-      const e = event as CollabResumeEndEvent & { type: string };
-      return {
-        type: 'tool_result',
-        toolName: 'collab:resumeAgent',
-        toolUseId: e.call_id,
-        content: `status: ${formatAgentStatus(e.status)}`,
-      };
-    }
-    case 'web_search_begin': {
-      const e = event as WebSearchBeginEvent & { type: string };
-      return {
-        type: 'tool_use',
-        toolName: 'web_search',
-        toolUseId: e.call_id,
-      };
-    }
-    case 'web_search_end': {
-      const e = event as WebSearchEndEvent & { type: string };
-      const actionDesc =
-        e.action?.type === 'search'
-          ? (e.action.queries ?? [e.action.query]).filter(Boolean).join(', ')
-          : e.action?.type === 'open_page'
-            ? `open: ${e.action.url ?? ''}`
-            : e.action?.type === 'find_in_page'
-              ? `find "${e.action.pattern ?? ''}" in ${e.action.url ?? ''}`
-              : '';
-      return {
-        type: 'tool_result',
-        toolName: 'web_search',
-        toolUseId: e.call_id,
-        content: actionDesc ? `${e.query} → ${actionDesc}` : e.query,
-      };
-    }
-    case 'task_complete':
-      // Turn completed — may also arrive via turn/completed v2 notification
-      return { type: 'complete' };
-    case 'agent_message_delta': {
-      // Streaming text from a subagent — pass through as text
-      const e = event as { type: string; delta?: string };
-      if (e.delta) return { type: 'text', content: e.delta };
-      return null;
-    }
-    case 'agent_reasoning_delta': {
-      const e = event as { type: string; delta?: string };
-      if (e.delta) return { type: 'thinking', content: e.delta };
-      return null;
-    }
-    default:
-      // Skip non-collab event_msg events (token_count, session_configured, etc.)
-      return null;
-  }
-}
-
-/**
- * Format an AgentStatus to a human-readable string.
- */
-function formatAgentStatus(status: AgentStatus): string {
-  if (typeof status === 'string') return status;
-  if ('completed' in status) return `completed${status.completed ? `: ${status.completed}` : ''}`;
-  if ('errored' in status) return `errored: ${status.errored}`;
-  return JSON.stringify(status);
 }
 
 /**

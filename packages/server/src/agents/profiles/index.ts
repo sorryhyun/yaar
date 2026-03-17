@@ -158,6 +158,7 @@ export const CODEX_AGENT_ROLES: Record<string, CodexAgentRole> = {
  */
 export function codexRoleToToml(role: CodexAgentRole, model?: string): string {
   const lines: string[] = [];
+  if (role.description) lines.push(`description = "${role.description}"`);
   if (model) lines.push(`model = "${model}"`);
   if (role.modelReasoningEffort)
     lines.push(`model_reasoning_effort = "${role.modelReasoningEffort}"`);

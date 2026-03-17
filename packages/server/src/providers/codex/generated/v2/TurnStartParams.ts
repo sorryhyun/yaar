@@ -7,6 +7,7 @@ import type { ReasoningEffort } from "../ReasoningEffort.js";
 import type { ReasoningSummary } from "../ReasoningSummary.js";
 import type { ServiceTier } from "../ServiceTier.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
+import type { ApprovalsReviewer } from "./ApprovalsReviewer.js";
 import type { AskForApproval } from "./AskForApproval.js";
 import type { SandboxPolicy } from "./SandboxPolicy.js";
 import type { UserInput } from "./UserInput.js";
@@ -20,6 +21,11 @@ cwd?: string | null,
  * Override the approval policy for this turn and subsequent turns.
  */
 approvalPolicy?: AskForApproval | null, 
+/**
+ * Override where approval requests are routed for review on this turn and
+ * subsequent turns.
+ */
+approvalsReviewer?: ApprovalsReviewer | null, 
 /**
  * Override the sandbox policy for this turn and subsequent turns.
  */

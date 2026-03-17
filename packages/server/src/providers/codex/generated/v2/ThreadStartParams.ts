@@ -4,11 +4,17 @@
 import type { Personality } from "../Personality.js";
 import type { ServiceTier } from "../ServiceTier.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
+import type { ApprovalsReviewer } from "./ApprovalsReviewer.js";
 import type { AskForApproval } from "./AskForApproval.js";
 import type { DynamicToolSpec } from "./DynamicToolSpec.js";
 import type { SandboxMode } from "./SandboxMode.js";
 
-export type ThreadStartParams = { model?: string | null, modelProvider?: string | null, serviceTier?: ServiceTier | null | null, cwd?: string | null, approvalPolicy?: AskForApproval | null, sandbox?: SandboxMode | null, config?: { [key in string]?: JsonValue } | null, serviceName?: string | null, baseInstructions?: string | null, developerInstructions?: string | null, personality?: Personality | null, ephemeral?: boolean | null, dynamicTools?: Array<DynamicToolSpec> | null, 
+export type ThreadStartParams = { model?: string | null, modelProvider?: string | null, serviceTier?: ServiceTier | null | null, cwd?: string | null, approvalPolicy?: AskForApproval | null, 
+/**
+ * Override where approval requests are routed for review on this thread
+ * and subsequent turns.
+ */
+approvalsReviewer?: ApprovalsReviewer | null, sandbox?: SandboxMode | null, config?: { [key in string]?: JsonValue } | null, serviceName?: string | null, baseInstructions?: string | null, developerInstructions?: string | null, personality?: Personality | null, ephemeral?: boolean | null, dynamicTools?: Array<DynamicToolSpec> | null, 
 /**
  * Test-only experimental field used to validate experimental gating and
  * schema filtering behavior in a stable way.

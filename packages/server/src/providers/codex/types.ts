@@ -75,22 +75,6 @@ export type { CancelLoginAccountResponse } from './generated/v2/index.js';
 export type { AccountLoginCompletedNotification } from './generated/v2/index.js';
 export type { Account } from './generated/v2/index.js';
 
-// Event message (v1 events union) and collaboration/subagent event types
-export type { EventMsg } from './generated/EventMsg.js';
-export type { AgentStatus } from './generated/AgentStatus.js';
-export type { CollabAgentSpawnBeginEvent } from './generated/CollabAgentSpawnBeginEvent.js';
-export type { CollabAgentSpawnEndEvent } from './generated/CollabAgentSpawnEndEvent.js';
-export type { CollabAgentInteractionBeginEvent } from './generated/CollabAgentInteractionBeginEvent.js';
-export type { CollabAgentInteractionEndEvent } from './generated/CollabAgentInteractionEndEvent.js';
-export type { CollabWaitingBeginEvent } from './generated/CollabWaitingBeginEvent.js';
-export type { CollabWaitingEndEvent } from './generated/CollabWaitingEndEvent.js';
-export type { CollabCloseBeginEvent } from './generated/CollabCloseBeginEvent.js';
-export type { CollabCloseEndEvent } from './generated/CollabCloseEndEvent.js';
-export type { CollabResumeBeginEvent } from './generated/CollabResumeBeginEvent.js';
-export type { CollabResumeEndEvent } from './generated/CollabResumeEndEvent.js';
-export type { WebSearchBeginEvent } from './generated/WebSearchBeginEvent.js';
-export type { WebSearchEndEvent } from './generated/WebSearchEndEvent.js';
-
 // ============================================================================
 // JSON-RPC Base Types (protocol plumbing, not generated)
 // ============================================================================
