@@ -61,7 +61,6 @@ export interface AppInfo {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
-  serverActions?: Record<string, { description: string }>;
 }
 
 /**
@@ -114,7 +113,6 @@ export async function listApps(): Promise<AppInfo[]> {
       let frameless: boolean | undefined;
       let windowStyle: Record<string, string | number> | undefined;
       let permissions: PermissionEntry[] | undefined;
-      let serverActions: Record<string, { description: string }> | undefined;
       try {
         const metaContent = await Bun.file(join(appPath, 'app.json')).text();
         const meta = JSON.parse(metaContent);
@@ -133,8 +131,6 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.windowStyle && typeof meta.windowStyle === 'object')
           windowStyle = meta.windowStyle;
         if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
-        if (meta.serverActions && typeof meta.serverActions === 'object')
-          serverActions = meta.serverActions;
       } catch {
         // No metadata or invalid JSON
       }
@@ -194,7 +190,6 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(frameless && { frameless }),
         ...(windowStyle && { windowStyle }),
         ...(permissions && { permissions }),
-        ...(serverActions && { serverActions }),
       });
     }
 

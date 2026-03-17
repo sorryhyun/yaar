@@ -103,6 +103,41 @@ interface YaarWindows {
   list(): Promise<YaarWindowListItem[]>;
 }
 
+// ── Dev Tools ────────────────────────────────────────────────────
+
+interface YaarDevCompileResult {
+  success: boolean;
+  previewUrl?: string;
+  errors?: string[];
+}
+
+interface YaarDevTypecheckResult {
+  success: boolean;
+  diagnostics: string[];
+}
+
+interface YaarDevDeployOpts {
+  appId: string;
+  name?: string;
+  icon?: string;
+  description?: string;
+  permissions?: string[];
+}
+
+interface YaarDevDeployResult {
+  success: boolean;
+  appId?: string;
+  name?: string;
+  icon?: string;
+  error?: string;
+}
+
+interface YaarDev {
+  compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
+  typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
+}
+
 // ── Verb SDK ─────────────────────────────────────────────────────
 
 interface YaarVerbResultContent {

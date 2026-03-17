@@ -169,11 +169,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
 
   // Resolve `self` → real appId from iframe token
   let resolvedUri = uri;
-  if (uri.startsWith('yaar://apps/self/')) {
+  if (uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/')) {
     if (!tokenEntry?.appId) {
       return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
     }
-    resolvedUri = uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
+    resolvedUri =
+      uri === 'yaar://apps/self'
+        ? `yaar://apps/${tokenEntry.appId}`
+        : uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
   }
 
   // Log to session logs

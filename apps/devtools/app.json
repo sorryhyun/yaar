@@ -6,17 +6,6 @@
   "appProtocol": true,
   "capture": "dom",
   "permissions": ["yaar://apps/self/storage/", "yaar://apps/", "yaar://skills/"],
-  "serverActions": {
-    "compile": {
-      "description": "Compile a project"
-    },
-    "typecheck": {
-      "description": "Type check a project"
-    },
-    "deploy": {
-      "description": "Deploy project as an installed app"
-    }
-  },
   "protocol": {
     "state": {
       "project": {

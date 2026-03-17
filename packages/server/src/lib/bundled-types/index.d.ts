@@ -197,6 +197,9 @@ declare module '@bundled/yaar' {
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
 
+  /** Dev tools — compile, typecheck, deploy from iframe apps. */
+  export const dev: YaarDev;
+
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;
 

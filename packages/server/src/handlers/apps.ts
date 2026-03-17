@@ -17,8 +17,6 @@
  * On disk: storage/apps/{appId}/{path}
  */
 
-import { stat } from 'fs/promises';
-import { join } from 'path';
 import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
@@ -41,7 +39,6 @@ import {
   storageDelete,
 } from '../storage/storage-manager.js';
 import { uninstallApp } from '../features/apps/install.js';
-import { PROJECT_ROOT } from '../config.js';
 
 /**
  * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.
@@ -103,6 +100,48 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           description: 'Content encoding (default: utf-8)',
         },
       },
+    },
+
+    async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      // Storage sub-paths get generic describe
+      if (parseAppStoragePath(resolved.sourceUri)) {
+        return okJson({
+          uri: resolved.sourceUri,
+          description: 'App-scoped file storage.',
+          verbs: ['read', 'list', 'invoke', 'delete'],
+        });
+      }
+
+      const appId = extractIdFromUri(resolved.sourceUri, 'apps');
+      if (!appId) return error('App ID required.');
+
+      const apps = await listApps();
+      const app = apps.find((a) => a.id === appId);
+      if (!app) return error(`App "${appId}" not found.`);
+
+      const invokeActions: Record<string, string> = {
+        set_badge: 'Set badge count on app icon ({ count })',
+      };
+
+      // Build rich describe result
+      const result: Record<string, unknown> = {
+        uri: resolved.sourceUri,
+        name: app.name,
+        description: app.description,
+        icon: app.icon,
+        verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
+        invokeActions,
+      };
+
+      if (app.appProtocol) result.appProtocol = true;
+      if (app.protocol) result.protocol = app.protocol;
+      if (app.permissions?.length) result.permissions = app.permissions;
+
+      // Append SKILL.md content
+      const skill = await loadAppSkill(appId);
+      if (skill) result.skill = skill;
+
+      return okJson(result);
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
@@ -246,14 +285,6 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         );
       }
 
-      // ── Server actions (app-specific invoke actions declared in app.json) ──
-      const apps = await listApps();
-      const appInfo = apps.find((a) => a.id === appId);
-      const actionName = payload.action as string;
-      if (appInfo?.serverActions?.[actionName]) {
-        return handleServerAction(appId, actionName, payload);
-      }
-
       return error(`Unknown action "${payload.action}".`);
     },
 
@@ -275,74 +306,6 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       return uninstallApp(appId);
     },
   });
-}
-
-/** Handle app-specific server actions declared in app.json serverActions. */
-async function handleServerAction(
-  appId: string,
-  action: string,
-  payload: Record<string, unknown>,
-): Promise<VerbResult> {
-  const projectId = payload.projectId as string;
-  if (!projectId) return error('"projectId" is required.');
-
-  // Validate projectId (prevent path traversal)
-  if (projectId.includes('..') || projectId.includes('/')) {
-    return error('Invalid projectId.');
-  }
-
-  const projectPath = join(PROJECT_ROOT, 'storage', 'apps', appId, 'projects', projectId);
-  try {
-    await stat(projectPath);
-  } catch {
-    return error(`Project "${projectId}" not found.`);
-  }
-
-  switch (action) {
-    case 'compile': {
-      const { compileTypeScript } = await import('../lib/compiler/index.js');
-      const result = await compileTypeScript(projectPath, {
-        title: (payload.title as string) ?? 'App',
-      });
-      if (!result.success) {
-        return error(`Compilation failed:\n${result.errors?.join('\n') ?? 'Unknown error'}`);
-      }
-      return okJson({
-        success: true,
-        previewUrl: `/api/storage/apps/${appId}/projects/${projectId}/dist/index.html`,
-      });
-    }
-    case 'typecheck': {
-      const { typecheckSandbox } = await import('../lib/compiler/index.js');
-      const result = await typecheckSandbox(projectPath);
-      if (!result.success) {
-        return error(`Type check errors:\n${result.diagnostics.join('\n')}`);
-      }
-      return okJson({ success: true, diagnostics: result.diagnostics });
-    }
-    case 'deploy': {
-      const { doDeploy } = await import('../features/dev/deploy.js');
-      const deployAppId = payload.appId as string;
-      if (!deployAppId) return error('"appId" is required for deploy.');
-      const result = await doDeploy(projectId, {
-        sourcePath: projectPath,
-        appId: deployAppId,
-        name: payload.name as string | undefined,
-        description: payload.description as string | undefined,
-        icon: payload.icon as string | undefined,
-        permissions: payload.permissions as string[] | undefined,
-      });
-      if (!result.success) return error(result.error);
-      return okJson({
-        success: true,
-        appId: result.appId,
-        name: result.name,
-        icon: result.icon,
-      });
-    }
-    default:
-      return error(`Unknown server action "${action}".`);
-  }
 }
 
 export { installApp } from '../features/apps/install.js';

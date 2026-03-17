@@ -43,6 +43,8 @@ export interface ResourceHandler {
   /** Optional JSON schema for invoke payloads. */
   invokeSchema?: Record<string, unknown>;
 
+  /** Custom describe handler. When provided, called instead of auto-generation. */
+  describe?(resolved: ResolvedUri): Promise<VerbResult>;
   read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
   list?(resolved: ResolvedUri): Promise<VerbResult>;
   invoke?(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult>;
@@ -151,8 +153,18 @@ export class ResourceRegistry {
       }
     }
 
-    // describe is always auto-generated
+    // describe: use custom handler if provided, otherwise auto-generate
     if (verb === 'describe') {
+      if (handler.describe) {
+        const resolved = resolveUri(uri);
+        if (!resolved) {
+          return {
+            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
+            isError: true,
+          };
+        }
+        return handler.describe(resolved);
+      }
       const result: DescribeResult = {
         uri,
         description: handler.description,

@@ -13,6 +13,7 @@ import { prepareWsData, type WsData } from '../websocket/server.js';
 import {
   handleApiRoutes,
   handleBrowseRoutes,
+  handleDevRoutes,
   handleFileRoutes,
   handleProxyRoutes,
   handleStaticRoutes,
@@ -158,6 +159,9 @@ export function createFetchHandler() {
 
     const browseResponse = await handleBrowseRoutes(req, url);
     if (browseResponse) return withCors(browseResponse, corsHeaders);
+
+    const devResponse = await handleDevRoutes(req, url);
+    if (devResponse) return withCors(devResponse, corsHeaders);
 
     const verbResponse = await handleVerbRoutes(req, url);
     if (verbResponse) return withCors(verbResponse, corsHeaders);

@@ -65,22 +65,29 @@ export class ClaudeSessionProvider extends BaseTransport {
       mcpHeaders['X-Agent-Id'] = agentId;
     }
 
-    // Build MCP server configs (shared between main agent and subagent definitions)
-    const activeServers = getActiveServers();
-    const mcpServerConfigs = Object.fromEntries(
-      activeServers.map((name: string) => [
-        name,
-        {
-          type: 'http' as const,
-          url: `http://127.0.0.1:${getPort()}/mcp/${name}`,
-          headers: mcpHeaders,
-        },
-      ]),
-    );
-
     // Only enable Task built-in tool if allowedTools includes it (or is unfiltered)
     const effectiveAllowed = allowedTools ?? getToolNames();
     const builtinTools: SDKOptions['tools'] = ['WebSearch'];
+
+    // Build MCP server configs — only include servers needed by allowedTools.
+    // This prevents the 'app' MCP server from being connected for monitor agents.
+    const neededServers = new Set<string>();
+    for (const tool of effectiveAllowed) {
+      const m = tool.match(/^mcp__(\w+)__/);
+      if (m) neededServers.add(m[1]);
+    }
+    const mcpServerConfigs = Object.fromEntries(
+      getActiveServers()
+        .filter((name) => neededServers.has(name))
+        .map((name: string) => [
+          name,
+          {
+            type: 'http' as const,
+            url: `http://127.0.0.1:${getPort()}/mcp/${name}`,
+            headers: mcpHeaders,
+          },
+        ]),
+    );
     if (!allowedTools || allowedTools.includes('Task')) {
       builtinTools.push('Task');
     }

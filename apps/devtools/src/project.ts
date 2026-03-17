@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, invokeJson } from '@bundled/yaar';
+import { appStorage, dev } from '@bundled/yaar';
 
 // ── Types ──
 
@@ -196,15 +196,8 @@ export async function compile(): Promise<void> {
   setCompileStatus('compiling');
   setStatusText('Compiling...');
   try {
-    const result = await invokeJson<{ success: boolean; previewUrl?: string }>(
-      'yaar://apps/self',
-      {
-        action: 'compile',
-        projectId: proj.id,
-        title: proj.name,
-      }
-    );
-    if (result?.success) {
+    const result = await dev.compile(projectPath(proj.id), { title: proj.name });
+    if (result.success) {
       batch(() => {
         setCompileStatus('success');
         setPreviewUrl(result.previewUrl ?? null);
@@ -212,7 +205,7 @@ export async function compile(): Promise<void> {
       });
     } else {
       setCompileStatus('error');
-      setStatusText('Compilation failed');
+      setStatusText(result.errors?.join('\n') ?? 'Compilation failed');
     }
   } catch (err) {
     setCompileStatus('error');
@@ -225,25 +218,17 @@ export async function typecheck(): Promise<void> {
   if (!proj) return;
   setStatusText('Type checking...');
   try {
-    const result = await invokeJson<{ success: boolean; diagnostics?: string[] }>(
-      'yaar://apps/self',
-      {
-        action: 'typecheck',
-        projectId: proj.id,
-      }
-    );
-    if (result?.success) {
+    const result = await dev.typecheck(projectPath(proj.id));
+    if (result.success) {
       setDiagnostics([]);
       setStatusText('No type errors');
     } else {
-      setStatusText('Type errors found');
+      const parsed = parseDiagnostics(result.diagnostics.join('\n'));
+      setDiagnostics(parsed);
+      setStatusText(`${parsed.length} type error(s)`);
     }
   } catch (err) {
-    // Parse diagnostics from error message
-    const msg = err instanceof Error ? err.message : String(err);
-    const parsed = parseDiagnostics(msg);
-    setDiagnostics(parsed);
-    setStatusText(`${parsed.length} type error(s)`);
+    setStatusText(`Typecheck error: ${err instanceof Error ? err.message : 'Unknown'}`);
   }
 }
 
@@ -258,16 +243,11 @@ export async function deploy(opts: {
   if (!proj) return;
   setStatusText('Deploying...');
   try {
-    const result = await invokeJson<{ success: boolean; appId?: string; name?: string }>(
-      'yaar://apps/self',
-      {
-        action: 'deploy',
-        projectId: proj.id,
-        ...opts,
-      }
-    );
-    if (result?.success) {
+    const result = await dev.deploy(projectPath(proj.id), opts);
+    if (result.success) {
       setStatusText(`Deployed as "${result.name ?? opts.appId}"`);
+    } else {
+      setStatusText(`Deploy failed: ${result.error ?? 'Unknown'}`);
     }
   } catch (err) {
     setStatusText(`Deploy failed: ${err instanceof Error ? err.message : 'Unknown'}`);

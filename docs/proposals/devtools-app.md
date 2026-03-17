@@ -2,7 +2,7 @@
 
 ## Status: Phase 1 Implemented
 
-Phase 1 is complete. The devtools app and server action dispatch are fully additive — the existing sandbox path continues to work unchanged.
+Phase 1 is complete. The devtools app is fully additive — the existing sandbox path continues to work unchanged.
 
 ## Problem
 
@@ -66,7 +66,7 @@ User: "build me a todo app"
   → Agent uses command("writeFile", { path: "src/main.ts", content: "..." })
   → Agent uses command("compile")
   → Agent uses command("deploy", { appId: "todo", icon: "✅" })
-  → Devtools iframe manages files via appStorage, calls server for compile/deploy
+  → Devtools iframe manages files via appStorage, calls dev SDK for compile/deploy
   → UI shows file tree, editor, diagnostics, preview in real-time
 ```
 
@@ -79,38 +79,34 @@ The devtools iframe receives commands via app protocol and maps them to the righ
 | `createProject` | Create directory structure in `appStorage` |
 | `writeFile` | `appStorage.save(path, content)` |
 | `editFile` | Read → apply edit → save back |
-| `compile` | `invokeJson('yaar://apps/self', { action: "compile", projectId })` |
-| `typecheck` | `invokeJson('yaar://apps/self', { action: "typecheck", projectId })` |
-| `deploy` | `invokeJson('yaar://apps/self', { action: "deploy", projectId, appId, ... })` |
+| `compile` | `dev.compile(projectPath)` via `@bundled/yaar` SDK |
+| `typecheck` | `dev.typecheck(projectPath)` via `@bundled/yaar` SDK |
+| `deploy` | `dev.deploy(projectPath, { appId, ... })` via `@bundled/yaar` SDK |
 
-### Server action dispatch
+### Dev SDK (`@bundled/yaar`)
 
-No new URI namespace or `features/` modules. The apps handler (`handlers/apps.ts`) dispatches server actions directly to `lib/compiler/` and `features/dev/deploy.ts`.
+Compile, typecheck, and deploy are platform capabilities exposed via the `@bundled/yaar` SDK shim. Any iframe app can import and use them — no per-app configuration needed.
 
-Apps declare **server actions** in `app.json`:
+```typescript
+import { dev } from '@bundled/yaar';
 
-```json
-// apps/devtools/app.json
-{
-  "serverActions": {
-    "compile":   { "description": "Compile a project" },
-    "typecheck": { "description": "Type check a project" },
-    "deploy":    { "description": "Deploy project as an installed app" }
-  }
-}
+// path is relative to app storage (e.g., "projects/123")
+await dev.compile(path, { title: 'My App' });
+await dev.typecheck(path);
+await dev.deploy(path, { appId: 'my-app', icon: '🎮' });
 ```
 
-The handler resolution:
+Under the hood, the SDK makes direct HTTP calls to `/api/dev/{action}` with iframe token auth. The server resolves the path relative to the calling app's storage directory (`storage/apps/{appId}/{path}`).
+
 ```
-invoke('yaar://apps/self', { action: "compile", projectId: "abc" })
-  → apps handler sees action "compile" — not a built-in action
-  → checks if app has serverActions["compile"] declared in app.json
-  → handleServerAction() resolves project path: storage/apps/{appId}/projects/{projectId}/
-  → calls lib/compiler/compileTypeScript(projectPath) directly
+iframe: dev.compile("projects/123")
+  → POST /api/dev/compile { path: "projects/123" }
+  → server resolves: storage/apps/devtools/projects/123/
+  → calls lib/compiler/compileTypeScript(absolutePath)
   → returns { success, previewUrl }
 ```
 
-The dispatch lives in `handleServerAction()` at module level in `handlers/apps.ts` (~60 lines). Heavy modules (`lib/compiler/`, `features/dev/deploy.ts`) are dynamically imported. This pattern is generic — any app can declare server actions. But the schema only appears when describing that specific app, not in the global `yaar://apps/*` describe output.
+The route (`http/routes/dev.ts`) validates the iframe token, prevents path traversal, and dynamically imports heavy modules (`lib/compiler/`, `features/dev/deploy.ts`).
 
 ### Preview serving
 
@@ -207,7 +203,7 @@ Fully additive — no changes to existing sandbox or agent code. Both paths work
 
 | File | Purpose |
 |------|---------|
-| `apps/devtools/app.json` | Metadata, protocol manifest, server actions, permissions |
+| `apps/devtools/app.json` | Metadata, protocol manifest, permissions |
 | `apps/devtools/SKILL.md` | Agent workflow instructions |
 | `apps/devtools/src/main.ts` | Entry point: toolbar, layout assembly, project selector |
 | `apps/devtools/src/project.ts` | State management (signals) + all operations (CRUD, compile, deploy) |
@@ -216,21 +212,26 @@ Fully additive — no changes to existing sandbox or agent code. Both paths work
 | `apps/devtools/src/editor.ts` | Prism.js code viewer with reactive highlighting |
 | `apps/devtools/src/diagnostics.ts` | Problems panel with severity, location, click-to-open |
 | `apps/devtools/src/styles.css` | IDE grid layout using `--yaar-*` design tokens |
+| `packages/server/src/http/routes/dev.ts` | `/api/dev/{compile,typecheck,deploy}` — iframe token auth, path resolution, dynamic imports |
 
 #### Modified files
 
 | File | Change |
 |------|--------|
-| `packages/server/src/handlers/apps.ts` | Server action dispatch (~60 lines): validates `projectId`, resolves path, dispatches `compile`/`typecheck`/`deploy` via dynamic imports to `lib/compiler/` and `features/dev/deploy.ts` |
-| `packages/server/src/features/apps/discovery.ts` | Reads `serverActions` from `app.json` into `AppInfo` |
+| `packages/server/src/lib/compiler/shims/yaar.ts` | Added `dev` namespace (compile, typecheck, deploy) to `@bundled/yaar` SDK |
+| `packages/server/src/lib/bundled-types/yaar.d.ts` | Added `YaarDev` interface for type-checking |
+| `packages/server/src/lib/bundled-types/index.d.ts` | Added `dev` export to `@bundled/yaar` module declaration |
+| `packages/server/src/http/routes/index.ts` | Re-export `handleDevRoutes` |
+| `packages/server/src/http/server.ts` | Register `/api/dev` route in dispatch chain |
 | `packages/server/src/features/dev/deploy.ts` | Added optional `sourcePath` to `DeployArgs` — uses it instead of `getSandboxPath(sandboxId)` when provided |
 
 #### Design decisions
 
-- **No `features/apps/server-actions/` directory** — the dispatch calls `lib/compiler/` directly from the handler. Compile/typecheck are already in `lib/`, deploy stays in `features/dev/` (has server deps like `actionEmitter`). No extra indirection layer.
+- **Dev SDK, not server actions** — compile/typecheck/deploy are platform capabilities in `@bundled/yaar`, not per-app `serverActions` declarations. Any iframe app can use `dev.compile()`. This avoids a new config concept in `app.json` and the awkward round-trip of iframe → verb API → same app's handler → compiler.
+- **Direct HTTP route** — The dev SDK calls `POST /api/dev/{action}` directly, bypassing the verb system. Simpler and faster than routing through `yaar://apps/self` invoke.
 - **`sourcePath` on `DeployArgs`** — minimal change to `doDeploy()`. When provided, overrides the sandbox path lookup.
-- **Dynamic imports** — `compileTypeScript`, `typecheckSandbox`, and `doDeploy` are dynamically imported in the handler to avoid loading heavy modules at startup.
-- **Path traversal prevention** — `projectId` is validated to not contain `..` or `/`.
+- **Dynamic imports** — `compileTypeScript`, `typecheckSandbox`, and `doDeploy` are dynamically imported in the route handler to avoid loading heavy modules at startup.
+- **Path traversal prevention** — path is validated to not contain `..` or start with `/`.
 
 ### Phase 2: Advanced features
 
@@ -263,4 +264,4 @@ Fully additive — no changes to existing sandbox or agent code. Both paths work
 
 4. **Project isolation**: Each project in `storage/apps/devtools/projects/{id}/`. No concurrent project limit or disk cleanup policy yet.
 
-5. **Server actions as a generic pattern**: The `serverActions` in `app.json` + handler delegation pattern could be useful for other apps too (e.g., server-side PDF generation, data processing). Currently the dispatch switch is in `handleServerAction()` in `handlers/apps.ts` — if more apps need server actions, extract to a plugin/module pattern.
+5. **Extending `/api/dev`**: The dev route currently handles compile/typecheck/deploy. Future dev operations (format, lint, LSP) would be added here as new actions, keeping them as platform capabilities any app can use via the SDK.
