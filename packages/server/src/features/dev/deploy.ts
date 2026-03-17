@@ -32,6 +32,7 @@ export interface DeployArgs {
   windowStyle?: Record<string, string | number>;
   capture?: 'auto' | 'canvas' | 'dom' | 'svg' | 'protocol';
   permissions?: PermissionEntry[];
+  sourcePath?: string; // Override sandbox path — use this directory as source
 }
 
 export interface DeployResult {
@@ -73,7 +74,7 @@ export async function doDeploy(
     };
   }
 
-  const sandboxPath = getSandboxPath(sandboxId);
+  const sandboxPath = args.sourcePath ?? getSandboxPath(sandboxId);
   const appPath = join(APPS_DIR, appId);
 
   try {

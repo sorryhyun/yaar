@@ -1,0 +1,245 @@
+#app {
+  height: 100%;
+}
+
+.devtools {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font);
+  font-size: 13px;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.toolbar .project-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Main area ── */
+.main-area {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── File tree ── */
+.file-tree {
+  border-right: 1px solid var(--yaar-border);
+  overflow-y: auto;
+  padding: var(--yaar-sp-1) 0;
+}
+
+.file-tree-empty {
+  padding: var(--yaar-sp-3);
+  text-align: center;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 3px;
+  margin: 0 4px;
+}
+
+.file-tree-item:hover {
+  background: var(--yaar-bg-hover);
+}
+
+.file-tree-item.active {
+  background: var(--yaar-accent);
+  color: #fff;
+}
+
+.file-tree-item.dir {
+  opacity: 0.8;
+}
+
+.file-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Editor area ── */
+.editor-area {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.editor-header {
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+}
+
+.editor-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.editor-pre {
+  margin: 0;
+  padding: var(--yaar-sp-2);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.editor-pre code {
+  font-family: inherit;
+}
+
+/* ── Diagnostics ── */
+.diagnostics {
+  border-top: 1px solid var(--yaar-border);
+  max-height: 150px;
+  display: flex;
+  flex-direction: column;
+}
+
+.diagnostics-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+  font-weight: 600;
+}
+
+.diagnostics-count {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+.diagnostics-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diagnostics-empty {
+  padding: var(--yaar-sp-2);
+  text-align: center;
+}
+
+.diagnostics-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-1);
+  padding: 3px var(--yaar-sp-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.diagnostics-item:hover {
+  background: var(--yaar-bg-hover);
+}
+
+.diagnostics-item.error {
+  color: var(--yaar-error);
+}
+
+.diagnostics-item.warning {
+  color: var(--yaar-warning, #d29922);
+}
+
+.diag-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.diag-location {
+  flex-shrink: 0;
+  opacity: 0.7;
+  font-family: monospace;
+}
+
+.diag-message {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Statusbar ── */
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-top: 1px solid var(--yaar-border);
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+}
+
+.statusbar .status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yaar-text-muted);
+}
+
+.statusbar .status-indicator.success {
+  background: var(--yaar-success);
+}
+
+.statusbar .status-indicator.error {
+  background: var(--yaar-error);
+}
+
+.statusbar .status-indicator.compiling {
+  background: var(--yaar-accent);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

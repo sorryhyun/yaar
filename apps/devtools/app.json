@@ -1,0 +1,187 @@
+{
+  "name": "Devtools",
+  "description": "IDE for building and deploying YAAR apps",
+  "icon": "🛠️",
+  "createShortcut": false,
+  "appProtocol": true,
+  "capture": "dom",
+  "permissions": ["yaar://apps/self/storage/", "yaar://apps/", "yaar://skills/"],
+  "serverActions": {
+    "compile": {
+      "description": "Compile a project"
+    },
+    "typecheck": {
+      "description": "Type check a project"
+    },
+    "deploy": {
+      "description": "Deploy project as an installed app"
+    }
+  },
+  "protocol": {
+    "state": {
+      "project": {
+        "description": "Active project"
+      },
+      "projects": {
+        "description": "All projects"
+      },
+      "openFile": {
+        "description": "Currently open file"
+      },
+      "diagnostics": {
+        "description": "TypeScript errors/warnings"
+      },
+      "compileStatus": {
+        "description": "Compilation state"
+      },
+      "previewUrl": {
+        "description": "URL of last successful compilation"
+      }
+    },
+    "commands": {
+      "createProject": {
+        "description": "Create a new project",
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Project name"
+            }
+          },
+          "required": ["name"]
+        }
+      },
+      "openProject": {
+        "description": "Switch to an existing project",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["id"]
+        }
+      },
+      "deleteProject": {
+        "description": "Delete a project",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": ["id"]
+        }
+      },
+      "openFile": {
+        "description": "Open a file in the editor",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": ["path"]
+        }
+      },
+      "writeFile": {
+        "description": "Write content to a file",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": ["path", "content"]
+        }
+      },
+      "editFile": {
+        "description": "Edit a file",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "oldString": {
+              "type": "string"
+            },
+            "newString": {
+              "type": "string"
+            }
+          },
+          "required": ["path", "oldString", "newString"]
+        }
+      },
+      "deleteFile": {
+        "description": "Delete a file",
+        "params": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": ["path"]
+        }
+      },
+      "compile": {
+        "description": "Compile the active project",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "typecheck": {
+        "description": "Run TypeScript type checker",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "deploy": {
+        "description": "Deploy to apps/",
+        "params": {
+          "type": "object",
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "permissions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["appId"]
+        }
+      },
+      "preview": {
+        "description": "Request preview window",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
+  },
+  "run": "index.html"
+}
