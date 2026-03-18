@@ -1,8 +1,13 @@
 {
-  "icon": "\ud83d\udccb",
+  "icon": "📋",
   "name": "Session Logs",
   "run": "index.html",
-  "permissions": [{ "uri": "yaar://sessions/", "verbs": ["list", "read"] }],
+  "permissions": [
+    {
+      "uri": "yaar://sessions/",
+      "verbs": ["list", "read"]
+    }
+  ],
   "version": "1.0.0",
   "author": "YAAR"
 }

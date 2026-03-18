@@ -222,7 +222,6 @@ export interface AppInteractionItem {
 export interface FeedbackSliceState {
   pendingFeedback: RenderingFeedback[];
   pendingAppProtocolResponses: AppProtocolResponseItem[];
-  pendingAppProtocolReady: string[];
   pendingAppInteractions: AppInteractionItem[];
 }
 
@@ -232,8 +231,6 @@ export interface FeedbackSliceActions {
   addPendingFeedback: (feedback: RenderingFeedback) => void;
   addPendingAppProtocolResponse: (item: AppProtocolResponseItem) => void;
   consumePendingAppProtocolResponses: () => AppProtocolResponseItem[];
-  addAppProtocolReady: (windowId: string) => void;
-  consumeAppProtocolReady: () => string[];
   addPendingAppInteraction: (item: AppInteractionItem) => void;
   consumePendingAppInteractions: () => AppInteractionItem[];
 }

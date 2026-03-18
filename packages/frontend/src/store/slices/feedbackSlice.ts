@@ -7,7 +7,6 @@ import { createConsumeQueue } from '../helpers';
 export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingFeedback: [],
   pendingAppProtocolResponses: [],
-  pendingAppProtocolReady: [],
   pendingAppInteractions: [],
 
   addRenderingFeedback: (feedback) =>
@@ -28,13 +27,6 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
     }),
 
   consumePendingAppProtocolResponses: createConsumeQueue(get, set, 'pendingAppProtocolResponses'),
-
-  addAppProtocolReady: (windowId) =>
-    set((state) => {
-      state.pendingAppProtocolReady.push(windowId);
-    }),
-
-  consumeAppProtocolReady: createConsumeQueue(get, set, 'pendingAppProtocolReady'),
 
   addPendingAppInteraction: (item) =>
     set((state) => {

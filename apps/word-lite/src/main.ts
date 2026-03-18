@@ -21,7 +21,7 @@ import { registerAppProtocol } from './protocol';
 
 // ── Mount
 render(() => html`
-  <div class=${() => 'app-shell y-light' + (focusMode() ? ' focus-mode' : '')}>
+  <div class=${() => 'app-shell' + (focusMode() ? ' focus-mode' : '')}>
     <div class="topbar">
       <div class="brand"><span class="brand-badge">W</span> Word Lite</div>
       <div class="doc-meta">

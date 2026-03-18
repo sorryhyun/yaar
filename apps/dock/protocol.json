@@ -29,7 +29,7 @@
       }
     },
     "setAppearance": {
-      "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0\u20131), panelBlurPx?: number (0\u201340) }",
+      "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }",
       "params": {
         "type": "object",
         "properties": {

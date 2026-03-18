@@ -5,7 +5,7 @@ import { notifications } from '@bundled/yaar';
 import { registerDockProtocol } from './protocol';
 import './styles.css';
 
-// ── WMO code → emoji ─────────────────────────────────────────────────────────────────
+// ── WMO code → emoji ─────────────────────────────────────────────────────────
 function wmoEmoji(code: number): string {
   if (code === 0) return '☀️';
   if (code === 1) return '🌤️';
@@ -37,7 +37,7 @@ const [showPanel, setShowPanel] = createSignal(false);
 const [panelOpacity, setPanelOpacity] = createSignal(0.45);
 const [panelBlurPx, setPanelBlurPx] = createSignal(10);
 
-// ── Panel style (reactive) ───────────────────────────────────────────────────────────────
+// ── Panel style (reactive) ────────────────────────────────────────────────────
 function panelStyle(): string {
   if (!showPanel()) {
     return [
@@ -52,14 +52,14 @@ function panelStyle(): string {
   const blur = panelBlurPx();
   return [
     `background:rgba(10,12,16,${opacity})`,
-    'border:1px solid rgba(255,255,255,0.12)',
-    'box-shadow:0 6px 30px rgba(0,0,0,0.35)',
+    'border-bottom:1px solid rgba(255,255,255,0.10)',
+    'box-shadow:0 4px 24px rgba(0,0,0,0.4)',
     `backdrop-filter:blur(${blur}px)`,
     `-webkit-backdrop-filter:blur(${blur}px)`,
   ].join(';');
 }
 
-// ── Clock ──────────────────────────────────────────────────────────────────────────────
+// ── Clock ─────────────────────────────────────────────────────────────────────
 function renderNow() {
   const now = new Date();
   setNowIso(now.toISOString());
@@ -76,7 +76,7 @@ function renderNow() {
   }));
 }
 
-// ── Weather ───────────────────────────────────────────────────────────────────────────
+// ── Weather ───────────────────────────────────────────────────────────────────
 const SEOUL_LAT = 37.5665;
 const SEOUL_LON = 126.978;
 
@@ -136,9 +136,8 @@ async function initWeather() {
   );
 }
 
-// ── App Component ──────────────────────────────────────────────────────────────────
+// ── App Component ─────────────────────────────────────────────────────────────
 function App() {
-  // Lifecycle
   onMount(() => {
     // Clock — tick every second
     renderNow();
@@ -160,37 +159,45 @@ function App() {
 
   return html`
     <div class="panel" style=${() => panelStyle()}>
-      <div class="weather-section">
-        <span class="weather-icon">${() => weatherIcon()}</span>
-        <span class="weather-temp">${() => weatherTemp()}</span>
-        <${Show} when=${() => weatherCity() !== ''}>
-          <span class="weather-city">${() => weatherCity()}</span>
-        </${Show}>
+
+      <!-- Row 1: Time (big) -->
+      <div class="row row-time">
+        <span class="time">${() => timeStr()}</span>
       </div>
 
-      <span class="sep">|</span>
-
-      <div class="notif-section">
-        <span class=${() => 'notif-icon' + (notifCount() > 0 ? '' : ' notif-muted')}>🔔</span>
-        <${Show} when=${() => notifCount() > 0}>
-          <span class="notif-count">${() => String(notifCount())}</span>
-        </${Show}>
+      <!-- Row 2: Date -->
+      <div class="row row-date">
+        <span class="date">${() => dateStr()}</span>
       </div>
 
-      <span class="sep">|</span>
+      <!-- Row 3: Weather + Notifications -->
+      <div class="row row-bottom">
+        <div class="weather-section">
+          <span class="weather-icon">${() => weatherIcon()}</span>
+          <span class="weather-temp">${() => weatherTemp()}</span>
+          <${Show} when=${() => weatherCity() !== ''}>
+            <span class="weather-city">${() => weatherCity()}</span>
+          </${Show}>
+        </div>
 
-      <div class="clock-section">
-        <div class="time">${() => timeStr()}</div>
-        <div class="date">${() => dateStr()}</div>
+        <span class="sep">·</span>
+
+        <div class="notif-section">
+          <span class=${() => 'notif-icon' + (notifCount() > 0 ? '' : ' notif-muted')}>🔔</span>
+          <${Show} when=${() => notifCount() > 0}>
+            <span class="notif-count">${() => String(notifCount())}</span>
+          </${Show}>
+        </div>
       </div>
+
     </div>
   `;
 }
 
-// ── Mount ──────────────────────────────────────────────────────────────────────────────
+// ── Mount ─────────────────────────────────────────────────────────────────────
 render(() => html`<${App} />`, document.getElementById('app')!);
 
-// ── App Protocol ────────────────────────────────────────────────────────────────────────────
+// ── App Protocol ──────────────────────────────────────────────────────────────
 registerDockProtocol({
   getNowIso:       () => nowIso(),
   getTimeStr:      () => timeStr(),

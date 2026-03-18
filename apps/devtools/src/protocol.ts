@@ -212,7 +212,6 @@ export function registerProtocol() {
             name: { type: 'string' },
             icon: { type: 'string' },
             description: { type: 'string' },
-            permissions: { type: 'array', items: { type: 'string' } },
           },
           required: ['appId'],
         },
@@ -222,7 +221,6 @@ export function registerProtocol() {
             name: p.name ? String(p.name) : undefined,
             icon: p.icon ? String(p.icon) : undefined,
             description: p.description ? String(p.description) : undefined,
-            permissions: Array.isArray(p.permissions) ? p.permissions.map(String) : undefined,
           });
           return { ok: true };
         },

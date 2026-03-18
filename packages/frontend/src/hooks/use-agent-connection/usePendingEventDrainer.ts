@@ -39,7 +39,6 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
   const {
     consumePendingFeedback,
     consumePendingAppProtocolResponses,
-    consumeAppProtocolReady,
     consumePendingAppInteractions,
     consumePendingInteractions,
     consumeGestureMessages,
@@ -54,7 +53,6 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
       if (
         state.pendingFeedback.length === 0 &&
         state.pendingAppProtocolResponses.length === 0 &&
-        state.pendingAppProtocolReady.length === 0 &&
         state.pendingAppInteractions.length === 0 &&
         state.pendingInteractions.length === 0 &&
         state.pendingGestureMessages.length === 0
@@ -84,15 +82,6 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             requestId: item.requestId,
             windowId: getRawWindowId(item.windowId),
             response: item.response,
-          });
-        }
-      });
-
-      drainQueue(state.pendingAppProtocolReady, consumeAppProtocolReady, (windowIds) => {
-        for (const windowId of windowIds) {
-          send({
-            type: ClientEventType.APP_PROTOCOL_READY,
-            windowId: getRawWindowId(windowId),
           });
         }
       });

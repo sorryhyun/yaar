@@ -6,12 +6,6 @@ export interface SessionSummary {
   agentCount: number;
 }
 
-export interface SessionListResult {
-  currentSessionId: string;
-  count: number;
-  sessions: SessionSummary[];
-}
-
 export interface SessionDetail {
   sessionId: string;
   createdAt: string;

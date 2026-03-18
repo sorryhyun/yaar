@@ -5,103 +5,129 @@ body {
   background: transparent;
   margin: 0;
   color: var(--yaar-text);
+  font-family: var(--yaar-font);
 }
 
 #app {
+  width: 100%;
   height: 100vh;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: stretch;
+  justify-content: stretch;
   user-select: none;
-  padding: 0 8px;
   box-sizing: border-box;
 }
 
+/* ── Panel: 3-row vertical layout ── */
 .panel {
+  width: 100%;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  padding: 2px 12px;
-  border-radius: 10px;
-  background: rgba(10, 12, 16, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  gap: 0;
+  justify-content: center;
+  padding: 6px 16px 8px;
+  box-sizing: border-box;
+  background: rgba(10, 12, 16, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  gap: 1px;
 }
 
-/* sections */
-.weather-section,
-.notif-section,
-.clock-section {
+/* ── Rows ── */
+.row {
   display: flex;
   align-items: center;
-}
-.weather-section {
-  gap: 4px;
-}
-.notif-section {
-  gap: 4px;
-}
-.clock-section {
-  align-items: baseline;
-  gap: 8px;
-}
-
-.sep {
-  color: rgba(255, 255, 255, 0.25);
-  font-size: 18px;
-  margin: 0 6px;
+  justify-content: center;
+  width: 100%;
   line-height: 1;
 }
 
-/* weather */
-.weather-icon {
-  font-size: 16px;
-  line-height: 1;
-}
-.weather-temp {
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.weather-city {
-  font-size: 13px;
-  color: var(--yaar-text-muted);
+.row-time {
+  /* Row 1: big time */
 }
 
-/* notifications */
-.notif-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-.notif-count {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--yaar-accent);
-  font-variant-numeric: tabular-nums;
-}
-.notif-muted {
-  color: rgba(255, 255, 255, 0.35);
+.row-date {
+  /* Row 2: date */
 }
 
-/* clock */
+.row-bottom {
+  /* Row 3: weather + notifications */
+  gap: 6px;
+}
+
+/* ── Time (Row 1) ── */
 .time {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: 0.1px;
+  letter-spacing: 0.5px;
   line-height: 1;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+
+/* ── Date (Row 2) ── */
 .date {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--yaar-text);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--yaar-text-muted);
   line-height: 1;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+/* ── Separator (Row 3) ── */
+.sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ── Weather (Row 3) ── */
+.weather-section {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.weather-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+.weather-temp {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.weather-city {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+}
+
+/* ── Notifications (Row 3) ── */
+.notif-section {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.notif-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.notif-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--yaar-accent);
+  font-variant-numeric: tabular-nums;
+  background: rgba(88, 166, 255, 0.15);
+  border-radius: 8px;
+  padding: 0 4px;
+}
+.notif-muted {
+  opacity: 0.35;
 }

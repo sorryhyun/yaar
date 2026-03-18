@@ -114,7 +114,7 @@
       }
     },
     "saveToStorage": {
-      "description": "Save the current document to YAAR persistent storage. Params: { path: string } \u2014 e.g. \"docs/my-doc.html\"",
+      "description": "Save the current document to YAAR persistent storage. Params: { path: string } — e.g. \"docs/my-doc.html\"",
       "params": {
         "type": "object",
         "properties": {

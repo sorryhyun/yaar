@@ -177,12 +177,22 @@ app.sendInteraction({ event: 'analyze', data: '...', toMonitor: true }); // → 
 
 ## Verb API (for iframe apps)
 
-Apps can use `@bundled/yaar` SDK for server communication:
+Apps can use `@bundled/yaar` SDK for server communication. Each helper maps to one of the 5 URI verb tools:
+
+| Function | Verb | Purpose |
+|----------|------|---------|
+| `readJson(uri)` / `readText(uri)` | `read` | Read a resource's current value |
+| `listJson(uri)` / `listText(uri)` | `list` | List child resources under a URI |
+| `invokeJson(uri, payload)` / `invokeText(uri, payload)` | `invoke` | Execute an action on a resource |
+| `describeJson(uri)` | `describe` | Get supported verbs and schema for a URI |
+| `deleteText(uri)` | `delete` | Delete a resource |
 
 ```ts
-import { readJson, invokeJson, storage, appStorage, subscribe } from '@bundled/yaar';
+import { readJson, listJson, invokeJson, describeJson, appStorage, subscribe } from '@bundled/yaar';
 
-const settings = await readJson<Settings>('yaar://config/settings');
+const settings = await readJson<Settings>('yaar://config/settings');  // read verb
+const apps = await listJson<App[]>('yaar://apps');                    // list verb
+const info = await describeJson('yaar://storage/');                   // describe verb
 await appStorage.save('data.json', JSON.stringify(data));
 const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 ```
@@ -239,9 +249,20 @@ For browser-level info (screenshots, DOM state) or system config, use `relay(mes
 
 ## Deploy
 
-Use `command("deploy", { appId, name?, icon?, description?, permissions? })`.
+Use `command("deploy", { appId, name?, icon?, description? })`.
 
-**Permissions:** If the app uses Verb API to access URIs, pass the `permissions` array. Without it, verb calls return 403.
+**All app metadata lives in `app.json`** — permissions, variant, frameless, windowStyle, capture, createShortcut, fileAssociations, etc. When cloning, `app.json` is copied into the sandbox. Edit it directly with `command("writeFile", { path: "app.json", content: "..." })` before deploying. Deploy reads it from the sandbox automatically.
+
+**Permissions:** If the app uses Verb API, declare permissions in `app.json`. Without them, verb calls return 403. Supports both string and object formats:
+
+```json
+{
+  "permissions": [
+    "yaar://storage/",
+    { "uri": "yaar://sessions/", "verbs": ["list", "read"] }
+  ]
+}
+```
 
 Permission URIs use prefix matching — `yaar://storage/` matches all paths under storage. Do **not** use glob patterns like `yaar://storage/*`.
 

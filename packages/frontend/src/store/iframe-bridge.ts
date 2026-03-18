@@ -6,9 +6,11 @@
  */
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { ClientEventType } from '@/types';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
-import { resolveWindowKey } from './helpers';
+import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
+import { getRawWindowId, resolveWindowKey } from './helpers';
 // Circular import — safe because useDesktopStore is only accessed at runtime (live ESM binding)
 import { useDesktopStore } from './desktop';
 
@@ -322,7 +324,12 @@ export function consumeIframeDragSource() {
 export function initIframeMessageHandlers() {
   iframeMessages.on('yaar:app-ready', (ctx) => {
     if (!ctx.source) return;
-    useDesktopStore.getState().addAppProtocolReady(ctx.source.windowId);
+    // Send APP_PROTOCOL_READY immediately over WebSocket, bypassing the
+    // Zustand pending queue to eliminate the subscription-drain latency.
+    sendEvent(wsManager, {
+      type: ClientEventType.APP_PROTOCOL_READY,
+      windowId: getRawWindowId(ctx.source.windowId),
+    });
   });
 
   iframeMessages.on('yaar:app-interaction', (ctx) => {

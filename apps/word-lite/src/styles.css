@@ -11,12 +11,17 @@ body {
 #app {
   height: 100%;
 }
+
+/* ── App Shell (dark UI chrome) ── */
 .app-shell {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   height: 100%;
   color: var(--yaar-text);
+  background: var(--yaar-bg);
 }
+
+/* ── Topbar (dark) ── */
 .topbar {
   display: flex;
   align-items: center;
@@ -24,12 +29,14 @@ body {
   padding: 10px 14px;
   background: var(--yaar-bg-surface);
   border-bottom: 1px solid var(--yaar-border);
+  color: var(--yaar-text);
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 700;
+  color: var(--yaar-text);
 }
 .doc-meta {
   display: inline-flex;
@@ -38,6 +45,9 @@ body {
 }
 .doc-title-input {
   min-width: 220px;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border-color: var(--yaar-border);
 }
 .brand-badge {
   width: 26px;
@@ -50,6 +60,8 @@ body {
   color: white;
   font-size: 13px;
 }
+
+/* ── Toolbar (dark) ── */
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -69,20 +81,39 @@ body {
   border-right: 0;
   padding-right: 0;
 }
+
+/* ── White border on all buttons ── */
+.app-shell button,
+.app-shell .y-btn {
+  border: 1px solid white !important;
+  color: var(--yaar-text) !important;
+}
+
+/* ── Toolbar select (dark) ── */
+.toolbar select,
+.toolbar .y-input {
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border-color: var(--yaar-border);
+}
+
+/* ── Editor wrap — dark canvas behind the page ── */
 .editor-wrap {
   overflow: auto;
   padding: 24px;
-  background: #0b1220;
+  background: #0d1117;
 }
+
+/* ── Page — WHITE editor content area ── */
 .page {
   max-width: 860px;
   min-height: calc(100% - 4px);
   margin: 0 auto;
-  background: var(--yaar-bg-surface);
-  border: 1px solid var(--yaar-border);
+  background: #ffffff;
+  border: 1px solid #d0d7de;
   border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-  color: var(--yaar-text);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  color: #1a1a1a;
   padding: 36px 44px;
   outline: none;
   line-height: 1.5;
@@ -97,14 +128,17 @@ body {
 .page a:focus,
 .page a * {
   cursor: pointer !important;
+  color: #0969da;
 }
 .page a:hover {
   text-decoration: underline;
 }
 .page:empty:before {
   content: attr(data-placeholder);
-  color: var(--yaar-text-dim);
+  color: #999;
 }
+
+/* ── Statusbar (dark) ── */
 .statusbar {
   display: flex;
   justify-content: space-between;
@@ -114,6 +148,8 @@ body {
   border-top: 1px solid var(--yaar-border);
   color: var(--yaar-text-muted);
 }
+
+/* ── Focus mode ── */
 .app-shell.focus-mode .topbar,
 .app-shell.focus-mode .toolbar,
 .app-shell.focus-mode .statusbar {
@@ -122,6 +158,7 @@ body {
 .app-shell.focus-mode .editor-wrap {
   padding: 12px;
 }
+
 .muted {
   color: var(--yaar-text-muted);
 }

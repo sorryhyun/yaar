@@ -1,8 +1,8 @@
 import { createSignal, createMemo, For, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { readJson } from '@bundled/yaar';
-import type { SessionSummary, SessionListResult, SessionDetail } from './types';
+import { listJson, readJson } from '@bundled/yaar';
+import type { SessionSummary, SessionDetail } from './types';
 import './styles.css';
 
 // --- State ---
@@ -14,22 +14,29 @@ const [loading, setLoading] = createSignal(false);
 const [detailLoading, setDetailLoading] = createSignal(false);
 const [search, setSearch] = createSignal('');
 const [totalCount, setTotalCount] = createSignal(0);
+const [loadError, setLoadError] = createSignal<string | null>(null);
 
 // --- Data loading ---
 async function loadSessions() {
   setLoading(true);
+  setLoadError(null);
   try {
-    // BUG FIX: listJson does not exist in @bundled/yaar and returns wrong format.
-    // yaar://sessions/ returns a JSON object, so we must use readJson.
-    const result = await readJson<SessionListResult>('yaar://sessions/');
-    setSessions(result.sessions ?? []);
-    setCurrentSessionId(result.currentSessionId ?? '');
-    setTotalCount(result.count ?? result.sessions?.length ?? 0);
+    // yaar://sessions/ returns { currentSessionId, count, sessions[] }
+    const result = await listJson<{ currentSessionId?: string; sessions: SessionSummary[] }>('yaar://sessions/');
+    const arr = Array.isArray(result?.sessions) ? result.sessions : [];
+    if (result?.currentSessionId) setCurrentSessionId(result.currentSessionId);
+    // Sort newest first
+    arr.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+    setSessions(arr);
+    setTotalCount(arr.length);
   } catch (e) {
     console.error('Failed to load sessions', e);
+    setLoadError(String(e));
   } finally {
     setLoading(false);
   }
+
+  // currentSessionId is already extracted from the list response above
 }
 
 async function loadDetail(sessionId: string) {
@@ -38,7 +45,6 @@ async function loadDetail(sessionId: string) {
   setDetailLoading(true);
   try {
     const d = await readJson<SessionDetail>(`yaar://sessions/${sessionId}`);
-    // Ensure sessionId is present even if the endpoint doesn't return it
     if (!d.sessionId) (d as Record<string, unknown>).sessionId = sessionId;
     setDetail(d);
   } catch (e) {
@@ -174,8 +180,6 @@ const SessionItem = (s: SessionSummary) => {
   const isActive  = () => selectedId() === s.sessionId;
   const isCurrent = () => currentSessionId() === s.sessionId;
 
-  // BUG FIX: wrap static class strings in functions so Solid's html template
-  // sets them correctly; also avoids stale closure issues.
   return html`
     <div
       class=${() =>
@@ -189,7 +193,7 @@ const SessionItem = (s: SessionSummary) => {
       <div class="session-meta">
         <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
         <span class="session-datetime">${() => formatDateTime(s.createdAt)}</span>
-        <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
+        <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
       </div>
     </div>
   `;
@@ -207,10 +211,9 @@ const DetailView = () => {
   const d = detail();
   if (!d) return null;
 
-  const sid      = selectedId() ?? '';
+  const sid       = selectedId() ?? '';
   const isCurrent = currentSessionId() === sid;
 
-  // Extra keys beyond the known ones go into the raw section
   const knownKeys = new Set(['sessionId','createdAt','lastActivity','provider','agentCount']);
   const extraEntries = Object.entries(d).filter(([k]) => !knownKeys.has(k));
 
@@ -233,7 +236,7 @@ const DetailView = () => {
 
         <div class="detail-field">
           <div class="field-label">Agents</div>
-          <div class="field-value agent-value">🤖 ${d.agentCount ?? '-'}</div>
+          <div class="field-value agent-value">🤖 ${d.agentCount ?? '-'}</div>
         </div>
 
         <div class="detail-field">
@@ -248,7 +251,7 @@ const DetailView = () => {
 
         <div class="detail-field span-2">
           <div class="field-label">Duration</div>
-          <div class="field-value">⏱ ${durationBetween(d.createdAt, d.lastActivity)}</div>
+          <div class="field-value">⏱ ${durationBetween(d.createdAt, d.lastActivity)}</div>
         </div>
 
       </div>
@@ -307,7 +310,11 @@ render(() => html`
             ? html`<div class="list-status"><span class="y-spinner"></span></div>`
             : null
           }
-          ${() => !loading() && filteredSessions().length === 0
+          ${() => !loading() && sessions().length === 0 && loadError()
+            ? html`<div class="list-status list-error">⚠️ ${loadError()}</div>`
+            : null
+          }
+          ${() => !loading() && filteredSessions().length === 0 && !loadError()
             ? html`<div class="list-status">No sessions found</div>`
             : null
           }

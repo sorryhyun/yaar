@@ -1,6 +1,6 @@
 /**
  * Tests for the feedback slice of the Zustand store.
- * Covers App Protocol responses, App Protocol ready, and App Interactions queues.
+ * Covers App Protocol responses and App Interactions queues.
  */
 import { useDesktopStore } from '../../store/desktop';
 
@@ -9,7 +9,6 @@ describe('Feedback Slice', () => {
     useDesktopStore.setState({
       pendingFeedback: [],
       pendingAppProtocolResponses: [],
-      pendingAppProtocolReady: [],
       pendingAppInteractions: [],
     });
   });
@@ -81,47 +80,6 @@ describe('Feedback Slice', () => {
 
       expect(consumed).toEqual([]);
       expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(0);
-    });
-  });
-
-  describe('App Protocol Ready', () => {
-    it('addAppProtocolReady adds a windowId', () => {
-      const { addAppProtocolReady } = useDesktopStore.getState();
-
-      addAppProtocolReady('win-1');
-
-      const state = useDesktopStore.getState();
-      expect(state.pendingAppProtocolReady).toHaveLength(1);
-      expect(state.pendingAppProtocolReady[0]).toBe('win-1');
-    });
-
-    it('addAppProtocolReady accumulates multiple windowIds', () => {
-      const { addAppProtocolReady } = useDesktopStore.getState();
-
-      addAppProtocolReady('win-1');
-      addAppProtocolReady('win-2');
-      addAppProtocolReady('win-3');
-
-      const state = useDesktopStore.getState();
-      expect(state.pendingAppProtocolReady).toHaveLength(3);
-      expect(state.pendingAppProtocolReady).toEqual(['win-1', 'win-2', 'win-3']);
-    });
-
-    it('consumeAppProtocolReady returns all and clears, returns [] when empty', () => {
-      const { addAppProtocolReady } = useDesktopStore.getState();
-
-      addAppProtocolReady('win-1');
-      addAppProtocolReady('win-2');
-
-      const { consumeAppProtocolReady } = useDesktopStore.getState();
-      const consumed = consumeAppProtocolReady();
-
-      expect(consumed).toEqual(['win-1', 'win-2']);
-      expect(useDesktopStore.getState().pendingAppProtocolReady).toHaveLength(0);
-
-      // Second consume should return empty
-      const { consumeAppProtocolReady: consumeAgain } = useDesktopStore.getState();
-      expect(consumeAgain()).toEqual([]);
     });
   });
 

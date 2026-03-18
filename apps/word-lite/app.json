@@ -1,5 +1,5 @@
 {
-  "icon": "\ud83d\udcdd",
+  "icon": "📝",
   "name": "Word Lite",
   "description": "Lightweight document editor with DOCX/Markdown import, rich text editing, and storage persistence",
   "run": "index.html",

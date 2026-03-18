@@ -10,7 +10,6 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-import type { PermissionEntry } from '../../http/routes/verb.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
@@ -19,18 +18,8 @@ export interface DeployArgs {
   name?: string;
   description?: string;
   icon?: string;
-  createShortcut?: boolean;
   keepSource?: boolean;
   skill?: string;
-  version?: string;
-  author?: string;
-  fileAssociations?: Array<{ extensions: string[]; command: string; paramKey: string }>;
-  variant?: 'standard' | 'widget' | 'panel';
-  dockEdge?: 'top' | 'bottom';
-  frameless?: boolean;
-  windowStyle?: Record<string, string | number>;
-  capture?: 'auto' | 'canvas' | 'dom' | 'svg' | 'protocol';
-  permissions?: PermissionEntry[];
   sourcePath?: string; // Override sandbox path — use this directory as source
 }
 
@@ -45,24 +34,7 @@ export async function doDeploy(
   sandboxId: string,
   args: DeployArgs,
 ): Promise<DeployResult | { success: false; error: string }> {
-  const {
-    appId,
-    name,
-    description,
-    icon,
-    createShortcut,
-    keepSource = true,
-    skill,
-    version,
-    author,
-    fileAssociations,
-    variant,
-    dockEdge,
-    frameless,
-    windowStyle,
-    capture,
-    permissions,
-  } = args;
+  const { appId, name, description, icon, keepSource = true, skill } = args;
 
   if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
     return {
@@ -136,6 +108,15 @@ export async function doDeploy(
     // No sandbox SKILL.md
   }
 
+  // Read sandbox's app.json as the base (preserves permissions, etc. from clone)
+  let sandboxMeta: Record<string, unknown> = {};
+  try {
+    sandboxMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
+  } catch {
+    // No sandbox app.json
+  }
+
+  // Also read existing deployed app's metadata for fallback values
   let existingMeta: Record<string, unknown> = {};
   try {
     existingMeta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
@@ -190,46 +171,21 @@ export async function doDeploy(
       await Bun.write(join(appPath, 'SKILL.md'), skillContent);
     }
 
-    const metadata: Record<string, unknown> = { ...existingMeta };
-    metadata.icon = resolvedIcon;
-    metadata.name = displayName;
+    // Sandbox app.json is the source of truth for all metadata (permissions, variant, etc.)
+    // Deploy args only override name/icon/description for convenience.
+    const metadata: Record<string, unknown> = { ...existingMeta, ...sandboxMeta };
+    if (name !== undefined) metadata.name = name;
+    else if (!metadata.name) metadata.name = displayName;
+    if (icon !== undefined) metadata.icon = icon;
+    else if (!metadata.icon) metadata.icon = resolvedIcon;
     if (description !== undefined) metadata.description = description;
     if (hasCompiledApp) metadata.run = 'index.html';
-    if (createShortcut !== undefined) {
-      if (createShortcut === false) metadata.createShortcut = false;
-      else delete metadata.createShortcut;
-    }
+    if (!metadata.version) metadata.version = '1.0.0';
+    if (!metadata.author) metadata.author = 'YAAR';
+    // Remove legacy fields
     delete metadata.hidden;
-    // Remove legacy fields (protocol and appProtocol now live in protocol.json)
     delete metadata.appProtocol;
     delete metadata.protocol;
-    if (fileAssociations !== undefined) {
-      if (fileAssociations.length > 0) metadata.fileAssociations = fileAssociations;
-      else delete metadata.fileAssociations;
-    }
-    if (variant !== undefined) {
-      if (variant !== 'standard') metadata.variant = variant;
-      else delete metadata.variant;
-    }
-    if (dockEdge !== undefined) metadata.dockEdge = dockEdge;
-    if (frameless !== undefined) {
-      if (frameless) metadata.frameless = true;
-      else delete metadata.frameless;
-    }
-    if (windowStyle !== undefined) metadata.windowStyle = windowStyle;
-    if (capture !== undefined) {
-      if (capture !== 'auto') metadata.capture = capture;
-      else delete metadata.capture;
-    }
-    if (permissions !== undefined) {
-      if (permissions.length > 0) metadata.permissions = permissions;
-      else delete metadata.permissions;
-    }
-    // Version and author merged into app.json (formerly in manifest.json)
-    if (version !== undefined) metadata.version = version;
-    else if (!metadata.version) metadata.version = '1.0.0';
-    if (author !== undefined) metadata.author = author;
-    else if (!metadata.author) metadata.author = 'YAAR';
     await Bun.write(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
     // Write protocol.json separately (or remove if no protocol)
@@ -244,19 +200,22 @@ export async function doDeploy(
 
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
-    if (createShortcut !== false) {
+    const finalName = (metadata.name as string) ?? displayName;
+    const finalIcon = (metadata.icon as string) ?? resolvedIcon;
+
+    if (metadata.createShortcut !== false) {
       await ensureAppShortcut({
         id: appId,
-        name: displayName,
-        icon: resolvedIcon,
+        name: finalName,
+        icon: finalIcon,
         iconType: 'emoji',
       });
       actionEmitter.emitAction({
         type: 'desktop.createShortcut',
         shortcut: {
           id: `app-${appId}`,
-          label: displayName,
-          icon: resolvedIcon,
+          label: finalName,
+          icon: finalIcon,
           target: buildYaarUri('apps', appId),
           createdAt: Date.now(),
         },
@@ -271,7 +230,7 @@ export async function doDeploy(
       }
     }
 
-    return { success: true, appId, name: displayName, icon: resolvedIcon };
+    return { success: true, appId, name: finalName, icon: finalIcon };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: `Failed to deploy app: ${msg}` };
@@ -286,7 +245,7 @@ export interface CloneResult {
 }
 
 /** Files to clone from the app directory root (alongside src/). */
-const CLONE_ROOT_FILES = ['SKILL.md'];
+const CLONE_ROOT_FILES = ['app.json', 'SKILL.md'];
 
 export async function doClone(
   appId: string,

@@ -63,11 +63,14 @@ const PERMISSION_PREFIXES = [
  * Returns an array of warning strings for undeclared permissions.
  */
 async function checkPermissions(sandboxPath: string): Promise<string[]> {
-  // Read app.json permissions
-  let declaredPermissions: string[] = [];
+  // Read app.json permissions (supports both string and { uri, verbs } formats)
+  let declaredPrefixes: string[] = [];
   try {
     const appJson = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-    declaredPermissions = Array.isArray(appJson.permissions) ? appJson.permissions : [];
+    const raw: unknown[] = Array.isArray(appJson.permissions) ? appJson.permissions : [];
+    declaredPrefixes = raw
+      .map((p) => (typeof p === 'string' ? p : (p as { uri: string }).uri))
+      .filter(Boolean);
   } catch {
     // No app.json or invalid — treat as no permissions declared
   }
@@ -107,7 +110,7 @@ async function checkPermissions(sandboxPath: string): Promise<string[]> {
   // Check which used prefixes are not covered by declared permissions
   const warnings: string[] = [];
   for (const prefix of usedPrefixes) {
-    const covered = declaredPermissions.some(
+    const covered = declaredPrefixes.some(
       (perm) => prefix.startsWith(perm) || prefix === perm || perm.startsWith(prefix),
     );
     if (!covered) {

@@ -347,27 +347,13 @@ export async function deploy(opts: {
   name?: string;
   icon?: string;
   description?: string;
-  permissions?: string[];
 }): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
   setStatusText('Deploying...');
   try {
-    // If permissions not explicitly passed, fall back to project's app.json
-    let finalOpts = { ...opts };
-    if (finalOpts.permissions === undefined) {
-      try {
-        const appJson = await appStorage.readJson<{ permissions?: string[] }>(
-          projectPath(proj.id, 'app.json'),
-        );
-        if (Array.isArray(appJson?.permissions)) {
-          finalOpts.permissions = appJson.permissions;
-        }
-      } catch {
-        /* no app.json or no permissions field */
-      }
-    }
-    const result = await dev.deploy(projectPath(proj.id), finalOpts);
+    // Permissions and other metadata are read from sandbox's app.json by the server
+    const result = await dev.deploy(projectPath(proj.id), opts);
     if (result.success) {
       setStatusText(`Deployed as "${result.name ?? opts.appId}"`);
     } else {

@@ -1,5 +1,5 @@
 import { createSignal } from '@bundled/solid-js';
-import type { SessionSummary, SessionListResult, SessionDetail } from './types';
+import type { SessionSummary, SessionDetail } from './types';
 
 export const [sessions, setSessions] = createSignal<SessionSummary[]>([]);
 export const [currentSessionId, setCurrentSessionId] = createSignal<string>('');
