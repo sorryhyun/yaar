@@ -41,7 +41,7 @@ ${WINDOWS_SECTION}
 
 ## Skills
 
-**IMPORTANT: You MUST call \`read('yaar://skills/app_dev')\` before writing sandbox code.** It contains bundled libraries, runtime constraints, and sandbox globals.
+Read \`read('yaar://skills/components')\` before using renderer: 'component'.
 
 ${RELAY_SECTION}
 `;

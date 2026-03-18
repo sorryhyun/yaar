@@ -54,6 +54,9 @@ export const [bundledLibs, setBundledLibs] = createSignal<string[]>([]);
 export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
 export const [previewIframeUrl, setPreviewIframeUrl] = createSignal<string | null>(null);
 
+// ── Feature: Preview Window ──
+export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>(null);
+
 // ── Helpers ──
 
 function projectPath(projectId: string, sub?: string): string {

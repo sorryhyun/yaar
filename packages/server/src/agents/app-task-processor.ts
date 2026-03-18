@@ -41,8 +41,25 @@ export class AppTaskProcessor {
     const processingKey = `app-${appId}`;
     const isParallel = !!task.actionId;
 
-    // Queue if this app agent is already busy (skip for parallel actions)
+    // If the app agent is already busy, try to steer (inject mid-turn message).
+    // Falls back to queuing if the provider doesn't support steering.
     if (!isParallel && this.ctx.windowQueuePolicy.isProcessing(processingKey)) {
+      const steered = await this.ctx.agentPool.steerAppAgent(appId, task.content);
+      if (steered) {
+        console.log(
+          `[AppTaskProcessor] Steered task ${task.messageId} into running ${appId} agent`,
+        );
+        const source = windowSource(windowId);
+        this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
+        await this.ctx.sendEvent({
+          type: ServerEventType.MESSAGE_ACCEPTED,
+          messageId: task.messageId,
+          agentId: `app-${appId}`,
+        });
+        return;
+      }
+
+      // Fallback: queue if steering not supported (e.g. Codex provider)
       const queueSize = this.ctx.windowQueuePolicy.enqueue(processingKey, task);
       console.log(
         `[AppTaskProcessor] Queued task ${task.messageId} for ${appId}, queue size: ${queueSize}`,

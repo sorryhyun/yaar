@@ -56,7 +56,7 @@ For iframe apps with app protocol support:
 
 ## Skills
 
-**You MUST call \`read('yaar://skills/<topic>')\` before using related tools for the first time** (app_dev, components).
+**You MUST call \`read('yaar://skills/<topic>')\` before using related tools for the first time** (components, host_api).
 
 ${RELAY_SECTION}
 `;

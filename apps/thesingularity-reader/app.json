@@ -2,7 +2,7 @@
   "icon": "⚡",
   "name": "특이점이 온다",
   "run": "index.html",
-  "permissions": ["yaar://browser/", "yaar://storage/", "yaar://http", "yaar://apps/self/storage/"],
+  "permissions": ["yaar://browser/", "yaar://storage/thesingularity-reader/"],
   "appProtocol": true,
   "protocol": {
     "state": {},
@@ -39,5 +39,6 @@
         }
       }
     }
-  }
+  },
+  "description": "Community feed with posts, comments, voting and PoW-backed write actions"
 }

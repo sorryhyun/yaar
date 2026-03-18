@@ -11,8 +11,6 @@ import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
 import { DEFAULT_PROFILE } from './default.js';
 import { WEB_PROFILE } from './web.js';
 import { CODE_PROFILE } from './code.js';
-import { APP_PROFILE } from './app.js';
-
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
 export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
@@ -24,7 +22,6 @@ export { buildAppAgentProfile } from './app-agent.js';
 export { DEFAULT_PROFILE } from './default.js';
 export { WEB_PROFILE } from './web.js';
 export { CODE_PROFILE } from './code.js';
-export { APP_PROFILE } from './app.js';
 export { WINDOW_PROFILE } from './window.js';
 
 // Re-export orchestrator
@@ -36,7 +33,6 @@ const profiles: Record<string, AgentProfile> = {
   default: DEFAULT_PROFILE,
   web: WEB_PROFILE,
   code: CODE_PROFILE,
-  app: APP_PROFILE,
 };
 
 /**

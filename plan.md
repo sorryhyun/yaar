@@ -2,23 +2,7 @@
 
 ## Goal
 
-Remove the `yaar://sandbox/*` URI namespace and the standalone "app dev agent profile" in favor of the **devtools app** as the single entry point for app development. The AI agent should use the devtools app (via app protocol commands) instead of raw sandbox verbs.
-
-## Current State
-
-Two parallel app-dev workflows exist:
-
-| | Sandbox (agent-direct) | Devtools (app protocol) |
-|---|---|---|
-| **Entry** | `invoke('yaar://sandbox/new/src/main.ts', ...)` | `command("createProject", { name })` |
-| **Storage** | `sandbox/{timestamp}/` | `storage/apps/devtools/projects/` |
-| **Compile** | `invoke('yaar://sandbox/{id}', { action: "compile" })` | `command("compile")` |
-| **Deploy** | `invoke('yaar://sandbox/{id}', { action: "deploy", ... })` | `command("deploy", { ... })` |
-| **Clone** | `invoke('yaar://sandbox/new', { action: "clone", ... })` | `command("cloneApp", { appId })` |
-| **Agent** | `app` profile (specialist) | devtools app agent (via AGENT.md) |
-| **UI** | None (agent writes to fs, previews in iframe) | Full IDE (file tree, editor, diagnostics) |
-
-The devtools app already covers the full workflow. The sandbox layer is redundant.
+Remove the `yaar://sandbox/*` URI namespace in favor of the **devtools app** as the single entry point for app development. The AI agent should use the devtools app (via app protocol commands) instead of raw sandbox verbs.
 
 ## What Gets Removed
 
@@ -29,17 +13,14 @@ The devtools app already covers the full workflow. The sandbox layer is redundan
 | `packages/server/src/handlers/sandbox.ts` | 249 | URI handler for `yaar://sandbox/*` and `yaar://sandbox/eval` |
 | `packages/server/src/features/sandbox/files.ts` | 160 | File read/write/edit/delete for sandbox dir |
 | `packages/server/src/features/sandbox/eval.ts` | 47 | `formatSandboxResult()` for eval output |
-| `packages/server/src/agents/profiles/app.ts` | 81 | App dev specialist agent profile |
 
 ### Files to modify
 
 | File | Change |
 |------|--------|
 | `packages/server/src/handlers/index.ts` | Remove `registerSandboxHandlers()` call |
-| `packages/server/src/agents/profiles/orchestrator.ts` | Remove `app` from profile table, update sandbox references to devtools workflow |
 | `packages/server/src/agents/profiles/shared-sections.ts` | Remove `SANDBOX_SECTION` export |
 | `packages/server/src/agents/profiles/code.ts` | Remove sandbox eval references (if any) |
-| `packages/server/src/features/skills/app_dev.md` | Rewrite to reference devtools commands instead of sandbox URIs |
 | `packages/server/src/features/config/hooks.ts` | Remove `yaar://sandbox/*` pattern matching |
 | `packages/server/src/features/window/resolve-window.ts` | Remove sandbox URI content resolution |
 | `packages/server/src/http/routes/files.ts` | Remove `GET /api/sandbox/{id}/{path}` route |
@@ -51,7 +32,7 @@ The devtools app already covers the full workflow. The sandbox layer is redundan
 | Component | Reason |
 |-----------|--------|
 | `lib/compiler/` | Still used by `/api/dev/compile` (devtools REST route) |
-| `lib/sandbox/` (vm execution) | Still used by `code` profile for JS eval — but consider moving eval to a `yaar://eval` URI or keeping under `yaar://code/eval` |
+| `lib/sandbox/` (vm execution) | Still used by `code` profile for JS eval |
 | `features/dev/compile.ts` | Called by devtools REST API |
 | `features/dev/deploy.ts` | Called by devtools REST API |
 | `features/dev/clone.ts` | Called by devtools REST API |
@@ -60,27 +41,6 @@ The devtools app already covers the full workflow. The sandbox layer is redundan
 | `apps/devtools/` | The replacement — stays and gets enhanced |
 
 ## Migration Steps
-
-### Phase 1: Reroute the `app` profile to devtools
-
-**Before deleting anything**, make the orchestrator delegate app-dev tasks to the devtools app instead of the `app` specialist profile.
-
-1. **Update orchestrator prompt** — Remove `app` from the profile dispatch table. Instead, instruct the orchestrator to:
-   - Open the devtools app window (if not already open)
-   - Send app-dev requests as messages to the devtools window
-   - The devtools app agent (AGENT.md) already handles the full workflow
-
-2. **Update `app_dev.md` skill** — Rewrite to document the devtools-based workflow:
-   ```
-   1. Open devtools: create window with renderer "iframe", app "devtools"
-   2. Create project: command("createProject", { name })
-   3. Write files: command("writeFile", { path, content })
-   4. Typecheck: command("typecheck")
-   5. Compile: command("compile")
-   6. Deploy: command("deploy", { appId, name, icon })
-   ```
-
-3. **Delete `agents/profiles/app.ts`** and remove from profile registry.
 
 ### Phase 2: Remove sandbox URI handler
 
@@ -114,12 +74,6 @@ Recommendation: **Option A** (`yaar://code/eval`). It's already semantically par
 
 Things the sandbox handler could do that devtools should also support:
 
-- [x] Create project (= sandbox new)
-- [x] Write/edit files
-- [x] Compile
-- [x] Typecheck
-- [x] Deploy
-- [x] Clone existing app
 - [ ] **Delete file** — verify devtools supports this via command
 - [ ] **List files** — verify devtools exposes file listing via query
 - [ ] **Read file with line numbers** — verify devtools `query("openFile")` returns content

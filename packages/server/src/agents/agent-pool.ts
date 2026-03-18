@@ -315,6 +315,16 @@ export class AgentPool {
     return agent.session.steer(content);
   }
 
+  /**
+   * Try to steer an app agent's active turn with additional input.
+   * Returns true if steering succeeded, false otherwise.
+   */
+  async steerAppAgent(appId: string, content: string): Promise<boolean> {
+    const agent = this.appAgents.get(appId);
+    if (!agent || !agent.session.isRunning()) return false;
+    return agent.session.steer(content);
+  }
+
   // ── Query / interrupt ───────────────────────────────────────────────
 
   /**

@@ -21,9 +21,8 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\` | read, invoke, delete |
-| \`yaar://sandbox/\` | \`yaar://sandbox/new/src/main.ts\`, \`yaar://sandbox/{id}\` | invoke (write, edit, compile, typecheck, deploy, clone), read, list |
 | \`yaar://sessions/\` | \`yaar://sessions/\`, \`yaar://sessions/{id}\`, \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/context\` | read, invoke, list |
-| \`yaar://skills/\` | \`yaar://skills/app_dev\`, \`yaar://skills/components\` | list, read |
+| \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |
 | \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |`;
@@ -93,11 +92,10 @@ export const SKILLS_SECTION = `## Skills
 
 \`\`\`
 list('yaar://skills')              # list available topics
-read('yaar://skills/app_dev')      # load a specific skill
+read('yaar://skills/components')   # load a specific skill
 \`\`\`
 
 Available skills:
-- **app_dev** — REQUIRED before sandbox write, compile, deploy. Contains bundled libraries, storage API, app protocol, runtime constraints, and sandbox globals
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **host_api** — REST endpoints available to iframe apps
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)`;

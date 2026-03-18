@@ -16,7 +16,7 @@ import type { ResolvedUri } from './uri-resolve.js';
 import { ok, okJson, error, extractIdFromUri } from './utils.js';
 
 /** Known topic names — kept in sync with skills/index.ts. */
-const TOPIC_NAMES = ['app_dev', 'components', 'host_api', 'config'];
+const TOPIC_NAMES = ['components', 'host_api', 'config'];
 
 /** Lazily load and resolve a topic's content (with template substitution). */
 async function loadTopic(topic: string): Promise<string | null> {

@@ -46,11 +46,17 @@ Task agents inherit your full conversation context and tools. They work autonomo
 | **default** | Multi-step tasks, anything not fitting a specific profile |
 | **web** | Web search, browsing, API calls, HTTP requests, scraping, data fetching — any task involving external web resources |
 | **code** | Computation, data processing, JavaScript sandbox execution, scripting |
-| **app** | App development, sandbox compilation, deployment, bug fixes in apps, app protocol interactions |
 
 **Parallel dispatch:** For multi-part requests, spawn Task agents in parallel. Task agents run in the background — you can continue handling other actions while they work.
 
-**Only use the profiles listed above** (default, web, code, app). Do NOT use general-purpose, explore, status-line, or plan subagents — they are disabled and will fail.
+**Only use the profiles listed above** (default, web, code). Do NOT use general-purpose, explore, status-line, or plan subagents — they are disabled and will fail.
+
+### App Development
+
+For app development tasks, **delegate to the devtools app** instead of using a subagent:
+1. Open the devtools app window: \`invoke('yaar://windows/', { action: "create", appId: "devtools", renderer: "iframe", content: "yaar://apps/devtools" })\`
+2. Send instructions via message: \`invoke('yaar://windows/devtools', { action: "message", message: "Create a calculator app" })\`
+The devtools app agent handles the full workflow (create, edit, typecheck, compile, deploy).
 
 ## Windows
 
@@ -83,11 +89,7 @@ Window agents can relay results to you via \`<relay>\` messages. When you see a 
 You can interact with apps by opening an app window and sending a message to it via \`invoke('yaar://windows/{windowId}', { action: "message", message: "..." })\`. This spawns a dedicated app agent that handles the interaction.
 
 App source code is **not directly readable** from \`yaar://apps/{appId}\` — that only returns the SKILL.md.
-To read or edit an app's source files, **clone it to the sandbox first**:
-\`\`\`
-invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })
-\`\`\`
-Then browse/edit files under \`yaar://sandbox/{id}/src/...\`.
+To read or edit an app's source files, use the **devtools app** which can clone and edit apps.
 
 ## Skills
 
@@ -95,10 +97,10 @@ Then browse/edit files under \`yaar://sandbox/{id}/src/...\`.
 
 \`\`\`
 list('yaar://skills')              # list available topics
-read('yaar://skills/app_dev')      # load a specific skill
+read('yaar://skills/components')   # load a specific skill
 \`\`\`
 
-Available skills: **app_dev** (sandbox/deploy), **components** (component renderer), **host_api** (iframe REST), **config** (hooks/settings/shortcuts)
+Available skills: **components** (component renderer), **host_api** (iframe REST), **config** (hooks/settings/shortcuts)
 
 ## User Drawings
 

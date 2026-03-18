@@ -1,5 +1,5 @@
 export {};
-import { app } from '@bundled/yaar';
+import { app, invokeJson, readJson } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -9,6 +9,8 @@ import {
   compileStatus,
   compileErrors,
   previewUrl,
+  previewWindowId,
+  setPreviewWindowId,
   files,
   bundledLibs,
   consoleLogs,
@@ -221,17 +223,79 @@ export function registerProtocol() {
         },
       },
       preview: {
-        description: 'Request preview window',
+        description: 'Open preview window for the compiled app',
         params: { type: 'object', properties: {} },
-        handler: () => {
+        handler: async () => {
           const url = previewUrl();
           if (!url) return { ok: false, error: 'No compiled output. Run compile first.' };
-          app?.sendInteraction({
-            event: 'preview_request',
-            previewUrl: url,
-            projectName: activeProject()?.name ?? 'Preview',
+          const name = activeProject()?.name ?? 'Preview';
+          const result = await invokeJson<{ windowId?: string }>('yaar://windows/', {
+            action: 'create',
+            title: name,
+            renderer: 'iframe',
+            content: url,
           });
-          return { ok: true, previewUrl: url };
+          if (result?.windowId) setPreviewWindowId(result.windowId);
+          return { ok: true, previewUrl: url, ...result };
+        },
+      },
+      viewPreview: {
+        description: 'Read the current preview window state (content, size, position)',
+        params: { type: 'object', properties: {} },
+        handler: async () => {
+          const wid = previewWindowId();
+          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          try {
+            const info = await readJson<Record<string, unknown>>(`yaar://windows/${wid}`);
+            return { ok: true, ...info };
+          } catch {
+            setPreviewWindowId(null);
+            return { ok: false, error: 'Preview window no longer exists.' };
+          }
+        },
+      },
+      previewQuery: {
+        description: 'Query app protocol state from the preview window',
+        params: {
+          type: 'object',
+          properties: { stateKey: { type: 'string', description: 'State key to query' } },
+          required: ['stateKey'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const wid = previewWindowId();
+          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          try {
+            return await invokeJson(`yaar://windows/${wid}`, {
+              action: 'app_query',
+              stateKey: String(p.stateKey),
+            });
+          } catch {
+            return { ok: false, error: 'Preview window not responding.' };
+          }
+        },
+      },
+      previewCommand: {
+        description: 'Send an app protocol command to the preview window',
+        params: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'Command name' },
+            params: { type: 'object', description: 'Command parameters' },
+          },
+          required: ['command'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const wid = previewWindowId();
+          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          try {
+            return await invokeJson(`yaar://windows/${wid}`, {
+              action: 'app_command',
+              command: String(p.command),
+              params: (p.params as Record<string, unknown>) ?? {},
+            });
+          } catch {
+            return { ok: false, error: 'Preview window not responding.' };
+          }
         },
       },
       cloneApp: {

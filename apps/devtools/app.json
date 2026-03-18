@@ -173,10 +173,47 @@
         }
       },
       "preview": {
-        "description": "Request preview window",
+        "description": "Open preview window for the compiled app",
         "params": {
           "type": "object",
           "properties": {}
+        }
+      },
+      "viewPreview": {
+        "description": "Read the current preview window state (content, size, position)",
+        "params": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "previewQuery": {
+        "description": "Query app protocol state from the preview window",
+        "params": {
+          "type": "object",
+          "properties": {
+            "stateKey": {
+              "type": "string",
+              "description": "State key to query"
+            }
+          },
+          "required": ["stateKey"]
+        }
+      },
+      "previewCommand": {
+        "description": "Send an app protocol command to the preview window",
+        "params": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Command name"
+            },
+            "params": {
+              "type": "object",
+              "description": "Command parameters"
+            }
+          },
+          "required": ["command"]
         }
       },
       "cloneApp": {
