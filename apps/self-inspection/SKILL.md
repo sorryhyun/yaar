@@ -39,7 +39,7 @@ Test the root resource and namespace enumeration:
 
 ```
 read('yaar://')                    # should return session overview (sessionId, platform, etc.)
-list('yaar://')                    # should return all 9 URI namespaces
+list('yaar://')                    # should return all 6 URI namespaces (apps, storage, windows, config, browser, sessions)
 list('yaar://config/')             # should return config sections (settings, hooks, shortcuts, mounts, app)
 ```
 
@@ -227,84 +227,7 @@ delete('yaar://storage/_si-v-test-data.json')
 
 **PASS** if imported data matches the original JSON.
 
-### 10. Dev Pipeline (Write → Compile → Deploy → Verify → Cleanup)
-
-Test the full app development pipeline using verb-based sandbox operations.
-
-**Step 1 — Write source:**
-```
-invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "import html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\n\nrender(() => html\`<div><h1 id=\"si-v-test\">Verb Inspection Dev Test</h1><p>Compiled and deployed successfully.</p></div>\`, document.getElementById('app')!);" })
-```
-Record the returned `sandboxId`.
-
-**Step 2 — Compile via verb:**
-```
-invoke('yaar://sandbox/<sandboxId>', { action: "compile" })
-```
-**PASS (compile)** if `previewUrl` is returned.
-
-**Step 3 — Deploy via verb:**
-```
-invoke('yaar://sandbox/<sandboxId>', { action: "deploy", appId: "si-v-dev-test", name: "SI Verb Dev Test", icon: "🧪", description: "Temporary test app from verb self-inspection" })
-```
-**PASS (deploy)** if deploy succeeds without error.
-
-**Step 4 — Verify deployment:**
-```
-list('yaar://apps')
-```
-Verify "si-v-dev-test" appears in the app list.
-
-**Step 5 — Open and verify:**
-```
-invoke('yaar://windows/si-v-dev-verify', { action: "create", title: "Dev Test Verify", appId: "si-v-dev-test", renderer: "iframe", content: "yaar://apps/si-v-dev-test" })
-list('yaar://monitors')    # verify window exists
-delete('yaar://windows/si-v-dev-verify')
-```
-
-**Step 6 — Cleanup (delete the test app):**
-```
-delete('yaar://apps/si-v-dev-test')
-```
-Verify it no longer appears in the app list.
-
-**PASS** if all 6 steps complete successfully.
-
-### 11. Sandbox Stress Tests
-
-Run multiple sandbox executions testing edge cases via `yaar://sandbox/eval`.
-
-**11a — Async/await:**
-```
-invoke('yaar://sandbox/eval', { code: "const r = await fetch('http://localhost:8000/health').then(r=>r.json()); JSON.stringify(r)" })
-```
-**PASS** if returns `{"status":"ok"}`.
-
-**11b — Computation:**
-```
-invoke('yaar://sandbox/eval', { code: "let sum = 0; for (let i = 0; i < 1000000; i++) sum += i; JSON.stringify({ sum })" })
-```
-**PASS** if returns `{"sum":499999500000}`.
-
-**11c — Error handling:**
-```
-invoke('yaar://sandbox/eval', { code: "throw new Error('intentional test error')" })
-```
-**PASS** if error is caught and reported (not a crash).
-
-**11d — Crypto:**
-```
-invoke('yaar://sandbox/eval', { code: "const hash = crypto.createHash('sha256').update('self-inspection').digest('hex'); hash" })
-```
-**PASS** if returns a 64-character hex string.
-
-**11e — Multiple return types:**
-```
-invoke('yaar://sandbox/eval', { code: "JSON.stringify({ string: 'hello', number: 42, bool: true, array: [1,2,3], nested: { a: 1 } })" })
-```
-**PASS** if all types are preserved in the output.
-
-### 12. Shortcut Create/Delete via Config URI
+### 10. Shortcut Create/Delete via Config URI
 
 ```
 invoke('yaar://config/shortcuts', { label: "SI Verb Test", icon: "🧪", shortcutType: "action", target: "self-inspection test" })
@@ -315,7 +238,7 @@ read('yaar://config/shortcuts')     # verify it's gone
 
 **PASS** if shortcut appears after create and disappears after remove.
 
-### 13. Component Update
+### 11. Component Update
 
 Create a component window, then replace its entire layout:
 
@@ -356,7 +279,7 @@ delete('yaar://windows/si-v-comp-upd')
 
 **PASS** if component update succeeds without error.
 
-### 14. Storage Directory Operations via URI
+### 12. Storage Directory Operations via URI
 
 Test directory creation and listing:
 
@@ -373,7 +296,7 @@ delete('yaar://storage/_si-v-test-dir/sub/file3.txt')
 
 **PASS** if directory listing shows expected files and subdirectory.
 
-### 15. Multi-App Simultaneous
+### 13. Multi-App Simultaneous
 
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
@@ -407,7 +330,7 @@ delete('yaar://windows/si-v-multi-img')
 
 **PASS** if all 3 apps respond correctly to commands and queries simultaneously.
 
-### 16. Monitor-as-Resource
+### 14. Monitor-as-Resource
 
 Read the monitor resource to verify it returns status:
 
@@ -417,7 +340,7 @@ read('yaar://sessions/current/monitors')
 
 **PASS** if returns monitorId, hasMainAgent, windows list, and stats.
 
-### 17. Agents Discovery
+### 15. Agents Discovery
 
 List and inspect active agents:
 
@@ -432,7 +355,7 @@ read('yaar://sessions/current/agents/<first-agent-id>')
 
 **PASS** if agent list returns without error and (if agents exist) individual agent read returns agent info.
 
-### 18. User Notifications via URI
+### 16. User Notifications via URI
 
 Test notification lifecycle through verb layer:
 
@@ -454,7 +377,7 @@ invoke('yaar://windows/self-inspection-report', {
   title: "Self Inspection Report (Verb Mode)",
   width: 750, height: 750,
   renderer: "markdown",
-  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock metadata correct, owner update allowed, unlock cleared |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Dev Pipeline | PASS | write → compile → deploy → cleanup |\n| 11 | Sandbox Stress | PASS | 5/5 subtests passed |\n| 12 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 13 | Component Update | PASS | layout replaced successfully |\n| 14 | Storage Directories | PASS | nested dirs and listing verified |\n| 15 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 16 | Monitor-as-Resource | PASS | monitor status returned |\n| 17 | Agents Discovery | PASS | agent list/read verified |\n| 18 | User Notifications | PASS | notification shown |\n\n**Result: X/18 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #16, #17 |\n| list | #2, #3, #10, #14, #17 |\n| invoke | #3–#15, #18 |\n| delete | #3–#5, #9, #10, #12, #14, #15 |"
+  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock metadata correct, owner update allowed, unlock cleared |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 14 | Monitor-as-Resource | PASS | monitor status returned |\n| 15 | Agents Discovery | PASS | agent list/read verified |\n| 16 | User Notifications | PASS | notification shown |\n\n**Result: X/16 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #14, #15 |\n| list | #2, #3, #12, #15 |\n| invoke | #3–#13, #16 |\n| delete | #3–#5, #9, #10, #12, #13 |"
 })
 ```
 
@@ -469,4 +392,4 @@ If any test fails partway through, always attempt cleanup (close windows, delete
 
 ## Verb Coverage Notes
 
-All diagnostics use the 5 generic verbs exclusively. Dev tools (compile, typecheck, deploy, clone) are available via `invoke('yaar://sandbox/{id}', { action: "..." })`. Sandboxed JS execution uses `invoke('yaar://sandbox/eval', { code: "..." })`.
+All diagnostics use the 5 generic verbs exclusively (`describe`, `read`, `list`, `invoke`, `delete`) against `yaar://` URIs.
