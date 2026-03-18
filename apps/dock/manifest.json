@@ -1,8 +1,0 @@
-{
-  "id": "dock",
-  "name": "Dock",
-  "icon": "📡",
-  "description": "Clock, weather and notifications dock panel",
-  "version": "1.0.1",
-  "author": "YAAR"
-}

@@ -1,10 +1,9 @@
 {
-  "icon": "📡",
+  "icon": "\ud83d\udce1",
   "name": "Dock",
   "description": "Clock, weather and notifications dock panel",
   "run": "index.html",
   "createShortcut": false,
-  "appProtocol": true,
   "frameless": true,
   "windowStyle": {
     "position": "fixed",
@@ -13,59 +12,8 @@
   },
   "variant": "panel",
   "dockEdge": "top",
-  "protocol": {
-    "state": {
-      "nowIso": {
-        "description": "Current time in ISO format"
-      },
-      "display": {
-        "description": "Current displayed date/time text: { time, date }"
-      },
-      "appearance": {
-        "description": "Current dock appearance settings: { showPanel, panelOpacity, panelBlurPx }"
-      },
-      "weather": {
-        "description": "Current weather data: { icon, temp, city }"
-      }
-    },
-    "commands": {
-      "refreshNow": {
-        "description": "Force immediate clock refresh. Params: {}",
-        "params": {
-          "type": "object",
-          "properties": {}
-        }
-      },
-      "refreshWeather": {
-        "description": "Force re-fetch weather data. Params: {}",
-        "params": {
-          "type": "object",
-          "properties": {}
-        }
-      },
-      "setAppearance": {
-        "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }",
-        "params": {
-          "type": "object",
-          "properties": {
-            "showPanel": {
-              "type": "boolean"
-            },
-            "panelOpacity": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1
-            },
-            "panelBlurPx": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 40
-            }
-          }
-        }
-      }
-    }
-  },
   "capture": "dom",
-  "permissions": ["yaar://http"]
+  "permissions": ["yaar://http"],
+  "version": "1.0.1",
+  "author": "YAAR"
 }

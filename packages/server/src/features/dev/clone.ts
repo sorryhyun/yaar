@@ -39,11 +39,11 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
   // Read all source files recursively
   const files: { path: string; content: string }[] = [];
 
-  // Include top-level app files so permissions, appProtocol, skill docs, etc. are preserved
-  for (const filename of ['app.json', 'SKILL.md']) {
+  // Include top-level app files so permissions, protocol, skill docs, etc. are preserved
+  for (const filename of ['app.json', 'protocol.json', 'SKILL.md']) {
     try {
       const content = await Bun.file(join(appDir, filename)).text();
-      if (filename === 'app.json') JSON.parse(content); // validate JSON
+      if (filename.endsWith('.json')) JSON.parse(content); // validate JSON
       files.push({ path: filename, content });
     } catch {
       /* file doesn't exist or invalid */

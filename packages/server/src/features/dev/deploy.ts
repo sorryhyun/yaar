@@ -22,7 +22,6 @@ export interface DeployArgs {
   createShortcut?: boolean;
   keepSource?: boolean;
   skill?: string;
-  appProtocol?: boolean;
   version?: string;
   author?: string;
   fileAssociations?: Array<{ extensions: string[]; command: string; paramKey: string }>;
@@ -54,7 +53,6 @@ export async function doDeploy(
     createShortcut,
     keepSource = true,
     skill,
-    appProtocol: explicitAppProtocol,
     version,
     author,
     fileAssociations,
@@ -85,14 +83,10 @@ export async function doDeploy(
 
   const distIndexPath = join(sandboxPath, 'dist', 'index.html');
   let hasCompiledApp = false;
-  let hasAppProtocol = explicitAppProtocol ?? false;
   let extractedProtocol: Pick<AppManifest, 'state' | 'commands'> | null = null;
   try {
-    const distHtml = await Bun.file(distIndexPath).text();
+    await Bun.file(distIndexPath).text();
     hasCompiledApp = true;
-    if (explicitAppProtocol === undefined) {
-      hasAppProtocol = distHtml.includes('.app.register');
-    }
   } catch {
     try {
       await stat(join(sandboxPath, 'src', 'main.ts'));
@@ -105,11 +99,7 @@ export async function doDeploy(
           error: `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`,
         };
       }
-      const distHtml = await Bun.file(distIndexPath).text();
       hasCompiledApp = true;
-      if (explicitAppProtocol === undefined) {
-        hasAppProtocol = distHtml.includes('.app.register');
-      }
     } catch {
       // No source either
     }
@@ -147,14 +137,8 @@ export async function doDeploy(
   }
 
   let existingMeta: Record<string, unknown> = {};
-  let existingManifest: Record<string, unknown> = {};
   try {
     existingMeta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
-  } catch {
-    // New app
-  }
-  try {
-    existingManifest = JSON.parse(await Bun.file(join(appPath, 'manifest.json')).text());
   } catch {
     // New app
   }
@@ -201,7 +185,7 @@ export async function doDeploy(
         hasCompiledApp,
         componentFiles,
         skill,
-        hasAppProtocol,
+        !!extractedProtocol,
       );
       await Bun.write(join(appPath, 'SKILL.md'), skillContent);
     }
@@ -216,12 +200,9 @@ export async function doDeploy(
       else delete metadata.createShortcut;
     }
     delete metadata.hidden;
-    if (explicitAppProtocol !== undefined) {
-      if (explicitAppProtocol) metadata.appProtocol = true;
-      else delete metadata.appProtocol;
-    } else if (hasAppProtocol) {
-      metadata.appProtocol = true;
-    }
+    // Remove legacy fields (protocol and appProtocol now live in protocol.json)
+    delete metadata.appProtocol;
+    delete metadata.protocol;
     if (fileAssociations !== undefined) {
       if (fileAssociations.length > 0) metadata.fileAssociations = fileAssociations;
       else delete metadata.fileAssociations;
@@ -244,26 +225,22 @@ export async function doDeploy(
       if (permissions.length > 0) metadata.permissions = permissions;
       else delete metadata.permissions;
     }
-    if (extractedProtocol) {
-      metadata.protocol = extractedProtocol;
-    } else if (!hasAppProtocol) {
-      delete metadata.protocol;
-    }
+    // Version and author merged into app.json (formerly in manifest.json)
+    if (version !== undefined) metadata.version = version;
+    else if (!metadata.version) metadata.version = '1.0.0';
+    if (author !== undefined) metadata.author = author;
+    else if (!metadata.author) metadata.author = 'YAAR';
     await Bun.write(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
-    const manifest: Record<string, unknown> = {
-      ...existingManifest,
-      id: appId,
-      name: displayName,
-      icon: resolvedIcon,
-    };
-    if (description !== undefined) manifest.description = description;
-    else if (!manifest.description) manifest.description = '';
-    if (version !== undefined) manifest.version = version;
-    else if (!manifest.version) manifest.version = '1.0.0';
-    if (author !== undefined) manifest.author = author;
-    else if (!manifest.author) manifest.author = 'YAAR';
-    await Bun.write(join(appPath, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+    // Write protocol.json separately (or remove if no protocol)
+    if (extractedProtocol) {
+      await Bun.write(
+        join(appPath, 'protocol.json'),
+        JSON.stringify(extractedProtocol, null, 2) + '\n',
+      );
+    } else {
+      await rm(join(appPath, 'protocol.json'), { force: true });
+    }
 
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
@@ -342,7 +319,7 @@ export async function doClone(
       .filter((f) => !f.includes('node_modules'))
       .map((f) => `src/${f}`);
 
-    // Copy root-level metadata files (app.json, manifest.json, SKILL.md)
+    // Copy root-level metadata files (app.json, protocol.json, SKILL.md)
     for (const file of CLONE_ROOT_FILES) {
       try {
         await cp(join(appPath, file), join(sandboxPath, file));

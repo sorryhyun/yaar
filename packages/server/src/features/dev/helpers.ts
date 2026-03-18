@@ -86,7 +86,7 @@ export function generateSkillMd(
   hasCompiledApp: boolean,
   componentFiles: string[] = [],
   customSkill?: string,
-  hasAppProtocol?: boolean,
+  hasProtocol?: boolean,
 ): string {
   const launchSection = generateLaunchSection(appId, appName, hasCompiledApp, componentFiles);
   let md: string;
@@ -106,7 +106,7 @@ ${launchSection}
 Source code is available in \`src/\` directory. Use \`invoke('yaar://sandbox/', { action: "clone", uri: "yaar://apps/${appId}" })\` to copy source into a sandbox for reading or editing.
 `;
 
-  if (hasAppProtocol) {
+  if (hasProtocol) {
     md += `
 ## App Protocol
 
@@ -143,13 +143,18 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
 
   // Detect what the app has
   let hasCompiledApp = false;
-  let hasAppProtocol = false;
+  let hasProtocolJson = false;
   try {
-    const indexHtml = await Bun.file(join(appPath, 'index.html')).text();
+    await Bun.file(join(appPath, 'index.html')).text();
     hasCompiledApp = true;
-    hasAppProtocol = indexHtml.includes('.app.register');
   } catch {
     /* no compiled app */
+  }
+  try {
+    await Bun.file(join(appPath, 'protocol.json')).text();
+    hasProtocolJson = true;
+  } catch {
+    /* no protocol.json */
   }
 
   const componentFiles: string[] = [];
@@ -177,7 +182,7 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     hasCompiledApp,
     componentFiles,
     customContent,
-    hasAppProtocol,
+    hasProtocolJson,
   );
   await Bun.write(join(appPath, 'SKILL.md'), skillContent);
 }

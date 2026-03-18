@@ -1,104 +1,10 @@
 {
-  "icon": "🎞️",
+  "icon": "\ud83c\udf9e\ufe0f",
   "name": "Slides Lite",
   "description": "Reactive slide deck editor with yaar.storage persistence, full Markdown (marked) and code syntax highlighting (Prism)",
   "run": "index.html",
-  "protocol": {
-    "state": {
-      "deck": {
-        "description": "Full deck object. Shape: { title: string, themeId: ThemeId, slides: Slide[], "
-      },
-      "activeSlide": {
-        "description": "Currently selected slide. Shape: { id, layout, title, body, imageUrl, notes, fontSize? }. "
-      },
-      "title": {
-        "description": "Deck title (string)."
-      },
-      "theme": {
-        "description": "Current theme ID. Valid values: \"classic-light\" (white bg, blue accent), "
-      },
-      "aspectRatio": {
-        "description": "Slide aspect ratio as \"W:H\" string (e.g. \"16:9\", \"4:3\", \"1:1\" or custom like \"3:2\"). "
-      },
-      "activeIndex": {
-        "description": "Zero-based index of the currently active (selected) slide."
-      },
-      "slideCount": {
-        "description": "Total number of slides in the deck."
-      },
-      "fontSize": {
-        "description": "Global text scale for all slides. Values: \"sm\" (0.78x), \"md\" (1.0x, default), "
-      }
-    },
-    "commands": {
-      "setDeck": {
-        "description": "Replace the entire deck at once. All fields are normalized on write. "
-      },
-      "setSlides": {
-        "description": "Set slides in \"replace\" (default) or \"append\" mode. "
-      },
-      "appendSlides": {
-        "description": "Append one or more slides to the end of the deck and select the last appended slide. "
-      },
-      "setActiveIndex": {
-        "description": "Select a slide by zero-based index. Clamped to valid range. Returns { ok, activeIndex }.",
-        "aliases": ["selectSlide", "goToSlide", "jumpToSlide"],
-        "params": {
-          "type": "object",
-          "properties": {
-            "index": {
-              "type": "number",
-              "description": "Zero-based slide index."
-            }
-          },
-          "required": ["index"]
-        }
-      },
-      "setTheme": {
-        "description": "Change the deck theme. Valid themeId values: \"classic-light\", \"midnight-dark\", \"ocean\", \"sunset\". "
-      },
-      "setAspectRatio": {
-        "description": "Set slide aspect ratio. Pass a \"W:H\" string. "
-      },
-      "setFontSize": {
-        "description": "Set global font size scale for all slides. "
-      },
-      "saveToStorage": {
-        "description": "Save current deck JSON to YAAR storage at the given path. Returns { ok, path, slideCount }."
-      },
-      "loadFromStorage": {
-        "description": "Load one or many deck JSON files from YAAR storage and merge into the current deck. ",
-        "params": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "Single storage path to load."
-            },
-            "paths": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Multiple storage paths to load."
-            },
-            "mode": {
-              "type": "string",
-              "enum": ["replace", "append"],
-              "description": "Merge mode."
-            }
-          }
-        }
-      },
-      "readStorageFile": {
-        "description": "Read a single file from YAAR storage and return its content. Returns { ok, path, as, content }."
-      },
-      "readStorageFiles": {
-        "description": "Read multiple files from YAAR storage. Returns { ok, as, files: [{ path, content }] }."
-      }
-    }
-  },
-  "appProtocol": true,
   "capture": "dom",
-  "permissions": ["yaar://apps/self/storage/"]
+  "permissions": ["yaar://apps/self/storage/"],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

@@ -1,0 +1,218 @@
+{
+  "state": {
+    "html": {
+      "description": "Current document HTML content"
+    },
+    "text": {
+      "description": "Current document plain text content"
+    },
+    "stats": {
+      "description": "Current text stats as { words, chars }"
+    },
+    "title": {
+      "description": "Current document title"
+    },
+    "saveState": {
+      "description": "Current save status label"
+    }
+  },
+  "commands": {
+    "setContent": {
+      "description": "Replace document content. Params: { content: string, renderer?: \"html\"|\"text\" }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "renderer": {
+            "type": "string",
+            "enum": ["html", "text"]
+          }
+        },
+        "required": ["content"]
+      }
+    },
+    "setTitle": {
+      "description": "Update document title. Params: { title: string }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": ["title"]
+      }
+    },
+    "appendContent": {
+      "description": "Append content to the end of the document. Params: { content: string, renderer?: \"html\"|\"text\" }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "renderer": {
+            "type": "string",
+            "enum": ["html", "text"]
+          }
+        },
+        "required": ["content"]
+      }
+    },
+    "setDocuments": {
+      "description": "Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "docs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "html": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": ["docs"]
+      }
+    },
+    "appendDocuments": {
+      "description": "Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "docs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "html": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "required": ["docs"]
+      }
+    },
+    "saveToStorage": {
+      "description": "Save the current document to YAAR persistent storage. Params: { path: string } \u2014 e.g. \"docs/my-doc.html\"",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    "loadFromStorage": {
+      "description": "Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: \"replace\"|\"append\" }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["replace", "append"]
+          }
+        }
+      }
+    },
+    "readStorageFile": {
+      "description": "Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: \"text\"|\"json\"|\"auto\" }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "as": {
+            "type": "string",
+            "enum": ["text", "json", "auto"]
+          }
+        },
+        "required": ["path"]
+      }
+    },
+    "readStorageFiles": {
+      "description": "Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: \"text\"|\"json\"|\"auto\" }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "as": {
+            "type": "string",
+            "enum": ["text", "json", "auto"]
+          }
+        },
+        "required": ["paths"]
+      }
+    },
+    "newDocument": {
+      "description": "Clear current document to a blank paragraph. Params: {}",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "saveDraft": {
+      "description": "Save current document to local draft storage. Params: {}",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "importFromWindow": {
+      "description": "Import content from another open window into this document. Params: { windowId: string, mode?: \"replace\"|\"append\", includeImage?: boolean }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "windowId": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["replace", "append"]
+          },
+          "includeImage": {
+            "type": "boolean"
+          }
+        },
+        "required": ["windowId"]
+      }
+    }
+  }
+}

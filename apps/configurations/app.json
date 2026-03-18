@@ -1,6 +1,8 @@
 {
-  "icon": "⚙️",
+  "icon": "\u2699\ufe0f",
   "name": "Configurations",
   "run": "index.html",
-  "permissions": ["yaar://config/"]
+  "permissions": ["yaar://config/"],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

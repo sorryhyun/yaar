@@ -1,8 +1,0 @@
-{
-  "id": "video-editor-lite",
-  "name": "Video Editor Lite",
-  "icon": "🎥",
-  "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
-  "version": "1.2.0",
-  "author": "YAAR"
-}

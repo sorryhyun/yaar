@@ -1,7 +1,9 @@
 {
-  "icon": "🎬",
+  "icon": "\ud83c\udfac",
   "name": "Video Viewer Lite",
   "description": "Simple polished MVP video viewer with URL and local file playback, native controls, and quick playback actions.",
   "run": "index.html",
-  "permissions": []
+  "permissions": [],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

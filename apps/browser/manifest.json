@@ -1,8 +1,0 @@
-{
-  "id": "browser",
-  "name": "Browser",
-  "icon": "🌐",
-  "description": "Live browser with screenshot streaming and session management",
-  "version": "1.0.0",
-  "author": "YAAR"
-}

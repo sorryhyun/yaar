@@ -1,0 +1,36 @@
+{
+  "state": {},
+  "commands": {
+    "setRecommendations": {
+      "description": "AI \ubd84\uc11d \uacb0\uacfc\ub97c \uc571\uc5d0 \ubc18\uc601\ud569\ub2c8\ub2e4. topics\ub294 \ud604\uc7ac \ub728\ub294 \uc8fc\uc81c \ud0a4\uc6cc\ub4dc \ubaa9\ub85d(5~8\uac1c), bestPost\ub294 \uc624\ub298\uc758 \ubca0\uc2a4\ud2b8 \uac8c\uc2dc\ubb3c \ubc88\ud638\uc640 \ucd94\ucc9c \uc774\uc720",
+      "params": {
+        "type": "object",
+        "properties": {
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "\ud604\uc7ac \ub728\ub294 \uc8fc\uc81c \ud0a4\uc6cc\ub4dc/\ubb38\uad6c \ubaa9\ub85d (5~8\uac1c)"
+          },
+          "bestPost": {
+            "type": "object",
+            "description": "\uc624\ub298\uc758 \ubca0\uc2a4\ud2b8 \uac8c\uc2dc\ubb3c (\ub531 1\uac1c)",
+            "properties": {
+              "num": {
+                "type": "string",
+                "description": "\uac8c\uc2dc\ubb3c \ubc88\ud638"
+              },
+              "reason": {
+                "type": "string",
+                "description": "AI \ucd94\ucc9c \uc774\uc720 (2~3\ubb38\uc7a5)"
+              }
+            },
+            "required": ["num", "reason"]
+          }
+        },
+        "required": ["topics"]
+      }
+    }
+  }
+}

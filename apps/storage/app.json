@@ -1,95 +1,14 @@
 {
-  "icon": "📁",
+  "icon": "\ud83d\udcc1",
   "name": "Storage",
   "description": "Visual file manager for YAAR storage",
   "run": "index.html",
   "createShortcut": false,
-  "appProtocol": true,
-  "protocol": {
-    "state": {
-      "current-path": {
-        "description": "Current directory path being viewed"
-      },
-      "directory-listing": {
-        "description": "Files and folders in the current directory"
-      },
-      "selected-file": {
-        "description": "Currently selected file path (null if none)"
-      },
-      "mount-aliases": {
-        "description": "Mounted folders available under mounts/"
-      },
-      "file-preview": {
-        "description": "Text content of the currently previewed file (null if not text)"
-      }
-    },
-    "commands": {
-      "navigate": {
-        "description": "Navigate to a directory path",
-        "params": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "Directory path to navigate to"
-            }
-          },
-          "required": [
-            "path"
-          ]
-        }
-      },
-      "select-file": {
-        "description": "Select and preview a file",
-        "params": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "File path to select"
-            }
-          },
-          "required": [
-            "path"
-          ]
-        }
-      },
-      "request-mount": {
-        "description": "Send a mount request for the agent to execute with host permission",
-        "params": {
-          "type": "object",
-          "properties": {
-            "alias": {
-              "type": "string",
-              "description": "Mount alias (example: project-files)"
-            },
-            "hostPath": {
-              "type": "string",
-              "description": "Absolute host folder path"
-            },
-            "readOnly": {
-              "type": "boolean",
-              "description": "Whether mount should be read-only"
-            }
-          },
-          "required": [
-            "alias",
-            "hostPath"
-          ]
-        }
-      },
-      "refresh": {
-        "description": "Refresh the current directory listing",
-        "params": {
-          "type": "object",
-          "properties": {}
-        }
-      }
-    }
-  },
   "capture": "dom",
   "permissions": [
     "yaar://apps/self/storage/",
     "yaar://storage/"
-  ]
+  ],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

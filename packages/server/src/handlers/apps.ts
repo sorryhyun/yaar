@@ -69,7 +69,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           icon: app.icon,
           hasSkill: app.hasSkill,
           hasConfig: app.hasConfig,
-          appProtocol: app.appProtocol,
+          hasProtocol: !!app.protocol,
           createShortcut: app.createShortcut,
         })),
       );
@@ -133,7 +133,6 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         invokeActions,
       };
 
-      if (app.appProtocol) result.appProtocol = true;
       if (app.protocol) result.protocol = app.protocol;
       if (app.permissions?.length) result.permissions = app.permissions;
 

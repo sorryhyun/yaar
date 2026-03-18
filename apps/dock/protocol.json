@@ -1,0 +1,53 @@
+{
+  "state": {
+    "nowIso": {
+      "description": "Current time in ISO format"
+    },
+    "display": {
+      "description": "Current displayed date/time text: { time, date }"
+    },
+    "appearance": {
+      "description": "Current dock appearance settings: { showPanel, panelOpacity, panelBlurPx }"
+    },
+    "weather": {
+      "description": "Current weather data: { icon, temp, city }"
+    }
+  },
+  "commands": {
+    "refreshNow": {
+      "description": "Force immediate clock refresh. Params: {}",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "refreshWeather": {
+      "description": "Force re-fetch weather data. Params: {}",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "setAppearance": {
+      "description": "Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0\u20131), panelBlurPx?: number (0\u201340) }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "showPanel": {
+            "type": "boolean"
+          },
+          "panelOpacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "panelBlurPx": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 40
+          }
+        }
+      }
+    }
+  }
+}

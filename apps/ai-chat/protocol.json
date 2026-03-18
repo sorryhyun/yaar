@@ -1,0 +1,41 @@
+{
+  "state": {
+    "messages": {
+      "description": "All chat messages"
+    },
+    "isWaiting": {
+      "description": "Whether app is waiting for AI response"
+    }
+  },
+  "commands": {
+    "addMessage": {
+      "description": "Add an AI response message to the chat",
+      "aliases": ["sendMessage", "postMessage", "appendMessage"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["content"]
+      }
+    },
+    "setError": {
+      "description": "Show an error message",
+      "aliases": ["showError", "displayError", "addError"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": ["content"]
+      }
+    }
+  }
+}

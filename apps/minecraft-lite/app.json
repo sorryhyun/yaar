@@ -1,8 +1,10 @@
 {
-  "icon": "⛏️",
+  "icon": "\u26cf\ufe0f",
   "name": "Minecraft Lite",
   "run": "index.html",
   "capture": "canvas",
-  "description": "3D Minecraft-style game with Three.js — explore, build, craft, and fight mobs",
-  "permissions": []
+  "description": "3D Minecraft-style game with Three.js \u2014 explore, build, craft, and fight mobs",
+  "permissions": [],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

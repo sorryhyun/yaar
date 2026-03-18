@@ -45,7 +45,7 @@ export function requireWindowUnlocked(
   return null;
 }
 
-/** Extract common window info fields (appProtocol, variant, dockEdge). */
+/** Extract common window info fields (variant, dockEdge). */
 export function formatWindowFlags(win: {
   appProtocol?: boolean;
   variant?: string;
@@ -68,7 +68,6 @@ export function getAppMetaOverrides(
     ...(appMeta.dockEdge ? { dockEdge: appMeta.dockEdge as 'top' | 'bottom' } : {}),
     ...(appMeta.frameless ? { frameless: true } : {}),
     ...(appMeta.windowStyle ? { windowStyle: appMeta.windowStyle } : {}),
-    ...(appMeta.appProtocol ? { appProtocol: true } : {}),
   };
 }
 

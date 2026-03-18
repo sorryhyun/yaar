@@ -1,8 +1,0 @@
-{
-  "id": "pdf-viewer",
-  "name": "PDF Viewer",
-  "icon": "📄",
-  "description": "A PDF document viewer with page navigation",
-  "version": "1.0.0",
-  "author": "YAAR"
-}

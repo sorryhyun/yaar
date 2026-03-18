@@ -1,48 +1,8 @@
 {
-  "icon": "💬",
+  "icon": "\ud83d\udcac",
   "name": "AI Chat",
   "run": "index.html",
-  "appProtocol": true,
-  "protocol": {
-    "state": {
-      "messages": {
-        "description": "All chat messages"
-      },
-      "isWaiting": {
-        "description": "Whether app is waiting for AI response"
-      }
-    },
-    "commands": {
-      "addMessage": {
-        "description": "Add an AI response message to the chat",
-        "aliases": ["sendMessage", "postMessage", "appendMessage"],
-        "params": {
-          "type": "object",
-          "properties": {
-            "content": {
-              "type": "string"
-            },
-            "id": {
-              "type": "string"
-            }
-          },
-          "required": ["content"]
-        }
-      },
-      "setError": {
-        "description": "Show an error message",
-        "aliases": ["showError", "displayError", "addError"],
-        "params": {
-          "type": "object",
-          "properties": {
-            "content": {
-              "type": "string"
-            }
-          },
-          "required": ["content"]
-        }
-      }
-    }
-  },
-  "permissions": []
+  "permissions": [],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

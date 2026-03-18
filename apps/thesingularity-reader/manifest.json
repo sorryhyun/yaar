@@ -1,8 +1,0 @@
-{
-  "id": "thesingularity-reader",
-  "name": "특이점이 온다",
-  "icon": "⚡",
-  "description": "Community feed with posts, comments, voting and PoW-backed write actions",
-  "version": "1.0.0",
-  "author": "YAAR"
-}

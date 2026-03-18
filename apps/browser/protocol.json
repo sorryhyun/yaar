@@ -1,0 +1,45 @@
+{
+  "state": {
+    "currentUrl": {
+      "description": "Currently displayed URL"
+    },
+    "browserId": {
+      "description": "Currently connected browser ID"
+    }
+  },
+  "commands": {
+    "refresh": {
+      "description": "Refresh screenshot and optionally update URL bar. Params: { url?, title? }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clear": {
+      "description": "Clear the browser display. Params: {}",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "attach": {
+      "description": "Switch to a different browser by ID. Params: { browserId }",
+      "params": {
+        "type": "object",
+        "properties": {
+          "browserId": {
+            "type": "string"
+          }
+        },
+        "required": ["browserId"]
+      }
+    }
+  }
+}

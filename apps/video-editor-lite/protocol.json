@@ -1,0 +1,309 @@
+{
+  "state": {
+    "currentSource": {
+      "description": "Current media source information."
+    },
+    "playbackState": {
+      "description": "Playback status including play/pause, loop preview, and rate."
+    },
+    "timeline": {
+      "description": "Current playback time and total duration in seconds."
+    },
+    "trimRange": {
+      "description": "Current trim in/out range and selected duration in seconds."
+    },
+    "composition": {
+      "description": "Current composition state including config and scenes."
+    },
+    "layers": {
+      "description": "All layers in the current composition with their scenes."
+    }
+  },
+  "commands": {
+    "loadSource": {
+      "description": "Load a media source by direct URL or storage path.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "Path under /api/storage/."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "play": {
+      "description": "Start playback (edit mode: video, create mode: composition preview).",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "pause": {
+      "description": "Pause playback.",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "seek": {
+      "description": "Seek to an absolute playback time in seconds.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["time"],
+        "additionalProperties": false
+      }
+    },
+    "setPlaybackRate": {
+      "description": "Set playback speed. Allowed values: 0.5, 1, 1.5, 2.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "rate": {
+            "type": "number",
+            "enum": [0.5, 1, 1.5, 2]
+          }
+        },
+        "required": ["rate"],
+        "additionalProperties": false
+      }
+    },
+    "createComposition": {
+      "description": "Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).",
+      "params": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "number",
+            "description": "Canvas width in pixels"
+          },
+          "height": {
+            "type": "number",
+            "description": "Canvas height in pixels"
+          },
+          "fps": {
+            "type": "number",
+            "description": "Frames per second"
+          },
+          "durationInFrames": {
+            "type": "number",
+            "description": "Total composition length in frames"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "addScene": {
+      "description": "Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).",
+      "params": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["solid", "text", "shape", "image", "video-clip"]
+          },
+          "from": {
+            "type": "number",
+            "description": "Start frame (default: 0)"
+          },
+          "durationInFrames": {
+            "type": "number",
+            "description": "Scene duration in frames"
+          },
+          "layerId": {
+            "type": "string",
+            "description": "Target layer ID (default: currently selected layer)"
+          },
+          "props": {
+            "type": "object",
+            "description": "Scene-specific properties."
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      }
+    },
+    "updateScene": {
+      "description": "Update an existing scene by ID.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "number"
+          },
+          "durationInFrames": {
+            "type": "number"
+          },
+          "props": {
+            "type": "object",
+            "description": "Updated scene properties (merged with defaults)."
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "removeScene": {
+      "description": "Remove a scene by ID.",
+      "aliases": ["deleteScene"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "reorderScenes": {
+      "description": "Reorder scenes by providing an array of IDs in the desired order.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["ids"],
+        "additionalProperties": false
+      }
+    },
+    "preview": {
+      "description": "Switch to Create mode and start playing the composition preview.",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "exportVideo": {
+      "description": "Export the composition as a WebM video file.",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "getComposition": {
+      "description": "Get the current composition state.",
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    "addLayer": {
+      "description": "Add a new layer to the composition. Returns the new layer ID."
+    },
+    "removeLayer": {
+      "description": "Remove a layer and all its scenes by layer ID. The last layer cannot be removed.",
+      "aliases": ["deleteLayer"],
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Layer ID to remove"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "updateLayer": {
+      "description": "Update layer properties: rename, toggle visibility, or toggle lock.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Layer ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "New layer name"
+          },
+          "visible": {
+            "type": "boolean",
+            "description": "Layer visibility (hidden layers are not rendered or exported)"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "Locked layers cannot have their scenes edited"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "reorderLayers": {
+      "description": "Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).",
+      "params": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Layer IDs in new order (bottom to top)"
+          }
+        },
+        "required": ["ids"],
+        "additionalProperties": false
+      }
+    },
+    "selectLayer": {
+      "description": "Select the active layer. New scenes added via addScene will go into this layer.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Layer ID to select"
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "moveSceneToLayer": {
+      "description": "Move a scene from its current layer to a different layer.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "sceneId": {
+            "type": "string",
+            "description": "Scene ID to move"
+          },
+          "layerId": {
+            "type": "string",
+            "description": "Target layer ID"
+          }
+        },
+        "required": ["sceneId", "layerId"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

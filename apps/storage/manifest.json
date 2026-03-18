@@ -1,8 +1,0 @@
-{
-  "id": "storage",
-  "name": "Storage",
-  "icon": "📁",
-  "description": "Visual file manager for YAAR storage",
-  "version": "1.0.0",
-  "author": "YAAR"
-}

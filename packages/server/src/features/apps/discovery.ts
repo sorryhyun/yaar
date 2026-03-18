@@ -48,13 +48,14 @@ export interface AppInfo {
   description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
+  version?: string;
+  author?: string;
   hasSkill: boolean;
   hasConfig: boolean;
   createShortcut?: boolean;
   run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
-  appProtocol?: boolean; // Supports App Protocol (agent ↔ iframe communication)
-  protocol?: Pick<AppManifest, 'state' | 'commands'>; // Static manifest for discovery
+  protocol?: Pick<AppManifest, 'state' | 'commands'>; // From protocol.json — implies appProtocol support
   fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
@@ -103,9 +104,10 @@ export async function listApps(): Promise<AppInfo[]> {
       let iconType: 'emoji' | 'image' | undefined;
       let displayName: string | undefined;
       let description: string | undefined;
+      let version: string | undefined;
+      let author: string | undefined;
       let createShortcut: boolean | undefined;
       let run: string | undefined;
-      let appProtocol: boolean | undefined;
       let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
       let fileAssociations: FileAssociation[] | undefined;
       let variant: WindowVariantType | undefined;
@@ -120,10 +122,10 @@ export async function listApps(): Promise<AppInfo[]> {
         if (icon) iconType = 'emoji';
         displayName = meta.name;
         if (meta.description) description = meta.description;
+        if (typeof meta.version === 'string') version = meta.version;
+        if (typeof meta.author === 'string') author = meta.author;
         if (meta.createShortcut === false || meta.hidden === true) createShortcut = false;
         if (typeof meta.run === 'string') run = meta.run;
-        if (meta.appProtocol) appProtocol = true;
-        if (meta.protocol && typeof meta.protocol === 'object') protocol = meta.protocol;
         if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
         if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
         if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
@@ -133,6 +135,14 @@ export async function listApps(): Promise<AppInfo[]> {
         if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
       } catch {
         // No metadata or invalid JSON
+      }
+
+      // Load protocol.json (implies appProtocol support)
+      try {
+        const protocolContent = await Bun.file(join(appPath, 'protocol.json')).text();
+        protocol = JSON.parse(protocolContent);
+      } catch {
+        // No protocol.json
       }
 
       // Check for icon image file (takes priority over emoji)
@@ -177,12 +187,13 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(description && { description }),
         icon,
         iconType,
+        ...(version && { version }),
+        ...(author && { author }),
         hasSkill,
         hasConfig: appHasConfig,
         ...(createShortcut === false && { createShortcut: false }),
         ...(resolvedRun && { run: resolvedRun }),
         isCompiled,
-        ...(appProtocol && { appProtocol }),
         ...(protocol && { protocol }),
         ...(fileAssociations && { fileAssociations }),
         ...(variant && { variant }),
@@ -209,7 +220,7 @@ export async function getAppMeta(appId: string): Promise<{
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
-  appProtocol?: boolean;
+  hasProtocol?: boolean;
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -220,7 +231,7 @@ export async function getAppMeta(appId: string): Promise<{
       frameless?: boolean;
       windowStyle?: Record<string, string | number>;
       permissions?: PermissionEntry[];
-      appProtocol?: boolean;
+      hasProtocol?: boolean;
     } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
@@ -228,7 +239,13 @@ export async function getAppMeta(appId: string): Promise<{
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
-    if (meta.appProtocol) result.appProtocol = true;
+    // Check for protocol.json to determine appProtocol support
+    try {
+      await Bun.file(join(APPS_DIR, appId, 'protocol.json')).text();
+      result.hasProtocol = true;
+    } catch {
+      // No protocol.json
+    }
     return Object.keys(result).length > 0 ? result : null;
   } catch {
     return null;

@@ -1,8 +1,0 @@
-{
-  "id": "rss-reader",
-  "name": "RSS Reader",
-  "icon": "📰",
-  "description": "Multi-feed RSS reader with resizable panels, article view, and unread tracking",
-  "version": "1.0.0",
-  "author": "YAAR"
-}

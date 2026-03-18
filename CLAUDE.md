@@ -173,23 +173,23 @@ YAAR has a convention-based apps system. Each folder in `apps/` becomes a deskto
 
 ### `app.json` Schema
 
-Each app folder can contain an `app.json` with optional metadata:
+Each app folder can contain an `app.json` with metadata:
 
 ```json
 {
   "name": "My App",
   "description": "Brief description of what the app does",
   "icon": "📦",
+  "version": "1.0.0",
+  "author": "YAAR",
   "createShortcut": false,
-  "appProtocol": false,
   "fileAssociations": [],
   "variant": "standard",
   "dockEdge": "bottom",
   "frameless": false,
   "windowStyle": {},
   "capture": "dom",
-  "permissions": [],
-  "protocol": { "state": {}, "commands": {} }
+  "permissions": []
 }
 ```
 
@@ -198,8 +198,9 @@ Each app folder can contain an `app.json` with optional metadata:
 | `name` | string | Display name (defaults to title-cased folder name) |
 | `description` | string | Brief description shown in `list('yaar://apps')` output |
 | `icon` | string | Emoji icon (overridden by `icon.png` if present) |
+| `version` | string | Semantic version |
+| `author` | string | Author name |
 | `createShortcut` | boolean | Create desktop shortcut on install (default: true). `hidden: true` treated as `createShortcut: false` for backward compat |
-| `appProtocol` | boolean | Supports bidirectional agent-iframe communication |
 | `fileAssociations` | array | File extensions this app can open |
 | `variant` | `'standard' \| 'widget' \| 'panel'` | Window layer when the app opens (default: `'standard'`) |
 | `dockEdge` | `'top' \| 'bottom'` | Dock edge for panel variant |
@@ -207,7 +208,23 @@ Each app folder can contain an `app.json` with optional metadata:
 | `windowStyle` | object | Custom CSS styles applied to the window element |
 | `capture` | `'auto' \| 'canvas' \| 'dom' \| 'svg' \| 'protocol'` | Capture mode for window screenshots |
 | `permissions` | string[] | `yaar://` URI prefixes the iframe app can access via `POST /api/verb` |
-| `protocol` | object | Static manifest (`{ state, commands }`) appended to SKILL.md for agent discovery |
+
+### `protocol.json` Schema
+
+Apps that support bidirectional agent-iframe communication provide a `protocol.json` alongside `app.json`. Its presence implies App Protocol support (no separate `appProtocol` flag needed).
+
+```json
+{
+  "state": {
+    "myState": { "description": "Description of this state key", "schema": {} }
+  },
+  "commands": {
+    "myCommand": { "description": "What this command does", "params": {}, "returns": {} }
+  }
+}
+```
+
+This manifest is appended to the app agent's system prompt and to SKILL.md for agent discovery.
 
 ### System Apps
 
@@ -221,8 +238,9 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
    - API endpoints and authentication
    - Available actions
    - Example workflows
-3. (Optional) Add `app.json` with metadata (name, description, icon, hidden, etc.)
-4. (Optional) Use `invoke('yaar://config/app/{appId}', { config })` to store credentials (saved to `config/{appId}.json`, git-ignored)
+3. (Optional) Add `app.json` with metadata (name, description, icon, version, author, etc.)
+4. (Optional) Add `protocol.json` with `{ state, commands }` for agent-iframe communication
+5. (Optional) Use `invoke('yaar://config/app/{appId}', { config })` to store credentials (saved to `config/{appId}.json`, git-ignored)
 
 ### Apps URI Verbs
 
@@ -244,7 +262,8 @@ All apps are listed in the AI system prompt. Apps with `"createShortcut": false`
 ```
 apps/github-manager/
 ├── SKILL.md           # API docs, auth flow, example usage
-└── app.json           # { "icon": "🐙", "name": "GitHub Manager", "protocol": {...} }
+├── app.json           # { "icon": "🐙", "name": "GitHub Manager", "version": "1.0.0" }
+└── protocol.json      # { "state": {...}, "commands": {...} } (if app protocol supported)
 
 config/
 └── github-manager.json  # { "api_key": "ghp_xxx" } (git-ignored)
