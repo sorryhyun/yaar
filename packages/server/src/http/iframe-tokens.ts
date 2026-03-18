@@ -47,10 +47,16 @@ export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
   appId?: string,
+  explicitPermissions?: PermissionEntry[],
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
-  return generateIframeToken(windowId, sessionId, appId, appMeta?.permissions);
+  return generateIframeToken(
+    windowId,
+    sessionId,
+    appId,
+    explicitPermissions ?? appMeta?.permissions,
+  );
 }
 
 /**

@@ -2,7 +2,7 @@
   "id": "session-logs",
   "name": "Session Logs",
   "icon": "📋",
-  "description": "Mandatory system app",
+  "description": "Session log viewer with creation date, time, and provider info",
   "version": "1.0.0",
   "author": "YAAR"
 }

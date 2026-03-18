@@ -1,5 +1,5 @@
 export {};
-import { app, invokeJson, readJson } from '@bundled/yaar';
+import { app, appStorage, invokeJson, readJson } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -148,18 +148,23 @@ export function registerProtocol() {
         },
       },
       editFile: {
-        description: 'Edit a file',
+        description: 'Edit a file (search & replace)',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            oldString: { type: 'string' },
-            newString: { type: 'string' },
+            search: { type: 'string', description: 'Text to find (alias: oldString)' },
+            replace: { type: 'string', description: 'Replacement text (alias: newString)' },
           },
-          required: ['path', 'oldString', 'newString'],
+          required: ['path', 'search', 'replace'],
         },
         handler: async (p: Record<string, unknown>) => {
-          await editFile(String(p.path), String(p.oldString), String(p.newString));
+          const search = String(p.search ?? p.oldString);
+          const replace = String(p.replace ?? p.newString);
+          if (!search || search === 'undefined')
+            return { ok: false, error: 'Missing search string' };
+          const changed = await editFile(String(p.path), search, replace);
+          if (!changed) return { ok: false, error: 'Search string not found in file' };
           return { ok: true };
         },
       },
@@ -228,12 +233,26 @@ export function registerProtocol() {
         handler: async () => {
           const url = previewUrl();
           if (!url) return { ok: false, error: 'No compiled output. Run compile first.' };
-          const name = activeProject()?.name ?? 'Preview';
+          const proj = activeProject();
+          const name = proj?.name ?? 'Preview';
+          // Read project's app.json to get declared permissions for the preview iframe
+          let permissions: string[] | undefined;
+          if (proj) {
+            try {
+              const appJson = await appStorage.readJson<{ permissions?: string[] }>(
+                `projects/${proj.id}/app.json`,
+              );
+              if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
+            } catch {
+              /* no app.json or no permissions */
+            }
+          }
           const result = await invokeJson<{ windowId?: string }>('yaar://windows/', {
             action: 'create',
             title: name,
             renderer: 'iframe',
             content: url,
+            ...(permissions ? { permissions } : {}),
           });
           if (result?.windowId) setPreviewWindowId(result.windowId);
           return { ok: true, previewUrl: url, ...result };

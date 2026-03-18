@@ -14,6 +14,7 @@ export {
   selectVisibleWindows,
   selectMinimizedWindows,
   selectMinimizedIframeWindows,
+  selectOffscreenIframeWindows,
   selectWidgetWindows,
   selectPanelWindows,
   selectToasts,

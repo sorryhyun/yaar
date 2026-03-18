@@ -61,6 +61,8 @@
     "clsx": "*",
     "d3": "*",
     "date-fns": "*",
+    "diff": "*",
+    "diff2html": "*",
     "eslint": "^10.0.2",
     "husky": "^9.1.7",
     "konva": "*",

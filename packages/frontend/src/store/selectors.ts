@@ -60,6 +60,19 @@ export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[]
       (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
   );
 
+/**
+ * Iframe windows on *inactive* monitors — kept in the DOM (hidden) so that
+ * app-protocol agents can still communicate with them after a monitor switch.
+ */
+export const selectOffscreenIframeWindows = (state: DesktopStore): WindowModel[] =>
+  Object.values(state.windows).filter(
+    (w): w is WindowModel =>
+      w != null &&
+      w.content.renderer === 'iframe' &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? DEFAULT_MONITOR_ID) !== state.activeMonitorId,
+  );
+
 export const selectWidgetWindows = createCachedWindowSelector(
   (w) => !w.minimized && w.variant === 'widget',
 );

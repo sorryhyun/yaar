@@ -131,6 +131,16 @@ declare module '@bundled/d3' {
   export * from 'd3';
 }
 
+// ── Diff ───────────────────────────────────────────────────────────────────
+
+declare module '@bundled/diff' {
+  export * from 'diff';
+}
+
+declare module '@bundled/diff2html' {
+  export * from 'diff2html';
+}
+
 // ── Documents & Code ────────────────────────────────────────────────────────
 
 declare module '@bundled/xlsx' {

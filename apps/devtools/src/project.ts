@@ -264,13 +264,15 @@ export async function writeFile(path: string, content: string): Promise<void> {
   setStatusText(`Saved ${path}`);
 }
 
-export async function editFile(path: string, oldString: string, newString: string): Promise<void> {
+export async function editFile(path: string, oldString: string, newString: string): Promise<boolean> {
   const proj = activeProject();
-  if (!proj) return;
+  if (!proj) return false;
   const content = await appStorage.read(projectPath(proj.id, path));
-  if (typeof content !== 'string') return;
+  if (typeof content !== 'string') return false;
+  if (!content.includes(oldString)) return false;
   const updated = content.replace(oldString, newString);
   await writeFile(path, updated);
+  return true;
 }
 
 export async function deleteFile(path: string): Promise<void> {

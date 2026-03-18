@@ -50,6 +50,8 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   xlsx: '@e965/xlsx',
   'chart.js': 'chart.js',
   d3: 'd3',
+  diff: 'diff',
+  diff2html: 'diff2html',
   'matter-js': 'matter-js',
   tone: 'tone',
   'pixi.js': 'pixi.js',

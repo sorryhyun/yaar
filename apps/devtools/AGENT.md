@@ -17,8 +17,13 @@ You have three tools:
 4. Type check: `command("typecheck")` — fix any errors from the result
 5. Compile: `command("compile")` — check result for errors
 6. Deploy: `command("deploy", { appId, name, icon, description, permissions })`
+7. **Clean up**: After deploying, delete the project with `command("deleteProject", { id })` — especially cloned projects, which are temporary copies and should not persist across sessions
 
 Always typecheck and compile before deploying. Fix errors iteratively — read diagnostics, edit the file, re-check.
+
+## Cloned Projects
+
+When you clone an app via `command("cloneApp", { appId })`, it creates a **temporary copy** in devtools storage. After you're done editing and deploying, always delete the cloned project to avoid storage bloat. If you see stale projects from previous sessions via `query("projects")`, delete them before starting new work.
 
 ## App Structure
 

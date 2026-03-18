@@ -170,7 +170,18 @@
   min-height: 0;
 }
 
+.editor-overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.editor-highlight,
 .editor-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   margin: 0;
@@ -179,13 +190,96 @@
   font-size: 13px;
   line-height: 1.5;
   tab-size: 2;
-  background: var(--yaar-bg);
-  color: var(--yaar-text);
-  border: none;
-  outline: none;
-  resize: none;
   white-space: pre;
   overflow: auto;
+  border: none;
+  box-sizing: border-box;
+}
+
+.editor-highlight {
+  pointer-events: none;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  z-index: 0;
+}
+
+.editor-highlight code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+}
+
+.editor-textarea {
+  background: transparent;
+  color: transparent;
+  caret-color: var(--yaar-text);
+  outline: none;
+  resize: none;
+  z-index: 1;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Prism Token Colors (dark theme) ── */
+.editor-highlight .token.comment,
+.editor-highlight .token.prolog,
+.editor-highlight .token.doctype,
+.editor-highlight .token.cdata {
+  color: #6a737d;
+}
+
+.editor-highlight .token.punctuation {
+  color: #e6edf3;
+}
+
+.editor-highlight .token.property,
+.editor-highlight .token.tag,
+.editor-highlight .token.boolean,
+.editor-highlight .token.number,
+.editor-highlight .token.constant,
+.editor-highlight .token.symbol,
+.editor-highlight .token.deleted {
+  color: #79c0ff;
+}
+
+.editor-highlight .token.selector,
+.editor-highlight .token.attr-name,
+.editor-highlight .token.string,
+.editor-highlight .token.char,
+.editor-highlight .token.builtin,
+.editor-highlight .token.inserted {
+  color: #a5d6ff;
+}
+
+.editor-highlight .token.operator,
+.editor-highlight .token.entity,
+.editor-highlight .token.url {
+  color: #e6edf3;
+}
+
+.editor-highlight .token.atrule,
+.editor-highlight .token.attr-value,
+.editor-highlight .token.keyword {
+  color: #ff7b72;
+}
+
+.editor-highlight .token.function,
+.editor-highlight .token.class-name {
+  color: #d2a8ff;
+}
+
+.editor-highlight .token.regex,
+.editor-highlight .token.important,
+.editor-highlight .token.variable {
+  color: #ffa657;
+}
+
+.editor-highlight .token.string {
+  color: #a5d6ff;
+}
+
+.editor-highlight .token.builtin {
+  color: #79c0ff;
 }
 
 .dirty-dot {
@@ -200,9 +294,13 @@
 /* ── Diagnostics / Bottom Panel ── */
 .diagnostics {
   border-top: 1px solid var(--yaar-border);
-  max-height: 150px;
+  max-height: 200px;
   display: flex;
   flex-direction: column;
+}
+
+.diagnostics:has(.diff-panel) {
+  max-height: 50vh;
 }
 
 .bottom-tabs {
@@ -337,6 +435,132 @@
   font-family: monospace;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* ── Diff Panel ── */
+.diff-panel {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.diff-input-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2);
+  height: 100%;
+}
+
+.diff-input-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.diff-textarea {
+  flex: 1;
+  min-height: 60px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  tab-size: 2;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border: 1px solid var(--yaar-border);
+  border-radius: 4px;
+  padding: var(--yaar-sp-1);
+  resize: none;
+  outline: none;
+  white-space: pre;
+  overflow: auto;
+}
+
+.diff-textarea:focus {
+  border-color: var(--yaar-accent);
+}
+
+.diff-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 4px var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.diff-output {
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* diff2html theme overrides for dark mode */
+.diff-output .d2h-wrapper {
+  background: var(--yaar-bg);
+}
+
+.diff-output .d2h-file-header,
+.diff-output .d2h-file-diff {
+  background: var(--yaar-bg);
+  border-color: var(--yaar-border);
+}
+
+.diff-output .d2h-code-linenumber,
+.diff-output .d2h-code-line {
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border-color: var(--yaar-border);
+}
+
+.diff-output .d2h-del {
+  background: rgba(248, 81, 73, 0.15);
+}
+
+.diff-output .d2h-ins {
+  background: rgba(63, 185, 80, 0.15);
+}
+
+.diff-output .d2h-del .d2h-code-line-ctn {
+  background: rgba(248, 81, 73, 0.15);
+}
+
+.diff-output .d2h-ins .d2h-code-line-ctn {
+  background: rgba(63, 185, 80, 0.15);
+}
+
+.diff-output .d2h-info {
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--yaar-accent);
+  border-color: var(--yaar-border);
+}
+
+.diff-output .d2h-code-linenumber {
+  color: var(--yaar-text-muted);
+}
+
+.diff-output .d2h-file-list-title,
+.diff-output .d2h-file-list-line {
+  display: none;
+}
+
+.diff-output del,
+.diff-output .d2h-del .d2h-code-line-ctn del {
+  background: rgba(248, 81, 73, 0.4);
+  text-decoration: none;
+}
+
+.diff-output ins,
+.diff-output .d2h-ins .d2h-code-line-ctn ins {
+  background: rgba(63, 185, 80, 0.4);
+  text-decoration: none;
 }
 
 /* ── Statusbar ── */

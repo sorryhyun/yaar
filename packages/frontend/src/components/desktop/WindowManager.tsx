@@ -8,6 +8,7 @@ import {
   selectVisibleWindows,
   selectWidgetWindows,
   selectMinimizedIframeWindows,
+  selectOffscreenIframeWindows,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { WindowFrame } from '../window/WindowFrame';
@@ -16,6 +17,7 @@ export function WindowManager() {
   const widgets = useDesktopStore(useShallow(selectWidgetWindows));
   const windows = useDesktopStore(useShallow(selectVisibleWindows));
   const minimizedIframes = useDesktopStore(useShallow(selectMinimizedIframeWindows));
+  const offscreenIframes = useDesktopStore(useShallow(selectOffscreenIframeWindows));
   const zOrder = useDesktopStore((s) => s.zOrder);
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
 
@@ -29,6 +31,9 @@ export function WindowManager() {
   return (
     <>
       {minimizedIframes.map((window) => (
+        <WindowFrame key={window.id} window={window} zIndex={-1} isFocused={false} hidden />
+      ))}
+      {offscreenIframes.map((window) => (
         <WindowFrame key={window.id} window={window} zIndex={-1} isFocused={false} hidden />
       ))}
       {widgets.map((window) => (

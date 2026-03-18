@@ -148,7 +148,12 @@ export async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
-          iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', appId),
+          iframeToken: await generateAppIframeToken(
+            actualId,
+            getSessionId() ?? '',
+            appId,
+            Array.isArray(payload.permissions) ? (payload.permissions as string[]) : undefined,
+          ),
         }
       : {}),
   };

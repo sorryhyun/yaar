@@ -102,21 +102,23 @@
         }
       },
       "editFile": {
-        "description": "Edit a file",
+        "description": "Edit a file (search & replace)",
         "params": {
           "type": "object",
           "properties": {
             "path": {
               "type": "string"
             },
-            "oldString": {
-              "type": "string"
+            "search": {
+              "type": "string",
+              "description": "Text to find"
             },
-            "newString": {
-              "type": "string"
+            "replace": {
+              "type": "string",
+              "description": "Replacement text"
             }
           },
-          "required": ["path", "oldString", "newString"]
+          "required": ["path", "search", "replace"]
         }
       },
       "deleteFile": {

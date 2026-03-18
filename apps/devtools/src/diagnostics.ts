@@ -4,8 +4,11 @@ import html from '@bundled/solid-js/html';
 import { diagnostics, openFile, consoleLogs, clearConsoleLogs } from './project';
 import type { Diagnostic } from './project';
 import { ConsolePanel } from './console-panel';
+import { DiffPanel, hasDiff, clearDiff } from './diff-panel';
 
-const [activeBottomTab, setActiveBottomTab] = createSignal<'problems' | 'console'>('problems');
+const [activeBottomTab, setActiveBottomTab] = createSignal<'problems' | 'console' | 'diff'>(
+  'problems',
+);
 
 function ProblemsPanel() {
   return html`
@@ -48,8 +51,20 @@ export function DiagnosticsPanel() {
             <span class="diagnostics-count y-badge">${() => consoleLogs().length}</span>
           <//>
         </button>
+        <button
+          class=${() => `bottom-tab y-text-xs${activeBottomTab() === 'diff' ? ' active' : ''}`}
+          onClick=${() => setActiveBottomTab('diff')}
+        >
+          Diff
+          <${Show} when=${hasDiff}>
+            <span class="diagnostics-count y-badge">\u2022</span>
+          <//>
+        </button>
         <${Show} when=${() => activeBottomTab() === 'console' && consoleLogs().length > 0}>
           <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>Clear</button>
+        <//>
+        <${Show} when=${() => activeBottomTab() === 'diff' && hasDiff()}>
+          <button class="bottom-tab-action y-text-xs" onClick=${() => clearDiff()}>Clear</button>
         <//>
       </div>
       <${Show} when=${() => activeBottomTab() === 'problems'}>
@@ -57,6 +72,9 @@ export function DiagnosticsPanel() {
       <//>
       <${Show} when=${() => activeBottomTab() === 'console'}>
         <${ConsolePanel} />
+      <//>
+      <${Show} when=${() => activeBottomTab() === 'diff'}>
+        <${DiffPanel} />
       <//>
     </div>
   `;
