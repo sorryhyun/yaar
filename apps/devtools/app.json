@@ -1,7 +1,7 @@
 {
   "name": "Dev Tools",
   "description": "IDE for building and deploying YAAR apps",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "createShortcut": false,
   "capture": "dom",
   "permissions": ["yaar://storage/", "yaar://apps/", "yaar://http", "yaar://windows/"],

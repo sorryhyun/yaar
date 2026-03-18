@@ -78,7 +78,7 @@ Things the sandbox handler could do that devtools should also support:
 - [ ] **List files** — verify devtools exposes file listing via query
 - [ ] **Read file with line numbers** — verify devtools `query("openFile")` returns content
 
-Audit the devtools AGENT.md commands against the sandbox handler's full verb set to ensure no capability gaps.
+Audit the devtools AGENTS.md commands against the sandbox handler's full verb set to ensure no capability gaps.
 
 ## Risk Assessment
 

@@ -1,5 +1,5 @@
 export {};
-import { app, appStorage, invokeJson, readJson } from '@bundled/yaar';
+import { app, appStorage, invokeJson, readJson, describeJson, listJson } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -314,6 +314,40 @@ export function registerProtocol() {
             });
           } catch {
             return { ok: false, error: 'Preview window not responding.' };
+          }
+        },
+      },
+      describeUri: {
+        description: 'Describe a yaar:// URI — returns supported verbs, description, and invoke schema',
+        params: {
+          type: 'object',
+          properties: {
+            uri: { type: 'string', description: 'yaar:// URI to describe (e.g. "yaar://sessions/")' },
+          },
+          required: ['uri'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          try {
+            return await describeJson(String(p.uri));
+          } catch {
+            return { ok: false, error: `Failed to describe URI: ${p.uri}` };
+          }
+        },
+      },
+      listUri: {
+        description: 'List child resources under a yaar:// URI',
+        params: {
+          type: 'object',
+          properties: {
+            uri: { type: 'string', description: 'yaar:// URI to list (e.g. "yaar://sessions/")' },
+          },
+          required: ['uri'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          try {
+            return await listJson(String(p.uri));
+          } catch {
+            return { ok: false, error: `Failed to list URI: ${p.uri}` };
           }
         },
       },

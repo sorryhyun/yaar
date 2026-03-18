@@ -16,7 +16,7 @@
 - **Multi-project tabs**: Tab bar with close buttons, auto-managed on open/create/delete
 - **Console capture**: Injected script overrides console.log/warn/error/info in all compiled apps, postMessage to parent. Tabbed bottom panel (Problems | Console) with clear button
 - **Clone app**: `invoke('yaar://apps/{appId}', { action: 'clone' })` reads `src/` recursively. Devtools creates a new project from the cloned files
-- **Bundled library discovery**: `GET /api/dev/bundled-libraries` endpoint, `query("bundledLibraries")` state, hardcoded list removed from AGENT.md
+- **Bundled library discovery**: `GET /api/dev/bundled-libraries` endpoint, `query("bundledLibraries")` state, hardcoded list removed from AGENTS.md
 
 ## Phase 3 — Proposals
 

@@ -2,7 +2,7 @@
  * App agent profile builder — creates dynamic profiles for app-scoped agents.
  *
  * App agents have a focused system prompt built from:
- * 1. AGENT.md (if present) — full custom prompt, replaces the generic base
+ * 1. AGENTS.md (if present) — full custom prompt, replaces the generic base
  * 2. SKILL.md (fallback) — app documentation appended to generic base prompt
  * Protocol manifest from app.json is always appended.
  */
@@ -13,7 +13,7 @@ import { loadAppSkill, loadAppAgentDoc, listApps } from '../../features/apps/dis
 
 /**
  * Build a dynamic agent profile for a specific app.
- * If AGENT.md exists, uses it as the full system prompt base.
+ * If AGENTS.md exists, uses it as the full system prompt base.
  * Otherwise falls back to the generic prompt + SKILL.md.
  * Protocol manifest from app.json is appended in both cases.
  */
@@ -30,7 +30,7 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
   let systemPrompt: string;
 
   if (agentDoc) {
-    // AGENT.md provides the full base prompt
+    // AGENTS.md provides the full base prompt
     systemPrompt = agentDoc;
   } else {
     // Generic fallback prompt

@@ -141,11 +141,13 @@ export async function cloneApp(appId: string): Promise<string> {
   setStatusText(`Cloning "${appId}"...`);
   const result = await invokeJson<{
     files: { path: string; content: string }[];
-    meta: { name: string };
+    meta: Record<string, unknown>;
   }>('yaar://apps/' + appId, { action: 'clone' });
-  const name = result?.meta?.name ?? appId;
+  const meta = result?.meta ?? {};
+  const name = typeof meta.name === 'string' ? meta.name : appId;
   const id = Date.now().toString();
-  await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
+  // Preserve all meta fields (including permissions) from the original app
+  await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ ...meta, name }, null, 2));
   if (result?.files) {
     for (const file of result.files) {
       await appStorage.save(projectPath(id, file.path), file.content);
@@ -171,14 +173,8 @@ export async function openProject(id: string): Promise<void> {
 
 export async function deleteProject(id: string): Promise<void> {
   try {
-    // Remove all files recursively
-    const allFiles = await appStorage.list(projectPath(id));
-    for (const f of (allFiles as FileEntry[]).filter((e) => !e.isDirectory).reverse()) {
-      const relPath = f.path.startsWith(`projects/${id}/`)
-        ? f.path.slice(`projects/${id}/`.length)
-        : f.path;
-      await appStorage.remove(projectPath(id, relPath));
-    }
+    // Remove the entire project directory (server handles recursive deletion)
+    await appStorage.remove(projectPath(id));
   } catch {
     /* best effort */
   }
@@ -357,7 +353,21 @@ export async function deploy(opts: {
   if (!proj) return;
   setStatusText('Deploying...');
   try {
-    const result = await dev.deploy(projectPath(proj.id), opts);
+    // If permissions not explicitly passed, fall back to project's app.json
+    let finalOpts = { ...opts };
+    if (finalOpts.permissions === undefined) {
+      try {
+        const appJson = await appStorage.readJson<{ permissions?: string[] }>(
+          projectPath(proj.id, 'app.json'),
+        );
+        if (Array.isArray(appJson?.permissions)) {
+          finalOpts.permissions = appJson.permissions;
+        }
+      } catch {
+        /* no app.json or no permissions field */
+      }
+    }
+    const result = await dev.deploy(projectPath(proj.id), finalOpts);
     if (result.success) {
       setStatusText(`Deployed as "${result.name ?? opts.appId}"`);
     } else {

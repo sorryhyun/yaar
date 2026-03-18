@@ -4,7 +4,7 @@
  * Provides CRUD operations for the storage/ directory with path validation.
  */
 
-import { mkdir, readdir, unlink, stat, realpath } from 'fs/promises';
+import { mkdir, readdir, unlink, rm, stat, realpath } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
 import {
@@ -345,7 +345,12 @@ export async function storageDelete(filePath: string): Promise<StorageDeleteResu
   const validatedPath = resolved.absolutePath;
 
   try {
-    await unlink(validatedPath);
+    const stats = await stat(validatedPath);
+    if (stats.isDirectory()) {
+      await rm(validatedPath, { recursive: true, force: true });
+    } else {
+      await unlink(validatedPath);
+    }
     return { success: true, path: filePath };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

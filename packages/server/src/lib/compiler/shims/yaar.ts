@@ -57,6 +57,10 @@ export async function listText(uri: string): Promise<string> {
   return text(await y.list(uri));
 }
 
+export async function describeJson<T = unknown>(uri: string): Promise<T> {
+  return json<T>(await y.describe(uri));
+}
+
 export async function deleteText(uri: string): Promise<string> {
   return text(await y.delete(uri));
 }

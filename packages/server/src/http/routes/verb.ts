@@ -162,8 +162,8 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // Compute effective permissions from app.json (no access if undeclared)
   const effectivePermissions = tokenEntry?.permissions ?? NO_PERMISSIONS;
 
-  // Allowlist check
-  if (!isUriAllowed(uri, verb, effectivePermissions)) {
+  // Allowlist check — `describe` is metadata-only, so it bypasses permission checks
+  if (verb !== 'describe' && !isUriAllowed(uri, verb, effectivePermissions)) {
     return errorResponse('URI not accessible to iframe apps', 403);
   }
 

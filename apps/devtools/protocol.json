@@ -103,11 +103,11 @@
           },
           "search": {
             "type": "string",
-            "description": "Text to find"
+            "description": "Text to find (alias: oldString)"
           },
           "replace": {
             "type": "string",
-            "description": "Replacement text"
+            "description": "Replacement text (alias: newString)"
           }
         },
         "required": ["path", "search", "replace"]
@@ -209,6 +209,12 @@
         },
         "required": ["command"]
       }
+    },
+    "describeUri": {
+      "description": "Describe a yaar:// URI — returns supported verbs, description, and invoke schema"
+    },
+    "listUri": {
+      "description": "List child resources under a yaar:// URI"
     },
     "cloneApp": {
       "description": "Clone an installed app source into a new project",

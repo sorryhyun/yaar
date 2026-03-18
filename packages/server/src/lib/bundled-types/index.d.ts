@@ -187,6 +187,8 @@ declare module '@bundled/yaar' {
   export function listJson<T = unknown>(uri: string): Promise<T>;
   /** List a URI and return the raw text. */
   export function listText(uri: string): Promise<string>;
+  /** Describe a URI and auto-parse the response as JSON. */
+  export function describeJson<T = unknown>(uri: string): Promise<T>;
   /** Delete a URI and return the raw text response. */
   export function deleteText(uri: string): Promise<string>;
 

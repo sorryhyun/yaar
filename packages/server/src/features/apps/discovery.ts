@@ -266,12 +266,12 @@ export async function loadAppSkill(appId: string): Promise<string | null> {
 }
 
 /**
- * Load AGENT.md for a specific app.
+ * Load AGENTS.md for a specific app.
  * When present, this replaces the generic app agent system prompt.
  */
 export async function loadAppAgentDoc(appId: string): Promise<string | null> {
   try {
-    const agentPath = join(APPS_DIR, appId, 'AGENT.md');
+    const agentPath = join(APPS_DIR, appId, 'AGENTS.md');
     const content = await Bun.file(agentPath).text();
     return content;
   } catch {
