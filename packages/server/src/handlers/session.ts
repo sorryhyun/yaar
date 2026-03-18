@@ -55,7 +55,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         namespaces: [
           'yaar://apps/',
           'yaar://storage/',
-          'yaar://sandbox/',
           'yaar://windows/',
           'yaar://config/',
           'yaar://browser/',

@@ -4,51 +4,27 @@
 
 Remove the `yaar://sandbox/*` URI namespace in favor of the **devtools app** as the single entry point for app development. The AI agent should use the devtools app (via app protocol commands) instead of raw sandbox verbs.
 
-## What Gets Removed
+## Completed
 
-### Files to delete
+### Phase 2: Remove sandbox URI handler ✅
 
-| File | Lines | What it does |
-|------|-------|-------------|
-| `packages/server/src/handlers/sandbox.ts` | 249 | URI handler for `yaar://sandbox/*` and `yaar://sandbox/eval` |
-| `packages/server/src/features/sandbox/files.ts` | 160 | File read/write/edit/delete for sandbox dir |
-| `packages/server/src/features/sandbox/eval.ts` | 47 | `formatSandboxResult()` for eval output |
+Deleted:
+- `packages/server/src/handlers/sandbox.ts` — URI handler for `yaar://sandbox/*` and `yaar://sandbox/eval`
+- `packages/server/src/features/sandbox/files.ts` — sandbox file read/write/edit/delete
 
-### Files to modify
+Modified:
+- `packages/server/src/handlers/index.ts` — removed `registerSandboxHandlers()` import and call
+- `packages/server/src/handlers/uri-resolve.ts` — removed `sandbox` from `ResourceKind`, `sandboxId` field, sandbox case, bare URI regex
+- `packages/server/src/handlers/session.ts` — removed `yaar://sandbox/` from namespace listing
+- `packages/server/src/http/routes/files.ts` — removed `/api/sandbox/*` endpoint, `handleSandbox()`, switch case
+- `packages/server/src/features/window/resolve-window.ts` — removed sandbox mention from comment
+- `packages/shared/src/yaar-uri.ts` — removed `sandbox` from `YaarAuthority`, `YAAR_RE`, `resolveContentUri`, `ParsedContentPath`, `ParsedFileUri`, `parseFileUri`, `parseContentPath`, `buildFileUri`
 
-| File | Change |
-|------|--------|
-| `packages/server/src/handlers/index.ts` | Remove `registerSandboxHandlers()` call |
-| `packages/server/src/agents/profiles/shared-sections.ts` | Remove `SANDBOX_SECTION` export |
-| `packages/server/src/agents/profiles/code.ts` | Remove sandbox eval references (if any) |
-| `packages/server/src/features/config/hooks.ts` | Remove `yaar://sandbox/*` pattern matching |
-| `packages/server/src/features/window/resolve-window.ts` | Remove sandbox URI content resolution |
-| `packages/server/src/http/routes/files.ts` | Remove `GET /api/sandbox/{id}/{path}` route |
-| `packages/server/src/tests/hooks.test.ts` | Update sandbox URI test patterns |
-| `packages/server/src/handlers/session.ts` | Remove sandbox references |
+Notes:
+- `features/config/hooks.ts` — no sandbox-specific code (generic wildcard matching), left as-is
+- `features/dev/compile.ts` — now orphaned (`doCompile`/`doTypecheck` were only imported by the deleted handler; devtools REST routes import from `lib/compiler/` directly). Can be cleaned up in Phase 4.
 
-### What stays
-
-| Component | Reason |
-|-----------|--------|
-| `lib/compiler/` | Still used by `/api/dev/compile` (devtools REST route) |
-| `lib/sandbox/` (vm execution) | Still used by `code` profile for JS eval |
-| `features/dev/compile.ts` | Called by devtools REST API |
-| `features/dev/deploy.ts` | Called by devtools REST API |
-| `features/dev/clone.ts` | Called by devtools REST API |
-| `features/dev/helpers.ts` | Used by deploy |
-| `http/routes/dev.ts` | Devtools REST endpoints (`/api/dev/*`) |
-| `apps/devtools/` | The replacement — stays and gets enhanced |
-
-## Migration Steps
-
-### Phase 2: Remove sandbox URI handler
-
-1. **Delete `handlers/sandbox.ts`** and remove `registerSandboxHandlers()` from `handlers/index.ts`.
-2. **Delete `features/sandbox/files.ts`** — no longer needed (devtools uses `/api/dev/*` routes).
-3. **Update `features/window/resolve-window.ts`** — remove sandbox content URI resolution.
-4. **Update `http/routes/files.ts`** — remove `/api/sandbox/*` file serving route.
-5. **Update `features/config/hooks.ts`** — remove sandbox URI pattern matching.
+## Remaining Phases
 
 ### Phase 3: Decide on `yaar://sandbox/eval`
 
@@ -60,15 +36,27 @@ The eval feature (`executeCode` in `lib/sandbox/`) is used by the `code` profile
 
 Recommendation: **Option A** (`yaar://code/eval`). It's already semantically part of the code profile.
 
+`features/sandbox/eval.ts` still exists (only file left in `features/sandbox/`). Move or inline it as part of this phase.
+
 ### Phase 4: Clean up references
 
 1. Remove `SANDBOX_SECTION` from `shared-sections.ts`.
 2. Update all agent prompts that mention sandbox URIs.
-3. Update `handlers/session.ts` if it references sandbox.
-4. Update tests in `hooks.test.ts`.
+3. Delete orphaned `features/dev/compile.ts` (`doCompile`/`doTypecheck`).
+4. Update tests in `hooks.test.ts` if any reference sandbox URIs.
 5. Delete `sandbox/` directory contents (git-ignored, but clean up).
-6. Update root `CLAUDE.md` monorepo structure diagram.
-7. Update `packages/server/CLAUDE.md` directory structure.
+6. Update `docs/` sandbox references (11 files — see list below).
+
+Docs with sandbox references:
+- `docs/common_flow.md`, `docs/ko/common_flow.md`
+- `docs/app-development.md`, `docs/ko/app-development.md`
+- `docs/os_architecture.md`
+- `docs/takeaways.md`
+- `docs/verbalized-with-uri.md`
+- `docs/hooks.md`
+- `docs/os_actions_reference.md`
+- `docs/storage_api_reference.md`
+- `docs/codex_protocol.md`
 
 ### Phase 5: Enhance devtools app (if needed)
 
@@ -86,7 +74,7 @@ Audit the devtools AGENTS.md commands against the sandbox handler's full verb se
 |------|-----------|
 | Agent prompts reference `yaar://sandbox/*` | Grep all profiles and skills, update references |
 | Existing sandbox dirs in `sandbox/` | Git-ignored, won't affect repo. Users lose in-progress sandboxes (acceptable — they're ephemeral) |
-| `lib/sandbox/` confused with `handlers/sandbox.ts` | `lib/sandbox/` is the vm execution engine (stays). `handlers/sandbox.ts` is the URI handler (removed). Names are confusing but separate concerns |
+| `lib/sandbox/` confused with deleted handler | `lib/sandbox/` is the vm execution engine (stays). The URI handler is removed. |
 | Devtools app protocol coverage gaps | Audit before removing sandbox handler |
 
 ## Non-Goals
@@ -94,4 +82,3 @@ Audit the devtools AGENTS.md commands against the sandbox handler's full verb se
 - Renaming `lib/sandbox/` (vm execution runtime) — it's correctly named for what it does
 - Changing `lib/compiler/` — it's provider-agnostic, used by both old and new paths
 - Modifying `/api/dev/*` REST routes — they're the devtools backend
-- Removing `features/dev/` — it's the shared business logic layer

@@ -53,7 +53,7 @@ src/
 │   ├── uri-registry.ts   # ResourceRegistry — central handler registry
 │   ├── uri-resolve.ts    # Server-side URI resolution
 │   ├── utils.ts          # Shared handler utilities
-│   ├── agents.ts / apps.ts / sandbox.ts / storage.ts / browser.ts / config.ts
+│   ├── agents.ts / apps.ts / storage.ts / browser.ts / config.ts
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
@@ -158,4 +158,4 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 ## REST API
 
-Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/sandbox/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
+Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.

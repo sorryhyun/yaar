@@ -24,7 +24,7 @@ export function resolveWindowId(uri: string): string {
   // yaar://monitors/{monitorId}/{windowId}
   const parsed = parseWindowUri(uri);
   if (parsed) return parsed.windowId;
-  // Handle content URIs (yaar://apps/..., yaar://storage/..., yaar://sandbox/...)
+  // Handle content URIs (yaar://apps/..., yaar://storage/...)
   const content = parseYaarUri(uri);
   if (content) return content.path;
   // Strip plain monitor prefix (agents sometimes include their own monitor)

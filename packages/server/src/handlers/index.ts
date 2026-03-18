@@ -11,7 +11,6 @@ import type { WindowStateRegistry } from '../session/window-state.js';
 import { getActiveSession } from './utils.js';
 import { registerConfigHandlers } from './config.js';
 import { registerStorageHandlers } from './storage.js';
-import { registerSandboxHandlers } from './sandbox.js';
 import { registerWindowHandlers } from './window.js';
 import { registerUserHandlers } from './user.js';
 import { registerAppsHandlers } from './apps.js';
@@ -46,7 +45,6 @@ export function initRegistry(): ResourceRegistry {
   // Register domain handlers -- add new domains here
   registerConfigHandlers(registry);
   registerStorageHandlers(registry);
-  registerSandboxHandlers(registry);
   registerWindowHandlers(registry, getWindowState);
   registerUserHandlers(registry);
   registerAppsHandlers(registry);

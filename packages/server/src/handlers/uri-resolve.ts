@@ -24,14 +24,13 @@ import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';
 import { getMonitorId } from '../agents/session.js';
 
-export type ResourceKind = 'app-static' | 'storage' | 'sandbox';
+export type ResourceKind = 'app-static' | 'storage';
 
 export interface ResolvedResource {
   kind: ResourceKind;
   absolutePath: string;
   readOnly: boolean;
   appId?: string;
-  sandboxId?: string;
   sourceUri: string;
   /** API path for frontend consumption */
   apiPath: string;
@@ -118,37 +117,14 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
       };
     }
 
-    case 'sandbox': {
-      const slashIdx = parsed.path.indexOf('/');
-      const sandboxId = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-      const subpath = slashIdx === -1 ? '' : parsed.path.slice(slashIdx + 1);
-      const base = join(PROJECT_ROOT, 'sandbox', sandboxId);
-      const absolutePath = safePath(base, subpath || 'index.html');
-      if (!absolutePath) return null;
-      return {
-        kind: 'sandbox',
-        absolutePath,
-        readOnly: false,
-        sandboxId,
-        sourceUri: uri,
-        apiPath,
-      };
-    }
-
-    case 'monitors':
-    case 'windows':
-    case 'config':
-    case 'browser':
-    case 'sessions':
-    case 'skills':
-    case 'market':
+    default:
       // Not content resources — handled by resolveUri via dedicated parsers
       return null;
   }
 }
 
 /**
- * Resolve any yaar:// URI — content resources (apps, storage, sandbox) or window addresses.
+ * Resolve any yaar:// URI — content resources (apps, storage) or window addresses.
  * Window URIs use `yaar://windows/{windowId}` (preferred) or legacy `yaar://monitors/{m}/{w}`.
  */
 export function resolveUri(uri: string): ResolvedUri | null {
@@ -229,7 +205,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|sandbox|monitors|windows|config|browser|sessions|skills|market)$/,
+    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

@@ -72,7 +72,6 @@ yaar/
 │   ├── monitor_and_windows_guide.md              # Core concepts: Session, Monitor, Window
 │   ├── common_flow.md           # Agent pools, context, message flow diagrams
 │   └── claude_codex.md          # Claude vs Codex provider behavioral differences
-├── sandbox/                     # Temporary app development workspace (git-ignored)
 ├── session_logs/                # AI conversation logs, timestamp-named dirs (git-ignored)
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
@@ -125,7 +124,7 @@ Beyond agents and providers, the server has additional subsystems:
 - **`lib/`** — Standalone utilities with no server internal dependencies:
   - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability)
   - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
-  - `compiler/` — Bun bundler for sandbox apps
+  - `compiler/` — Bun bundler for app development
   - `pdf/` — PDF rendering via poppler
   - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`

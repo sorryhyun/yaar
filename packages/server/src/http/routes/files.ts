@@ -60,12 +60,6 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     response: 'JSON',
     description: 'Navigate a browser directly (bypass agent)',
   },
-  {
-    method: 'GET',
-    path: '/api/sandbox/{sandboxId}/{path}',
-    response: 'file',
-    description: 'Serve sandbox files',
-  },
 ];
 import { storageWrite, storageDelete, storageList } from '../../storage/storage-manager.js';
 
@@ -303,12 +297,10 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
     }
   }
 
-  // Content routes — sandbox, apps, storage (unified via parseContentPath)
+  // Content routes — apps, storage (unified via parseContentPath)
   const parsed = parseContentPath(decodeURIComponent(url.pathname));
   if (parsed) {
     switch (parsed.authority) {
-      case 'sandbox':
-        return handleSandbox(req, parsed);
       case 'apps':
         return handleApps(req, parsed);
       case 'storage':
@@ -317,20 +309,6 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
   }
 
   return null;
-}
-
-/** Serve sandbox files (for previewing compiled apps). */
-async function handleSandbox(
-  req: Request,
-  parsed: Extract<ParsedContentPath, { authority: 'sandbox' }>,
-): Promise<Response | null> {
-  if (req.method !== 'GET' || !parsed.sandboxId || !parsed.path) return null;
-
-  const sandboxDir = join(PROJECT_ROOT, 'sandbox', parsed.sandboxId);
-  const normalizedPath = await safePathAsync(sandboxDir, parsed.path);
-  if (!normalizedPath) return errorResponse('Access denied', 403);
-
-  return serveStaticFile(req, normalizedPath, parsed.path);
 }
 
 /** Serve app static files (for deployed apps). */
