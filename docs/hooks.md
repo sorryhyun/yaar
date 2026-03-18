@@ -28,7 +28,7 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
   "event": "tool_use",
   "filter": {
     "verb": "invoke",
-    "uri": "yaar://sandbox/*",
+    "uri": "yaar://apps/*",
     "action": "compile"
   },
   "action": {
@@ -48,16 +48,15 @@ Filters match against the verb tool context. All filter fields are optional — 
 | Field | Type | Description |
 |-------|------|-------------|
 | `verb` | `string \| string[]` | The verb used: `invoke`, `read`, `list`, `delete` |
-| `uri` | `string \| string[]` | URI pattern. Supports trailing `/*` wildcard (e.g., `yaar://sandbox/*`) |
+| `uri` | `string \| string[]` | URI pattern. Supports trailing `/*` wildcard (e.g., `yaar://storage/*`) |
 | `action` | `string \| string[]` | The `payload.action` value for invoke calls (e.g., `compile`, `deploy`) |
 | `toolName` | `string \| string[]` | Legacy: matches non-verb tool names (e.g., `WebSearch`) |
 
 **Examples:**
 
-- Match any sandbox invoke: `{ "verb": "invoke", "uri": "yaar://sandbox/*" }`
-- Match compile specifically: `{ "verb": "invoke", "uri": "yaar://sandbox/*", "action": "compile" }`
-- Match sandbox writes/edits: `{ "verb": "invoke", "uri": "yaar://sandbox/*", "action": ["write", "edit"] }`
+- Match any storage invoke: `{ "verb": "invoke", "uri": "yaar://storage/*" }`
 - Match any storage read: `{ "verb": "read", "uri": "yaar://storage/*" }`
+- Match any apps invoke: `{ "verb": "invoke", "uri": "yaar://apps/*" }`
 - Match non-verb tool: `{ "toolName": "WebSearch" }`
 - Match everything (no filter): omit the `filter` field entirely
 
@@ -67,10 +66,10 @@ An example config at `docs/example_hooks.json` demonstrates toasts that track ap
 
 | Stage | Filter | Status |
 |-------|--------|--------|
-| Clone | `verb: invoke, uri: yaar://sandbox/*, action: clone` | "Cloning..." |
-| Write | `verb: invoke, uri: yaar://sandbox/*, action: [write, edit]` | "Writing code..." |
-| Compile | `verb: invoke, uri: yaar://sandbox/*, action: compile` | "Compiling..." |
-| Deploy | `verb: invoke, uri: yaar://sandbox/*, action: deploy` | "Deployed!" |
+| Clone | `verb: invoke, uri: yaar://apps/*, action: clone` | "Cloning..." |
+| Write | `verb: invoke, uri: yaar://apps/*, action: [write, edit]` | "Writing code..." |
+| Compile | `verb: invoke, uri: yaar://apps/*, action: compile` | "Compiling..." |
+| Deploy | `verb: invoke, uri: yaar://apps/*, action: deploy` | "Deployed!" |
 
 ### Activating the Example
 
@@ -97,7 +96,7 @@ The AI can manage hooks through verb tools:
   "event": "tool_use",
   "filter": {
     "verb": "invoke",
-    "uri": "yaar://sandbox/*",
+    "uri": "yaar://apps/*",
     "action": "compile"
   },
   "action": {
@@ -115,7 +114,7 @@ The AI can manage hooks through verb tools:
 
 ## How It Works
 
-1. When the AI calls a verb tool (e.g., `invoke('yaar://sandbox/abc', { action: 'compile' })`), the `StreamToEventMapper` extracts the verb, URI, and action from the tool input
+1. When the AI calls a verb tool (e.g., `invoke('yaar://apps/my-app', { action: 'set_badge', count: 3 })`), the `StreamToEventMapper` extracts the verb, URI, and action from the tool input
 2. It checks for matching `tool_use` hooks via `getToolUseHooks({ toolName, verb, uri, action })`
 3. For each matching hook with an `os_action` action, the OS Action(s) are emitted through `actionEmitter`
 4. The frontend receives and processes these actions (showing toasts, creating windows, etc.)

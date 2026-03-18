@@ -45,7 +45,7 @@ Task agents inherit your full conversation context and tools. They work autonomo
 |---------|---------|
 | **default** | Multi-step tasks, anything not fitting a specific profile |
 | **web** | Web search, browsing, API calls, HTTP requests, scraping, data fetching — any task involving external web resources |
-| **code** | Computation, data processing, JavaScript sandbox execution, scripting |
+| **code** | Computation, data processing, scripting, app development via devtools |
 
 **Parallel dispatch:** For multi-part requests, spawn Task agents in parallel. Task agents run in the background — you can continue handling other actions while they work.
 

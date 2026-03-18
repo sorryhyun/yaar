@@ -85,9 +85,9 @@ MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/
 | Verb | OS analogy | URI pattern examples |
 |---|---|---|
 | `describe` | stat / introspect | `yaar://windows/{id}`, `yaar://apps/{id}`, `yaar://browser/{id}` |
-| `read` | read / open | `yaar://storage/{path}`, `yaar://sandbox/{path}`, `yaar://skills/{topic}` |
+| `read` | read / open | `yaar://storage/{path}`, `yaar://skills/{topic}` |
 | `list` | readdir / ls | `yaar://windows/`, `yaar://apps/`, `yaar://config/hooks/` |
-| `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://sandbox/eval` (JS execution), `yaar://config/app/{id}` |
+| `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://config/app/{id}` |
 | `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
 
 System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests use verb layer: `invoke('yaar://http', { url, ... })`
@@ -110,7 +110,7 @@ The system prompt **is** the instruction set architecture. It defines:
 - The `<timeline>` XML format (event protocol)
 - The `<relay>` protocol (inter-agent messaging)
 - The `Task` tool delegation pattern (when to handle directly vs. spawn subagents)
-- Mandatory `skill()` calls before using app/sandbox/component tools
+- Mandatory `skill()` calls before using app/component tools
 
 Located at `providers/claude/system-prompt.ts` (Claude) and `providers/codex/system-prompt.ts` (Codex). Users can override with `config/system-prompt.txt`.
 
@@ -125,7 +125,7 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
 ```
  1. ensureStorageDir()          ← mkdir storage/
  2. loadMounts()                ← warm mount cache, validate host paths
- 3. (bundled exe) mkdirs        ← apps/, sandbox/, config/
+ 3. (bundled exe) mkdirs        ← apps/, config/
  4. (remote mode) genToken      ← generate remote access token
  5. initSessionHub()            ← create singleton SessionHub
  6. initMcpServer()             ← register 8 MCP namespaces + bearer token

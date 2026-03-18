@@ -17,7 +17,7 @@ export interface HookFilter {
   toolName?: string | string[];
   /** Verb filter: 'invoke', 'read', 'list', 'delete'. */
   verb?: string | string[];
-  /** URI prefix/glob pattern: 'yaar://sandbox/*', 'yaar://apps/my-app'. */
+  /** URI prefix/glob pattern: 'yaar://storage/*', 'yaar://apps/my-app'. */
   uri?: string | string[];
   /** Payload action filter: 'compile', 'deploy', 'write', etc. */
   action?: string | string[];
@@ -115,9 +115,9 @@ export async function addHook(
 function matchesFilter(value: string, filter: string | string[]): boolean {
   const patterns = Array.isArray(filter) ? filter : [filter];
   return patterns.some((p) => {
-    // Support trailing wildcard: 'yaar://sandbox/*' matches 'yaar://sandbox/abc/file.ts'
+    // Support trailing wildcard: 'yaar://storage/*' matches 'yaar://storage/docs/readme.md'
     if (p.endsWith('/*')) {
-      const prefix = p.slice(0, -1); // 'yaar://sandbox/'
+      const prefix = p.slice(0, -1); // 'yaar://storage/'
       return value.startsWith(prefix) || value === p.slice(0, -2); // exact base match too
     }
     return value === p;

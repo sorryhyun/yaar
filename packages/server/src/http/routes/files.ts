@@ -1,5 +1,5 @@
 /**
- * File-serving routes — PDF render, sandbox, app static, storage files.
+ * File-serving routes — PDF render, app static, storage files.
  */
 
 import { join, extname } from 'path';

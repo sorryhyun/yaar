@@ -1,6 +1,6 @@
 # App Development Guide
 
-In YAAR, you tell the AI what to build and it creates the app. TypeScript authoring, compilation, preview, and desktop deployment are all handled by the AI via MCP tools.
+In YAAR, you tell the AI what to build and it creates the app. TypeScript authoring, compilation, preview, and desktop deployment are all handled by the AI through the devtools app.
 
 > [한국어 버전](ko/app-development.md)
 
@@ -9,34 +9,26 @@ In YAAR, you tell the AI what to build and it creates the app. TypeScript author
 ```
 "Make me a Tetris game"
 
-    ↓  AI writes code    invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })
-    ↓  Compiles           invoke('yaar://sandbox/{id}', { action: "compile" })
+    ↓  AI opens devtools app window
+    ↓  Writes code via app protocol commands
+    ↓  Compiles via devtools compile command
     ↓  Previews in iframe window
-    ↓  Deploys to desktop invoke('yaar://sandbox/{id}', { action: "deploy", appId: "tetris", ... })
+    ↓  Deploys to desktop via devtools deploy command
 
 🎮 Tetris icon appears on the desktop
 ```
 
-Users don't need to write code. The AI writes TypeScript in a sandbox, compiles with Bun, previews the result, and deploys it as an app. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies.
+Users don't need to write code. The AI writes TypeScript through the devtools app, compiles with Bun, previews the result, and deploys it as an app. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies.
 
 ## URI Verbs
 
 All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describe`) on `yaar://` URIs.
 
-### Sandbox — `yaar://sandbox/`
+### Devtools App
 
-| Verb | URI | Description |
-|------|-----|-------------|
-| `invoke` | `yaar://sandbox/new/src/main.ts`, `{ action: "write", content }` | Write file to new sandbox (auto-creates ID) |
-| `invoke` | `yaar://sandbox/{id}/src/main.ts`, `{ action: "write", content }` | Write file to existing sandbox |
-| `invoke` | `yaar://sandbox/{id}/src/main.ts`, `{ action: "edit", old_string, new_string }` | Search-and-replace edit |
-| `read` | `yaar://sandbox/{id}/src/main.ts` | Read sandbox file |
-| `list` | `yaar://sandbox/{id}/` | List sandbox files |
-| `invoke` | `yaar://sandbox/{id}`, `{ action: "compile" }` | Bundle `src/main.ts` → single HTML (Bun) |
-| `invoke` | `yaar://sandbox/{id}`, `{ action: "typecheck" }` | Run TypeScript type checking |
-| `invoke` | `yaar://sandbox/{id}`, `{ action: "deploy", appId, ... }` | Deploy compiled app to desktop |
-| `invoke` | `yaar://sandbox/new`, `{ action: "clone", uri }` | Clone a deployed app's source into a new sandbox |
-| `invoke` | `yaar://sandbox/eval`, `{ code }` | Execute JavaScript in sandboxed VM |
+App development (write, edit, compile, typecheck, deploy, clone) is handled through the **devtools app** via App Protocol commands. The devtools app runs in an iframe window and exposes these operations as protocol commands. The AI opens the devtools window and interacts with it using `app_command` and `app_query`.
+
+See the devtools app's `SKILL.md` for the full list of available commands.
 
 ### Apps — `yaar://apps/`
 
@@ -68,30 +60,25 @@ All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describ
 | Verb | URI | Description |
 |------|-----|-------------|
 | `list` | `yaar://skills` | List available skill topics |
-| `read` | `yaar://skills/{topic}` | Load reference docs (`app_dev`, `sandbox`, `components`, `host_api`, `app_protocol`) |
+| `read` | `yaar://skills/{topic}` | Load reference docs (`app_dev`, `components`, `host_api`, `app_protocol`) |
 
 ## Development Workflow in Detail
 
+All development operations are performed through the **devtools app** via App Protocol commands. The AI opens the devtools window and uses `app_command` to write, compile, and deploy code.
+
 ### Step 1: Write Code
 
-```
-invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })        // new sandbox auto-created
-invoke('yaar://sandbox/1739xxx/src/main.ts', { action: "write", content: "..." })     // write to existing sandbox
-```
+The AI sends write/edit commands to the devtools app to create source files.
 
-- Creates files in an isolated sandbox directory
-- `yaar://sandbox/new/{path}` auto-generates a new sandbox ID
 - Supports multiple files (`src/main.ts`, `src/utils.ts`, ...)
 
 ### Step 2: Compile
 
-```
-invoke('yaar://sandbox/1739xxx', { action: "compile", title: "My App" })
-```
+The AI sends a compile command to the devtools app.
 
 - Bundles from `src/main.ts` entry point via Bun
 - Produces a **single self-contained HTML file** with embedded JS
-- Returns preview URL: `/api/sandbox/{sandboxId}/dist/index.html`
+- Returns preview URL via `/api/dev/` routes
 
 ### Step 3: Preview
 
@@ -99,9 +86,7 @@ The AI opens an iframe window to preview the compiled result immediately.
 
 ### Step 4: Deploy
 
-```
-invoke('yaar://sandbox/1739xxx', { action: "deploy", appId: "my-app", name: "My App", icon: "🚀", description: "..." })
-```
+The AI sends a deploy command to the devtools app.
 
 - Copies compiled HTML to `apps/{appId}/`
 - Auto-generates `SKILL.md` and `app.json`
@@ -111,12 +96,7 @@ invoke('yaar://sandbox/1739xxx', { action: "deploy", appId: "my-app", name: "My 
 
 ### Editing Existing Apps — clone → edit → compile → deploy
 
-```
-invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })  → returns sandboxId
-invoke('yaar://sandbox/{sandboxId}/src/main.ts', { action: "edit", old_string: "...", new_string: "..." })
-invoke('yaar://sandbox/{sandboxId}', { action: "compile" })
-invoke('yaar://sandbox/{sandboxId}', { action: "deploy", appId: "my-app" })  // same appId overwrites in-place
-```
+The AI clones an existing app's source into the devtools workspace, makes edits, recompiles, and redeploys with the same appId to overwrite in-place.
 
 ## Bundled Libraries
 
@@ -146,17 +126,6 @@ import { v4 as uuid } from '@bundled/uuid';
 import { debounce } from '@bundled/lodash';
 import anime from '@bundled/anime';
 ```
-
-## Sandbox Execution Environment
-
-`invoke('yaar://sandbox/eval', { code })` executes code in an isolated VM.
-
-**Available:** JSON, Math, Date, Promise, fetch (domain-restricted), crypto.createHash, TextEncoder/Decoder, typed arrays
-
-**Blocked:** process, require, import, eval, Function, fs, os, setTimeout/setInterval
-
-- Timeout: 100ms–30,000ms (default 5,000ms)
-- Allowed fetch domains: managed in `config/curl_allowed_domains.yaml`
 
 ## TypeScript Notes
 

@@ -160,114 +160,46 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 
 ## Apps System
 
-YAAR has a convention-based apps system. Each folder in `apps/` becomes a desktop icon automatically (unless hidden).
+Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `SKILL.md` for AI context, `protocol.json` for agent-iframe communication. See [`docs/app-development.md`](./docs/app-development.md) for full URI verbs reference and [`docs/app_protocol_reference.md`](./docs/app_protocol_reference.md) for protocol details.
 
-### How It Works
+### App Agent Architecture
 
-1. **Frontend startup**: Calls `GET /api/apps` to list apps
-2. **Desktop renders**: Shows one icon per non-hidden app folder
-3. **User clicks icon**: Sends `<ui:click>app: {appId}</ui:click>`
-4. **AI reads skill**: Loads `apps/{appId}/SKILL.md` as context
-5. **AI responds**: Uses skill instructions to help user
+When a user interacts with an app window, a **persistent app agent** is created (one per `appId`, reused across all windows of that app). App agents have only 3 tools: `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent).
 
-### `app.json` Schema
+**Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices.
 
-Each app folder can contain an `app.json` with metadata:
+Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (query/command/relay tools).
 
-```json
-{
-  "name": "My App",
-  "description": "Brief description of what the app does",
-  "icon": "📦",
-  "version": "1.0.0",
-  "author": "YAAR",
-  "createShortcut": false,
-  "fileAssociations": [],
-  "variant": "standard",
-  "dockEdge": "bottom",
-  "frameless": false,
-  "windowStyle": {},
-  "capture": "dom",
-  "permissions": []
-}
-```
+### Compiler & Bundled Libraries
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Display name (defaults to title-cased folder name) |
-| `description` | string | Brief description shown in `list('yaar://apps')` output |
-| `icon` | string | Emoji icon (overridden by `icon.png` if present) |
-| `version` | string | Semantic version |
-| `author` | string | Author name |
-| `createShortcut` | boolean | Create desktop shortcut on install (default: true). `hidden: true` treated as `createShortcut: false` for backward compat |
-| `fileAssociations` | array | File extensions this app can open |
-| `variant` | `'standard' \| 'widget' \| 'panel'` | Window layer when the app opens (default: `'standard'`) |
-| `dockEdge` | `'top' \| 'bottom'` | Dock edge for panel variant |
-| `frameless` | boolean | Hide the titlebar when the app opens |
-| `windowStyle` | object | Custom CSS styles applied to the window element |
-| `capture` | `'auto' \| 'canvas' \| 'dom' \| 'svg' \| 'protocol'` | Capture mode for window screenshots |
-| `permissions` | string[] | `yaar://` URI prefixes the iframe app can access via `POST /api/verb` |
+Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.
 
-### `protocol.json` Schema
+**`@bundled/*` imports** — no `npm install` needed. Available libraries:
+- **UI**: `solid-js`, `solid-js/html`, `solid-js/web` (preferred framework)
+- **Utilities**: `uuid`, `lodash`, `date-fns`, `clsx`, `diff`, `diff2html`
+- **Graphics/3D**: `three`, `konva`, `pixi.js`, `p5`, `matter-js`
+- **Data/Charts**: `chart.js`, `d3`, `xlsx`
+- **Animation**: `anime`
+- **Audio**: `tone`
+- **Parsing**: `marked`, `prismjs`, `mammoth`
+- **YAAR SDK**: `yaar` — `readJson`, `invokeJson`, `app.register()`, `appStorage`, `dev.compile()`, etc.
 
-Apps that support bidirectional agent-iframe communication provide a `protocol.json` alongside `app.json`. Its presence implies App Protocol support (no separate `appProtocol` flag needed).
+Key files: `lib/compiler/compile.ts` (Bun.build + HTML wrapper), `lib/compiler/plugins.ts` (bundled library resolution), `lib/compiler/shims/yaar.ts` (@bundled/yaar SDK), `lib/compiler/extract-protocol.ts` (manifest extraction from source), `lib/bundled-types/` (.d.ts files for typecheck).
 
-```json
-{
-  "state": {
-    "myState": { "description": "Description of this state key", "schema": {} }
-  },
-  "commands": {
-    "myCommand": { "description": "What this command does", "params": {}, "returns": {} }
-  }
-}
-```
+### Design Tokens
 
-This manifest is appended to the app agent's system prompt and to SKILL.md for agent discovery.
+All compiled apps get YAAR CSS custom properties and utility classes injected automatically:
+- **Colors**: `--yaar-bg`, `--yaar-bg-surface`, `--yaar-text`, `--yaar-text-muted`, `--yaar-accent`, `--yaar-border`, `--yaar-success`, `--yaar-error`
+- **Spacing**: `--yaar-sp-1` through `--yaar-sp-8` (4px increments)
+- **Layout**: `y-app` (root container), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`
+- **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`
 
-### System Apps
+Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common patterns.
 
-All apps are listed in the AI system prompt. Apps with `"createShortcut": false` in `app.json` won't get a desktop shortcut on install, but they're still fully accessible via `list('yaar://apps')` and `read('yaar://apps/{appId}')`. Use this for system capabilities (like the dock or storage) that should run without a desktop icon.
+### Solid.js Gotchas
 
-### Creating a New App
-
-1. Create folder: `apps/myapp/`
-2. Create `SKILL.md` with:
-   - App description
-   - API endpoints and authentication
-   - Available actions
-   - Example workflows
-3. (Optional) Add `app.json` with metadata (name, description, icon, version, author, etc.)
-4. (Optional) Add `protocol.json` with `{ state, commands }` for agent-iframe communication
-5. (Optional) Use `invoke('yaar://config/app/{appId}', { config })` to store credentials (saved to `config/{appId}.json`, git-ignored)
-
-### Apps URI Verbs
-
-| Verb | URI | Description |
-|------|-----|-------------|
-| `list` | `yaar://apps` | List all available apps |
-| `read` | `yaar://apps/{appId}` | Load SKILL.md for an app |
-| `invoke` | `yaar://apps/{appId}`, `{ action: "set_badge", count }` | Set badge count on app icon |
-| `delete` | `yaar://apps/{appId}` | Uninstall app |
-| `invoke` | `yaar://config/app/{appId}`, `{ config }` | Save app config/credentials |
-| `read` | `yaar://config/app/{appId}` | Read app config |
-| `delete` | `yaar://config/app/{appId}` | Remove app config |
-| `list` | `yaar://market` | Browse marketplace apps |
-| `read` | `yaar://market/{appId}` | Get marketplace app details |
-| `invoke` | `yaar://market/{appId}`, `{ action: "install" }` | Install from marketplace |
-
-### Example: GitHub Manager App
-
-```
-apps/github-manager/
-├── SKILL.md           # API docs, auth flow, example usage
-├── app.json           # { "icon": "🐙", "name": "GitHub Manager", "version": "1.0.0" }
-└── protocol.json      # { "state": {...}, "commands": {...} } (if app protocol supported)
-
-config/
-└── github-manager.json  # { "api_key": "ghp_xxx" } (git-ignored)
-```
-
-When user clicks the GitHub Manager icon, the AI loads `SKILL.md` and can then help with repos, issues, etc.
-
-**Note:** Old credentials at `config/credentials/{appId}.json`, `apps/{appId}/credentials.json`, or `storage/credentials/{appId}.json` are automatically migrated to `config/{appId}.json` on first read.
+Apps use Solid.js with `html` tagged templates (not JSX). Known issues:
+- **Empty templates crash**: Use `null` instead of `` html`` ``
+- **`flex: 1` breaks reactivity**: Use `position: absolute; inset: 0` instead
+- **Closing tags**: `</${Component}>` is auto-fixed by compiler plugin to `</>`
+- **Event handler props**: Can re-fire during render if passed as reactive props — bind handlers outside reactive scope

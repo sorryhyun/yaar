@@ -76,7 +76,7 @@ A temporary agent spawned by the monitor agent to handle delegated work. Forks t
 - **Role**: `task-{messageId}-{timestamp}`
 - **Creation**: Via Task tool (Claude) or collaboration system (Codex). Limited by global `AgentLimiter`
 - **Context**: Forks monitor agent's session — inherits full conversation history
-- **Profiles**: `default` (all tools), `web` (HTTP + search), `code` (sandbox), `app` (dev + deploy)
+- **Profiles**: `default` (all tools), `web` (HTTP + search), `code` (code execution), `app` (dev + deploy)
 - **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
 - **Parallel**: Multiple task agents can run concurrently for independent sub-tasks
 

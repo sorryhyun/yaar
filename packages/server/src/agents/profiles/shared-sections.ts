@@ -70,16 +70,6 @@ list('yaar://storage/docs')
 delete('yaar://storage/docs/readme.txt')
 \`\`\``;
 
-export const SANDBOX_SECTION = `## Sandbox
-
-\`\`\`
-invoke('yaar://sandbox/new/src/main.ts', { action: "write", content: "..." })  # auto-creates sandbox
-invoke('yaar://sandbox/{id}', { action: "compile" })                          # compile to HTML
-invoke('yaar://sandbox/{id}', { action: "typecheck" })                        # type check
-invoke('yaar://sandbox/{id}', { action: "deploy", appId: "my-app", name: "My App", icon: "🎯" })
-invoke('yaar://sandbox/new', { action: "clone", uri: "yaar://apps/my-app" })  # clone app → new sandbox
-\`\`\``;
-
 export const HTTP_SECTION = `## HTTP Access
 
 Use \`invoke('yaar://http', { url, method, headers, body })\` for API calls. Domains require allowlisting.

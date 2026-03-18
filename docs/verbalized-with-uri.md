@@ -2,7 +2,7 @@
 
 ## Summary
 
-`yaar://` is a unified URI scheme for addressing all internal resources: content (apps, storage, sandbox), windows, configuration, browser instances, and session state (agents, notifications, prompts, monitors).
+`yaar://` is a unified URI scheme for addressing all internal resources: content (apps, storage), windows, configuration, browser instances, and session state (agents, notifications, prompts, monitors).
 
 Every stable, inspectable entity gets a URI. Five generic verbs (`describe`, `read`, `list`, `invoke`, `delete`) operate on them.
 
@@ -18,8 +18,6 @@ All parsing flows through `packages/shared/src/yaar-uri.ts`. The `YaarAuthority`
 |-----------|-----|-------------|
 | `apps` | `yaar://apps/{appId}` | App content (resolved to iframe URL) |
 | `storage` | `yaar://storage/{path}` | Persistent storage file |
-| `sandbox` | `yaar://sandbox/{sandboxId}/{path}` | Sandbox file |
-| `sandbox` | `yaar://sandbox/new/{path}` | New sandbox (write/edit only) |
 
 Content URIs resolve to filesystem paths via `resolveResourceUri()` and to API paths via `resolveContentUri()`.
 
@@ -261,8 +259,6 @@ resolveContentUri('yaar://apps/excel-lite')
 resolveContentUri('yaar://storage/docs/file.txt')
 // -> '/api/storage/docs/file.txt'
 
-resolveContentUri('yaar://sandbox/123/src/main.ts')
-// -> '/api/sandbox/123/src/main.ts'
 ```
 
 Resolution points:
@@ -271,7 +267,7 @@ Resolution points:
 
 ### File-Operation Parsing
 
-File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`. This handles `yaar://` URIs (not API paths) and includes sandbox creation (`sandboxId: null`):
+File-operation URIs are parsed via `parseFileUri()` in `@yaar/shared`. This handles `yaar://` URIs (not API paths):
 
 ```typescript
 import { parseFileUri, buildFileUri } from '@yaar/shared';
@@ -279,17 +275,11 @@ import { parseFileUri, buildFileUri } from '@yaar/shared';
 parseFileUri('yaar://storage/docs/file.txt')
 // -> { authority: 'storage', path: 'docs/file.txt' }
 
-parseFileUri('yaar://sandbox/123/src/main.ts')
-// -> { authority: 'sandbox', sandboxId: '123', path: 'src/main.ts' }
-
-parseFileUri('yaar://sandbox/new/src/main.ts')
-// -> { authority: 'sandbox', sandboxId: null, path: 'src/main.ts' }
-
 buildFileUri('storage', 'docs/file.txt')
 // -> 'yaar://storage/docs/file.txt'
 ```
 
-The verb handlers use `parseFileUri()` for storage and sandbox file operations.
+The verb handlers use `parseFileUri()` for storage file operations.
 
 ### Content Helpers
 
@@ -316,7 +306,7 @@ extractAppId('yaar://apps/excel-lite')
 | `packages/server/src/handlers/uri-resolve.ts` | Server-side typed resolution for all URI namespaces |
 | `packages/server/src/handlers/uri-registry.ts` | ResourceRegistry — central handler registry |
 | `packages/server/src/handlers/index.ts` | 5 verb MCP tool definitions (describe, read, list, invoke, delete) |
-| `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage, sandbox |
+| `packages/server/src/http/routes/files.ts` | HTTP routes using `parseContentPath()` for apps, storage |
 | `packages/frontend/src/lib/api.ts` | Frontend URI resolution + remote auth |
 
 ---

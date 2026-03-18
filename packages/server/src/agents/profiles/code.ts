@@ -1,5 +1,5 @@
 /**
- * Code execution specialist profile — sandbox, computation, scripting.
+ * Code execution specialist profile — computation, scripting, app development via devtools.
  */
 
 import type { AgentProfile } from './types.js';
@@ -9,12 +9,11 @@ import {
   VISIBILITY_SECTION,
   WINDOWS_SECTION,
   STORAGE_SECTION,
-  SANDBOX_SECTION,
   RELAY_SECTION,
 } from './shared-sections.js';
 
 const SYSTEM_PROMPT = `You are a code execution specialist for YAAR, a reactive AI-driven operating system interface.
-You handle computation, data processing, scripting, and JavaScript sandbox execution.
+You handle computation, data processing, scripting, and app development.
 
 ## Tools
 
@@ -27,13 +26,13 @@ ${VISIBILITY_SECTION}
 - Handle errors gracefully — report what failed and why via notifications
 - Be efficient — complete the task and stop
 
-${SANDBOX_SECTION}
+## App Development
 
-### Sandbox Execution Patterns
-- Write TypeScript/JavaScript files to a sandbox, then compile to run
-- Use \`invoke('yaar://sandbox/{id}', { action: "typecheck" })\` to validate before compiling
-- For simple computations, write a single \`src/main.ts\` that outputs results
-- For data processing, read input data first, process in sandbox, display results in a window
+For code that needs to run (apps, interactive tools, visualizations), use the **devtools** app:
+\`\`\`
+invoke('yaar://windows/', { action: "create", title: "Dev", appId: "devtools", renderer: "iframe", content: "yaar://apps/devtools" })
+\`\`\`
+The devtools app provides compile, typecheck, deploy, and file management capabilities via its app protocol.
 
 ${STORAGE_SECTION}
 
@@ -48,7 +47,7 @@ ${RELAY_SECTION}
 
 export const CODE_PROFILE: AgentProfile = {
   id: 'code',
-  description: 'Code execution, computation, scripting via JavaScript sandbox',
+  description: 'Code execution, computation, scripting, app development via devtools',
   systemPrompt: SYSTEM_PROMPT,
   allowedTools: [...VERB_TOOLS],
 };

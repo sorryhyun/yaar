@@ -152,24 +152,24 @@ describe('getToolUseHooks — URI-based matching', () => {
   it('matches by verb + uri + action', async () => {
     await addHook(
       'tool_use',
-      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Compiling...' } },
-      'Compile toast',
-      { verb: 'invoke', uri: 'yaar://sandbox/*', action: 'compile' },
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Writing...' } },
+      'Storage write toast',
+      { verb: 'invoke', uri: 'yaar://storage/*', action: 'write' },
     );
 
     const matched = await getToolUseHooks({
       toolName: 'verbs:invoke',
       verb: 'invoke',
-      uri: 'yaar://sandbox/abc123',
-      action: 'compile',
+      uri: 'yaar://storage/docs/readme.md',
+      action: 'write',
     });
     expect(matched).toHaveLength(1);
 
     const noMatch = await getToolUseHooks({
       toolName: 'verbs:invoke',
       verb: 'invoke',
-      uri: 'yaar://sandbox/abc123',
-      action: 'deploy',
+      uri: 'yaar://storage/docs/readme.md',
+      action: 'delete',
     });
     expect(noMatch).toHaveLength(0);
   });
@@ -200,15 +200,15 @@ describe('getToolUseHooks — URI-based matching', () => {
   it('matches action array filter', async () => {
     await addHook(
       'tool_use',
-      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Writing...' } },
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Modifying...' } },
       'Write/edit toast',
-      { verb: 'invoke', uri: 'yaar://sandbox/*', action: ['write', 'edit'] },
+      { verb: 'invoke', uri: 'yaar://storage/*', action: ['write', 'edit'] },
     );
 
     const writeMatch = await getToolUseHooks({
       toolName: 'verbs:invoke',
       verb: 'invoke',
-      uri: 'yaar://sandbox/abc/src/main.ts',
+      uri: 'yaar://storage/docs/readme.md',
       action: 'write',
     });
     expect(writeMatch).toHaveLength(1);
@@ -216,7 +216,7 @@ describe('getToolUseHooks — URI-based matching', () => {
     const editMatch = await getToolUseHooks({
       toolName: 'verbs:invoke',
       verb: 'invoke',
-      uri: 'yaar://sandbox/abc/src/main.ts',
+      uri: 'yaar://storage/docs/readme.md',
       action: 'edit',
     });
     expect(editMatch).toHaveLength(1);
