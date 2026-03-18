@@ -11,6 +11,7 @@ import {
 } from './store';
 import { takeScreenshot } from './actions';
 import { stripImages } from './helpers';
+import { CommentSection } from './CommentSection';
 
 export function DetailPanel() {
   // ref 시그널: createEffect가 할당 시점을 추적할 수 있도록 signal로 관리
@@ -31,7 +32,7 @@ export function DetailPanel() {
         if (!post)
           return html`
             <div class="detail-empty">
-              <span class="detail-empty-icon">⚡</span>
+              <span class="detail-empty-icon">&#9889;</span>
               <span class="y-text-sm">게시물을 선택하세요</span>
             </div>
           `;
@@ -41,11 +42,11 @@ export function DetailPanel() {
             <div class="detail-title">${post.title}</div>
             <div class="detail-meta">
               <span>${post.author}</span>
-              <span class="divider">·</span>
+              <span class="divider">&middot;</span>
               <span>${post.date}</span>
-              <span class="divider">·</span>
-              <span>👁 ${post.views}</span>
-              <span>👍 ${post.recommend}</span>
+              <span class="divider">&middot;</span>
+              <span>&#128065; ${post.views}</span>
+              <span>&#128077; ${post.recommend}</span>
             </div>
             <div class="detail-actions">
               <button
@@ -57,9 +58,9 @@ export function DetailPanel() {
                     takeScreenshot(post);
                   }
                 }}
-                title="브라우저 스크린셟으로 원본 보기"
+                title="브라우저 스크린셛으로 원본 보기"
               >
-                ${() => (showOriginal() ? '📷 원본 보는 중' : '📷 원본 보기')}
+                ${() => (showOriginal() ? '&#128247; 원본 보는 중' : '&#128247; 원본 보기')}
               </button>
               <a
                 href=${post.url}
@@ -67,7 +68,7 @@ export function DetailPanel() {
                 rel="noopener noreferrer"
                 class="detail-open-link"
               >
-                DC에서 보기 ↗
+                DC에서 보기 &#8599;
               </a>
             </div>
           </div>
@@ -85,7 +86,7 @@ export function DetailPanel() {
                 if (src)
                   return html`
                     <div class="screenshot-wrap">
-                      <div class="screenshot-notice">📷 브라우저 스크린셟</div>
+                      <div class="screenshot-notice">&#128247; 브라우저 스크린셛</div>
                       <img
                         src=${src}
                         style="width:100%;border-radius:6px;display:block"
@@ -95,7 +96,7 @@ export function DetailPanel() {
                   `;
                 return html`
                   <div class="loading-center">
-                    <span style="color:var(--yaar-text-muted)">스크린셟 실패</span>
+                    <span style="color:var(--yaar-text-muted)">스크린셛 실패</span>
                   </div>
                 `;
               }
@@ -117,6 +118,11 @@ export function DetailPanel() {
                   ref=${(el: HTMLDivElement) => setContentBodyEl(el)}
                 ></div>
               `;
+            }}
+            ${() => {
+              const hidden = showOriginal() || postLoading();
+              if (hidden) return null;
+              return html`<${CommentSection} />`;
             }}
           </div>
         `;

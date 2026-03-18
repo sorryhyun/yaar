@@ -7,8 +7,9 @@ import {
   setShowOriginal, setScreenshotSrc, setScreenshotLoading,
   recLoading, setRecLoading,
   updatePosts,
+  setComments, setCommentsLoading, setShowComments,
 } from './store';
-import { fetchPosts, fetchPostContent, fetchTopPostsForAnalysis } from './fetcher';
+import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
 import { app, invoke } from '@bundled/yaar';
 import type { Post } from './types';
 import { toMobileUrl } from './helpers';
@@ -59,7 +60,9 @@ export function startRefreshTimer(): void {
   }, 1000);
 }
 
-/** 게시물을 선택하고 본문을 비동기로 가져온다 */
+/**
+ * 게시물을 선택하고 본문과 댓글을 동시에 비동기로 가져온다.
+ */
 export async function selectPost(post: Post): Promise<void> {
   if (selectedPost()?.id === post.id && postContent()) return;
 
@@ -71,11 +74,18 @@ export async function selectPost(post: Post): Promise<void> {
     setShowOriginal(false);
     setScreenshotSrc(null);
     setScreenshotLoading(false);
+    setComments([]);
+    setCommentsLoading(true);
+    setShowComments(false);
   });
+
   try {
-    const content = await fetchPostContent(post);
+    const { content, comments } = await fetchPostDetail(post);
     if (version !== fetchVersion) return;
-    setPostContent(content);
+    batch(() => {
+      setPostContent(content);
+      setComments(comments);
+    });
   } catch (e: any) {
     if (version !== fetchVersion) return;
     setPostContent(
@@ -84,7 +94,10 @@ export async function selectPost(post: Post): Promise<void> {
         '</p>',
     );
   } finally {
-    if (version === fetchVersion) setPostLoading(false);
+    if (version === fetchVersion) {
+      setPostLoading(false);
+      setCommentsLoading(false);
+    }
   }
 }
 
@@ -123,7 +136,7 @@ export async function triggerAnalysis(): Promise<void> {
   }
 }
 
-/** 모바일 브라우저로 포스트 URL 스크린셟 찍기 */
+/** 모바일 브라우저로 포스트 URL 스크린셛 찍기 */
 export async function takeScreenshot(post: Post): Promise<void> {
   batch(() => {
     setScreenshotLoading(true);

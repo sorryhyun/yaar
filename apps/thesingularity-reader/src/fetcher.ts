@@ -1,4 +1,4 @@
-import type { Post } from './types';
+import type { Post, Comment } from './types';
 import { invoke } from '@bundled/yaar';
 
 const GALLERY_ID = 'thesingularity';
@@ -258,60 +258,162 @@ export async function fetchPosts(): Promise<Post[]> {
   return posts;
 }
 
-/**
- * DCinside 모바일 게시물 본문을 HTML로 가져온다.
- * extract 액션 대신 browseUrl + DOMParser 방식으로 실제 본문 컨테이너를 직접 파싱.
- * extract 액션은 DCinside에서 네비게이션/UI 텍스트를 본문으로 오인식하는 문제가 있음.
- */
-export async function fetchPostContent(post: Post): Promise<string> {
-  // 전체 HTML 가져오기 (networkidle 대기)
-  const rawHtml = await browseUrl(post.url, 'singularity-post', true);
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(rawHtml, 'text/html');
+// ============================================================
+// 댓글 파싱 헬퍼
+// ============================================================
 
-  // 전역 위험 요소 제거
-  doc.querySelectorAll('script, noscript, style').forEach(e => e.remove());
+function parseCommentItem(li: Element, idx: number, isBest: boolean): Comment | null {
+  // 텍스트
+  const TEXT_SELS = ['.usertxt', '.comment_text', '.cmt_text', '.reply_txt', 'p.txt'];
+  let text = '';
+  for (const sel of TEXT_SELS) {
+    const el = li.querySelector(sel);
+    if (el) {
+      text = (el.textContent ?? '').trim();
+      if (text) break;
+    }
+  }
+  if (!text) {
+    // fallback: li 자체 텍스트에서 닉·날짜 부분 제외하고 추출
+    const clone = li.cloneNode(true) as Element;
+    clone.querySelectorAll('.nick, .date_time, .recommend_txt, .info_lay, .user_layer').forEach(e => e.remove());
+    text = (clone.textContent ?? '').trim();
+  }
+  if (!text) return null;
 
-  // DCinside 모바일 본문 컨테이너 셀렉터 (우선순위 순)
-  // .write_div   : 실제 본문 내용 div (가장 정확)
-  // .thum-txt    : .write_div 의 부모 래퍼
-  // .view_content_wrap : 전체 게시물 영역 폴백
-  const CONTENT_SELECTORS = [
-    '.write_div',
-    '.thum-txt',
-    '.view_content_wrap',
-    '.gallview_contents',
-    '#readBody',
-  ];
+  // 작성자
+  const NICK_SELS = ['.nick', '.nickname', '.wr_name', '.user_name', '.name'];
+  let author = '익명';
+  for (const sel of NICK_SELS) {
+    const el = li.querySelector(sel);
+    if (el) {
+      author = (el.textContent ?? '').trim() || '익명';
+      break;
+    }
+  }
 
-  // .view_content_wrap 를 선택할 경우 제거할 불필요한 자식 요소들
-  const REMOVE_INSIDE = [
-    '.gallview-tit-wrap',  // 제목 (헤더에 이미 표시)
-    '.gallview-head',      // 작성자/날짜/조회수 메타 (헤더에 이미 표시)
-    '.view_content_bottom',// 반응 버튼 영역
-    '.bottom_nav',         // 하단 네비게이션
-    '.comment_wrap',       // 댓글 영역
-    '.reply_wrap',
-    '.ad', '.adsbygoogle', '.float_ad',
-  ].join(', ');
+  // 날짜
+  const dateEl = li.querySelector('.date_time, .cmt_date, .reply_date, .time, .date');
+  const date = dateEl ? (dateEl.textContent ?? '').trim() : '';
 
+  // 추천수
+  const recEl = li.querySelector('.recommend_txt, .rec_cnt, .cmt_recommend, .up_num');
+  const recommend = recEl ? (recEl.textContent ?? '').replace(/[^0-9]/g, '') || '0' : '0';
+
+  // 대댓글 여부
+  const isReply =
+    li.classList.contains('re_li') ||
+    li.classList.contains('reply') ||
+    li.classList.contains('sub_comment') ||
+    li.classList.contains('re_comment');
+
+  return {
+    id: `${isBest ? 'best' : 'cmt'}-${idx}`,
+    author,
+    text,
+    date,
+    recommend,
+    isBest,
+    isReply,
+  };
+}
+
+function parseComments(doc: Document): Comment[] {
+  const comments: Comment[] = [];
+
+  // 댓글 컨테이너 탐색
+  const WRAP_SELS = ['.comment_wrap', '.reply_wrap', '.cmt_wrap', '#comment_box', '.gall_comment'];
+  let wrap: Element | null = null;
+  for (const sel of WRAP_SELS) {
+    wrap = doc.querySelector(sel);
+    if (wrap) break;
+  }
+  if (!wrap) return comments;
+
+  // 베스트 댓글
+  const bestItems = wrap.querySelectorAll(
+    '.list_best .li_best, .list_best .li_comment, .best_list li, .list_best li',
+  );
+  bestItems.forEach((li, i) => {
+    const c = parseCommentItem(li, i, true);
+    if (c) comments.push(c);
+  });
+
+  // 일반 댓글 (베스트 댓글 li 제외)
+  const regularItems = wrap.querySelectorAll(
+    '.list_comment > li, .cmt_list > li, .comment_list > li, ul.reply_list > li',
+  );
+  regularItems.forEach((li, i) => {
+    const c = parseCommentItem(li, bestItems.length + i, false);
+    if (c) comments.push(c);
+  });
+
+  return comments;
+}
+
+// ============================================================
+// 본문 추출 헬퍼 (fetchPostContent 와 공유)
+// ============================================================
+
+const CONTENT_SELECTORS = [
+  '.write_div',
+  '.thum-txt',
+  '.view_content_wrap',
+  '.gallview_contents',
+  '#readBody',
+];
+
+const REMOVE_INSIDE = [
+  '.gallview-tit-wrap',
+  '.gallview-head',
+  '.view_content_bottom',
+  '.bottom_nav',
+  '.comment_wrap',
+  '.reply_wrap',
+  '.ad', '.adsbygoogle', '.float_ad',
+].join(', ');
+
+function extractContentFromDoc(doc: Document, post: Post): string {
   for (const sel of CONTENT_SELECTORS) {
     const el = doc.querySelector(sel) as HTMLElement | null;
     if (!el) continue;
-
-    // 불필요한 하위 요소 제거
     el.querySelectorAll(REMOVE_INSIDE).forEach(e => e.remove());
-
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    // 의미 있는 텍스트가 있는 경우만 사용
     if (textContent.length > 20) {
       return el.innerHTML.trim();
     }
   }
-
-  // 모든 셀렉터 실패 시 안내 메시지
   const safeUrl = post.url.replace(/"/g, '&quot;');
-  return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 ↗</a></p>`;
+  return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
+}
+
+// ============================================================
+// 공개 API
+// ============================================================
+
+/**
+ * 게시물 본문과 댓글을 한 번의 브라우저 fetch로 동시에 가져온다.
+ */
+export async function fetchPostDetail(
+  post: Post,
+): Promise<{ content: string; comments: Comment[] }> {
+  const rawHtml = await browseUrl(post.url, 'singularity-post', true);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawHtml, 'text/html');
+  doc.querySelectorAll('script, noscript, style').forEach(e => e.remove());
+
+  const comments = parseComments(doc);
+  const content = extractContentFromDoc(doc, post);
+
+  return { content, comments };
+}
+
+/**
+ * DCinside 모바일 게시물 본문을 HTML로 가져온다. (하위 호환용)
+ */
+export async function fetchPostContent(post: Post): Promise<string> {
+  const { content } = await fetchPostDetail(post);
+  return content;
 }
 
 /**
@@ -332,7 +434,6 @@ export async function fetchTopPostsForAnalysis(
           setTimeout(async () => {
             try {
               const tabId = `singularity-rec-${i % 3}`;
-              // DOMParser로 본문 추출
               const rawHtml = await browseUrl(post.url, tabId, true);
               const parser = new DOMParser();
               const doc = parser.parseFromString(rawHtml, 'text/html');

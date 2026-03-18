@@ -11,6 +11,16 @@ export type Post = {
   isNotice: boolean;
 };
 
+export type Comment = {
+  id: string;
+  author: string;
+  text: string;
+  date: string;
+  recommend: string;
+  isBest: boolean;
+  isReply: boolean;
+};
+
 export type AppSettings = {
   refreshInterval: number; // in seconds
 };

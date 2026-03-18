@@ -8,7 +8,7 @@ import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
-import { toWindowKey } from './helpers';
+import { resolveWindowKey } from './helpers';
 // Circular import — safe because useDesktopStore is only accessed at runtime (live ESM binding)
 import { useDesktopStore } from './desktop';
 
@@ -171,7 +171,7 @@ export function handleAppProtocolRequest(
 ) {
   const state = useDesktopStore.getState();
   const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
+  const key = resolveWindowKey(state.windows, windowId, monitorId);
 
   const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
   if (!el) {
@@ -280,7 +280,7 @@ export function handleVerbSubscriptionUpdate(
 ): void {
   const state = useDesktopStore.getState();
   const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-  const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
+  const key = resolveWindowKey(state.windows, windowId, monitorId);
 
   const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
   if (!el) return;
@@ -404,9 +404,7 @@ export function initWindowsSdkHandler() {
 
     const state = useDesktopStore.getState();
     const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-    const key = state.windows[targetWindowId]
-      ? targetWindowId
-      : toWindowKey(monitorId, targetWindowId);
+    const key = resolveWindowKey(state.windows, targetWindowId, monitorId);
     const win = state.windows[key];
     if (!win) {
       src.postMessage(

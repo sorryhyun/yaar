@@ -19,7 +19,7 @@ import type {
   DesktopUpdateShortcutAction,
   DesktopUpdateSettingsAction,
 } from '@yaar/shared';
-import { toWindowKey } from './helpers';
+import { resolveWindowKey } from './helpers';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
 import {
@@ -115,7 +115,7 @@ export const useDesktopStore = create<DesktopStore>()(
           const state = useDesktopStore.getState();
           const actionMonitorId = (action as { monitorId?: string }).monitorId;
           const monitorId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-          const key = state.windows[windowId] ? windowId : toWindowKey(monitorId, windowId);
+          const key = resolveWindowKey(state.windows, windowId, monitorId);
           captureWindow(key, requestId);
         }
         return;

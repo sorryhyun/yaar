@@ -32,6 +32,30 @@ export function getRawWindowId(key: string): string {
 }
 
 /**
+ * Resolve a raw windowId to its scoped store key by searching all windows.
+ * Returns the raw ID as-is if it already exists as a key, otherwise scans
+ * for a key ending with `/rawId`. Falls back to scoping with the given
+ * monitorId if no match is found.
+ */
+export function resolveWindowKey(
+  windows: Record<string, unknown>,
+  rawId: string,
+  fallbackMonitorId: string,
+): string {
+  // 1. Exact match (already scoped or legacy raw key)
+  if (windows[rawId]) return rawId;
+
+  // 2. Scan all keys for a suffix match (cross-monitor lookup)
+  const suffix = `/${rawId}`;
+  for (const key of Object.keys(windows)) {
+    if (key.endsWith(suffix)) return key;
+  }
+
+  // 3. Fallback: assume the given monitor
+  return toWindowKey(fallbackMonitorId, rawId);
+}
+
+/**
  * Get empty content data for a given renderer type.
  */
 export function emptyContentByRenderer(renderer: string): unknown {

@@ -2,7 +2,7 @@
   "icon": "⚡",
   "name": "특이점이 온다",
   "run": "index.html",
-  "permissions": ["yaar://browser/", "yaar://storage/thesingularity-reader/"],
+  "permissions": ["yaar://browser/"],
   "appProtocol": true,
   "protocol": {
     "state": {},

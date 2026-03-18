@@ -1,5 +1,5 @@
 import { createSignal, batch } from '@bundled/solid-js';
-import type { Post, AppSettings, Recommendation } from './types';
+import type { Post, AppSettings, Recommendation, Comment } from './types';
 import { storage } from '@bundled/yaar';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -22,6 +22,11 @@ export const [showSettings, setShowSettings] = createSignal(false);
 export const [showOriginal, setShowOriginal] = createSignal(false);
 export const [screenshotSrc, setScreenshotSrc] = createSignal<string | null>(null);
 export const [screenshotLoading, setScreenshotLoading] = createSignal(false);
+
+// 댓글
+export const [comments, setComments] = createSignal<Comment[]>([]);
+export const [commentsLoading, setCommentsLoading] = createSignal(false);
+export const [showComments, setShowComments] = createSignal(false);
 
 // 도배기 안 보기 (localStorage에 저장)
 const HIDE_SPAMMER_KEY = 'singularity-hide-spammer';
