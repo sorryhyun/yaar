@@ -12,9 +12,11 @@ if [ -n "$1" ]; then
   echo "Using provider: $PROVIDER_ARG"
 fi
 
-# Build shared package first (needed by other packages)
+# Build shared and compiler packages first (needed by other packages)
 echo "Building shared package..."
 bun run --filter @yaar/shared build
+echo "Building compiler package..."
+bun run --filter @yaar/compiler build
 
 # Cleanup function
 cleanup() {

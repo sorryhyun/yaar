@@ -15,30 +15,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const outDir = join(rootDir, 'dist', 'bundled-libs');
 
-// Same map as plugins.ts — import name → npm package
-const BUNDLED_LIBRARIES = {
-  'solid-js': 'solid-js',
-  'solid-js/html': 'solid-js/html',
-  'solid-js/web': 'solid-js/web',
-  'uuid': 'uuid',
-  'lodash': 'lodash-es',
-  'date-fns': 'date-fns',
-  'clsx': 'clsx',
-  'anime': 'animejs',
-  'konva': 'konva',
-  'three': 'three',
-  'cannon-es': 'cannon-es',
-  'xlsx': '@e965/xlsx',
-  'chart.js': 'chart.js',
-  'd3': 'd3',
-  'matter-js': 'matter-js',
-  'tone': 'tone',
-  'pixi.js': 'pixi.js',
-  'p5': 'p5',
-  'mammoth': 'mammoth',
-  'marked': 'marked',
-  'prismjs': 'prismjs',
-};
+// Import the canonical map from @yaar/compiler (Bun can resolve .ts directly)
+const { BUNDLED_LIBRARIES: _allLibs } = await import('../packages/compiler/src/plugins.ts');
+// Filter out 'yaar' (it's a shim, not an npm package to pre-bundle)
+const BUNDLED_LIBRARIES = Object.fromEntries(
+  Object.entries(_allLibs).filter(([k]) => k !== 'yaar'),
+);
 
 mkdirSync(outDir, { recursive: true });
 

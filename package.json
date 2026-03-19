@@ -49,6 +49,9 @@
     "packages/shared/src/**/*.{ts,js}": [
       "prettier --write"
     ],
+    "packages/compiler/src/**/*.{ts,js}": [
+      "prettier --write"
+    ],
     "*.{json,yaml,yml,css}": [
       "prettier --write"
     ]

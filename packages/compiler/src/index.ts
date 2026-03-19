@@ -1,0 +1,18 @@
+export { initCompiler, getCompilerConfig, type CompilerConfig } from './config.js';
+export {
+  getSandboxDir,
+  getSandboxPath,
+  compileTypeScript,
+  generateHtmlWrapper,
+  type CompileOptions,
+  type CompileResult,
+} from './compile.js';
+export { typecheckSandbox, type TypecheckResult } from './typecheck.js';
+export {
+  BUNDLED_LIBRARIES,
+  getAvailableBundledLibraries,
+  bundledLibraryPluginBun,
+  cssFilePlugin,
+  solidHtmlClosingTagPlugin,
+} from './plugins.js';
+export { extractProtocolFromSource } from './extract-protocol.js';

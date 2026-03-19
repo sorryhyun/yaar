@@ -23,6 +23,9 @@ jobs:
       - name: Build shared
         run: bun run --filter @yaar/shared build
 
+      - name: Build compiler
+        run: bun run --filter @yaar/compiler build
+
       - name: Typecheck
         run: bun run typecheck
 

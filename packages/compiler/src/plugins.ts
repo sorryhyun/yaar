@@ -10,7 +10,7 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-/** Directory of this file — inside packages/server, where devDependencies are installed. */
+/** Directory of this file — inside packages/compiler, where devDependencies are installed. */
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 
 /**

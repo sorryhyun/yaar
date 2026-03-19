@@ -76,6 +76,7 @@ yaar/
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
 │   ├── shared/        # Shared types (OS Actions, WebSocket events, Component DSL)
+│   ├── compiler/      # App compiler (@bundled/* resolution, Bun.build, typecheck)
 │   ├── server/        # TypeScript WebSocket server
 │   └── frontend/      # React frontend
 └── package.json
@@ -84,9 +85,10 @@ yaar/
 ### Package Dependencies
 
 ```
-@yaar/frontend ──┐
-                  ├──> @yaar/shared (Zod v4 schemas, types)
-@yaar/server ────┘
+@yaar/frontend ──────┐
+                      ├──> @yaar/shared (Zod v4 schemas, types)
+@yaar/server ──┬─────┘
+               └──> @yaar/compiler ──> @yaar/shared
 ```
 
 ## Architecture
@@ -184,7 +186,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Parsing**: `marked`, `prismjs`, `mammoth`
 - **YAAR SDK**: `yaar` — `readJson`, `invokeJson`, `app.register()`, `appStorage`, `dev.compile()`, etc.
 
-Key files: `lib/compiler/compile.ts` (Bun.build + HTML wrapper), `lib/compiler/plugins.ts` (bundled library resolution), `lib/compiler/shims/yaar.ts` (@bundled/yaar SDK), `lib/compiler/extract-protocol.ts` (manifest extraction from source), `lib/bundled-types/` (.d.ts files for typecheck).
+Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution), `packages/compiler/src/shims/yaar.ts` (@bundled/yaar SDK), `packages/compiler/src/extract-protocol.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 
 ### Design Tokens
 

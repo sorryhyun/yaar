@@ -6,7 +6,7 @@
  * in both dev mode and bundled executables.
  */
 
-import { getAvailableBundledLibraries } from '../../lib/compiler/plugins.js';
+import { getAvailableBundledLibraries } from '@yaar/compiler';
 import type { EndpointMeta } from '../../http/utils.js';
 import { PUBLIC_ENDPOINTS as apiEndpoints } from '../../http/routes/api.js';
 import { PUBLIC_ENDPOINTS as fileEndpoints } from '../../http/routes/files.js';

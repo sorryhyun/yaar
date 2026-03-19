@@ -31,6 +31,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'src/lib/bundled-types/**', 'src/lib/compiler/shims/**', 'src/providers/codex/generated/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/providers/codex/generated/**'],
   }
 )

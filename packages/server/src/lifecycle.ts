@@ -21,6 +21,7 @@ import {
   getCliRestoreEntries,
 } from './logging/index.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, getPort } from './config.js';
+import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
@@ -33,6 +34,8 @@ let activeTunnel: SshTunnel | null = null;
  * Returns the options to pass to createWsHandlers.
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
+  initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
+
   await ensureStorageDir();
 
   // Warm mount cache and validate mount paths still exist

@@ -194,7 +194,9 @@ interface YaarAppRegistration {
 interface YaarApp {
   register(config: YaarAppRegistration): void;
   sendInteraction(
-    description: string | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean }),
+    description:
+      | string
+      | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean }),
   ): void;
 }
 
@@ -354,10 +356,7 @@ declare module '@bundled/yaar' {
     payload?: Record<string, unknown>,
   ): Promise<T>;
   /** Invoke a URI and return the raw text. */
-  export function invokeText(
-    uri: string,
-    payload?: Record<string, unknown>,
-  ): Promise<string>;
+  export function invokeText(uri: string, payload?: Record<string, unknown>): Promise<string>;
   /** List a URI and auto-parse as JSON. */
   export function listJson<T = unknown>(uri: string): Promise<T>;
   /** List a URI and return the raw text. */

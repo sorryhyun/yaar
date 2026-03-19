@@ -4,7 +4,7 @@
 
 import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
-import { compileTypeScript, getSandboxPath } from '../../lib/compiler/index.js';
+import { compileTypeScript, getSandboxPath } from '@yaar/compiler';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';

@@ -45,7 +45,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
 
   // GET /api/dev/bundled-libraries — no auth required (static list)
   if (url.pathname === '/api/dev/bundled-libraries' && req.method === 'GET') {
-    const { getAvailableBundledLibraries } = await import('../../lib/compiler/plugins.js');
+    const { getAvailableBundledLibraries } = await import('@yaar/compiler');
     return jsonResponse(getAvailableBundledLibraries());
   }
 
@@ -85,7 +85,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
 
   switch (action) {
     case 'compile': {
-      const { compileTypeScript } = await import('../../lib/compiler/index.js');
+      const { compileTypeScript } = await import('@yaar/compiler');
       const result = await compileTypeScript(absolutePath, {
         title: (body.title as string) ?? 'App',
       });
@@ -102,7 +102,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
     }
 
     case 'typecheck': {
-      const { typecheckSandbox } = await import('../../lib/compiler/index.js');
+      const { typecheckSandbox } = await import('@yaar/compiler');
       const result = await typecheckSandbox(absolutePath);
       return jsonResponse({
         success: result.success,

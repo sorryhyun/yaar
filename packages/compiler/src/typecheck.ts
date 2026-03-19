@@ -6,16 +6,21 @@
 
 import { unlink } from 'fs/promises';
 import { join, resolve } from 'path';
-import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../config.js';
+import { getCompilerConfig } from './config.js';
 
 export interface TypecheckResult {
   success: boolean;
   diagnostics: string[];
 }
 
-const BUNDLED_TYPES_DIR = resolve(PROJECT_ROOT, 'packages/server/src/lib/bundled-types');
+function getBundledTypesDir(): string {
+  return resolve(getCompilerConfig().projectRoot, 'packages/compiler/src/bundled-types');
+}
 
-const TSC_PATH = resolve(PROJECT_ROOT, 'packages/server/node_modules/.bin/tsc');
+function getTscPath(): string {
+  // tsc is a devDependency of @yaar/compiler, so resolve from this package
+  return resolve(import.meta.dir, '../node_modules/.bin/tsc');
+}
 
 /**
  * Run a loose TypeScript type check on a sandbox directory.
@@ -24,9 +29,12 @@ const TSC_PATH = resolve(PROJECT_ROOT, 'packages/server/node_modules/.bin/tsc');
  */
 export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckResult> {
   // tsc is not available in bundled exe mode (no node_modules)
-  if (IS_BUNDLED_EXE) {
+  if (getCompilerConfig().isBundledExe) {
     return { success: true, diagnostics: [] };
   }
+
+  const BUNDLED_TYPES_DIR = getBundledTypesDir();
+  const TSC_PATH = getTscPath();
 
   const tsconfigPath = join(sandboxPath, 'tsconfig.typecheck.json');
 
