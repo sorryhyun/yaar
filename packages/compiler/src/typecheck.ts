@@ -7,6 +7,7 @@
 import { unlink } from 'fs/promises';
 import { join, resolve } from 'path';
 import { getCompilerConfig } from './config.js';
+import { toForwardSlash } from './plugins.js';
 
 export interface TypecheckResult {
   success: boolean;
@@ -14,12 +15,14 @@ export interface TypecheckResult {
 }
 
 function getBundledTypesDir(): string {
-  return resolve(getCompilerConfig().projectRoot, 'packages/compiler/src/bundled-types');
+  return toForwardSlash(
+    resolve(getCompilerConfig().projectRoot, 'packages/compiler/src/bundled-types'),
+  );
 }
 
 function getTscPath(): string {
   // tsc is a devDependency of @yaar/compiler, so resolve from this package
-  return resolve(import.meta.dir, '../node_modules/.bin/tsc');
+  return toForwardSlash(resolve(import.meta.dir, '../node_modules/.bin/tsc'));
 }
 
 /**
