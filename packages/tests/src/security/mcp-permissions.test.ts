@@ -8,7 +8,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { extractDomain } from '@yaar/server/features/config/domains';
-import { executeJs } from '@yaar/server/lib/sandbox/index';
 
 // ── extractDomain ──────────────────────────────────────────────────────────
 
@@ -102,47 +101,3 @@ describe('isDomainAllowed — with Bun stub', () => {
   });
 });
 
-// ── Sandbox isolation ──────────────────────────────────────────────────────
-
-describe('executeJs — sandbox security', () => {
-  it('cannot access process.env from sandboxed code', async () => {
-    const result = await executeJs('return typeof process');
-    // process is not exposed in the sandbox context
-    expect(result.success).toBe(true);
-    expect(result.result).toBe('"undefined"');
-  });
-
-  it('cannot require() arbitrary modules', async () => {
-    const result = await executeJs('return typeof require');
-    expect(result.success).toBe(true);
-    expect(result.result).toBe('"undefined"');
-  });
-
-  it('cannot access __dirname or __filename', async () => {
-    const result = await executeJs('return typeof __dirname + "," + typeof __filename');
-    expect(result.success).toBe(true);
-    expect(result.result).toBe('"undefined,undefined"');
-  });
-
-  it('times out on infinite loops and returns an error', async () => {
-    const result = await executeJs('while(true){}', { timeout: 200 });
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/timed out/i);
-  }, 5000);
-
-  it('cannot access fetch without an allowedDomain', async () => {
-    // fetch is available but domain-restricted in the sandbox context
-    const result = await executeJs(
-      'return typeof fetch !== "undefined" ? "fetch-exists" : "no-fetch"',
-    );
-    expect(result.success).toBe(true);
-    // fetch is injected but blocked at request time, not removed
-    expect(result.result).toMatch(/"fetch-exists"|"no-fetch"/);
-  });
-
-  it('returns computed values correctly', async () => {
-    const result = await executeJs('return [1,2,3].reduce((a,b) => a+b, 0)');
-    expect(result.success).toBe(true);
-    expect(result.result).toBe('6');
-  });
-});

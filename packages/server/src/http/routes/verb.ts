@@ -18,6 +18,8 @@ import type { Verb } from '../../handlers/uri-registry.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
+import { runWithAgentContext } from '../../agents/session.js';
+import type { SessionId } from '../../session/types.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -193,10 +195,18 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     }
   }
 
-  // Dispatch to ResourceRegistry
+  // Dispatch to ResourceRegistry — run within agent context so that handlers
+  // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
   try {
     const registry = initRegistry();
-    const result = await registry.execute(verb, resolvedUri, body.payload);
+    const sessionId = tokenEntry?.sessionId as SessionId | undefined;
+    const execute = () => registry.execute(verb, resolvedUri, body.payload);
+    const result = sessionId
+      ? await runWithAgentContext(
+          { agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`, sessionId },
+          execute,
+        )
+      : await execute();
     return jsonResponse(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Verb execution failed';

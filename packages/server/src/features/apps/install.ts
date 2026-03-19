@@ -85,13 +85,12 @@ export async function installApp(appId: string): Promise<VerbResult> {
   }
 
   // Check for permissions and prompt user before installing.
-  // Skip the permission dialog during onboarding — the user is being guided through
-  // initial setup and shouldn't be interrupted by permission modals for each app.
+  // Skip the permission dialog during onboarding or when allowAllApps is enabled.
   if (!isUpdate) {
     const permissions = await readAppPermissions(stagingDir);
     if (permissions && permissions.length > 0) {
       const settings = await readSettings();
-      if (settings.onboardingCompleted) {
+      if (settings.onboardingCompleted && !settings.allowAllApps) {
         const confirmed = await actionEmitter.showPermissionDialog(
           'App Permissions',
           `"${appId}" requests the following permissions:\n\n${formatPermissions(permissions)}\n\nDo you want to allow this?`,
