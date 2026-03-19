@@ -8,7 +8,7 @@ export const DEFAULT_STYLE: Required<CellStyle> = {
   italic: false,
   underline: false,
   fontSize: 14,
-  color: '#111827',
-  bg: '#ffffff',
+  color: '',
+  bg: 'transparent',
   align: 'left'
 };

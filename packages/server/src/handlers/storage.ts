@@ -70,7 +70,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           prependNote(r, 'This is a folder — used list instead.'),
         );
 
-      const result = await storageRead(parsed.path, { raw: true });
+      const result = await storageRead(parsed.path);
       if (!result.success) {
         // Directory → fall through to list
         if (result.error?.includes('is a directory'))

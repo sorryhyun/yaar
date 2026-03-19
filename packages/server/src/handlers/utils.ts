@@ -196,6 +196,37 @@ export function applyReadOptions(
   return `── ${filePath} lines ${startLine}-${endLine} of ${totalLines} ──\n${numbered}`;
 }
 
+/**
+ * Format multiple verb results into a single VerbResult with URI headers.
+ * Used by brace-expansion in the exec() wrapper.
+ */
+export function formatBatchResults(
+  uris: string[],
+  settled: PromiseSettledResult<VerbResult>[],
+): VerbResult {
+  const content: VerbResult['content'] = [];
+  let hasError = false;
+
+  for (let i = 0; i < uris.length; i++) {
+    const s = settled[i];
+    if (s.status === 'fulfilled') {
+      if (s.value.isError) hasError = true;
+      // Add URI header before each result's content
+      content.push({ type: 'text', text: `--- ${uris[i]} ---` });
+      content.push(...s.value.content);
+    } else {
+      hasError = true;
+      content.push({ type: 'text', text: `--- ${uris[i]} ---` });
+      content.push({
+        type: 'text',
+        text: s.reason instanceof Error ? s.reason.message : 'Unknown error',
+      });
+    }
+  }
+
+  return hasError ? { content, isError: true } : { content };
+}
+
 export async function applyEdit(
   content: string,
   params: Record<string, unknown>,

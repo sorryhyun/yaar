@@ -156,8 +156,8 @@ export function updateToolbarState() {
   refs.italicBtn?.classList.toggle('active', !!style.italic);
   refs.underlineBtn?.classList.toggle('active', !!style.underline);
   if (refs.fontSizeSel) refs.fontSizeSel.value = String(style.fontSize);
-  if (refs.textColor) refs.textColor.value = style.color;
-  if (refs.bgColor) refs.bgColor.value = style.bg;
+  if (refs.textColor) refs.textColor.value = style.color || '#e6edf3';
+  if (refs.bgColor) refs.bgColor.value = style.bg === 'transparent' ? '#161b22' : (style.bg || '#161b22');
   if (refs.alignSel) refs.alignSel.value = style.align;
 }
 

@@ -231,12 +231,11 @@ Call `window.yaar.app.register()` with state handlers and command handlers. The 
 
 ```typescript
 // src/protocol.ts
+import { app } from '@bundled/yaar';
 import { items } from './store';
 
 export function registerProtocol() {
-  if (!window.yaar?.app) return;
-
-  window.yaar.app.register({
+  app.register({
     appId: 'my-app',
     name: 'My App',
     state: {
@@ -297,37 +296,28 @@ config/
 
 Each app has isolated file storage at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
 
-### From App Code (Verb SDK)
+### From App Code (`@bundled/yaar`)
 
 ```typescript
+import { appStorage } from '@bundled/yaar';
+
 // Write a file
-await window.yaar.invoke('yaar://apps/self/storage/data.json', {
-  action: 'write',
-  content: JSON.stringify({ key: 'value' }),
-});
+await appStorage.save('data.json', JSON.stringify({ key: 'value' }));
 
-// Read a file
-const result = await window.yaar.read('yaar://apps/self/storage/data.json');
-const text = result.content[0].text; // raw file content
+// Read as JSON
+const data = await appStorage.readJson<{ key: string }>('data.json');
 
-// List files
-const listResult = await window.yaar.list('yaar://apps/self/storage/');
-const entries = JSON.parse(listResult.content[0].text); // [{ path, isDirectory, size, modifiedAt }]
+// Read as text
+const text = await appStorage.read('data.json');
+
+// Read binary (returns { data: base64, mimeType })
+const binary = await appStorage.readBinary('image.png');
+
+// List files (returns [{ path, isDirectory, size, modifiedAt }])
+const files = await appStorage.list();
 
 // Delete a file
-await window.yaar.delete('yaar://apps/self/storage/data.json');
-```
-
-### From App Code (Storage SDK)
-
-The `window.yaar.storage` convenience API uses the verb SDK internally:
-
-```typescript
-await window.yaar.storage.save('data.json', JSON.stringify({ key: 'value' }));
-const data = await window.yaar.storage.read('data.json', { as: 'json' });
-const files = await window.yaar.storage.list();
-await window.yaar.storage.remove('data.json');
-const url = window.yaar.storage.url('image.png'); // direct URL for <img> src
+await appStorage.remove('data.json');
 ```
 
 ### From Agent (MCP Tools)

@@ -80,10 +80,6 @@ export interface UserInteraction {
   bounds?: { x: number; y: number; w: number; h: number };
   monitorId?: string; // Monitor ID for window.create
   content?: { renderer: string; data: unknown }; // Window content for window.create
-  variant?: string; // Window variant for window.create
-  dockEdge?: string; // Dock edge for window.create (panel variant)
-  frameless?: boolean; // Frameless flag for window.create
-  windowStyle?: Record<string, string | number>; // Custom styles for window.create
   appId?: string; // App ID for window.create
 }
 

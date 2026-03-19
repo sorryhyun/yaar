@@ -26,6 +26,12 @@ export function destroyChart() {
   selectionChart = null;
 }
 
+// Resolve CSS variable at runtime for chart theming
+function cssVar(name: string, fallback: string): string {
+  const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return val || fallback;
+}
+
 export function renderSelectionChart() {
   const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
   const rects = refsInRect(rect);
@@ -53,6 +59,11 @@ export function renderSelectionChart() {
 
   const isRound = chartType === 'pie' || chartType === 'doughnut';
 
+  // Theme-aware colors
+  const textColor = cssVar('--yaar-text', '#e6edf3');
+  const textMuted = cssVar('--yaar-text-muted', '#8b949e');
+  const gridColor = cssVar('--yaar-border', '#30363d');
+
   selectionChart = new Chart(refs.chartCanvas!, {
     type: chartType,
     data: {
@@ -77,7 +88,11 @@ export function renderSelectionChart() {
       maintainAspectRatio: false,
       animation: { duration: 400, easing: 'easeInOutQuart' },
       plugins: {
-        legend: { display: isRound, position: 'bottom' },
+        legend: {
+          display: isRound,
+          position: 'bottom',
+          labels: { color: textColor },
+        },
         tooltip: {
           enabled: true,
           callbacks: {
@@ -87,12 +102,12 @@ export function renderSelectionChart() {
       },
       scales: !isRound ? {
         x: {
-          grid: { color: 'rgba(0,0,0,0.05)' },
-          ticks: { font: { size: 11 }, maxRotation: 45 },
+          grid: { color: gridColor },
+          ticks: { color: textMuted, font: { size: 11 }, maxRotation: 45 },
         },
         y: {
-          grid: { color: 'rgba(0,0,0,0.07)' },
-          ticks: { font: { size: 11 } },
+          grid: { color: gridColor },
+          ticks: { color: textMuted, font: { size: 11 } },
           beginAtZero: true,
         },
       } : undefined,

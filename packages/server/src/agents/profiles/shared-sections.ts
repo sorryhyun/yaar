@@ -13,7 +13,10 @@ export const VERB_TOOLS_TABLE = `You have 5 generic verbs that operate on \`yaar
 | **invoke** | Perform an action (create, update, trigger) |
 | **delete** | Remove a resource |
 
-Use \`describe(uri)\` to discover what actions a URI supports before invoking it.`;
+Use \`describe(uri)\` to discover what actions a URI supports before invoking it.
+
+**Brace expansion:** Use \`{a,b,c}\` in any URI to batch multiple operations in one call.
+Example: \`read('yaar://storage/{config.json,data.json,schema.json}')\` reads all 3 files at once.`;
 
 export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|

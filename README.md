@@ -67,7 +67,7 @@ invoke('yaar://windows/main', { ... })  # 윈도우 생성
 invoke('yaar://apps/github-manager')    # 앱 스킬 로드
 ```
 
-실행 시 자동으로 `storage/, config/, apps/, session_logs/, sandbox/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
+실행 시 자동으로 `storage/, config/, apps/, session_logs/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
 
 
 ## 주요 기능

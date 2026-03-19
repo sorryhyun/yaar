@@ -39,6 +39,7 @@ import {
   mapActionToSubscriptionEvent,
   summarizeAction,
 } from '../features/window/subscription-events.js';
+import { getAppMeta } from '../features/apps/discovery.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -489,16 +490,17 @@ export class LiveSession {
           switch (interaction.type) {
             case 'window.create':
               if (interaction.windowId && interaction.content && interaction.bounds) {
+                const appMeta = interaction.appId ? await getAppMeta(interaction.appId) : null;
                 const createAction = {
                   type: 'window.create' as const,
                   windowId: interaction.windowId,
                   title: interaction.windowTitle ?? interaction.windowId,
                   bounds: interaction.bounds,
                   content: interaction.content,
-                  variant: interaction.variant as 'standard' | 'widget' | 'panel' | undefined,
-                  dockEdge: interaction.dockEdge as 'top' | 'bottom' | undefined,
-                  frameless: interaction.frameless,
-                  windowStyle: interaction.windowStyle,
+                  variant: appMeta?.variant,
+                  dockEdge: appMeta?.dockEdge,
+                  frameless: appMeta?.frameless,
+                  windowStyle: appMeta?.windowStyle,
                   appId: interaction.appId,
                 };
                 this.windowState.handleAction(createAction, interaction.monitorId ?? '0');

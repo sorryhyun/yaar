@@ -140,7 +140,7 @@ async function convertPdfToImages(filePath: string): Promise<{ images: StorageIm
 /**
  * Read a file from storage.
  */
-export async function storageRead(filePath: string, options?: { raw?: boolean }): Promise<StorageReadResult> {
+export async function storageRead(filePath: string): Promise<StorageReadResult> {
   const resolved = resolvePath(filePath);
   if (!resolved) {
     return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
@@ -197,16 +197,7 @@ export async function storageRead(filePath: string, options?: { raw?: boolean })
 
     // Text file
     const content = await Bun.file(validatedPath).text();
-    if (options?.raw) {
-      return { success: true, content };
-    }
-    // Add line numbers for AI consumption
-    const lines = content.split('\n');
-    const width = String(lines.length).length;
-    const numbered = lines
-      .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
-      .join('\n');
-    return { success: true, content: `── ${filePath} (${lines.length} lines) ──\n${numbered}` };
+    return { success: true, content };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: sanitizeStorageError(msg, filePath) };

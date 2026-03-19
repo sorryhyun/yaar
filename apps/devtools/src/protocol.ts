@@ -48,12 +48,19 @@ export function registerProtocol() {
         handler: () => [...projects()],
       },
       openFile: {
-        description: 'Currently open file',
+        description: 'Currently open file (with line numbers)',
         handler: () => {
           const path = openFilePath();
           if (!path) return null;
+          const raw = openFileContent();
           const ext = path.split('.').pop() ?? '';
-          return { path, content: openFileContent(), language: ext };
+          if (raw == null) return { path, content: null, language: ext };
+          const lines = raw.split('\n');
+          const width = String(lines.length).length;
+          const numbered = lines
+            .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
+            .join('\n');
+          return { path, content: `── ${path} (${lines.length} lines) ──\n${numbered}`, language: ext };
         },
       },
       diagnostics: {

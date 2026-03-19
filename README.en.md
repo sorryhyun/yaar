@@ -66,7 +66,7 @@ invoke('yaar://windows/main', { ... })  # Create a window
 invoke('yaar://apps/github-manager')    # Load an app skill
 ```
 
-On startup, the program creates `storage/, config/, apps/, session_logs/, sandbox/` folders. The AI **cannot access anything outside these folders.** To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
+On startup, the program creates `storage/, config/, apps/, session_logs/` folders. The AI **cannot access anything outside these folders.** To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
 
 
 ## Key Features

@@ -97,6 +97,29 @@ export function extractAppId(uri: string): string | null {
   return null;
 }
 
+// ============ Brace Expansion ============
+
+/**
+ * Expand brace patterns in a yaar:// URI.
+ *
+ *   expandBraceUri('yaar://storage/{a.txt, b.txt}')
+ *     → ['yaar://storage/a.txt', 'yaar://storage/b.txt']
+ *
+ *   expandBraceUri('yaar://storage/file.txt')
+ *     → ['yaar://storage/file.txt']
+ *
+ * Only the first brace group is expanded. No nesting.
+ */
+export function expandBraceUri(uri: string): string[] {
+  const match = uri.match(/^(.*)\{([^}]+)}(.*)$/);
+  if (!match) return [uri];
+  const [, prefix, inner, suffix] = match;
+  const alternatives = inner.split(',');
+  // Require at least 2 alternatives (single item in braces is not expansion)
+  if (alternatives.length < 2) return [uri];
+  return alternatives.map((alt) => `${prefix}${alt.trim()}${suffix}`);
+}
+
 // ============ File-operation URIs ============
 
 export type ParsedContentPath =

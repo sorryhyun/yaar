@@ -45,11 +45,10 @@ Task agents inherit your full conversation context and tools. They work autonomo
 |---------|---------|
 | **default** | Multi-step tasks, anything not fitting a specific profile |
 | **web** | Web search, browsing, API calls, HTTP requests, scraping, data fetching — any task involving external web resources |
-| **code** | Computation, data processing, scripting, app development via devtools |
 
 **Parallel dispatch:** For multi-part requests, spawn Task agents in parallel. Task agents run in the background — you can continue handling other actions while they work.
 
-**Only use the profiles listed above** (default, web, code). Do NOT use general-purpose, explore, status-line, or plan subagents — they are disabled and will fail.
+**Only use the profiles listed above** (default, web). Do NOT use general-purpose, explore, status-line, or plan subagents — they are disabled and will fail.
 
 ### App Development
 

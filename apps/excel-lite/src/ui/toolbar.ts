@@ -75,7 +75,7 @@ export function createToolbar() {
           onChange=${(e: Event) => applyStyleToSelection({ fontSize: Number((e.target as HTMLSelectElement).value) })}>
           <option value="12">12</option><option value="14">14</option><option value="16">16</option><option value="18">18</option><option value="20">20</option><option value="24">24</option>
         </select>
-        <input id="textColor" type="color" ref=${(el: HTMLInputElement) => { refs.textColor = el; }} value="#111827" title="Text color"
+        <input id="textColor" type="color" ref=${(el: HTMLInputElement) => { refs.textColor = el; }} value="#e6edf3" title="Text color"
           onChange=${(e: Event) => applyStyleToSelection({ color: (e.target as HTMLInputElement).value })} />
         <input id="bgColor" type="color" ref=${(el: HTMLInputElement) => { refs.bgColor = el; }} value="#ffffff" title="Cell background"
           onChange=${(e: Event) => applyStyleToSelection({ bg: (e.target as HTMLInputElement).value })} />

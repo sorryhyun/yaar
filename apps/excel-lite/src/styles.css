@@ -52,6 +52,7 @@ body {
   border-radius: 8px;
   padding: 7px 8px;
   background: var(--yaar-bg);
+  color: var(--yaar-text);
 }
 input,
 select {
@@ -61,7 +62,11 @@ select {
   border-radius: 8px;
   font-size: 13px;
   background: var(--yaar-bg-surface);
+  color: var(--yaar-text);
   box-sizing: border-box;
+}
+input::placeholder {
+  color: var(--yaar-text-muted);
 }
 #formulaInput {
   width: 100%;
@@ -154,6 +159,7 @@ th {
   background: var(--yaar-bg-surface-hover);
   z-index: 2;
   font-weight: 600;
+  color: var(--yaar-text);
 }
 .rowHead {
   position: sticky;
@@ -163,6 +169,7 @@ th {
   text-align: right;
   padding: 6px 8px;
   min-width: 46px;
+  color: var(--yaar-text-muted);
 }
 .corner {
   position: sticky;
@@ -183,6 +190,8 @@ td input {
   box-sizing: border-box;
   outline: none;
   background: transparent;
+  color: var(--yaar-text);
+  height: 100%;
 }
 td.selected {
   background: color-mix(in srgb, var(--yaar-accent) 15%, var(--yaar-bg-surface));

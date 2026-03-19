@@ -7,7 +7,7 @@
       "description": "All projects"
     },
     "openFile": {
-      "description": "Currently open file"
+      "description": "Currently open file (with line numbers)"
     },
     "diagnostics": {
       "description": "TypeScript errors/warnings"

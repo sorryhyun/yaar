@@ -164,10 +164,6 @@ export function DesktopIcons({
                     bounds: { x: 100, y: 100, w: 500, h: 400 },
                     content,
                     appId: app.id,
-                    ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
-                    ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
-                    ...(app.frameless ? { frameless: true } : {}),
-                    ...(app.windowStyle ? { windowStyle: app.windowStyle } : {}),
                   },
                 ],
               }));

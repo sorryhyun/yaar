@@ -60,4 +60,5 @@ export {
   type ParsedBareWindowUri,
   parseBareWindowUri,
   isBareWindowsAuthority,
+  expandBraceUri,
 } from './yaar-uri.js';

@@ -231,13 +231,11 @@ iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 
 ```typescript
 // src/protocol.ts
+import { app } from '@bundled/yaar';
 import { items } from './store';
 
 export function registerProtocol() {
-  const appApi = (window as any).yaar?.app;
-  if (!appApi) return;
-
-  appApi.register({
+  app.register({
     appId: 'my-app',
     name: 'My App',
     state: {
@@ -266,8 +264,11 @@ export function registerProtocol() {
 |------|------|
 | `invoke('yaar://windows/{id}', { action: 'app_query', key })` | 상태 키로 앱의 구조화된 데이터 읽기 (`"manifest"`로 매니페스트 조회) |
 | `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | 앱에 명령 실행 |
+| `invoke('yaar://windows/{id}', { action: 'message', message })` | 앱 에이전트에 메시지 전송 (모니터 → 앱 에이전트 위임). Fire-and-forget — 사용자 상호작용과 동일한 코드 경로. |
 
 에이전트는 먼저 `app_query`에 bare window URI를 사용하여 앱이 지원하는 기능(매니페스트)을 확인한 뒤, `app_query`와 `app_command`로 상호작용합니다.
+
+`message` 액션은 **모니터 에이전트가 앱 에이전트에 작업을 위임**할 수 있게 합니다. `AppTaskProcessor`를 통해 사용자 `WINDOW_MESSAGE`와 동일한 경로로 태스크를 큐잉하며, 필요시 앱 에이전트를 자동 생성합니다. `subscribe`와 결합하면 앱 에이전트 작업 완료 알림을 받을 수 있습니다.
 
 ### 예시: Excel Lite
 
@@ -275,6 +276,7 @@ export function registerProtocol() {
 invoke('yaar://windows/excel-lite', { action: 'app_query' })
 invoke('yaar://windows/excel-lite', { action: 'app_query', key: 'cells' })
 invoke('yaar://windows/excel-lite', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "Hello" } } })
+invoke('yaar://windows/excel-lite', { action: 'message', message: 'A열을 요약해줘' })
 ```
 
 ## 자격 증명 관리
@@ -289,3 +291,40 @@ config/
 - `invoke('yaar://config/app/moltbook', { config: { api_key: "..." } })` — 저장
 - `read('yaar://config/app/moltbook')` — 읽기
 - `delete('yaar://config/app/moltbook')` — 삭제
+
+## 앱 전용 스토리지
+
+각 앱은 `storage/apps/{appId}/`에 격리된 파일 저장소를 가집니다. 앱 코드에서는 `self`를 약칭으로 사용할 수 있으며, 서버가 iframe 토큰에서 실제 appId로 변환합니다.
+
+### 앱 코드에서 (`@bundled/yaar`)
+
+```typescript
+import { appStorage } from '@bundled/yaar';
+
+// 파일 저장
+await appStorage.save('data.json', JSON.stringify({ key: 'value' }));
+
+// JSON으로 읽기
+const data = await appStorage.readJson<{ key: string }>('data.json');
+
+// 텍스트로 읽기
+const text = await appStorage.read('data.json');
+
+// 바이너리 읽기 (returns { data: base64, mimeType })
+const binary = await appStorage.readBinary('image.png');
+
+// 파일 목록 (returns [{ path, isDirectory, size, modifiedAt }])
+const files = await appStorage.list();
+
+// 파일 삭제
+await appStorage.remove('data.json');
+```
+
+### 에이전트에서 (MCP 도구)
+
+```
+invoke('yaar://apps/my-app/storage/data.json', { action: 'write', content: '...' })
+read('yaar://apps/my-app/storage/data.json')
+list('yaar://apps/my-app/storage/')
+delete('yaar://apps/my-app/storage/data.json')
+```

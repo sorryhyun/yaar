@@ -154,7 +154,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           if (!listResult.success) return error(listResult.error!);
           return okJson(listResult.entries ?? []);
         }
-        const result = await storageRead(prefixedPath, { raw: true });
+        const result = await storageRead(prefixedPath);
         if (!result.success) return error(result.error!);
         // Images / PDFs — return base64 content items
         if (result.images?.length) {

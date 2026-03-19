@@ -8,7 +8,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ResourceRegistry } from './uri-registry.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { getActiveSession } from './utils.js';
+import { getActiveSession, formatBatchResults } from './utils.js';
+import { expandBraceUri } from '@yaar/shared';
 import { registerConfigHandlers } from './config.js';
 import { registerStorageHandlers } from './storage.js';
 import { registerWindowHandlers } from './window.js';
@@ -66,10 +67,24 @@ export function initRegistry(): ResourceRegistry {
 
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
-  const [verb, uri, payload] = args;
-  recordVerbCall(verb, uri, payload);
-  const result = await reg.execute(...args);
-  return { ...result };
+  const [verb, uri, payload, readOptions] = args;
+  const expanded = expandBraceUri(uri);
+
+  if (expanded.length === 1) {
+    // Normal single-URI path
+    recordVerbCall(verb, uri, payload);
+    const result = await reg.execute(...args);
+    return { ...result };
+  }
+
+  // Multi-URI: execute all in parallel, format combined result
+  const settled = await Promise.allSettled(
+    expanded.map((u: string) => {
+      recordVerbCall(verb, u, payload);
+      return reg.execute(verb, u, payload, readOptions);
+    }),
+  );
+  return { ...formatBatchResults(expanded, settled) };
 };
 
 /** Register the 5 verb tools on an MCP server instance. */
@@ -80,7 +95,8 @@ export function registerVerbTools(server: McpServer): void {
     'describe',
     {
       description:
-        'Describe a yaar:// resource -- returns supported verbs, description, and invoke schema.',
+        'Describe a yaar:// resource -- returns supported verbs, description, and invoke schema. ' +
+        'URIs support brace expansion: yaar://storage/{a,b,c} describes all 3 at once.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to describe'),
       },
@@ -93,7 +109,8 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'Read the current value/state of a yaar:// resource. ' +
-        'For text files, optionally filter by line range or regex pattern.',
+        'For text files, optionally filter by line range or regex pattern. ' +
+        'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to read'),
         lines: z
@@ -117,7 +134,9 @@ export function registerVerbTools(server: McpServer): void {
   server.registerTool(
     'list',
     {
-      description: 'List child resources under a yaar:// URI.',
+      description:
+        'List child resources under a yaar:// URI. ' +
+        'URIs support brace expansion: yaar://storage/{dir1,dir2} lists both.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to list children of'),
       },
@@ -128,7 +147,9 @@ export function registerVerbTools(server: McpServer): void {
   server.registerTool(
     'invoke',
     {
-      description: 'Invoke an action on a yaar:// resource (create, update, trigger).',
+      description:
+        'Invoke an action on a yaar:// resource (create, update, trigger). ' +
+        'URIs support brace expansion: yaar://storage/{a,b} invokes on both.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to invoke'),
         payload: z
@@ -143,7 +164,9 @@ export function registerVerbTools(server: McpServer): void {
   server.registerTool(
     'delete',
     {
-      description: 'Delete a yaar:// resource.',
+      description:
+        'Delete a yaar:// resource. ' +
+        'URIs support brace expansion: yaar://storage/{a,b} deletes both.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to delete'),
       },
