@@ -55,7 +55,6 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   if (IS_BUNDLED_EXE) {
     await Promise.all([
       mkdir(join(PROJECT_ROOT, 'apps'), { recursive: true }),
-      mkdir(join(PROJECT_ROOT, 'sandbox'), { recursive: true }),
       mkdir(join(PROJECT_ROOT, 'config'), { recursive: true }),
     ]);
   }

@@ -28,9 +28,9 @@ export const providerRegistry: Record<ProviderType, ProviderInfo> = {
 };
 
 /**
- * Preference order for auto-selecting providers (codex first).
+ * Preference order for auto-selecting providers (claude first).
  */
-const PROVIDER_PREFERENCE: ProviderType[] = ['codex', 'claude'];
+const PROVIDER_PREFERENCE: ProviderType[] = ['claude', 'codex'];
 
 /**
  * Lightweight availability checkers per provider.
