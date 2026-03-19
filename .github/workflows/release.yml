@@ -32,6 +32,7 @@ jobs:
 
       - name: Sign Windows executable
         run: |
+          sudo apt-get install -y osslsigncode
           echo "${{ secrets.DEV_CERT_PFX }}" | base64 -d > dev-cert.pfx
           osslsigncode sign \
             -pkcs12 dev-cert.pfx \
