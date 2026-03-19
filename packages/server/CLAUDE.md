@@ -70,7 +70,7 @@ src/
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
-    └── browser/ pdf/ sandbox/ pick-directory.ts
+    └── browser/ pdf/ pick-directory.ts
 ```
 
 ## Architecture
