@@ -198,8 +198,6 @@ export async function doDeploy(
       await rm(join(appPath, 'protocol.json'), { force: true });
     }
 
-    actionEmitter.emitAction({ type: 'desktop.refreshApps' });
-
     const finalName = (metadata.name as string) ?? displayName;
     const finalIcon = (metadata.icon as string) ?? resolvedIcon;
 
@@ -229,6 +227,9 @@ export async function doDeploy(
         });
       }
     }
+
+    // Emit refreshApps AFTER shortcut changes are persisted to disk.
+    actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
     return { success: true, appId, name: finalName, icon: finalIcon };
   } catch (err) {

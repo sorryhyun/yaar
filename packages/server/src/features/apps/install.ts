@@ -120,8 +120,6 @@ export async function installApp(appId: string): Promise<VerbResult> {
     return error('Failed to move app to install directory.');
   }
 
-  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
-
   const apps = await listApps();
   const installed = apps.find((a) => a.id === appId);
   if (installed && installed.createShortcut !== false) {
@@ -133,6 +131,10 @@ export async function installApp(appId: string): Promise<VerbResult> {
     });
     actionEmitter.emitAction({ type: 'desktop.createShortcut', shortcut });
   }
+
+  // Emit refreshApps AFTER shortcut is persisted to disk, so the frontend
+  // fetch of /api/shortcuts (triggered by appsVersion bump) includes the new shortcut.
+  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
   return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
 }
@@ -148,12 +150,13 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
   const oldCredPath = join(getConfigDir(), 'credentials', `${appId}.json`);
   await unlink(oldCredPath).catch(() => {});
 
-  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
-
   const removed = await removeAppShortcut(appId);
   if (removed) {
     actionEmitter.emitAction({ type: 'desktop.removeShortcut', shortcutId: `app-${appId}` });
   }
+
+  // Emit refreshApps AFTER shortcut removal is persisted to disk.
+  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
   return ok(`Deleted app "${appId}" successfully.`);
 }
