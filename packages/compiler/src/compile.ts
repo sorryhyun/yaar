@@ -7,7 +7,12 @@
 
 import { mkdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { bundledLibraryPluginBun, cssFilePlugin, solidHtmlClosingTagPlugin } from './plugins.js';
+import {
+  bundledLibraryPluginBun,
+  cssFilePlugin,
+  solidHtmlClosingTagPlugin,
+  toForwardSlash,
+} from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
 import { getCompilerConfig } from './config.js';
 import {
@@ -126,7 +131,7 @@ function escapeHtml(text: string): string {
  */
 async function compileWithBun(entryPoint: string, minify: boolean): Promise<string> {
   const result = await Bun.build({
-    entrypoints: [entryPoint],
+    entrypoints: [toForwardSlash(entryPoint)],
     minify,
     format: 'esm',
     target: 'browser',

@@ -10,8 +10,15 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
+/**
+ * Normalize a file path to use forward slashes.
+ * On Windows, path.join/resolve produce backslashes which can cause
+ * Bun.build() plugin resolution failures ("AggregateError: Bundle failed").
+ */
+export const toForwardSlash = (p: string): string => p.replace(/\\/g, '/');
+
 /** Directory of this file — inside packages/compiler, where devDependencies are installed. */
-const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
+const PLUGIN_DIR = toForwardSlash(dirname(fileURLToPath(import.meta.url)));
 
 /**
  * Local shim files that wrap npm libraries with compatibility fixes.
@@ -19,8 +26,8 @@ const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
  * instead of the npm package directly.
  */
 const BUNDLED_SHIMS: Record<string, string> = {
-  anime: join(PLUGIN_DIR, 'shims', 'anime.ts'),
-  yaar: join(PLUGIN_DIR, 'shims', 'yaar.ts'),
+  anime: toForwardSlash(join(PLUGIN_DIR, 'shims', 'anime.ts')),
+  yaar: toForwardSlash(join(PLUGIN_DIR, 'shims', 'yaar.ts')),
 };
 
 /**
@@ -89,7 +96,7 @@ function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
     const browser = exportEntry.browser;
     if (browser) {
       const entry = typeof browser === 'string' ? browser : (browser.import ?? browser.default);
-      if (entry) return join(pkgDir, entry);
+      if (entry) return toForwardSlash(join(pkgDir, entry));
     }
 
     return null;
@@ -181,8 +188,8 @@ export function bundledLibraryPluginBun(): Bun.BunPlugin {
         }
 
         // Strategy 2: disk libs (dev exe) — bundled-libs/ next to executable
-        const exeDir = dirname(process.execPath);
-        const diskPath = join(exeDir, 'bundled-libs', `${libName}.js`);
+        const exeDir = toForwardSlash(dirname(process.execPath));
+        const diskPath = toForwardSlash(join(exeDir, 'bundled-libs', `${libName}.js`));
         const diskFile = Bun.file(diskPath);
         if (await diskFile.exists()) {
           const contents = await diskFile.text();
