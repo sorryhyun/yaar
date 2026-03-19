@@ -30,6 +30,19 @@ jobs:
       - name: Build Windows executable
         run: bun run build:exe:bundle
 
+      - name: Sign Windows executable
+        run: |
+          echo "${{ secrets.DEV_CERT_PFX }}" | base64 -d > dev-cert.pfx
+          osslsigncode sign \
+            -pkcs12 dev-cert.pfx \
+            -pass "${{ secrets.DEV_CERT_PASSWORD }}" \
+            -n "YAAR" \
+            -t http://timestamp.digicert.com \
+            -in dist/yaar.exe \
+            -out dist/yaar-signed.exe
+          mv dist/yaar-signed.exe dist/yaar.exe
+          rm dev-cert.pfx
+
       - name: Build Linux executable
         run: |
           bun run build:exe:bundle:linux
