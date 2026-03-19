@@ -9,11 +9,11 @@
  *   invoke('yaar://sessions/current/prompts', { action: 'request', ... })  → request user action
  */
 
-import type { OSAction } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { actionEmitter } from '../session/action-emitter.js';
 import { ok, error, assertUri, requireAction } from './utils.js';
+import { showNotification, dismissNotification } from '../features/user/notifications.js';
+import { askUser, requestUserInput } from '../features/user/prompts.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
   // ── yaar://sessions/current/notifications — show/manage notifications ──
@@ -36,16 +36,13 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       if (!payload?.title) {
         return error('"title" is required.');
       }
-      const id = (payload.id as string) || `notif-${Date.now().toString(36)}`;
-      const osAction: OSAction = {
-        type: 'notification.show',
-        id,
+      const result = showNotification({
+        id: payload.id as string | undefined,
         title: payload.title as string,
-        body: (payload.body as string) ?? '',
+        body: payload.body as string | undefined,
         icon: payload.icon as string | undefined,
-      };
-      actionEmitter.emitAction(osAction);
-      return ok(`Notification "${payload.title}" shown`);
+      });
+      return ok(result.message);
     },
   });
 
@@ -57,11 +54,7 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'session');
       if (!resolved.id) return error('Notification ID required.');
-      const osAction: OSAction = {
-        type: 'notification.dismiss',
-        id: resolved.id,
-      };
-      actionEmitter.emitAction(osAction);
+      dismissNotification(resolved.id);
       return ok(`Dismissed notification "${resolved.id}"`);
     },
   });
@@ -108,42 +101,25 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       const action = p.action as string;
 
       if (action === 'ask') {
-        if (!p.options || !Array.isArray(p.options) || p.options.length < 2) {
-          return error('"options" (array of at least 2) is required for "ask".');
-        }
-        const result = await actionEmitter.showUserPrompt({
+        const result = await askUser({
           title: p.title as string,
           message: p.message as string,
           options: p.options as Array<{ value: string; label: string; description?: string }>,
           multiSelect: p.multiSelect as boolean | undefined,
-          inputField: p.allowText ? { placeholder: 'Type your answer…' } : undefined,
-          allowDismiss: true,
+          allowText: p.allowText as boolean | undefined,
         });
-
-        if (result.dismissed) return error('User dismissed the prompt without answering.');
-
-        const parts: string[] = [];
-        if (result.selectedValues?.length)
-          parts.push(`Selected: ${result.selectedValues.join(', ')}`);
-        if (result.text) parts.push(`Text: ${result.text}`);
-        return ok(parts.join('\n') || 'No selection made.');
+        return result.success ? ok(result.result!) : error(result.error!);
       }
 
       if (action === 'request') {
-        const result = await actionEmitter.showUserPrompt({
+        const result = await requestUserInput({
           title: p.title as string,
           message: p.message as string,
-          inputField: {
-            label: p.inputLabel as string | undefined,
-            placeholder: p.inputPlaceholder as string | undefined,
-            type: p.multiline ? 'textarea' : 'text',
-          },
-          allowDismiss: true,
+          inputLabel: p.inputLabel as string | undefined,
+          inputPlaceholder: p.inputPlaceholder as string | undefined,
+          multiline: p.multiline as boolean | undefined,
         });
-
-        if (result.dismissed) return error('User dismissed the request without responding.');
-        if (!result.text) return error('User submitted an empty response.');
-        return ok(result.text);
+        return result.success ? ok(result.text!) : error(result.error!);
       }
 
       return error(`Unknown action "${action}". Use "ask" or "request".`);

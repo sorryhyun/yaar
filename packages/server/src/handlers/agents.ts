@@ -12,7 +12,8 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { getAgentId, getMonitorId } from '../agents/session.js';
 import { ok, okJson, error, getActivePool, requireAction } from './utils.js';
-import { SESSION_AGENT_PROFILE } from '../agents/profiles/index.js';
+import { executeSessionAction } from '../features/agents/session-actions.js';
+import { relayToMonitor } from '../features/agents/relay.js';
 
 function assertSessionAgents(resolved: ResolvedUri): asserts resolved is ResolvedSession {
   if (resolved.kind !== 'session' || (resolved as ResolvedSession).subKind !== 'agents')
@@ -116,41 +117,13 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           const pool = getPool();
           if (!pool) return error('Session not initialized.');
 
-          const agent = await pool.getOrCreateSessionAgent();
-          if (!agent) return error('Failed to create session agent — agent limit reached.');
-
-          // Build prompt from action
-          let prompt: string;
-          if (action === 'audit') {
-            prompt =
-              'Audit the current session. Read all monitor states, check for anomalies (stuck agents, excessive queues, conflicts), and report findings.';
-          } else if (action === 'coordinate') {
-            if (typeof payload!.plan !== 'string' || !payload!.plan)
-              return error('"plan" (string) is required for coordinate action.');
-            prompt = `Coordinate the following cross-monitor workflow:\n\n${payload!.plan}`;
-          } else {
-            if (typeof payload!.question !== 'string' || !payload!.question)
-              return error('"question" (string) is required for query action.');
-            prompt = payload!.question;
-          }
-
-          const role = `session-${action}-${Date.now()}`;
-          agent.currentRole = role;
-          agent.lastUsed = Date.now();
-
-          try {
-            await agent.session.handleMessage(prompt, {
-              role,
-              source: `yaar://monitors/0`, // Session agent is monitor-less; use monitor-0 for routing
-              messageId: role,
-              allowedTools: SESSION_AGENT_PROFILE.allowedTools,
-              systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
-            });
-          } finally {
-            agent.currentRole = null;
-          }
-
-          return ok(`Session agent completed "${action}" action.`);
+          const result = await executeSessionAction(pool, action, {
+            plan: payload!.plan as string | undefined,
+            question: payload!.question as string | undefined,
+          });
+          return result.success
+            ? ok(`Session agent completed "${action}" action.`)
+            : error(result.error!);
         }
       }
 
@@ -188,12 +161,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
 
         const agentId = getAgentId() ?? 'unknown';
         const monitorId = getMonitorId() ?? '0';
-        const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const content = `<relay from="${agentId}">\n${payload!.message}\n</relay>`;
-
-        pool
-          .handleTask({ type: 'monitor', messageId, content, monitorId })
-          .catch((err: unknown) => console.error('[relay_to_main] Failed:', err));
+        const messageId = relayToMonitor(pool, agentId, monitorId, payload!.message as string);
 
         return ok(`Relayed to monitor agent (messageId: ${messageId}).`);
       }

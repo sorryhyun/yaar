@@ -13,12 +13,17 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJson, error, getActiveSession } from './utils.js';
-import { configRead, configWrite } from '../storage/storage-manager.js';
 import { getSessionId, getMonitorId } from '../agents/session.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
-import { parseWindowKey } from '@yaar/shared';
 import { listSessions, readSessionTranscript } from '../logging/session-reader.js';
+import {
+  listMonitors,
+  getMonitorStatus,
+  controlMonitor,
+  disposeMonitor,
+} from '../features/session/monitors.js';
+import { memorize } from '../features/session/memorize.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -96,11 +101,8 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         if (typeof payload.content !== 'string' || !payload.content) {
           return error('"content" (string) is required for memorize.');
         }
-        const existing = await configRead('memory.md');
-        const current = existing.success ? (existing.content ?? '') : '';
-        const updated = current ? current.trimEnd() + '\n' + payload.content : payload.content;
-        const result = await configWrite('memory.md', updated + '\n');
-        if (!result.success) return error(`Failed to save memory: ${result.error}`);
+        const result = await memorize(payload.content);
+        if (!result.success) return error(result.error ?? 'Failed to save memory.');
         return ok(`Memorized: "${payload.content}"`);
       }
 
@@ -119,21 +121,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const pool = session.getPool();
       if (!pool) return error('Session not initialized.');
 
-      const monitorIds = pool.getMonitorAgentIds();
-      const allWindows = session.windowState.listWindows();
-
-      const monitors = monitorIds.map((id) => {
-        const windows = allWindows.filter((w) => {
-          const parsed = parseWindowKey(w.id);
-          return parsed?.monitorId === id;
-        });
-        return {
-          monitorId: id,
-          hasMonitorAgent: pool.hasMonitorAgent(id),
-          windowCount: windows.length,
-        };
-      });
-
+      const monitors = listMonitors(session, pool);
       return okJson({
         currentMonitorId: getMonitorId() ?? '0',
         monitors,
@@ -163,34 +151,9 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const pool = session.getPool();
       if (!pool) return error('Session not initialized.');
 
-      if (!pool.hasMonitorAgent(monitorId)) {
-        return error(`Monitor "${monitorId}" not found.`);
-      }
-
-      const allWindows = session.windowState.listWindows();
-      const windows = allWindows.filter((w) => {
-        const parsed = parseWindowKey(w.id);
-        return parsed?.monitorId === monitorId;
-      });
-
-      const agentPool = pool.agentPool;
-      const agent = agentPool.getMonitorAgent(monitorId);
-      const isBusy = agentPool.isMonitorAgentBusy(monitorId);
-      const isSuspended = pool.isMonitorSuspended(monitorId);
-
-      return okJson({
-        monitorId,
-        agent: agent
-          ? {
-              instanceId: agent.instanceId,
-              busy: isBusy,
-              currentRole: agent.currentRole,
-            }
-          : null,
-        suspended: isSuspended,
-        windowCount: windows.length,
-        windows: windows.map((w) => ({ id: w.id, title: w.title })),
-      });
+      const status = getMonitorStatus(session, pool, monitorId);
+      if (!status) return error(`Monitor "${monitorId}" not found.`);
+      return okJson(status);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -199,8 +162,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       if (!monitorId) return error('Monitor ID required.');
       if (!payload?.action) return error('Payload must include "action".');
 
-      const session = getActiveSession();
-      const pool = session.getPool();
+      const pool = getActiveSession().getPool();
       if (!pool) return error('Session not initialized.');
 
       if (!pool.hasMonitorAgent(monitorId)) {
@@ -208,29 +170,12 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       }
 
       const action = payload.action as string;
-
-      if (action === 'suspend') {
-        const success = pool.suspendMonitor(monitorId);
-        return success ? ok(`Monitor "${monitorId}" suspended.`) : error(`Failed to suspend.`);
+      if (action !== 'suspend' && action !== 'resume' && action !== 'interrupt') {
+        return error(`Unknown action "${action}". Supported: suspend, resume, interrupt.`);
       }
 
-      if (action === 'resume') {
-        const success = pool.resumeMonitor(monitorId);
-        return success
-          ? ok(`Monitor "${monitorId}" resumed.`)
-          : error(`Monitor "${monitorId}" is not suspended.`);
-      }
-
-      if (action === 'interrupt') {
-        const agent = pool.agentPool.getMonitorAgent(monitorId);
-        if (!agent || !agent.session.isRunning()) {
-          return error(`Monitor "${monitorId}" is not running.`);
-        }
-        await agent.session.interrupt();
-        return ok(`Monitor "${monitorId}" interrupted.`);
-      }
-
-      return error(`Unknown action "${action}". Supported: suspend, resume, interrupt.`);
+      const result = await controlMonitor(pool, monitorId, action);
+      return result.success ? ok(result.message) : error(result.message);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
@@ -245,7 +190,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         return error(`Monitor "${monitorId}" not found.`);
       }
 
-      await pool.removeMonitorAgent(monitorId);
+      await disposeMonitor(pool, monitorId);
       return ok(`Monitor "${monitorId}" disposed.`);
     },
   });

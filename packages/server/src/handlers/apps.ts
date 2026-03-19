@@ -31,7 +31,8 @@ import {
 import { resolvePath } from '../storage/storage-manager.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
-import { listApps, loadAppSkill } from '../features/apps/discovery.js';
+import { listApps } from '../features/apps/discovery.js';
+import { describeApp, loadAppSkillWithManifest } from '../features/apps/describe.js';
 import {
   storageRead,
   storageWrite,
@@ -115,31 +116,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const appId = extractIdFromUri(resolved.sourceUri, 'apps');
       if (!appId) return error('App ID required.');
 
-      const apps = await listApps();
-      const app = apps.find((a) => a.id === appId);
-      if (!app) return error(`App "${appId}" not found.`);
+      const result = await describeApp(appId);
+      if (!result) return error(`App "${appId}" not found.`);
 
-      const invokeActions: Record<string, string> = {
-        set_badge: 'Set badge count on app icon ({ count })',
-      };
-
-      // Build rich describe result
-      const result: Record<string, unknown> = {
-        uri: resolved.sourceUri,
-        name: app.name,
-        description: app.description,
-        icon: app.icon,
-        verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
-        invokeActions,
-      };
-
-      if (app.protocol) result.protocol = app.protocol;
-      if (app.permissions?.length) result.permissions = app.permissions;
-
-      // Append SKILL.md content
-      const skill = await loadAppSkill(appId);
-      if (skill) result.skill = skill;
-
+      result.uri = resolved.sourceUri;
       return okJson(result);
     },
 
@@ -178,50 +158,8 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const appId = extractIdFromUri(resolved.sourceUri, 'apps');
       if (!appId) return error('App ID required.');
 
-      const skill = await loadAppSkill(appId);
-      if (skill === null) return error(`No SKILL.md found for app "${appId}".`);
-
-      // Build up result starting with skill content
-      let result = skill;
-
-      // Append static protocol manifest if available
-      const apps = await listApps();
-      const app = apps.find((a) => a.id === appId);
-      if (app?.protocol) {
-        const sections: string[] = [];
-        const { state, commands } = app.protocol;
-        if (state && Object.keys(state).length) {
-          sections.push(
-            '### State\n' +
-              Object.entries(state)
-                .map(([k, v]) => `- \`${k}\` — ${v.description}`)
-                .join('\n'),
-          );
-        }
-        if (commands && Object.keys(commands).length) {
-          sections.push(
-            '### Commands\n' +
-              Object.entries(commands)
-                .map(([k, v]) => `- \`${k}\` — ${v.description}`)
-                .join('\n'),
-          );
-        }
-        if (sections.length) {
-          result += '\n\n## Protocol\n\n' + sections.join('\n\n');
-        }
-      }
-
-      // Append permissions section if the app declares URI permissions
-      if (app?.permissions?.length) {
-        const permissionsList = app.permissions
-          .map((p) => {
-            if (typeof p === 'string') return `- \`${p}\``;
-            const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
-            return `- \`${p.uri}\`${verbs}`;
-          })
-          .join('\n');
-        result += '\n\n## Permissions\n\n' + permissionsList;
-      }
+      const result = await loadAppSkillWithManifest(appId);
+      if (result === null) return error(`No SKILL.md found for app "${appId}".`);
 
       return ok(result);
     },

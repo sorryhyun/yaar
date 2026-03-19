@@ -4,7 +4,7 @@
 
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { rm, unlink, mkdir } from 'fs/promises';
+import { rm, unlink, mkdir, rename } from 'fs/promises';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -114,8 +114,9 @@ export async function installApp(appId: string): Promise<VerbResult> {
     await rm(appDir, { recursive: true, force: true });
   }
   await mkdir(join(appDir, '..'), { recursive: true });
-  const mvProc = Bun.spawnSync(['mv', stagingDir, appDir]);
-  if (mvProc.exitCode !== 0) {
+  try {
+    await rename(stagingDir, appDir);
+  } catch {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
     return error('Failed to move app to install directory.');
   }
