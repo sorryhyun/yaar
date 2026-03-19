@@ -210,6 +210,45 @@ export class ContextPool implements PoolContext {
     }
   }
 
+  // ── Monitor suspend/resume ──────────────────────────────────────────
+
+  suspendMonitor(monitorId: string): boolean {
+    if (!this.agentPool.hasMonitorAgent(monitorId)) return false;
+    const queue = this.getOrCreateMonitorQueue(monitorId);
+    queue.suspend();
+    console.log(`[ContextPool] Suspended monitor ${monitorId}`);
+    return true;
+  }
+
+  resumeMonitor(monitorId: string): boolean {
+    const queue = this.monitorQueues.get(monitorId);
+    if (!queue || !queue.isSuspended()) return false;
+    queue.resume();
+    console.log(`[ContextPool] Resumed monitor ${monitorId}`);
+    // Drain any pending tasks
+    this.monitorProcessor
+      .processMonitorQueue(monitorId)
+      .catch((err) => console.error(`[ContextPool] Error draining queue after resume:`, err));
+    return true;
+  }
+
+  isMonitorSuspended(monitorId: string): boolean {
+    const queue = this.monitorQueues.get(monitorId);
+    return queue?.isSuspended() ?? false;
+  }
+
+  // ── Session agent ─────────────────────────────────────────────────
+
+  async getOrCreateSessionAgent(): Promise<import('./agent-pool.js').PooledAgent | null> {
+    const existing = this.agentPool.getSessionAgent();
+    if (existing) return existing;
+    return this.agentPool.createSessionAgent();
+  }
+
+  async disposeSessionAgent(): Promise<void> {
+    await this.agentPool.disposeSessionAgent();
+  }
+
   // ── Inflight tracking ──────────────────────────────────────────────
 
   private inflightEnter(): void {
@@ -356,6 +395,7 @@ export class ContextPool implements PoolContext {
     monitorAgent: boolean;
     appAgents: number;
     ephemeralAgents: number;
+    sessionAgent: boolean;
     monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
   } {
     const poolStats = this.agentPool.getStats();

@@ -46,7 +46,7 @@ export interface AgentTurnOptions {
   source: ContextSource;
   task: Task;
   prompt: string;
-  fp: Fingerprint;
+  fp?: Fingerprint;
   windowId?: string;
   canonicalAgent?: string;
   resumeSessionId?: string;
@@ -103,7 +103,7 @@ export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Pr
     });
 
     const recordedActions = agent.session.getRecordedActions();
-    ctx.reloadPolicy.maybeRecord(task, fp, recordedActions, opts.windowId);
+    if (fp) ctx.reloadPolicy.maybeRecord(task, fp, recordedActions, opts.windowId);
 
     await opts.onAfterRun?.(recordedActions);
 

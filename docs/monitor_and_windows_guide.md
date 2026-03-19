@@ -106,6 +106,39 @@ When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen befo
 
 `USER_MESSAGE`, `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, and `TOOL_PROGRESS` events all carry an optional `monitorId` field for routing.
 
+### Monitor control URIs
+
+Individual monitors can be inspected and controlled via `yaar://sessions/current/monitors/{id}`:
+
+| Verb | Effect |
+|------|--------|
+| `read` | Monitor detail: agent status (busy/idle), suspended state, queue depth, windows |
+| `invoke { action: "suspend" }` | Pause the monitor's queue — agent stays alive, new tasks enqueue but don't process |
+| `invoke { action: "resume" }` | Unpause and drain pending tasks |
+| `invoke { action: "interrupt" }` | Interrupt the monitor's current task |
+| `delete` | Dispose the monitor agent and clear its queue |
+
+Suspend/resume is implemented via `MonitorQueuePolicy.suspended` — when suspended, `dequeue()` returns nothing, so the queue accumulates tasks until resumed.
+
+### Session agent
+
+A **session agent** is a lazy, on-demand AI supervisor that sits above monitor agents. It provides cross-monitor visibility and coordination — auditing monitor states, intervening when agents are stuck, and orchestrating cross-monitor workflows.
+
+- **Lazy singleton** — created on first invocation, not at session start. Keyed as `sessionAgent` in `AgentPool`.
+- **No monitor** — the session agent doesn't belong to any monitor. It uses verb tools to read monitor states and invoke control actions.
+- **No windows** — communicates via tool results and relay messages only.
+- **Verb tools only** — same 5 generic `yaar://` verbs as other agents, no WebSearch or Task.
+
+Invoke via `yaar://sessions/current/agents/session`:
+
+| Action | Payload | Effect |
+|--------|---------|--------|
+| `audit` | — | Reviews all monitors, reports anomalies |
+| `coordinate` | `{ plan: "..." }` | Orchestrates cross-monitor work |
+| `query` | `{ question: "..." }` | Answers questions about session state |
+
+`read` returns status (exists, busy/idle), `delete` disposes the agent.
+
 ---
 
 ## Window

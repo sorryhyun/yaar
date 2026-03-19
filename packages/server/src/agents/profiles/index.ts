@@ -24,6 +24,9 @@ export { WEB_PROFILE } from './web.js';
 // Re-export orchestrator
 export { ORCHESTRATOR_PROMPT, getOrchestratorPrompt } from './orchestrator.js';
 
+// Re-export session agent profile
+export { SESSION_AGENT_PROFILE } from './session-agent.js';
+
 // ── Profile registry ──────────────────────────────────────────────────
 
 const profiles: Record<string, AgentProfile> = {

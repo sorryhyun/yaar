@@ -141,6 +141,115 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
+  // ── yaar://sessions/current/monitors/* — individual monitor operations ──
+  registry.register('yaar://sessions/current/monitors/*', {
+    description:
+      'Individual monitor. Read for status, invoke to suspend/resume/interrupt, delete to dispose.',
+    verbs: ['describe', 'read', 'invoke', 'delete'],
+    invokeSchema: {
+      type: 'object',
+      required: ['action'],
+      properties: {
+        action: { type: 'string', enum: ['suspend', 'resume', 'interrupt'] },
+      },
+    },
+
+    async read(resolved: ResolvedUri): Promise<VerbResult> {
+      const sessionResolved = resolved as ResolvedSession;
+      const monitorId = sessionResolved.id;
+      if (!monitorId) return error('Monitor ID required.');
+
+      const session = getActiveSession();
+      const pool = session.getPool();
+      if (!pool) return error('Session not initialized.');
+
+      if (!pool.hasMonitorAgent(monitorId)) {
+        return error(`Monitor "${monitorId}" not found.`);
+      }
+
+      const allWindows = session.windowState.listWindows();
+      const windows = allWindows.filter((w) => {
+        const parsed = parseWindowKey(w.id);
+        return parsed?.monitorId === monitorId;
+      });
+
+      const agentPool = pool.agentPool;
+      const agent = agentPool.getMonitorAgent(monitorId);
+      const isBusy = agentPool.isMonitorAgentBusy(monitorId);
+      const isSuspended = pool.isMonitorSuspended(monitorId);
+
+      return okJson({
+        monitorId,
+        agent: agent
+          ? {
+              instanceId: agent.instanceId,
+              busy: isBusy,
+              currentRole: agent.currentRole,
+            }
+          : null,
+        suspended: isSuspended,
+        windowCount: windows.length,
+        windows: windows.map((w) => ({ id: w.id, title: w.title })),
+      });
+    },
+
+    async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      const sessionResolved = resolved as ResolvedSession;
+      const monitorId = sessionResolved.id;
+      if (!monitorId) return error('Monitor ID required.');
+      if (!payload?.action) return error('Payload must include "action".');
+
+      const session = getActiveSession();
+      const pool = session.getPool();
+      if (!pool) return error('Session not initialized.');
+
+      if (!pool.hasMonitorAgent(monitorId)) {
+        return error(`Monitor "${monitorId}" not found.`);
+      }
+
+      const action = payload.action as string;
+
+      if (action === 'suspend') {
+        const success = pool.suspendMonitor(monitorId);
+        return success ? ok(`Monitor "${monitorId}" suspended.`) : error(`Failed to suspend.`);
+      }
+
+      if (action === 'resume') {
+        const success = pool.resumeMonitor(monitorId);
+        return success
+          ? ok(`Monitor "${monitorId}" resumed.`)
+          : error(`Monitor "${monitorId}" is not suspended.`);
+      }
+
+      if (action === 'interrupt') {
+        const agent = pool.agentPool.getMonitorAgent(monitorId);
+        if (!agent || !agent.session.isRunning()) {
+          return error(`Monitor "${monitorId}" is not running.`);
+        }
+        await agent.session.interrupt();
+        return ok(`Monitor "${monitorId}" interrupted.`);
+      }
+
+      return error(`Unknown action "${action}". Supported: suspend, resume, interrupt.`);
+    },
+
+    async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      const sessionResolved = resolved as ResolvedSession;
+      const monitorId = sessionResolved.id;
+      if (!monitorId) return error('Monitor ID required.');
+
+      const pool = getActiveSession().getPool();
+      if (!pool) return error('Session not initialized.');
+
+      if (!pool.hasMonitorAgent(monitorId)) {
+        return error(`Monitor "${monitorId}" not found.`);
+      }
+
+      await pool.removeMonitorAgent(monitorId);
+      return ok(`Monitor "${monitorId}" disposed.`);
+    },
+  });
+
   // ── yaar://sessions/ — list all sessions ──
   registry.register('yaar://sessions/', {
     description: 'All sessions. List to see past sessions, read a specific one by ID.',

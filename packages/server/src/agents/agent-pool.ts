@@ -42,6 +42,9 @@ export class AgentPool {
   /** Persistent per-app agents, keyed by appId. */
   private appAgents = new Map<string, PooledAgent>();
 
+  /** Session agent — lazy singleton for cross-monitor oversight. */
+  private sessionAgent: PooledAgent | null = null;
+
   /** Ephemeral agents currently in-flight (disposed after task). */
   private ephemeralAgents = new Set<PooledAgent>();
 
@@ -276,6 +279,61 @@ export class AgentPool {
     console.log(`[AgentPool] App agent disposed for ${appId}: ${agent.instanceId}`);
   }
 
+  // ── Session agent ────────────────────────────────────────────────
+
+  /**
+   * Create the session agent (lazy singleton for cross-monitor oversight).
+   */
+  async createSessionAgent(): Promise<PooledAgent | null> {
+    if (this.sessionAgent) return this.sessionAgent;
+
+    const provider = await acquireWarmProvider();
+    const agent = await this.createAgentCore(provider ?? undefined);
+    if (!agent) {
+      if (provider) await provider.dispose();
+      return null;
+    }
+
+    this.sessionAgent = agent;
+    console.log(`[AgentPool] Session agent created: ${agent.instanceId}`);
+    return agent;
+  }
+
+  /**
+   * Get the session agent (null if not created).
+   */
+  getSessionAgent(): PooledAgent | null {
+    return this.sessionAgent;
+  }
+
+  /**
+   * Check if the session agent exists.
+   */
+  hasSessionAgent(): boolean {
+    return this.sessionAgent !== null;
+  }
+
+  /**
+   * Dispose the session agent.
+   */
+  async disposeSessionAgent(): Promise<void> {
+    const agent = this.sessionAgent;
+    if (!agent) return;
+
+    this.sessionAgent = null;
+    this.agentIds.delete(agent.instanceId);
+    getSessionHub().unregisterAgent(agent.instanceId);
+    if (agent.session.isRunning()) {
+      await agent.session.interrupt();
+    }
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
+    console.log(`[AgentPool] Session agent disposed: ${agent.instanceId}`);
+  }
+
   /**
    * Check if an agent with the given instanceId exists in this pool.
    */
@@ -331,6 +389,7 @@ export class AgentPool {
    * Interrupt all running agents (monitor, app, ephemeral).
    */
   async interruptAll(): Promise<void> {
+    if (this.sessionAgent) await this.sessionAgent.session.interrupt();
     for (const agent of this.monitorAgents.values()) {
       await agent.session.interrupt();
     }
@@ -346,6 +405,11 @@ export class AgentPool {
    * Interrupt a specific agent by its current role.
    */
   async interruptByRole(role: string): Promise<boolean> {
+    // Check session agent
+    if (this.sessionAgent?.currentRole === role) {
+      await this.sessionAgent.session.interrupt();
+      return true;
+    }
     // Check monitor agents
     for (const agent of this.monitorAgents.values()) {
       if (agent.currentRole === role) {
@@ -374,6 +438,7 @@ export class AgentPool {
    * Check if any agent has a role starting with the given prefix.
    */
   hasRolePrefix(prefix: string): boolean {
+    if (this.sessionAgent?.currentRole?.startsWith(prefix)) return true;
     for (const agent of this.monitorAgents.values()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
@@ -399,6 +464,7 @@ export class AgentPool {
     monitorAgents: number;
     appAgents: number;
     ephemeralAgents: number;
+    sessionAgent: boolean;
   } {
     let total = 0;
     let idle = 0;
@@ -413,6 +479,7 @@ export class AgentPool {
       }
     };
 
+    if (this.sessionAgent) countAgent(this.sessionAgent);
     for (const agent of this.monitorAgents.values()) countAgent(agent);
     for (const agent of this.appAgents.values()) countAgent(agent);
     for (const agent of this.ephemeralAgents) countAgent(agent);
@@ -425,6 +492,7 @@ export class AgentPool {
       monitorAgents: this.monitorAgents.size,
       appAgents: this.appAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
+      sessionAgent: this.sessionAgent !== null,
     };
   }
 
@@ -437,6 +505,7 @@ export class AgentPool {
     const limiter = getAgentLimiter();
     const allAgents: PooledAgent[] = [];
 
+    if (this.sessionAgent) allAgents.push(this.sessionAgent);
     for (const agent of this.monitorAgents.values()) allAgents.push(agent);
     for (const agent of this.appAgents.values()) allAgents.push(agent);
     for (const agent of this.ephemeralAgents) allAgents.push(agent);
@@ -452,6 +521,7 @@ export class AgentPool {
       limiter.release();
     }
 
+    this.sessionAgent = null;
     this.monitorAgents.clear();
     this.appAgents.clear();
     this.ephemeralAgents.clear();

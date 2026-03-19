@@ -34,6 +34,28 @@ export class MonitorTaskProcessor {
   }
 
   private async queueMonitorTaskInner(task: Task, monitorId: string): Promise<void> {
+    // If monitor is suspended, just enqueue without attempting to process
+    const suspendQueue = this.ctx.getOrCreateMonitorQueue(monitorId);
+    if (suspendQueue.isSuspended()) {
+      if (!suspendQueue.canEnqueue()) {
+        await this.ctx.sendEvent({
+          type: ServerEventType.ERROR,
+          error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Monitor is suspended.`,
+        });
+        return;
+      }
+      const position = suspendQueue.enqueue(task);
+      console.log(
+        `[ContextPool] Monitor ${monitorId} is suspended — queued task ${task.messageId}, queue size: ${position}`,
+      );
+      await this.ctx.sendEvent({
+        type: ServerEventType.MESSAGE_QUEUED,
+        messageId: task.messageId,
+        position,
+      });
+      return;
+    }
+
     if (!this.ctx.agentPool.isMonitorAgentBusy(monitorId)) {
       // Monitor agent idle → process directly
       await this.processMonitorTask(this.ctx.agentPool.getMonitorAgent(monitorId)!, task);

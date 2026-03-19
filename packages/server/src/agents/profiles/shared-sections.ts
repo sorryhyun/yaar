@@ -24,7 +24,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\` | read, invoke, delete |
-| \`yaar://sessions/\` | \`yaar://sessions/\`, \`yaar://sessions/{id}\`, \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/context\` | read, invoke, list |
+| \`yaar://sessions/\` | \`yaar://sessions/\`, \`yaar://sessions/{id}\`, \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/monitors/{id}\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |

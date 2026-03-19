@@ -33,7 +33,7 @@ src/
 ├── session/              # LiveSession, SessionHub, BroadcastCenter, ActionEmitter, WindowStateRegistry, types
 ├── websocket/            # WebSocket server + connection registry
 ├── agents/               # Agent lifecycle, pooling, context management
-│   ├── agent-pool.ts     # AgentPool — per-monitor and app agent registry
+│   ├── agent-pool.ts     # AgentPool — per-monitor, app, and session agent registry
 │   ├── context-pool.ts   # ContextPool — unified task orchestration
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
@@ -85,6 +85,7 @@ SessionHub (singleton registry)
     ├── ReloadCache                                 ← fingerprint-based action caching
     └── ContextPool (unified pool)
         ├── AgentPool
+        │   ├── Session Agent: PooledAgent | null            ← lazy singleton, cross-monitor oversight
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
         │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app

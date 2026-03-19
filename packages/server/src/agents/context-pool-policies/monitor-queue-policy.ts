@@ -9,9 +9,22 @@ export class MonitorQueuePolicy {
   private readonly maxQueueSize: number;
   private queue: QueuedTask[] = [];
   private processing = false;
+  private suspended = false;
 
   constructor(maxQueueSize: number) {
     this.maxQueueSize = maxQueueSize;
+  }
+
+  suspend(): void {
+    this.suspended = true;
+  }
+
+  resume(): void {
+    this.suspended = false;
+  }
+
+  isSuspended(): boolean {
+    return this.suspended;
   }
 
   canEnqueue(): boolean {
@@ -25,6 +38,7 @@ export class MonitorQueuePolicy {
   }
 
   dequeue(): QueuedTask | undefined {
+    if (this.suspended) return undefined;
     return this.queue.shift();
   }
 

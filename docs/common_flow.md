@@ -80,6 +80,17 @@ A temporary agent spawned by the monitor agent to handle delegated work. Forks t
 - **Lifecycle**: Created → process objective → push to InteractionTimeline → disposed
 - **Parallel**: Multiple task agents can run concurrently for independent sub-tasks
 
+### 5. Session Agent
+
+A lazy, on-demand supervisor for cross-monitor oversight and coordination. Singleton per session, created on first invocation via `yaar://sessions/current/agents/session`.
+
+- **Role**: `session-{action}-{timestamp}`
+- **Creation**: Lazy — created when first invoked (audit, coordinate, or query). Not present at session start.
+- **Context**: Maintains provider session continuity across invocations (like monitor agents)
+- **Tools**: Verb tools only (describe, read, list, invoke, delete) — no WebSearch, no Task
+- **Scope**: Session-wide. Can read all monitor states and invoke control actions (suspend/resume/interrupt)
+- **No monitor**: Doesn't belong to any monitor. No windows — communicates via tool results and relay messages.
+
 ## Monitor Agent ↔ App Agent: Division of Responsibility
 
 The monitor agent and app agents have complementary roles with a clear boundary: the monitor agent is the **generalist orchestrator** that knows the user and conversation; app agents are **specialist operators** that know their app's internal state and commands.
