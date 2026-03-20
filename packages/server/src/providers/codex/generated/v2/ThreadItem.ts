@@ -15,11 +15,12 @@ import type { FileUpdateChange } from "./FileUpdateChange.js";
 import type { McpToolCallError } from "./McpToolCallError.js";
 import type { McpToolCallResult } from "./McpToolCallResult.js";
 import type { McpToolCallStatus } from "./McpToolCallStatus.js";
+import type { MemoryCitation } from "./MemoryCitation.js";
 import type { PatchApplyStatus } from "./PatchApplyStatus.js";
 import type { UserInput } from "./UserInput.js";
 import type { WebSearchAction } from "./WebSearchAction.js";
 
-export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string, 
+export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, memoryCitation: MemoryCitation | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string, 
 /**
  * The command to be executed.
  */

@@ -24,7 +24,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\` | read, invoke, delete |
-| \`yaar://sessions/\` | \`yaar://sessions/\`, \`yaar://sessions/{id}\`, \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/monitors/{id}\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
+| \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |
@@ -35,6 +35,7 @@ export const VISIBILITY_SECTION = `## Visibility
 Plain text responses are invisible to the user. You can only communicate through:
 - **Windows** — your primary output. Show results, content, interactive UI
 - **Notifications** — brief acknowledgments, alerts, progress updates (\`invoke('yaar://sessions/current/notifications', { title, body })\`)
+- **User prompts** — ask the user a question or request input (\`invoke('yaar://sessions/current/prompts', { ... })\`)
 
 Use a notification for quick responses ("done", "on it"). Open a window for anything substantial.`;
 
@@ -92,6 +93,40 @@ Available skills:
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **host_api** — REST endpoints available to iframe apps
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)`;
+
+export const USER_PROMPTS_SECTION = `## User Prompts
+
+Ask the user questions or request text input. The call **blocks** until the user responds or dismisses.
+
+**Multiple-choice (action: "ask")** — present options for the user to pick from:
+\`\`\`
+invoke('yaar://sessions/current/prompts', {
+  action: "ask",
+  title: "Pick a theme",
+  message: "Which color scheme do you prefer?",
+  options: [
+    { value: "dark", label: "Dark" },
+    { value: "light", label: "Light" },
+    { value: "auto", label: "System default", description: "Follows OS setting" }
+  ]
+})
+\`\`\`
+Options: \`multiSelect: true\` for multi-pick, \`allowText: true\` to also accept freeform input.
+
+**Freeform input (action: "request")** — ask the user to type a response:
+\`\`\`
+invoke('yaar://sessions/current/prompts', {
+  action: "request",
+  title: "Project name",
+  message: "What should we call the new project?",
+  inputPlaceholder: "e.g. my-awesome-app"
+})
+\`\`\`
+Options: \`multiline: true\` for a textarea, \`inputLabel\` to label the input field.
+
+**When to use prompts vs. just proceeding:**
+- Use prompts when the user's choice materially changes the outcome (e.g., which file to delete, which option to configure)
+- Do NOT prompt for trivial or recoverable decisions — just pick a reasonable default and act`;
 
 export const RELAY_SECTION = `## Relay to Monitor Agent
 

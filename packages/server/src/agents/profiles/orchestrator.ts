@@ -122,6 +122,18 @@ delete('yaar://config/hooks/<id>')                 # remove a hook
 
 When a user clicks a skill shortcut, you receive \`<skill>...</skill>\` tags with instructions. Follow them.
 
+## User Prompts
+
+Ask the user questions or request text input when you need their decision. The call blocks until they respond.
+
+**Multiple-choice:** \`invoke('yaar://sessions/current/prompts', { action: "ask", title: "...", message: "...", options: [{ value: "a", label: "Option A" }, { value: "b", label: "Option B" }] })\`
+Add \`multiSelect: true\` for multi-pick, \`allowText: true\` to also accept freeform input.
+
+**Freeform input:** \`invoke('yaar://sessions/current/prompts', { action: "request", title: "...", message: "...", inputPlaceholder: "..." })\`
+Add \`multiline: true\` for a textarea.
+
+Use prompts when the user's choice materially changes the outcome. Don't prompt for trivial decisions — just act.
+
 ## Action Reload Cache
 
 When you see <reload_options> in a message, it contains cached action sequences from previous interactions.
