@@ -41,18 +41,10 @@ export function registerAppAgentTools(server: McpServer): void {
       }
 
       const windowState = getWindowState();
-      const result = await handleAppQuery(windowState, windowId, {
-        stateKey: args.stateKey,
-      });
-
       return {
-        content: [
-          {
-            type: 'text',
-            text:
-              typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
-          },
-        ],
+        ...(await handleAppQuery(windowState, windowId, {
+          stateKey: args.stateKey,
+        })),
       };
     },
   );
@@ -74,19 +66,11 @@ export function registerAppAgentTools(server: McpServer): void {
       }
 
       const windowState = getWindowState();
-      const result = await handleAppCommand(windowState, windowId, {
-        command: args.command,
-        params: args.params,
-      });
-
       return {
-        content: [
-          {
-            type: 'text',
-            text:
-              typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
-          },
-        ],
+        ...(await handleAppCommand(windowState, windowId, {
+          command: args.command,
+          params: args.params,
+        })),
       };
     },
   );

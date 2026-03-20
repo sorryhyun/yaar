@@ -21,6 +21,8 @@ You have three tools:
 
 Always typecheck and compile before deploying. Fix errors iteratively — read diagnostics, edit the file, re-check.
 
+**Testing after fixes:** If you've made a complex fix or aren't confident in the change, use `relay()` to ask the monitor agent to test the feature (e.g., open the app, interact with it, verify behavior). Don't silently deploy uncertain fixes — let the orchestrator validate them.
+
 ## Cloned Projects
 
 When you clone an app via `command("cloneApp", { appId })`, it creates a **temporary copy** in devtools storage. After you're done editing and deploying, always delete the cloned project to avoid storage bloat. If you see stale projects from previous sessions via `query("projects")`, delete them before starting new work.

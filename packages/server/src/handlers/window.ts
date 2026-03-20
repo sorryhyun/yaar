@@ -14,7 +14,15 @@ import { parseWindowKey } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
-import { ok, okJson, error, getActiveSession, assertUri, requireAction } from './utils.js';
+import {
+  ok,
+  okJson,
+  okWithImages,
+  error,
+  getActiveSession,
+  assertUri,
+  requireAction,
+} from './utils.js';
 import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
@@ -22,6 +30,7 @@ import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
 import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
 import { getMonitorId } from '../agents/session.js';
+import { actionEmitter } from '../session/action-emitter.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -182,6 +191,21 @@ export function registerWindowHandlers(
         lockedBy: win.lockedBy,
         ...formatWindowFlags(win),
       };
+
+      // For iframe windows, capture a screenshot so the agent can see what's rendered
+      if (win.content.renderer === 'iframe') {
+        const feedback = await actionEmitter.emitActionWithFeedback(
+          { type: 'window.capture', windowId: resolved.windowId },
+          5000,
+        );
+        if (feedback?.success && feedback.imageData) {
+          // Omit raw content (compiled HTML blob) — the screenshot is more useful
+          const { content: _content, ...infoWithoutContent } = windowInfo;
+          return okWithImages(JSON.stringify(infoWithoutContent, null, 2), [
+            { data: feedback.imageData, mimeType: 'image/webp' },
+          ]);
+        }
+      }
 
       return okJson(windowInfo);
     },
