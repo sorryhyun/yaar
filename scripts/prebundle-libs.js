@@ -15,11 +15,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const outDir = join(rootDir, 'dist', 'bundled-libs');
 
-// Import the canonical map from @yaar/compiler (Bun can resolve .ts directly)
-const { BUNDLED_LIBRARIES: _allLibs } = await import('../packages/compiler/src/plugins.ts');
-// Filter out 'yaar' (it's a shim, not an npm package to pre-bundle)
+// Import the canonical map and shims from @yaar/compiler (Bun can resolve .ts directly)
+const { BUNDLED_LIBRARIES: _allLibs, BUNDLED_SHIMS } = await import('../packages/compiler/src/plugins.ts');
+// Filter out shim-based libraries (bundled separately below)
 const BUNDLED_LIBRARIES = Object.fromEntries(
-  Object.entries(_allLibs).filter(([k]) => k !== 'yaar'),
+  Object.entries(_allLibs).filter(([k]) => !(k in BUNDLED_SHIMS)),
 );
 
 mkdirSync(outDir, { recursive: true });
@@ -77,6 +77,29 @@ const failed = results.filter(r => r.status === 'rejected' || (r.status === 'ful
 if (failed.length > 0) {
   console.error(`\n${failed.length} library(ies) failed to bundle.`);
   process.exit(1);
+}
+
+// Bundle shim-based libraries (e.g. yaar) — these are local .ts files, not npm packages
+for (const [name, shimPath] of Object.entries(BUNDLED_SHIMS)) {
+  const outfile = join(outDir, `${name}.js`);
+  try {
+    const result = await Bun.build({
+      entrypoints: [shimPath],
+      minify: true,
+      format: 'esm',
+      target: 'browser',
+    });
+    if (!result.success) {
+      const errors = result.logs.filter(l => l.level === 'error').map(l => l.message || String(l));
+      throw new Error(errors.join('\n') || `Bun.build() failed for shim ${name}`);
+    }
+    mkdirSync(dirname(outfile), { recursive: true });
+    await Bun.write(outfile, result.outputs[0]);
+    console.log(`  ✓ ${name} (shim)`);
+  } catch (err) {
+    console.error(`  ✗ ${name} (shim): ${err.message}`);
+    process.exit(1);
+  }
 }
 
 console.log(`\nAll libraries bundled to ${outDir}`);

@@ -228,9 +228,15 @@ export async function compileTypeScript(
       outputPath,
     };
   } catch (err) {
+    let errors: string[];
+    if (err instanceof AggregateError && err.errors?.length) {
+      errors = err.errors.map((e: unknown) => String(e));
+    } else {
+      errors = [String(err)];
+    }
     return {
       success: false,
-      errors: [String(err)],
+      errors,
     };
   }
 }

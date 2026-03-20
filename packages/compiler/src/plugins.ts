@@ -25,7 +25,7 @@ const PLUGIN_DIR = toForwardSlash(dirname(fileURLToPath(import.meta.url)));
  * When a @bundled/* import matches a shim, it resolves to the shim file
  * instead of the npm package directly.
  */
-const BUNDLED_SHIMS: Record<string, string> = {
+export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(PLUGIN_DIR, 'shims', 'anime.ts')),
   yaar: toForwardSlash(join(PLUGIN_DIR, 'shims', 'yaar.ts')),
 };
@@ -127,17 +127,18 @@ export function bundledLibraryPluginBun(): Bun.BunPlugin {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
-        // Strategy 0: local shim file (wraps npm package with compat fixes)
-        if (BUNDLED_SHIMS[libName]) {
-          return { path: BUNDLED_SHIMS[libName] };
-        }
-
-        // Strategy 1: embedded libs (production exe)
+        // Strategy 1: embedded libs (production exe) — checked first because
+        // shim source paths don't exist inside the bundled executable.
         const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
           return { path: libName, namespace: NAMESPACE };
+        }
+
+        // Strategy 0: local shim file (wraps npm package with compat fixes)
+        if (BUNDLED_SHIMS[libName]) {
+          return { path: BUNDLED_SHIMS[libName] };
         }
 
         // Strategy 3: node_modules (dev) — first try browser-aware resolution
@@ -215,7 +216,7 @@ export function cssFilePlugin(): Bun.BunPlugin {
     name: 'css-file-loader',
     setup(build: Bun.PluginBuilder) {
       build.onLoad({ filter: /\.css$/ }, async (args: Bun.OnLoadArgs) => {
-        const css = await Bun.file(args.path).text();
+        const css = await Bun.file(toForwardSlash(args.path)).text();
         const escaped = css.replace(/`/g, '\\`').replace(/\$/g, '\\$');
         return {
           contents: `{const s=document.createElement('style');s.textContent=\`${escaped}\`;document.head.appendChild(s);}`,
@@ -243,11 +244,12 @@ export function solidHtmlClosingTagPlugin(): Bun.BunPlugin {
     name: 'solid-html-closing-tag-fix',
     setup(build: Bun.PluginBuilder) {
       build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
-        const text = await Bun.file(args.path).text();
+        const filePath = toForwardSlash(args.path);
+        const text = await Bun.file(filePath).text();
         if (!text.includes('</${')) return undefined; // fast skip
         return {
           contents: text.replace(/<\/\$\{([^}]+)\}>/g, '</>'),
-          loader: args.path.endsWith('.tsx') ? 'tsx' : 'ts',
+          loader: filePath.endsWith('.tsx') ? 'tsx' : 'ts',
         };
       });
     },

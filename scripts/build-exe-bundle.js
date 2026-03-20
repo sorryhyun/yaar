@@ -83,10 +83,24 @@ console.log(`Embedding ${frontendFiles.length} frontend files into executable...
 const bundledLibsDir = join(rootDir, 'dist', 'bundled-libs');
 let bundledLibFiles = [];
 
+/** Recursively collect .js files, returning library names with subdirectory paths (e.g. "solid-js/html"). */
+function collectLibFiles(dir, prefix = '') {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const results = [];
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectLibFiles(full, prefix ? `${prefix}/${entry.name}` : entry.name));
+    } else if (entry.name.endsWith('.js')) {
+      const name = prefix ? `${prefix}/${basename(entry.name, '.js')}` : basename(entry.name, '.js');
+      results.push({ name, absPath: full });
+    }
+  }
+  return results;
+}
+
 if (existsSync(bundledLibsDir)) {
-  bundledLibFiles = readdirSync(bundledLibsDir)
-    .filter(f => f.endsWith('.js'))
-    .map(f => ({ name: basename(f, '.js'), absPath: join(bundledLibsDir, f) }));
+  bundledLibFiles = collectLibFiles(bundledLibsDir);
   console.log(`Embedding ${bundledLibFiles.length} bundled libraries...`);
 } else {
   console.warn('Warning: dist/bundled-libs/ not found. Run "bun run build:exe:libs" first.');
