@@ -99,7 +99,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       executable: 'bun',
       ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
       systemPrompt: systemPrompt ?? this.systemPrompt,
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: builtinTools,
