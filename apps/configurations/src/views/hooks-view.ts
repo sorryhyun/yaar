@@ -126,7 +126,7 @@ export function HooksView() {
               </div>
               <div>
                 <div class="field-label">Filter URI <span style="opacity:.6">(optional)</span></div>
-                <input class="y-input" style="width:100%" placeholder="yaar://sandbox/*"
+                <input class="y-input" style="width:100%" placeholder="yaar://apps/*"
                   value=${filterUri} onInput=${(e: InputEvent) => setFilterUri((e.target as HTMLInputElement).value)} />
               </div>
               <div>

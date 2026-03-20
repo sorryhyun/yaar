@@ -15,7 +15,7 @@ invoke('yaar://windows/ai-chat', {
 ```
 
 ## Source
-Source code is available in `src/` directory. Use `invoke('yaar://sandbox/', { action: "clone", uri: "yaar://apps/ai-chat" })` to copy source into a sandbox for reading or editing.
+Source code is available in `src/` directory. Use the devtools app to browse, edit, and compile the source.
 
 ## App Protocol
 

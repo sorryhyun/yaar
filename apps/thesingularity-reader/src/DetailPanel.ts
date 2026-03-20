@@ -60,7 +60,7 @@ export function DetailPanel() {
                 }}
                 title="브라우저 스크린셛으로 원본 보기"
               >
-                ${() => (showOriginal() ? '&#128247; 원본 보는 중' : '&#128247; 원본 보기')}
+                ${() => (showOriginal() ? '📷 원본 보는 중' : '📷 원본 보기')}
               </button>
               <a
                 href=${post.url}

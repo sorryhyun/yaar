@@ -21,13 +21,20 @@ export const toForwardSlash = (p: string): string => p.replace(/\\/g, '/');
 const PLUGIN_DIR = toForwardSlash(dirname(fileURLToPath(import.meta.url)));
 
 /**
+ * Shim source directory — always points to src/shims/ regardless of whether
+ * this code runs from src/ (dev) or dist/ (built). Shim files are .ts sources
+ * consumed by Bun.build(), so they must resolve to the original source location.
+ */
+const SHIMS_DIR = toForwardSlash(join(PLUGIN_DIR.replace(/\/dist$/, '/src'), 'shims'));
+
+/**
  * Local shim files that wrap npm libraries with compatibility fixes.
  * When a @bundled/* import matches a shim, it resolves to the shim file
  * instead of the npm package directly.
  */
 export const BUNDLED_SHIMS: Record<string, string> = {
-  anime: toForwardSlash(join(PLUGIN_DIR, 'shims', 'anime.ts')),
-  yaar: toForwardSlash(join(PLUGIN_DIR, 'shims', 'yaar.ts')),
+  anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
+  yaar: toForwardSlash(join(SHIMS_DIR, 'yaar.ts')),
 };
 
 /**

@@ -215,7 +215,6 @@ When building apps that use `yaar://` URIs (e.g., session-logs, storage browser)
 | `yaar://` | Session root — overview and namespace list |
 | `yaar://apps/` | App listing, skill loading, marketplace |
 | `yaar://storage/` | File storage |
-| `yaar://sandbox/` | Sandbox compilation artifacts |
 | `yaar://windows/` | Window management |
 | `yaar://config/` | Settings, hooks, app config |
 | `yaar://browser/` | Browser automation |
@@ -286,6 +285,7 @@ Apps run in a **browser iframe sandbox**:
 - **Don't assume external servers are running** — Apps must be self-contained.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't use Unicode escape sequences** — Write actual characters, not `\uXXXX`.
+- **Don't use HTML entities inside `${}` expressions** — Solid sets interpolated strings as `textContent`, not `innerHTML`, so `&#128247;` renders as literal text. Use actual Unicode characters (e.g., `📷`) instead. HTML entities only work in static template text outside `${}`.
 
 ### Right Pattern for External Service Integration
 

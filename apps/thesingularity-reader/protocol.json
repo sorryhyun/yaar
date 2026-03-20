@@ -2,7 +2,7 @@
   "state": {},
   "commands": {
     "setRecommendations": {
-      "description": "AI \ubd84\uc11d \uacb0\uacfc\ub97c \uc571\uc5d0 \ubc18\uc601\ud569\ub2c8\ub2e4. topics\ub294 \ud604\uc7ac \ub728\ub294 \uc8fc\uc81c \ud0a4\uc6cc\ub4dc \ubaa9\ub85d(5~8\uac1c), bestPost\ub294 \uc624\ub298\uc758 \ubca0\uc2a4\ud2b8 \uac8c\uc2dc\ubb3c \ubc88\ud638\uc640 \ucd94\ucc9c \uc774\uc720",
+      "description": "AI 분석 결과를 앱에 반영합니다. topics는 현재 뜨는 주제 키워드 목록(5~8개), bestPost는 오늘의 베스트 게시물 번호와 추천 이유",
       "params": {
         "type": "object",
         "properties": {
@@ -11,19 +11,19 @@
             "items": {
               "type": "string"
             },
-            "description": "\ud604\uc7ac \ub728\ub294 \uc8fc\uc81c \ud0a4\uc6cc\ub4dc/\ubb38\uad6c \ubaa9\ub85d (5~8\uac1c)"
+            "description": "현재 뜨는 주제 키워드/문구 목록 (5~8개)"
           },
           "bestPost": {
             "type": "object",
-            "description": "\uc624\ub298\uc758 \ubca0\uc2a4\ud2b8 \uac8c\uc2dc\ubb3c (\ub531 1\uac1c)",
+            "description": "오늘의 베스트 게시물 (딱 1개)",
             "properties": {
               "num": {
                 "type": "string",
-                "description": "\uac8c\uc2dc\ubb3c \ubc88\ud638"
+                "description": "게시물 번호"
               },
               "reason": {
                 "type": "string",
-                "description": "AI \ucd94\ucc9c \uc774\uc720 (2~3\ubb38\uc7a5)"
+                "description": "AI 추천 이유 (2~3문장)"
               }
             },
             "required": ["num", "reason"]

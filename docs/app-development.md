@@ -180,6 +180,41 @@ Option B: Compiled app + AI-mediated API (for rich UI)
     invoke(uri, { action: 'app_command' }) → user actions from app to AI
 ```
 
+## Agent Prompt Customization
+
+Each app gets its own **app agent** when a user interacts with it. The agent's system prompt is built from files in the app's directory:
+
+| File | Role | When to use |
+|------|------|-------------|
+| `SKILL.md` | Appended to a generic base prompt | Most apps — add API docs, usage instructions, domain context |
+| `AGENTS.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
+
+**Priority:** `AGENTS.md` > `SKILL.md`. If both exist, only `AGENTS.md` is used. The `protocol.json` manifest (available state keys and commands) is always appended regardless.
+
+### SKILL.md (default)
+
+The agent gets a generic prompt ("You are an AI assistant for the X app...") with `SKILL.md` content appended under an "App Documentation" heading. Good for apps where the default 3-tool behavior (query, command, relay) is sufficient and you just need to add domain knowledge.
+
+### AGENTS.md (full control)
+
+The agent's entire system prompt is replaced with the contents of `AGENTS.md`. Use this when:
+- The agent needs a specific workflow (e.g., devtools: typecheck → compile → deploy)
+- You want to define anti-patterns, gotchas, or domain-specific rules
+- The generic prompt's behavior guidelines don't fit
+
+Since `AGENTS.md` replaces the base prompt, you must document the 3 available tools (`query`, `command`, `relay`) yourself if the agent needs to know about them.
+
+### Example structure
+
+```
+apps/my-app/
+├── AGENTS.md       # Full custom agent prompt (optional, advanced)
+├── SKILL.md        # App documentation (optional, simpler)
+├── app.json        # Metadata, permissions, protocol manifest
+├── index.html      # Compiled app (if compiled)
+└── src/            # Source code (if compiled)
+```
+
 ## App Types
 
 ### Compiled Apps

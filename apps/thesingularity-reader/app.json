@@ -1,6 +1,6 @@
 {
-  "icon": "\u26a1",
-  "name": "\ud2b9\uc774\uc810\uc774 \uc628\ub2e4",
+  "icon": "🔬",
+  "name": "특이점이 온다",
   "run": "index.html",
   "permissions": ["yaar://browser/"],
   "description": "Community feed with posts, comments, voting and PoW-backed write actions",

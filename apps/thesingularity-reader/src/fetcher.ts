@@ -160,6 +160,10 @@ export async function fetchPosts(): Promise<Post[]> {
       if (!titleEl) continue;
       const clone = titleEl.cloneNode(true) as Element;
       clone.querySelectorAll(META_SELECTORS).forEach(el => el.remove());
+      // 아이콘 요소(이미지·동영상·설문 등 텍스트를 가진 em/i 태그) 제거
+      clone.querySelectorAll('em, i, b').forEach(el => {
+        if (isMetaLine((el.textContent ?? '').trim())) el.remove();
+      });
       const text = (clone.textContent ?? '').trim();
       if (text && !isMetaLine(text)) {
         titleRaw = text;
@@ -171,9 +175,9 @@ export async function fetchPosts(): Promise<Post[]> {
     if (!titleRaw) {
       const aClone = aEl.cloneNode(true) as Element;
       aClone.querySelectorAll(META_SELECTORS).forEach(el => el.remove());
-      aClone.querySelectorAll('span, em').forEach(el => {
+      aClone.querySelectorAll('span, em, i, b').forEach(el => {
         const t = (el.textContent ?? '').trim();
-        if (/^조회/.test(t) || /^추천/.test(t)) el.remove();
+        if (/^조회/.test(t) || /^추천/.test(t) || isMetaLine(t)) el.remove();
       });
 
       const allLines = (aClone.textContent ?? '')
@@ -200,11 +204,16 @@ export async function fetchPosts(): Promise<Post[]> {
     let date = '';
     let category: string | undefined = categoryFromTitle || undefined;
 
-    const writerEl = li.querySelector('.gall-writer, .wr-name, .nickname, [class*="writer"]');
+    // DCinside: data-nick 속성을 가진 요소가 반드시 작성자 요소임 (제목·날짜 등 다른 요소에는 없음)
+    // [class*="writer"] / .nickname 처럼 범위가 넓은 셀렉터는 제목 요소를 오인식할 수 있으므로 사용하지 않음
+    const writerEl = li.querySelector('[data-nick]')
+      ?? li.querySelector('.gall-writer, .wr-name');
     const dateEl = li.querySelector('.num-date, .gall-date, [class*="date"]');
 
     if (writerEl) {
-      author = (writerEl.textContent ?? '').trim() || '익명';
+      const dataNick = writerEl.getAttribute('data-nick') ?? '';
+      // data-nick이 비어 있으면 익명; 있으면 실제 닉네임
+      author = dataNick || (writerEl.textContent ?? '').trim() || '익명';
     }
     if (dateEl) {
       date = (dateEl.textContent ?? '').trim();
