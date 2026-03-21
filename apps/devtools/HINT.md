@@ -1,0 +1,1 @@
+Use the devtools app for all app development tasks — creating, editing, compiling, and deploying YAAR apps. The devtools app agent is a specialist with direct access to the project filesystem, compiler, and type checker. Prefer routing app development work to devtools rather than handling it yourself.

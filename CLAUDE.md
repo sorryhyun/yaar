@@ -168,7 +168,7 @@ Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata
 
 When a user interacts with an app window, a **persistent app agent** is created (one per `appId`, reused across all windows of that app). App agents have only 3 tools: `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent).
 
-**Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices.
+**Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices. `HINT.md` is separate — its content is injected into the **monitor agent's** system prompt (not the app agent's), providing orchestration hints that auto-sync with app install/uninstall.
 
 Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (query/command/relay tools).
 

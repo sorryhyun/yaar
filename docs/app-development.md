@@ -188,8 +188,21 @@ Each app gets its own **app agent** when a user interacts with it. The agent's s
 |------|------|-------------|
 | `SKILL.md` | Appended to a generic base prompt | Most apps — add API docs, usage instructions, domain context |
 | `AGENTS.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
+| `HINT.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
 
 **Priority:** `AGENTS.md` > `SKILL.md`. If both exist, only `AGENTS.md` is used. The `protocol.json` manifest (available state keys and commands) is always appended regardless.
+
+### HINT.md (orchestrator context)
+
+Unlike `SKILL.md` and `AGENTS.md` which configure the **app agent**, `HINT.md` is injected into the **monitor (orchestrator) agent's** system prompt. This tells the orchestrator when to route tasks to the app. Hints auto-sync with installed apps — uninstalling the app removes the hint.
+
+Use this for app-dependent orchestration guidance that would otherwise go stale in a static system prompt. Example:
+
+```markdown
+Use the devtools app for all app development tasks. The devtools app agent
+is a specialist with direct access to the project filesystem, compiler,
+and type checker.
+```
 
 ### SKILL.md (default)
 
@@ -210,6 +223,7 @@ Since `AGENTS.md` replaces the base prompt, you must document the 3 available to
 apps/my-app/
 ├── AGENTS.md       # Full custom agent prompt (optional, advanced)
 ├── SKILL.md        # App documentation (optional, simpler)
+├── HINT.md         # Monitor agent routing hint (optional)
 ├── app.json        # Metadata, permissions, protocol manifest
 ├── index.html      # Compiled app (if compiled)
 └── src/            # Source code (if compiled)

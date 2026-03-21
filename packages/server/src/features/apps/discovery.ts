@@ -266,6 +266,42 @@ export async function loadAppSkill(appId: string): Promise<string | null> {
 }
 
 /**
+ * Load HINT.md for a specific app.
+ * When present, its content is injected into the monitor agent's system prompt
+ * so the orchestrator knows when/how to use the app.
+ */
+export async function loadAppHint(appId: string): Promise<string | null> {
+  try {
+    const hintPath = join(APPS_DIR, appId, 'HINT.md');
+    const content = await Bun.file(hintPath).text();
+    return content;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load all app hints for injection into the monitor prompt.
+ */
+export async function loadAllAppHints(): Promise<{ appId: string; hint: string }[]> {
+  try {
+    const entries = await readdir(APPS_DIR, { withFileTypes: true });
+    const results: { appId: string; hint: string }[] = [];
+    await Promise.all(
+      entries
+        .filter((e) => e.isDirectory())
+        .map(async (e) => {
+          const hint = await loadAppHint(e.name);
+          if (hint) results.push({ appId: e.name, hint });
+        }),
+    );
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Load AGENTS.md for a specific app.
  * When present, this replaces the generic app agent system prompt.
  */

@@ -7,7 +7,7 @@
 
 import { platform } from 'os';
 import type { ProviderType } from './types.js';
-import { listApps } from '../features/apps/discovery.js';
+import { listApps, loadAllAppHints } from '../features/apps/discovery.js';
 import { storageList } from '../storage/storage-manager.js';
 import { loadMounts } from '../storage/mounts.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';
@@ -29,10 +29,11 @@ function getProviderName(provider: ProviderType): string {
 }
 
 export async function buildEnvironmentSection(provider: ProviderType): Promise<string> {
-  const [apps, storage, settings] = await Promise.all([
+  const [apps, storage, settings, appHints] = await Promise.all([
     listApps().catch(() => []),
     storageList('').catch(() => ({ success: false as const, error: 'unavailable' })),
     readSettings(),
+    loadAllAppHints().catch(() => []),
   ]);
 
   const lines = [`- Platform: ${getPlatformName()}`, `- Provider: ${getProviderName(provider)}`];
@@ -54,6 +55,11 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
       return line;
     });
     lines.push(`- Installed apps:\n${appLines.join('\n')}`);
+  }
+
+  if (appHints.length > 0) {
+    const hintLines = appHints.map((h) => `### ${h.appId}\n${h.hint.trim()}`).join('\n\n');
+    lines.push(`- App hints:\n${hintLines}`);
   }
 
   if (storage.success && storage.entries && storage.entries.length > 0) {
