@@ -1,5 +1,5 @@
-export const STORAGE_KEY = 'word-lite-document-v2';
-export const LEGACY_STORAGE_KEY = 'word-lite-document-v1';
+// ── Shared constants
+export const DEFAULT_TITLE = 'Untitled Document';
 
 export function debounce<T extends (...args: any[]) => void>(fn: T, delay = 500) {
   let timer: number | null = null;
@@ -44,6 +44,20 @@ export function sanitizeFilename(name: string) {
     .replace(/-+/g, '-')
     .slice(0, 60) || 'document';
 }
+
+/**
+ * Escape `& < >` for safe HTML insertion, and convert newlines to `<br>`.
+ * Use this whenever inserting plain text into innerHTML.
+ */
+export function textToHtml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Private DOCX helpers ───────────────────────────────────────────────────
 
 const encoder = new TextEncoder();
 
@@ -204,7 +218,7 @@ export function createDocxBlob(title: string, plainText: string) {
 
   const core = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>${escapeXml(title || 'Untitled Document')}</dc:title>
+  <dc:title>${escapeXml(title || DEFAULT_TITLE)}</dc:title>
 </cp:coreProperties>`;
 
   const zip = createStoredZip([

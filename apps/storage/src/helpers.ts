@@ -20,9 +20,13 @@ export function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+export function getExtension(name: string): string {
+  return name.includes('.') ? (name.split('.').pop()?.toLowerCase() || '') : '';
+}
+
 export function getFileIcon(name: string, isDir: boolean): string {
   if (isDir) return '📁';
-  const ext = name.split('.').pop()?.toLowerCase() || '';
+  const ext = getExtension(name);
   const icons: Record<string, string> = {
     pdf: '📄', txt: '📝', md: '📝',
     json: '{}', csv: '📊', html: '🌐', xml: '🌐',
@@ -36,17 +40,17 @@ export function getFileIcon(name: string, isDir: boolean): string {
 }
 
 export function isPreviewable(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
+  const ext = getExtension(name);
   return ['txt', 'md', 'json', 'csv', 'html', 'xml', 'js', 'ts', 'py', 'css', 'yaml', 'yml', 'toml', 'log', 'sh', 'bat', 'env'].includes(ext);
 }
 
 export function isImage(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() || '';
+  const ext = getExtension(name);
   return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext);
 }
 
-export function getExtension(name: string): string {
-  return name.includes('.') ? (name.split('.').pop()?.toLowerCase() || '') : '';
+export function isMarkdown(name: string): boolean {
+  return ['md', 'mdx', 'markdown'].includes(getExtension(name));
 }
 
 export function toStorageUri(path: string): string {
@@ -69,8 +73,4 @@ export function buildDragMetadata(entry: StorageEntry) {
     url,
     storageUri: toStorageUri(entry.path),
   };
-}
-
-export function isMarkdown(name: string): boolean {
-  return ['md', 'mdx', 'markdown'].includes(name.split('.').pop()?.toLowerCase() || '');
 }

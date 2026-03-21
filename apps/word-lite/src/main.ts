@@ -113,5 +113,8 @@ render(() => html`
 // ref fires synchronously during mount — all elements are ready
 loadDoc().then(() => editorEl.focus());
 
+// ── Keyboard shortcuts (Ctrl+S, B, I, U, O, N, Escape)
+installKeyboardShortcuts(saveDoc);
+
 // ── App Protocol
 registerAppProtocol();

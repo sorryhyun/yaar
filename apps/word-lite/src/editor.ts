@@ -1,4 +1,4 @@
-import { countTextStats } from './utils';
+import { countTextStats, DEFAULT_TITLE } from './utils';
 import { editorEl, focusMode, setFocusMode, setStatsText, setSaveStateText, fileInputEl, docTitleEl } from './state';
 
 export const refreshStats = () => {
@@ -33,7 +33,7 @@ export function installKeyboardShortcuts(
     else if (key === 'n') {
       e.preventDefault();
       editorEl.innerHTML = '<p></p>';
-      docTitleEl.value = 'Untitled Document';
+      docTitleEl.value = DEFAULT_TITLE;
       refreshStats();
       setSaveStateText('Unsaved new document');
       editorEl.focus();

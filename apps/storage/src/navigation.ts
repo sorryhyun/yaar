@@ -18,6 +18,8 @@ const EXT_LANG: Record<string, string> = {
   cs: 'csharp', rb: 'ruby', php: 'php',
 };
 
+const PREVIEW_UNAVAILABLE = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
+
 export async function navigate(path: string) {
   setCurrentPath(path);
   setSelectedFile(null);
@@ -65,7 +67,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
       const htmlContent = marked.parse(content) as string;
       elPreviewBody.innerHTML = `<div class="md-preview">${htmlContent}</div>`;
     } catch {
-      elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
+      elPreviewBody.innerHTML = PREVIEW_UNAVAILABLE;
     }
     return;
   }
@@ -76,21 +78,12 @@ export async function selectFile(entry: import('./types').StorageEntry) {
       setPreviewContent(content);
 
       const lang = EXT_LANG[ext] || 'clike';
-      const grammar = (Prism.languages as any)[lang] || Prism.languages.clike;
-
-      let highlighted: string;
-      if (grammar) {
-        highlighted = Prism.highlight(content, grammar, lang);
-      } else {
-        highlighted = content
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-      }
+      const grammar = (Prism.languages as any)[lang] ?? Prism.languages.clike;
+      const highlighted = Prism.highlight(content, grammar, lang);
 
       elPreviewBody.innerHTML = `<pre class="code-preview language-${lang}"><code class="language-${lang}">${highlighted}</code></pre>`;
     } catch {
-      elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
+      elPreviewBody.innerHTML = PREVIEW_UNAVAILABLE;
     }
     return;
   }

@@ -62,56 +62,10 @@
       }
     },
     "setDocuments": {
-      "description": "Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "docs": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "title": {
-                  "type": "string"
-                },
-                "text": {
-                  "type": "string"
-                },
-                "html": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "required": ["docs"]
-      }
+      "description": "Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }"
     },
     "appendDocuments": {
-      "description": "Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "docs": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "title": {
-                  "type": "string"
-                },
-                "text": {
-                  "type": "string"
-                },
-                "html": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "required": ["docs"]
-      }
+      "description": "Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }"
     },
     "saveToStorage": {
       "description": "Save the current document to YAAR persistent storage. Params: { path: string } — e.g. \"docs/my-doc.html\"",

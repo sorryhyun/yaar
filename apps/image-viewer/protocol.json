@@ -12,62 +12,10 @@
   },
   "commands": {
     "setImages": {
-      "description": "Replace images with a new set. Accepts URL/dataUrl/path+url.",
-      "params": {
-        "type": "object",
-        "properties": {
-          "images": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "path": {
-                  "type": "string"
-                },
-                "url": {
-                  "type": "string"
-                },
-                "dataUrl": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "required": ["images"]
-      }
+      "description": "Replace images with a new set. Accepts URL/dataUrl/path+url."
     },
     "addImages": {
-      "description": "Append multiple images in one call.",
-      "params": {
-        "type": "object",
-        "properties": {
-          "images": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "path": {
-                  "type": "string"
-                },
-                "url": {
-                  "type": "string"
-                },
-                "dataUrl": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "required": ["images"]
-      }
+      "description": "Append images to the current set."
     },
     "openStoragePaths": {
       "description": "Load multiple storage file paths at once.",

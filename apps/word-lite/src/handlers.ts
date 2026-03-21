@@ -1,6 +1,6 @@
 import mammoth from '@bundled/mammoth';
 import { marked } from '@bundled/marked';
-import { downloadBlob, downloadFile, nowLabel, createDocxBlob } from './utils';
+import { downloadBlob, downloadFile, nowLabel, createDocxBlob, textToHtml, DEFAULT_TITLE } from './utils';
 import { editorEl, docTitleEl, fileInputEl, focusMode, setFocusMode, setSaveStateText } from './state';
 import { exec, refreshStats } from './editor';
 import {
@@ -25,7 +25,7 @@ export const handleLink = () => {
 export const handleNew = () => {
   if (!confirm('Start a new blank document?')) return;
   editorEl.innerHTML = '<p></p>';
-  docTitleEl.value = 'Untitled Document';
+  docTitleEl.value = DEFAULT_TITLE;
   refreshStats();
   setSaveStateText('Unsaved new document');
   editorEl.focus();
@@ -77,28 +77,17 @@ export const handleFileChange = async () => {
       const html = await marked.parse(text);
       editorEl.innerHTML = html;
     } catch (err) {
-      const text = await file.text();
-      const escaped = text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>');
-      editorEl.innerHTML = `<p>${escaped}</p>`;
+      editorEl.innerHTML = `<p>${textToHtml(await file.text())}</p>`;
     }
   } else if (/\.html?$/i.test(file.name)) {
     const text = await file.text();
     editorEl.innerHTML = text;
   } else {
     const text = await file.text();
-    const escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    editorEl.innerHTML = `<p>${escaped}</p>`;
+    editorEl.innerHTML = `<p>${textToHtml(text)}</p>`;
   }
 
-  docTitleEl.value = file.name.replace(/\.[^/.]+$/, '') || 'Untitled Document';
+  docTitleEl.value = file.name.replace(/\.[^/.]+$/, '') || DEFAULT_TITLE;
   refreshStats();
   setSaveStateText(`Opened ${file.name}`);
   saveDoc();

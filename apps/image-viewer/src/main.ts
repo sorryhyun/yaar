@@ -1,143 +1,44 @@
 export {};
-import { createSignal, Show, For } from '@bundled/solid-js';
+import { Show, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
-import { ImageItem, LayoutMode } from './types';
+import { app } from '@bundled/yaar';
+import {
+  images, selectedIds, mode, columns, status,
+  setMode, setColumns, setStatus, setImages,
+  loadAllStorageImages, loadLocalFiles, getShowItems, selectImage,
+} from './store';
+import { makeStatusText, clampColumns } from './helpers';
 import { setupProtocol } from './protocol';
-import { app, storage, list } from '@bundled/yaar';
-
-// signals
-const [images, setImages_] = createSignal<ImageItem[]>([]);
-const [selectedIds, setSelectedIds] = createSignal(new Set<number>());
-const [mode, setMode] = createSignal<LayoutMode>('grid');
-const [columns, setColumns] = createSignal(3);
-const [status, setStatus] = createSignal('Ready.');
-let nextId = 1;
-
-let fileInputEl!: HTMLInputElement;
-let colsInputEl!: HTMLInputElement;
-
-// helpers
-function baseName(path: string) {
-  return path.split('/').pop() || path;
-}
-
-function normalizeInputImage(input: { name?: string; path?: string; url?: string; dataUrl?: string }): ImageItem | null {
-  const source = input.url || input.dataUrl;
-  if (!source) return null;
-  return {
-    id: nextId++,
-    name: input.name || (input.path ? baseName(input.path) : `Image ${nextId - 1}`),
-    source,
-    path: input.path,
-  };
-}
-
-function setImages(items: ImageItem[], replace = true) {
-  const next = replace ? items : [...images(), ...items];
-  setImages_(() => next);
-  if (next.length) setSelectedIds(new Set([next[0].id]));
-  else setSelectedIds(new Set<number>());
-  setStatus(`${next.length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${columns()}` : ''}`);
-}
-
-async function loadStoragePaths(paths: string[], replace = false) {
-  if (!storage?.url) {
-    setStatus('Storage API unavailable.');
-    return;
-  }
-  const loaded = paths.map((p) => ({ id: nextId++, name: baseName(p), source: storage!.url(p), path: p }));
-  setImages(loaded, replace);
-}
-
-async function loadAllStorageImages() {
-  if (!storage?.url) {
-    setStatus('Storage API unavailable.');
-    return;
-  }
-  try {
-    const r = await list('yaar://apps/self/storage/');
-    if (r.isError) { setStatus('Storage list failed.'); return; }
-    const entries = JSON.parse(r.content[0]?.text ?? '[]') as Array<{ path: string; isDirectory: boolean }>;
-    const paths = entries
-      .filter((e) => !e.isDirectory && /\.(png|jpe?g|gif|webp|bmp)$/i.test(e.path))
-      .map((e) => e.path);
-    await loadStoragePaths(paths, true);
-    setStatus(`Loaded ${paths.length} image(s) from storage.`);
-  } catch {
-    setStatus('Storage API unavailable.');
-  }
-}
-
-function getShowItems(): ImageItem[] {
-  const imgs = images();
-  const sel = selectedIds();
-  let showItems = imgs;
-  if (sel.size) showItems = imgs.filter((x) => sel.has(x.id));
-  if (mode() === 'single') showItems = showItems.length ? [showItems[0]] : imgs.length ? [imgs[0]] : [];
-  return showItems;
-}
-
-function selectImage(item: ImageItem) {
-  const sel = selectedIds();
-  if (mode() === 'single') {
-    setSelectedIds(new Set([item.id]));
-  } else {
-    const next = new Set(sel);
-    if (next.has(item.id)) next.delete(item.id);
-    else next.add(item.id);
-    if (!next.size) next.add(item.id);
-    setSelectedIds(next);
-  }
-}
-
-async function handleFileChange() {
-  const files = [...(fileInputEl.files || [])];
-  if (!files.length) return;
-
-  const toDataUrl = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-  const loaded: ImageItem[] = [];
-  for (const file of files) {
-    const dataUrl = await toDataUrl(file);
-    loaded.push({ id: nextId++, name: file.name, source: dataUrl });
-  }
-  setImages(loaded, true);
-}
+import type { ImageItem } from './types';
 
 render(() => html`
   <div class="app y-app">
     <div class="toolbar y-flex y-gap-2 y-p-2 y-surface y-border-b">
       <input
-        ref=${(el: HTMLInputElement) => { fileInputEl = el; }}
         type="file"
         accept="image/*"
         multiple
-        onchange=${() => handleFileChange()}
+        onchange=${(e: Event) => {
+          const files = [...((e.target as HTMLInputElement).files || [])];
+          if (files.length) loadLocalFiles(files);
+        }}
       />
       <button class="y-btn y-btn-sm" onClick=${() => loadAllStorageImages()}>Load storage images</button>
-      <button class="y-btn y-btn-sm" onClick=${() => { setMode('grid'); setStatus(`${images().length} image(s) loaded · mode=grid · cols=${columns()}`); }}>Grid</button>
-      <button class="y-btn y-btn-sm" onClick=${() => { setMode('single'); setStatus(`${images().length} image(s) loaded · mode=single`); }}>Single</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { setMode('grid'); setStatus(makeStatusText(images().length, 'grid', columns())); }}>Grid</button>
+      <button class="y-btn y-btn-sm" onClick=${() => { setMode('single'); setStatus(makeStatusText(images().length, 'single', columns())); }}>Single</button>
       <label class="y-text-sm">Cols <input
-        ref=${(el: HTMLInputElement) => { colsInputEl = el; }}
         type="number"
         min="1"
         max="8"
-        value="3"
+        value=${() => columns()}
         style="width:64px"
         class="y-input"
-        onchange=${() => {
-          const v = Math.max(1, Math.min(8, Number(colsInputEl.value) || 3));
-          colsInputEl.value = String(v);
-          setColumns(v);
-          setStatus(`${images().length} image(s) loaded · mode=${mode()}${mode() === 'grid' ? ` · cols=${v}` : ''}`);
+        onchange=${(e: Event) => {
+          const c = clampColumns(Number((e.target as HTMLInputElement).value));
+          setColumns(c);
+          setStatus(makeStatusText(images().length, mode(), c));
         }}
       /></label>
       <button class="y-btn y-btn-sm y-btn-danger" onClick=${() => setImages([], true)}>Clear</button>
@@ -182,22 +83,4 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-if (app) {
-  setupProtocol(app, {
-    images,
-    setImages_,
-    selectedIds,
-    setSelectedIds,
-    mode,
-    setMode,
-    columns,
-    setColumns,
-    status,
-    setStatus,
-    getColsInputEl: () => colsInputEl,
-    setImages,
-    normalizeInputImage,
-    loadStoragePaths,
-    loadAllStorageImages,
-  });
-}
+if (app) setupProtocol(app);

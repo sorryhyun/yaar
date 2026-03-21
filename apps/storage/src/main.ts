@@ -14,19 +14,14 @@ import { storageSave, storageDelete, storageUrl } from './storage-api';
 // ── Toast helper ─────────────────────────────────────────────────────
 
 function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000) {
-  const toast = document.createElement('div');
-  toast.style.cssText = `
-    position:fixed;bottom:40px;left:50%;transform:translateX(-50%);
-    background:${type === 'error' ? 'var(--yaar-error,#f85149)' : 'var(--yaar-success,#3fb950)'};
-    color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;
-    z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;
-    opacity:1;transition:opacity 0.3s;
-  `;
-  toast.textContent = msg;
-  document.body.appendChild(toast);
+  const el = document.createElement('div');
+  el.className = `y-toast y-toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('y-toast-visible'));
   setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => toast.remove(), 300);
+    el.classList.remove('y-toast-visible');
+    setTimeout(() => el.remove(), 300);
   }, ms);
 }
 
@@ -58,7 +53,7 @@ async function handleUpload(e: Event) {
   }
 }
 
-// ── Template ───────────────────────────────────────────────────────────
+// ── Template ─────────────────────────────────────────────────────────
 
 const App = () => html`
   <div class="toolbar y-flex-between">
@@ -195,7 +190,7 @@ const App = () => html`
 
 render(App, document.getElementById('app')!);
 
-// ── App Protocol & Init ──────────────────────────────────────────────
+// ── App Protocol & Init ───────────────────────────────────────────
 
 registerProtocol();
 navigate('');

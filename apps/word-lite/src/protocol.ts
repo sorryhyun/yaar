@@ -1,5 +1,5 @@
 import { app, storage, windows } from '@bundled/yaar';
-import { countTextStats, nowLabel } from './utils';
+import { countTextStats, nowLabel, textToHtml } from './utils';
 import { editorEl, docTitleEl, saveStateText, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 import {
@@ -14,6 +14,21 @@ import {
 } from './documents';
 
 type StorageReadAs = 'text' | 'json' | 'auto' | 'blob' | 'arraybuffer';
+
+/** Shared schema for the `docs` array parameter used in setDocuments / appendDocuments. */
+const docsParamSchema = {
+  type: 'array' as const,
+  items: {
+    type: 'object' as const,
+    properties: {
+      title: { type: 'string' as const },
+      text: { type: 'string' as const },
+      html: { type: 'string' as const },
+    },
+  },
+};
+
+const UPDATED_VIA_PROTOCOL = 'Updated via app protocol';
 
 export function registerAppProtocol() {
   if (!app) return;
@@ -60,7 +75,7 @@ export function registerAppProtocol() {
           } else {
             setEditorFromHtml((p.content as string) || '<p></p>');
           }
-          setSaveStateText('Updated via app protocol');
+          setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
           return { ok: true };
         },
@@ -74,7 +89,7 @@ export function registerAppProtocol() {
         },
         handler: (p: Record<string, unknown>) => {
           docTitleEl.value = ((p.title as string) || '').trim() || 'Untitled Document';
-          setSaveStateText('Updated via app protocol');
+          setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
           return { ok: true };
         },
@@ -91,19 +106,14 @@ export function registerAppProtocol() {
         },
         handler: (p: Record<string, unknown>) => {
           if (((p.renderer as string) ?? 'html') === 'text') {
-            const escaped = ((p.content as string) || '')
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/\n/g, '<br>');
             const para = document.createElement('p');
-            para.innerHTML = escaped;
+            para.innerHTML = textToHtml((p.content as string) || '');
             editorEl.appendChild(para);
             refreshStats();
           } else {
             appendHtmlFragment((p.content as string) || '');
           }
-          setSaveStateText('Updated via app protocol');
+          setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
           return { ok: true };
         },
@@ -112,19 +122,7 @@ export function registerAppProtocol() {
         description: 'Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
         params: {
           type: 'object',
-          properties: {
-            docs: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  text: { type: 'string' },
-                  html: { type: 'string' },
-                },
-              },
-            },
-          },
+          properties: { docs: docsParamSchema },
           required: ['docs'],
         },
         handler: (p: Record<string, unknown>) => {
@@ -139,19 +137,7 @@ export function registerAppProtocol() {
         description: 'Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
         params: {
           type: 'object',
-          properties: {
-            docs: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  text: { type: 'string' },
-                  html: { type: 'string' },
-                },
-              },
-            },
-          },
+          properties: { docs: docsParamSchema },
           required: ['docs'],
         },
         handler: (p: Record<string, unknown>) => {
@@ -306,17 +292,10 @@ export function registerAppProtocol() {
           const mode = (p.mode as string) ?? 'append';
           let html = '';
 
-          // Build HTML from window content
           if (result.content) {
-            const escaped = String(result.content)
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/\n/g, '<br>');
-            html += `<p>${escaped}</p>`;
+            html += `<p>${textToHtml(String(result.content))}</p>`;
           }
 
-          // Embed screenshot image if requested and available
           if (p.includeImage && result.image) {
             html += `<p><img src="${result.image}" alt="Window screenshot: ${p.windowId}" style="max-width:100%;border:1px solid #ddd;border-radius:4px;"></p>`;
           }

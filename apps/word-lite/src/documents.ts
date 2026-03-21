@@ -1,7 +1,6 @@
-import { nowLabel, sanitizeFilename } from './utils';
+import { nowLabel, sanitizeFilename, debounce, textToHtml, DEFAULT_TITLE } from './utils';
 import { editorEl, docTitleEl, setSaveStateText } from './state';
 import { refreshStats } from './editor';
-import { debounce } from './utils';
 
 export const STORAGE_KEY = 'draft.json';
 
@@ -19,7 +18,7 @@ async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<
   return as === 'json' ? JSON.parse(text) : text;
 }
 
-export const getTitle = () => (docTitleEl?.value || '').trim() || 'Untitled Document';
+export const getTitle = () => (docTitleEl?.value || '').trim() || DEFAULT_TITLE;
 export const exportBaseName = () => sanitizeFilename(getTitle());
 
 export const saveDoc = async () => {
@@ -35,16 +34,16 @@ export const loadDoc = async () => {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as { html?: string; title?: string };
-      editorEl.innerHTML = parsed.html || '<h1>Untitled Document</h1><p></p>';
-      docTitleEl.value = parsed.title || 'Untitled Document';
+      editorEl.innerHTML = parsed.html || `<h1>${DEFAULT_TITLE}</h1><p></p>`;
+      docTitleEl.value = parsed.title || DEFAULT_TITLE;
     } catch {
-      editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
-      docTitleEl.value = 'Untitled Document';
+      editorEl.innerHTML = `<h1>${DEFAULT_TITLE}</h1><p></p>`;
+      docTitleEl.value = DEFAULT_TITLE;
     }
     setSaveStateText('Loaded saved draft');
   } else {
-    editorEl.innerHTML = '<h1>Untitled Document</h1><p></p>';
-    docTitleEl.value = 'Untitled Document';
+    editorEl.innerHTML = `<h1>${DEFAULT_TITLE}</h1><p></p>`;
+    docTitleEl.value = DEFAULT_TITLE;
     setSaveStateText('New document');
   }
   refreshStats();
@@ -53,12 +52,7 @@ export const loadDoc = async () => {
 // ── Document HTML helpers (used by handlers and protocol)
 
 export function setEditorFromPlainText(text: string) {
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>');
-  editorEl.innerHTML = `<p>${escaped}</p>`;
+  editorEl.innerHTML = `<p>${textToHtml(text)}</p>`;
   refreshStats();
 }
 
@@ -102,12 +96,7 @@ export function docsToMergedHtml(docs: BatchDocInput[]) {
         return `<section><h2>${safeTitle}</h2>${doc.html}</section>`;
       }
 
-      const escapedText = (doc.text || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>');
-      return `<section><h2>${safeTitle}</h2><p>${escapedText}</p></section>`;
+      return `<section><h2>${safeTitle}</h2><p>${textToHtml(doc.text || '')}</p></section>`;
     })
     .join('');
 }
