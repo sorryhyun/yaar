@@ -8,3 +8,6 @@ export interface ChatMessage {
   status: MessageStatus;
   timestamp: number;
 }
+
+/** Sentinel ID for the typing-indicator placeholder message */
+export const TYPING_INDICATOR_ID = 'typing-indicator';

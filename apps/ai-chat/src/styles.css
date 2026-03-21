@@ -4,13 +4,19 @@
   padding: 0;
 }
 
+/* App-specific gradient tokens (not covered by --yaar-* design tokens) */
 .chat-app {
+  --grad-blue: linear-gradient(135deg, #1f6feb, #388bfd);
+  --grad-avatar: linear-gradient(135deg, #58a6ff, #a371f7);
+
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: var(--yaar-bg);
   font-family: var(--yaar-font);
 }
+
+/* ── Header ── */
 
 .chat-header {
   display: flex;
@@ -26,7 +32,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #58a6ff, #a371f7);
+  background: var(--grad-avatar);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -59,6 +65,8 @@
   background: var(--yaar-success);
 }
 
+/* ── Message list ── */
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -79,6 +87,8 @@
   background: var(--yaar-border);
   border-radius: 10px;
 }
+
+/* ── Message rows ── */
 
 .message-row {
   display: flex;
@@ -101,6 +111,8 @@
   flex-direction: row-reverse;
 }
 
+/* ── Avatars ── */
+
 .message-avatar {
   width: 28px;
   height: 28px;
@@ -113,13 +125,16 @@
   margin-top: 2px;
 }
 
+/* Both header and assistant message avatars share the same gradient */
 .assistant .message-avatar {
-  background: linear-gradient(135deg, #58a6ff, #a371f7);
+  background: var(--grad-avatar);
 }
 
 .user .message-avatar {
   background: linear-gradient(135deg, #3fb950, #58a6ff);
 }
+
+/* ── Bubbles ── */
 
 .message-bubble {
   max-width: 72%;
@@ -139,7 +154,7 @@
 }
 
 .user .message-bubble {
-  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  background: var(--grad-blue);
   color: #fff;
   border-top-right-radius: 4px;
 }
@@ -160,6 +175,8 @@
 .message-row.user .message-time {
   text-align: right;
 }
+
+/* ── Typing indicator ── */
 
 .typing-indicator {
   display: flex;
@@ -196,6 +213,8 @@
   }
 }
 
+/* ── Input area ── */
+
 .input-area {
   padding: 12px 16px;
   background: var(--yaar-bg-surface);
@@ -231,17 +250,18 @@
 .chat-textarea:focus {
   border-color: var(--yaar-accent);
 }
-
 .chat-textarea::placeholder {
   color: var(--yaar-text-muted);
 }
+
+/* ── Send button ── */
 
 .send-btn {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  background: var(--grad-blue);
   color: white;
   cursor: pointer;
   display: flex;
@@ -265,6 +285,8 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Empty state ── */
 
 .empty-state {
   flex: 1;

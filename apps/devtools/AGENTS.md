@@ -9,6 +9,19 @@ You have three tools:
 - **command(name, params)** — execute an IDE action (createProject, writeFile, compile, deploy, preview, viewPreview, describeUri, listUri, cloneApp, clearConsole, etc.)
 - **relay(message)** — hand off to the monitor agent when the request is outside your domain (e.g., browser automation, config access, system info)
 
+## Reading & Searching Files
+
+- **`command("readFile", { path })`** — read a single file with line numbers
+- **`command("readFile", { path, startLine, endLine })`** — read specific line range (1-based, inclusive)
+- **`command("readFile", { path: ["a.ts", "b.ts"] })`** — read multiple files at once
+- **`command("readFile", { path, openInEditor: true })`** — read and also open in editor UI
+- **`command("listFiles")`** — list all project files
+- **`command("listFiles", { glob: "src/**/*.ts" })`** — list files matching a glob pattern
+- **`command("grep", { pattern: "TODO" })`** — search file contents with regex
+- **`command("grep", { pattern: "import", glob: "src/**/*.ts" })`** — search within specific files
+
+Use `readFile` to inspect code without changing editor state (default), or with `openInEditor: true` to also show it in the UI. Use `grep` to find usages across the project.
+
 ## Workflow
 
 1. Check state: `query("project")` for active project, `query("projects")` to list all

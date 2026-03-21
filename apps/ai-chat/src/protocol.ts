@@ -1,7 +1,6 @@
-import { v4 as uuid } from '@bundled/uuid';
 import { app } from '@bundled/yaar';
-import { messages, setMessages, isWaiting, setIsWaiting } from './store';
-import type { ChatMessage } from './types';
+import { messages, isWaiting, finishWithMessage } from './store';
+import { makeMessage } from './helpers';
 
 export function registerProtocol() {
   if (!app) return;
@@ -32,15 +31,9 @@ export function registerProtocol() {
           required: ['content'],
         },
         handler: (p: Record<string, unknown>) => {
-          const newMsg: ChatMessage = {
-            id: (p.id as string) ?? uuid(),
-            role: 'assistant',
-            content: p.content as string,
-            status: 'done',
-            timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev.filter(m => m.id !== 'typing-indicator'), newMsg]);
-          setIsWaiting(false);
+          finishWithMessage(
+            makeMessage('assistant', p.content as string, 'done', p.id as string | undefined),
+          );
           return { ok: true };
         },
       },
@@ -53,14 +46,9 @@ export function registerProtocol() {
           required: ['content'],
         },
         handler: (p: Record<string, unknown>) => {
-          setMessages(prev => [...prev.filter(m => m.id !== 'typing-indicator'), {
-            id: uuid(),
-            role: 'assistant',
-            content: p.content as string,
-            status: 'error',
-            timestamp: Date.now(),
-          }]);
-          setIsWaiting(false);
+          finishWithMessage(
+            makeMessage('assistant', p.content as string, 'error'),
+          );
           return { ok: true };
         },
       },

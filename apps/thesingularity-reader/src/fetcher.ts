@@ -204,28 +204,73 @@ export async function fetchPosts(): Promise<Post[]> {
     let date = '';
     let category: string | undefined = categoryFromTitle || undefined;
 
-    // DCinside: data-nick 속성을 가진 요소가 반드시 작성자 요소임 (제목·날짜 등 다른 요소에는 없음)
-    // [class*="writer"] / .nickname 처럼 범위가 넓은 셀렉터는 제목 요소를 오인식할 수 있으므로 사용하지 않음
-    const writerEl = li.querySelector('[data-nick]')
-      ?? li.querySelector('.gall-writer, .wr-name');
+    // DCinside: data-nick 속성을 가진 요소에서 닉네임을 추출한다.
+    // 단, <a> 태그 자체에 data-nick=""(빈값)이 붙은 경우
+    // fallback으로 <a>.textContent 전체(이미지 아이콘·제목 포함)를 사용하면 버그가 생기므로
+    // <a> 태그는 [data-nick] 탐색에서 제외하고 전용 작성자 요소를 우선 사용한다.
+    const allDataNickEls = Array.from(li.querySelectorAll('[data-nick]'));
+    const nonAnchorNickEls = allDataNickEls.filter(el => el.tagName !== 'A');
+    const writerEl: Element | null =
+      // 1순위: data-nick 값이 있는 비-<a> 요소 (고닉/반고닉)
+      nonAnchorNickEls.find(el => (el.getAttribute('data-nick') ?? '').trim() !== '') ??
+      // 2순위: 전용 작성자 클래스
+      li.querySelector('.gall-writer, .wr-name, .ginfo .name, .nick, .nickname') ??
+      // 3순위: data-nick="" (빈값) 비-<a> 요소 (유동닉)
+      nonAnchorNickEls[0] ??
+      null;
     const dateEl = li.querySelector('.num-date, .gall-date, [class*="date"]');
 
     if (writerEl) {
       const dataNick = writerEl.getAttribute('data-nick') ?? '';
-      // data-nick이 비어 있으면 익명; 있으면 실제 닉네임
-      author = dataNick || (writerEl.textContent ?? '').trim() || '익명';
+      if (dataNick) {
+        // data-nick 속성값이 있으면 그것이 실제 닉네임 (textContent 사용 안 함)
+        author = dataNick;
+      } else {
+        // 유동닉 등 data-nick이 비어 있는 경우: 아이콘 em/i 제거 후 텍스트 추출
+        const writerClone = writerEl.cloneNode(true) as Element;
+        writerClone.querySelectorAll('img, i, em').forEach(e => {
+          if (isMetaLine((e.textContent ?? '').trim())) e.remove();
+        });
+        const writerText = (writerClone.textContent ?? '').trim();
+        author = writerText || '익명';
+      }
     }
     if (dateEl) {
       date = (dateEl.textContent ?? '').trim();
+    }
+
+    // .ginfo 요소에서 닉네임 추출 (모바일 DC: 닉네임·날짜·조회·추천이 .ginfo 안에 텍스트로 나열)
+    if (author === '익명') {
+      const ginfoEl = li.querySelector('.ginfo');
+      if (ginfoEl) {
+        let ginfoText = (ginfoEl.textContent ?? '').trim();
+        // 뒤에서부터 알려진 메타데이터 패턴을 제거
+        ginfoText = ginfoText.replace(/\s*조회\s*\d+.*$/, '');           // 조회 N 추천 N ...
+        ginfoText = ginfoText.replace(/\s+\d{2}[:.]\d{2}\s*$/, '');      // 시간 HH:MM
+        ginfoText = ginfoText.replace(/\s+\d{4}\.\d{2}\.\d{2}\s*$/, ''); // 날짜 YYYY.MM.DD
+        ginfoText = ginfoText.replace(/\s+\d{2}\.\d{2}\s*$/, '');        // 단축 날짜 MM.DD
+        ginfoText = ginfoText.trim();
+        if (ginfoText) {
+          // "카테고리 닉네임" 분리: 첫 토큰이 짧은 한글(≤4자)이면 카테고리로 간주
+          const parts = ginfoText.split(/\s+/);
+          if (parts.length >= 2 && /^[가-힣]+$/.test(parts[0]) && parts[0].length <= 4) {
+            if (!category) category = parts[0];
+            author = parts.slice(1).join(' ');
+          } else {
+            author = ginfoText;
+          }
+          if (!date && dateEl) date = (dateEl.textContent ?? '').trim();
+        }
+      }
     }
 
     // writerEl/dateEl 탐색 실패 시 텍스트 파싱 fallback
     if (author === '익명' && !date) {
       const aClone2 = aEl.cloneNode(true) as Element;
       aClone2.querySelectorAll(META_SELECTORS).forEach(el => el.remove());
-      aClone2.querySelectorAll('span, em').forEach(el => {
+      aClone2.querySelectorAll('span, em, i, b').forEach(el => {
         const t = (el.textContent ?? '').trim();
-        if (/^조회/.test(t) || /^추천/.test(t)) el.remove();
+        if (/^조회/.test(t) || /^추천/.test(t) || isMetaLine(t)) el.remove();
       });
       const rawText2 = aClone2.textContent ?? '';
       const allLines2 = rawText2.split(/\n/).map(s => s.trim()).filter(Boolean);

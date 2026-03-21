@@ -4,5 +4,6 @@
   "run": "index.html",
   "permissions": [],
   "version": "1.0.0",
-  "author": "YAAR"
+  "author": "YAAR",
+  "description": "AI 어시스턴트 채팅 앱"
 }

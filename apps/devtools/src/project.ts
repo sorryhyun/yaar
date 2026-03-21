@@ -251,6 +251,80 @@ export async function openFile(path: string): Promise<void> {
   }
 }
 
+/** Read one or more files with optional line range. Returns numbered content. */
+export async function readFiles(
+  paths: string[],
+  startLine?: number,
+  endLine?: number,
+): Promise<{ path: string; content: string; lines: number }[]> {
+  const proj = activeProject();
+  if (!proj) return [];
+  const results: { path: string; content: string; lines: number }[] = [];
+  for (const p of paths) {
+    try {
+      const raw = await appStorage.read(projectPath(proj.id, p));
+      const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+      const allLines = text.split('\n');
+      const total = allLines.length;
+      const start = Math.max(1, startLine ?? 1);
+      const end = Math.min(total, endLine ?? total);
+      const slice = allLines.slice(start - 1, end);
+      const width = String(end).length;
+      const numbered = slice
+        .map((line, i) => `${String(start + i).padStart(width)}│${line}`)
+        .join('\n');
+      const header = startLine || endLine
+        ? `── ${p} (lines ${start}-${end} of ${total}) ──`
+        : `── ${p} (${total} lines) ──`;
+      results.push({ path: p, content: `${header}\n${numbered}`, lines: total });
+    } catch {
+      results.push({ path: p, content: `── ${p} ── ERROR: could not read file`, lines: 0 });
+    }
+  }
+  return results;
+}
+
+/** Grep across project files. Returns matching lines with context. */
+export async function grepFiles(
+  pattern: string,
+  glob?: string,
+): Promise<{ file: string; line: number; text: string }[]> {
+  const proj = activeProject();
+  if (!proj) return [];
+  const allFiles = files().filter((f) => !f.isDirectory);
+  const matchingFiles = glob
+    ? allFiles.filter((f) => matchGlob(f.path, glob))
+    : allFiles;
+  const regex = new RegExp(pattern, 'gi');
+  const results: { file: string; line: number; text: string }[] = [];
+  for (const f of matchingFiles) {
+    try {
+      const raw = await appStorage.read(projectPath(proj.id, f.path));
+      const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      const lines = text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          results.push({ file: f.path, line: i + 1, text: lines[i] });
+        }
+        regex.lastIndex = 0; // reset for global regex
+      }
+    } catch {
+      /* skip unreadable files */
+    }
+  }
+  return results;
+}
+
+/** Simple glob matching (supports * and **) */
+function matchGlob(path: string, glob: string): boolean {
+  const pattern = glob
+    .replace(/\./g, '\\.')
+    .replace(/\*\*/g, '⦿')
+    .replace(/\*/g, '[^/]*')
+    .replace(/⦿/g, '.*');
+  return new RegExp(`^${pattern}$`).test(path);
+}
+
 export async function writeFile(path: string, content: string): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
