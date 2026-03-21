@@ -386,3 +386,97 @@
   pointer-events: none;
   z-index: 1;
 }
+
+/* ============ Folder Styles ============ */
+
+.folderContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.folderIcon {
+  position: relative;
+}
+
+/* 2x2 mini-icon grid preview inside folder icon */
+.folderIconGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: var(--icon-size, 48px);
+  height: var(--icon-size, 48px);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  place-items: center;
+  overflow: hidden;
+}
+
+.folderMiniIcon {
+  font-size: calc(var(--icon-size, 48px) * 0.35);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.folderMiniImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.folderBadge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* Expanded folder contents */
+.folderExpanded {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  margin-top: 2px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: folderExpandIn 0.2s ease-out;
+}
+
+.folderChildIcon {
+  transform: scale(0.9);
+}
+
+@keyframes folderExpandIn {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+    transform-origin: top;
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+}

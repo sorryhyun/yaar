@@ -274,6 +274,8 @@ export interface DesktopShortcut {
   osActions?: OSAction[];
   /** Inline skill instructions sent to AI when clicked. */
   skill?: string;
+  /** If set, this shortcut belongs to a folder. */
+  folderId?: string;
   createdAt: number;
 }
 

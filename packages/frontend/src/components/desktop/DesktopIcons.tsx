@@ -1,7 +1,11 @@
 /**
- * DesktopIcons - Desktop app icons and shortcuts.
+ * DesktopIcons - Desktop app icons, shortcuts, and folders.
+ *
+ * Shortcuts with the same `folderId` are grouped into an expandable folder.
+ * The folderId value is used as the folder label. Folder icon is a 2x2
+ * mini-grid of the first 4 child icons (iPhone-style).
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
@@ -32,6 +36,14 @@ interface DesktopIconsProps {
   showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
 }
 
+/** A folder derived from shortcuts sharing the same folderId. */
+interface DerivedFolder {
+  folderId: string;
+  children: DesktopShortcut[];
+  /** Earliest createdAt among children — used for sort order. */
+  createdAt: number;
+}
+
 export function DesktopIcons({
   selectedAppIds,
   sendMessage,
@@ -43,6 +55,7 @@ export function DesktopIcons({
 
   const [apps, setApps] = useState<AppInfo[]>([]);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Double-click prevention: track which icon is in cooldown
   const [cooldownId, setCooldownId] = useState<string | null>(null);
@@ -199,6 +212,129 @@ export function DesktopIcons({
     [sendMessage, cooldownId, startCooldown, apps],
   );
 
+  const toggleFolder = useCallback((folderId: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  }, []);
+
+  // Derive folders from shortcuts that share a folderId
+  const renderItems = useMemo(() => {
+    const loose: DesktopShortcut[] = [];
+    const folderMap: Record<string, DerivedFolder> = {};
+
+    for (const s of shortcuts) {
+      if (s.folderId) {
+        if (!folderMap[s.folderId]) {
+          folderMap[s.folderId] = { folderId: s.folderId, children: [], createdAt: s.createdAt };
+        }
+        folderMap[s.folderId].children.push(s);
+        // Folder position = earliest child
+        if (s.createdAt < folderMap[s.folderId].createdAt) {
+          folderMap[s.folderId].createdAt = s.createdAt;
+        }
+      } else {
+        loose.push(s);
+      }
+    }
+
+    const items: Array<
+      { type: 'shortcut'; data: DesktopShortcut } | { type: 'folder'; data: DerivedFolder }
+    > = [];
+    for (const s of loose) items.push({ type: 'shortcut', data: s });
+    for (const f of Object.values(folderMap)) items.push({ type: 'folder', data: f });
+    items.sort((a, b) => a.data.createdAt - b.data.createdAt);
+    return items;
+  }, [shortcuts]);
+
+  const renderShortcutButton = (shortcut: DesktopShortcut, inFolder = false) => {
+    const appId = extractAppId(shortcut.target);
+    return (
+      <button
+        key={shortcut.id}
+        className={`${styles.desktopIcon}${inFolder ? ` ${styles.folderChildIcon}` : ''}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
+        data-shortcut-id={shortcut.id}
+        {...(appId ? { 'data-app-id': appId } : {})}
+        onClick={() => handleShortcutClick(shortcut)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          showShortcutContextMenu(e.clientX, e.clientY, {
+            id: shortcut.id,
+            label: shortcut.label,
+            target: shortcut.target,
+          });
+        }}
+        disabled={cooldownId === shortcut.id}
+        draggable={!!appId}
+        onDragStart={
+          appId
+            ? (e) => {
+                e.dataTransfer.setData('application/x-yaar-app', appId);
+                e.dataTransfer.effectAllowed = 'link';
+              }
+            : undefined
+        }
+      >
+        <span className={styles.iconWrapper}>
+          {shortcut.iconType === 'image' ? (
+            <img
+              className={styles.iconImg}
+              src={resolveAssetUrl(shortcut.icon)}
+              alt={shortcut.label}
+              draggable={false}
+            />
+          ) : (
+            <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
+          )}
+          {appId && appBadges[appId] > 0 && (
+            <span className={styles.badge}>{appBadges[appId] > 99 ? '99+' : appBadges[appId]}</span>
+          )}
+          {!appId && <span className={styles.shortcutArrow} />}
+        </span>
+        <span className={styles.iconLabel}>{shortcut.label}</span>
+      </button>
+    );
+  };
+
+  const renderFolder = (folder: DerivedFolder) => {
+    const isExpanded = expandedFolders.has(folder.folderId);
+    const { children } = folder;
+
+    return (
+      <div key={folder.folderId} className={styles.folderContainer}>
+        <button
+          className={`${styles.desktopIcon} ${styles.folderIcon}`}
+          onClick={() => toggleFolder(folder.folderId)}
+        >
+          <span className={styles.iconWrapper}>
+            <span className={styles.folderIconGrid}>
+              {children.slice(0, 4).map((s) => (
+                <span key={s.id} className={styles.folderMiniIcon}>
+                  {s.iconType === 'image' ? (
+                    <img src={resolveAssetUrl(s.icon)} alt="" className={styles.folderMiniImg} />
+                  ) : (
+                    s.icon || '🔗'
+                  )}
+                </span>
+              ))}
+            </span>
+            <span className={styles.folderBadge}>{children.length}</span>
+          </span>
+          <span className={styles.iconLabel}>{folder.folderId}</span>
+        </button>
+        {isExpanded && (
+          <div className={styles.folderExpanded}>
+            {children.map((s) => renderShortcutButton(s, true))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={styles.desktopIcons}>
       {/* Onboarding icon (shown until onboarding is completed) */}
@@ -212,58 +348,10 @@ export function DesktopIcons({
           <span className={styles.iconLabel}>Start</span>
         </button>
       )}
-      {/* Desktop shortcuts (includes app shortcuts) */}
-      {shortcuts.map((shortcut) => {
-        const appId = extractAppId(shortcut.target);
-        return (
-          <button
-            key={shortcut.id}
-            className={`${styles.desktopIcon}${selectedAppIds.has(shortcut.id) ? ` ${styles.desktopIconSelected}` : ''}`}
-            data-shortcut-id={shortcut.id}
-            {...(appId ? { 'data-app-id': appId } : {})}
-            onClick={() => handleShortcutClick(shortcut)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              showShortcutContextMenu(e.clientX, e.clientY, {
-                id: shortcut.id,
-                label: shortcut.label,
-                target: shortcut.target,
-              });
-            }}
-            disabled={cooldownId === shortcut.id}
-            draggable={!!appId}
-            onDragStart={
-              appId
-                ? (e) => {
-                    e.dataTransfer.setData('application/x-yaar-app', appId);
-                    e.dataTransfer.effectAllowed = 'link';
-                  }
-                : undefined
-            }
-          >
-            <span className={styles.iconWrapper}>
-              {shortcut.iconType === 'image' ? (
-                <img
-                  className={styles.iconImg}
-                  src={resolveAssetUrl(shortcut.icon)}
-                  alt={shortcut.label}
-                  draggable={false}
-                />
-              ) : (
-                <span className={styles.iconImage}>{shortcut.icon || '🔗'}</span>
-              )}
-              {appId && appBadges[appId] > 0 && (
-                <span className={styles.badge}>
-                  {appBadges[appId] > 99 ? '99+' : appBadges[appId]}
-                </span>
-              )}
-              {!appId && <span className={styles.shortcutArrow} />}
-            </span>
-            <span className={styles.iconLabel}>{shortcut.label}</span>
-          </button>
-        );
-      })}
+      {/* Desktop shortcuts and folders */}
+      {renderItems.map((item) =>
+        item.type === 'folder' ? renderFolder(item.data) : renderShortcutButton(item.data),
+      )}
     </div>
   );
 }

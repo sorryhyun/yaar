@@ -22,6 +22,8 @@ export const shortcutContentSchema = z.object({
   target: z.string().optional(),
   osActions: z.array(z.record(z.string(), z.unknown())).optional(),
   skill: z.string().optional(),
+  /** Assign shortcut to a folder. */
+  folderId: z.string().optional(),
 });
 
 export async function handleSetShortcut(content: Record<string, unknown>) {
@@ -39,6 +41,7 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     if (data.target !== undefined) updates.target = data.target;
     if (data.osActions !== undefined) updates.osActions = data.osActions;
     if (data.skill !== undefined) updates.skill = data.skill;
+    if (data.folderId !== undefined) updates.folderId = data.folderId;
     if (Object.keys(updates).length === 0) {
       return error('No updates provided.');
     }
@@ -70,6 +73,7 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     target: data.target || '',
     osActions: data.osActions as DesktopShortcut['osActions'],
     ...(data.skill && { skill: data.skill }),
+    ...(data.folderId && { folderId: data.folderId }),
     createdAt: Date.now(),
   };
   await addShortcut(shortcut);

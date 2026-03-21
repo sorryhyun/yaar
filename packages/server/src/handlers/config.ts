@@ -232,6 +232,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         label: { type: 'string' },
         icon: { type: 'string' },
         target: { type: 'string' },
+        folderId: { type: 'string', description: 'Assign shortcut to a folder' },
       },
     },
 

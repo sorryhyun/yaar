@@ -135,6 +135,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
         target: (data.target as string) || '',
         osActions: data.osActions as DesktopShortcut['osActions'],
         skill: data.skill as string | undefined,
+        ...(data.folderId ? { folderId: data.folderId as string } : {}),
         createdAt: Date.now(),
       };
       await addShortcut(shortcut);
