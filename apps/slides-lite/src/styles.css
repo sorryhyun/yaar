@@ -25,6 +25,11 @@ select {
   display: grid;
   grid-template-rows: 62px 1fr;
   background: var(--yaar-bg);
+  /*
+    Re-resolve --yaar-text inside the y-light scope so all descendants
+    inherit the dark text color instead of body's dark-theme white.
+  */
+  color: var(--yaar-text);
 }
 .topbar {
   display: flex;
@@ -82,6 +87,7 @@ select {
   margin-bottom: 8px;
   cursor: pointer;
   background: var(--yaar-bg-surface);
+  color: var(--yaar-text); /* guard: re-resolve against y-light tokens */
   transition:
     transform 0.12s ease,
     box-shadow 0.12s ease;
@@ -121,12 +127,8 @@ select {
   display: flex;
   gap: 4px;
 }
-/*
-  Canvas area: row 1 of col 2.
-  - overflow: auto so the slide can be scrolled if it exceeds the
-    container in either dimension.
-  - flex centering keeps the slide centred when it fits.
-*/
+/* Canvas area: row 1 of col 2. updateSlideSize() ensures the slide always
+   fits exactly, so overflow:hidden is safe and prevents a phantom scrollbar. */
 .center {
   grid-column: 2;
   grid-row: 1;
@@ -135,31 +137,24 @@ select {
   justify-content: center;
   padding: 16px;
   transition: background 0.18s ease;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
   min-width: 0;
 }
 /*
   Slide card:
-  - aspect-ratio is set dynamically by JS (from deck.aspectRatio),
-    defaulting to 16/9. The CSS fallback here matches that default.
-  - width: 100% + max-width let the slide shrink on narrow canvases.
-  - max-height: 100% ensures the slide never exceeds the canvas height
-    when the aspect-ratio property is in effect — the browser will
-    respect BOTH constraints and pick the smaller dimension, so the
-    slide always fits inside the canvas without overflowing.
-  - No fixed height or max-height calc() — those fight aspect-ratio.
-  - overflow: hidden (not auto) because the outer .center now scrolls;
-    internal slide content should not double-scroll.
+  - In the canvas (.center), width and height are set pixel-exactly by
+    updateSlideSize() + ResizeObserver so the slide always fills the
+    available space at the exact deck aspect ratio. The CSS sizing rules
+    below are not used for the main canvas.
+  - In present mode (.present .slide sits in a plain block container),
+    width defaults to 100% of the wrapper and aspect-ratio computes height.
+    That path never has a max-height conflict, so aspect-ratio is safe.
 */
 .slide {
   --slide-fs-scale: 1;
-  /* fallback aspect ratio — JS overwrites via inline style */
+  /* Present-mode fallback; canvas dimensions overridden by JS inline styles. */
   aspect-ratio: 16 / 9;
-  width: 100%;
-  max-width: 860px;
-  max-height: 100%;
-  flex-shrink: 0;
   border-radius: 16px;
   padding: 32px 38px;
   overflow: hidden;

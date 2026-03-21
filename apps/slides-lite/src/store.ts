@@ -62,16 +62,13 @@ export function persist(showToast = false) {
   if (showToast) flash('Saved');
 }
 
-export function flash(msg: string) {
-  const n = document.createElement('div');
-  n.textContent = msg;
-  n.style.cssText = 'position:fixed;top:14px;right:14px;background:#111827;color:white;padding:9px 12px;border-radius:10px;z-index:99999';
-  document.body.appendChild(n);
-  n.animate([{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'translateY(0px)' }], { duration: 220, easing: 'ease-out' });
-  setTimeout(() => {
-    const anim = n.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-in' });
-    anim.onfinish = () => n.remove();
-  }, 900);
+// Use y-toast utility classes instead of inline CSS animation strings.
+export function flash(msg: string, type: 'info' | 'success' | 'error' = 'success') {
+  const el = document.createElement('div');
+  el.className = `y-toast y-toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
 }
 
 export function moveSlide(from: number, to: number) {

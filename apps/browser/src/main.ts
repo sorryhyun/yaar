@@ -4,7 +4,7 @@
  * Supports runtime session switching via the `attach` protocol command.
  * App Protocol is registered in ./protocol.ts.
  */
-import { createSignal, onCleanup } from '@bundled/solid-js';
+import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { app } from '@bundled/yaar';
@@ -43,27 +43,26 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Derived helpers ───────────────────────────────────────────────────
 
-function lockClass(): string {
-  const url = currentUrl();
-  if (url === 'about:blank') return 'lock hidden';
+/**
+ * Merged lock state: parses the URL exactly once, returning both the CSS
+ * class and the icon character.  Using createMemo avoids parsing the URL
+ * twice per render tick (previously done by separate lockClass / lockIcon).
+ */
+interface LockState { cls: string; icon: string; }
+
+function getLockState(url: string): LockState {
+  if (url === 'about:blank') return { cls: 'lock hidden', icon: '' };
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' ? 'lock' : 'lock insecure';
+    return parsed.protocol === 'https:'
+      ? { cls: 'lock', icon: '🔒' }
+      : { cls: 'lock insecure', icon: '🔓' };
   } catch {
-    return 'lock insecure';
+    return { cls: 'lock insecure', icon: '🔓' };
   }
 }
 
-function lockIcon(): string {
-  const url = currentUrl();
-  if (url === 'about:blank') return '';
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' ? '🔒' : '🔓';
-  } catch {
-    return '🔓';
-  }
-}
+const lock = createMemo<LockState>(() => getLockState(currentUrl()));
 
 // ── Actions ───────────────────────────────────────────────────────────
 
@@ -90,21 +89,26 @@ function updateUrlBar(url: string, title?: string) {
   if (title !== undefined) setPageTitle(title);
 }
 
-function clearDisplay() {
+/**
+ * Shared reset helper used by both clearDisplay() and attach().
+ * Hides the screenshot and resets URL/title, then shows a placeholder.
+ */
+function resetDisplay(placeholder: string) {
   setShowScreenshot(false);
-  updateUrlBar('about:blank');
+  setCurrentUrl('about:blank');
   setPageTitle('');
-  setPlaceholderText('Browser closed.');
+  setPlaceholderText(placeholder);
+}
+
+function clearDisplay() {
+  resetDisplay('Browser closed.');
 }
 
 // ── Event handlers ────────────────────────────────────────────────────
 
-function handleBack() {
-  app?.sendInteraction({ event: 'navigate_back' });
-}
-
-function handleForward() {
-  app?.sendInteraction({ event: 'navigate_forward' });
+/** Unified navigation handler — avoids duplicating sendInteraction calls. */
+function handleNav(direction: 'navigate_back' | 'navigate_forward') {
+  app?.sendInteraction({ event: direction });
 }
 
 function handleReload() {
@@ -163,6 +167,8 @@ function stopPolling() {
 function startPolling(bid: string) {
   stopPolling();
   pollTimer = setInterval(() => {
+    // Guard: screenshotEl may not be mounted yet if polling starts before render
+    if (!screenshotEl) return;
     const ts = Date.now();
     const img = new Image();
     img.onload = () => {
@@ -210,13 +216,13 @@ function connectSSE(bid: string) {
   evtSource.onerror = () => {
     sseErrorCount++;
     if (sseErrorCount === 1) {
+      // First error: hide screenshot and indicate reconnection attempt
       setPlaceholderText('Reconnecting...');
       setShowScreenshot(false);
-    }
-    if (sseErrorCount >= MAX_SSE_ERRORS) {
+    } else if (sseErrorCount >= MAX_SSE_ERRORS) {
+      // Too many consecutive errors — give up (screenshot already hidden)
       evtSource.close();
       setPlaceholderText('Connection lost. Session may have ended.');
-      setShowScreenshot(false);
     }
   };
 }
@@ -227,10 +233,7 @@ function connectSSE(bid: string) {
  */
 function attach(browserId: string) {
   setActiveBrowserId(browserId);
-  setShowScreenshot(false);
-  setCurrentUrl('about:blank');
-  setPageTitle('');
-  setPlaceholderText('Connecting...');
+  resetDisplay('Connecting...');
   connectSSE(browserId);
 }
 
@@ -244,10 +247,10 @@ render(() => html`
   <div class="browser-chrome y-app">
     <div class="url-bar y-flex y-gap-2 y-px-2 y-surface y-border-b">
       <button class="y-btn y-btn-sm y-btn-ghost" title="Back" aria-label="Back"
-        onClick=${handleBack}>←</button>
+        onClick=${() => handleNav('navigate_back')}>←</button>
       <button class="y-btn y-btn-sm y-btn-ghost" title="Forward" aria-label="Forward"
-        onClick=${handleForward}>→</button>
-      <span class=${() => lockClass()}>${() => lockIcon()}</span>
+        onClick=${() => handleNav('navigate_forward')}>→</button>
+      <span class=${() => lock().cls}>${() => lock().icon}</span>
       <input class="url-text y-input"
         value=${() => currentUrl()}
         onFocus=${handleUrlFocus}

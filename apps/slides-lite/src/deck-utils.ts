@@ -3,6 +3,11 @@ import { isThemeId } from './theme';
 import type { Deck, FontSize, Slide, SlideLayout } from './types';
 import { uuid } from './utils';
 
+// Single source of truth for valid enum values — consumed by isSlideLayout,
+// isFontSize, and UI select lists to avoid repeating literal arrays.
+export const SLIDE_LAYOUTS: SlideLayout[] = ['title-body', 'title-image', 'section'];
+export const FONT_SIZES: FontSize[] = ['sm', 'md', 'lg', 'xl'];
+
 export function newSlide(layout: SlideLayout = 'title-body'): Slide {
   return { id: uuid(), layout, title: 'New Slide', body: '', imageUrl: '', notes: '' };
 }
@@ -19,11 +24,11 @@ export function newDeck(): Deck {
 }
 
 export function isSlideLayout(value: unknown): value is SlideLayout {
-  return value === 'title-body' || value === 'title-image' || value === 'section';
+  return SLIDE_LAYOUTS.includes(value as SlideLayout);
 }
 
 export function isFontSize(value: unknown): value is FontSize {
-  return value === 'sm' || value === 'md' || value === 'lg' || value === 'xl';
+  return FONT_SIZES.includes(value as FontSize);
 }
 
 export function normalizeSlideInput(raw: Partial<Slide> | null | undefined): Slide {

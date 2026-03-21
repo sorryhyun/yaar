@@ -1,6 +1,6 @@
 {
   "name": "Dev Tools",
-  "description": "IDE for building and deploying YAAR apps",
+  "description": "Tool for developing and deploying YAAR apps. Use this for analyzing app source code.",
   "icon": "🛠️",
   "createShortcut": false,
   "capture": "dom",

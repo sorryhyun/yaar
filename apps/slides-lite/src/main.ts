@@ -25,6 +25,33 @@ import type { Deck } from './types';
 // DOM ref for canvas
 let canvasEl!: HTMLDivElement;
 
+/**
+ * Compute pixel-exact slide dimensions so the slide always fills the canvas
+ * at the correct aspect ratio, regardless of container size.
+ *
+ * Strategy: width-first up to 860 px, then height-first if the computed
+ * height would overflow the available vertical space. Explicit pixel sizes
+ * are written as inline styles, overriding any CSS sizing rules.
+ */
+function updateSlideSize() {
+  const slideEl = canvasEl?.querySelector('.slide') as HTMLElement | null;
+  if (!slideEl) return;
+  const PAD = 32; // 16 px padding × 2
+  const availW = canvasEl.clientWidth - PAD;
+  const availH = canvasEl.clientHeight - PAD;
+  if (availW <= 0 || availH <= 0) return;
+
+  const { width: rW, height: rH } = parseAspectRatio(getDeck().aspectRatio);
+  const ratio = rW / rH;
+
+  let w = Math.min(availW, 860); // visual max-width cap
+  let h = w / ratio;
+  if (h > availH) { h = availH; w = h * ratio; } // height overflows → height-first
+
+  slideEl.style.width = `${Math.round(w)}px`;
+  slideEl.style.height = `${Math.round(h)}px`;
+}
+
 // Mount
 render(() => html`
   <div class="root y-light">
@@ -33,7 +60,13 @@ render(() => html`
       ${createThumbnailList()}
       <div
         class="center"
-        ref=${(el: HTMLDivElement) => { canvasEl = el; }}
+        ref=${(el: HTMLDivElement) => {
+          canvasEl = el;
+          // Re-compute slide size whenever the canvas container is resized
+          // (window resize, sidebar toggled, etc.).
+          const obs = new ResizeObserver(() => updateSlideSize());
+          obs.observe(el);
+        }}
         style=${() => { deckVer(); return `background:${THEMES[getDeck().themeId].canvas}`; }}
       ></div>
       ${createEditorPanel()}
@@ -47,10 +80,10 @@ createEffect(() => {
   if (!canvasEl) return;
   canvasEl.innerHTML = renderSlideHtml(activeSlide(), getDeck().themeId, getDeck().fontSize);
   Prism.highlightAllUnder(canvasEl);
+  // Apply pixel-exact sizing immediately after rendering the new slide HTML.
+  updateSlideSize();
   const slideEl = canvasEl.querySelector('.slide') as HTMLElement | null;
   if (slideEl) {
-    const ratio = parseAspectRatio(getDeck().aspectRatio);
-    slideEl.style.aspectRatio = ratio.cssValue;
     slideEl.animate(
       [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0px)' }],
       { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },

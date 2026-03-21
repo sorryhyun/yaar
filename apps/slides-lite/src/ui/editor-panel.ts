@@ -1,10 +1,10 @@
 import html from '@bundled/solid-js/html';
 import { getDeck, activeIndexVer, activeSlide, markDirty, bumpDeck, bumpActiveIndex, clampActive } from '../store';
-import { newSlide, isFontSize } from '../deck-utils';
+import { newSlide, isFontSize, FONT_SIZES } from '../deck-utils';
 import { debounce } from '../utils';
-import type { FontSize, SlideLayout } from '../types';
+import type { SlideLayout } from '../types';
 
-// Debounced version of bumpDeck for text input fields (300ms)
+// Debounced version of bumpDeck for text input fields (350ms)
 const debouncedBumpDeck = debounce(() => bumpDeck(), 350);
 
 export function createEditorPanel() {
@@ -61,11 +61,11 @@ function renderEditorPanel() {
       <select onchange=${(e: Event) => {
         const val = (e.target as HTMLSelectElement).value;
         if (val === '') { delete slide.fontSize; }
-        else if (isFontSize(val)) { slide.fontSize = val as FontSize; }
+        else if (isFontSize(val)) { slide.fontSize = val; }
         markDirty(); bumpDeck();
       }}>
         <option value="" selected=${!slide.fontSize}>Default (deck)</option>
-        ${(['sm', 'md', 'lg', 'xl'] as FontSize[]).map(s => html`<option value=${s} selected=${slide.fontSize === s}>${s.toUpperCase()}</option>`)}
+        ${FONT_SIZES.map(s => html`<option value=${s} selected=${slide.fontSize === s}>${s.toUpperCase()}</option>`)}
       </select>
     </div>
     <div class="field" style="display:flex;gap:8px">

@@ -1,12 +1,12 @@
 import html from '@bundled/solid-js/html';
 import { getDeck, setDeck, deckVer, activeIndexVer, dirty, lastSavedAt, markDirty, persist, bumpDeck, bumpActiveIndex, activeSlide, setFilterQueryValue } from '../store';
-import { newDeck, newSlide, isFontSize } from '../deck-utils';
+import { newDeck, newSlide, isFontSize, FONT_SIZES } from '../deck-utils';
 import { THEMES } from '../theme';
 import { parseAspectRatio, RATIO_PRESETS, type RatioPreset } from '../aspect-ratio';
 import { uuid, formatDistanceToNow } from '../utils';
 import { startPresent } from './present';
 import { exportPdf } from './export';
-import type { ThemeId, FontSize } from '../types';
+import type { ThemeId } from '../types';
 
 export function createTopbar() {
   return html`
@@ -45,7 +45,7 @@ export function createTopbar() {
       <button class="y-btn y-btn-sm y-btn-primary" onClick=${startPresent}>Present</button>
       <button class="y-btn y-btn-sm y-btn-ghost" onClick=${exportPdf}>Export PDF</button>
       <span class=${() => `chip${dirty() ? ' dirty' : ''}`}>
-        ${() => dirty() ? 'Saving\u2026' : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
+        ${() => dirty() ? 'Saving…' : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
       </span>
     </div>
   `;
@@ -92,13 +92,12 @@ function renderRatioControls() {
 function renderFontSizeControl() {
   deckVer();
   const deck = getDeck();
-  const sizes: FontSize[] = ['sm', 'md', 'lg', 'xl'];
   return html`
     <select title="Font size" onchange=${(e: Event) => {
-      const val = (e.target as HTMLSelectElement).value as FontSize;
+      const val = (e.target as HTMLSelectElement).value;
       if (isFontSize(val)) { deck.fontSize = val; markDirty(); bumpDeck(); }
     }}>
-      ${sizes.map(s => html`<option value=${s} selected=${deck.fontSize === s}>${s.toUpperCase()}</option>`)}
+      ${FONT_SIZES.map(s => html`<option value=${s} selected=${deck.fontSize === s}>${s.toUpperCase()}</option>`)}
     </select>
   `;
 }

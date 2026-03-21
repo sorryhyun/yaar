@@ -1,7 +1,7 @@
 {
-  "icon": "\ud83c\udf10",
+  "icon": "🌐",
   "name": "Browser",
-  "description": "Live browser with screenshot streaming and session management",
+  "description": "Second-hand browser tool for rendering server-side browser.",
   "run": "index.html",
   "createShortcut": false,
   "variant": "standard",

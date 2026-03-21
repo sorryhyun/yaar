@@ -8,7 +8,6 @@ import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentProfile } from './types.js';
 import { VERB_TOOL_NAMES } from './types.js';
 import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
-import { DEFAULT_PROFILE } from './default.js';
 import { WEB_PROFILE } from './web.js';
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
@@ -18,7 +17,6 @@ export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
 export { buildAppAgentProfile } from './app-agent.js';
 
 // Re-export individual profiles
-export { DEFAULT_PROFILE } from './default.js';
 export { WEB_PROFILE } from './web.js';
 
 // Re-export orchestrator
@@ -30,15 +28,14 @@ export { SESSION_AGENT_PROFILE } from './session-agent.js';
 // ── Profile registry ──────────────────────────────────────────────────
 
 const profiles: Record<string, AgentProfile> = {
-  default: DEFAULT_PROFILE,
   web: WEB_PROFILE,
 };
 
 /**
- * Get a profile by ID. Returns the 'default' profile for unknown IDs.
+ * Get a profile by ID. Returns the 'web' profile for unknown IDs.
  */
 export function getProfile(id: string): AgentProfile {
-  return profiles[id] ?? profiles.default;
+  return profiles[id] ?? profiles.web;
 }
 
 // ── Developer profile (monitor agent) ────────────────────────────────
@@ -134,9 +131,6 @@ export interface CodexAgentRole {
  * Each role becomes a TOML config file referenced via `-c agents.<role>.config_file=...`.
  */
 export const CODEX_AGENT_ROLES: Record<string, CodexAgentRole> = {
-  default: {
-    description: 'General-purpose helper',
-  },
   worker: {
     description: 'Task execution agent',
   },

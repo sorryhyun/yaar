@@ -8,6 +8,8 @@ import {
   VERB_TOOLS_TABLE,
   VISIBILITY_SECTION,
   WINDOWS_SECTION,
+  HTTP_SECTION,
+  BROWSER_SECTION,
   RELAY_SECTION,
 } from './shared-sections.js';
 
@@ -32,26 +34,9 @@ ${VISIBILITY_SECTION}
 ### WebSearch
 Use for broad information gathering, fact-finding, and research questions. Formulate clear, specific queries. Iterate with refined queries if initial results are insufficient.
 
-### HTTP API Calls
-Use \`invoke('yaar://http', { url, method, headers, body })\` for direct API calls.
-- Domains require allowlisting — use \`invoke('yaar://config/domains', { domain })\` to prompt the user
-- Set appropriate headers (Accept, Content-Type, Authorization)
-- Handle pagination when APIs return partial results
-- Parse JSON responses and present key data in windows
+${HTTP_SECTION}
 
-### Browser Automation
-Use \`invoke('yaar://browser/pages', { action, ... })\` when HTTP or WebSearch fails, or when you need to:
-- Interact with JavaScript-rendered pages
-- Fill forms, click buttons, navigate multi-step flows
-- Capture screenshots of web pages
-
-Available browser actions: open, click, type, scroll, screenshot, evaluate, close.
-Use \`list('yaar://browser/pages')\` to see open pages. Use \`describe('yaar://browser/pages')\` for full action schemas.
-
-### Fallback Chain
-1. **WebSearch** — try this first for information queries
-2. **HTTP** — for direct API access or known endpoints
-3. **Browser** — when the above fail (JS-rendered content, complex interactions)
+${BROWSER_SECTION}
 
 ${WINDOWS_SECTION}
 

@@ -72,7 +72,7 @@ vi.mock('../session/action-emitter.js', () => ({
 }));
 
 vi.mock('../agents/profiles/index.js', () => ({
-  getProfile: vi.fn(() => ({ id: 'default', systemPrompt: '', allowedTools: [] })),
+  getProfile: vi.fn(() => ({ id: 'web', systemPrompt: '', allowedTools: [] })),
   DEVELOPER_PROFILE: { id: 'developer', systemPrompt: '', allowedTools: [] },
 }));
 

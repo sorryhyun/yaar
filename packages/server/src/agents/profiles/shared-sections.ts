@@ -77,8 +77,27 @@ delete('yaar://storage/docs/readme.txt')
 export const HTTP_SECTION = `## HTTP Access
 
 Use \`invoke('yaar://http', { url, method, headers, body })\` for API calls. Domains require allowlisting.
-Use \`invoke('yaar://config/domains', { domain: "example.com" })\` to prompt user for new domain access.
-**When http or WebSearch fails**, use \`invoke('yaar://browser/pages', { action: "open", url })\` as a fallback.`;
+Use \`invoke('yaar://config/domains', { domain: "example.com" })\` to prompt user for new domain access.`;
+
+export const BROWSER_SECTION = `## Browser Automation
+
+Use \`invoke('yaar://browser/{id}', { action, ... })\` to control a headless browser via verbs (not an app).
+
+\`\`\`
+invoke('yaar://browser/b1', { action: "open", url: "https://example.com" })  # open page
+invoke('yaar://browser/b1', { action: "screenshot" })                         # capture screenshot
+invoke('yaar://browser/b1', { action: "click", selector: "#btn" })            # click element
+invoke('yaar://browser/b1', { action: "type", selector: "input", text: "hi" })# type into element
+invoke('yaar://browser/b1', { action: "extract", selector: ".content" })      # extract text
+invoke('yaar://browser/b1', { action: "evaluate", expression: "document.title" }) # run JS
+list('yaar://browser')                                                        # list open browsers
+delete('yaar://browser/b1')                                                   # close browser
+\`\`\`
+
+Other actions: navigate, scroll, hover, press, wait_for, extract_images, html.
+Use \`describe('yaar://browser/{id}')\` for full action schemas.
+
+**Fallback chain:** WebSearch → HTTP → Browser (use browser when JS rendering or interaction is needed).`;
 
 export const SKILLS_SECTION = `## Skills
 

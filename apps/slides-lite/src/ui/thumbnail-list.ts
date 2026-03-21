@@ -1,12 +1,11 @@
 import html from '@bundled/solid-js/html';
 import { getDeck, deckVer, bumpDeck, bumpActiveIndex, filterQueryValue, setFilterQueryValue, moveSlide } from '../store';
-import { escapeHtml } from '../markdown';
 
 export function createThumbnailList() {
   return html`
     <div class="left y-scroll">
       <div class="left-head">
-        <input placeholder="Filter slides\u2026" onInput=${(e: Event) => {
+        <input placeholder="Filter slides…" onInput=${(e: Event) => {
           setFilterQueryValue((e.target as HTMLInputElement).value);
           bumpDeck();
         }} />
@@ -34,10 +33,10 @@ function renderThumbList() {
           bumpActiveIndex();
         }}
       >
-        <h4>${idx + 1}. ${escapeHtml(s.title || 'Untitled')}</h4>
-        <p>${escapeHtml((s.body || '').slice(0, 72))}</p>
+        <h4>${idx + 1}. ${s.title || 'Untitled'}</h4>
+        <p>${(s.body || '').slice(0, 72)}</p>
         <div class="thumb-badges">
-          <span class="thumb-badge">${escapeHtml(s.layout)}</span>
+          <span class="thumb-badge">${s.layout}</span>
           <div class="thumb-actions">
             <button onClick=${(e: Event) => { e.stopPropagation(); moveSlide(idx, idx - 1); }}>↑</button>
             <button onClick=${(e: Event) => { e.stopPropagation(); moveSlide(idx, idx + 1); }}>↓</button>
