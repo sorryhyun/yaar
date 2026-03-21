@@ -1,4 +1,4 @@
-// ── App Protocol registration ────────────────────────────────────────────────
+// ── App Protocol registration ───────────────────────────────────────────────────────
 //
 // All postMessage / App Protocol wiring lives here so that src/main.ts stays
 // focused on UI.  The compiler auto-extracts the protocol manifest from this
@@ -11,10 +11,11 @@ import {
   installedApps,
   setInstalledApps,
   statusText,
-  setStatusText,
   lastUpdated,
   loading,
   apiBase,
+  hideInstalled,
+  setHideInstalled,
   setDomain,
   setStatus,
   touch,
@@ -51,6 +52,10 @@ if (app) {
       loading: {
         description: 'Whether network request is in progress',
         handler: () => loading(),
+      },
+      hideInstalled: {
+        description: 'Whether the Hide Installed filter is active',
+        handler: () => hideInstalled(),
       },
     },
     commands: {
@@ -91,8 +96,8 @@ if (app) {
         handler: (p: { marketApps?: ListedApp[]; installedApps?: InstalledApp[]; status?: string }) => {
           if (p.marketApps) setMarketApps(p.marketApps);
           if (p.installedApps) setInstalledApps(p.installedApps);
-          if (p.status) setStatusText(p.status);
-          touch();
+          if (p.status) setStatus(p.status);
+          else touch();
           return { ok: true, marketCount: marketApps().length, installedCount: installedApps().length };
         },
       },
@@ -106,6 +111,18 @@ if (app) {
         handler: (p: { status: string }) => {
           setStatus(p.status);
           return { ok: true };
+        },
+      },
+      setHideInstalled: {
+        description: 'Toggle the Hide Installed filter on or off',
+        params: {
+          type: 'object',
+          properties: { hide: { type: 'boolean' } },
+          required: ['hide'],
+        },
+        handler: (p: { hide: boolean }) => {
+          setHideInstalled(p.hide);
+          return { ok: true, hideInstalled: hideInstalled() };
         },
       },
       clearData: {

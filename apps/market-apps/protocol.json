@@ -17,6 +17,9 @@
     },
     "loading": {
       "description": "Whether network request is in progress"
+    },
+    "hideInstalled": {
+      "description": "Whether the Hide Installed filter is active"
     }
   },
   "commands": {
@@ -75,6 +78,18 @@
           }
         },
         "required": ["status"]
+      }
+    },
+    "setHideInstalled": {
+      "description": "Toggle the Hide Installed filter on or off",
+      "params": {
+        "type": "object",
+        "properties": {
+          "hide": {
+            "type": "boolean"
+          }
+        },
+        "required": ["hide"]
       }
     },
     "clearData": {
