@@ -13,7 +13,7 @@ import type { PoolContext, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, APP_AGENT_TOOL_NAMES } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
-import { windowSource } from './context.js';
+import { windowSource, monitorSource } from './context.js';
 
 export class AppTaskProcessor {
   /** Track the most recent windowId for each app (for tool resolution). */
@@ -108,6 +108,9 @@ export class AppTaskProcessor {
       // Record user message
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
 
+      // Capture the app-agent's response text for relaying to the monitor
+      let appResponseText = '';
+
       await runAgentTurn(this.ctx, {
         agent,
         role: agentRole,
@@ -119,6 +122,9 @@ export class AppTaskProcessor {
         monitorId: task.monitorId,
         allowedTools: [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
+        onAssistantResponse: (text) => {
+          appResponseText = text;
+        },
         onBeforeRun: async () => {
           await this.ctx.sharedLogger?.registerAgent(
             agentRole,
@@ -135,6 +141,20 @@ export class AppTaskProcessor {
             recordedActions,
             windowId,
           );
+
+          // Auto-relay: append a summary to monitor context so the orchestrator
+          // sees what the app-agent responded (avoids user message being "swallowed")
+          if (appResponseText && task.monitorId) {
+            const monitorSrc = monitorSource(task.monitorId);
+            const summary =
+              `[app-agent "${appId}" responded to user in window "${windowId}"]\n` +
+              appResponseText;
+            this.ctx.contextAssembly.appendAssistantMessage(
+              this.ctx.contextTape,
+              summary,
+              monitorSrc,
+            );
+          }
         },
         onFinally: async () => {
           await this.sendWindowStatus(windowId, agentRole, 'released');

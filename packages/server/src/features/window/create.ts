@@ -13,11 +13,30 @@ import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error, validateRelativePath } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/session.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { PROJECT_ROOT } from '../../config.js';
 import { formatWindowRef, deriveWindowId, getAppMetaOverrides } from './helpers.js';
+
+/** Cascade offset per window (px). */
+const CASCADE_STEP = 32;
+/** Maximum cascade offset before wrapping back to origin. */
+const CASCADE_MAX = 320;
+
+/**
+ * Compute cascade offset for default window positions.
+ * Returns { x, y } offset based on existing window count in the session.
+ */
+function getCascadeOffset(): { x: number; y: number } {
+  const sid = getSessionId();
+  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+  if (!session) return { x: 0, y: 0 };
+  const count = session.windowState.getWindowCount();
+  const offset = (count * CASCADE_STEP) % CASCADE_MAX;
+  return { x: offset, y: offset };
+}
 
 /** Handle window creation (both component and non-component renderers). */
 export async function handleCreate(
@@ -36,6 +55,9 @@ export async function handleCreate(
     title,
   );
   const actualId = windowId || derivedId;
+
+  // Cascade offset: when no explicit position, offset based on existing window count
+  const cascade = payload.x == null && payload.y == null ? getCascadeOffset() : { x: 0, y: 0 };
 
   // Component renderer: content is a ComponentLayout object or loaded from jsonfile
   if (renderer === 'component') {
@@ -94,8 +116,8 @@ export async function handleCreate(
       windowId: actualId,
       title,
       bounds: {
-        x: (payload.x as number) ?? 100,
-        y: (payload.y as number) ?? 100,
+        x: (payload.x as number) ?? 100 + cascade.x,
+        y: (payload.y as number) ?? 100 + cascade.y,
         w: (payload.width as number) ?? 500,
         h: (payload.height as number) ?? 400,
       },
@@ -137,8 +159,8 @@ export async function handleCreate(
     windowId: actualId,
     title,
     bounds: {
-      x: (payload.x as number) ?? 100,
-      y: (payload.y as number) ?? 100,
+      x: (payload.x as number) ?? 100 + cascade.x,
+      y: (payload.y as number) ?? 100 + cascade.y,
       w: (payload.width as number) ?? 500,
       h: (payload.height as number) ?? 400,
     },

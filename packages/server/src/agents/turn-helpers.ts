@@ -57,6 +57,8 @@ export interface AgentTurnOptions {
   onBeforeRun?: () => Promise<void> | void;
   onAfterRun?: (recordedActions: OSAction[]) => Promise<void> | void;
   onFinally?: () => Promise<void> | void;
+  /** Called with the assistant's response text when the turn completes. */
+  onAssistantResponse?: (responseText: string) => void;
 }
 
 /**
@@ -98,6 +100,7 @@ export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Pr
       onContextMessage: (msgRole, content) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);
+          opts.onAssistantResponse?.(content);
         }
       },
     });
