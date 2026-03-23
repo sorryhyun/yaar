@@ -1,6 +1,7 @@
 :root {
   color-scheme: dark;
 }
+
 body {
   margin: 0;
   font-family: var(--yaar-font);
@@ -9,87 +10,333 @@ body {
   height: 100dvh;
   overflow: hidden;
 }
+
+/* ── 3-column grid ───────────────────────────────────────────────── */
+
 #layout {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 220px 300px 1fr;
   height: 100dvh;
-  min-height: 0;
 }
-.panel {
-  border-right: 1px solid var(--yaar-border);
-  overflow: auto;
-  min-height: 0;
-}
-.panel-right {
+
+/* ── Feeds panel ────────────────────────────────────────────────── */
+
+.feeds-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto 1fr auto;
+  border-right: 1px solid var(--yaar-border);
   min-height: 0;
   overflow: hidden;
 }
-.toolbar,
-.post-actions {
-  padding: 12px;
+
+/* ── Articles panel ─────────────────────────────────────────────── */
+
+.articles-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-right: 1px solid var(--yaar-border);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Content panel ──────────────────────────────────────────────── */
+
+.content-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* .content-main is a stable (non-reactive) flex child → safe to use flex:1 */
+.content-main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* ── Shared panel header ───────────────────────────────────────────── */
+
+.panel-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--yaar-border);
+  font-size: 13px;
+  flex-shrink: 0;
 }
-.composer {
-  padding: 12px;
-  border-top: 1px solid var(--yaar-border);
+.panel-hdr strong {
+  flex: 1;
 }
-.post-list {
-  padding: 8px;
+
+/* ── Feed list ─────────────────────────────────────────────────────── */
+
+.feed-list {
+  overflow-y: auto;
+  padding: 6px;
 }
-.post-item {
-  padding: 10px;
-  border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius-lg);
-  margin-bottom: 8px;
+
+.feed-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: var(--yaar-radius);
   cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
+  font-size: 13px;
+  user-select: none;
+  transition: background 0.1s;
 }
-.post-item:hover,
-.post-item.active {
-  border-color: var(--yaar-accent);
+.feed-item:hover {
   background: var(--yaar-bg-surface);
 }
-.title {
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-.post-view {
-  padding: 14px;
-  overflow: auto;
-  min-height: 0;
-}
-.row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-textarea {
-  min-height: 88px;
-  resize: vertical;
-  width: 100%;
-}
-.comments {
-  margin-top: 8px;
-}
-.comment {
-  border-top: 1px solid var(--yaar-border);
-  padding: 8px 0;
-  white-space: pre-wrap;
-}
-.status {
-  padding: 6px 12px;
-  border-top: 1px solid var(--yaar-border);
-  font-size: 12px;
+.feed-item.active {
+  background: var(--yaar-bg-surface);
   color: var(--yaar-accent);
 }
-.pill {
-  border: 1px solid var(--yaar-border);
+
+.feed-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unread-pill {
+  background: var(--yaar-accent);
+  color: #fff;
   border-radius: 999px;
-  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+.rm-btn {
+  opacity: 0;
+  border: none;
+  background: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:
+    color 0.1s,
+    background 0.1s;
+}
+.feed-item:hover .rm-btn {
+  opacity: 1;
+}
+.rm-btn:hover {
+  color: var(--yaar-error);
+  background: rgba(248, 81, 73, 0.12);
+}
+
+.dot-blink {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yaar-accent);
+  display: inline-block;
+  animation: blink 1s infinite;
+  flex-shrink: 0;
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Add feed area ────────────────────────────────────────────────── */
+
+.add-area {
+  padding: 8px;
+  border-top: 1px solid var(--yaar-border);
+}
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.add-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Article list ─────────────────────────────────────────────────── */
+
+.article-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.article-item {
+  padding: 8px 10px;
+  border-radius: var(--yaar-radius);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background 0.1s;
+}
+.article-item:hover {
+  background: var(--yaar-bg-surface);
+}
+.article-item.active {
+  background: var(--yaar-bg-surface);
+  border-left-color: var(--yaar-accent);
+}
+
+.art-title {
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.article-item.unread .art-title {
+  font-weight: 700;
+}
+
+.art-meta {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+}
+
+.empty-hint {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--yaar-text-muted);
+  line-height: 1.6;
+}
+
+/* ── Splash (no article selected) ────────────────────────────────── */
+
+/* position:absolute inside .content-main (position:relative) fills the space
+   without relying on flex:1 inside a reactive SolidJS expression */
+.splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--yaar-text-muted);
+  font-size: 14px;
+}
+.splash-icon {
+  font-size: 40px;
+}
+
+/* ── Article view ──────────────────────────────────────────────────── */
+
+.art-view {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.art-header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+.art-view-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.art-view-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
   font-size: 12px;
+  color: var(--yaar-text-muted);
+  align-items: center;
+}
+.ext-link {
+  color: var(--yaar-accent);
+  text-decoration: none;
+}
+.ext-link:hover {
+  text-decoration: underline;
+}
+
+.art-body {
+  overflow-y: auto;
+  padding: 16px 18px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.art-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--yaar-radius);
+}
+.art-body a {
+  color: var(--yaar-accent);
+}
+.art-body p {
+  margin: 0 0 12px;
+}
+.art-body h1,
+.art-body h2,
+.art-body h3 {
+  margin: 16px 0 8px;
+  line-height: 1.3;
+}
+.art-body pre {
+  background: var(--yaar-bg-surface);
+  padding: 10px 12px;
+  border-radius: var(--yaar-radius);
+  overflow-x: auto;
+  font-size: 13px;
+}
+.art-body code {
+  font-size: 13px;
+}
+.art-body blockquote {
+  border-left: 3px solid var(--yaar-border);
+  margin: 0 0 12px;
+  padding: 4px 12px;
+  color: var(--yaar-text-muted);
+}
+
+/* ── Status bar ───────────────────────────────────────────────────── */
+
+.status-bar {
+  padding: 5px 12px;
+  border-top: 1px solid var(--yaar-border);
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.toast-inline {
+  font-size: 11px;
+}
+.toast-inline.toast-success {
+  color: var(--yaar-success);
+}
+.toast-inline.toast-error {
+  color: var(--yaar-error);
+}
+.toast-inline.toast-info {
+  color: var(--yaar-accent);
 }

@@ -1,645 +1,276 @@
-import { createSignal, createMemo } from '@bundled/solid-js';
+import { createMemo, createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { createComment, createPost, fetchComments, fetchPost, fetchPosts, votePost } from "./api";
-import type { Comment, Post } from "./types";
-import { app } from '@bundled/yaar';
-import "./styles.css";
+import type { Article, Feed } from './types';
+import {
+  feeds, setFeeds,
+  articles,
+  selectedFeedId, setSelectedFeedId,
+  selectedArticle, setSelectedArticle,
+  readArticleIds, setReadArticleIds,
+  unreadCounts, loadingFeedIds,
+  showToast, toastMsg,
+} from './store';
+import { fetchAllFeeds, fetchSingleFeed } from './fetcher';
+import { loadState, saveState } from './storage';
+import { registerAppProtocol, notifyUnreadUpdate } from './protocol';
+import { formatDate, generateFeedId, extractDomainName } from './utils';
+import './styles.css';
 
-type SortMode = "latest" | "top" | "discussed";
-type ComposerMode = "post" | "comment";
+// ── Derived state ──────────────────────────────────────────────────────────
 
-// ── Signals ──────────────────────────────────────────────────────────────────
-const [posts, setPosts] = createSignal<Post[]>([]);
-const [nextCursor, setNextCursor] = createSignal<string | null>(null);
-const [selectedPostId, setSelectedPostId] = createSignal<string | null>(null);
-const [comments, setComments] = createSignal<Comment[]>([]);
-const [loading, setLoading] = createSignal(false);
-const [busyAction, setBusyAction] = createSignal(false);
-const [filter, setFilter] = createSignal("");
-const [sort, setSort] = createSignal<SortMode>("latest");
-const [composerMode, setComposerMode] = createSignal<ComposerMode>("post");
-const [statusText, setStatusText] = createSignal("Ready.");
-
-// ── Element refs ──────────────────────────────────────────────────────────────
-let searchInputEl: HTMLInputElement | null = null;
-let sortSelectEl: HTMLSelectElement | null = null;
-let postNicknameEl: HTMLInputElement | null = null;
-let postTitleEl: HTMLInputElement | null = null;
-let postContentEl: HTMLTextAreaElement | null = null;
-let commentNicknameEl: HTMLInputElement | null = null;
-let commentContentEl: HTMLTextAreaElement | null = null;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function relativeTime(iso?: string): string {
-  if (!iso) return "";
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return "";
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
-
-function truncate(text: string, max = 100): string {
-  if (!text) return "";
-  return text.length <= max ? text : `${text.slice(0, max)}…`;
-}
-
-function scoreOf(post: Post): number {
-  return post.score ?? (post.upvotes ?? 0) - (post.downvotes ?? 0);
-}
-
-function fmtPostMeta(post: Post): string {
-  const nickname = post.author?.nickname ?? "돌쇠";
-  const score = scoreOf(post);
-  const commentCount = post.comment_count ?? 0;
-  const time = relativeTime(post.created_at);
-  return `${nickname} · score ${score} · comments ${commentCount}${time ? ` · ${time}` : ""}`;
-}
-
-// ── Derived ───────────────────────────────────────────────────────────────────
-const getVisiblePosts = createMemo(() => {
-  const q = filter().trim().toLowerCase();
-  const filtered = q
-    ? posts().filter((p) => `${p.title} ${p.content}`.toLowerCase().includes(q))
-    : [...posts()];
-  filtered.sort((a, b) => {
-    if (sort() === "top") return scoreOf(b) - scoreOf(a);
-    if (sort() === "discussed") return (b.comment_count ?? 0) - (a.comment_count ?? 0);
-    return (Date.parse(b.created_at ?? "") || 0) - (Date.parse(a.created_at ?? "") || 0);
-  });
-  return filtered;
+const visibleArticles = createMemo(() => {
+  const art = articles();
+  const selId = selectedFeedId();
+  if (selId === 'all') {
+    const all: Article[] = [];
+    for (const feed of feeds()) all.push(...(art[feed.id] ?? []));
+    return all.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
+  }
+  return art[selId] ?? [];
 });
 
-const selectedPost = createMemo(() => {
-  const id = selectedPostId();
-  if (!id) return null;
-  return posts().find((p) => p.id === id) ?? null;
-});
+const totalUnread = createMemo(() =>
+  Object.values(unreadCounts() as Record<string, number>).reduce((sum, n) => sum + n, 0)
+);
 
-// ── Business logic ────────────────────────────────────────────────────────────
-async function loadFeed(reset = false) {
-  if (loading()) return;
-  setLoading(true);
-  setStatusText("Loading feed...");
+// ── Actions ────────────────────────────────────────────────────────────────
 
+async function refresh(): Promise<{ ok: boolean; totalUnread: number }> {
+  await fetchAllFeeds();
+  await saveState();
+  notifyUnreadUpdate(totalUnread());
+  return { ok: true, totalUnread: totalUnread() };
+}
+
+function markAllRead(): { ok: boolean } {
+  const ids = visibleArticles().map(a => a.id);
+  setReadArticleIds(Array.from(new Set([...readArticleIds(), ...ids])));
+  void saveState();
+  return { ok: true };
+}
+
+function selectFeed(feedId: string): { ok: boolean } {
+  setSelectedFeedId(feedId);
+  setSelectedArticle(null);
+  return { ok: true };
+}
+
+async function addFeed(url: string, name?: string): Promise<{ ok: boolean; feedId: string }> {
+  let normalized: string;
+  try { normalized = new URL(url).toString(); } catch { throw new Error('Invalid URL'); }
+  if (feeds().some(f => f.url === normalized)) throw new Error('Feed already exists');
+  const id = generateFeedId();
+  const feed: Feed = { id, url: normalized, name: name || extractDomainName(normalized) };
+  setFeeds([...feeds(), feed]);
+  await fetchSingleFeed(feed);
+  await saveState();
+  showToast(`Added: ${feed.name}`, 'success');
+  return { ok: true, feedId: id };
+}
+
+function removeFeed(feedId: string): void {
+  setFeeds(feeds().filter(f => f.id !== feedId));
+  if (selectedFeedId() === feedId) {
+    setSelectedFeedId('all');
+    setSelectedArticle(null);
+  }
+  void saveState();
+}
+
+function openArticle(article: Article): void {
+  setSelectedArticle(article);
+  if (!readArticleIds().includes(article.id)) {
+    setReadArticleIds([...readArticleIds(), article.id]);
+    void saveState();
+  }
+}
+
+// ── Add-feed form state ─────────────────────────────────────────────────────
+
+const [showAddForm, setShowAddForm] = createSignal(false);
+const [addBusy, setAddBusy] = createSignal(false);
+let addUrlInput: HTMLInputElement | null = null;
+let addNameInput: HTMLInputElement | null = null;
+
+async function submitAdd() {
+  const url = addUrlInput?.value.trim() ?? '';
+  if (!url) return;
+  setAddBusy(true);
   try {
-    const cursor = reset ? null : nextCursor();
-    const res = await fetchPosts(20, cursor);
-
-    const selectedBefore = selectedPostId();
-    setPosts(reset ? res.posts : [...posts(), ...res.posts]);
-    setNextCursor(res.nextCursor);
-
-    if (reset && posts().length) {
-      const stillExists = selectedBefore && posts().some((p) => p.id === selectedBefore);
-      setSelectedPostId(stillExists ? selectedBefore : posts()[0].id);
-      await loadSelectedPost();
-    }
-
-    setStatusText(`Feed loaded (${posts().length} posts).`);
-  } catch (err) {
-    setStatusText(`Feed error: ${(err as Error).message}`);
+    await addFeed(url, addNameInput?.value.trim() || undefined);
+    if (addUrlInput) addUrlInput.value = '';
+    if (addNameInput) addNameInput.value = '';
+    setShowAddForm(false);
+  } catch (e: unknown) {
+    showToast((e as Error).message, 'error');
   } finally {
-    setLoading(false);
+    setAddBusy(false);
   }
 }
 
-async function loadSelectedPost() {
-  const id = selectedPostId();
-  if (!id) return;
+// ── Render ──────────────────────────────────────────────────────────────────
 
-  setStatusText("Loading post...");
-
-  try {
-    const [post, fetchedComments] = await Promise.all([fetchPost(id), fetchComments(id)]);
-
-    const idx = posts().findIndex((p) => p.id === post.id);
-    if (idx >= 0) {
-      const updated = [...posts()];
-      updated[idx] = { ...updated[idx], ...post };
-      setPosts(updated);
-    }
-    setComments(fetchedComments);
-
-    setStatusText("Post loaded.");
-  } catch (err) {
-    setStatusText(`Post error: ${(err as Error).message}`);
-  }
-}
-
-async function selectPost(postId: string) {
-  setSelectedPostId(postId);
-  await loadSelectedPost();
-}
-
-async function handleVote(type: "up" | "down") {
-  const id = selectedPostId();
-  if (!id || busyAction()) return;
-
-  setBusyAction(true);
-  setStatusText(`Submitting ${type}vote with PoW...`);
-
-  try {
-    await votePost(id, type);
-    await loadSelectedPost();
-    setStatusText(`${type}vote submitted.`);
-  } catch (err) {
-    setStatusText(`Vote failed: ${(err as Error).message}`);
-  } finally {
-    setBusyAction(false);
-  }
-}
-
-async function handleCreatePost() {
-  if (busyAction()) return;
-
-  const nickname = postNicknameEl?.value.trim() || "돌쇠";
-  const title = postTitleEl?.value.trim() ?? "";
-  const content = postContentEl?.value.trim() ?? "";
-
-  if (!title || !content) {
-    setStatusText("Please fill title and content.");
-    return;
-  }
-
-  setBusyAction(true);
-  setStatusText("Creating post with PoW...");
-
-  try {
-    const post = await createPost({ nickname, title, content });
-    setPosts([post, ...posts()]);
-    setSelectedPostId(post.id);
-    setComments([]);
-
-    if (postTitleEl) postTitleEl.value = "";
-    if (postContentEl) postContentEl.value = "";
-
-    setStatusText("Post published.");
-  } catch (err) {
-    setStatusText(`Create post failed: ${(err as Error).message}`);
-  } finally {
-    setBusyAction(false);
-  }
-}
-
-async function handleCreateComment() {
-  const id = selectedPostId();
-  if (!id) {
-    setStatusText("Select a post first.");
-    return;
-  }
-  if (busyAction()) return;
-
-  const nickname = commentNicknameEl?.value.trim() || "돌쇠";
-  const content = commentContentEl?.value.trim() ?? "";
-
-  if (!content) {
-    setStatusText("Please write a comment.");
-    return;
-  }
-
-  setBusyAction(true);
-  setStatusText("Creating comment with PoW...");
-
-  try {
-    await createComment(id, { nickname, content });
-    if (commentContentEl) commentContentEl.value = "";
-    await loadSelectedPost();
-    setStatusText("Comment published.");
-  } catch (err) {
-    setStatusText(`Create comment failed: ${(err as Error).message}`);
-  } finally {
-    setBusyAction(false);
-  }
-}
-
-// ── UI ────────────────────────────────────────────────────────────────────────
 render(() => html`
   <div id="layout">
-    <!-- Left panel: post list -->
-    <aside class="panel y-scroll">
-      <div class="toolbar row">
-        <strong>Mersoom</strong>
-        <span class="pill y-badge">Read + Write</span>
+
+    <!-- Feeds panel -->
+    <aside class="feeds-panel">
+      <div class="panel-hdr">
+        <strong>📰 Feeds</strong>
+        <button
+          class="y-btn y-btn-ghost y-btn-sm"
+          title="Refresh all feeds"
+          disabled=${() => loadingFeedIds().length > 0}
+          onClick=${() => void refresh()}
+        >${() => loadingFeedIds().length > 0 ? '⟳' : '↻'}</button>
       </div>
-      <div class="toolbar">
-        <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">Search posts</div>
-        <input
-          class="y-input"
-          placeholder="Filter by title or content..."
-          ref=${(el: HTMLInputElement) => { searchInputEl = el; }}
-          disabled=${() => loading() || busyAction()}
-          onInput=${(e: Event) => { setFilter((e.target as HTMLInputElement).value); }}
-        />
-      </div>
-      <div class="toolbar row">
-        <select
-          class="y-input"
-          style="max-width: 145px;"
-          ref=${(el: HTMLSelectElement) => { sortSelectEl = el; }}
-          disabled=${() => loading() || busyAction()}
-          onChange=${(e: Event) => { setSort((e.target as HTMLSelectElement).value as SortMode); }}
+
+      <div class="feed-list">
+        <div
+          class=${() => 'feed-item' + (selectedFeedId() === 'all' ? ' active' : '')}
+          onClick=${() => selectFeed('all')}
         >
-          <option value="latest">Latest</option>
-          <option value="top">Top score</option>
-          <option value="discussed">Most discussed</option>
-        </select>
-        <button
-          class="y-btn y-btn-ghost y-btn-sm"
-          disabled=${() => loading() || busyAction()}
-          onClick=${() => void loadFeed(true)}
-        >Refresh</button>
-        <button
-          class="y-btn y-btn-ghost y-btn-sm"
-          disabled=${() => loading() || busyAction() || !nextCursor()}
-          onClick=${() => void loadFeed(false)}
-        >Load more</button>
-      </div>
-      <div class="toolbar y-text-sm y-text-muted">
-        ${() => `${getVisiblePosts().length} visible / ${posts().length} loaded`}
-      </div>
-      <div class="post-list">
-        ${() => getVisiblePosts().length === 0 ? html`<div class="y-text-sm y-text-muted">No matching posts.</div>` : ''}
-        ${() => getVisiblePosts().map(post => html`
-          <article
-            class=${() => "post-item" + (selectedPostId() === post.id ? " active" : "")}
-            onClick=${() => void selectPost(post.id)}
+          <span class="feed-label">All Articles</span>
+          ${() => totalUnread() > 0
+            ? html`<span class="unread-pill">${totalUnread()}</span>`
+            : null}
+        </div>
+        ${() => feeds().map(feed => html`
+          <div
+            class=${() => 'feed-item' + (selectedFeedId() === feed.id ? ' active' : '')}
+            onClick=${() => selectFeed(feed.id)}
           >
-            <div class="title">${post.title}</div>
-            <div class="y-text-sm y-text-muted" style="margin-bottom:6px;">${fmtPostMeta(post)}</div>
-            <div class="y-text-sm y-text-muted">${truncate(post.content, 92)}</div>
-          </article>
+            ${() => loadingFeedIds().includes(feed.id)
+              ? html`<span class="dot-blink"></span>`
+              : null}
+            <span class="feed-label">${feed.name}</span>
+            ${() => ((unreadCounts() as Record<string, number>)[feed.id] ?? 0) > 0
+              ? html`<span class="unread-pill">${(unreadCounts() as Record<string, number>)[feed.id]}</span>`
+              : null}
+            <button
+              class="rm-btn"
+              title="Remove feed"
+              onClick=${(e: MouseEvent) => { e.stopPropagation(); removeFeed(feed.id); }}
+            >x</button>
+          </div>
         `)}
+      </div>
+
+      <div class="add-area">
+        ${() => !showAddForm()
+          ? html`<button
+              class="y-btn y-btn-ghost y-btn-sm"
+              style="width:100%;"
+              onClick=${() => setShowAddForm(true)}
+            >+ Add Feed</button>`
+          : html`
+            <div class="add-form">
+              <input
+                class="y-input"
+                placeholder="https://example.com/feed.xml"
+                ref=${(el: HTMLInputElement) => { addUrlInput = el; }}
+              />
+              <input
+                class="y-input"
+                placeholder="Name (optional)"
+                ref=${(el: HTMLInputElement) => { addNameInput = el; }}
+              />
+              <div class="add-actions">
+                <button
+                  class="y-btn y-btn-primary y-btn-sm"
+                  style="flex:1;"
+                  disabled=${() => addBusy()}
+                  onClick=${() => void submitAdd()}
+                >Add</button>
+                <button
+                  class="y-btn y-btn-ghost y-btn-sm"
+                  onClick=${() => { setShowAddForm(false); }}
+                >Cancel</button>
+              </div>
+            </div>`}
       </div>
     </aside>
 
-    <!-- Right panel: post detail + composer -->
-    <main class="panel-right">
-      <!-- Header -->
-      <div class="toolbar y-flex-between">
-        <div class="y-truncate" style="font-weight:700;">
-          ${() => selectedPost()?.title ?? "Select a post"}
-        </div>
-        <div class="y-text-sm y-text-muted">
-          ${() => selectedPost() ? fmtPostMeta(selectedPost()!) : "Pick a post from the list."}
-        </div>
+    <!-- Articles panel -->
+    <section class="articles-panel">
+      <div class="panel-hdr">
+        <strong>${() => selectedFeedId() === 'all'
+          ? 'All Articles'
+          : (feeds().find(f => f.id === selectedFeedId())?.name ?? 'Articles')
+        }</strong>
+        <button class="y-btn y-btn-ghost y-btn-sm" onClick=${() => markAllRead()}>✓ All read</button>
+      </div>
+      <div class="article-list">
+        ${() => visibleArticles().length === 0
+          ? html`<div class="empty-hint">No articles yet — select a feed and click refresh.</div>`
+          : null}
+        ${() => visibleArticles().map(article => html`
+          <div
+            class=${() => {
+              let cls = 'article-item';
+              if (selectedArticle()?.id === article.id) cls += ' active';
+              if (!readArticleIds().includes(article.id)) cls += ' unread';
+              return cls;
+            }}
+            onClick=${() => openArticle(article)}
+          >
+            <div class="art-title">${article.title}</div>
+            <div class="art-meta">${article.feedName} · ${formatDate(article.pubDate)}</div>
+          </div>
+        `)}
+      </div>
+    </section>
+
+    <!-- Content panel -->
+    <main class="content-panel">
+      <div class="content-main">
+        ${() => !selectedArticle()
+          ? html`
+            <div class="splash">
+              <span class="splash-icon">📰</span>
+              <span>Select an article to read</span>
+            </div>`
+          : html`
+            <div class="art-view">
+              <div class="art-header">
+                <div class="art-view-title">${() => selectedArticle()!.title}</div>
+                <div class="art-view-meta">
+                  <span>${() => selectedArticle()!.feedName}</span>
+                  ${() => selectedArticle()!.author
+                    ? html`<span>${() => selectedArticle()!.author}</span>`
+                    : null}
+                  <span>${() => formatDate(selectedArticle()!.pubDate)}</span>
+                  <a
+                    href=${() => selectedArticle()!.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="ext-link"
+                  >Open original ↗</a>
+                </div>
+              </div>
+              <div
+                class="art-body"
+                .innerHTML=${() => selectedArticle()!.content || selectedArticle()!.description || ''}
+              ></div>
+            </div>`}
       </div>
 
-      <!-- Post view -->
-      <section class="post-view y-scroll">
-        ${() => !selectedPostId() ? html`<div class="y-text-sm y-text-muted">Pick a post from the list to read and vote.</div>` : ''}
-        ${() => !!selectedPostId() ? html`
-            <article class="y-card">
-              <div class="title">${() => selectedPost()?.title ?? ""}</div>
-              <div class="y-text-sm y-text-muted">${() => selectedPost() ? fmtPostMeta(selectedPost()!) : ""}</div>
-              <p style="white-space: pre-wrap;">${() => selectedPost()?.content ?? ""}</p>
-              <div class="post-actions row">
-                <button
-                  class="y-btn y-btn-ghost y-btn-sm"
-                  disabled=${() => loading() || busyAction()}
-                  onClick=${() => void handleVote("up")}
-                >👍 Upvote</button>
-                <button
-                  class="y-btn y-btn-ghost y-btn-sm"
-                  disabled=${() => loading() || busyAction()}
-                  onClick=${() => void handleVote("down")}
-                >👎 Downvote</button>
-              </div>
-            </article>
-            <section class="y-card comments">
-              <div class="title">Comments (${() => comments().length})</div>
-              ${() => comments().length === 0 ? html`<div class="y-text-sm y-text-muted">No comments.</div>` : ''}
-              ${() => comments().map(c => html`
-                <div class="comment">
-                  <div class="y-text-sm y-text-muted">${c.author?.nickname ?? "돌쇠"}${c.created_at ? " · " + relativeTime(c.created_at) : ""}</div>
-                  <div>${c.content}</div>
-                </div>
-              `)}
-            </section>
-          ` : ''}
-      </section>
-
-      <!-- Composer -->
-      <section class="composer">
-        <div class="row" style="margin-bottom:8px;">
-          <button
-            class=${() => composerMode() === "post" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
-            onClick=${() => setComposerMode("post")}
-          >New Post</button>
-          <button
-            class=${() => composerMode() === "comment" ? "y-btn y-btn-primary" : "y-btn y-btn-ghost"}
-            disabled=${() => !selectedPostId()}
-            onClick=${() => setComposerMode("comment")}
-          >New Comment</button>
-        </div>
-
-        ${() => composerMode() === "post" ? html`
-            <div class="y-card">
-              <div class="title">Create post</div>
-              <div class="row" style="margin-bottom:8px;">
-                <input
-                  class="y-input"
-                  placeholder="nickname"
-                  value="돌쇠"
-                  ref=${(el: HTMLInputElement) => { postNicknameEl = el; }}
-                />
-              </div>
-              <div class="row" style="margin-bottom:8px;">
-                <input
-                  class="y-input"
-                  placeholder="title"
-                  ref=${(el: HTMLInputElement) => { postTitleEl = el; }}
-                />
-              </div>
-              <div class="row" style="margin-bottom:8px;">
-                <textarea
-                  class="y-input"
-                  placeholder="share your thoughts..."
-                  ref=${(el: HTMLTextAreaElement) => { postContentEl = el; }}
-                ></textarea>
-              </div>
-              <div class="row">
-                <button
-                  class="y-btn y-btn-primary"
-                  disabled=${() => loading() || busyAction()}
-                  onClick=${() => void handleCreatePost()}
-                >Publish Post</button>
-              </div>
-            </div>
-          ` : ''}
-
-        ${() => composerMode() === "comment" ? html`
-            <div class="y-card">
-              <div class="title">Create comment</div>
-              <div class="y-text-sm y-text-muted" style="margin-bottom:8px;">Comment goes to selected post.</div>
-              <div class="row" style="margin-bottom:8px;">
-                <input
-                  class="y-input"
-                  placeholder="nickname"
-                  value="돌쇠"
-                  ref=${(el: HTMLInputElement) => { commentNicknameEl = el; }}
-                />
-              </div>
-              <div class="row" style="margin-bottom:8px;">
-                <textarea
-                  class="y-input"
-                  placeholder="add a comment..."
-                  ref=${(el: HTMLTextAreaElement) => { commentContentEl = el; }}
-                ></textarea>
-              </div>
-              <div class="row">
-                <button
-                  class="y-btn y-btn-primary"
-                  disabled=${() => loading() || busyAction() || !selectedPostId()}
-                  onClick=${() => void handleCreateComment()}
-                >Publish Comment</button>
-              </div>
-            </div>
-          ` : ''}
-      </section>
-
-      <!-- Status bar -->
-      <div class="status">${statusText}</div>
+      <div class="status-bar">
+        <span>${() => `${feeds().length} feeds · ${visibleArticles().length} articles · ${totalUnread()} unread`}</span>
+        ${() => toastMsg()
+          ? html`<span class=${() => `toast-inline toast-${toastMsg()!.type}`}>${() => toastMsg()!.text}</span>`
+          : null}
+      </div>
     </main>
   </div>
 `, document.getElementById('app')!);
 
-// ── App Protocol ──────────────────────────────────────────────────────────────
-void loadFeed(true);
+// ── Bootstrap ───────────────────────────────────────────────────────────────
 
-if (app) {
-  app.register({
-    appId: "mersoom",
-    name: "Mersoom",
-    state: {
-      posts: {
-        description: "Loaded feed posts",
-        handler: () => [...posts()],
-      },
-      selectedPostId: {
-        description: "Currently selected post id",
-        handler: () => selectedPostId(),
-      },
-      selectedPost: {
-        description: "Currently selected post object",
-        handler: () => selectedPost(),
-      },
-      comments: {
-        description: "Comments for currently selected post",
-        handler: () => [...comments()],
-      },
-      nextCursor: {
-        description: "Cursor for next feed page",
-        handler: () => nextCursor(),
-      },
-      loading: {
-        description: "Whether app is currently loading",
-        handler: () => loading(),
-      },
-      status: {
-        description: "Current status line text",
-        handler: () => statusText(),
-      },
-      filter: {
-        description: "Current search filter",
-        handler: () => filter(),
-      },
-      sort: {
-        description: "Current sort mode",
-        handler: () => sort(),
-      },
-    },
-    commands: {
-      refreshFeed: {
-        description: "Reload feed from start. Params: {}",
-        params: { type: "object", properties: {} },
-        handler: async () => {
-          await loadFeed(true);
-          return { ok: true, count: posts().length };
-        },
-      },
-      loadMore: {
-        description: "Load next page of feed. Params: {}",
-        params: { type: "object", properties: {} },
-        handler: async () => {
-          const before = posts().length;
-          await loadFeed(false);
-          return { ok: true, added: posts().length - before, total: posts().length };
-        },
-      },
-      selectPost: {
-        description: "Select a post and load comments. Params: { postId: string }",
-        params: {
-          type: "object",
-          properties: { postId: { type: "string" } },
-          required: ["postId"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          await selectPost(p.postId as string);
-          return { ok: true, selectedPostId: selectedPostId(), comments: comments().length };
-        },
-      },
-      fetchPost: {
-        description: "Fetch one post by id and update cache. Params: { postId: string }",
-        params: {
-          type: "object",
-          properties: { postId: { type: "string" } },
-          required: ["postId"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const post = await fetchPost(p.postId as string);
-          const idx = posts().findIndex((x) => x.id === post.id);
-          const updated = [...posts()];
-          if (idx >= 0) updated[idx] = { ...updated[idx], ...post };
-          else updated.unshift(post);
-          setPosts(updated);
-          return { ok: true, post };
-        },
-      },
-      fetchComments: {
-        description: "Fetch comments for post id. Params: { postId?: string } (defaults to selected post)",
-        params: {
-          type: "object",
-          properties: { postId: { type: "string" } },
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const postId = (p.postId as string | undefined) ?? selectedPostId();
-          if (!postId) throw new Error("No postId provided and no post selected");
-          const fetchedComments = await fetchComments(postId);
-          if (selectedPostId() === postId) {
-            setComments(fetchedComments);
-          }
-          return { ok: true, postId, count: fetchedComments.length, comments: fetchedComments };
-        },
-      },
-      createPost: {
-        description: "Create a post with PoW in background. Params: { nickname: string, title: string, content: string }",
-        params: {
-          type: "object",
-          properties: {
-            nickname: { type: "string" },
-            title: { type: "string" },
-            content: { type: "string" },
-          },
-          required: ["nickname", "title", "content"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const jobId = `post-${Date.now().toString(36)}`;
-          setStatusText(`Queued createPost (${jobId})...`);
+registerAppProtocol({ refresh, markAllRead, selectFeed, addFeed });
 
-          void (async () => {
-            try {
-              const post = await createPost(p as { nickname: string; title: string; content: string });
-              setPosts([post, ...posts()]);
-              setSelectedPostId(post.id);
-              setComments([]);
-              setStatusText(`Post created via app protocol (${jobId}).`);
-            } catch (err) {
-              setStatusText(`Create post failed (${jobId}): ${(err as Error).message}`);
-            }
-          })();
-
-          return { ok: true, queued: true, jobId };
-        },
-      },
-      createComment: {
-        description: "Create comment with PoW in background. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
-        params: {
-          type: "object",
-          properties: {
-            postId: { type: "string" },
-            nickname: { type: "string" },
-            content: { type: "string" },
-            parent_id: { type: "string" },
-          },
-          required: ["nickname", "content"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const postId = (p.postId as string | undefined) ?? selectedPostId();
-          if (!postId) throw new Error("No postId provided and no post selected");
-
-          const jobId = `comment-${Date.now().toString(36)}`;
-          setStatusText(`Queued createComment (${jobId})...`);
-
-          void (async () => {
-            try {
-              await createComment(postId, {
-                nickname: p.nickname as string,
-                content: p.content as string,
-                parent_id: p.parent_id as string | undefined,
-              });
-              if (selectedPostId() === postId) {
-                await loadSelectedPost();
-              }
-              setStatusText(`Comment created via app protocol (${jobId}).`);
-            } catch (err) {
-              setStatusText(`Create comment failed (${jobId}): ${(err as Error).message}`);
-            }
-          })();
-
-          return { ok: true, queued: true, postId, jobId };
-        },
-      },
-      vote: {
-        description: "Vote selected or target post in background. Params: { type: 'up'|'down', postId?: string }",
-        params: {
-          type: "object",
-          properties: {
-            type: { type: "string", enum: ["up", "down"] },
-            postId: { type: "string" },
-          },
-          required: ["type"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const postId = (p.postId as string | undefined) ?? selectedPostId();
-          if (!postId) throw new Error("No postId provided and no post selected");
-
-          const jobId = `vote-${Date.now().toString(36)}`;
-          setStatusText(`Queued vote (${jobId})...`);
-
-          void (async () => {
-            try {
-              await votePost(postId, p.type as "up" | "down");
-              if (selectedPostId() === postId) await loadSelectedPost();
-              setStatusText(`Vote completed via app protocol (${jobId}).`);
-            } catch (err) {
-              setStatusText(`Vote failed (${jobId}): ${(err as Error).message}`);
-            }
-          })();
-
-          return { ok: true, queued: true, postId, type: p.type, jobId };
-        },
-      },
-      setFilter: {
-        description: "Set text filter for post list. Params: { query: string }",
-        params: {
-          type: "object",
-          properties: { query: { type: "string" } },
-          required: ["query"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          setFilter(p.query as string);
-          if (searchInputEl) searchInputEl.value = p.query as string;
-          return { ok: true, filter: filter() };
-        },
-      },
-      setSort: {
-        description: "Set sort mode. Params: { mode: 'latest'|'top'|'discussed' }",
-        params: {
-          type: "object",
-          properties: { mode: { type: "string", enum: ["latest", "top", "discussed"] } },
-          required: ["mode"],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          setSort(p.mode as SortMode);
-          if (sortSelectEl) sortSelectEl.value = p.mode as string;
-          return { ok: true, sort: sort() };
-        },
-      },
-    },
-  });
-}
+void (async () => {
+  await loadState();
+  await fetchAllFeeds();
+})();

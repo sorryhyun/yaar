@@ -1,161 +1,58 @@
 {
   "state": {
-    "posts": {
-      "description": "Loaded feed posts"
+    "unreadCount": {
+      "description": "Total unread article count"
     },
-    "selectedPostId": {
-      "description": "Currently selected post id"
+    "feeds": {
+      "description": "All feeds with unread counts"
     },
-    "selectedPost": {
-      "description": "Currently selected post object"
+    "articles": {
+      "description": "Current visible articles (max 50)"
     },
-    "comments": {
-      "description": "Comments for currently selected post"
-    },
-    "nextCursor": {
-      "description": "Cursor for next feed page"
-    },
-    "loading": {
-      "description": "Whether app is currently loading"
-    },
-    "status": {
-      "description": "Current status line text"
-    },
-    "filter": {
-      "description": "Current search filter"
-    },
-    "sort": {
-      "description": "Current sort mode"
+    "selectedArticle": {
+      "description": "Currently selected article or null"
     }
   },
   "commands": {
-    "refreshFeed": {
-      "description": "Reload feed from start. Params: {}",
+    "refresh": {
+      "description": "Refresh all feeds",
       "params": {
         "type": "object",
         "properties": {}
       }
     },
-    "loadMore": {
-      "description": "Load next page of feed. Params: {}",
+    "markAllRead": {
+      "description": "Mark all visible articles as read",
       "params": {
         "type": "object",
         "properties": {}
       }
     },
-    "selectPost": {
-      "description": "Select a post and load comments. Params: { postId: string }",
+    "selectFeed": {
+      "description": "Select a feed by ID",
       "params": {
         "type": "object",
         "properties": {
-          "postId": {
+          "feedId": {
             "type": "string"
           }
         },
-        "required": ["postId"]
+        "required": ["feedId"]
       }
     },
-    "fetchPost": {
-      "description": "Fetch one post by id and update cache. Params: { postId: string }",
+    "addFeed": {
+      "description": "Add a new feed by URL",
       "params": {
         "type": "object",
         "properties": {
-          "postId": {
-            "type": "string"
-          }
-        },
-        "required": ["postId"]
-      }
-    },
-    "fetchComments": {
-      "description": "Fetch comments for post id. Params: { postId?: string } (defaults to selected post)",
-      "params": {
-        "type": "object",
-        "properties": {
-          "postId": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "createPost": {
-      "description": "Create a post with PoW in background. Params: { nickname: string, title: string, content: string }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "nickname": {
+          "url": {
             "type": "string"
           },
-          "title": {
-            "type": "string"
-          },
-          "content": {
+          "name": {
             "type": "string"
           }
         },
-        "required": ["nickname", "title", "content"]
-      }
-    },
-    "createComment": {
-      "description": "Create comment with PoW in background. Params: { postId?: string, nickname: string, content: string, parent_id?: string }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "postId": {
-            "type": "string"
-          },
-          "nickname": {
-            "type": "string"
-          },
-          "content": {
-            "type": "string"
-          },
-          "parent_id": {
-            "type": "string"
-          }
-        },
-        "required": ["nickname", "content"]
-      }
-    },
-    "vote": {
-      "description": "Vote selected or target post in background. Params: { type: 'up'|'down', postId?: string }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["up", "down"]
-          },
-          "postId": {
-            "type": "string"
-          }
-        },
-        "required": ["type"]
-      }
-    },
-    "setFilter": {
-      "description": "Set text filter for post list. Params: { query: string }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string"
-          }
-        },
-        "required": ["query"]
-      }
-    },
-    "setSort": {
-      "description": "Set sort mode. Params: { mode: 'latest'|'top'|'discussed' }",
-      "params": {
-        "type": "object",
-        "properties": {
-          "mode": {
-            "type": "string",
-            "enum": ["latest", "top", "discussed"]
-          }
-        },
-        "required": ["mode"]
+        "required": ["url"]
       }
     }
   }

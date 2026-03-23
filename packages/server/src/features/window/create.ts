@@ -10,7 +10,7 @@ import {
   extractAppId,
 } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
-import { ok, error, validateRelativePath } from '../../handlers/utils.js';
+import { okJson, error, validateRelativePath } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
@@ -128,7 +128,10 @@ export async function handleCreate(
     };
 
     actionEmitter.emitAction(osAction);
-    return ok(`Created component window "${formatWindowRef(actualId)}"`);
+    return okJson({
+      windowId: actualId,
+      message: `Created component window "${formatWindowRef(actualId)}"`,
+    });
   }
 
   // Non-component renderers
@@ -189,9 +192,12 @@ export async function handleCreate(
         : ' The site likely blocks embedding.';
       return error(`Failed to embed iframe in window "${actualId}": ${feedback.error}.${hint}`);
     }
-    return ok(`Created window "${formatWindowRef(actualId)}" with embedded iframe`);
+    return okJson({
+      windowId: actualId,
+      message: `Created window "${formatWindowRef(actualId)}" with embedded iframe`,
+    });
   }
 
   actionEmitter.emitAction(osAction);
-  return ok(`Created window "${formatWindowRef(actualId)}"`);
+  return okJson({ windowId: actualId, message: `Created window "${formatWindowRef(actualId)}"` });
 }
