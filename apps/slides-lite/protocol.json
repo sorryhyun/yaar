@@ -53,13 +53,44 @@
       "description": "Change the deck theme. Valid themeId values: \"classic-light\", \"midnight-dark\", \"ocean\", \"sunset\". "
     },
     "setAspectRatio": {
-      "description": "Set slide aspect ratio. Pass a \"W:H\" string. "
+      "description": "Set slide aspect ratio. Pass a \"W:H\" string. ",
+      "params": {
+        "type": "object",
+        "properties": {
+          "aspectRatio": {
+            "type": "string",
+            "description": "Aspect ratio string, e.g. \"16:9\", \"4:3\", \"1:1\", or custom \"W:H\"."
+          }
+        },
+        "required": ["aspectRatio"]
+      }
     },
     "setFontSize": {
-      "description": "Set global font size scale for all slides. "
+      "description": "Set global font size scale for all slides. ",
+      "params": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "string",
+            "enum": ["sm", "md", "lg", "xl"],
+            "description": "Font size preset: \"sm\" | \"md\" | \"lg\" | \"xl\"."
+          }
+        },
+        "required": ["size"]
+      }
     },
     "saveToStorage": {
-      "description": "Save current deck JSON to YAAR storage at the given path. Returns { ok, path, slideCount }."
+      "description": "Save current deck JSON to YAAR storage at the given path. Returns { ok, path, slideCount }.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Storage path, e.g. \"my-deck.json\"."
+          }
+        },
+        "required": ["path"]
+      }
     },
     "loadFromStorage": {
       "description": "Load one or many deck JSON files from YAAR storage and merge into the current deck. ",
@@ -86,10 +117,43 @@
       }
     },
     "readStorageFile": {
-      "description": "Read a single file from YAAR storage and return its content. Returns { ok, path, as, content }."
+      "description": "Read a single file from YAAR storage and return its content. Returns { ok, path, as, content }.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Storage path to read."
+          },
+          "as": {
+            "type": "string",
+            "enum": ["text", "json", "auto"],
+            "description": "Read mode (default: \"text\")."
+          }
+        },
+        "required": ["path"]
+      }
     },
     "readStorageFiles": {
-      "description": "Read multiple files from YAAR storage. Returns { ok, as, files: [{ path, content }] }."
+      "description": "Read multiple files from YAAR storage. Returns { ok, as, files: [{ path, content }] }.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Storage paths to read."
+          },
+          "as": {
+            "type": "string",
+            "enum": ["text", "json", "auto"],
+            "description": "Read mode (default: \"text\")."
+          }
+        },
+        "required": ["paths"]
+      }
     }
   }
 }

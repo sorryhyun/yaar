@@ -1,4 +1,5 @@
 import { createSignal } from '@bundled/solid-js';
+import { showToast } from '@bundled/yaar';
 import { saveDeck } from './storage';
 import { newDeck, normalizeDeck } from './deck-utils';
 import { debounce } from './utils';
@@ -55,20 +56,11 @@ export function markDirty() {
   debouncedSave();
 }
 
-export function persist(showToast = false) {
+export function persist(withToast = false) {
   void saveDeck(_deck);
   setDirty(false);
   setLastSavedAt(Date.now());
-  if (showToast) flash('Saved');
-}
-
-// Use y-toast utility classes instead of inline CSS animation strings.
-export function flash(msg: string, type: 'info' | 'success' | 'error' = 'success') {
-  const el = document.createElement('div');
-  el.className = `y-toast y-toast-${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1100);
+  if (withToast) showToast('Saved', 'success');
 }
 
 export function moveSlide(from: number, to: number) {

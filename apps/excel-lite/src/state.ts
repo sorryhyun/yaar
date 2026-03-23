@@ -1,7 +1,7 @@
 import { createSignal } from '@bundled/solid-js';
 import { format } from '@bundled/date-fns';
 import { debounce } from '@bundled/lodash';
-import { appStorage } from '@bundled/yaar';
+import { appStorage, showToast } from '@bundled/yaar';
 import { createFormulaEngine } from './formula-utils';
 import { cloneMap } from './data-utils';
 import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
@@ -103,19 +103,11 @@ export function getRaw(ref: string): string {
 
 export const formulaEngine = createFormulaEngine(getRaw);
 
-// ── Toast helper ──────────────────────────────────────────────────────
-function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info', ms = 3000) {
-  const el = document.createElement('div');
-  el.className = `y-toast y-toast-${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), ms);
-}
-
 // ── IO Status ─────────────────────────────────────────────────────────
 export function setIoStatus(message: string, isError = false) {
   const timeStr = format(new Date(), 'HH:mm:ss');
-  showToast(`[${timeStr}] ${message}`, isError ? 'error' : 'success', isError ? 4200 : 2400);
+  const type = isError ? 'error' : 'success';
+  showToast(`[${timeStr}] ${message}`, type);
 }
 
 export function storagePath() {

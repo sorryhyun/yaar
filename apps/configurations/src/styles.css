@@ -323,39 +323,6 @@ body,
   color: var(--yaar-text-muted);
 }
 
-/* Toast */
-.cfg-toast {
-  position: fixed;
-  bottom: var(--yaar-sp-4);
-  right: var(--yaar-sp-4);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  border-radius: var(--yaar-radius);
-  font-size: 13px;
-  z-index: 1000;
-  pointer-events: none;
-  animation: fadeIn 0.2s ease;
-}
-
-.cfg-toast-success {
-  background: var(--yaar-success);
-  color: #000;
-}
-.cfg-toast-error {
-  background: var(--yaar-error);
-  color: #fff;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ── Typed Settings UI ── */
 .s-section {
   background: var(--yaar-bg-surface);

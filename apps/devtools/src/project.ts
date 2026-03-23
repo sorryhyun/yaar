@@ -388,6 +388,42 @@ export function addConsoleEntry(entry: ConsoleEntry): void {
   });
 }
 
+// ── Read (non-mutating) ──
+
+export interface ReadFileResult {
+  path: string;
+  content: string;
+  totalLines: number;
+  startLine: number;
+  endLine: number;
+}
+
+export async function readFileContent(
+  path: string,
+  opts?: { startLine?: number; endLine?: number },
+): Promise<ReadFileResult> {
+  const proj = activeProject();
+  if (!proj) return { path, content: '// No active project', totalLines: 0, startLine: 1, endLine: 0 };
+  try {
+    const raw = await appStorage.read(projectPath(proj.id, path));
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+    const allLines = text.split('\n');
+    const totalLines = allLines.length;
+    const start = opts?.startLine ? Math.max(1, opts.startLine) : 1;
+    const end = opts?.endLine ? Math.min(totalLines, opts.endLine) : totalLines;
+    const sliced = allLines.slice(start - 1, end);
+    const width = String(totalLines).length;
+    const numbered = sliced
+      .map((line, i) => `${String(start + i).padStart(width)}│${line}`)
+      .join('\n');
+    const rangeTag = (opts?.startLine || opts?.endLine) ? ` [${start}-${end}]` : '';
+    const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
+    return { path, content: header + numbered, totalLines, startLine: start, endLine: end };
+  } catch {
+    return { path, content: `// Could not read ${path}`, totalLines: 0, startLine: 1, endLine: 0 };
+  }
+}
+
 // ── Grep ──
 
 export interface GrepMatch {

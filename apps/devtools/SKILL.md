@@ -12,6 +12,15 @@ IDE for building and deploying YAAR apps. Manages projects in app storage, provi
 6. Compile: `command("compile")`
 7. Deploy: `command("deploy", { appId: "my-app", name: "My App", icon: "✅" })`
 
+## Reading Files
+
+- **Single file**: `command("readFile", { path: "src/main.ts" })`
+- **Multiple files at once**: `command("readFile", { path: ["src/main.ts", "src/store.ts", "src/types.ts"] })`
+- **Line range**: `command("readFile", { path: "src/main.ts", startLine: 10, endLine: 50 })`
+- **Read + open in editor**: `command("readFile", { path: "src/main.ts", openInEditor: true })`
+- **`openFile`** opens file(s) in editor tabs; supports `files[]` array: `command("openFile", { files: ["src/a.ts", "src/b.ts"] })`
+- `query("openFile")` returns the currently active editor tab content with line numbers
+
 ## Important
 
 - Read `yaar://skills/app_dev` before writing any app code — it has bundled libraries, design tokens, and anti-patterns

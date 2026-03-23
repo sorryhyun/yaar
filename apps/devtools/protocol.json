@@ -67,12 +67,55 @@
       }
     },
     "openFile": {
-      "description": "Open a file in the editor",
+      "description": "Open a file (or multiple files) in the editor. Use `path` for a single file or `files` array for multiple files.",
       "params": {
         "type": "object",
         "properties": {
           "path": {
-            "type": "string"
+            "type": "string",
+            "description": "Single file path"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Multiple file paths to open as tabs"
+          }
+        }
+      }
+    },
+    "readFile": {
+      "description": "Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ",
+      "params": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Single file path"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Multiple file paths"
+              }
+            ]
+          },
+          "startLine": {
+            "type": "number",
+            "description": "Start line (1-based, inclusive)"
+          },
+          "endLine": {
+            "type": "number",
+            "description": "End line (1-based, inclusive)"
+          },
+          "openInEditor": {
+            "type": "boolean",
+            "description": "Also open file(s) in editor UI"
           }
         },
         "required": ["path"]

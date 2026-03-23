@@ -1,5 +1,6 @@
 import * as THREE from '@bundled/three';
-import { BASE_MESSAGE, createUI } from './ui';
+import { showToast } from '@bundled/yaar';
+import { createUI } from './ui';
 import { createWorld } from './world';
 
 export function startGame(root: HTMLElement) {
@@ -155,13 +156,6 @@ export function startGame(root: HTMLElement) {
       ui.center.style.display = 'none';
       renderPanel();
     } else ui.center.style.display = 'block';
-  }
-
-  function showToast(text: string) {
-    ui.msg.textContent = text;
-    setTimeout(() => {
-      ui.msg.textContent = BASE_MESSAGE;
-    }, 1700);
   }
 
   function renderHotbar() {

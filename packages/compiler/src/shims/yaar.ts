@@ -86,6 +86,14 @@ export const appStorage = {
   async readJson<T = unknown>(path: string): Promise<T> {
     return y.read(appStorageUri(path));
   },
+  /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
+  async readJsonOr<T>(path: string, fallback: T): Promise<T> {
+    try {
+      return (await y.read(appStorageUri(path))) as T;
+    } catch {
+      return fallback;
+    }
+  },
   async readBinary(path: string): Promise<{ data: string; mimeType: string }> {
     const result = await y.read(appStorageUri(path));
     // When images are present, callVerb returns { data, images }
@@ -164,11 +172,36 @@ export const dev = {
   },
 };
 
-// ── Timing utilities ────────────────────────────────────────────
+// ── Utilities ───────────────────────────────────────────────────
 
 /** Returns a promise that resolves after `ms` milliseconds. */
 export const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Extract a human-readable message from any thrown value. */
+export function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Show a toast notification using the built-in `y-toast` CSS classes.
+ * Auto-dismisses after `ms` (default 3000).
+ */
+export function showToast(
+  msg: string,
+  type: 'info' | 'success' | 'error' = 'info',
+  ms = 3000,
+): void {
+  const el = document.createElement('div');
+  el.className = `y-toast y-toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('y-toast-visible'));
+  setTimeout(() => {
+    el.classList.remove('y-toast-visible');
+    setTimeout(() => el.remove(), 300);
+  }, ms);
+}
 
 // ── Default export: the raw global ───────────────────────────────
 

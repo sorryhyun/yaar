@@ -224,6 +224,8 @@ interface YaarAppStorage {
   save(path: string, content: string, options?: YaarAppStorageSaveOptions): Promise<void>;
   read(path: string): Promise<string>;
   readJson<T = unknown>(path: string): Promise<T>;
+  /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
+  readJsonOr<T>(path: string, fallback: T): Promise<T>;
   readBinary(path: string): Promise<{ data: string; mimeType: string }>;
   list(dirPath?: string): Promise<unknown[]>;
   remove(path: string): Promise<void>;
@@ -369,6 +371,12 @@ declare module '@bundled/yaar' {
 
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;
+
+  /** Extract a human-readable message from any thrown value. */
+  export function errMsg(e: unknown): string;
+
+  /** Show a toast notification using the built-in `y-toast` CSS classes. Auto-dismisses after `ms` (default 3000). */
+  export function showToast(msg: string, type?: 'info' | 'success' | 'error', ms?: number): void;
 
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;

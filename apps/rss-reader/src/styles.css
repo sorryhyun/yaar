@@ -327,16 +327,3 @@ body {
   gap: 16px;
   flex-shrink: 0;
 }
-
-.toast-inline {
-  font-size: 11px;
-}
-.toast-inline.toast-success {
-  color: var(--yaar-success);
-}
-.toast-inline.toast-error {
-  color: var(--yaar-error);
-}
-.toast-inline.toast-info {
-  color: var(--yaar-accent);
-}

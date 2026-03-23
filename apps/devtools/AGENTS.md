@@ -20,6 +20,8 @@ You have three tools:
 
 Use `readFile` to inspect code without changing editor state (default), or with `openInEditor: true` to also show it in the UI. Use `grep` to find usages across the project.
 
+**Important:** `readFile`, `grep`, and all file commands operate only within the **active project's sandbox** — not the server filesystem. They will silently return empty results if no project is open. Always `query("project")` first to confirm a project is active, or use `command("openProject", ...)` / `command("cloneApp", ...)` before reading or searching files. Glob patterns like `apps/**/*.ts` refer to paths inside the project, not the `apps/` directory on disk.
+
 ## Workflow
 
 1. Check state: `query("project")` for active project, `query("projects")` to list all
@@ -137,16 +139,22 @@ import { render } from '@bundled/solid-js/web';
 
 CSS: Prefer `import './styles.css'` over inline styles.
 
-Toast notifications — use `y-toast` CSS class directly:
+### SDK Utilities
+
+`@bundled/yaar` provides common helpers — **always use these instead of hand-rolling**:
 
 ```ts
-function showToast(msg: string, type: 'info' | 'success' | 'error' = 'info', ms = 3000) {
-  const el = document.createElement('div');
-  el.className = `y-toast y-toast-${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), ms);
-}
+import { showToast, errMsg, appStorage } from '@bundled/yaar';
+
+// Toast notifications (uses y-toast CSS, auto-dismisses)
+showToast('Saved!', 'success');
+showToast('Something went wrong', 'error', 5000);
+
+// Error message extraction (replaces `err instanceof Error ? err.message : String(err)`)
+catch (err) { showToast(errMsg(err), 'error'); }
+
+// Read JSON with fallback (no try-catch needed for first-run defaults)
+const settings = await appStorage.readJsonOr<Settings>('settings.json', { theme: 'dark', fontSize: 14 });
 ```
 
 ## App Protocol
@@ -365,4 +373,38 @@ Option B: Compiled app + AI-mediated API (for rich UI)
   Compiled iframe app handles UI/display only
   AI agent handles external API calls via MCP tools
   App Protocol bridges the two
+```
+
+## Migration Patterns
+
+When editing existing apps, replace these legacy patterns with SDK equivalents:
+
+
+### `errMsg` — use SDK import
+
+```ts
+// ❌ OLD: inline everywhere
+catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  setError(msg);
+}
+
+// ✅ NEW: one import
+import { errMsg } from '@bundled/yaar';
+catch (err) { setError(errMsg(err)); }
+```
+
+### `readJsonOr` — use SDK for first-run defaults
+
+```ts
+// ❌ OLD: try-catch wrapper for missing file on first run
+let settings: Settings;
+try {
+  settings = await appStorage.readJson<Settings>('settings.json');
+} catch {
+  settings = { theme: 'dark', fontSize: 14 };
+}
+
+// ✅ NEW: single call with fallback
+const settings = await appStorage.readJsonOr<Settings>('settings.json', { theme: 'dark', fontSize: 14 });
 ```

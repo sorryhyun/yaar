@@ -73,9 +73,7 @@ export async function loadAllStorageImages(): Promise<void> {
     return;
   }
   try {
-    const r = await list('yaar://apps/self/storage/');
-    if (r.isError) { setStatus('Storage list failed.'); return; }
-    const entries = JSON.parse(r.content[0]?.text ?? '[]') as Array<{ path: string; isDirectory: boolean }>;
+    const entries = await list('yaar://apps/self/storage/') as Array<{ path: string; isDirectory: boolean }>;
     const paths = entries
       .filter((e) => !e.isDirectory && IMAGE_EXT_REGEX.test(e.path))
       .map((e) => e.path);

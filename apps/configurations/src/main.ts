@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
-import { activeTab, setActiveTab, toast } from './store';
+import { activeTab, setActiveTab } from './store';
 import type { Tab } from './types';
 import { SettingsView } from './views/settings-view';
 import { ShortcutsView } from './views/shortcuts-view';
@@ -36,11 +36,7 @@ function App() {
                  DomainsView()}
       </div>
 
-      ${() => {
-        const t = toast();
-        if (!t) return null;
-        return html`<div class=${`cfg-toast cfg-toast-${t.type}`}>${t.msg}</div>`;
-      }}
+
     </div>
   `;
 }

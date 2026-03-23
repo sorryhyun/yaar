@@ -9,7 +9,7 @@ import {
   selectedArticle, setSelectedArticle,
   readArticleIds, setReadArticleIds,
   unreadCounts, loadingFeedIds,
-  showToast, toastMsg,
+  showToast,
 } from './store';
 import { fetchAllFeeds, fetchSingleFeed } from './fetcher';
 import { loadState, saveState } from './storage';
@@ -258,9 +258,7 @@ render(() => html`
 
       <div class="status-bar">
         <span>${() => `${feeds().length} feeds · ${visibleArticles().length} articles · ${totalUnread()} unread`}</span>
-        ${() => toastMsg()
-          ? html`<span class=${() => `toast-inline toast-${toastMsg()!.type}`}>${() => toastMsg()!.text}</span>`
-          : null}
+
       </div>
     </main>
   </div>

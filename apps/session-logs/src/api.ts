@@ -1,4 +1,4 @@
-import { listJson, readJson } from '@bundled/yaar';
+import { list, read } from '@bundled/yaar';
 import {
   sessions,
   setSessions,
@@ -16,7 +16,7 @@ export async function loadSessions(): Promise<void> {
   setLoading(true);
   setLoadError(null);
   try {
-    const result = await listJson<{ currentSessionId?: string; sessions: SessionSummary[] }>(
+    const result = await list<{ currentSessionId?: string; sessions: SessionSummary[] }>(
       'yaar://sessions/'
     );
     const arr = Array.isArray(result?.sessions) ? result.sessions : [];
@@ -38,7 +38,7 @@ export async function loadDetail(sessionId: string): Promise<void> {
   setDetail(null);
   setDetailLoading(true);
   try {
-    const d = await readJson<SessionDetail>(`yaar://sessions/${sessionId}`);
+    const d = await read<SessionDetail>(`yaar://sessions/${sessionId}`);
     if (!d.sessionId) (d as Record<string, unknown>).sessionId = sessionId;
     setDetail(d);
   } catch (e) {

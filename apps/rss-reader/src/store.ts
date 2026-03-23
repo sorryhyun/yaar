@@ -18,11 +18,4 @@ export const [selectedArticle, setSelectedArticle] = createSignal<Article | null
 export const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
 
 // Toast
-export const [toastMsg, setToastMsg] = createSignal<{ text: string; type: 'info' | 'error' | 'success' } | null>(null);
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
-
-export function showToast(message: string, type: 'info' | 'error' | 'success' = 'info') {
-  if (toastTimer) clearTimeout(toastTimer);
-  setToastMsg({ text: message, type });
-  toastTimer = setTimeout(() => setToastMsg(null), 2500);
-}
+export { showToast } from '@bundled/yaar';

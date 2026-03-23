@@ -27,6 +27,7 @@ import {
   cloneApp,
   clearConsoleLogs,
   grep,
+  readFileContent,
 } from './project';
 
 export function registerProtocol() {
@@ -113,7 +114,13 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           await openProject(String(p.id));
-          return { ok: true };
+          const proj = activeProject();
+          if (!proj) return { ok: false, error: 'Project not found' };
+          return {
+            ok: true,
+            project: { id: proj.id, name: proj.name },
+            files: files().map((f) => f.path),
+          };
         },
       },
       deleteProject: {
@@ -129,15 +136,67 @@ export function registerProtocol() {
         },
       },
       openFile: {
-        description: 'Open a file in the editor',
+        description: 'Open a file (or multiple files) in the editor. Use `path` for a single file or `files` array for multiple files.',
         params: {
           type: 'object',
-          properties: { path: { type: 'string' } },
+          properties: {
+            path: { type: 'string', description: 'Single file path' },
+            files: { type: 'array', items: { type: 'string' }, description: 'Multiple file paths to open as tabs' },
+          },
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const paths: string[] = [];
+          if (Array.isArray(p.files)) paths.push(...p.files.map(String));
+          if (p.path) paths.push(String(p.path));
+          if (paths.length === 0) return { ok: false, error: 'Provide path or files[]' };
+          for (const fp of paths) await openFile(fp);
+          return { ok: true, opened: paths };
+        },
+      },
+      readFile: {
+        description:
+          'Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ' +
+          'Use `path` (string) for a single file or `path` (array) for multiple files. ' +
+          'Optionally specify `startLine` / `endLine` for a line range (1-based, inclusive). ' +
+          'Set `openInEditor: true` to also open each file in the editor.',
+        params: {
+          type: 'object',
+          properties: {
+            path: {
+              oneOf: [
+                { type: 'string', description: 'Single file path' },
+                { type: 'array', items: { type: 'string' }, description: 'Multiple file paths' },
+              ],
+            },
+            startLine: { type: 'number', description: 'Start line (1-based, inclusive)' },
+            endLine: { type: 'number', description: 'End line (1-based, inclusive)' },
+            openInEditor: { type: 'boolean', description: 'Also open file(s) in editor UI' },
+          },
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          await openFile(String(p.path));
-          return { ok: true };
+          const rawPath = p.path;
+          const paths: string[] = Array.isArray(rawPath)
+            ? rawPath.map(String)
+            : [String(rawPath)];
+          const opts = {
+            startLine: p.startLine != null ? Number(p.startLine) : undefined,
+            endLine: p.endLine != null ? Number(p.endLine) : undefined,
+          };
+          const results = await Promise.all(
+            paths.map((fp) => readFileContent(fp, opts)),
+          );
+          if (p.openInEditor) {
+            for (const fp of paths) await openFile(fp);
+          }
+          if (paths.length === 1) {
+            // Single file: return flat result for backwards compat
+            const r = results[0];
+            return { ok: true, path: r.path, content: r.content, totalLines: r.totalLines };
+          }
+          // Multiple files: return array + concatenated content
+          const combined = results.map((r) => r.content).join('\n\n');
+          return { ok: true, files: results, combined };
         },
       },
       writeFile: {
@@ -383,7 +442,13 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const projectId = await cloneApp(String(p.appId));
-          return { ok: true, projectId };
+          const proj = activeProject();
+          return {
+            ok: true,
+            projectId,
+            project: proj ? { id: proj.id, name: proj.name } : undefined,
+            files: files().map((f) => f.path),
+          };
         },
       },
       clearConsole: {
