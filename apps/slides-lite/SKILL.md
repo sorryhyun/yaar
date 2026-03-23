@@ -13,6 +13,3 @@ invoke('yaar://windows/slides-lite', {
   content: "yaar://apps/slides-lite"
 })
 ```
-
-## Source
-Source code is available in `src/` directory. Use the devtools app to browse, edit, and compile the source.

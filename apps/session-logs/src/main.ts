@@ -1,147 +1,23 @@
-import { createSignal, createMemo, For, onMount } from '@bundled/solid-js';
+import { createMemo, For, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { listJson, readJson } from '@bundled/yaar';
-import type { SessionSummary, SessionDetail } from './types';
 import './styles.css';
 
-// --- State ---
-const [sessions, setSessions] = createSignal<SessionSummary[]>([]);
-const [currentSessionId, setCurrentSessionId] = createSignal('');
-const [selectedId, setSelectedId] = createSignal<string | null>(null);
-const [detail, setDetail] = createSignal<SessionDetail | null>(null);
-const [loading, setLoading] = createSignal(false);
-const [detailLoading, setDetailLoading] = createSignal(false);
-const [search, setSearch] = createSignal('');
-const [totalCount, setTotalCount] = createSignal(0);
-const [loadError, setLoadError] = createSignal<string | null>(null);
-
-// --- Data loading ---
-async function loadSessions() {
-  setLoading(true);
-  setLoadError(null);
-  try {
-    // yaar://sessions/ returns { currentSessionId, count, sessions[] }
-    const result = await listJson<{ currentSessionId?: string; sessions: SessionSummary[] }>('yaar://sessions/');
-    const arr = Array.isArray(result?.sessions) ? result.sessions : [];
-    if (result?.currentSessionId) setCurrentSessionId(result.currentSessionId);
-    // Sort newest first
-    arr.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-    setSessions(arr);
-    setTotalCount(arr.length);
-  } catch (e) {
-    console.error('Failed to load sessions', e);
-    setLoadError(String(e));
-  } finally {
-    setLoading(false);
-  }
-
-  // currentSessionId is already extracted from the list response above
-}
-
-async function loadDetail(sessionId: string) {
-  setSelectedId(sessionId);
-  setDetail(null);
-  setDetailLoading(true);
-  try {
-    const d = await readJson<SessionDetail>(`yaar://sessions/${sessionId}`);
-    if (!d.sessionId) (d as Record<string, unknown>).sessionId = sessionId;
-    setDetail(d);
-  } catch (e) {
-    console.error('Failed to load detail', e);
-    // Fallback: use summary data from the list
-    const s = sessions().find(s => s.sessionId === sessionId);
-    if (s) setDetail(s as unknown as SessionDetail);
-  } finally {
-    setDetailLoading(false);
-  }
-}
-
-// --- Format helpers ---
-
-/** YYYY-MM-DD HH:MM in local time */
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return '-';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '-';
-    const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${yy}-${mm}-${dd} ${hh}:${min}`;
-  } catch { return '-'; }
-}
-
-/** Full datetime with seconds for detail view */
-function formatFull(iso: string | undefined): string {
-  if (!iso) return '-';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '-';
-    const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const hh = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    const sec = String(d.getSeconds()).padStart(2, '0');
-    return `${yy}-${mm}-${dd} ${hh}:${min}:${sec}`;
-  } catch { return '-'; }
-}
-
-/** Human-readable duration between two ISO timestamps */
-function durationBetween(a: string | undefined, b: string | undefined): string {
-  if (!a || !b) return '-';
-  try {
-    const ms = new Date(b).getTime() - new Date(a).getTime();
-    if (isNaN(ms) || ms < 0) return '0s';
-    const s = Math.floor(ms / 1000);
-    if (s < 60) return `${s}s`;
-    const mn = Math.floor(s / 60);
-    if (mn < 60) return `${mn}m ${s % 60}s`;
-    const h = Math.floor(mn / 60);
-    return `${h}h ${mn % 60}m`;
-  } catch { return '-'; }
-}
-
-/** YYYY-MM-DD date key from createdAt (with sessionId fallback) */
-function getDateKey(s: SessionSummary): string {
-  if (s.createdAt) {
-    try {
-      const d = new Date(s.createdAt);
-      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-    } catch { /* fall through */ }
-  }
-  const match = s.sessionId.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : 'unknown';
-}
-
-/** Friendly date group label */
-function formatDateLabel(dateStr: string): string {
-  if (dateStr === 'unknown') return 'Unknown Date';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  const yest = new Date(now); yest.setDate(now.getDate() - 1);
-  const yesterdayStr = `${yest.getFullYear()}-${pad(yest.getMonth()+1)}-${pad(yest.getDate())}`;
-  if (dateStr === todayStr) return `Today  ${y}.${pad(m)}.${pad(d)}`;
-  if (dateStr === yesterdayStr) return `Yesterday  ${y}.${pad(m)}.${pad(d)}`;
-  return `${y}.${pad(m)}.${pad(d)}`;
-}
-
-/** Canonical display label for provider */
-function providerLabel(p: string | undefined): string {
-  if (!p) return 'unknown';
-  return p.trim() || 'unknown';
-}
-
-/** CSS class string for provider badge */
-function providerCls(p: string | undefined): string {
-  const slug = providerLabel(p).toLowerCase().replace(/[^a-z0-9]/g, '-');
-  return `provider-badge provider-${slug}`;
-}
+import {
+  sessions,
+  selectedId,
+  loading,
+  detailLoading,
+  detail,
+  search,
+  setSearch,
+  totalCount,
+  loadError,
+} from './store';
+import { loadSessions, loadDetail } from './api';
+import { getDateKey, formatDateLabel, providerLabel, providerCls, formatDateTime } from './utils';
+import { SessionItem, DetailEmpty, DetailView } from './components';
+import type { SessionSummary } from './types';
 
 // --- Computed ---
 const filteredSessions = createMemo(() => {
@@ -174,112 +50,12 @@ const groupedSessions = createMemo(() => {
 // --- Mount ---
 onMount(() => { loadSessions(); });
 
-// --- Components ---
-
-const SessionItem = (s: SessionSummary) => {
-  const isActive  = () => selectedId() === s.sessionId;
-  const isCurrent = () => currentSessionId() === s.sessionId;
-
-  return html`
-    <div
-      class=${() =>
-        `session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`
-      }
-      onClick=${() => loadDetail(s.sessionId)}
-    >
-      <div class="session-id">
-        ${() => isCurrent() ? '⚡\u00a0' + s.sessionId : s.sessionId}
-      </div>
-      <div class="session-meta">
-        <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
-        <span class="session-datetime">${() => formatDateTime(s.createdAt)}</span>
-        <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
-      </div>
-    </div>
-  `;
-};
-
-const DetailEmpty = () => html`
-  <div class="detail-empty">
-    <div class="empty-icon">📋</div>
-    <div class="empty-title">No session selected</div>
-    <div class="empty-sub">Click a session in the list to view its details</div>
-  </div>
-`;
-
-const DetailView = () => {
-  const d = detail();
-  if (!d) return null;
-
-  const sid       = selectedId() ?? '';
-  const isCurrent = currentSessionId() === sid;
-
-  const knownKeys = new Set(['sessionId','createdAt','lastActivity','provider','agentCount']);
-  const extraEntries = Object.entries(d).filter(([k]) => !knownKeys.has(k));
-
-  return html`
-    <div class="detail-content">
-
-      <div class="detail-header">
-        <div class="detail-session-id">${d.sessionId ?? sid}</div>
-        ${isCurrent ? html`<span class="current-chip">⚡ Current Session</span>` : null}
-      </div>
-
-      <div class="detail-grid">
-
-        <div class="detail-field">
-          <div class="field-label">Provider</div>
-          <div class="field-value">
-            <span class=${providerCls(d.provider)}>${providerLabel(d.provider)}</span>
-          </div>
-        </div>
-
-        <div class="detail-field">
-          <div class="field-label">Agents</div>
-          <div class="field-value agent-value">🤖 ${d.agentCount ?? '-'}</div>
-        </div>
-
-        <div class="detail-field">
-          <div class="field-label">Created</div>
-          <div class="field-value mono">${formatFull(d.createdAt)}</div>
-        </div>
-
-        <div class="detail-field">
-          <div class="field-label">Last Activity</div>
-          <div class="field-value mono">${formatFull(d.lastActivity)}</div>
-        </div>
-
-        <div class="detail-field span-2">
-          <div class="field-label">Duration</div>
-          <div class="field-value">⏱ ${durationBetween(d.createdAt, d.lastActivity)}</div>
-        </div>
-
-      </div>
-
-      ${extraEntries.length > 0 ? html`
-        <div class="raw-section">
-          <div class="raw-section-title">Extra Fields</div>
-          <pre class="raw-json">${JSON.stringify(
-            Object.fromEntries(extraEntries), null, 2
-          )}</pre>
-        </div>
-      ` : null}
-
-      <div class="raw-section">
-        <div class="raw-section-title">Raw JSON</div>
-        <pre class="raw-json">${JSON.stringify(d, null, 2)}</pre>
-      </div>
-
-    </div>
-  `;
-};
-
 // --- Root render ---
 render(() => html`
   <div class="layout">
 
     <div class="app-header">
-      <span class="app-title">📋 Session Logs</span>
+      <span class="app-title">&#x1F4CB; Session Logs</span>
       ${() => totalCount() > 0
         ? html`<span class="count-badge">${totalCount()} sessions</span>`
         : null
@@ -287,7 +63,7 @@ render(() => html`
       <button class="y-btn y-btn-sm y-btn-ghost refresh-btn" onClick=${loadSessions}>
         ${() => loading()
           ? html`<span class="y-spinner"></span>`
-          : html`<span>↻</span>`
+          : html`<span>&#x21BB;</span>`
         }
       </button>
     </div>
@@ -311,7 +87,7 @@ render(() => html`
             : null
           }
           ${() => !loading() && sessions().length === 0 && loadError()
-            ? html`<div class="list-status list-error">⚠️ ${loadError()}</div>`
+            ? html`<div class="list-status list-error">&#x26a0;&#xFE0F; ${loadError()}</div>`
             : null
           }
           ${() => !loading() && filteredSessions().length === 0 && !loadError()

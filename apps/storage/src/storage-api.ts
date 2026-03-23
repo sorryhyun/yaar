@@ -2,10 +2,16 @@ export {};
 import { invoke, read, list, del } from '@bundled/yaar';
 import type { StorageEntry } from './types';
 
-/** Build a yaar://storage/ URI from a relative path */
-export function storageUri(path: string): string {
+/** Build a yaar://storage/ URI from a relative path (no encoding — for internal API calls) */
+function storageUri(path: string): string {
   const clean = path ? path.replace(/^\//, '') : '';
   return clean ? `yaar://storage/${clean}` : 'yaar://storage/';
+}
+
+/** Build a yaar://storage/ URI with percent-encoded path segments (for drag metadata / external use) */
+export function toStorageUri(path: string): string {
+  const cleaned = path.split('/').map((part) => encodeURIComponent(part)).join('/');
+  return `yaar://storage/${cleaned}`;
 }
 
 /** Direct URL for browser access (images, downloads, etc.) */

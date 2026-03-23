@@ -102,10 +102,6 @@ ${launchSection}
 `;
   }
 
-  md += `\n## Source
-Source code is available in \`src/\` directory. Use the devtools app to browse, edit, and compile the source.
-`;
-
   if (hasProtocol) {
     md += `
 ## App Protocol

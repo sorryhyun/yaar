@@ -2,7 +2,25 @@ export {};
 import { app } from '@bundled/yaar';
 import type { StorageEntry } from './types';
 import { setStatusText } from './state';
-import { basename, getExtension, buildDragMetadata } from './helpers';
+import { basename, getExtension } from './helpers';
+import { storageUrl, toStorageUri } from './storage-api';
+
+function buildDragMetadata(entry: StorageEntry) {
+  const name = basename(entry.path);
+  const url = !entry.isDirectory ? storageUrl(entry.path) : null;
+  return {
+    source: 'storage',
+    appId: 'storage',
+    path: entry.path,
+    name,
+    isDirectory: entry.isDirectory,
+    size: entry.size ?? null,
+    extension: entry.isDirectory ? '' : getExtension(name),
+    mimeType: null,
+    url,
+    storageUri: toStorageUri(entry.path),
+  };
+}
 
 export function safeSetDragData(dt: DataTransfer, type: string, value: string) {
   try { dt.setData(type, value); } catch { /* ignore */ }

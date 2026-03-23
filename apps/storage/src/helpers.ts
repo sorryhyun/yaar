@@ -1,8 +1,6 @@
 export {};
-import type { StorageEntry } from './types';
-import { storageUrl } from './storage-api';
 
-// ── Pure utilities ──────────────────────────────────────────────
+// ── Pure utilities (no side-effects, no external imports) ─────────────────
 
 export function basename(path: string): string {
   const parts = path.replace(/\/$/, '').split('/');
@@ -51,26 +49,4 @@ export function isImage(name: string): boolean {
 
 export function isMarkdown(name: string): boolean {
   return ['md', 'mdx', 'markdown'].includes(getExtension(name));
-}
-
-export function toStorageUri(path: string): string {
-  const cleaned = path.split('/').map((part) => encodeURIComponent(part)).join('/');
-  return `yaar://storage/${cleaned}`;
-}
-
-export function buildDragMetadata(entry: StorageEntry) {
-  const name = basename(entry.path);
-  const url = !entry.isDirectory ? storageUrl(entry.path) : null;
-  return {
-    source: 'storage',
-    appId: 'storage',
-    path: entry.path,
-    name,
-    isDirectory: entry.isDirectory,
-    size: entry.size ?? null,
-    extension: entry.isDirectory ? '' : getExtension(name),
-    mimeType: null,
-    url,
-    storageUri: toStorageUri(entry.path),
-  };
 }

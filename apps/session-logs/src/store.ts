@@ -8,4 +8,5 @@ export const [detail, setDetail] = createSignal<SessionDetail | null>(null);
 export const [loading, setLoading] = createSignal(false);
 export const [detailLoading, setDetailLoading] = createSignal(false);
 export const [search, setSearch] = createSignal('');
-export const [error, setError] = createSignal<string | null>(null);
+export const [totalCount, setTotalCount] = createSignal(0);
+export const [loadError, setLoadError] = createSignal<string | null>(null);

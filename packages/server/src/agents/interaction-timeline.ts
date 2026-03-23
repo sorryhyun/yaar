@@ -57,9 +57,19 @@ export class InteractionTimeline {
 
   /**
    * Push an AI agent action summary into the timeline.
+   * @param responseText Optional final text response from the agent (included in summary).
    */
-  pushAI(role: string, task: string, actions: OSAction[], windowId?: string): void {
-    const summary = this.summarizeActions(actions, windowId);
+  pushAI(
+    role: string,
+    _task: string,
+    actions: OSAction[],
+    windowId?: string,
+    responseText?: string,
+  ): void {
+    let summary = this.summarizeActions(actions, windowId);
+    if (responseText) {
+      summary += ` Response: ${responseText}`;
+    }
     this.entries.push({
       type: 'AI',
       content: summary,

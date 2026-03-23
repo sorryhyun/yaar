@@ -12,6 +12,3 @@ create({
   content: "yaar://apps/minecraft-lite"
 })
 ```
-
-## Source
-Source code is available in `src/` directory. Use `clone(appId="minecraft-lite")` to copy source into a sandbox for reading or editing.

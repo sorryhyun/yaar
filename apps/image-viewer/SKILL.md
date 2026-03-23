@@ -13,5 +13,3 @@ create({
 })
 ```
 
-## Source
-Source code is available in `src/` directory. Use `clone(appId="image-viewer")` to copy source into a sandbox for reading or editing.

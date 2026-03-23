@@ -12,6 +12,3 @@ create({
   content: "yaar://apps/dock"
 })
 ```
-
-## Source
-Source code is available in `src/` directory. Use `clone(appId="dock")` to copy source into a sandbox for reading or editing.

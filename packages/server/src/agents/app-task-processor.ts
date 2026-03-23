@@ -135,15 +135,16 @@ export class AppTaskProcessor {
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },
         onAfterRun: async (recordedActions) => {
+          // Push to timeline with response text so the monitor agent sees it on next turn
           this.ctx.timeline.pushAI(
             agentRole,
             task.content.slice(0, 100),
             recordedActions,
             windowId,
+            appResponseText || undefined,
           );
 
-          // Auto-relay: append a summary to monitor context so the orchestrator
-          // sees what the app-agent responded (avoids user message being "swallowed")
+          // Also append to context tape for logging/debugging
           if (appResponseText && task.monitorId) {
             const monitorSrc = monitorSource(task.monitorId);
             const summary =

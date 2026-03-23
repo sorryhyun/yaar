@@ -13,6 +13,3 @@ invoke('yaar://windows/session-logs', {
   content: "yaar://apps/session-logs"
 })
 ```
-
-## Source
-Source code is available in `src/` directory. Use the devtools app to browse, edit, and compile the source.

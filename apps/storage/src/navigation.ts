@@ -18,7 +18,7 @@ const EXT_LANG: Record<string, string> = {
   cs: 'csharp', rb: 'ruby', php: 'php',
 };
 
-const PREVIEW_UNAVAILABLE = '<span style="color:var(--yaar-text-muted)">Unable to preview</span>';
+const PREVIEW_UNAVAILABLE = '<span class="preview-unavailable">Unable to preview</span>';
 
 export async function navigate(path: string) {
   setCurrentPath(path);
@@ -51,10 +51,11 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   setPreviewMetaText(formatSize(entry.size));
   setShowPreview(true);
 
-  elPreviewBody.innerHTML = '<span style="color:var(--yaar-text-muted)">Loading…</span>';
+  elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 
   if (isImage(name)) {
-    elPreviewBody.innerHTML = `<img src="${storageUrl(entry.path)}" alt="${name}" style="max-width:100%;border-radius:var(--yaar-radius)" />`;
+    // inline styles intentionally omitted — .preview-body img already covers max-width + border-radius
+    elPreviewBody.innerHTML = `<img src="${storageUrl(entry.path)}" alt="${name}" />`;
     return;
   }
 
@@ -89,10 +90,10 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   }
 
   elPreviewBody.innerHTML = `
-    <div style="text-align:center;padding:24px 20px">
-      <div style="font-size:36px;margin-bottom:10px">${getFileIcon(name, false)}</div>
-      <div style="color:var(--yaar-text-muted);margin-bottom:14px;font-size:12px">No preview available</div>
-      <button class="toolbar-btn" id="open-external" style="font-size:12px">Open in browser tab ↗</button>
+    <div class="no-preview-fallback">
+      <div class="no-preview-icon">${getFileIcon(name, false)}</div>
+      <div class="no-preview-text">No preview available</div>
+      <button class="y-btn y-btn-sm" id="open-external">Open in browser tab ↗</button>
     </div>
   `;
   document.getElementById('open-external')?.addEventListener('click', () => {

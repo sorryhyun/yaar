@@ -12,6 +12,3 @@ create({
   content: "yaar://apps/recent-papers"
 })
 ```
-
-## Source
-Source code is available in `src/` directory. Use `clone(appId="recent-papers")` to copy source into a sandbox for reading or editing.

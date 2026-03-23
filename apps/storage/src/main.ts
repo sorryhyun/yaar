@@ -3,6 +3,7 @@ import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
+import type { StorageEntry } from './types';
 import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody, setStatusText } from './state';
 import { basename, formatSize, getFileIcon } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
@@ -11,7 +12,7 @@ import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
 import { storageSave, storageDelete, storageUrl } from './storage-api';
 
-// ── Toast helper ─────────────────────────────────────────────────────
+// ── Toast helper ───────────────────────────────────────────────────────────────────
 
 function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000) {
   const el = document.createElement('div');
@@ -25,7 +26,7 @@ function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000
   }, ms);
 }
 
-// ── Upload ───────────────────────────────────────────────────────────
+// ── Upload ───────────────────────────────────────────────────────────────────────
 
 let uploadInput: HTMLInputElement;
 
@@ -53,7 +54,7 @@ async function handleUpload(e: Event) {
   }
 }
 
-// ── Template ─────────────────────────────────────────────────────────
+// ── Template ───────────────────────────────────────────────────────────────────
 
 const App = () => html`
   <div class="toolbar y-flex-between">
@@ -100,7 +101,7 @@ const App = () => html`
         if (list.length === 0) return html`<div class="empty">This folder is empty</div>`;
         return html`
           <${For} each=${entries}>
-            ${(entry: import('./types').StorageEntry) => {
+            ${(entry: StorageEntry) => {
               const name = basename(entry.path);
               return html`
                 <div
@@ -190,7 +191,7 @@ const App = () => html`
 
 render(App, document.getElementById('app')!);
 
-// ── App Protocol & Init ───────────────────────────────────────────
+// ── App Protocol & Init ───────────────────────────────────────────────────
 
 registerProtocol();
 navigate('');

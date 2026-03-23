@@ -38,17 +38,13 @@
   .breadcrumb button:hover { background: var(--yaar-bg-surface-hover); }
   .breadcrumb button:last-child { color: var(--yaar-text); cursor: default; }
   .breadcrumb .sep { color: var(--yaar-text-muted); font-size: 11px; }
+
+  /* .toolbar-btn is combined with y-btn y-btn-sm — only add overrides here */
   .toolbar-btn {
-    background: var(--yaar-bg-surface-hover);
-    border: 1px solid var(--yaar-border);
-    color: var(--yaar-text);
-    cursor: pointer;
-    padding: 4px 10px;
-    border-radius: var(--yaar-radius);
-    font-size: 12px;
     white-space: nowrap;
   }
   .toolbar-btn:hover { border-color: var(--yaar-accent); }
+
   .toolbar-select {
     background: var(--yaar-bg-surface-hover);
     border: 1px solid var(--yaar-border);
@@ -79,15 +75,11 @@
   .modal-note { color: var(--yaar-text-muted); font-size: 12px; line-height: 1.4; margin-bottom: 12px; }
   .modal-form { display: grid; gap: 10px; }
   .modal-label { font-size: 12px; color: var(--yaar-text-muted); }
+
+  /* .modal-input is combined with y-input — only add layout overrides here */
   .modal-input {
     width: 100%;
     box-sizing: border-box;
-    background: var(--yaar-bg);
-    border: 1px solid var(--yaar-border);
-    color: var(--yaar-text);
-    border-radius: var(--yaar-radius);
-    padding: 7px 9px;
-    font-size: 12px;
   }
   .modal-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -209,7 +201,27 @@
     flex-shrink: 0;
   }
 
-/* ── Markdown Preview ────────────────────────────────────────────────── */
+/* ── Preview state classes (replaces inline styles) ─────────────────────── */
+.preview-loading,
+.preview-unavailable {
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+}
+.no-preview-fallback {
+  text-align: center;
+  padding: 24px 20px;
+}
+.no-preview-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
+.no-preview-text {
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+/* ── Markdown Preview ────────────────────────────────────────────────────── */
 .md-preview {
   font-size: 13px;
   line-height: 1.6;
@@ -266,7 +278,7 @@
 .md-preview img { max-width: 100%; border-radius: var(--yaar-radius); }
 .md-preview hr { border: none; border-top: 1px solid var(--yaar-border); margin: 12px 0; }
 
-/* ── Code Preview with Prism ─────────────────────────────────────────── */
+/* ── Code Preview with Prism ─────────────────────────────────────────────────── */
 .code-preview {
   margin: 0;
   font-family: var(--yaar-font-mono);

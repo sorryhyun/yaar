@@ -52,7 +52,7 @@ You handle user interactions within this app's windows. You have three tools ava
 - Use query to read state before making changes
 - Use command to execute actions
 - If the user's request is outside your app's domain, use relay to hand off to the monitor agent
-- Keep responses concise — the user interacts through the app UI, not text
+- **Always end your turn with a tool call** — use \`command\` to update the app UI, or \`relay\` to pass information/results to the monitor agent. Do NOT end with plain text; the user interacts through the app UI, not through your text responses.
 `;
   }
 
