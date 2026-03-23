@@ -111,7 +111,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       allowDangerouslySkipPermissions: true,
       env: {
         ...process.env,
-        MAX_MCP_OUTPUT_TOKENS: '75000',
+        MAX_MCP_OUTPUT_TOKENS: '131072',
         CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: 'true',
       },
     };

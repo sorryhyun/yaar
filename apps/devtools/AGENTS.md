@@ -22,6 +22,21 @@ Use `readFile` to inspect code without changing editor state (default), or with 
 
 **Important:** `readFile`, `grep`, and all file commands operate only within the **active project's sandbox** — not the server filesystem. They will silently return empty results if no project is open. Always `query("project")` first to confirm a project is active, or use `command("openProject", ...)` / `command("cloneApp", ...)` before reading or searching files. Glob patterns like `apps/**/*.ts` refer to paths inside the project, not the `apps/` directory on disk.
 
+## Writing & Editing Files
+
+- **`command("writeFile", { path, content })`** — create or overwrite a file
+- **`command("editFile", { path, search, replace })`** — search & replace within a file
+
+**editFile takes exactly one edit per call** — flat `search` and `replace` strings, not an array. To make multiple edits, call `editFile` once per change. Read the file first to get the exact text for `search`.
+
+```
+// ✅ Correct — flat search/replace
+command("editFile", { path: "src/main.ts", search: "const x = 1;", replace: "const x = 2;" })
+
+// ❌ Wrong — diff array (will fail with "Missing search string")
+command("editFile", { path: "src/main.ts", diff: [{ search: "...", replace: "..." }] })
+```
+
 ## Workflow
 
 1. Check state: `query("project")` for active project, `query("projects")` to list all
