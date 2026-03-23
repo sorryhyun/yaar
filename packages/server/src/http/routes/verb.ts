@@ -3,7 +3,7 @@
  *
  * POST /api/verb
  * Body: { verb, uri, payload? }
- * Returns: VerbResult JSON
+ * Returns: JSON envelope: { ok: true, data } or { ok: false, error }
  *
  * Access restricted to permissions declared in the app's app.json.
  * Apps without explicit permissions get no verb access.
@@ -14,7 +14,7 @@ import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
-import type { Verb } from '../../handlers/uri-registry.js';
+import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
@@ -77,6 +77,34 @@ interface SubscribeRequest {
   uri?: string;
   action?: 'subscribe' | 'unsubscribe';
   subscriptionId?: string;
+}
+
+/** Transform a VerbResult into a standard JSON envelope for iframe apps. */
+function toEnvelope(result: VerbResult): Record<string, unknown> {
+  const textItem = result.content.find((c) => c.type === 'text');
+  const raw = (textItem as { text?: string } | undefined)?.text ?? '';
+
+  if (result.isError) {
+    return { ok: false, error: raw };
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = raw;
+  }
+
+  const images = result.content
+    .filter((c) => c.type === 'image')
+    .map((c) => {
+      const img = c as { data: string; mimeType: string };
+      return { data: img.data, mimeType: img.mimeType };
+    });
+
+  const envelope: Record<string, unknown> = { ok: true, data };
+  if (images.length > 0) envelope.images = images;
+  return envelope;
 }
 
 export async function handleVerbRoutes(req: Request, url: URL): Promise<Response | null> {
@@ -207,7 +235,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
           execute,
         )
       : await execute();
-    return jsonResponse(result);
+    return jsonResponse(toEnvelope(result));
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Verb execution failed';
     return errorResponse(message, 500);

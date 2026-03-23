@@ -35,13 +35,11 @@ export const IFRAME_VERB_SDK_SCRIPT = `
       headers: tokenHeaders(),
       body: JSON.stringify(body)
     }).then(function(res) {
-      return res.json().then(function(data) {
-        if (!res.ok) throw new Error(data.error || 'Verb call failed');
-        if (data.isError) {
-          var msg = (data.content && data.content[0] && data.content[0].text) || 'Verb error';
-          throw new Error(msg);
-        }
-        return data;
+      return res.json().then(function(envelope) {
+        if (!res.ok) throw new Error(envelope.error || 'Verb call failed');
+        if (!envelope.ok) throw new Error(envelope.error || 'Verb error');
+        if (envelope.images) return { data: envelope.data, images: envelope.images };
+        return envelope.data;
       });
     });
   }
@@ -94,9 +92,8 @@ export const IFRAME_VERB_SDK_SCRIPT = `
       if (options.headers) payload.headers = options.headers;
       if (options.body) payload.body = options.body;
     }
-    return window.yaar.invoke('yaar://http', payload).then(function(result) {
-      var text = (result && result.content && result.content[0] && result.content[0].text) || '{}';
-      var data = JSON.parse(text);
+    return window.yaar.invoke('yaar://http', payload).then(function(data) {
+      if (typeof data === 'string') data = JSON.parse(data);
       var body;
       if (data.bodyEncoding === 'base64') {
         var bin = atob(data.body);

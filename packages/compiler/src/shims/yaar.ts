@@ -18,14 +18,15 @@ const y = (window as any).yaar;
 // ── Helpers ──────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function text(result: any): string {
-  return result?.content?.[0]?.text ?? '';
+function text(data: any): string {
+  return typeof data === 'string' ? data : data != null ? JSON.stringify(data) : '';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function json<T>(result: any): T {
-  const t = text(result);
-  return t ? JSON.parse(t) : undefined;
+function json<T>(data: any): T {
+  if (data == null) return undefined as T;
+  if (typeof data === 'string') return data ? JSON.parse(data) : (undefined as T);
+  return data as T;
 }
 
 // ── Auto-parsed verb helpers ─────────────────────────────────────
@@ -80,35 +81,28 @@ export const appStorage = {
   ): Promise<void> {
     const payload: Record<string, unknown> = { action: 'write', content };
     if (options?.encoding) payload.encoding = options.encoding;
-    const result = await y.invoke(appStorageUri(path), payload);
-    if (result?.isError) throw new Error(text(result) || 'Save failed');
+    await y.invoke(appStorageUri(path), payload);
   },
   async read(path: string): Promise<string> {
-    const result = await y.read(appStorageUri(path));
-    if (result?.isError) throw new Error(text(result) || 'Read failed');
-    return text(result);
+    return text(await y.read(appStorageUri(path)));
   },
   async readJson<T = unknown>(path: string): Promise<T> {
-    const raw = await appStorage.read(path);
-    return JSON.parse(raw);
+    return json<T>(await y.read(appStorageUri(path)));
   },
   async readBinary(path: string): Promise<{ data: string; mimeType: string }> {
     const result = await y.read(appStorageUri(path));
-    if (result?.isError) throw new Error(text(result) || 'Read failed');
-    const items = result?.content ?? [];
-    const img = items.find((c: any) => c?.type === 'image' && c.data);
-    if (img) return { data: img.data, mimeType: img.mimeType ?? 'application/octet-stream' };
-    // Fallback: text content is the base64 data itself
+    // When images are present, callVerb returns { data, images }
+    if (result && typeof result === 'object' && result.images?.length) {
+      const img = result.images[0];
+      return { data: img.data, mimeType: img.mimeType ?? 'application/octet-stream' };
+    }
     return { data: text(result), mimeType: 'application/octet-stream' };
   },
   async list(dirPath?: string): Promise<unknown[]> {
-    const result = await y.list(appStorageUri(dirPath ?? ''));
-    if (result?.isError) return [];
-    return json(result) ?? [];
+    return json(await y.list(appStorageUri(dirPath ?? ''))) ?? [];
   },
   async remove(path: string): Promise<void> {
-    const result = await y.delete(appStorageUri(path));
-    if (result?.isError) throw new Error(text(result) || 'Remove failed');
+    await y.delete(appStorageUri(path));
   },
 };
 
