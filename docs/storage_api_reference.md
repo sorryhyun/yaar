@@ -377,7 +377,7 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 **Source:** `packages/shared/src/capture-helper.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
-Apps running inside iframes get `window.yaar.storage` injected automatically:
+Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `storage` for raw). The underlying SDK (`window.yaar.storage`) is injected automatically:
 
 | Method | Signature | Description |
 |--------|-----------|-------------|

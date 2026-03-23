@@ -152,7 +152,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **서버 프로세스 없음** — 앱은 포트를 열거나 서버를 실행할 수 없습니다.
 - **OAuth 플로우 불가** — OAuth code-for-token 교환에는 서버 측 `client_secret`이 필요합니다. iframe 앱에서는 안전하게 수행할 수 없으므로, API 기반 앱 패턴을 사용하세요 (아래 참조).
 - **브라우저 `fetch()`는 CORS 제한** — 직접적인 크로스 오리진 요청은 차단됩니다. `yaar.invoke('yaar://http', { url, ... })`를 사용하여 서버를 통해 프록시하세요.
-- **localStorage/IndexedDB 사용 금지** — `window.yaar.storage`를 사용하세요 (서버 측 저장, 세션 간 유지).
+- **localStorage/IndexedDB 사용 금지** — `@bundled/yaar`의 `appStorage`를 사용하세요 (서버 측 저장, 세션 간 유지).
 - **자체 완결형** — 앱은 외부 서버, localhost 서비스, iframe 외부 인프라에 의존해서는 안 됩니다.
 
 ## 안티패턴
@@ -262,7 +262,7 @@ iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 
 ### 앱에서 등록하기
 
-`window.yaar.app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다. SDK 스크립트는 iframe에 자동 주입됩니다.
+`@bundled/yaar`에서 `app`을 import하고 `app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다.
 
 ```typescript
 // src/protocol.ts

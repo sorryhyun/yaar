@@ -2,6 +2,7 @@ import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { readJson, invoke } from '@bundled/yaar';
 import { showToast } from '../store';
+import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpers';
 
 const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize'];
 
@@ -12,7 +13,7 @@ const ACCENT_COLORS: Record<string, string> = {
 };
 
 const WALLPAPER_LABELS: Record<string, string> = {
-  'dark-blue': '🌌 Dark Blue', midnight: '🌃 Midnight', aurora: '🌠 Aurora',
+  'dark-blue': '🌌 Dark Blue', midnight: '🏙️ Midnight', aurora: '🌠 Aurora',
   ember: '🔥 Ember', ocean: '🌊 Ocean', moss: '🌿 Moss',
 };
 
@@ -44,11 +45,11 @@ export function SettingsView() {
   const set = (key: string, value: unknown) => setData(d => ({ ...d, [key]: value }));
 
   const save = async () => {
-    let extra: Record<string, unknown> = {};
     const rawStr = extraRaw().trim();
-    if (rawStr) {
-      try { extra = JSON.parse(rawStr); }
-      catch { showToast('Invalid JSON in extra settings', 'error'); return; }
+    const extra = rawStr ? parseJson<Record<string, unknown>>(rawStr, null as unknown as Record<string, unknown>) : {};
+    if (rawStr && extra === null) {
+      showToast('Invalid JSON in extra settings', 'error');
+      return;
     }
     setSaving(true);
     try {
@@ -56,7 +57,7 @@ export function SettingsView() {
       for (const k of KNOWN_KEYS) {
         if (data()[k] !== undefined) payload[k] = data()[k];
       }
-      await invoke('yaar://config/settings', { ...payload, ...extra });
+      await invoke('yaar://config/settings', { ...payload, ...(extra ?? {}) });
       showToast('Settings saved');
     } catch {
       showToast('Failed to save', 'error');
@@ -84,14 +85,14 @@ export function SettingsView() {
           <label class="s-label">Display Name</label>
           <input class="s-input" type="text" placeholder="Your name"
             value=${() => String(get('userName') ?? '')}
-            onInput=${(e: InputEvent) => set('userName', (e.target as HTMLInputElement).value)}
+            onInput=${onInputHandler(v => set('userName', v))}
           />
         </div>
         <div class="s-row">
           <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
           <input class="s-input" type="text" placeholder="en"
             value=${() => String(get('language') ?? 'en')}
-            onInput=${(e: InputEvent) => set('language', (e.target as HTMLInputElement).value)}
+            onInput=${onInputHandler(v => set('language', v))}
           />
         </div>
       </div>
@@ -102,7 +103,7 @@ export function SettingsView() {
           <label class="s-label">Wallpaper</label>
           <select class="s-select"
             value=${() => String(get('wallpaper') ?? '')}
-            onChange=${(e: Event) => set('wallpaper', (e.target as HTMLSelectElement).value)}
+            onChange=${onChangeHandler(v => set('wallpaper', v))}
           >
             ${Object.entries(WALLPAPER_LABELS).map(([val, label]) =>
               html`<option value=${val}>${label}</option>`
@@ -126,10 +127,10 @@ export function SettingsView() {
           <label class="s-label">Icon Size</label>
           <select class="s-select"
             value=${() => String(get('iconSize') ?? '')}
-            onChange=${(e: Event) => set('iconSize', (e.target as HTMLSelectElement).value)}
+            onChange=${onChangeHandler(v => set('iconSize', v))}
           >
             ${['small', 'medium', 'large'].map(v =>
-              html`<option value=${v}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+              html`<option value=${v}>${capitalize(v)}</option>`
             )}
           </select>
         </div>
@@ -141,10 +142,10 @@ export function SettingsView() {
           <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
           <select class="s-select"
             value=${() => String(get('provider') ?? '')}
-            onChange=${(e: Event) => set('provider', (e.target as HTMLSelectElement).value)}
+            onChange=${onChangeHandler(v => set('provider', v))}
           >
             ${['auto', 'claude', 'codex'].map(v =>
-              html`<option value=${v}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+              html`<option value=${v}>${capitalize(v)}</option>`
             )}
           </select>
         </div>
@@ -160,7 +161,7 @@ export function SettingsView() {
       <div class="s-section">
         <button class="s-extra-toggle" onClick=${() => setShowExtra(v => !v)}>
           ${() => showExtra() ? '▾' : '▸'} Advanced / Extra Settings
-          ${() => extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(JSON.parse(extraRaw() || '{}')).length} keys</span>` : ''}
+          ${() => extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(parseJson(extraRaw(), {})).length} keys</span>` : ''}
         </button>
         ${() => showExtra() ? html`
           <textarea

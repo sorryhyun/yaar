@@ -26,15 +26,26 @@ export function destroyChart() {
   selectionChart = null;
 }
 
-// Resolve CSS variable at runtime for chart theming
+// ── Internal helpers ───────────────────────────────────────────────────
+
+/** Resolve a CSS custom property value at runtime for chart theming. */
 function cssVar(name: string, fallback: string): string {
   const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return val || fallback;
 }
 
+/** Build the current selection range label, e.g. "A1" or "A1:C3". */
+function getSelectionRangeLabel(): string {
+  return mutable.selectionStart === mutable.selectionEnd
+    ? mutable.selected
+    : `${mutable.selectionStart}:${mutable.selectionEnd}`;
+}
+
+// ── Exported renderers ─────────────────────────────────────────────────
+
 export function renderSelectionChart() {
-  const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
-  const rects = refsInRect(rect);
+  const rect   = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+  const rects  = refsInRect(rect);
   const points = selectionChartPoints(rects, cells, (ref) => formulaEngine.display(ref));
 
   if (!points.length) {
@@ -53,11 +64,8 @@ export function renderSelectionChart() {
     '#1d4ed8', '#bfdbfe', '#dbeafe', '#2563eb',
   ];
 
-  // Scatter uses {x, y} point objects; other types use flat value arrays
   const isScatter = chartType === 'scatter';
-  const scatterData = isScatter ? values.map((v, i) => ({ x: i, y: v })) : values;
-
-  const isRound = chartType === 'pie' || chartType === 'doughnut';
+  const isRound   = chartType === 'pie' || chartType === 'doughnut';
 
   // Theme-aware colors
   const textColor = cssVar('--yaar-text', '#e6edf3');
@@ -71,7 +79,7 @@ export function renderSelectionChart() {
       datasets: [
         {
           label: chartType.charAt(0).toUpperCase() + chartType.slice(1) + ' Chart',
-          data: scatterData,
+          data: isScatter ? values.map((v, i) => ({ x: i, y: v })) : values,
           borderColor: '#2a6df6',
           backgroundColor: isRound ? colors : 'rgba(42, 109, 246, 0.35)',
           borderWidth: isRound ? 1 : 2,
@@ -101,30 +109,20 @@ export function renderSelectionChart() {
         },
       },
       scales: !isRound ? {
-        x: {
-          grid: { color: gridColor },
-          ticks: { color: textMuted, font: { size: 11 }, maxRotation: 45 },
-        },
-        y: {
-          grid: { color: gridColor },
-          ticks: { color: textMuted, font: { size: 11 } },
-          beginAtZero: true,
-        },
+        x: { grid: { color: gridColor }, ticks: { color: textMuted, font: { size: 11 }, maxRotation: 45 } },
+        y: { grid: { color: gridColor }, ticks: { color: textMuted, font: { size: 11 } }, beginAtZero: true },
       } : undefined,
     },
   } as any);
 
-  const rangeLabel = mutable.selectionStart === mutable.selectionEnd
-    ? mutable.selected
-    : `${mutable.selectionStart}:${mutable.selectionEnd}`;
-  setChartTitleText(`${rangeLabel} (${points.length} pts)`);
+  setChartTitleText(`${getSelectionRangeLabel()} (${points.length} pts)`);
   setChartPanelOpen(true);
   setIoStatus(`Rendered ${chartType} chart from selection.`);
 }
 
 export function renderSelectionStats() {
-  const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
-  const rects = refsInRect(rect);
+  const rect    = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+  const rects   = refsInRect(rect);
   const numeric = rects
     .map((ref) => Number.parseFloat(formulaEngine.display(ref)))
     .filter((value) => Number.isFinite(value));
@@ -134,21 +132,18 @@ export function renderSelectionStats() {
     return;
   }
 
-  const fmt = d3Format(',.4~f');
+  const fmt  = d3Format(',.4~f');
   const rows = [
-    { label: 'Count', value: String(numeric.length) },
-    { label: 'Sum', value: fmt(sum(numeric)) },
-    { label: 'Mean', value: fmt(mean(numeric) ?? 0) },
+    { label: 'Count',  value: String(numeric.length) },
+    { label: 'Sum',    value: fmt(sum(numeric)) },
+    { label: 'Mean',   value: fmt(mean(numeric) ?? 0) },
     { label: 'Median', value: fmt(median(numeric) ?? 0) },
-    { label: 'Min', value: fmt(min(numeric) ?? 0) },
-    { label: 'Max', value: fmt(max(numeric) ?? 0) },
+    { label: 'Min',    value: fmt(min(numeric) ?? 0) },
+    { label: 'Max',    value: fmt(max(numeric) ?? 0) },
   ];
 
   setStatsRows(rows);
-  const rangeLabel = mutable.selectionStart === mutable.selectionEnd
-    ? mutable.selected
-    : `${mutable.selectionStart}:${mutable.selectionEnd}`;
-  setStatsRangeLabel(rangeLabel);
+  setStatsRangeLabel(getSelectionRangeLabel());
   setStatsPanelOpen(true);
   setIoStatus('Computed stats for selected range.');
 }

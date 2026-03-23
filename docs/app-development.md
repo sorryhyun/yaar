@@ -152,7 +152,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
 - **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `yaar.invoke('yaar://http', { url, ... })` to proxy requests through the server.
-- **No localStorage/IndexedDB** — Use `window.yaar.storage` for persistence (server-side, survives across sessions).
+- **No localStorage/IndexedDB** — Use `appStorage` from `@bundled/yaar` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
 ## Anti-Patterns
@@ -276,7 +276,7 @@ Iframe App → postMessage → WebSocket → MCP tool returns
 
 ### Registering in Your App
 
-Call `window.yaar.app.register()` with state handlers and command handlers. The SDK script is auto-injected into iframes.
+Import `app` from `@bundled/yaar` and call `app.register()` with state handlers and command handlers.
 
 ```typescript
 // src/protocol.ts

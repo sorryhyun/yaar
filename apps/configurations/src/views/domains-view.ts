@@ -2,11 +2,8 @@ import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { readJson, invoke, del } from '@bundled/yaar';
 import { showToast } from '../store';
-
-interface DomainsData {
-  allow_all_domains: boolean;
-  allowed_domains: string[];
-}
+import type { DomainsData } from '../types';
+import { onInputHandler } from '../helpers';
 
 export function DomainsView() {
   const [data, setData] = createSignal<DomainsData>({ allow_all_domains: false, allowed_domains: [] });
@@ -110,7 +107,7 @@ export function DomainsView() {
               type="text"
               placeholder="api.example.com"
               value=${newDomain}
-              onInput=${(e: InputEvent) => setNewDomain((e.target as HTMLInputElement).value)}
+              onInput=${onInputHandler(setNewDomain)}
               onKeydown=${handleKeydown}
             />
             <button

@@ -1,5 +1,5 @@
 {
-  "icon": "\u2699\ufe0f",
+  "icon": "⚙️",
   "name": "Configurations",
   "run": "index.html",
   "permissions": ["yaar://config/"],

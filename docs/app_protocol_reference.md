@@ -17,7 +17,7 @@ Agent calls MCP tool (app_query / app_command)
   → MCP tool returns result to agent
 ```
 
-An app opts in by setting `"appProtocol": true` in its `app.json` and calling `window.yaar.app.register()` inside the iframe.
+An app opts in by setting `"appProtocol": true` in its `app.json` and calling `app.register()` (imported from `@bundled/yaar`) inside the iframe.
 
 ---
 
@@ -172,7 +172,7 @@ These messages are exchanged between the frontend (parent window) and the iframe
 
 ### Client → Server: `APP_PROTOCOL_READY`
 
-Sent when an iframe app calls `window.yaar.app.register()`.
+Sent when an iframe app calls `app.register()` (from `@bundled/yaar`).
 
 ```typescript
 {
@@ -185,14 +185,16 @@ Sent when an iframe app calls `window.yaar.app.register()`.
 
 ## Iframe SDK
 
-The SDK script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component. It provides `window.yaar.app`.
+The SDK is available via `@bundled/yaar`. Import `app` and call `app.register()` / `app.sendInteraction()`. Under the hood, the protocol script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component.
 
-### `window.yaar.app.register(config)`
+### `app.register(config)`
 
 Register the app with the protocol. Must be called once.
 
-```javascript
-window.yaar.app.register({
+```typescript
+import { app } from '@bundled/yaar';
+
+app.register({
   appId: 'my-app',
   name: 'My App',
 
@@ -226,12 +228,14 @@ window.yaar.app.register({
 
 On registration the SDK sends `{ type: 'yaar:app-ready', appId }` to the parent so the server knows the app supports the protocol.
 
-### `window.yaar.app.sendInteraction(description)`
+### `app.sendInteraction(description)`
 
 Send a free-form interaction message from the app to the AI agent. Useful for notifying the agent about user actions inside the iframe.
 
-```javascript
-window.yaar.app.sendInteraction('User clicked the save button');
+```typescript
+import { app } from '@bundled/yaar';
+
+app.sendInteraction('User clicked the save button');
 ```
 
 This posts a `{ type: 'yaar:app-interaction', content: "..." }` message to the parent, which routes it to the window's agent.
@@ -297,11 +301,12 @@ When an iframe app reloads (e.g., due to HMR or navigation), the server detects 
 
 A minimal spreadsheet app:
 
-```javascript
-// Inside the iframe
+```typescript
+import { app } from '@bundled/yaar';
+
 const cells = {};
 
-window.yaar.app.register({
+app.register({
   appId: 'sheet',
   name: 'Sheet',
   state: {

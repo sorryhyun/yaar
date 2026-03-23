@@ -1,8 +1,10 @@
 import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { readJson, invoke, del as yaarDelete } from '@bundled/yaar';
+import { invoke, del as yaarDelete } from '@bundled/yaar';
 import { shortcuts, setShortcuts, showToast } from '../store';
 import type { Shortcut } from '../types';
+import { onInputHandler } from '../helpers';
+import { loadConfigList } from '../api';
 
 export function ShortcutsView() {
   const [label, setLabel] = createSignal('');
@@ -12,14 +14,7 @@ export function ShortcutsView() {
   const [showForm, setShowForm] = createSignal(false);
   const [selected, setSelected] = createSignal<Shortcut | null>(null);
 
-  const load = async () => {
-    try {
-      const data = await readJson<{ shortcuts: Shortcut[] }>('yaar://config/shortcuts');
-      setShortcuts(data?.shortcuts ?? []);
-    } catch {
-      setShortcuts([]);
-    }
-  };
+  const load = () => loadConfigList<Shortcut>('yaar://config/shortcuts', 'shortcuts', setShortcuts);
 
   onMount(load);
 
@@ -51,7 +46,6 @@ export function ShortcutsView() {
   return html`
     <div class="view-panel">
 
-      <!-- Add section at top -->
       <div class="view-add-section">
         <div class="view-add-toggle">
           <span style="font-size:13px;font-weight:600;color:var(--yaar-text)">
@@ -68,17 +62,17 @@ export function ShortcutsView() {
               <div>
                 <div class="field-label">Label</div>
                 <input class="y-input" style="width:100%" placeholder="My Shortcut"
-                  value=${label} onInput=${(e: InputEvent) => setLabel((e.target as HTMLInputElement).value)} />
+                  value=${label} onInput=${onInputHandler(setLabel)} />
               </div>
               <div>
                 <div class="field-label">Icon (emoji)</div>
                 <input class="y-input" style="width:100%" placeholder="🔗"
-                  value=${icon} onInput=${(e: InputEvent) => setIcon((e.target as HTMLInputElement).value)} />
+                  value=${icon} onInput=${onInputHandler(setIcon)} />
               </div>
               <div class="form-full">
                 <div class="field-label">Target URI</div>
                 <input class="y-input" style="width:100%" placeholder="yaar://apps/my-app"
-                  value=${target} onInput=${(e: InputEvent) => setTarget((e.target as HTMLInputElement).value)} />
+                  value=${target} onInput=${onInputHandler(setTarget)} />
               </div>
             </div>
             <button class="y-btn y-btn-primary" onClick=${add} disabled=${adding}>
@@ -88,7 +82,6 @@ export function ShortcutsView() {
         </${Show}>
       </div>
 
-      <!-- Sidebar + Detail -->
       <div class="view-split">
         <div class="view-sidebar">
           ${() => shortcuts().length === 0
@@ -133,11 +126,7 @@ export function ShortcutsView() {
                   <div class="detail-field-value" style="color:var(--yaar-text-muted)">${s.id}</div>
                 </div>
                 <div class="detail-actions">
-                  <button
-                    class="y-btn"
-                    style="color:var(--yaar-error);border-color:var(--yaar-error)"
-                    onClick=${() => remove(s.id)}
-                  >
+                  <button class="y-btn btn-danger" onClick=${() => remove(s.id)}>
                     🗑 Delete
                   </button>
                 </div>

@@ -41,22 +41,3 @@ export function createStatsPanel() {
     </div>
   `;
 }
-
-export function createChartTypeSelect(): HTMLSelectElement {
-  const sel = document.createElement('select');
-  sel.className = 'y-select y-select-sm';
-  const options: Array<{ value: string; label: string }> = [
-    { value: 'bar', label: 'Bar' },
-    { value: 'line', label: 'Line' },
-    { value: 'pie', label: 'Pie' },
-    { value: 'doughnut', label: 'Doughnut' },
-    { value: 'scatter', label: 'Scatter' },
-  ];
-  for (const opt of options) {
-    const el = document.createElement('option');
-    el.value = opt.value;
-    el.textContent = opt.label;
-    sel.appendChild(el);
-  }
-  return sel;
-}

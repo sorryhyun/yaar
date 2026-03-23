@@ -5,13 +5,39 @@
 import { z } from 'zod';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { getSessionId } from '../../agents/session.js';
 import {
   readShortcuts,
   addShortcut,
   removeShortcut,
   updateShortcut,
 } from '../../storage/shortcuts.js';
-import type { DesktopShortcut } from '@yaar/shared';
+import { ServerEventType, type DesktopShortcut, type OSAction } from '@yaar/shared';
+
+/**
+ * Broadcast a desktop shortcut action to the frontend.
+ *
+ * Uses the session-scoped 'desktop-shortcut' channel so it reaches the frontend
+ * regardless of whether the caller is an AI agent or an iframe verb request.
+ * (The generic 'action' channel is filtered by ToolActionBridge's agentId check,
+ * which rejects iframe-originated actions like 'iframe:configurations'.)
+ */
+function broadcastDesktopAction(action: OSAction): void {
+  const sessionId = getSessionId();
+  if (sessionId) {
+    actionEmitter.emit('desktop-shortcut', {
+      sessionId,
+      event: {
+        type: ServerEventType.ACTIONS,
+        actions: [action],
+        agentId: 'system',
+      },
+    });
+  } else {
+    // Fallback for non-session contexts (e.g. AI agent MCP tools)
+    actionEmitter.emitAction(action);
+  }
+}
 
 export const shortcutContentSchema = z.object({
   id: z.string().optional(),
@@ -49,11 +75,11 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     if (!updated) {
       return error(`Shortcut "${data.id}" not found.`);
     }
-    actionEmitter.emitAction({
+    broadcastDesktopAction({
       type: 'desktop.updateShortcut',
       shortcutId: data.id,
       updates,
-    });
+    } as OSAction);
     return ok(`Shortcut "${data.id}" updated.`);
   }
 
@@ -77,7 +103,7 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     createdAt: Date.now(),
   };
   await addShortcut(shortcut);
-  actionEmitter.emitAction({ type: 'desktop.createShortcut', shortcut });
+  broadcastDesktopAction({ type: 'desktop.createShortcut', shortcut } as OSAction);
   return ok(`Shortcut created: "${shortcut.label}" (${shortcut.id})`);
 }
 
@@ -91,9 +117,9 @@ export async function handleRemoveShortcut(shortcutId: string) {
   if (!removed) {
     return error(`Shortcut "${shortcutId}" not found.`);
   }
-  actionEmitter.emitAction({
+  broadcastDesktopAction({
     type: 'desktop.removeShortcut',
     shortcutId,
-  });
+  } as OSAction);
   return ok(`Shortcut "${shortcutId}" removed.`);
 }

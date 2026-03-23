@@ -13,21 +13,25 @@ import {
   serializeWorkbook, getRaw,
 } from './state';
 
+/** Extract a human-readable message from an unknown error value. */
+function getErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export async function saveWorkbookToStorage() {
   try {
-    const path = storagePath();
+    const path   = storagePath();
     const binary = createXlsxWorkbook(cells);
     await storageSave(path, binary);
     setIoStatus(`Saved XLSX to storage: ${path}`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to save';
-    setIoStatus(message, true);
+    setIoStatus(getErrorMessage(err, 'Failed to save'), true);
   }
 }
 
 export async function openWorkbookFromStorage() {
   try {
-    const path = storagePath();
+    const path  = storagePath();
     const lower = path.toLowerCase();
 
     if (lower.endsWith('.json')) {
@@ -39,14 +43,12 @@ export async function openWorkbookFromStorage() {
       return;
     }
 
-    const data = await storageRead(path, 'arraybuffer');
+    const data  = await storageRead(path, 'arraybuffer');
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
-    const parsed = parseXlsxWorkbook(bytes);
-    importWorkbook(parsed);
+    importWorkbook(parseXlsxWorkbook(bytes));
     setIoStatus(`Opened XLSX from storage: ${path}`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to open file';
-    setIoStatus(message, true);
+    setIoStatus(getErrorMessage(err, 'Failed to open file'), true);
   }
 }
 
@@ -56,8 +58,7 @@ export function exportCsv() {
 
   for (const ref of Object.keys(cells)) {
     const parsed = parseRef(ref);
-    if (!parsed) continue;
-    if (!cells[ref]) continue;
+    if (!parsed || !cells[ref]) continue;
     maxRow = Math.max(maxRow, parsed.r);
     maxCol = Math.max(maxCol, parsed.c);
   }
@@ -69,11 +70,10 @@ export function exportCsv() {
     lines.push(row.join(','));
   }
 
-  const csv = lines.join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
   a.download = 'sheet.csv';
   a.click();
   URL.revokeObjectURL(url);

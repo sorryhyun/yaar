@@ -179,7 +179,7 @@ Frontend: APP_PROTOCOL_RESPONSE → WebSocket → Server
 ActionEmitter resolves pending promise → result returned to agent
 ```
 
-**Registration flow**: When an iframe loads, the injected app protocol script exposes `window.yaar.app.register(manifest)`. The app calls this with its capabilities (state keys + commands). The server stores readiness per window, and subsequent `query`/`command` calls proceed without waiting.
+**Registration flow**: When an iframe loads, apps import `{ app } from '@bundled/yaar'` and call `app.register(manifest)` with their capabilities (state keys + commands). The server stores readiness per window, and subsequent `query`/`command` calls proceed without waiting.
 
 ### App Agent Tools (Minimal by Design)
 

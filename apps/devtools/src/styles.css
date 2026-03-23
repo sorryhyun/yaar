@@ -100,14 +100,13 @@
 .file-tree-item {
   display: flex;
   align-items: center;
-  gap: var(--yaar-sp-1);
+  gap: 5px;
   padding: 3px 8px;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   border-radius: 3px;
   margin: 0 4px;
+  min-width: 0;
 }
 
 .file-tree-item:hover {
@@ -120,17 +119,26 @@
 }
 
 .file-tree-item.dir {
-  opacity: 0.8;
+  font-weight: 500;
 }
 
 .file-icon {
-  font-size: 12px;
+  font-size: 10px;
   flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: var(--yaar-text-muted);
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.file-tree-item.active .file-icon {
+  color: inherit;
 }
 
 .file-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* ── Editor area ── */

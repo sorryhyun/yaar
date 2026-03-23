@@ -1,14 +1,12 @@
-import { createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { activeTab, setActiveTab, toast } from './store';
+import type { Tab } from './types';
 import { SettingsView } from './views/settings-view';
 import { ShortcutsView } from './views/shortcuts-view';
 import { HooksView } from './views/hooks-view';
 import { DomainsView } from './views/domains-view';
-
-type Tab = 'settings' | 'shortcuts' | 'hooks' | 'domains';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -24,7 +22,7 @@ function App() {
         ${TABS.map(tab => html`
           <button
             class=${() => `cfg-tab${activeTab() === tab.id ? ' active' : ''}`}
-            onClick=${() => setActiveTab(tab.id as any)}
+            onClick=${() => setActiveTab(tab.id)}
           >
             ${tab.icon} ${tab.label}
           </button>

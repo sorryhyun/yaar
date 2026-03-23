@@ -1,6 +1,6 @@
 import html from '@bundled/solid-js/html';
 import { COLS, ROWS } from '../constants';
-import { colLabel, key as cellKey, parseRef, rangeRect } from '../ref-utils';
+import { colLabel, key as cellKey, parseRef, rangeRect, refsInRect } from '../ref-utils';
 import { computeFillDestination, sourceForDestination } from '../fill-utils';
 import { shiftFormula } from '../formula-utils';
 import {
@@ -11,14 +11,6 @@ import {
   clearHighlights,
   pushHistory, scheduleAutosave,
 } from '../state';
-
-function refsInRect(rect: { c1: number; c2: number; r1: number; r2: number }) {
-  const out: string[] = [];
-  for (let r = rect.r1; r <= rect.r2; r++)
-    for (let c = rect.c1; c <= rect.c2; c++)
-      out.push(cellKey(c, r));
-  return out;
-}
 
 export function updateFillPreview() {
   clearHighlights('fill-preview');
@@ -36,9 +28,9 @@ export function applyFill() {
   pushHistory();
 
   for (const ref of refsInRect(dest)) {
-    const src = sourceForDestination(mutable.fillSource, ref);
+    const src   = sourceForDestination(mutable.fillSource, ref);
     const pDest = parseRef(ref)!;
-    const pSrc = parseRef(src)!;
+    const pSrc  = parseRef(src)!;
     const shifted = shiftFormula(getRaw(src), pDest.r - pSrc.r, pDest.c - pSrc.c);
     if (shifted) cells[ref] = shifted;
     else delete cells[ref];
@@ -49,15 +41,10 @@ export function applyFill() {
   }
 
   const fs = mutable.fillSource;
-  if (dest.r2 > fs.r2) {
-    setSelection(cellKey(fs.c1, fs.r1), cellKey(fs.c2, dest.r2));
-  } else if (dest.r1 < fs.r1) {
-    setSelection(cellKey(fs.c1, dest.r1), cellKey(fs.c2, fs.r2));
-  } else if (dest.c2 > fs.c2) {
-    setSelection(cellKey(fs.c1, fs.r1), cellKey(dest.c2, fs.r2));
-  } else if (dest.c1 < fs.c1) {
-    setSelection(cellKey(dest.c1, fs.r1), cellKey(fs.c2, fs.r2));
-  }
+  if (dest.r2 > fs.r2)        setSelection(cellKey(fs.c1, fs.r1),   cellKey(fs.c2, dest.r2));
+  else if (dest.r1 < fs.r1)   setSelection(cellKey(fs.c1, dest.r1), cellKey(fs.c2, fs.r2));
+  else if (dest.c2 > fs.c2)   setSelection(cellKey(fs.c1, fs.r1),   cellKey(dest.c2, fs.r2));
+  else if (dest.c1 < fs.c1)   setSelection(cellKey(dest.c1, fs.r1), cellKey(fs.c2, fs.r2));
 
   refreshAll();
   scheduleAutosave();
@@ -68,7 +55,8 @@ export function buildSheet() {
 
   const table = document.createElement('table');
   const thead = document.createElement('thead');
-  const hr = document.createElement('tr');
+  const hr    = document.createElement('tr');
+
   const corner = document.createElement('th');
   corner.className = 'corner';
   hr.appendChild(corner);
@@ -84,15 +72,15 @@ export function buildSheet() {
 
   const tbody = document.createElement('tbody');
   for (let r = 1; r <= ROWS; r++) {
-    const tr = document.createElement('tr');
+    const tr      = document.createElement('tr');
     const rowHead = document.createElement('th');
-    rowHead.className = 'rowHead';
+    rowHead.className  = 'rowHead';
     rowHead.textContent = String(r);
     tr.appendChild(rowHead);
 
     for (let c = 1; c <= COLS; c++) {
-      const ref = cellKey(c, r);
-      const td = document.createElement('td');
+      const ref   = cellKey(c, r);
+      const td    = document.createElement('td');
       td.dataset.ref = ref;
       const input = document.createElement('input');
       input.spellcheck = false;
@@ -119,7 +107,7 @@ export function buildSheet() {
 
       input.addEventListener('focus', () => {
         mutable.editingRef = ref;
-        mutable.selected = ref;
+        mutable.selected   = ref;
         if (!mutable.isSelecting) setSelection(ref, ref, true);
         input.value = getRaw(ref);
       });
@@ -136,13 +124,11 @@ export function buildSheet() {
         if (e.key === 'Enter') {
           e.preventDefault();
           input.blur();
-          const next = cellKey(parsed.c, Math.min(ROWS, parsed.r + 1));
-          inputs.get(next)?.focus();
+          inputs.get(cellKey(parsed.c, Math.min(ROWS, parsed.r + 1)))?.focus();
         } else if (e.key === 'Tab') {
           e.preventDefault();
           input.blur();
-          const next = cellKey(Math.min(COLS, parsed.c + 1), parsed.r);
-          inputs.get(next)?.focus();
+          inputs.get(cellKey(Math.min(COLS, parsed.c + 1), parsed.r))?.focus();
         } else if (e.key === 'Escape') {
           e.preventDefault();
           input.value = formulaEngine.display(ref);
@@ -167,8 +153,8 @@ export function buildSheet() {
     e.preventDefault();
     e.stopPropagation();
     mutable.isFillDragging = true;
-    mutable.fillSource = rangeRect(mutable.selectionStart, mutable.selectionEnd);
-    mutable.fillTarget = mutable.selected;
+    mutable.fillSource     = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+    mutable.fillTarget     = mutable.selected;
     updateFillPreview();
   });
 }

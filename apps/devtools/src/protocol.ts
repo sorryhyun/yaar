@@ -18,8 +18,6 @@ import {
   openProject,
   deleteProject,
   openFile,
-  readFiles,
-  grepFiles,
   writeFile,
   editFile,
   deleteFile,
@@ -129,90 +127,16 @@ export function registerProtocol() {
           return { ok: true };
         },
       },
-      readFile: {
-        description:
-          'Read file contents with line numbers. Supports selective line ranges, multi-file reads, and optionally opening in the editor.',
+      openFile: {
+        description: 'Open a file in the editor',
         params: {
           type: 'object',
-          properties: {
-            path: {
-              oneOf: [
-                { type: 'string', description: 'Single file path' },
-                { type: 'array', items: { type: 'string' }, description: 'Multiple file paths' },
-              ],
-            },
-            startLine: { type: 'number', description: 'First line to read (1-based, inclusive)' },
-            endLine: { type: 'number', description: 'Last line to read (1-based, inclusive)' },
-            openInEditor: {
-              type: 'boolean',
-              description: 'Also open the file in the editor UI (single file only)',
-            },
-          },
+          properties: { path: { type: 'string' } },
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          const paths = Array.isArray(p.path) ? (p.path as string[]).map(String) : [String(p.path)];
-          const startLine = typeof p.startLine === 'number' ? p.startLine : undefined;
-          const endLine = typeof p.endLine === 'number' ? p.endLine : undefined;
-          if (p.openInEditor && paths.length === 1) {
-            await openFile(paths[0]);
-          }
-          const results = await readFiles(paths, startLine, endLine);
-          return results.length === 1 ? results[0] : results;
-        },
-      },
-      listFiles: {
-        description: 'List project files, optionally filtered by glob pattern',
-        params: {
-          type: 'object',
-          properties: {
-            glob: {
-              type: 'string',
-              description: 'Glob pattern to filter (e.g. "src/**/*.ts", "*.css")',
-            },
-          },
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const proj = activeProject();
-          if (!proj) return { ok: false, error: 'No active project' };
-          const allFiles = files();
-          if (p.glob) {
-            const pattern = String(p.glob);
-            const globRegex = new RegExp(
-              '^' +
-                pattern
-                  .replace(/\./g, '\\.')
-                  .replace(/\*\*/g, '⦿')
-                  .replace(/\*/g, '[^/]*')
-                  .replace(/⦿/g, '.*') +
-                '$',
-            );
-            return allFiles
-              .filter((f) => globRegex.test(f.path))
-              .map((f) => (f.isDirectory ? f.path + '/' : f.path));
-          }
-          return allFiles.map((f) => (f.isDirectory ? f.path + '/' : f.path));
-        },
-      },
-      grep: {
-        description: 'Search file contents across project files using regex',
-        params: {
-          type: 'object',
-          properties: {
-            pattern: { type: 'string', description: 'Regex pattern to search for' },
-            glob: {
-              type: 'string',
-              description: 'Glob to filter files (e.g. "src/**/*.ts")',
-            },
-          },
-          required: ['pattern'],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const pattern = String(p.pattern);
-          const glob = p.glob ? String(p.glob) : undefined;
-          const results = await grepFiles(pattern, glob);
-          if (results.length === 0) return { matches: 0, results: [] };
-          return { matches: results.length, results };
+          await openFile(String(p.path));
+          return { ok: true };
         },
       },
       writeFile: {

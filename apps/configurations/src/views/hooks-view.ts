@@ -1,15 +1,17 @@
 import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { readJson, invoke, del as yaarDelete } from '@bundled/yaar';
+import { invoke, del as yaarDelete } from '@bundled/yaar';
 import { hooks, setHooks, showToast } from '../store';
 import type { Hook, HookFilter, HookAction } from '../types';
+import { onInputHandler, onChangeHandler } from '../helpers';
+import { loadConfigList } from '../api';
 
 const EVENTS = ['tool_use', 'launch', 'app:open', 'app:close', 'window:create', 'window:close'];
 
 function describeFilter(filter?: HookFilter): string {
   if (!filter) return '(any)';
-  const parts: string[] = [];
   if (filter.toolName) return `toolName: ${filter.toolName}`;
+  const parts: string[] = [];
   if (filter.verb) parts.push(filter.verb);
   if (filter.uri) parts.push(filter.uri);
   if (filter.action) {
@@ -42,14 +44,7 @@ export function HooksView() {
   const [showForm, setShowForm] = createSignal(false);
   const [selected, setSelected] = createSignal<Hook | null>(null);
 
-  const load = async () => {
-    try {
-      const data = await readJson<{ hooks: Hook[] }>('yaar://config/hooks');
-      setHooks(data?.hooks ?? []);
-    } catch {
-      setHooks([]);
-    }
-  };
+  const load = () => loadConfigList<Hook>('yaar://config/hooks', 'hooks', setHooks);
 
   onMount(load);
 
@@ -98,7 +93,6 @@ export function HooksView() {
   return html`
     <div class="view-panel">
 
-      <!-- Add section at top -->
       <div class="view-add-section">
         <div class="view-add-toggle">
           <span style="font-size:13px;font-weight:600;color:var(--yaar-text)">
@@ -115,34 +109,34 @@ export function HooksView() {
               <div>
                 <div class="field-label">Label</div>
                 <input class="y-input" style="width:100%" placeholder="My hook"
-                  value=${hookLabel} onInput=${(e: InputEvent) => setHookLabel((e.target as HTMLInputElement).value)} />
+                  value=${hookLabel} onInput=${onInputHandler(setHookLabel)} />
               </div>
               <div>
                 <div class="field-label">Event</div>
                 <select class="y-input" style="width:100%"
-                  onChange=${(e: Event) => setEvent((e.target as HTMLSelectElement).value)}>
+                  onChange=${onChangeHandler(setEvent)}>
                   <${For} each=${EVENTS}>${(ev: string) => html`<option value=${ev}>${ev}</option>`}</${For}>
                 </select>
               </div>
               <div>
                 <div class="field-label">Filter URI <span style="opacity:.6">(optional)</span></div>
                 <input class="y-input" style="width:100%" placeholder="yaar://apps/*"
-                  value=${filterUri} onInput=${(e: InputEvent) => setFilterUri((e.target as HTMLInputElement).value)} />
+                  value=${filterUri} onInput=${onInputHandler(setFilterUri)} />
               </div>
               <div>
                 <div class="field-label">Filter Action <span style="opacity:.6">(optional)</span></div>
                 <input class="y-input" style="width:100%" placeholder="e.g. compile"
-                  value=${filterAction} onInput=${(e: InputEvent) => setFilterAction((e.target as HTMLInputElement).value)} />
+                  value=${filterAction} onInput=${onInputHandler(setFilterAction)} />
               </div>
               <div>
                 <div class="field-label">Toast Message</div>
                 <input class="y-input" style="width:100%" placeholder="Something happened!"
-                  value=${toastMsg} onInput=${(e: InputEvent) => setToastMsg((e.target as HTMLInputElement).value)} />
+                  value=${toastMsg} onInput=${onInputHandler(setToastMsg)} />
               </div>
               <div>
                 <div class="field-label">Toast Variant</div>
                 <select class="y-input" style="width:100%"
-                  onChange=${(e: Event) => setToastVariant((e.target as HTMLSelectElement).value as 'info' | 'success' | 'error')}>
+                  onChange=${onChangeHandler(v => setToastVariant(v as 'info' | 'success' | 'error'))}>
                   <option value="info">info</option>
                   <option value="success">success</option>
                   <option value="error">error</option>
@@ -156,7 +150,6 @@ export function HooksView() {
         </${Show}>
       </div>
 
-      <!-- Sidebar + Detail -->
       <div class="view-split">
         <div class="view-sidebar">
           ${() => hooks().length === 0
@@ -213,11 +206,7 @@ export function HooksView() {
                   <div class="detail-field-value" style="color:var(--yaar-text-muted);font-size:11px">${h.id}</div>
                 </div>
                 <div class="detail-actions">
-                  <button
-                    class="y-btn"
-                    style="color:var(--yaar-error);border-color:var(--yaar-error)"
-                    onClick=${() => remove(h.id)}
-                  >
+                  <button class="y-btn btn-danger" onClick=${() => remove(h.id)}>
                     🗑 Delete
                   </button>
                 </div>

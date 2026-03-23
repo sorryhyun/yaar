@@ -30,3 +30,8 @@ export interface Hook {
   enabled: boolean;
   createdAt?: string;
 }
+
+export interface DomainsData {
+  allow_all_domains: boolean;
+  allowed_domains: string[];
+}

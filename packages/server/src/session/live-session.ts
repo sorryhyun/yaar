@@ -157,7 +157,7 @@ export class LiveSession {
     this.unsubscribeSessionChannels = subscribeSessionChannels(
       sessionId,
       this.broadcast.bind(this),
-      ['approval-request', 'user-prompt', 'verb-subscription'],
+      ['approval-request', 'user-prompt', 'verb-subscription', 'desktop-shortcut'],
     );
   }
 

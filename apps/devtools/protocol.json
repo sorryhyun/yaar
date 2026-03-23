@@ -66,47 +66,17 @@
         "required": ["id"]
       }
     },
-    "readFile": {
-      "description": "Read file contents with line numbers. Supports selective line ranges, multi-file reads, and optionally opening in the editor.",
+    "openFile": {
+      "description": "Open a file in the editor",
       "params": {
         "type": "object",
         "properties": {
           "path": {
-            "oneOf": [
-              {
-                "type": "string",
-                "description": "Single file path"
-              },
-              {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Multiple file paths"
-              }
-            ]
-          },
-          "startLine": {
-            "type": "number",
-            "description": "First line to read (1-based, inclusive)"
-          },
-          "endLine": {
-            "type": "number",
-            "description": "Last line to read (1-based, inclusive)"
-          },
-          "openInEditor": {
-            "type": "boolean",
-            "description": "Also open the file in the editor UI (single file only)"
+            "type": "string"
           }
         },
         "required": ["path"]
       }
-    },
-    "listFiles": {
-      "description": "List project files, optionally filtered by glob pattern"
-    },
-    "grep": {
-      "description": "Search file contents across project files using regex"
     },
     "writeFile": {
       "description": "Write content to a file",

@@ -57,13 +57,6 @@ body,
   padding: var(--yaar-sp-4);
 }
 
-.cfg-section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--yaar-text);
-  margin-bottom: var(--yaar-sp-3);
-}
-
 /* Settings tab */
 .settings-editor {
   font-family: 'Consolas', 'Monaco', monospace;
@@ -274,6 +267,16 @@ body,
   gap: var(--yaar-sp-2);
 }
 
+/* Danger button variant (delete actions) */
+.btn-danger {
+  color: var(--yaar-error);
+  border-color: var(--yaar-error);
+}
+
+.btn-danger:hover {
+  background: rgba(248, 81, 73, 0.1);
+}
+
 /* Shared form styles */
 .form-grid {
   display: grid;
@@ -416,7 +419,9 @@ body,
   margin-top: 2px;
 }
 
-.s-input {
+/* Consolidated input/select styles */
+.s-input,
+.s-select {
   font-size: 13px;
   background: var(--yaar-bg);
   border: 1px solid var(--yaar-border);
@@ -428,23 +433,11 @@ body,
   transition: border-color 0.15s;
 }
 
-.s-input:focus {
-  outline: none;
-  border-color: var(--yaar-accent);
-}
-
 .s-select {
-  font-size: 13px;
-  background: var(--yaar-bg);
-  border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
-  color: var(--yaar-text);
-  padding: 5px 10px;
-  width: 180px;
   cursor: pointer;
-  transition: border-color 0.15s;
 }
 
+.s-input:focus,
 .s-select:focus {
   outline: none;
   border-color: var(--yaar-accent);
