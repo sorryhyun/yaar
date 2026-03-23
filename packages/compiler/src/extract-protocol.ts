@@ -132,6 +132,96 @@ function extractStringArrayProp(body: string, propName: string): string[] | null
 }
 
 /**
+ * Normalize a JS object literal to valid JSON.
+ * Handles single-quoted strings (including those containing double quotes),
+ * line/block comments, trailing commas, and unquoted keys — all string-aware.
+ */
+function normalizeToJson(src: string): string {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+
+    // Skip line comments
+    if (ch === '/' && src[i + 1] === '/') {
+      i = src.indexOf('\n', i);
+      if (i === -1) break;
+      continue;
+    }
+    // Skip block comments
+    if (ch === '/' && src[i + 1] === '*') {
+      i = src.indexOf('*/', i + 2);
+      if (i === -1) break;
+      i += 2;
+      continue;
+    }
+
+    // Single-quoted string → double-quoted, escaping inner double quotes
+    if (ch === "'") {
+      out += '"';
+      i++;
+      while (i < src.length && src[i] !== "'") {
+        if (src[i] === '\\') {
+          out += src[i] + src[i + 1];
+          i += 2;
+          continue;
+        }
+        if (src[i] === '"') out += '\\"';
+        else out += src[i];
+        i++;
+      }
+      out += '"';
+      i++; // skip closing '
+      continue;
+    }
+
+    // Double-quoted string — pass through as-is
+    if (ch === '"') {
+      out += ch;
+      i++;
+      while (i < src.length && src[i] !== '"') {
+        if (src[i] === '\\') {
+          out += src[i] + src[i + 1];
+          i += 2;
+          continue;
+        }
+        out += src[i];
+        i++;
+      }
+      if (i < src.length) out += src[i++]; // closing "
+      continue;
+    }
+
+    // Unquoted key before `:` — quote it
+    if (/[a-zA-Z_$]/.test(ch)) {
+      let word = '';
+      while (i < src.length && /[\w$]/.test(src[i])) word += src[i++];
+      // Check if this is a key (followed by `:`)
+      const rest = src.slice(i).match(/^\s*:/);
+      if (rest) {
+        out += `"${word}"`;
+      } else {
+        out += word; // value like true/false/null
+      }
+      continue;
+    }
+
+    // Strip trailing commas before } or ]
+    if (ch === ',') {
+      const after = src.slice(i + 1).match(/^\s*([}\]])/);
+      if (after) {
+        i++;
+        continue; // skip the comma
+      }
+    }
+
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+/**
  * Extract a JSON-like object value for a property like `params: { type: 'object', ... }`.
  * Returns the parsed object, or null.
  */
@@ -149,12 +239,8 @@ function extractObjectProp(body: string, propName: string): object | null {
     // Try direct JSON parse first
     return JSON.parse(raw);
   } catch {
-    // Normalize to valid JSON: quote unquoted keys, replace single quotes
-    raw = raw
-      .replace(/\/\/[^\n]*/g, '') // strip line comments
-      .replace(/,\s*([}\]])/g, '$1') // strip trailing commas
-      .replace(/(\{|,)\s*(\w+)\s*:/g, '$1"$2":') // quote unquoted keys
-      .replace(/'/g, '"'); // single → double quotes
+    // Normalize to valid JSON using a string-aware approach
+    raw = normalizeToJson(raw);
     try {
       return JSON.parse(raw);
     } catch {

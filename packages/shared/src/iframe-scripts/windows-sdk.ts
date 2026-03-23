@@ -12,24 +12,22 @@ export const IFRAME_WINDOWS_SDK_SCRIPT = `
 
   window.yaar = window.yaar || {};
 
-  function extractText(result) {
-    if (result && result.content && result.content[0] && result.content[0].text !== undefined) {
-      return result.content[0].text;
-    }
-    return '';
-  }
-
   window.yaar.windows = {
-    read: function(windowId, options) {
-      return window.yaar.read('yaar://windows/' + windowId).then(function(result) {
-        var text = extractText(result);
-        try { return JSON.parse(text); } catch(e) { return { id: windowId, content: text }; }
+    read: function(windowId) {
+      return window.yaar.read('yaar://windows/' + windowId).then(function(data) {
+        if (typeof data === 'string') {
+          try { return JSON.parse(data); } catch(e) { return { id: windowId, content: data }; }
+        }
+        return data || { id: windowId, content: '' };
       });
     },
     list: function() {
-      return window.yaar.list('yaar://windows').then(function(result) {
-        var text = extractText(result);
-        try { return JSON.parse(text); } catch(e) { return []; }
+      return window.yaar.list('yaar://windows').then(function(data) {
+        if (Array.isArray(data)) return data;
+        if (typeof data === 'string') {
+          try { return JSON.parse(data); } catch(e) { return []; }
+        }
+        return [];
       });
     }
   };

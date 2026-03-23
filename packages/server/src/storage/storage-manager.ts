@@ -18,6 +18,8 @@ import type {
   StorageWriteResult,
   StorageListResult,
   StorageDeleteResult,
+  StorageGrepMatch,
+  StorageGrepResult,
   StorageImageContent,
 } from './types.js';
 import { resolveMountPath, loadMounts, type ResolvedPath } from './mounts.js';
@@ -347,6 +349,107 @@ export async function storageDelete(filePath: string): Promise<StorageDeleteResu
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, path: filePath, error: sanitizeStorageError(msg, filePath) };
   }
+}
+
+/**
+ * Recursively collect all file paths under a directory.
+ */
+async function collectFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = join(dir, entry);
+    try {
+      const stats = await stat(fullPath);
+      if (stats.isDirectory()) {
+        const nested = await collectFiles(fullPath);
+        results.push(...nested);
+      } else {
+        results.push(fullPath);
+      }
+    } catch {
+      // Skip inaccessible entries
+    }
+  }
+  return results;
+}
+
+const MAX_GREP_MATCHES = 100;
+
+/**
+ * Search for a regex pattern across text files in a storage directory.
+ */
+export async function storageGrep(
+  dirPath: string,
+  pattern: string,
+  glob?: string,
+): Promise<StorageGrepResult> {
+  const resolved = resolvePath(dirPath);
+  if (!resolved) {
+    return { success: false, error: 'Invalid path: path traversal detected.' };
+  }
+  const basePath = resolved.absolutePath;
+
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Invalid regex';
+    return { success: false, error: `Invalid pattern: ${msg}` };
+  }
+
+  let dirStat;
+  try {
+    dirStat = await stat(basePath);
+  } catch {
+    return { success: false, error: `Directory not found: ${dirPath}` };
+  }
+  if (!dirStat.isDirectory()) {
+    return { success: false, error: `"${dirPath}" is not a directory.` };
+  }
+
+  const allFiles = await collectFiles(basePath);
+
+  const globMatcher = glob ? new Bun.Glob(glob) : null;
+
+  const matches: StorageGrepMatch[] = [];
+  let truncated = false;
+
+  for (const filePath of allFiles) {
+    if (!isTextFile(filePath)) continue;
+
+    const relativePath = relative(basePath, filePath).replaceAll('\\', '/');
+    if (globMatcher && !globMatcher.match(relativePath)) continue;
+
+    try {
+      const content = await Bun.file(filePath).text();
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matches.push({
+            file: relativePath,
+            line: i + 1,
+            content: lines[i],
+          });
+          if (matches.length >= MAX_GREP_MATCHES) {
+            truncated = true;
+            break;
+          }
+        }
+      }
+    } catch {
+      // Skip unreadable files
+    }
+
+    if (truncated) break;
+  }
+
+  return { success: true, matches, truncated };
 }
 
 // --- Config directory helpers ---

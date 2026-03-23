@@ -1,5 +1,5 @@
 export {};
-import { app, appStorage, invokeJson, readJson, describeJson, listJson } from '@bundled/yaar';
+import { app, appStorage, invoke, read, describe, list } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -26,6 +26,7 @@ import {
   deploy,
   cloneApp,
   clearConsoleLogs,
+  grep,
 } from './project';
 
 export function registerProtocol() {
@@ -187,6 +188,21 @@ export function registerProtocol() {
           return { ok: true };
         },
       },
+      grep: {
+        description: 'Search file contents with regex across the project',
+        params: {
+          type: 'object',
+          properties: {
+            pattern: { type: 'string', description: 'Regex pattern to search for' },
+            glob: { type: 'string', description: 'File glob filter (e.g. "src/**/*.ts")' },
+          },
+          required: ['pattern'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
+          return { ok: true, ...result };
+        },
+      },
       compile: {
         description: 'Compile the active project',
         params: { type: 'object', properties: {} },
@@ -252,7 +268,7 @@ export function registerProtocol() {
               /* no app.json or no permissions */
             }
           }
-          const result = await invokeJson<{ windowId?: string }>('yaar://windows/', {
+          const result = await invoke<{ windowId?: string }>('yaar://windows/', {
             action: 'create',
             title: name,
             renderer: 'iframe',
@@ -270,7 +286,7 @@ export function registerProtocol() {
           const wid = previewWindowId();
           if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
           try {
-            const info = await readJson<Record<string, unknown>>(`yaar://windows/${wid}`);
+            const info = await read<Record<string, unknown>>(`yaar://windows/${wid}`);
             return { ok: true, ...info };
           } catch {
             setPreviewWindowId(null);
@@ -289,7 +305,7 @@ export function registerProtocol() {
           const wid = previewWindowId();
           if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
           try {
-            return await invokeJson(`yaar://windows/${wid}`, {
+            return await invoke(`yaar://windows/${wid}`, {
               action: 'app_query',
               stateKey: String(p.stateKey),
             });
@@ -312,7 +328,7 @@ export function registerProtocol() {
           const wid = previewWindowId();
           if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
           try {
-            return await invokeJson(`yaar://windows/${wid}`, {
+            return await invoke(`yaar://windows/${wid}`, {
               action: 'app_command',
               command: String(p.command),
               params: (p.params as Record<string, unknown>) ?? {},
@@ -333,7 +349,7 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           try {
-            return await describeJson(String(p.uri));
+            return await describe(String(p.uri));
           } catch {
             return { ok: false, error: `Failed to describe URI: ${p.uri}` };
           }
@@ -350,7 +366,7 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           try {
-            return await listJson(String(p.uri));
+            return await list(String(p.uri));
           } catch {
             return { ok: false, error: `Failed to list URI: ${p.uri}` };
           }

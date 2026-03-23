@@ -11,7 +11,13 @@
 import { parseFileUri } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ReadOptions } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { storageRead, storageWrite, storageList, storageDelete } from '../storage/index.js';
+import {
+  storageRead,
+  storageWrite,
+  storageList,
+  storageDelete,
+  storageGrep,
+} from '../storage/index.js';
 import { ok, okJson, okWithImages, error } from './utils.js';
 import { prependNote, applyEdit, applyReadOptions } from './utils.js';
 
@@ -41,7 +47,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['write', 'edit'] },
+        action: { type: 'string', enum: ['write', 'edit', 'grep'] },
+        pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
+        glob: { type: 'string', description: 'Glob pattern to filter files (grep)' },
         content: { type: 'string', description: 'File content (for write)' },
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
         new_string: { type: 'string', description: 'Replacement text (edit)' },
@@ -149,7 +157,15 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return ok(`Edited yaar://storage/${path}`);
       }
 
-      return error(`Unknown action "${action}". Use "write" or "edit".`);
+      if (action === 'grep') {
+        if (typeof payload.pattern !== 'string')
+          return error('"pattern" (string) is required for grep.');
+        const result = await storageGrep(path, payload.pattern, payload.glob as string | undefined);
+        if (!result.success) return error(result.error!);
+        return okJson({ matches: result.matches, truncated: result.truncated });
+      }
+
+      return error(`Unknown action "${action}". Use "write", "edit", or "grep".`);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

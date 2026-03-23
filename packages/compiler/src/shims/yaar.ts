@@ -4,12 +4,12 @@
  * Importable SDK for @bundled/yaar.
  *
  * Thin wrapper around the `window.yaar` global (injected by the verb SDK script).
- * Provides auto-parsed helpers so apps don't need to manually extract text and
- * JSON from `YaarVerbResult` objects.
+ * The verb proxy returns a JSON envelope; callVerb() unwraps it, so verb
+ * functions already return parsed data. The typed helpers just pass through.
  *
  * Usage:
- *   import { readJson, config, storage } from '@bundled/yaar';
- *   const settings = await readJson<Settings>('yaar://config/settings');
+ *   import { read, invoke, list, storage } from '@bundled/yaar';
+ *   const settings = await read<Settings>('yaar://config/settings');
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,53 +18,50 @@ const y = (window as any).yaar;
 // ── Helpers ──────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function text(data: any): string {
+function asText(data: any): string {
   return typeof data === 'string' ? data : data != null ? JSON.stringify(data) : '';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function json<T>(data: any): T {
-  if (data == null) return undefined as T;
-  if (typeof data === 'string') return data ? JSON.parse(data) : (undefined as T);
-  return data as T;
+// ── Verb functions ───────────────────────────────────────────────
+
+export async function read<T = unknown>(uri: string): Promise<T> {
+  return y.read(uri);
 }
 
-// ── Auto-parsed verb helpers ─────────────────────────────────────
-
-export async function readJson<T = unknown>(uri: string): Promise<T> {
-  return json<T>(await y.read(uri));
-}
-
-export async function readText(uri: string): Promise<string> {
-  return text(await y.read(uri));
-}
-
-export async function invokeJson<T = unknown>(
+export async function invoke<T = unknown>(
   uri: string,
   payload?: Record<string, unknown>,
 ): Promise<T> {
-  return json<T>(await y.invoke(uri, payload));
+  return y.invoke(uri, payload);
 }
 
-export async function invokeText(uri: string, payload?: Record<string, unknown>): Promise<string> {
-  return text(await y.invoke(uri, payload));
+export async function list<T = unknown>(uri: string): Promise<T> {
+  return y.list(uri);
 }
 
-export async function listJson<T = unknown>(uri: string): Promise<T> {
-  return json<T>(await y.list(uri));
+export async function describe<T = unknown>(uri: string): Promise<T> {
+  return y.describe(uri);
 }
 
-export async function listText(uri: string): Promise<string> {
-  return text(await y.list(uri));
+export async function del(uri: string): Promise<unknown> {
+  return y.delete(uri);
 }
 
-export async function describeJson<T = unknown>(uri: string): Promise<T> {
-  return json<T>(await y.describe(uri));
+export async function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void> {
+  return y.subscribe(uri, callback);
 }
 
-export async function deleteText(uri: string): Promise<string> {
-  return text(await y.delete(uri));
-}
+// ── Aliases (backwards-compat) ───────────────────────────────────
+
+export const readJson = read;
+export const readText = async (uri: string): Promise<string> => asText(await y.read(uri));
+export const invokeJson = invoke;
+export const invokeText = async (uri: string, payload?: Record<string, unknown>): Promise<string> =>
+  asText(await y.invoke(uri, payload));
+export const listJson = list;
+export const listText = async (uri: string): Promise<string> => asText(await y.list(uri));
+export const describeJson = describe;
+export const deleteText = async (uri: string): Promise<string> => asText(await y.delete(uri));
 
 // ── App-scoped storage ──────────────────────────────────────────
 
@@ -84,10 +81,10 @@ export const appStorage = {
     await y.invoke(appStorageUri(path), payload);
   },
   async read(path: string): Promise<string> {
-    return text(await y.read(appStorageUri(path)));
+    return asText(await y.read(appStorageUri(path)));
   },
   async readJson<T = unknown>(path: string): Promise<T> {
-    return json<T>(await y.read(appStorageUri(path)));
+    return y.read(appStorageUri(path));
   },
   async readBinary(path: string): Promise<{ data: string; mimeType: string }> {
     const result = await y.read(appStorageUri(path));
@@ -96,10 +93,11 @@ export const appStorage = {
       const img = result.images[0];
       return { data: img.data, mimeType: img.mimeType ?? 'application/octet-stream' };
     }
-    return { data: text(result), mimeType: 'application/octet-stream' };
+    return { data: asText(result), mimeType: 'application/octet-stream' };
   },
   async list(dirPath?: string): Promise<unknown[]> {
-    return json(await y.list(appStorageUri(dirPath ?? ''))) ?? [];
+    const result = await y.list(appStorageUri(dirPath ?? ''));
+    return Array.isArray(result) ? result : [];
   },
   async remove(path: string): Promise<void> {
     await y.delete(appStorageUri(path));
@@ -112,15 +110,6 @@ export const storage = y.storage;
 export const app = y.app;
 export const notifications = y.notifications;
 export const windows = y.windows;
-
-// ── Raw verb passthrough ─────────────────────────────────────────
-
-export const invoke = y.invoke.bind(y);
-export const read = y.read.bind(y);
-export const list = y.list.bind(y);
-export const describe = y.describe.bind(y);
-export const del = y.delete.bind(y);
-export const subscribe = y.subscribe.bind(y);
 
 // ── Dev tools (compile, typecheck, deploy) ─────────────────────
 

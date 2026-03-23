@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, dev, invokeJson } from '@bundled/yaar';
+import { appStorage, dev, invoke } from '@bundled/yaar';
 
 // ── Types ──
 
@@ -139,7 +139,7 @@ export async function createProject(name: string): Promise<string> {
 
 export async function cloneApp(appId: string): Promise<string> {
   setStatusText(`Cloning "${appId}"...`);
-  const result = await invokeJson<{
+  const result = await invoke<{
     files: { path: string; content: string }[];
     meta: Record<string, unknown>;
   }>('yaar://apps/' + appId, { action: 'clone' });
@@ -386,6 +386,25 @@ export function addConsoleEntry(entry: ConsoleEntry): void {
     const next = [...prev, entry];
     return next.length > 200 ? next.slice(-200) : next;
   });
+}
+
+// ── Grep ──
+
+export interface GrepMatch {
+  file: string;
+  line: number;
+  content: string;
+}
+
+export async function grep(pattern: string, glob?: string): Promise<{ matches: GrepMatch[]; truncated?: boolean }> {
+  const proj = activeProject();
+  if (!proj) return { matches: [] };
+  const storagePath = `projects/${proj.id}`;
+  const result = await invoke<{ matches: GrepMatch[]; truncated?: boolean }>(
+    `yaar://apps/self/storage/${storagePath}`,
+    { action: 'grep', pattern, ...(glob ? { glob } : {}) },
+  );
+  return { matches: result?.matches ?? [], truncated: result?.truncated };
 }
 
 // ── Diagnostic parsing ──

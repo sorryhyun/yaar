@@ -38,6 +38,7 @@ import {
   storageWrite,
   storageList,
   storageDelete,
+  storageGrep,
 } from '../storage/storage-manager.js';
 import { uninstallApp } from '../features/apps/install.js';
 
@@ -193,8 +194,22 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
+        if (!payload?.action) return error('Payload must include "action".');
+
+        if (payload.action === 'grep') {
+          if (typeof payload.pattern !== 'string')
+            return error('"pattern" (string) is required for grep.');
+          const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+          const result = await storageGrep(
+            prefixedPath,
+            payload.pattern,
+            payload.glob as string | undefined,
+          );
+          if (!result.success) return error(result.error!);
+          return okJson({ matches: result.matches, truncated: result.truncated });
+        }
+
         if (!storagePath.path) return error('Provide a file path under /storage/.');
-        if (!payload?.action) return error('Payload must include "action" ("write").');
         if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);
         if (typeof payload.content !== 'string')
           return error('"content" (string) is required for write.');

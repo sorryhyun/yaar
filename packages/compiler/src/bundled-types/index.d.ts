@@ -305,20 +305,6 @@ interface YaarDev {
   bundledLibraries(): Promise<string[]>;
 }
 
-// -- Verb SDK --
-
-interface YaarVerbResultContent {
-  type: 'text' | 'image';
-  text?: string;
-  data?: string;
-  mimeType?: string;
-}
-
-interface YaarVerbResult {
-  content: YaarVerbResultContent[];
-  isError?: boolean;
-}
-
 // -- Global --
 
 interface YaarGlobal {
@@ -327,16 +313,16 @@ interface YaarGlobal {
   notifications: YaarNotifications;
   windows: YaarWindows;
 
-  /** Execute an action on a yaar:// resource. */
-  invoke(uri: string, payload?: Record<string, unknown>): Promise<YaarVerbResult>;
-  /** Read the current value/state of a yaar:// resource. */
-  read(uri: string): Promise<YaarVerbResult>;
-  /** List child resources under a yaar:// URI. */
-  list(uri: string): Promise<YaarVerbResult>;
-  /** Describe a yaar:// resource (supported verbs, schema). */
-  describe(uri: string): Promise<YaarVerbResult>;
-  /** Delete a yaar:// resource. */
-  delete(uri: string): Promise<YaarVerbResult>;
+  /** Execute an action on a yaar:// resource. Returns parsed data from the JSON envelope. */
+  invoke<T = unknown>(uri: string, payload?: Record<string, unknown>): Promise<T>;
+  /** Read the current value/state of a yaar:// resource. Returns parsed data. */
+  read<T = unknown>(uri: string): Promise<T>;
+  /** List child resources under a yaar:// URI. Returns parsed data. */
+  list<T = unknown>(uri: string): Promise<T>;
+  /** Describe a yaar:// resource (supported verbs, schema). Returns parsed data. */
+  describe<T = unknown>(uri: string): Promise<T>;
+  /** Delete a yaar:// resource. Returns parsed data. */
+  delete<T = unknown>(uri: string): Promise<T>;
 }
 
 interface Window {
@@ -346,33 +332,28 @@ interface Window {
 // -- @bundled/yaar module --
 
 declare module '@bundled/yaar' {
-  /** Read a URI and auto-parse the text response as JSON. */
-  export function readJson<T = unknown>(uri: string): Promise<T>;
-  /** Read a URI and return the raw text. */
-  export function readText(uri: string): Promise<string>;
-  /** Invoke a URI and auto-parse the response as JSON. */
-  export function invokeJson<T = unknown>(
-    uri: string,
-    payload?: Record<string, unknown>,
-  ): Promise<T>;
-  /** Invoke a URI and return the raw text. */
-  export function invokeText(uri: string, payload?: Record<string, unknown>): Promise<string>;
-  /** List a URI and auto-parse as JSON. */
-  export function listJson<T = unknown>(uri: string): Promise<T>;
-  /** List a URI and return the raw text. */
-  export function listText(uri: string): Promise<string>;
-  /** Describe a URI and auto-parse the response as JSON. */
-  export function describeJson<T = unknown>(uri: string): Promise<T>;
-  /** Delete a URI and return the raw text response. */
-  export function deleteText(uri: string): Promise<string>;
-
-  /** Raw verb passthrough — returns YaarVerbResult. */
-  export function invoke(uri: string, payload?: Record<string, unknown>): Promise<YaarVerbResult>;
-  export function read(uri: string): Promise<YaarVerbResult>;
-  export function list(uri: string): Promise<YaarVerbResult>;
-  export function describe(uri: string): Promise<YaarVerbResult>;
-  export function del(uri: string): Promise<YaarVerbResult>;
+  /** Read the current value/state of a yaar:// resource. */
+  export function read<T = unknown>(uri: string): Promise<T>;
+  /** Execute an action on a yaar:// resource. */
+  export function invoke<T = unknown>(uri: string, payload?: Record<string, unknown>): Promise<T>;
+  /** List child resources under a yaar:// URI. */
+  export function list<T = unknown>(uri: string): Promise<T>;
+  /** Describe a yaar:// resource (supported verbs, schema). */
+  export function describe<T = unknown>(uri: string): Promise<T>;
+  /** Delete a yaar:// resource. */
+  export function del(uri: string): Promise<unknown>;
+  /** Subscribe to reactive URI updates. */
   export function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void>;
+
+  // Aliases (backwards-compat) — identical to the typed verbs above
+  export const readJson: typeof read;
+  export function readText(uri: string): Promise<string>;
+  export const invokeJson: typeof invoke;
+  export function invokeText(uri: string, payload?: Record<string, unknown>): Promise<string>;
+  export const listJson: typeof list;
+  export function listText(uri: string): Promise<string>;
+  export const describeJson: typeof describe;
+  export function deleteText(uri: string): Promise<string>;
 
   /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). */
   export const appStorage: YaarAppStorage;

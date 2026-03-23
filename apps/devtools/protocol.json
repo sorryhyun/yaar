@@ -125,6 +125,23 @@
         "required": ["path"]
       }
     },
+    "grep": {
+      "description": "Search file contents with regex across the project",
+      "params": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "Regex pattern to search for"
+          },
+          "glob": {
+            "type": "string",
+            "description": "File glob filter (e.g. \"src/**/*.ts\")"
+          }
+        },
+        "required": ["pattern"]
+      }
+    },
     "compile": {
       "description": "Compile the active project",
       "params": {
@@ -205,10 +222,30 @@
       }
     },
     "describeUri": {
-      "description": "Describe a yaar:// URI — returns supported verbs, description, and invoke schema"
+      "description": "Describe a yaar:// URI — returns supported verbs, description, and invoke schema",
+      "params": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "description": "yaar:// URI to describe (e.g. \"yaar://sessions/\")"
+          }
+        },
+        "required": ["uri"]
+      }
     },
     "listUri": {
-      "description": "List child resources under a yaar:// URI"
+      "description": "List child resources under a yaar:// URI",
+      "params": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "description": "yaar:// URI to list (e.g. \"yaar://sessions/\")"
+          }
+        },
+        "required": ["uri"]
+      }
     },
     "cloneApp": {
       "description": "Clone an installed app source into a new project",

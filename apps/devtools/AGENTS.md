@@ -15,8 +15,6 @@ You have three tools:
 - **`command("readFile", { path, startLine, endLine })`** — read specific line range (1-based, inclusive)
 - **`command("readFile", { path: ["a.ts", "b.ts"] })`** — read multiple files at once
 - **`command("readFile", { path, openInEditor: true })`** — read and also open in editor UI
-- **`command("listFiles")`** — list all project files
-- **`command("listFiles", { glob: "src/**/*.ts" })`** — list files matching a glob pattern
 - **`command("grep", { pattern: "TODO" })`** — search file contents with regex
 - **`command("grep", { pattern: "import", glob: "src/**/*.ts" })`** — search within specific files
 

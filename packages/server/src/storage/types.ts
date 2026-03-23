@@ -41,3 +41,16 @@ export interface StorageDeleteResult {
   path: string;
   error?: string;
 }
+
+export interface StorageGrepMatch {
+  file: string;
+  line: number;
+  content: string;
+}
+
+export interface StorageGrepResult {
+  success: boolean;
+  matches?: StorageGrepMatch[];
+  truncated?: boolean;
+  error?: string;
+}
