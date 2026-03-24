@@ -74,7 +74,7 @@ src/
 
 ## App Protocol
 
-Bidirectional agent-to-iframe communication. Frontend relays between server (WebSocket) and iframe apps (postMessage). Key files: `store/desktop.ts` (`handleAppProtocolRequest()`), `usePendingEventDrainer.ts`, `IframeRenderer.tsx` (injects SDK scripts providing `window.yaar.app.register()`).
+Bidirectional agent-to-iframe communication. Frontend relays between server (WebSocket) and iframe apps (postMessage). Apps import `{ app } from '@bundled/yaar'` and call `app.register()`. Key files: `store/desktop.ts` (`handleAppProtocolRequest()`), `usePendingEventDrainer.ts`, `IframeRenderer.tsx` (injects the underlying SDK scripts).
 
 ## Testing
 

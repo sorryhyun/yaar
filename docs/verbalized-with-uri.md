@@ -369,15 +369,15 @@ Resolved server-side using the `appId` from the token entry. Fails with 403 if t
 
 ### Iframe SDK
 
-The `IFRAME_VERB_SDK_SCRIPT` (exported from `packages/shared/src/capture-helper.ts`) provides a `window.yaar` API:
+The `IFRAME_VERB_SDK_SCRIPT` (exported from `packages/shared/src/capture-helper.ts`) injects the underlying globals. Apps should use `@bundled/yaar` imports instead of accessing globals directly:
 
-| Method | Endpoint |
-|--------|----------|
-| `window.yaar.invoke(uri, payload?)` | `POST /api/verb` |
-| `window.yaar.read(uri)` | `POST /api/verb` |
-| `window.yaar.list(uri)` | `POST /api/verb` |
-| `window.yaar.describe(uri)` | `POST /api/verb` |
-| `window.yaar.delete(uri)` | `POST /api/verb` |
-| `window.yaar.subscribe(uri, cb)` | `POST /api/verb/subscribe` |
+| `@bundled/yaar` import | Endpoint |
+|-------------------------|----------|
+| `invoke(uri, payload?)` | `POST /api/verb` |
+| `read(uri)` | `POST /api/verb` |
+| `list(uri)` | `POST /api/verb` |
+| `describe(uri)` | `POST /api/verb` |
+| `del(uri)` | `POST /api/verb` |
+| `subscribe(uri, cb)` | `POST /api/verb/subscribe` |
 
 All requests automatically include the `X-Iframe-Token` header. Subscriptions deliver update notifications via `postMessage` with type `yaar:subscription-update` (contains the URI that changed — apps must call `read` to get the new value).

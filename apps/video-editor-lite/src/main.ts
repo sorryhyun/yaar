@@ -43,7 +43,7 @@ const fileBrowser = createFileBrowser(ui, {
   onFileSelect: (storageUrl, storagePath) => editMode.loadSourceUrl(storageUrl, storagePath),
 });
 
-setupKeyboardShortcuts(store, editMode, creatorMode);
+const cleanupKeyboard = setupKeyboardShortcuts(store, editMode, creatorMode);
 
 // === Event listeners: Edit mode ===
 
@@ -404,6 +404,7 @@ ui.compDurationInput.addEventListener('change', handleCompSettingChange);
 createEffect(() => { renderEditor(ui, store.getState()); });
 
 window.addEventListener('beforeunload', () => {
+  cleanupKeyboard();
   editMode.releaseActiveObjectUrl();
   creatorMode.destroy();
 });
