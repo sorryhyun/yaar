@@ -213,7 +213,21 @@
       }
     },
     "addLayer": {
-      "description": "Add a new layer to the composition. Returns the new layer ID."
+      "description": "Add a new layer to the composition. Returns the new layer ID.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Layer name (default: \"Layer N\")"
+          },
+          "index": {
+            "type": "number",
+            "description": "Insert position (0 = bottom/background). Default: top."
+          }
+        },
+        "additionalProperties": false
+      }
     },
     "removeLayer": {
       "description": "Remove a layer and all its scenes by layer ID. The last layer cannot be removed.",

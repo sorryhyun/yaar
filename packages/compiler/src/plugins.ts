@@ -42,7 +42,7 @@ export const BUNDLED_SHIMS: Record<string, string> = {
  * Bare imports of these from within bundled code must resolve to the same path as
  * the @bundled/* aliased imports to prevent duplicate module copies.
  */
-const CONDITIONAL_EXPORT_LIBS = ['solid-js', 'solid-js/web', 'solid-js/html'];
+const CONDITIONAL_EXPORT_LIBS = ['solid-js', 'solid-js/web', 'solid-js/html', 'solid-js/store'];
 
 /**
  * Map of @bundled/* import names to actual npm module paths.
@@ -53,6 +53,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'solid-js': 'solid-js',
   'solid-js/html': 'solid-js/html',
   'solid-js/web': 'solid-js/web',
+  'solid-js/store': 'solid-js/store',
   uuid: 'uuid',
   lodash: 'lodash-es',
   'date-fns': 'date-fns',

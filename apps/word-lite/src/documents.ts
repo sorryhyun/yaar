@@ -1,43 +1,38 @@
+import { appStorage, createPersistedSignal } from '@bundled/yaar';
 import { nowLabel, sanitizeFilename, debounce, textToHtml, DEFAULT_TITLE } from './utils';
 import { editorEl, docTitleEl, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 
 export const STORAGE_KEY = 'draft.json';
 
-const _yaar = (window as any).yaar;
+type DraftState = { html: string; title: string; savedAt: number };
+const EMPTY_DRAFT: DraftState = {
+  html: `<h1>${DEFAULT_TITLE}</h1><p></p>`,
+  title: DEFAULT_TITLE,
+  savedAt: 0,
+};
 
-async function storageSave(path: string, content: string): Promise<void> {
-  await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
-}
-
-async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
-  const result = await _yaar.read(`yaar://apps/self/storage/${path}`);
-  if (typeof result === 'string') return as === 'json' ? JSON.parse(result) : result;
-  return as === 'json' ? result : JSON.stringify(result);
-}
+// Signal: auto-persists to storage on every setDraft() call.
+// Replaces the old window.yaar.invoke pattern for saves.
+const [, setDraft] = createPersistedSignal<DraftState>(STORAGE_KEY, EMPTY_DRAFT);
 
 export const getTitle = () => (docTitleEl?.value || '').trim() || DEFAULT_TITLE;
 export const exportBaseName = () => sanitizeFilename(getTitle());
 
-export const saveDoc = async () => {
-  const payload = { html: editorEl?.innerHTML || '', title: getTitle(), savedAt: Date.now() };
-  await storageSave(STORAGE_KEY, JSON.stringify(payload));
+/** Save current editor content. Synchronous — setDraft handles async persistence. */
+export const saveDoc = () => {
+  setDraft({ html: editorEl?.innerHTML || '', title: getTitle(), savedAt: Date.now() });
   setSaveStateText(`Saved at ${nowLabel()}`);
 };
 
 export const autoSave = debounce(() => saveDoc(), 550);
 
+/** Load persisted draft into the editor on startup. */
 export const loadDoc = async () => {
-  const stored = await storageRead(STORAGE_KEY, 'text').catch(() => null);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as { html?: string; title?: string };
-      editorEl.innerHTML = parsed.html || `<h1>${DEFAULT_TITLE}</h1><p></p>`;
-      docTitleEl.value = parsed.title || DEFAULT_TITLE;
-    } catch {
-      editorEl.innerHTML = `<h1>${DEFAULT_TITLE}</h1><p></p>`;
-      docTitleEl.value = DEFAULT_TITLE;
-    }
+  const stored = await appStorage.readJsonOr<DraftState>(STORAGE_KEY, EMPTY_DRAFT);
+  if (stored.savedAt > 0) {
+    editorEl.innerHTML = stored.html || `<h1>${DEFAULT_TITLE}</h1><p></p>`;
+    docTitleEl.value = stored.title || DEFAULT_TITLE;
     setSaveStateText('Loaded saved draft');
   } else {
     editorEl.innerHTML = `<h1>${DEFAULT_TITLE}</h1><p></p>`;

@@ -20,6 +20,10 @@ declare module '@bundled/solid-js/web' {
   export * from 'solid-js/web';
 }
 
+declare module '@bundled/solid-js/store' {
+  export * from 'solid-js/store';
+}
+
 // CSS module imports
 declare module '*.css' {}
 
@@ -397,6 +401,16 @@ declare module '@bundled/yaar' {
    * `ctrl` matches both Ctrl and Cmd (Meta) for cross-platform shortcuts.
    */
   export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): () => void;
+
+  /**
+   * Create a Solid.js signal that auto-persists to appStorage.
+   * The signal starts with `fallback` and updates once the stored value loads.
+   * Saves to appStorage automatically on every change.
+   */
+  export function createPersistedSignal<T>(
+    key: string,
+    fallback: T,
+  ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
 
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;

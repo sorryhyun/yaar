@@ -28,14 +28,14 @@ Migration: apps audited and migrated — storage (showToast), video-editor-lite/
 
 Migration: `readBlob` adopted in pdf-viewer and excel-lite. `withLoading` and `onShortcut` available for new code and future migration.
 
-### Tier 3 — Medium ergonomics (later)
+### Tier 3 — Medium ergonomics (done)
 
-| Addition | What it kills | Complexity |
-|----------|---------------|------------|
-| `createPersistedSignal(key, default)` | Manual save/load + JSON round-trip for every persisted signal | Medium — needs Solid.js `createEffect` integration |
-| `createAsyncResource(fetcher)` | Manual `[loading, error, data]` signal triplet + try/catch | Medium — similar to Solid's `createResource` |
-| Schema builder for protocol params | Hand-written JSON Schema in every `protocol.ts` | Medium |
-| Export `createStore` from `@bundled/solid-js/store` | Signal explosion (10-20 loose signals per app) | Tiny config change, but migration is medium |
+| Addition | What it kills | Files touched |
+|----------|---------------|---------------|
+| `createPersistedSignal(key, default)` | Manual save/load + JSON round-trip for every persisted signal | `shims/yaar.ts`, `bundled-types/index.d.ts` |
+| Export `createStore` from `@bundled/solid-js/store` | Signal explosion (10-20 loose signals per app) | `plugins.ts`, `bundled-types/index.d.ts` |
+
+Deferred to Tier 4: `createAsyncResource(fetcher)` (evaluate against Solid's built-in `createResource`), schema builder for protocol params (low ROI — schemas are write-once).
 
 ### Tier 4 — Structural (future)
 

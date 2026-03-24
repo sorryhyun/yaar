@@ -184,6 +184,17 @@ await withLoading(setLoading, async () => {
 onShortcut('ctrl+s', () => save());
 onShortcut('ctrl+shift+z', () => redo());
 onShortcut('escape', () => close());
+
+// Persisted signal (auto-loads from appStorage, auto-saves on change)
+import { createPersistedSignal } from '@bundled/yaar';
+const [settings, setSettings] = createPersistedSignal<Settings>('settings.json', { theme: 'dark', fontSize: 14 });
+// starts with fallback, updates when stored value loads, saves automatically on every setSettings()
+
+// Stores (for complex state with many fields — avoids 10+ loose signals)
+import { createStore, produce } from '@bundled/solid-js/store';
+const [state, setState] = createStore({ items: [], filter: '', page: 1 });
+setState(produce(s => { s.items.push(newItem); }));
+setState('filter', 'active');
 ```
 
 ## App Protocol
@@ -378,19 +389,14 @@ Apps run in a **browser iframe sandbox**:
 - No localStorage/IndexedDB — use `appStorage` for persistence
 - Must be fully self-contained
 
-## Anti-Patterns
+## Solid.js Gotchas
 
-- **Don't use empty `html` template literals** — `html``\`` crashes Solid.js. Use `null` instead.
-- **Don't rely on `flex: 1` for height inside reactive expressions** — Solid's `html` tagged template inserts comment markers that break flex chains. Use `position: absolute; inset: 0` instead.
-- **Don't pass event handlers as component props** — SolidJS's `html` wraps props in reactive getters, causing handlers to be called during rendering. Use event delegation on a parent DOM element.
-- **Don't guess API endpoints** — Only use endpoints from the host API skill.
-- **Don't build OAuth clients as compiled apps** — Use API-based app pattern with personal access tokens.
-- **Don't assume external servers are running** — Apps must be self-contained.
-- **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
-- **Don't use Unicode escape sequences** — Write actual characters, not `\uXXXX`.
-- **Don't use HTML entities inside `${}` expressions** — Solid sets interpolated strings as `textContent`, not `innerHTML`, so `&#128247;` renders as literal text. Use actual Unicode characters (e.g., `📷`) instead. HTML entities only work in static template text outside `${}`.
+- **Empty `html` template literals crash** — `html``\`` throws. Use `null` instead.
+- **`flex: 1` breaks inside reactive expressions** — Solid's `html` inserts comment markers that break flex chains. Use `position: absolute; inset: 0` instead.
+- **Don't pass event handlers as component props** — `html` wraps props in reactive getters, causing handlers to fire during render. Use event delegation on a parent DOM element.
+- **HTML entities inside `${}`** — Solid sets interpolated strings as `textContent`, not `innerHTML`, so `&#128247;` renders as literal text. Use actual Unicode characters (e.g., `📷`). HTML entities only work in static template text outside `${}`.
 
-### Right Pattern for External Service Integration
+## External Service Integration
 
 ```
 Option A: API-based app (preferred for API wrappers)
@@ -408,41 +414,60 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 
 When editing existing apps, replace these legacy patterns with SDK equivalents:
 
-### `withLoading` — use SDK for async state management
+### `createPersistedSignal` — replaces manual load/save
 
+Before:
 ```ts
-// ❌ OLD: 8-line try/loading/catch/error/finally skeleton
-setLoading(true);
-try {
-  const data = await fetchData();
-  setItems(data);
-} catch (err) {
-  setError(errMsg(err));
-} finally {
-  setLoading(false);
-}
-
-// ✅ NEW: one call
-import { withLoading } from '@bundled/yaar';
-await withLoading(setLoading, async () => {
-  const data = await fetchData();
-  setItems(data);
-}, setError);
-```
-
-### `onShortcut` — use SDK for keyboard shortcuts
-
-```ts
-// ❌ OLD: manual addEventListener + modifier checks
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    save();
-  }
+const [theme, setTheme] = createSignal<Theme>({ dark: true });
+onMount(async () => {
+  const saved = await appStorage.readJsonOr<Theme>('theme.json', { dark: true });
+  setTheme(saved);
 });
-
-// ✅ NEW: declarative, auto-cleanup, cross-platform ctrl/cmd
-import { onShortcut } from '@bundled/yaar';
-const cleanup = onShortcut('ctrl+s', () => save());
-// ctrl matches both Ctrl and Cmd automatically
+// ... and every mutation must manually save:
+function toggleDark() {
+  setTheme(t => { const next = { ...t, dark: !t.dark }; appStorage.save('theme.json', JSON.stringify(next)); return next; });
+}
 ```
+
+After:
+```ts
+const [theme, setTheme] = createPersistedSignal<Theme>('theme.json', { dark: true });
+// loads automatically, saves automatically on every setTheme()
+function toggleDark() {
+  setTheme(t => ({ ...t, dark: !t.dark }));
+}
+```
+
+### `createStore` — replaces signal explosion
+
+Before (10+ loose signals):
+```ts
+const [items, setItems] = createSignal([]);
+const [filter, setFilter] = createSignal('');
+const [page, setPage] = createSignal(1);
+const [selected, setSelected] = createSignal(null);
+const [loading, setLoading] = createSignal(false);
+const [error, setError] = createSignal('');
+```
+
+After (one store):
+```ts
+import { createStore, produce } from '@bundled/solid-js/store';
+const [state, setState] = createStore({ items: [], filter: '', page: 1, selected: null, loading: false, error: '' });
+setState('filter', 'active');                       // update one field
+setState(produce(s => { s.items.push(newItem); })); // mutate nested data
+```
+
+Use `createStore` when an app has 5+ related signals. Keep `createSignal` for isolated values.
+
+### Earlier SDK migrations (Tier 1–2)
+
+| Legacy pattern | SDK replacement |
+|---|---|
+| Copy-pasted toast HTML/CSS | `showToast(msg, 'success')` |
+| `err instanceof Error ? err.message : String(err)` | `errMsg(err)` |
+| `try { await readJson(path) } catch { defaults }` | `appStorage.readJsonOr(path, defaults)` |
+| `atob(data)` → `charCodeAt` → `Uint8Array` → `new Blob` | `appStorage.readBlob(path)` |
+| 8-line try/setLoading/catch/setError/finally | `withLoading(setLoading, fn, setError)` |
+| `window.addEventListener('keydown', ...)` + manual cleanup | `onShortcut('ctrl+s', handler)` |
+

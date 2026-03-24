@@ -1,5 +1,5 @@
 {
-  "icon": "\ud83c\udfa5",
+  "icon": "🎥",
   "name": "Video Editor Lite",
   "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
   "run": "index.html",

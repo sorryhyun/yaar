@@ -1,7 +1,7 @@
+import { appStorage, createPersistedSignal } from '@bundled/yaar';
 import type { AppState, Feed } from './types';
 import { FALLBACK_FEEDS, feeds, setFeeds, readArticleIds, setReadArticleIds } from './store';
 import { extractDomainName } from './utils';
-import { storage } from '@bundled/yaar';
 
 const STATE_PATH = 'feeds.json';
 const FEED_SOURCE_PATHS = ['feeds.txt', 'feed-sources.txt'];
@@ -41,10 +41,9 @@ function parseFeedSourcesText(text: string): Feed[] {
 }
 
 async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
-  if (!storage) return null;
   for (const path of FEED_SOURCE_PATHS) {
     try {
-      const text = await storage.read(path, { as: 'text' }) as unknown as string;
+      const text = await appStorage.read(path);
       const parsed = parseFeedSourcesText(String(text || ''));
       if (parsed.length > 0) return parsed;
     } catch { /* missing file ok */ }
@@ -52,27 +51,24 @@ async function loadFeedsFromSourceFile(): Promise<Feed[] | null> {
   return null;
 }
 
+// Persisted signal: auto-saves AppState on every setAppState() call — no null guard needed
+const [, setAppState] = createPersistedSignal<AppState>(STATE_PATH, {
+  feeds: [...FALLBACK_FEEDS],
+  readArticleIds: [],
+});
+
 export async function loadState(): Promise<void> {
-  let saved: AppState | null = null;
-  if (storage) {
-    try {
-      const data = await storage.read(STATE_PATH, { as: 'json' });
-      if (data && typeof data === 'object') saved = data as AppState;
-    } catch { /* use defaults */ }
-  }
+  const saved = await appStorage.readJsonOr<AppState | null>(STATE_PATH, null);
 
   const sourceFeeds = await loadFeedsFromSourceFile();
   if (sourceFeeds && sourceFeeds.length > 0) setFeeds(sourceFeeds);
   else if (saved?.feeds && saved.feeds.length > 0) setFeeds(saved.feeds);
   else setFeeds([...FALLBACK_FEEDS]);
 
-  setReadArticleIds(saved?.readArticleIds || []);
+  setReadArticleIds(saved?.readArticleIds ?? []);
 }
 
+// Synchronises current signal state to storage. Kept async for call-site compatibility.
 export async function saveState(): Promise<void> {
-  if (!storage) return;
-  try {
-    const state: AppState = { feeds: feeds(), readArticleIds: readArticleIds() };
-    await storage.save(STATE_PATH, JSON.stringify(state));
-  } catch (e) { console.error('Failed to save state:', e); }
+  setAppState({ feeds: feeds(), readArticleIds: readArticleIds() });
 }

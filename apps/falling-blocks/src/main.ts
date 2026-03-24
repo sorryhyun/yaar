@@ -1,6 +1,6 @@
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { storage } from '@bundled/yaar';
+import { appStorage, createPersistedSignal } from '@bundled/yaar';
 import './styles.css';
 import {
   COLS, ROWS, N, COLORS, GLOW_COLORS,
@@ -52,28 +52,15 @@ let bgTime = 0;
 let BLOCK = 26;
 
 // --- Persistence ---
-async function saveHi(): Promise<void> {
-  if (storage) {
-    try { await storage.save('hi.json', JSON.stringify({ hi })); } catch {}
-  }
-}
-async function loadHi(): Promise<void> {
-  if (storage) {
-    try {
-      const saved = await storage.read('hi.json', { as: 'json' });
-      if (saved && typeof (saved as any).hi === 'number') {
-        hi = (saved as any).hi; setHiS(hi);
-      }
-    } catch {}
-  }
-}
+// Persisted signal: auto-saves hi on every setPersistedHi() call — no null guard needed
+const [, setPersistedHi] = createPersistedSignal<number>('hi', 0);
 
 function updateStats(): void {
   setScoreS(score); setHiS(hi); setLinesS(lines); setLevelS(level); setComboS(combo);
 }
 function updateOverlay(): void { setGameOverS(gameOver); setPausedS(paused); }
 function updateHi(): void {
-  if (score > hi) { hi = score; setHiS(hi); void saveHi(); }
+  if (score > hi) { hi = score; setHiS(hi); setPersistedHi(hi); }
 }
 
 // --- Game logic ---
@@ -430,7 +417,12 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-void loadHi();
+// Load saved hi score (handles both legacy {hi:N} object and plain number formats)
+void (async () => {
+  const raw = await appStorage.readJsonOr<any>('hi.json', null);
+  const value = typeof raw === 'number' ? raw : (raw && typeof raw.hi === 'number' ? raw.hi : 0);
+  if (value > 0) { hi = value; setHiS(hi); setPersistedHi(value); }
+})();
 fit();
 updateStats();
 updateOverlay();

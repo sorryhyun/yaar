@@ -2,7 +2,7 @@ import { createEffect } from '@bundled/solid-js';
 import { EditorStore } from './editor/state';
 import { createEditorUI } from './editor/ui';
 import { renderEditor } from './editor/render';
-import { loadPrefs, savePrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './editor/prefs';
+import { prefs, setPrefs, loadPrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './editor/prefs';
 import type { EditorPrefs } from './editor/prefs';
 import { parseNumber, clamp } from './editor/utils/time';
 import type { Composition, Scene } from './core/types';
@@ -26,16 +26,13 @@ import './scenes/video-clip';
 
 const store = new EditorStore();
 const ui = createEditorUI(document.body, store);
-let prefs: EditorPrefs = { ...DEFAULT_PREFS };
-
 const persistPrefs = (patch: Partial<EditorPrefs>): void => {
-  prefs = { ...prefs, ...patch };
-  void savePrefs(prefs);
+  setPrefs(prev => ({ ...prev, ...patch }));
 };
 
 // Create sub-controllers
 const editMode = createEditMode(ui, store, {
-  getPrefs: () => prefs,
+  getPrefs: () => prefs(),
   persistPrefs,
 });
 
@@ -394,12 +391,13 @@ ui.compDurationInput.addEventListener('change', handleCompSettingChange);
 
 // === Async initialization from prefs ===
 (async () => {
-  prefs = await loadPrefs();
-  ui.urlInput.value = prefs.lastUrl;
-  ui.storagePathInput.value = normalizeStoragePath(prefs.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
-  ui.video.playbackRate = prefs.playbackRate;
-  store.setPlaybackRate(prefs.playbackRate);
-  store.setLoopPreview(prefs.loopPreview);
+  const p = await loadPrefs();
+  setPrefs(p); // sync signal with validated loaded value
+  ui.urlInput.value = p.lastUrl;
+  ui.storagePathInput.value = normalizeStoragePath(p.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
+  ui.video.playbackRate = p.playbackRate;
+  store.setPlaybackRate(p.playbackRate);
+  store.setLoopPreview(p.loopPreview);
   void fileBrowser.refresh();
 })();
 

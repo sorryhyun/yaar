@@ -12,6 +12,9 @@
  *   const settings = await read<Settings>('yaar://config/settings');
  */
 
+// Solid.js primitives — imported from solid-js directly (the Bun plugin resolves to the browser build)
+import { createSignal, createEffect } from 'solid-js';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const y = (window as any).yaar;
 
@@ -269,6 +272,36 @@ export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): 
 
   window.addEventListener('keydown', listener);
   return () => window.removeEventListener('keydown', listener);
+}
+
+// ── Persisted signal ──────────────────────────────────────────────
+
+/**
+ * Create a Solid.js signal that auto-persists to appStorage.
+ * Loads the saved value on creation (async — the signal starts with `fallback`
+ * and updates once the stored value is read). Saves automatically on every change.
+ */
+export function createPersistedSignal<T>(
+  key: string,
+  fallback: T,
+): [() => T, (v: T | ((prev: T) => T)) => void] {
+  const [value, setValue] = createSignal<T>(fallback);
+  let skipNextSave = true;
+  // Load persisted value
+  appStorage.readJsonOr<T>(key, fallback).then((stored) => {
+    skipNextSave = true;
+    setValue(() => stored as any);
+  });
+  // Auto-save on changes
+  createEffect(() => {
+    const v = value();
+    if (skipNextSave) {
+      skipNextSave = false;
+      return;
+    }
+    appStorage.save(key, JSON.stringify(v));
+  });
+  return [value, setValue] as [() => T, (v: T | ((prev: T) => T)) => void];
 }
 
 // ── Default export: the raw global ───────────────────────────────
