@@ -87,9 +87,13 @@ export function buildWsUrl(sessionId?: string | null): string {
     const serverUrl = conn.serverUrl.replace(/^http/, 'ws');
     base = `${serverUrl}/ws`;
   } else {
-    // Local mode: derive from current page
+    // Local mode: connect to server directly (Vite's WS proxy is unreliable with Bun)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    base = `${protocol}//${window.location.host}/ws`;
+    const host =
+      import.meta.env.DEV && window.location.port === '5173'
+        ? `${window.location.hostname}:8000`
+        : window.location.host;
+    base = `${protocol}//${host}/ws`;
   }
 
   const url = new URL(base);
