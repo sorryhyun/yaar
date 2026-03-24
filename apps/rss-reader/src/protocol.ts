@@ -1,7 +1,5 @@
 import type { Article } from './types';
-import {
-  feeds, articles, unreadCounts, readArticleIds, selectedFeedId, selectedArticle
-} from './store';
+import { state } from './store';
 import { app } from '@bundled/yaar';
 
 export interface ProtocolActions {
@@ -12,18 +10,18 @@ export interface ProtocolActions {
 }
 
 function getTotalUnread(): number {
-  const vals = Object.values(unreadCounts()) as number[];
+  const vals = Object.values(state.unreadCounts) as number[];
   return vals.reduce((a, b) => a + b, 0);
 }
 
 function getCurrentArticles(): Article[] {
-  const art = articles();
-  if (selectedFeedId() === 'all') {
+  const art = state.articles;
+  if (state.selectedFeedId === 'all') {
     const all: Article[] = [];
-    for (const feed of feeds()) all.push(...(art[feed.id] || []));
+    for (const feed of state.feeds) all.push(...(art[feed.id] || []));
     return all.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
   }
-  return art[selectedFeedId() || ''] || [];
+  return art[state.selectedFeedId || ''] || [];
 }
 
 export function registerAppProtocol(actions: ProtocolActions) {
@@ -36,9 +34,9 @@ export function registerAppProtocol(actions: ProtocolActions) {
       unreadCount: { description: 'Total unread article count', handler: () => getTotalUnread() },
       feeds: {
         description: 'All feeds with unread counts',
-        handler: () => feeds().map(f => ({
+        handler: () => state.feeds.map(f => ({
           id: f.id, name: f.name, url: f.url,
-          unreadCount: unreadCounts()[f.id] || 0,
+          unreadCount: state.unreadCounts[f.id] || 0,
         })),
       },
       articles: {
@@ -46,13 +44,13 @@ export function registerAppProtocol(actions: ProtocolActions) {
         handler: (): Array<{ title: string; feedName: string; pubDate: string; isRead: boolean; link: string }> =>
           getCurrentArticles().slice(0, 50).map(a => ({
             title: a.title, feedName: a.feedName, pubDate: a.pubDate,
-            isRead: readArticleIds().includes(a.id), link: a.link,
+            isRead: state.readArticleIds.includes(a.id), link: a.link,
           })),
       },
       selectedArticle: {
         description: 'Currently selected article or null',
         handler: () => {
-          const a = selectedArticle();
+          const a = state.selectedArticle;
           return a ? { title: a.title, feedName: a.feedName, pubDate: a.pubDate, link: a.link } : null;
         },
       },

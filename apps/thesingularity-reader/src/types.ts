@@ -19,6 +19,10 @@ export type Comment = {
   recommend: string;
   isBest: boolean;
   isReply: boolean;
+  /** 모바일 DC 닉네임 타입 */
+  nickType?: 'gonick' | 'nogonick' | 'sub-gonick';
+  /** DCCon 이모티콘 이미지 URL */
+  dcconSrc?: string;
 };
 
 export type AppSettings = {

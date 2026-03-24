@@ -1,6 +1,6 @@
 import { appStorage, createPersistedSignal } from '@bundled/yaar';
 import type { AppState, Feed } from './types';
-import { FALLBACK_FEEDS, feeds, setFeeds, readArticleIds, setReadArticleIds } from './store';
+import { FALLBACK_FEEDS, state, setState } from './store';
 import { extractDomainName } from './utils';
 
 const STATE_PATH = 'feeds.json';
@@ -61,14 +61,14 @@ export async function loadState(): Promise<void> {
   const saved = await appStorage.readJsonOr<AppState | null>(STATE_PATH, null);
 
   const sourceFeeds = await loadFeedsFromSourceFile();
-  if (sourceFeeds && sourceFeeds.length > 0) setFeeds(sourceFeeds);
-  else if (saved?.feeds && saved.feeds.length > 0) setFeeds(saved.feeds);
-  else setFeeds([...FALLBACK_FEEDS]);
+  if (sourceFeeds && sourceFeeds.length > 0) setState('feeds', sourceFeeds);
+  else if (saved?.feeds && saved.feeds.length > 0) setState('feeds', saved.feeds);
+  else setState('feeds', [...FALLBACK_FEEDS]);
 
-  setReadArticleIds(saved?.readArticleIds ?? []);
+  setState('readArticleIds', saved?.readArticleIds ?? []);
 }
 
 // Synchronises current signal state to storage. Kept async for call-site compatibility.
 export async function saveState(): Promise<void> {
-  setAppState({ feeds: feeds(), readArticleIds: readArticleIds() });
+  setAppState({ feeds: state.feeds, readArticleIds: state.readArticleIds });
 }

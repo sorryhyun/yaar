@@ -3,20 +3,39 @@ import html from '@bundled/solid-js/html';
 import { state, setState } from './store';
 import type { Comment } from './types';
 
+/** 닉네임 타입 뱃지 */
+function NickBadge(props: { nickType?: Comment['nickType'] }) {
+  if (props.nickType === 'sub-gonick') {
+    return html`<span class="nick-badge nick-badge-manager" title="운영진/매니저">★</span>`;
+  }
+  if (props.nickType === 'gonick') {
+    return html`<span class="nick-badge nick-badge-gonick" title="고정닉">🔒</span>`;
+  }
+  // nogonick 또는 undefined → 뱃지 없음
+  return null;
+}
+
 function CommentItem(props: { comment: Comment }) {
   const c = props.comment;
+
   return html`
     <div class=${`comment-item${c.isBest ? ' comment-best' : ''}${c.isReply ? ' comment-reply' : ''}`}>
       <div class="comment-header">
         ${() => c.isBest ? html`<span class="comment-best-badge">BEST</span>` : null}
-        ${() => c.isReply ? html`<span class="comment-reply-icon">&#x21B3;</span>` : null}
-        <span class="comment-author">${c.author}</span>
+        ${() => c.isReply ? html`<span class="comment-reply-icon">↳</span>` : null}
+        <${NickBadge} nickType=${c.nickType} />
+        <span class=${`comment-author${c.nickType === 'sub-gonick' ? ' comment-author-manager' : c.nickType === 'nogonick' ? ' comment-author-anon' : ''}`}>${c.author}</span>
         <span class="comment-date">${c.date}</span>
         ${() => parseInt(c.recommend) > 0 ? html`
-          <span class="comment-rec">&#128077; ${c.recommend}</span>
+          <span class="comment-rec">👍 ${c.recommend}</span>
         ` : null}
       </div>
-      <div class="comment-text">${c.text}</div>
+      <div class="comment-body">
+        ${() => c.dcconSrc
+          ? html`<img class="comment-dccon" src=${c.dcconSrc} alt="이모티콘" loading="lazy" />`
+          : html`<span class="comment-text">${c.text}</span>`
+        }
+      </div>
     </div>
   `;
 }
@@ -27,10 +46,10 @@ export function CommentSection() {
   const totalCount = () => state.comments.length;
 
   const toggleLabel = () => {
-    if (state.commentsLoading) return '&#128172; 댓글 로딩중...';
+    if (state.commentsLoading) return '💬 댓글 로딩중...';
     const n = totalCount();
-    if (state.showComments) return `&#128172; 댓글 접기 (${n})`;
-    return `&#128172; 댓글 보기 (${n})`;
+    if (state.showComments) return `💬 댓글 접기 (${n})`;
+    return `💬 댓글 보기 (${n})`;
   };
 
   return html`
@@ -43,7 +62,7 @@ export function CommentSection() {
         disabled=${() => state.commentsLoading}
       >
         <span innerHTML=${toggleLabel}></span>
-        <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>&#8964;</span>
+        <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>⌄</span>
       </button>
 
       ${() => state.showComments ? html`
@@ -63,7 +82,7 @@ export function CommentSection() {
 
           ${() => !state.commentsLoading && bestComments().length > 0 ? html`
             <div class="comment-group">
-              <div class="comment-group-label">&#11088; 베스트 댓글</div>
+              <div class="comment-group-label">⭐ 베스트 댓글</div>
               <${For} each=${bestComments}>
                 ${(c: Comment) => html`<${CommentItem} comment=${c} />`}
               </${For}>

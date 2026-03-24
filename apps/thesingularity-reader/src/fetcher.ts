@@ -317,44 +317,101 @@ export async function fetchPosts(): Promise<Post[]> {
 // ============================================================
 
 function parseCommentItem(li: Element, idx: number, isBest: boolean): Comment | null {
-  // 텍스트
-  const TEXT_SELS = ['.usertxt', '.comment_text', '.cmt_text', '.reply_txt', 'p.txt'];
+  // ── 1. DCCon 이모티콘 감지 ──────────────────────────────────────────────────
+  let dcconSrc: string | undefined;
+
+  // 데스크탑: .comment_dccon 또는 .coment_dccon_img 안의 img
+  const dcconDesktop = li.querySelector('.comment_dccon img, .coment_dccon_img img, img.written_dccon');
+  if (dcconDesktop) {
+    dcconSrc = dcconDesktop.getAttribute('src') ?? undefined;
+  }
+
+  // ── 2. 텍스트 추출 ─────────────────────────────────────────────────────────
   let text = '';
-  for (const sel of TEXT_SELS) {
-    const el = li.querySelector(sel);
-    if (el) {
-      text = (el.textContent ?? '').trim();
-      if (text) break;
+
+  // 모바일: p.txt (텍스트 또는 DCCon img 포함)
+  const txtEl = li.querySelector('p.txt');
+  if (txtEl) {
+    const imgInTxt = txtEl.querySelector('img.written_dccon, img[src*="dccon"], img[src*="dcimg"]');
+    if (imgInTxt) {
+      dcconSrc = dcconSrc ?? imgInTxt.getAttribute('src') ?? undefined;
+      text = '[이모티콘]';
+    } else {
+      text = (txtEl.textContent ?? '').trim();
     }
   }
-  if (!text) {
-    // fallback: li 자체 텍스트에서 닉·날짜 부분 제외하고 추출
-    const clone = li.cloneNode(true) as Element;
-    clone.querySelectorAll('.nick, .date_time, .recommend_txt, .info_lay, .user_layer').forEach(e => e.remove());
-    text = (clone.textContent ?? '').trim();
+
+  // 데스크탑 텍스트 셀렉터
+  if (!text && !dcconSrc) {
+    const TEXT_SELS = ['.usertxt', '.ub-word', '.comment_text', '.cmt_text', '.reply_txt'];
+    for (const sel of TEXT_SELS) {
+      const el = li.querySelector(sel);
+      if (el) {
+        const imgEl = el.querySelector('img.written_dccon, img[src*="dccon"]');
+        if (imgEl) {
+          dcconSrc = imgEl.getAttribute('src') ?? undefined;
+          text = '[이모티콘]';
+        } else {
+          text = (el.textContent ?? '').trim();
+        }
+        if (text || dcconSrc) break;
+      }
+    }
   }
+
+  // DCCon만 있고 text 없으면 placeholder
+  if (!text && dcconSrc) text = '[이모티콘]';
+
+  // fallback: li 전체에서 메타 요소 제거 후 추출
+  if (!text) {
+    const clone = li.cloneNode(true) as Element;
+    clone.querySelectorAll(
+      '.ginfo-area, button.nick, .nick, .date_time, span.date, .recommend_txt, .info_lay, .user_layer',
+    ).forEach(e => e.remove());
+    const fallbackText = (clone.textContent ?? '').trim();
+    // 날짜 패턴만 남은 경우는 제외
+    if (fallbackText && !/^\d{2}[.:]\ *\d{2}/.test(fallbackText)) {
+      text = fallbackText;
+    }
+  }
+
   if (!text) return null;
 
-  // 작성자
-  const NICK_SELS = ['.nick', '.nickname', '.wr_name', '.user_name', '.name'];
+  // ── 3. 작성자 ──────────────────────────────────────────────────────────────
   let author = '익명';
-  for (const sel of NICK_SELS) {
-    const el = li.querySelector(sel);
-    if (el) {
-      author = (el.textContent ?? '').trim() || '익명';
-      break;
+  // 모바일: .ginfo-area button.nick
+  const nickBtn = li.querySelector('.ginfo-area button.nick, button.nick');
+  if (nickBtn) {
+    author = (nickBtn.textContent ?? '').trim() || '익명';
+  } else {
+    const NICK_SELS = ['.nick', '.nickname', '.wr_name', '.user_name', '.name'];
+    for (const sel of NICK_SELS) {
+      const el = li.querySelector(sel);
+      if (el) {
+        author = (el.textContent ?? '').trim() || '익명';
+        break;
+      }
     }
   }
 
-  // 날짜
-  const dateEl = li.querySelector('.date_time, .cmt_date, .reply_date, .time, .date');
+  // ── 4. 닉네임 타입 (모바일 DC: sp-nick 클래스) ─────────────────────────────
+  let nickType: 'gonick' | 'nogonick' | 'sub-gonick' | undefined;
+  const nickSpan = li.querySelector('.sp-nick');
+  if (nickSpan) {
+    if (nickSpan.classList.contains('sub-gonick')) nickType = 'sub-gonick';
+    else if (nickSpan.classList.contains('gonick')) nickType = 'gonick';
+    else if (nickSpan.classList.contains('nogonick')) nickType = 'nogonick';
+  }
+
+  // ── 5. 날짜 ────────────────────────────────────────────────────────────────
+  const dateEl = li.querySelector('span.date, .date_time, .cmt_date, .reply_date, .time');
   const date = dateEl ? (dateEl.textContent ?? '').trim() : '';
 
-  // 추천수
+  // ── 6. 추천수 ──────────────────────────────────────────────────────────────
   const recEl = li.querySelector('.recommend_txt, .rec_cnt, .cmt_recommend, .up_num');
   const recommend = recEl ? (recEl.textContent ?? '').replace(/[^0-9]/g, '') || '0' : '0';
 
-  // 대댓글 여부
+  // ── 7. 대댓글 여부 ─────────────────────────────────────────────────────────
   const isReply =
     li.classList.contains('re_li') ||
     li.classList.contains('reply') ||
@@ -369,14 +426,31 @@ function parseCommentItem(li: Element, idx: number, isBest: boolean): Comment | 
     recommend,
     isBest,
     isReply,
+    nickType,
+    dcconSrc,
   };
 }
 
 function parseComments(doc: Document): Comment[] {
   const comments: Comment[] = [];
 
-  // 댓글 컨테이너 탐색
-  const WRAP_SELS = ['.comment_wrap', '.reply_wrap', '.cmt_wrap', '#comment_box', '.gall_comment'];
+  // ─── 모바일 DC: #comment_box > ul.all-comment-lst > li.comment ────────────────────────
+  const commentBox = doc.querySelector('#comment_box');
+  if (commentBox) {
+    const mobileItems = commentBox.querySelectorAll(
+      'ul.all-comment-lst > li.comment, ul.all-comment-lst > li[no]',
+    );
+    if (mobileItems.length > 0) {
+      mobileItems.forEach((li, i) => {
+        const c = parseCommentItem(li, i, false);
+        if (c) comments.push(c);
+      });
+      return comments;
+    }
+  }
+
+  // ─── 데스크탑 DC fallback ────────────────────────────────────────────────
+  const WRAP_SELS = ['.comment_wrap', '.reply_wrap', '.cmt_wrap', '.gall_comment'];
   let wrap: Element | null = null;
   for (const sel of WRAP_SELS) {
     wrap = doc.querySelector(sel);
@@ -393,7 +467,7 @@ function parseComments(doc: Document): Comment[] {
     if (c) comments.push(c);
   });
 
-  // 일반 댓글 (베스트 댓글 li 제외)
+  // 일반 댓글 (베스트 제외)
   const regularItems = wrap.querySelectorAll(
     '.list_comment > li, .cmt_list > li, .comment_list > li, ul.reply_list > li',
   );
@@ -451,9 +525,26 @@ function extractContentFromDoc(doc: Document, post: Post): string {
 export async function fetchPostDetail(
   post: Post,
 ): Promise<{ content: string; comments: Comment[] }> {
-  const rawHtml = await browseUrl(post.url, 'singularity-post', true);
+  const tabId = 'singularity-post';
+  await invoke('yaar://browser/' + tabId, {
+    action: 'open',
+    url: post.url,
+    visible: false,
+    mobile: true,
+    waitUntil: 'networkidle',
+  });
+
+  // DC loads comments via AJAX after page load — wait for mobile (#comment_box) or desktop (.comment_wrap) selectors
+  await invoke('yaar://browser/' + tabId, {
+    action: 'wait_for',
+    selector: '#comment_box li.comment, .comment_wrap .comment_list, .comment_wrap .list_comment, .reply_wrap',
+    timeout: 4000,
+  }).catch(() => {});
+
+  const rawHtml = await invoke<string>('yaar://browser/' + tabId, { action: 'html' });
+  const html = typeof rawHtml === 'string' ? rawHtml : '';
   const parser = new DOMParser();
-  const doc = parser.parseFromString(rawHtml, 'text/html');
+  const doc = parser.parseFromString(html, 'text/html');
   doc.querySelectorAll('script, noscript, style').forEach(e => e.remove());
 
   const comments = parseComments(doc);

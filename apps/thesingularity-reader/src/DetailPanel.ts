@@ -24,7 +24,7 @@ export function DetailPanel() {
         if (!post)
           return html`
             <div class="y-empty detail-empty">
-              <span class="y-empty-icon detail-empty-icon">&#9889;</span>
+              <span class="y-empty-icon detail-empty-icon">⚡</span>
               <span class="y-text-sm">게시물을 선택하세요</span>
             </div>
           `;
@@ -37,8 +37,8 @@ export function DetailPanel() {
               <span class="divider">&middot;</span>
               <span>${post.date}</span>
               <span class="divider">&middot;</span>
-              <span>&#128065; ${post.views}</span>
-              <span>&#128077; ${post.recommend}</span>
+              <span>👁 ${post.views}</span>
+              <span>👍 ${post.recommend}</span>
             </div>
             <div class="detail-actions">
               <button
@@ -60,7 +60,7 @@ export function DetailPanel() {
                 rel="noopener noreferrer"
                 class="detail-open-link"
               >
-                DC에서 보기 &#8599;
+                DC에서 보기 ↗
               </a>
             </div>
           </div>
@@ -78,7 +78,7 @@ export function DetailPanel() {
                 if (src)
                   return html`
                     <div class="screenshot-wrap">
-                      <div class="screenshot-notice">&#128247; 브라우저 스크린셛</div>
+                      <div class="screenshot-notice">📷 브라우저 스크린셛</div>
                       <img
                         src=${src}
                         style="width:100%;border-radius:6px;display:block"

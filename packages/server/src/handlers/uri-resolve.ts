@@ -205,7 +205,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market)$/,
+    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market|http)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

@@ -26,10 +26,7 @@
   --yaar-sp-2: 8px;
   --yaar-sp-3: 12px;
   --yaar-sp-4: 16px;
-  --yaar-sp-5: 20px;
-  --yaar-sp-6: 24px;
   --yaar-sp-8: 32px;
-  --yaar-radius-sm: 4px;
   --yaar-radius: 6px;
   --yaar-radius-lg: 10px;
   --yaar-font: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -47,7 +44,6 @@
 .y-app{display:flex;flex-direction:column;height:100%;color:var(--yaar-text);background:var(--yaar-bg);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5}
 .y-flex{display:flex}.y-flex-col{display:flex;flex-direction:column}.y-flex-center{display:flex;align-items:center;justify-content:center}.y-flex-between{display:flex;align-items:center;justify-content:space-between}.y-flex-1{flex:1;min-width:0;min-height:0}
 .y-gap-1{gap:var(--yaar-sp-1)}.y-gap-2{gap:var(--yaar-sp-2)}.y-gap-3{gap:var(--yaar-sp-3)}.y-gap-4{gap:var(--yaar-sp-4)}
-.y-grid{display:grid}
 .y-p-1{padding:var(--yaar-sp-1)}.y-p-2{padding:var(--yaar-sp-2)}.y-p-3{padding:var(--yaar-sp-3)}.y-p-4{padding:var(--yaar-sp-4)}
 .y-px-2{padding-left:var(--yaar-sp-2);padding-right:var(--yaar-sp-2)}.y-px-3{padding-left:var(--yaar-sp-3);padding-right:var(--yaar-sp-3)}.y-px-4{padding-left:var(--yaar-sp-4);padding-right:var(--yaar-sp-4)}
 .y-py-2{padding-top:var(--yaar-sp-2);padding-bottom:var(--yaar-sp-2)}.y-py-3{padding-top:var(--yaar-sp-3);padding-bottom:var(--yaar-sp-3)}
@@ -79,8 +75,6 @@
 .y-toast{position:fixed;bottom:var(--yaar-sp-4);left:50%;transform:translateX(-50%) translateY(20px);padding:var(--yaar-sp-2) var(--yaar-sp-4);border-radius:var(--yaar-radius);font-size:var(--yaar-text-sm);color:var(--yaar-text);background:var(--yaar-bg-surface);border:1px solid var(--yaar-border);box-shadow:var(--yaar-shadow-lg);opacity:0;transition:opacity var(--yaar-ease),transform var(--yaar-ease);pointer-events:none;z-index:9999}
 .y-toast-visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 .y-toast-info{border-color:var(--yaar-accent)}.y-toast-success{border-color:var(--yaar-success)}.y-toast-error{border-color:var(--yaar-error)}
-.y-transition{transition:all var(--yaar-ease)}
-.y-overflow-hidden{overflow:hidden}
 .y-light{--yaar-bg:#f8f9fa;--yaar-bg-surface:#ffffff;--yaar-bg-surface-hover:#f0f1f3;--yaar-text:#1f2328;--yaar-text-muted:#656d76;--yaar-text-dim:#8b949e;--yaar-accent:#0969da;--yaar-accent-hover:#0550ae;--yaar-border:#d0d7de;--yaar-success:#1a7f37;--yaar-error:#cf222e;--yaar-warning:#9a6700;--yaar-shadow-sm:0 1px 2px rgba(0,0,0,.08);--yaar-shadow:0 2px 8px rgba(0,0,0,.1);--yaar-shadow-lg:0 8px 24px rgba(0,0,0,.15);color-scheme:light}
 .y-toolbar{display:flex;align-items:center;gap:var(--yaar-sp-2);padding:var(--yaar-sp-2) var(--yaar-sp-3);background:var(--yaar-bg-surface);border-bottom:1px solid var(--yaar-border);flex-shrink:0}
 .y-sidebar{display:flex;flex-direction:column;border-right:1px solid var(--yaar-border);overflow:hidden;background:var(--yaar-bg);flex-shrink:0}
@@ -94,6 +88,15 @@
 .y-select{padding:var(--yaar-sp-2) var(--yaar-sp-3);border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);background:var(--yaar-bg);color:var(--yaar-text);font-size:var(--yaar-text-sm);outline:none;cursor:pointer;transition:border-color var(--yaar-ease)}
 .y-select:focus{border-color:var(--yaar-accent)}
 .y-divider{border:none;border-top:1px solid var(--yaar-border);margin:var(--yaar-sp-2) 0}
+.y-list-item{display:flex;align-items:center;gap:var(--yaar-sp-2);padding:var(--yaar-sp-2) var(--yaar-sp-3);cursor:pointer;border-left:2px solid transparent;transition:background var(--yaar-ease)}
+.y-list-item:hover{background:var(--yaar-bg-surface-hover)}
+.y-list-item.active,.y-list-item[aria-selected="true"]{background:rgba(88,166,255,.08);border-left-color:var(--yaar-accent)}
+.y-label{font-size:var(--yaar-text-xs);font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--yaar-text-muted)}
+.y-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--yaar-sp-2);color:var(--yaar-text-muted);padding:var(--yaar-sp-8);text-align:center}
+.y-empty-icon{font-size:40px;opacity:.25}
+.y-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.y-clamp-3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.y-btn-danger{color:var(--yaar-error);border-color:var(--yaar-error)}.y-btn-danger:hover{background:rgba(248,81,73,.1)}
 pre[class*="language-"],code[class*="language-"]{color:#e6edf3;background:var(--yaar-bg-surface);font-family:var(--yaar-font-mono);font-size:var(--yaar-text-sm);border-radius:var(--yaar-radius)}
 pre[class*="language-"]{padding:var(--yaar-sp-3);overflow:auto;margin:var(--yaar-sp-2) 0}
 .token.comment,.token.prolog,.token.doctype,.token.cdata{color:#6e7781;font-style:italic}
@@ -652,9 +655,9 @@ kbd {
         <button class="y-btn y-btn-sm" onClick=${()=>jQ()}>Pause (P)</button>
       </div>
       <div class="help">
-        <div class="help-row"><kbd>&#8592;&#8594;</kbd> Move</div>
-        <div class="help-row"><kbd>&#8593;</kbd> Rotate</div>
-        <div class="help-row"><kbd>&#8595;</kbd> Soft drop</div>
+        <div class="help-row"><kbd>←→</kbd> Move</div>
+        <div class="help-row"><kbd>↑</kbd> Rotate</div>
+        <div class="help-row"><kbd>↓</kbd> Soft drop</div>
         <div class="help-row"><kbd>Space</kbd> Hard drop</div>
         <div class="help-row"><kbd>C</kbd> Hold</div>
       </div>

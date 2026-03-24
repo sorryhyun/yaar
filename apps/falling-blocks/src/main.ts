@@ -407,9 +407,9 @@ render(() => html`
         <button class="y-btn y-btn-sm" onClick=${() => togglePause()}>Pause (P)</button>
       </div>
       <div class="help">
-        <div class="help-row"><kbd>&#8592;&#8594;</kbd> Move</div>
-        <div class="help-row"><kbd>&#8593;</kbd> Rotate</div>
-        <div class="help-row"><kbd>&#8595;</kbd> Soft drop</div>
+        <div class="help-row"><kbd>←→</kbd> Move</div>
+        <div class="help-row"><kbd>↑</kbd> Rotate</div>
+        <div class="help-row"><kbd>↓</kbd> Soft drop</div>
         <div class="help-row"><kbd>Space</kbd> Hard drop</div>
         <div class="help-row"><kbd>C</kbd> Hold</div>
       </div>

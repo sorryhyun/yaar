@@ -1,16 +1,8 @@
-import { createMemo, createSignal } from '@bundled/solid-js';
+import { createMemo } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import type { Article, Feed } from './types';
-import {
-  feeds, setFeeds,
-  articles,
-  selectedFeedId, setSelectedFeedId,
-  selectedArticle, setSelectedArticle,
-  readArticleIds, setReadArticleIds,
-  unreadCounts, loadingFeedIds,
-  showToast,
-} from './store';
+import { state, setState, showToast } from './store';
 import { fetchAllFeeds, fetchSingleFeed } from './fetcher';
 import { loadState, saveState } from './storage';
 import { registerAppProtocol, notifyUnreadUpdate } from './protocol';
@@ -20,18 +12,18 @@ import './styles.css';
 // ── Derived state ──────────────────────────────────────────────────────────
 
 const visibleArticles = createMemo(() => {
-  const art = articles();
-  const selId = selectedFeedId();
+  const art = state.articles;
+  const selId = state.selectedFeedId;
   if (selId === 'all') {
     const all: Article[] = [];
-    for (const feed of feeds()) all.push(...(art[feed.id] ?? []));
+    for (const feed of state.feeds) all.push(...(art[feed.id] ?? []));
     return all.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
   }
   return art[selId] ?? [];
 });
 
 const totalUnread = createMemo(() =>
-  Object.values(unreadCounts() as Record<string, number>).reduce((sum, n) => sum + n, 0)
+  Object.values(state.unreadCounts as Record<string, number>).reduce((sum, n) => sum + n, 0)
 );
 
 // ── Actions ────────────────────────────────────────────────────────────────
@@ -45,24 +37,24 @@ async function refresh(): Promise<{ ok: boolean; totalUnread: number }> {
 
 function markAllRead(): { ok: boolean } {
   const ids = visibleArticles().map(a => a.id);
-  setReadArticleIds(Array.from(new Set([...readArticleIds(), ...ids])));
+  setState('readArticleIds', Array.from(new Set([...state.readArticleIds, ...ids])));
   void saveState();
   return { ok: true };
 }
 
 function selectFeed(feedId: string): { ok: boolean } {
-  setSelectedFeedId(feedId);
-  setSelectedArticle(null);
+  setState('selectedFeedId', feedId);
+  setState('selectedArticle', null);
   return { ok: true };
 }
 
 async function addFeed(url: string, name?: string): Promise<{ ok: boolean; feedId: string }> {
   let normalized: string;
   try { normalized = new URL(url).toString(); } catch { throw new Error('Invalid URL'); }
-  if (feeds().some(f => f.url === normalized)) throw new Error('Feed already exists');
+  if (state.feeds.some(f => f.url === normalized)) throw new Error('Feed already exists');
   const id = generateFeedId();
   const feed: Feed = { id, url: normalized, name: name || extractDomainName(normalized) };
-  setFeeds([...feeds(), feed]);
+  setState('feeds', [...state.feeds, feed]);
   await fetchSingleFeed(feed);
   await saveState();
   showToast(`Added: ${feed.name}`, 'success');
@@ -70,42 +62,40 @@ async function addFeed(url: string, name?: string): Promise<{ ok: boolean; feedI
 }
 
 function removeFeed(feedId: string): void {
-  setFeeds(feeds().filter(f => f.id !== feedId));
-  if (selectedFeedId() === feedId) {
-    setSelectedFeedId('all');
-    setSelectedArticle(null);
+  setState('feeds', state.feeds.filter(f => f.id !== feedId));
+  if (state.selectedFeedId === feedId) {
+    setState('selectedFeedId', 'all');
+    setState('selectedArticle', null);
   }
   void saveState();
 }
 
 function openArticle(article: Article): void {
-  setSelectedArticle(article);
-  if (!readArticleIds().includes(article.id)) {
-    setReadArticleIds([...readArticleIds(), article.id]);
+  setState('selectedArticle', article);
+  if (!state.readArticleIds.includes(article.id)) {
+    setState('readArticleIds', [...state.readArticleIds, article.id]);
     void saveState();
   }
 }
 
 // ── Add-feed form state ─────────────────────────────────────────────────────
 
-const [showAddForm, setShowAddForm] = createSignal(false);
-const [addBusy, setAddBusy] = createSignal(false);
 let addUrlInput: HTMLInputElement | null = null;
 let addNameInput: HTMLInputElement | null = null;
 
 async function submitAdd() {
   const url = addUrlInput?.value.trim() ?? '';
   if (!url) return;
-  setAddBusy(true);
+  setState('addBusy', true);
   try {
     await addFeed(url, addNameInput?.value.trim() || undefined);
     if (addUrlInput) addUrlInput.value = '';
     if (addNameInput) addNameInput.value = '';
-    setShowAddForm(false);
+    setState('showAddForm', false);
   } catch (e: unknown) {
     showToast((e as Error).message, 'error');
   } finally {
-    setAddBusy(false);
+    setState('addBusy', false);
   }
 }
 
@@ -121,14 +111,14 @@ render(() => html`
         <button
           class="y-btn y-btn-ghost y-btn-sm"
           title="Refresh all feeds"
-          disabled=${() => loadingFeedIds().length > 0}
+          disabled=${() => state.loadingFeedIds.length > 0}
           onClick=${() => void refresh()}
-        >${() => loadingFeedIds().length > 0 ? '⟳' : '↻'}</button>
+        >${() => state.loadingFeedIds.length > 0 ? '⟳' : '↻'}</button>
       </div>
 
       <div class="feed-list">
         <div
-          class=${() => 'feed-item' + (selectedFeedId() === 'all' ? ' active' : '')}
+          class=${() => 'feed-item' + (state.selectedFeedId === 'all' ? ' active' : '')}
           onClick=${() => selectFeed('all')}
         >
           <span class="feed-label">All Articles</span>
@@ -136,17 +126,17 @@ render(() => html`
             ? html`<span class="unread-pill">${totalUnread()}</span>`
             : null}
         </div>
-        ${() => feeds().map(feed => html`
+        ${() => state.feeds.map(feed => html`
           <div
-            class=${() => 'feed-item' + (selectedFeedId() === feed.id ? ' active' : '')}
+            class=${() => 'feed-item' + (state.selectedFeedId === feed.id ? ' active' : '')}
             onClick=${() => selectFeed(feed.id)}
           >
-            ${() => loadingFeedIds().includes(feed.id)
+            ${() => state.loadingFeedIds.includes(feed.id)
               ? html`<span class="dot-blink"></span>`
               : null}
             <span class="feed-label">${feed.name}</span>
-            ${() => ((unreadCounts() as Record<string, number>)[feed.id] ?? 0) > 0
-              ? html`<span class="unread-pill">${(unreadCounts() as Record<string, number>)[feed.id]}</span>`
+            ${() => ((state.unreadCounts as Record<string, number>)[feed.id] ?? 0) > 0
+              ? html`<span class="unread-pill">${(state.unreadCounts as Record<string, number>)[feed.id]}</span>`
               : null}
             <button
               class="rm-btn"
@@ -158,11 +148,11 @@ render(() => html`
       </div>
 
       <div class="add-area">
-        ${() => !showAddForm()
+        ${() => !state.showAddForm
           ? html`<button
               class="y-btn y-btn-ghost y-btn-sm"
               style="width:100%;"
-              onClick=${() => setShowAddForm(true)}
+              onClick=${() => setState('showAddForm', true)}
             >+ Add Feed</button>`
           : html`
             <div class="add-form">
@@ -180,12 +170,12 @@ render(() => html`
                 <button
                   class="y-btn y-btn-primary y-btn-sm"
                   style="flex:1;"
-                  disabled=${() => addBusy()}
+                  disabled=${() => state.addBusy}
                   onClick=${() => void submitAdd()}
                 >Add</button>
                 <button
                   class="y-btn y-btn-ghost y-btn-sm"
-                  onClick=${() => { setShowAddForm(false); }}
+                  onClick=${() => { setState('showAddForm', false); }}
                 >Cancel</button>
               </div>
             </div>`}
@@ -195,9 +185,9 @@ render(() => html`
     <!-- Articles panel -->
     <section class="articles-panel">
       <div class="panel-hdr">
-        <strong>${() => selectedFeedId() === 'all'
+        <strong>${() => state.selectedFeedId === 'all'
           ? 'All Articles'
-          : (feeds().find(f => f.id === selectedFeedId())?.name ?? 'Articles')
+          : (state.feeds.find(f => f.id === state.selectedFeedId)?.name ?? 'Articles')
         }</strong>
         <button class="y-btn y-btn-ghost y-btn-sm" onClick=${() => markAllRead()}>✓ All read</button>
       </div>
@@ -209,8 +199,8 @@ render(() => html`
           <div
             class=${() => {
               let cls = 'article-item';
-              if (selectedArticle()?.id === article.id) cls += ' active';
-              if (!readArticleIds().includes(article.id)) cls += ' unread';
+              if (state.selectedArticle?.id === article.id) cls += ' active';
+              if (!state.readArticleIds.includes(article.id)) cls += ' unread';
               return cls;
             }}
             onClick=${() => openArticle(article)}
@@ -225,7 +215,7 @@ render(() => html`
     <!-- Content panel -->
     <main class="content-panel">
       <div class="content-main">
-        ${() => !selectedArticle()
+        ${() => !state.selectedArticle
           ? html`
             <div class="splash">
               <span class="splash-icon">📰</span>
@@ -234,15 +224,15 @@ render(() => html`
           : html`
             <div class="art-view">
               <div class="art-header">
-                <div class="art-view-title">${() => selectedArticle()!.title}</div>
+                <div class="art-view-title">${() => state.selectedArticle!.title}</div>
                 <div class="art-view-meta">
-                  <span>${() => selectedArticle()!.feedName}</span>
-                  ${() => selectedArticle()!.author
-                    ? html`<span>${() => selectedArticle()!.author}</span>`
+                  <span>${() => state.selectedArticle!.feedName}</span>
+                  ${() => state.selectedArticle!.author
+                    ? html`<span>${() => state.selectedArticle!.author}</span>`
                     : null}
-                  <span>${() => formatDate(selectedArticle()!.pubDate)}</span>
+                  <span>${() => formatDate(state.selectedArticle!.pubDate)}</span>
                   <a
-                    href=${() => selectedArticle()!.link}
+                    href=${() => state.selectedArticle!.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     class="ext-link"
@@ -251,13 +241,13 @@ render(() => html`
               </div>
               <div
                 class="art-body"
-                .innerHTML=${() => selectedArticle()!.content || selectedArticle()!.description || ''}
+                .innerHTML=${() => state.selectedArticle!.content || state.selectedArticle!.description || ''}
               ></div>
             </div>`}
       </div>
 
       <div class="y-statusbar">
-        <span>${() => `${feeds().length} feeds · ${visibleArticles().length} articles · ${totalUnread()} unread`}</span>
+        <span>${() => `${state.feeds.length} feeds · ${visibleArticles().length} articles · ${totalUnread()} unread`}</span>
 
       </div>
     </main>

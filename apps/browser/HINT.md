@@ -1,0 +1,1 @@
+Use `yaar://browser/` URI verb for using headless browser. browser app is for hook rendering, not server-side browsing.

@@ -14,7 +14,7 @@ export function createChartPanel() {
         <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
           destroyChart();
           setChartPanelOpen(false);
-        }} title="Close chart">&#x2715;</button>
+        }} title="Close chart">✕</button>
       </div>
       <canvas ref=${(el: HTMLCanvasElement) => { refs.chartCanvas = el; }} id="chartCanvas" height="180"></canvas>
     </div>

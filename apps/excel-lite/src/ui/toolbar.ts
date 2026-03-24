@@ -36,13 +36,13 @@ export function createToolbar() {
   return html`
     <div class="toolbar">
       <div class="toolbar-row file">
-        <button class="y-btn y-btn-sm" onClick=${() => void saveWorkbookToStorage()} title="Save workbook XLSX to YAAR storage" aria-label="Save File">&#x1F4BE;</button>
-        <button class="y-btn y-btn-sm" onClick=${() => void openWorkbookFromStorage()} title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">&#x1F4C2;</button>
-        <button class="y-btn y-btn-sm" onClick=${() => void copyToClipboard()} title="Copy sheet JSON to clipboard" aria-label="Copy JSON">&#x2398;</button>
-        <button class="y-btn y-btn-sm" onClick=${pasteFromClipboard} title="Paste sheet JSON from a dialog" aria-label="Paste JSON">&#x1F4CB;</button>
-        <button class="y-btn y-btn-sm" onClick=${exportCsvAndNotify} title="Export CSV" aria-label="Export CSV">&#x2B07;</button>
-        <button class="y-btn y-btn-sm" onClick=${() => renderSelectionChart()} title="Create chart from selection" aria-label="Chart Selection">&#x1F4CA;</button>
-        <button class="y-btn y-btn-sm" onClick=${() => renderSelectionStats()} title="Selection statistics" aria-label="Selection Statistics">&#x3A3;</button>
+        <button class="y-btn y-btn-sm" onClick=${() => void saveWorkbookToStorage()} title="Save workbook XLSX to YAAR storage" aria-label="Save File">💾</button>
+        <button class="y-btn y-btn-sm" onClick=${() => void openWorkbookFromStorage()} title="Open workbook from YAAR storage (XLSX/JSON)" aria-label="Open File">📂</button>
+        <button class="y-btn y-btn-sm" onClick=${() => void copyToClipboard()} title="Copy sheet JSON to clipboard" aria-label="Copy JSON">⎘</button>
+        <button class="y-btn y-btn-sm" onClick=${pasteFromClipboard} title="Paste sheet JSON from a dialog" aria-label="Paste JSON">📋</button>
+        <button class="y-btn y-btn-sm" onClick=${exportCsvAndNotify} title="Export CSV" aria-label="Export CSV">⬇</button>
+        <button class="y-btn y-btn-sm" onClick=${() => renderSelectionChart()} title="Create chart from selection" aria-label="Chart Selection">📊</button>
+        <button class="y-btn y-btn-sm" onClick=${() => renderSelectionStats()} title="Selection statistics" aria-label="Selection Statistics">Σ</button>
         <select ref=${(el: HTMLSelectElement) => { refs.chartTypeSel = el; }} title="Chart type"
           onChange=${() => { if (chartPanelOpen()) renderSelectionChart(); }} >
           <option value="bar">Bar</option>
@@ -54,8 +54,8 @@ export function createToolbar() {
         <input id="storagePathInput" ref=${(el: HTMLInputElement) => { refs.storagePathInput = el; }} title="Storage path" value="sheet.xlsx" />
       </div>
       <div class="toolbar-row edit">
-        <button class="y-btn y-btn-sm" onClick=${() => undo()} title="Undo" aria-label="Undo">&#x21B6;</button>
-        <button class="y-btn y-btn-sm" onClick=${() => redo()} title="Redo" aria-label="Redo">&#x21B7;</button>
+        <button class="y-btn y-btn-sm" onClick=${() => undo()} title="Undo" aria-label="Undo">↶</button>
+        <button class="y-btn y-btn-sm" onClick=${() => redo()} title="Redo" aria-label="Redo">↷</button>
         <div class="name" ref=${(el: HTMLDivElement) => { refs.cellName = el; }}>A1</div>
         <input class="y-input" id="formulaInput" ref=${(el: HTMLInputElement) => { refs.formulaInput = el; }}
           placeholder="Value or formula (=A1+B1, =SUM(A1:A10))"

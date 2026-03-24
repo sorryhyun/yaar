@@ -3,17 +3,7 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 
-import {
-  sessions,
-  selectedId,
-  loading,
-  detailLoading,
-  detail,
-  search,
-  setSearch,
-  totalCount,
-  loadError,
-} from './store';
+import { state, setState } from './store';
 import { loadSessions, loadDetail } from './api';
 import { getDateKey, formatDateLabel, providerLabel, providerCls, formatDateTime } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
@@ -21,9 +11,9 @@ import type { SessionSummary } from './types';
 
 // --- Computed ---
 const filteredSessions = createMemo(() => {
-  const q = search().toLowerCase();
-  if (!q) return sessions();
-  return sessions().filter(s =>
+  const q = state.search.toLowerCase();
+  if (!q) return state.sessions;
+  return state.sessions.filter(s =>
     s.sessionId.toLowerCase().includes(q) ||
     providerLabel(s.provider).toLowerCase().includes(q)
   );
@@ -55,15 +45,15 @@ render(() => html`
   <div class="layout">
 
     <div class="app-header">
-      <span class="app-title">&#x1F4CB; Session Logs</span>
-      ${() => totalCount() > 0
-        ? html`<span class="count-badge">${totalCount()} sessions</span>`
+      <span class="app-title">📋 Session Logs</span>
+      ${() => state.totalCount > 0
+        ? html`<span class="count-badge">${state.totalCount} sessions</span>`
         : null
       }
       <button class="y-btn y-btn-sm y-btn-ghost refresh-btn" onClick=${loadSessions}>
-        ${() => loading()
+        ${() => state.loading
           ? html`<span class="y-spinner"></span>`
-          : html`<span>&#x21BB;</span>`
+          : html`<span>↻</span>`
         }
       </button>
     </div>
@@ -76,21 +66,21 @@ render(() => html`
             class="y-input search-input"
             placeholder="Search by ID or provider..."
             onInput=${(e: InputEvent) =>
-              setSearch((e.target as HTMLInputElement).value)
+              setState('search', (e.target as HTMLInputElement).value)
             }
           />
         </div>
 
         <div class="session-list">
-          ${() => loading() && sessions().length === 0
+          ${() => state.loading && state.sessions.length === 0
             ? html`<div class="list-status"><span class="y-spinner"></span></div>`
             : null
           }
-          ${() => !loading() && sessions().length === 0 && loadError()
-            ? html`<div class="list-status list-error">&#x26a0;&#xFE0F; ${loadError()}</div>`
+          ${() => !state.loading && state.sessions.length === 0 && state.loadError
+            ? html`<div class="list-status list-error">⚠️ ${state.loadError}</div>`
             : null
           }
-          ${() => !loading() && filteredSessions().length === 0 && !loadError()
+          ${() => !state.loading && filteredSessions().length === 0 && !state.loadError
             ? html`<div class="list-status">No sessions found</div>`
             : null
           }
@@ -110,11 +100,11 @@ render(() => html`
 
       <div class="detail-panel">
         ${() => {
-          if (!selectedId()) return DetailEmpty();
-          if (detailLoading()) return html`
+          if (!state.selectedId) return DetailEmpty();
+          if (state.detailLoading) return html`
             <div class="detail-loading"><span class="y-spinner y-spinner-lg"></span></div>
           `;
-          if (detail()) return DetailView();
+          if (state.detail) return DetailView();
           return DetailEmpty();
         }}
       </div>

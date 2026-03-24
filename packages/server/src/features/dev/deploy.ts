@@ -173,6 +173,14 @@ export async function doDeploy(
       await Bun.write(join(appPath, 'SKILL.md'), skillContent);
     }
 
+    // Copy HINT.md from sandbox if it exists (monitor agent orchestration hints)
+    try {
+      const hintContent = await Bun.file(join(sandboxPath, 'HINT.md')).text();
+      await Bun.write(join(appPath, 'HINT.md'), hintContent);
+    } catch {
+      // No HINT.md in sandbox
+    }
+
     // Sandbox app.json is the source of truth for all metadata (permissions, variant, etc.)
     // Deploy args only override name/icon/description for convenience.
     const metadata: Record<string, unknown> = { ...existingMeta, ...sandboxMeta };
@@ -248,7 +256,7 @@ export interface CloneResult {
 }
 
 /** Files to clone from the app directory root (alongside src/). */
-const CLONE_ROOT_FILES = ['app.json', 'SKILL.md'];
+const CLONE_ROOT_FILES = ['app.json', 'SKILL.md', 'HINT.md'];
 
 export async function doClone(
   appId: string,

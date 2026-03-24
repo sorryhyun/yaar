@@ -1,6 +1,6 @@
 import html from '@bundled/solid-js/html';
 import type { SessionSummary } from './types';
-import { selectedId, currentSessionId, detail } from './store';
+import { state } from './store';
 import { loadDetail } from './api';
 import {
   formatDateTime,
@@ -11,8 +11,8 @@ import {
 } from './utils';
 
 export const SessionItem = (s: SessionSummary) => {
-  const isActive  = () => selectedId() === s.sessionId;
-  const isCurrent = () => currentSessionId() === s.sessionId;
+  const isActive  = () => state.selectedId === s.sessionId;
+  const isCurrent = () => state.currentSessionId === s.sessionId;
 
   return html`
     <div
@@ -27,7 +27,7 @@ export const SessionItem = (s: SessionSummary) => {
       <div class="session-meta">
         <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
         <span class="session-datetime">${() => formatDateTime(s.createdAt)}</span>
-        <span class="agent-count">&#x1F916; ${() => s.agentCount ?? 0}</span>
+        <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
       </div>
     </div>
   `;
@@ -35,18 +35,18 @@ export const SessionItem = (s: SessionSummary) => {
 
 export const DetailEmpty = () => html`
   <div class="y-empty detail-empty">
-    <div class="y-empty-icon">&#x1F4CB;</div>
+    <div class="y-empty-icon">📋</div>
     <div class="empty-title">No session selected</div>
     <div class="empty-sub">Click a session in the list to view its details</div>
   </div>
 `;
 
 export const DetailView = () => {
-  const d = detail();
+  const d = state.detail;
   if (!d) return null;
 
-  const sid       = selectedId() ?? '';
-  const isCurrent = currentSessionId() === sid;
+  const sid       = state.selectedId ?? '';
+  const isCurrent = state.currentSessionId === sid;
 
   const knownKeys = new Set(['sessionId', 'createdAt', 'lastActivity', 'provider', 'agentCount']);
   const extraEntries = Object.entries(d).filter(([k]) => !knownKeys.has(k));
@@ -56,7 +56,7 @@ export const DetailView = () => {
 
       <div class="detail-header">
         <div class="detail-session-id">${d.sessionId ?? sid}</div>
-        ${isCurrent ? html`<span class="current-chip">&#x26a1; Current Session</span>` : null}
+        ${isCurrent ? html`<span class="current-chip">⚡ Current Session</span>` : null}
       </div>
 
       <div class="detail-grid">
@@ -70,7 +70,7 @@ export const DetailView = () => {
 
         <div class="detail-field">
           <div class="y-label field-label">Agents</div>
-          <div class="field-value agent-value">&#x1F916; ${d.agentCount ?? '-'}</div>
+          <div class="field-value agent-value">🤖 ${d.agentCount ?? '-'}</div>
         </div>
 
         <div class="detail-field">
@@ -85,7 +85,7 @@ export const DetailView = () => {
 
         <div class="detail-field span-2">
           <div class="y-label field-label">Duration</div>
-          <div class="field-value">&#x23F1; ${durationBetween(d.createdAt, d.lastActivity)}</div>
+          <div class="field-value">⏱ ${durationBetween(d.createdAt, d.lastActivity)}</div>
         </div>
 
       </div>

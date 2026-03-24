@@ -1,10 +1,10 @@
 export {};
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
-import { currentPath, setCurrentPath, setEntries, setSelectedFile, setPreviewContent, setShowPreview, setStatusText, setPreviewTitleText, setPreviewMetaText, elPreviewBody } from './state';
+import { storage } from '@bundled/yaar';
+import { state, setState, elPreviewBody } from './state';
 import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
-import { storageList, storageRead, storageUrl } from './storage-api';
 
 const EXT_LANG: Record<string, string> = {
   js: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -21,41 +21,41 @@ const EXT_LANG: Record<string, string> = {
 const PREVIEW_UNAVAILABLE = '<span class="preview-unavailable">Unable to preview</span>';
 
 export async function navigate(path: string) {
-  setCurrentPath(path);
-  setSelectedFile(null);
-  setPreviewContent(null);
-  setShowPreview(false);
-  setStatusText('Loading...');
+  setState('currentPath', path);
+  setState('selectedFile', null);
+  setState('previewContent', null);
+  setState('showPreview', false);
+  setState('statusText', 'Loading...');
   try {
     await refreshMountAliases();
-    const fetched = await storageList(path);
+    const fetched = await storage.list(path) as unknown as import('./types').StorageEntry[];
     fetched.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return basename(a.path).localeCompare(basename(b.path));
     });
-    setEntries(() => fetched);
+    setState('entries', fetched);
     const dirs = fetched.filter((e) => e.isDirectory).length;
     const files = fetched.length - dirs;
-    setStatusText(`${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`);
+    setState('statusText', `${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`);
   } catch {
-    setEntries(() => []);
-    setStatusText('Error loading directory');
+    setState('entries', []);
+    setState('statusText', 'Error loading directory');
   }
 }
 
 export async function selectFile(entry: import('./types').StorageEntry) {
   const name = basename(entry.path);
-  setSelectedFile(entry.path);
-  setPreviewContent(null);
-  setPreviewTitleText(name);
-  setPreviewMetaText(formatSize(entry.size));
-  setShowPreview(true);
+  setState('selectedFile', entry.path);
+  setState('previewContent', null);
+  setState('previewTitleText', name);
+  setState('previewMetaText', formatSize(entry.size));
+  setState('showPreview', true);
 
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 
   if (isImage(name)) {
     // inline styles intentionally omitted — .preview-body img already covers max-width + border-radius
-    elPreviewBody.innerHTML = `<img src="${storageUrl(entry.path)}" alt="${name}" />`;
+    elPreviewBody.innerHTML = `<img src="${storage.url(entry.path)}" alt="${name}" />`;
     return;
   }
 
@@ -63,8 +63,8 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isMarkdown(name)) {
     try {
-      const content = await storageRead(entry.path);
-      setPreviewContent(content);
+      const content = await storage.read(entry.path, { as: 'text' }) as string;
+      setState('previewContent', content);
       const htmlContent = marked.parse(content) as string;
       elPreviewBody.innerHTML = `<div class="md-preview">${htmlContent}</div>`;
     } catch {
@@ -75,8 +75,8 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isPreviewable(name)) {
     try {
-      const content = await storageRead(entry.path);
-      setPreviewContent(content);
+      const content = await storage.read(entry.path, { as: 'text' }) as string;
+      setState('previewContent', content);
 
       const lang = EXT_LANG[ext] || 'clike';
       const grammar = (Prism.languages as any)[lang] ?? Prism.languages.clike;
@@ -97,12 +97,12 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     </div>
   `;
   document.getElementById('open-external')?.addEventListener('click', () => {
-    window.open(storageUrl(entry.path), '_blank');
+    window.open(storage.url(entry.path), '_blank');
   });
 }
 
 export function closePreview() {
-  setSelectedFile(null);
-  setPreviewContent(null);
-  setShowPreview(false);
+  setState('selectedFile', null);
+  setState('previewContent', null);
+  setState('showPreview', false);
 }

@@ -1,0 +1,10 @@
+{
+  "appId": "music-maker",
+  "name": "Music Maker",
+  "icon": "🎹",
+  "description": "Drum machine + algorithmic melody generator. 16-step sequencer, Tone.js synths, Markov chain melody, piano roll visualizer.",
+  "permissions": [],
+  "run": "dist/index.html",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

@@ -1,6 +1,6 @@
 export {};
 import { app } from '@bundled/yaar';
-import { currentPath, entries, selectedFile, mountAliases, previewContent } from './state';
+import { state } from './state';
 import { basename, sanitizeAlias } from './helpers';
 import { navigate, selectFile } from './navigation';
 
@@ -13,12 +13,12 @@ export function registerProtocol() {
     state: {
       'current-path': {
         description: 'Current directory path being viewed',
-        handler: () => currentPath(),
+        handler: () => state.currentPath,
       },
       'directory-listing': {
         description: 'Files and folders in the current directory',
         handler: () =>
-          entries().map((e) => ({
+          state.entries.map((e) => ({
             path: e.path,
             name: basename(e.path),
             isDirectory: e.isDirectory,
@@ -27,15 +27,15 @@ export function registerProtocol() {
       },
       'selected-file': {
         description: 'Currently selected file path (null if none)',
-        handler: () => selectedFile(),
+        handler: () => state.selectedFile,
       },
       'mount-aliases': {
         description: 'Mounted folders available under mounts/',
-        handler: () => [...mountAliases()],
+        handler: () => [...state.mountAliases],
       },
       'file-preview': {
         description: 'Text content of the currently previewed file (null if not text)',
-        handler: () => previewContent(),
+        handler: () => state.previewContent,
       },
     },
     commands: {
@@ -59,7 +59,7 @@ export function registerProtocol() {
           required: ['path'],
         },
         handler: (params: Record<string, unknown>) => {
-          const entry = entries().find((e) => e.path === params.path);
+          const entry = state.entries.find((e) => e.path === params.path);
           if (!entry || entry.isDirectory) return { success: false, error: 'File not found' };
           selectFile(entry);
           return { success: true };
@@ -92,7 +92,7 @@ export function registerProtocol() {
         description: 'Refresh the current directory listing',
         params: { type: 'object', properties: {} },
         handler: () => {
-          navigate(currentPath());
+          navigate(state.currentPath);
           return { success: true };
         },
       },

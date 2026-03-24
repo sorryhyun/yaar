@@ -1,0 +1,10 @@
+{
+  "appId": "memo",
+  "name": "Memo",
+  "icon": "📝",
+  "description": "Simple persistent memo/notes app",
+  "permissions": ["yaar://storage/"],
+  "run": "dist/index.html",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

@@ -1,13 +1,16 @@
 export {};
-import { app } from '@bundled/yaar';
+import { app, storage } from '@bundled/yaar';
 import type { StorageEntry } from './types';
-import { setStatusText } from './state';
+import { setState } from './state';
 import { basename, getExtension } from './helpers';
-import { storageUrl, toStorageUri } from './storage-api';
+
+function toStorageUri(path: string): string {
+  return `yaar://storage/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
 
 function buildDragMetadata(entry: StorageEntry) {
   const name = basename(entry.path);
-  const url = !entry.isDirectory ? storageUrl(entry.path) : null;
+  const url = !entry.isDirectory ? storage.url(entry.path) : null;
   return {
     source: 'storage',
     appId: 'storage',
@@ -38,7 +41,7 @@ export function requestOpenByAgent(entry: StorageEntry) {
     extension,
     isDirectory: entry.isDirectory,
   });
-  setStatusText(`Requested agent open: ${name}`);
+  setState('statusText', `Requested agent open: ${name}`);
 }
 
 export function handleDragStart(e: DragEvent, entry: StorageEntry) {

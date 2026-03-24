@@ -1,17 +1,19 @@
 export {};
-import { createSignal } from '@bundled/solid-js';
+import { createStore } from '@bundled/solid-js/store';
+import type { StorageEntry } from './types';
 
-// ── Signals ───────────────────────────────────────────────────────────
-export const [currentPath, setCurrentPath] = createSignal('');
-export const [entries, setEntries] = createSignal<import('./types').StorageEntry[]>([]);
-export const [mountAliases, setMountAliases] = createSignal<string[]>([]);
-export const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
-export const [previewContent, setPreviewContent] = createSignal<string | null>(null);
-export const [showPreview, setShowPreview] = createSignal(false);
-export const [showModal, setShowModal] = createSignal(false);
-export const [statusText, setStatusText] = createSignal('Ready');
-export const [previewTitleText, setPreviewTitleText] = createSignal('Preview');
-export const [previewMetaText, setPreviewMetaText] = createSignal('');
+export const [state, setState] = createStore({
+  currentPath: '',
+  entries: [] as StorageEntry[],
+  mountAliases: [] as string[],
+  selectedFile: null as string | null,
+  previewContent: null as string | null,
+  showPreview: false,
+  showModal: false,
+  statusText: 'Ready',
+  previewTitleText: 'Preview',
+  previewMetaText: '',
+});
 
 // ── DOM refs ──────────────────────────────────────────────────────────
 export let elMountAlias!: HTMLInputElement;

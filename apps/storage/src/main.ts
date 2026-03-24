@@ -4,14 +4,13 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import type { StorageEntry } from './types';
-import { currentPath, entries, mountAliases, selectedFile, showPreview, showModal, statusText, previewTitleText, previewMetaText, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody, setStatusText } from './state';
+import { state, setState, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody } from './state';
 import { basename, formatSize, getFileIcon } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
-import { storageSave, storageDelete, storageUrl } from './storage-api';
-import { showToast } from '@bundled/yaar';
+import { storage, showToast } from '@bundled/yaar';
 
 // ── Upload ───────────────────────────────────────────────────────────────────────
 
@@ -25,18 +24,18 @@ async function handleUpload(e: Event) {
   const input = e.target as HTMLInputElement;
   const files = Array.from(input.files || []);
   if (!files.length) return;
-  setStatusText(`Uploading ${files.length} file(s)…`);
+  setState('statusText', `Uploading ${files.length} file(s)…`);
   try {
     for (const file of files) {
-      const path = currentPath() ? `${currentPath()}/${file.name}` : file.name;
+      const path = state.currentPath ? `${state.currentPath}/${file.name}` : file.name;
       const buf = await file.arrayBuffer();
-      await storageSave(path, buf);
+      await storage.save(path, buf);
     }
     input.value = '';
-    navigate(currentPath());
+    navigate(state.currentPath);
     showToast(`Uploaded ${files.length} file${files.length !== 1 ? 's' : ''}`, 'success');
   } catch {
-    setStatusText('Upload failed');
+    setState('statusText', 'Upload failed');
     showToast('Upload failed', 'error');
   }
 }
@@ -47,7 +46,7 @@ const App = () => html`
   <div class="toolbar y-flex-between">
     <div class="breadcrumb">
       ${() => {
-        const parts = currentPath() ? currentPath().split('/').filter(Boolean) : [];
+        const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
         const crumbs: any[] = [
           html`<button onClick=${() => navigate('')}>yaar://storage/</button>`
         ];
@@ -69,13 +68,13 @@ const App = () => html`
         (e.target as HTMLSelectElement).value = '';
       }}>
       <option value="">Mounts</option>
-      <${For} each=${mountAliases}>
+      <${For} each=${() => state.mountAliases}>
         ${(alias: string) => html`<option value="${alias}">${alias}</option>`}
       <//>
     </select>
     <button class="toolbar-btn y-btn y-btn-sm" onClick=${openMountDialog} title="Request mount folder">Mount...</button>
-    <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(currentPath())} title="Refresh">&#x21BB;</button>
-    <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">&#x2B06; Upload</button>
+    <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(state.currentPath)} title="Refresh">↻</button>
+    <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">⬆ Upload</button>
     <input type="file" id="upload-input" multiple style="display:none"
       ref=${(el: HTMLInputElement) => { uploadInput = el; }}
       onChange=${handleUpload} />
@@ -84,15 +83,15 @@ const App = () => html`
   <div class="main">
     <div class="file-list y-scroll">
       ${() => {
-        const list = entries();
+        const list = state.entries;
         if (list.length === 0) return html`<div class="y-empty empty">This folder is empty</div>`;
         return html`
-          <${For} each=${entries}>
+          <${For} each=${() => state.entries}>
             ${(entry: StorageEntry) => {
               const name = basename(entry.path);
               return html`
                 <div
-                  class=${() => `file-row${selectedFile() === entry.path ? ' selected' : ''}`}
+                  class=${() => `file-row${state.selectedFile === entry.path ? ' selected' : ''}`}
                   draggable="true"
                   onClick=${(e: MouseEvent) => {
                     if ((e.target as HTMLElement).closest('.file-actions')) return;
@@ -113,19 +112,19 @@ const App = () => html`
                     <${Show} when=${() => !entry.isDirectory}>
                       <button title="Open in new tab" onClick=${(e: MouseEvent) => {
                         e.stopPropagation();
-                        window.open(storageUrl(entry.path), '_blank');
-                      }}>&#x21D7;</button>
+                        window.open(storage.url(entry.path), '_blank');
+                      }}>⇗</button>
                     <//>
                     <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
                       e.stopPropagation();
                       if (!confirm(`Delete "${name}"?`)) return;
                       try {
-                        await storageDelete(entry.path);
-                        navigate(currentPath());
+                        await storage.remove(entry.path);
+                        navigate(state.currentPath);
                       } catch {
-                        setStatusText(`Failed to delete ${name}`);
+                        setState('statusText', `Failed to delete ${name}`);
                       }
-                    }}>&#x1F5D1;</button>
+                    }}>🗑</button>
                   </span>
                 </div>
               `;
@@ -135,17 +134,17 @@ const App = () => html`
       }}
     </div>
 
-    <div class=${() => `preview${showPreview() ? '' : ' hidden'}`}>
+    <div class=${() => `preview${state.showPreview ? '' : ' hidden'}`}>
       <div class="y-label preview-header y-flex-between">
-        <span class="y-truncate">${() => previewTitleText()}</span>
-        <button class="preview-close" onClick=${closePreview}>&#x2715;</button>
+        <span class="y-truncate">${() => state.previewTitleText}</span>
+        <button class="preview-close" onClick=${closePreview}>✕</button>
       </div>
       <div class="preview-body" ref=${(el: HTMLDivElement) => { setElPreviewBody(el); }}></div>
-      <div class="preview-meta y-text-xs y-text-muted">${() => previewMetaText()}</div>
+      <div class="preview-meta y-text-xs y-text-muted">${() => state.previewMetaText}</div>
     </div>
   </div>
 
-  <${Show} when=${showModal}>
+  <${Show} when=${() => state.showModal}>
     <div class="modal-overlay" onClick=${(e: MouseEvent) => {
       if (e.target === e.currentTarget) closeMountDialog();
     }}>
@@ -173,7 +172,7 @@ const App = () => html`
     </div>
   <//>
 
-  <div class="statusbar y-text-xs y-text-muted">${() => statusText()}</div>
+  <div class="statusbar y-text-xs y-text-muted">${() => state.statusText}</div>
 `;
 
 render(App, document.getElementById('app')!);

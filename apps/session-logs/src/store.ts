@@ -1,12 +1,14 @@
-import { createSignal } from '@bundled/solid-js';
+import { createStore } from '@bundled/solid-js/store';
 import type { SessionSummary, SessionDetail } from './types';
 
-export const [sessions, setSessions] = createSignal<SessionSummary[]>([]);
-export const [currentSessionId, setCurrentSessionId] = createSignal<string>('');
-export const [selectedId, setSelectedId] = createSignal<string | null>(null);
-export const [detail, setDetail] = createSignal<SessionDetail | null>(null);
-export const [loading, setLoading] = createSignal(false);
-export const [detailLoading, setDetailLoading] = createSignal(false);
-export const [search, setSearch] = createSignal('');
-export const [totalCount, setTotalCount] = createSignal(0);
-export const [loadError, setLoadError] = createSignal<string | null>(null);
+export const [state, setState] = createStore({
+  sessions: [] as SessionSummary[],
+  currentSessionId: '',
+  selectedId: null as string | null,
+  detail: null as SessionDetail | null,
+  loading: false,
+  detailLoading: false,
+  search: '',
+  totalCount: 0,
+  loadError: null as string | null,
+});
