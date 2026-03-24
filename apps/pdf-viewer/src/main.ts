@@ -16,14 +16,12 @@ type StorageEntry = {
 
 // --- Storage helpers using @bundled/yaar ---
 async function storageSave(path: string, content: string): Promise<void> {
-  const r = await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
-  if (r.isError) throw new Error(r.content[0]?.text);
+  await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
 }
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
-  const r = await list(`yaar://apps/self/storage/${dir}`);
-  if (r.isError) return [];
-  return JSON.parse(r.content[0]?.text ?? '[]');
+  const r = await list<StorageEntry[]>(`yaar://apps/self/storage/${dir}`);
+  return Array.isArray(r) ? r : [];
 }
 
 // --- Signals ---

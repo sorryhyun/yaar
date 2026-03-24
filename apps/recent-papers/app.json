@@ -1,5 +1,5 @@
 {
-  "icon": "\ud83d\udcda",
+  "icon": "📚",
   "name": "Recent Papers",
   "run": "index.html",
   "capture": "dom",

@@ -12,8 +12,7 @@ const _yaar = (window as any).yaar;
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
   const r = await _yaar.list(`yaar://apps/self/storage/${dir}`);
-  if (r.isError) return [];
-  return JSON.parse(r.content[0]?.text ?? '[]');
+  return Array.isArray(r) ? r : [];
 }
 
 export function getStorageApi(): YaarStorageApi | null {

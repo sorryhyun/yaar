@@ -16,8 +16,9 @@ import { createToolbar } from './ui/toolbar';
 import { createChartPanel, createStatsPanel } from './ui/chart-panel';
 import { createGrid, buildSheet, applyFill } from './ui/grid';
 import { registerAppProtocol } from './protocol';
+import { onShortcut } from '@bundled/yaar';
 
-// ── Mount ─────────────────────────────────────────────────────────────
+// ── Mount ─────────────────────────────────────────────────────
 render(() => html`
   <div class="wrap y-light">
     ${createToolbar()}
@@ -27,11 +28,11 @@ render(() => html`
   </div>
 `, document.getElementById('app')!);
 
-// ── Build grid imperatively (refs are set after mount) ─────────────────────
+// ── Build grid imperatively (refs are set after mount) ──────────────────
 buildSheet();
 refreshAll();
 
-// ── Global event listeners ────────────────────────────────────────────
+// ── Global event listeners ─────────────────────────────────────────
 document.addEventListener('mouseup', () => {
   mutable.isSelecting = false;
 
@@ -44,52 +45,26 @@ document.addEventListener('mouseup', () => {
   }
 });
 
+// Ctrl/Cmd shortcuts via SDK
+onShortcut('ctrl+s', () => void saveWorkbookToStorage());
+onShortcut('ctrl+o', () => void openWorkbookFromStorage());
+onShortcut('ctrl+shift+z', () => redo());
+onShortcut('ctrl+z', () => undo());
+onShortcut('ctrl+y', () => redo());
+onShortcut('ctrl+b', () => toggleStyle('bold'));
+onShortcut('ctrl+i', () => toggleStyle('italic'));
+onShortcut('ctrl+u', () => toggleStyle('underline'));
+
+// Delete key (no modifier, conditional on focus target)
 document.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;
   const isFormula = target === refs.formulaInput;
-
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    void saveWorkbookToStorage();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
-    e.preventDefault();
-    void openWorkbookFromStorage();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-    e.preventDefault();
-    if (e.shiftKey) redo();
-    else undo();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-    e.preventDefault();
-    redo();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-    e.preventDefault();
-    toggleStyle('bold');
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
-    e.preventDefault();
-    toggleStyle('italic');
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
-    e.preventDefault();
-    toggleStyle('underline');
-    return;
-  }
   if (e.key === 'Delete' && !isFormula) {
     clearSelectionValues();
   }
 });
 
-// ── Autosave recovery ─────────────────────────────────────────────────
+// ── Autosave recovery ───────────────────────────────────────────
 async function tryRecoverAutosave() {
   if (Object.keys(cells).length > 0) return;
   try {
@@ -105,5 +80,5 @@ async function tryRecoverAutosave() {
 
 void tryRecoverAutosave();
 
-// ── App Protocol ────────────────────────────────────────────────────
+// ── App Protocol ────────────────────────────────────────────────
 registerAppProtocol();

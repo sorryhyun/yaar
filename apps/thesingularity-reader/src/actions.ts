@@ -10,7 +10,7 @@ import {
   setComments, setCommentsLoading, setShowComments,
 } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
-import { app, invoke } from '@bundled/yaar';
+import { app, invoke, withLoading } from '@bundled/yaar';
 import type { Post } from './types';
 import { toMobileUrl } from './helpers';
 
@@ -27,17 +27,14 @@ export function clearTimers(): void {
 /** 게시물 목록을 지금 증해서 가져온다 */
 export async function doRefresh(): Promise<void> {
   if (loading()) return;
-  setLoading(true);
   setError(null);
-  try {
+  await withLoading(setLoading, async () => {
     const newPosts = await fetchPosts();
     updatePosts(newPosts);
     setCountdown(settings().refreshInterval);
-  } catch (e: any) {
-    setError(e?.message ?? '불러오기 실패');
-  } finally {
-    setLoading(false);
-  }
+  }, (msg) => {
+    setError(msg || '불러오기 실패');
+  });
 }
 
 /** 자동 새로고침 타이머를 시작한다 */
@@ -152,16 +149,11 @@ export async function takeScreenshot(post: Post): Promise<void> {
       waitUntil: 'networkidle',
     });
     await invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
-    const result = await invoke('yaar://browser/pages', { action: 'screenshot' });
-    const contents: any[] = result?.content ?? [];
-    const imageItem = contents.find((i: any) => i?.type === 'image');
-    if (imageItem) {
-      setScreenshotSrc(`data:${imageItem.mimeType ?? 'image/png'};base64,${imageItem.data}`);
-    } else {
-      const textItem = contents.find(
-        (i: any) => i?.type === 'text' && /^[A-Za-z0-9+/]{20}/.test(i.text ?? ''),
-      );
-      if (textItem) setScreenshotSrc(`data:image/png;base64,${textItem.text}`);
+    const result = await invoke<{ data: string; images?: Array<{ data: string; mimeType?: string }> }>('yaar://browser/pages', { action: 'screenshot' });
+    const images = result?.images ?? [];
+    if (images.length > 0) {
+      const img = images[0];
+      setScreenshotSrc(`data:${img.mimeType ?? 'image/png'};base64,${img.data}`);
     }
   } catch (e: any) {
     console.error('Screenshot failed:', e);

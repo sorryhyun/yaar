@@ -2,7 +2,7 @@ export {};
 import { createSignal, createEffect, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { app, errMsg } from '@bundled/yaar';
+import { app, errMsg, withLoading } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation } from './types';
 import {
   getComments, getPublishedAt, getPublishedMs, getSource, getUpvotes,
@@ -59,9 +59,8 @@ function applyFiltersAndSort() {
 
 async function loadPapers() {
   if (loading()) return;
-  setLoading(true);
   setErrorMsg('');
-  try {
+  await withLoading(setLoading, async () => {
     const lim = limitVal();
     const mode = sourceMode();
     let hfItems: DailyPaperItem[] = [];
@@ -78,13 +77,11 @@ async function loadPapers() {
 
     setSourcePapers([...hfItems, ...arxivItems]);
     applyFiltersAndSort();
-  } catch (err) {
+  }, (msg) => {
     setSourcePapers([]);
     setPapers([]);
-    setErrorMsg(errMsg(err));
-  } finally {
-    setLoading(false);
-  }
+    setErrorMsg(msg);
+  });
 }
 
 function requestRecommendationsFromAgent(source: 'button' | 'app-command') {

@@ -405,7 +405,8 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           try {
-            return await describe(String(p.uri));
+            const result = await describe(String(p.uri));
+            return { ok: true, result };
           } catch {
             return { ok: false, error: `Failed to describe URI: ${p.uri}` };
           }
@@ -422,7 +423,8 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           try {
-            return await list(String(p.uri));
+            const result = await list(String(p.uri));
+            return { ok: true, items: result };
           } catch {
             return { ok: false, error: `Failed to list URI: ${p.uri}` };
           }

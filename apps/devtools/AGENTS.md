@@ -227,22 +227,22 @@ app.sendInteraction({ event: 'analyze', data: '...', toMonitor: true }); // → 
 
 ## Verb API (for iframe apps)
 
-Apps can use `@bundled/yaar` SDK for server communication. Each helper maps to one of the 5 URI verb tools:
+Apps can use `@bundled/yaar` SDK for server communication. Each function maps to one of the 5 URI verbs:
 
 | Function | Verb | Purpose |
 |----------|------|---------|
-| `readJson(uri)` / `readText(uri)` | `read` | Read a resource's current value |
-| `listJson(uri)` / `listText(uri)` | `list` | List child resources under a URI |
-| `invokeJson(uri, payload)` / `invokeText(uri, payload)` | `invoke` | Execute an action on a resource |
-| `describeJson(uri)` | `describe` | Get supported verbs and schema for a URI |
-| `deleteText(uri)` | `delete` | Delete a resource |
+| `read(uri)` | `read` | Read a resource's current value |
+| `list(uri)` | `list` | List child resources under a URI |
+| `invoke(uri, payload)` | `invoke` | Execute an action on a resource |
+| `describe(uri)` | `describe` | Get supported verbs and schema for a URI |
+| `del(uri)` | `delete` | Delete a resource |
 
 ```ts
-import { readJson, listJson, invokeJson, describeJson, appStorage, subscribe } from '@bundled/yaar';
+import { read, list, invoke, describe, appStorage, subscribe } from '@bundled/yaar';
 
-const settings = await readJson<Settings>('yaar://config/settings');  // read verb
-const apps = await listJson<App[]>('yaar://apps');                    // list verb
-const info = await describeJson('yaar://storage/');                   // describe verb
+const settings = await read<Settings>('yaar://config/settings');  // read verb
+const apps = await list<App[]>('yaar://apps');                    // list verb
+const info = await describe('yaar://storage/');                   // describe verb
 await appStorage.save('data.json', JSON.stringify(data));
 const unsub = await subscribe('yaar://storage/scores.json', () => reload());
 ```
@@ -263,7 +263,7 @@ When building apps that use `yaar://` URIs (e.g., session-logs, storage browser)
 | URI | Description |
 |-----|-------------|
 | `yaar://` | Session root — overview and namespace list |
-| `yaar://apps/` | App listing, skill loading, marketplace |
+| `yaar://apps/` | App source code, listing, skill loading, marketplace |
 | `yaar://storage/` | File storage |
 | `yaar://windows/` | Window management |
 | `yaar://config/` | Settings, hooks, app config |

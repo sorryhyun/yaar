@@ -8,8 +8,8 @@ async function browseUrl(url: string, tabId: string, waitForIdle = false): Promi
   const openPayload: Record<string, unknown> = { action: 'open', url, visible: false, mobile: true };
   if (waitForIdle) openPayload.waitUntil = 'networkidle';
   await invoke('yaar://browser/' + tabId, openPayload);
-  const result = await invoke('yaar://browser/' + tabId, { action: 'html' });
-  return result.content[0]?.text ?? '';
+  const result = await invoke<string>('yaar://browser/' + tabId, { action: 'html' });
+  return typeof result === 'string' ? result : '';
 }
 
 /**
@@ -27,11 +27,11 @@ async function extractUrl(
     mobile: true,
     waitUntil: 'networkidle',
   });
-  const result = await invoke('yaar://browser/' + tabId, {
+  const result = await invoke<string>('yaar://browser/' + tabId, {
     action: 'extract',
     mainContentOnly: true,
   });
-  const raw = result.content[0]?.text ?? '';
+  const raw = typeof result === 'string' ? result : '';
   return parseExtractResult(raw);
 }
 

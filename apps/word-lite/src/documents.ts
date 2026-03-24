@@ -7,15 +7,13 @@ export const STORAGE_KEY = 'draft.json';
 const _yaar = (window as any).yaar;
 
 async function storageSave(path: string, content: string): Promise<void> {
-  const result = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
-  if (result.isError) throw new Error(result.content[0]?.text);
+  await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
 }
 
 async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
   const result = await _yaar.read(`yaar://apps/self/storage/${path}`);
-  if (result.isError) throw new Error(result.content[0]?.text);
-  const text = result.content[0]?.text ?? '';
-  return as === 'json' ? JSON.parse(text) : text;
+  if (typeof result === 'string') return as === 'json' ? JSON.parse(result) : result;
+  return as === 'json' ? result : JSON.stringify(result);
 }
 
 export const getTitle = () => (docTitleEl?.value || '').trim() || DEFAULT_TITLE;

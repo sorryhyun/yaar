@@ -1,4 +1,4 @@
-import { list, read, errMsg } from '@bundled/yaar';
+import { list, read, errMsg, withLoading } from '@bundled/yaar';
 import {
   sessions,
   setSessions,
@@ -13,9 +13,8 @@ import {
 import type { SessionSummary, SessionDetail } from './types';
 
 export async function loadSessions(): Promise<void> {
-  setLoading(true);
   setLoadError(null);
-  try {
+  await withLoading(setLoading, async () => {
     const result = await list<{ currentSessionId?: string; sessions: SessionSummary[] }>(
       'yaar://sessions/'
     );
@@ -25,12 +24,10 @@ export async function loadSessions(): Promise<void> {
     arr.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
     setSessions(arr);
     setTotalCount(arr.length);
-  } catch (e) {
-    console.error('Failed to load sessions', e);
-    setLoadError(errMsg(e));
-  } finally {
-    setLoading(false);
-  }
+  }, (msg) => {
+    console.error('Failed to load sessions', msg);
+    setLoadError(msg);
+  });
 }
 
 export async function loadDetail(sessionId: string): Promise<void> {

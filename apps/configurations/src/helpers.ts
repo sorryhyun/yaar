@@ -2,8 +2,8 @@ export function parseJson<T>(text: string, fallback: T): T {
   try { return JSON.parse(text); } catch { return fallback; }
 }
 
-export function extractText(result: { content: Array<{ text?: string }> }): string {
-  return result?.content?.[0]?.text ?? '';
+export function extractText(result: unknown): string {
+  return typeof result === 'string' ? result : JSON.stringify(result ?? '');
 }
 
 export function capitalize(s: string): string {

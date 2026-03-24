@@ -20,6 +20,7 @@ import { createThumbnailList } from './ui/thumbnail-list';
 import { createEditorPanel } from './ui/editor-panel';
 import { startPresent } from './ui/present';
 import { registerProtocol } from './protocol';
+import { onShortcut } from '@bundled/yaar';
 import type { Deck } from './types';
 
 // DOM ref for canvas
@@ -92,17 +93,10 @@ createEffect(() => {
 });
 
 // Keyboard shortcuts
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault(); persist(true);
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isPresenting()) {
-    e.preventDefault(); startPresent();
-  }
-  const deck = getDeck();
-  if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); moveSlide(deck.activeIndex, deck.activeIndex - 1); }
-  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); moveSlide(deck.activeIndex, deck.activeIndex + 1); }
-});
+onShortcut('ctrl+s', () => persist(true));
+onShortcut('ctrl+enter', () => { if (!isPresenting()) startPresent(); });
+onShortcut('alt+arrowup', () => { const deck = getDeck(); moveSlide(deck.activeIndex, deck.activeIndex - 1); });
+onShortcut('alt+arrowdown', () => { const deck = getDeck(); moveSlide(deck.activeIndex, deck.activeIndex + 1); });
 
 // Async initialization
 (async () => {

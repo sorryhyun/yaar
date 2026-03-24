@@ -21,15 +21,14 @@ export function storageUrl(path: string): string {
 
 /** List directory contents */
 export async function storageList(path: string): Promise<StorageEntry[]> {
-  const result = await list(storageUri(path));
-  const raw = result.content[0]?.text ?? '[]';
-  return JSON.parse(raw) as StorageEntry[];
+  const result = await list<StorageEntry[]>(storageUri(path));
+  return Array.isArray(result) ? result : [];
 }
 
 /** Read a file as text */
 export async function storageRead(path: string): Promise<string> {
-  const result = await read(storageUri(path));
-  return result.content[0]?.text ?? '';
+  const result = await read<string>(storageUri(path));
+  return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
 /** Write a file (text or binary ArrayBuffer) */

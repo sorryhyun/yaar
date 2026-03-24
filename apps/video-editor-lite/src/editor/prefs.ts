@@ -3,15 +3,13 @@ const PREFS_KEY = 'prefs.json';
 const _yaar = (window as any).yaar;
 
 async function storageSave(path: string, content: string): Promise<void> {
-  const r = await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
-  if (r.isError) throw new Error(r.content[0]?.text);
+  await _yaar.invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
 }
 
 async function storageRead(path: string, as: 'text' | 'json' = 'text'): Promise<any> {
   const r = await _yaar.read(`yaar://apps/self/storage/${path}`);
-  if (r.isError) throw new Error(r.content[0]?.text);
-  const text = r.content[0]?.text ?? '';
-  return as === 'json' ? JSON.parse(text) : text;
+  if (typeof r === 'string') return as === 'json' ? JSON.parse(r) : r;
+  return as === 'json' ? r : JSON.stringify(r);
 }
 
 export const ALLOWED_PLAYBACK_RATES = new Set([0.5, 1, 1.5, 2]);
