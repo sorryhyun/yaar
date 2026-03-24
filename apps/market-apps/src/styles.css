@@ -159,15 +159,12 @@ body {
 
 /* Uninstall button — muted danger style */
 .uninstall-btn {
-  color: var(--yaar-error) !important;
-  border-color: color-mix(in srgb, var(--yaar-error) 40%, transparent) !important;
   background: transparent !important;
   font-size: 13px;
 }
 
 .uninstall-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--yaar-error) 12%, transparent) !important;
-  border-color: var(--yaar-error) !important;
 }
 
 .uninstall-btn:disabled {

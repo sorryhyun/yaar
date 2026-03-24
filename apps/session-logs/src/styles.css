@@ -99,10 +99,6 @@ body,
 
 .date-group-label {
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--yaar-text-muted);
   padding: 10px 12px 4px;
   position: sticky;
   top: 0;
@@ -113,21 +109,12 @@ body,
 /* ── Session item ───────────────────────────────── */
 
 .session-item {
-  display: flex;
   flex-direction: column;
-  gap: 4px;
   padding: 8px 12px;
-  cursor: pointer;
   border-bottom: 1px solid rgba(48, 54, 61, 0.5);
-  transition: background 0.1s;
-}
-
-.session-item:hover {
-  background: rgba(255, 255, 255, 0.04);
 }
 
 .session-item.active {
-  background: rgba(88, 166, 255, 0.08);
   border-left: 2px solid var(--yaar-accent);
   padding-left: 10px;
 }
@@ -236,17 +223,6 @@ body,
 
 .detail-empty {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--yaar-text-muted);
-}
-
-.empty-icon {
-  font-size: 40px;
-  opacity: 0.25;
 }
 
 .empty-title {
@@ -323,10 +299,6 @@ body,
 
 .field-label {
   font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--yaar-text-muted);
 }
 
 .field-value {
@@ -356,10 +328,6 @@ body,
 
 .raw-section-title {
   font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--yaar-text-muted);
   padding: 6px 10px;
   border-bottom: 1px solid var(--yaar-border);
   background: rgba(255, 255, 255, 0.02);

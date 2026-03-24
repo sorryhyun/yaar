@@ -1,6 +1,6 @@
 import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { comments, commentsLoading, showComments, setShowComments } from './store';
+import { state, setState } from './store';
 import type { Comment } from './types';
 
 function CommentItem(props: { comment: Comment }) {
@@ -22,46 +22,46 @@ function CommentItem(props: { comment: Comment }) {
 }
 
 export function CommentSection() {
-  const bestComments = () => comments().filter(c => c.isBest);
-  const regularComments = () => comments().filter(c => !c.isBest);
-  const totalCount = () => comments().length;
+  const bestComments = () => state.comments.filter(c => c.isBest);
+  const regularComments = () => state.comments.filter(c => !c.isBest);
+  const totalCount = () => state.comments.length;
 
   const toggleLabel = () => {
-    if (commentsLoading()) return '&#128172; 댓글 로딩중...';
+    if (state.commentsLoading) return '&#128172; 댓글 로딩중...';
     const n = totalCount();
-    if (showComments()) return `&#128172; 댓글 접기 (${n})`;
+    if (state.showComments) return `&#128172; 댓글 접기 (${n})`;
     return `&#128172; 댓글 보기 (${n})`;
   };
 
   return html`
     <div class="comment-section">
       <button
-        class=${() => 'comment-toggle-btn' + (showComments() ? ' active' : '')}
+        class=${() => 'comment-toggle-btn' + (state.showComments ? ' active' : '')}
         onClick=${() => {
-          if (!commentsLoading()) setShowComments(!showComments());
+          if (!state.commentsLoading) setState('showComments', !state.showComments);
         }}
-        disabled=${() => commentsLoading()}
+        disabled=${() => state.commentsLoading}
       >
         <span innerHTML=${toggleLabel}></span>
-        <span class=${() => 'comment-toggle-chevron' + (showComments() ? ' open' : '')}>&#8964;</span>
+        <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>&#8964;</span>
       </button>
 
-      ${() => showComments() ? html`
+      ${() => state.showComments ? html`
         <div class="comment-list-wrap">
-          ${() => commentsLoading() ? html`
+          ${() => state.commentsLoading ? html`
             <div class="comment-loading">
               <span class="y-spinner"></span>
               <span>댓글을 불러오는 중...</span>
             </div>
           ` : null}
 
-          ${() => !commentsLoading() && totalCount() === 0 ? html`
+          ${() => !state.commentsLoading && totalCount() === 0 ? html`
             <div class="comment-empty">
               <span>댓글이 없거나 불러올 수 없었습니다.</span>
             </div>
           ` : null}
 
-          ${() => !commentsLoading() && bestComments().length > 0 ? html`
+          ${() => !state.commentsLoading && bestComments().length > 0 ? html`
             <div class="comment-group">
               <div class="comment-group-label">&#11088; 베스트 댓글</div>
               <${For} each=${bestComments}>
@@ -70,7 +70,7 @@ export function CommentSection() {
             </div>
           ` : null}
 
-          ${() => !commentsLoading() && regularComments().length > 0 ? html`
+          ${() => !state.commentsLoading && regularComments().length > 0 ? html`
             <div class="comment-group">
               ${() => bestComments().length > 0 ? html`
                 <div class="comment-group-label">전체 댓글 (${regularComments().length})</div>

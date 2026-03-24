@@ -90,7 +90,7 @@ export function ShortcutsView() {
           }
           <${For} each=${shortcuts}>${(s: Shortcut) => html`
             <div
-              class=${() => `sidebar-item${selected()?.id === s.id ? ' active' : ''}`}
+              class=${() => `y-list-item sidebar-item${selected()?.id === s.id ? ' active' : ''}`}
               onClick=${() => setSelected(s)}
             >
               <span class="sidebar-item-icon">${() => s.icon}</span>
@@ -103,8 +103,8 @@ export function ShortcutsView() {
           ${() => {
             const s = selected();
             if (!s) return html`
-              <div class="detail-empty">
-                <span class="detail-empty-icon">⚡</span>
+              <div class="y-empty detail-empty">
+                <span class="y-empty-icon detail-empty-icon">⚡</span>
                 <span>Select a shortcut to view details</span>
               </div>
             `;
@@ -118,15 +118,15 @@ export function ShortcutsView() {
                   </div>
                 </div>
                 <div class="detail-field">
-                  <div class="detail-field-label">Target URI</div>
+                  <div class="y-label detail-field-label">Target URI</div>
                   <div class="detail-field-value">${s.target}</div>
                 </div>
                 <div class="detail-field">
-                  <div class="detail-field-label">ID</div>
+                  <div class="y-label detail-field-label">ID</div>
                   <div class="detail-field-value" style="color:var(--yaar-text-muted)">${s.id}</div>
                 </div>
                 <div class="detail-actions">
-                  <button class="y-btn btn-danger" onClick=${() => remove(s.id)}>
+                  <button class="y-btn y-btn-danger" onClick=${() => remove(s.id)}>
                     🗑 Delete
                   </button>
                 </div>

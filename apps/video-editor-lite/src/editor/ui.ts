@@ -142,7 +142,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
           <!-- Edit mode sidebar -->
           <div ref=${(el: HTMLDivElement) => { sidebarEditSection = el; }}
                style="">
-            <div class="sb-title">Source</div>
+            <div class="y-label sb-title">Source</div>
             <input ref=${(el: HTMLInputElement) => { urlInput = el; }}
                    type="url" class="sb-input"
                    placeholder="https://example.com/video.mp4"
@@ -155,7 +155,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             </div>
 
             <hr class="sb-divider" />
-            <div class="sb-title">File Browser</div>
+            <div class="y-label sb-title">File Browser</div>
             <div class="sb-row" style="margin-bottom:6px;">
               <input ref=${(el: HTMLInputElement) => { storagePathInput = el; }}
                      type="text" class="sb-input"
@@ -177,7 +177,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
           <!-- Create mode sidebar -->
           <div ref=${(el: HTMLDivElement) => { sidebarCreateSection = el; }}
                style="display:none">
-            <div class="sb-title">Composition</div>
+            <div class="y-label sb-title">Composition</div>
             <div class="comp-grid">
               <div>
                 <label>Width</label>
@@ -202,7 +202,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             </div>
 
             <hr class="sb-divider" />
-            <div class="sb-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="y-label sb-title" style="display:flex;align-items:center;justify-content:space-between;">
               <span>Layers</span>
               <button
                 ref=${(el: HTMLButtonElement) => { addLayerButton = el; }}
@@ -211,7 +211,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             <div ref=${(el: HTMLDivElement) => { layerListEl = el; }} class="layer-list"></div>
 
             <hr class="sb-divider" />
-            <div class="sb-title">Add Scene</div>
+            <div class="y-label sb-title">Add Scene</div>
             <div class="comp-grid" style="margin-bottom:6px;">
               <div>
                 <label>Start Frame</label>
@@ -238,7 +238,7 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             </div>
 
             <hr class="sb-divider" />
-            <div class="sb-title">Scenes</div>
+            <div class="y-label sb-title">Scenes</div>
             <div ref=${(el: HTMLDivElement) => { scenePanel = el; }} class="scene-list"></div>
             <div ref=${(el: HTMLDivElement) => { scenePropsPanel = el; }} class="scene-props-panel"></div>
           </div>

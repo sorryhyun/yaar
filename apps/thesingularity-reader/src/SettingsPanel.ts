@@ -1,5 +1,5 @@
 import html from '@bundled/solid-js/html';
-import { settings, saveSettings } from './store';
+import { settings, setSettings } from './store';
 import { startRefreshTimer } from './actions';
 
 const INTERVALS = [
@@ -20,7 +20,7 @@ export function SettingsPanel() {
           value=${() => settings().refreshInterval}
           onChange=${(e: Event) => {
             const val = parseInt((e.target as HTMLSelectElement).value);
-            saveSettings({ ...settings(), refreshInterval: val });
+            setSettings({ ...settings(), refreshInterval: val });
             startRefreshTimer();
           }}
         >

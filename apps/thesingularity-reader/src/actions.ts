@@ -1,14 +1,4 @@
-import { batch } from '@bundled/solid-js';
-import {
-  posts, loading, setLoading, setError,
-  settings, setCountdown,
-  selectedPost, setSelectedPost,
-  postContent, setPostContent, setPostLoading,
-  setShowOriginal, setScreenshotSrc, setScreenshotLoading,
-  recLoading, setRecLoading,
-  updatePosts,
-  setComments, setCommentsLoading, setShowComments,
-} from './store';
+import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
 import { app, invoke, withLoading } from '@bundled/yaar';
 import type { Post } from './types';
@@ -26,15 +16,19 @@ export function clearTimers(): void {
 
 /** 게시물 목록을 지금 증해서 가져온다 */
 export async function doRefresh(): Promise<void> {
-  if (loading()) return;
-  setError(null);
-  await withLoading(setLoading, async () => {
-    const newPosts = await fetchPosts();
-    updatePosts(newPosts);
-    setCountdown(settings().refreshInterval);
-  }, (msg) => {
-    setError(msg || '불러오기 실패');
-  });
+  if (state.loading) return;
+  setState('error', null);
+  await withLoading(
+    (v: boolean) => setState('loading', v),
+    async () => {
+      const newPosts = await fetchPosts();
+      updatePosts(newPosts);
+      setState('countdown', settings().refreshInterval);
+    },
+    (msg) => {
+      setState('error', msg || '불러오기 실패');
+    },
+  );
 }
 
 /** 자동 새로고침 타이머를 시작한다 */
@@ -43,14 +37,14 @@ export function startRefreshTimer(): void {
   if (countdownTimer) clearInterval(countdownTimer);
 
   const interval = settings().refreshInterval;
-  setCountdown(interval);
+  setState('countdown', interval);
 
   refreshTimer = setInterval(() => {
     doRefresh();
   }, interval * 1000);
 
   countdownTimer = setInterval(() => {
-    setCountdown(c => {
+    setState('countdown', (c) => {
       if (c <= 1) return settings().refreshInterval;
       return c - 1;
     });
@@ -61,57 +55,54 @@ export function startRefreshTimer(): void {
  * 게시물을 선택하고 본문과 댓글을 동시에 비동기로 가져온다.
  */
 export async function selectPost(post: Post): Promise<void> {
-  if (selectedPost()?.id === post.id && postContent()) return;
+  if (state.selectedPost?.id === post.id && state.postContent) return;
 
   const version = ++fetchVersion;
-  batch(() => {
-    setSelectedPost(post);
-    setPostContent(null);
-    setPostLoading(true);
-    setShowOriginal(false);
-    setScreenshotSrc(null);
-    setScreenshotLoading(false);
-    setComments([]);
-    setCommentsLoading(true);
-    setShowComments(false);
+  setState({
+    selectedPost: post,
+    postContent: null,
+    postLoading: true,
+    showOriginal: false,
+    screenshotSrc: null,
+    screenshotLoading: false,
+    comments: [],
+    commentsLoading: true,
+    showComments: false,
   });
 
   try {
     const { content, comments } = await fetchPostDetail(post);
     if (version !== fetchVersion) return;
-    batch(() => {
-      setPostContent(content);
-      setComments(comments);
-    });
+    setState({ postContent: content, comments });
   } catch (e: any) {
     if (version !== fetchVersion) return;
-    setPostContent(
+    setState(
+      'postContent',
       '<p style="color:var(--yaar-error)">게시물을 불러올 수 없습니다: ' +
         (e?.message ?? '') +
         '</p>',
     );
   } finally {
     if (version === fetchVersion) {
-      setPostLoading(false);
-      setCommentsLoading(false);
+      setState({ postLoading: false, commentsLoading: false });
     }
   }
 }
 
 /** AI 분석 트리거: 상위 5개 게시물 내용을 에이전트에게 전달 */
 export async function triggerAnalysis(): Promise<void> {
-  if (recLoading()) return;
-  const currentPosts = posts();
+  if (state.recLoading) return;
+  const currentPosts = state.posts;
   if (currentPosts.length === 0) return;
 
-  setRecLoading(true);
+  setState('recLoading', true);
   try {
     const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
     app.sendInteraction({
       type: 'analyze_posts',
       description:
         '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 커맨드로 결과를 돌려주세요',
-      allPosts: currentPosts.map(p => ({
+      allPosts: currentPosts.map((p) => ({
         num: p.num,
         title: p.title,
         author: p.author,
@@ -129,16 +120,13 @@ export async function triggerAnalysis(): Promise<void> {
     });
   } catch (e: any) {
     console.error('Analysis trigger failed:', e);
-    setRecLoading(false);
+    setState('recLoading', false);
   }
 }
 
 /** 모바일 브라우저로 포스트 URL 스크린셛 찍기 */
 export async function takeScreenshot(post: Post): Promise<void> {
-  batch(() => {
-    setScreenshotLoading(true);
-    setScreenshotSrc(null);
-  });
+  setState({ screenshotLoading: true, screenshotSrc: null });
   try {
     const mobileUrl = toMobileUrl(post.url);
     await invoke('yaar://browser/pages', {
@@ -149,15 +137,18 @@ export async function takeScreenshot(post: Post): Promise<void> {
       waitUntil: 'networkidle',
     });
     await invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
-    const result = await invoke<{ data: string; images?: Array<{ data: string; mimeType?: string }> }>('yaar://browser/pages', { action: 'screenshot' });
+    const result = await invoke<{
+      data: string;
+      images?: Array<{ data: string; mimeType?: string }>;
+    }>('yaar://browser/pages', { action: 'screenshot' });
     const images = result?.images ?? [];
     if (images.length > 0) {
       const img = images[0];
-      setScreenshotSrc(`data:${img.mimeType ?? 'image/png'};base64,${img.data}`);
+      setState('screenshotSrc', `data:${img.mimeType ?? 'image/png'};base64,${img.data}`);
     }
   } catch (e: any) {
     console.error('Screenshot failed:', e);
   } finally {
-    setScreenshotLoading(false);
+    setState('screenshotLoading', false);
   }
 }

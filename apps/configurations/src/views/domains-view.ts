@@ -73,7 +73,7 @@ export function DomainsView() {
         </div>
       ` : html`
         <div class="s-section">
-          <div class="s-section-title">🌐 Access Control</div>
+          <div class="y-label s-section-title">🌐 Access Control</div>
           <div class="s-row s-row-toggle">
             <div>
               <label class="s-label">Allow All Domains</label>
@@ -95,7 +95,7 @@ export function DomainsView() {
         </div>
 
         <div class="s-section" style=${() => data().allow_all_domains ? 'opacity:0.5;pointer-events:none;' : ''}>
-          <div class="s-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="y-label s-section-title" style="display:flex;align-items:center;justify-content:space-between;">
             <span>📋 Allowed Domains</span>
             <span class="item-badge">${() => data().allowed_domains.length} domains</span>
           </div>

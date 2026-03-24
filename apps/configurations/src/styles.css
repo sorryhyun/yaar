@@ -126,23 +126,8 @@ body,
 }
 
 .sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: var(--yaar-sp-2);
   padding: 10px var(--yaar-sp-3);
-  cursor: pointer;
   border-bottom: 1px solid var(--yaar-border);
-  border-left: 2px solid transparent;
-  transition: background 0.1s;
-}
-
-.sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.sidebar-item.active {
-  background: rgba(88, 166, 255, 0.08);
-  border-left-color: var(--yaar-accent);
 }
 
 .sidebar-item-icon {
@@ -179,19 +164,12 @@ body,
 }
 
 .detail-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  color: var(--yaar-text-muted);
   font-size: 13px;
-  flex-direction: column;
-  gap: var(--yaar-sp-2);
 }
 
 .detail-empty-icon {
   font-size: 32px;
-  opacity: 0.3;
 }
 
 .detail-card {
@@ -241,11 +219,7 @@ body,
 
 .detail-field-label {
   font-size: 10px;
-  color: var(--yaar-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   margin-bottom: 4px;
-  font-weight: 600;
 }
 
 .detail-field-value {
@@ -265,16 +239,6 @@ body,
   border-top: 1px solid var(--yaar-border);
   display: flex;
   gap: var(--yaar-sp-2);
-}
-
-/* Danger button variant (delete actions) */
-.btn-danger {
-  color: var(--yaar-error);
-  border-color: var(--yaar-error);
-}
-
-.btn-danger:hover {
-  background: rgba(248, 81, 73, 0.1);
 }
 
 /* Shared form styles */
@@ -334,10 +298,6 @@ body,
 
 .s-section-title {
   font-size: 12px;
-  font-weight: 700;
-  color: var(--yaar-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
   margin-bottom: var(--yaar-sp-3);
   padding-bottom: var(--yaar-sp-2);
   border-bottom: 1px solid var(--yaar-border);

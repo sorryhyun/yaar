@@ -158,7 +158,7 @@ export function HooksView() {
           }
           <${For} each=${hooks}>${(h: Hook) => html`
             <div
-              class=${() => `sidebar-item${selected()?.id === h.id ? ' active' : ''}`}
+              class=${() => `y-list-item sidebar-item${selected()?.id === h.id ? ' active' : ''}`}
               onClick=${() => setSelected(h)}
             >
               <span class="sidebar-item-icon">🪝</span>
@@ -174,8 +174,8 @@ export function HooksView() {
           ${() => {
             const h = selected();
             if (!h) return html`
-              <div class="detail-empty">
-                <span class="detail-empty-icon">🪝</span>
+              <div class="y-empty detail-empty">
+                <span class="y-empty-icon detail-empty-icon">🪝</span>
                 <span>Select a hook to view details</span>
               </div>
             `;
@@ -194,19 +194,19 @@ export function HooksView() {
                   </div>
                 </div>
                 <div class="detail-field">
-                  <div class="detail-field-label">Filter</div>
+                  <div class="y-label detail-field-label">Filter</div>
                   <div class="detail-field-value">${describeFilter(h.filter)}</div>
                 </div>
                 <div class="detail-field">
-                  <div class="detail-field-label">Action</div>
+                  <div class="y-label detail-field-label">Action</div>
                   <div class="detail-field-value">${describeAction(h.action)}</div>
                 </div>
                 <div class="detail-field">
-                  <div class="detail-field-label">ID</div>
+                  <div class="y-label detail-field-label">ID</div>
                   <div class="detail-field-value" style="color:var(--yaar-text-muted);font-size:11px">${h.id}</div>
                 </div>
                 <div class="detail-actions">
-                  <button class="y-btn btn-danger" onClick=${() => remove(h.id)}>
+                  <button class="y-btn y-btn-danger" onClick=${() => remove(h.id)}>
                     🗑 Delete
                   </button>
                 </div>

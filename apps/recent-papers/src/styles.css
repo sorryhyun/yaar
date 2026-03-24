@@ -160,7 +160,6 @@ input {
   text-align: center;
   border: 1px dashed var(--yaar-border);
   border-radius: 12px;
-  color: var(--yaar-text-muted);
 }
 .chart-btn {
   border-color: var(--yaar-accent);

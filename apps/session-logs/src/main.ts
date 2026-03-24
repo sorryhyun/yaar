@@ -98,7 +98,7 @@ render(() => html`
           <${For} each=${groupedSessions}>
             ${([date, items]: [string, SessionSummary[]]) => html`
               <div class="date-group">
-                <div class="date-group-label">${formatDateLabel(date)}</div>
+                <div class="y-label date-group-label">${formatDateLabel(date)}</div>
                 <${For} each=${() => items}>
                   ${(s: SessionSummary) => SessionItem(s)}
                 </${For}>

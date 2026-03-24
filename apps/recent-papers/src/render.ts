@@ -90,7 +90,7 @@ function renderSection(title: string, items: DailyPaperItem[]) {
     return `
       <section style="margin-top: 12px;">
         <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${title} (0)</h3>
-        <div class="empty">No papers available for this source.</div>
+        <div class="y-empty empty">No papers available for this source.</div>
       </section>
     `;
   }
@@ -123,7 +123,7 @@ export function renderApp({
   renderRecommendations(recommendBoxEl, recommendations);
 
   if (!papers.length) {
-    listEl.innerHTML = '<div class="empty">No papers available for this filter.</div>';
+    listEl.innerHTML = '<div class="y-empty empty">No papers available for this filter.</div>';
     return;
   }
 

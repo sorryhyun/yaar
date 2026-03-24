@@ -73,10 +73,6 @@ body {
 
 .sb-title {
   font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--yaar-text-muted);
   margin: 12px 0 5px;
 }
 

@@ -176,7 +176,7 @@ function Section(props: { title: string; items: DailyPaperItem[] }) {
     <section style="margin-top: 12px;">
       <h3 style="margin: 0 0 10px; font-size: 15px; color: #cfd8e6;">${props.title} (${props.items.length})</h3>
       ${props.items.length === 0
-        ? html`<div class="empty">No papers available for this source.</div>`
+        ? html`<div class="y-empty empty">No papers available for this source.</div>`
         : html`<div class="grid"><${For} each=${props.items}>${(item: DailyPaperItem) => html`<${PaperCard} item=${item} />`}</${For}></div>`
       }
     </section>
@@ -278,7 +278,7 @@ render(() => html`
       ${() => {
         if (loading()) return null;
         const p = papers();
-        if (p.length === 0) return html`<div class="empty">No papers available for this filter.</div>`;
+        if (p.length === 0) return html`<div class="y-empty empty">No papers available for this filter.</div>`;
         const mode = sourceMode();
         if (mode === 'both') {
           const hf = p.filter((x) => getSource(x) === 'huggingface');

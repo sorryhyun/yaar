@@ -1,13 +1,13 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { posts, recommendation, recLoading, setFilterKeyword, setShowRec } from './store';
+import { state, setState } from './store';
 import { selectPost, triggerAnalysis } from './actions';
 
 export function RecommendPanel() {
   return html`
     <div class="rec-panel">
       ${() =>
-        recLoading()
+        state.recLoading
           ? html`
               <div class="rec-loading">
                 <span class="y-spinner"></span>
@@ -16,23 +16,23 @@ export function RecommendPanel() {
             `
           : null}
       ${() => {
-        const rec = recommendation();
-        if (!rec || recLoading()) return null;
+        const rec = state.recommendation;
+        if (!rec || state.recLoading) return null;
 
         const bestNum = rec.bestPostNum;
-        const best = bestNum ? posts().find(p => p.num === bestNum) : null;
+        const best = bestNum ? state.posts.find(p => p.num === bestNum) : null;
 
         return html`
           <div class="rec-content">
             <div class="rec-section">
-              <div class="rec-section-title">🔥 현재 뜨는 주제</div>
+              <div class="y-label rec-section-title">🔥 현재 뜨는 주제</div>
               <div
                 class="rec-topics"
                 onClick=${(e: MouseEvent) => {
                   const el = (e.target as HTMLElement).closest('[data-topic]') as HTMLElement | null;
                   if (el?.dataset.topic) {
-                    setFilterKeyword(el.dataset.topic);
-                    setShowRec(false);
+                    setState('filterKeyword', el.dataset.topic);
+                    setState('showRec', false);
                   }
                 }}
               >
@@ -45,12 +45,12 @@ export function RecommendPanel() {
               best
                 ? html`
                     <div class="rec-section">
-                      <div class="rec-section-title">⭐ 오늘의 베스트</div>
+                      <div class="y-label rec-section-title">⭐ 오늘의 베스트</div>
                       <div
                         class="best-post-card"
                         onClick=${() => {
                           selectPost(best!);
-                          setShowRec(false);
+                          setState('showRec', false);
                         }}
                       >
                         <div class="best-post-title">${best.title}</div>

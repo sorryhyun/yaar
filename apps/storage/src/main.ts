@@ -85,7 +85,7 @@ const App = () => html`
     <div class="file-list y-scroll">
       ${() => {
         const list = entries();
-        if (list.length === 0) return html`<div class="empty">This folder is empty</div>`;
+        if (list.length === 0) return html`<div class="y-empty empty">This folder is empty</div>`;
         return html`
           <${For} each=${entries}>
             ${(entry: StorageEntry) => {
@@ -136,7 +136,7 @@ const App = () => html`
     </div>
 
     <div class=${() => `preview${showPreview() ? '' : ' hidden'}`}>
-      <div class="preview-header y-flex-between">
+      <div class="y-label preview-header y-flex-between">
         <span class="y-truncate">${() => previewTitleText()}</span>
         <button class="preview-close" onClick=${closePreview}>&#x2715;</button>
       </div>

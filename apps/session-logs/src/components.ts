@@ -17,7 +17,7 @@ export const SessionItem = (s: SessionSummary) => {
   return html`
     <div
       class=${() =>
-        `session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`
+        `y-list-item session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`
       }
       onClick=${() => loadDetail(s.sessionId)}
     >
@@ -34,8 +34,8 @@ export const SessionItem = (s: SessionSummary) => {
 };
 
 export const DetailEmpty = () => html`
-  <div class="detail-empty">
-    <div class="empty-icon">&#x1F4CB;</div>
+  <div class="y-empty detail-empty">
+    <div class="y-empty-icon">&#x1F4CB;</div>
     <div class="empty-title">No session selected</div>
     <div class="empty-sub">Click a session in the list to view its details</div>
   </div>
@@ -62,29 +62,29 @@ export const DetailView = () => {
       <div class="detail-grid">
 
         <div class="detail-field">
-          <div class="field-label">Provider</div>
+          <div class="y-label field-label">Provider</div>
           <div class="field-value">
             <span class=${providerCls(d.provider)}>${providerLabel(d.provider)}</span>
           </div>
         </div>
 
         <div class="detail-field">
-          <div class="field-label">Agents</div>
+          <div class="y-label field-label">Agents</div>
           <div class="field-value agent-value">&#x1F916; ${d.agentCount ?? '-'}</div>
         </div>
 
         <div class="detail-field">
-          <div class="field-label">Created</div>
+          <div class="y-label field-label">Created</div>
           <div class="field-value mono">${formatFull(d.createdAt)}</div>
         </div>
 
         <div class="detail-field">
-          <div class="field-label">Last Activity</div>
+          <div class="y-label field-label">Last Activity</div>
           <div class="field-value mono">${formatFull(d.lastActivity)}</div>
         </div>
 
         <div class="detail-field span-2">
-          <div class="field-label">Duration</div>
+          <div class="y-label field-label">Duration</div>
           <div class="field-value">&#x23F1; ${durationBetween(d.createdAt, d.lastActivity)}</div>
         </div>
 
@@ -92,7 +92,7 @@ export const DetailView = () => {
 
       ${extraEntries.length > 0 ? html`
         <div class="raw-section">
-          <div class="raw-section-title">Extra Fields</div>
+          <div class="y-label raw-section-title">Extra Fields</div>
           <pre class="raw-json">${JSON.stringify(
             Object.fromEntries(extraEntries), null, 2
           )}</pre>
@@ -100,7 +100,7 @@ export const DetailView = () => {
       ` : null}
 
       <div class="raw-section">
-        <div class="raw-section-title">Raw JSON</div>
+        <div class="y-label raw-section-title">Raw JSON</div>
         <pre class="raw-json">${JSON.stringify(d, null, 2)}</pre>
       </div>
 

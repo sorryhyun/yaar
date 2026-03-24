@@ -521,7 +521,7 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
   }
 
   const title = document.createElement('div');
-  title.className = 'sb-title';
+  title.className = 'y-label sb-title';
   title.style.marginTop = '10px';
   title.textContent = `Properties: ${scene.type}`;
   panelEl.appendChild(title);

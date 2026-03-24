@@ -80,7 +80,7 @@ export function SettingsView() {
   return html`
     <div class="settings-wrapper">
       <div class="s-section">
-        <div class="s-section-title">👤 Profile</div>
+        <div class="y-label s-section-title">👤 Profile</div>
         <div class="s-row">
           <label class="s-label">Display Name</label>
           <input class="s-input" type="text" placeholder="Your name"
@@ -98,7 +98,7 @@ export function SettingsView() {
       </div>
 
       <div class="s-section">
-        <div class="s-section-title">🎨 Appearance</div>
+        <div class="y-label s-section-title">🎨 Appearance</div>
         <div class="s-row">
           <label class="s-label">Wallpaper</label>
           <select class="s-select"
@@ -137,7 +137,7 @@ export function SettingsView() {
       </div>
 
       <div class="s-section">
-        <div class="s-section-title">⚙️ System</div>
+        <div class="y-label s-section-title">⚙️ System</div>
         <div class="s-row">
           <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
           <select class="s-select"

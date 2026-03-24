@@ -1,4 +1,4 @@
-import { setRecommendation, setRecLoading } from './store';
+import { setState } from './store';
 import { app } from '@bundled/yaar';
 
 export function registerProtocol() {
@@ -34,8 +34,8 @@ export function registerProtocol() {
         handler: (p: Record<string, unknown>) => {
           const topics = p.topics as string[];
           const bestPost = p.bestPost as { num: string; reason: string } | undefined;
-          setRecLoading(false);
-          setRecommendation({
+          setState('recLoading', false);
+          setState('recommendation', {
             topics,
             bestPostNum: bestPost?.num ?? null,
             bestPostReason: bestPost?.reason ?? null,

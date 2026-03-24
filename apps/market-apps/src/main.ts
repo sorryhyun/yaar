@@ -280,7 +280,7 @@ function marketCard(app: ListedApp) {
             return html`
               <span class="installed-badge">\u2713 Installed</span>
               <button
-                class="y-btn y-btn-sm uninstall-btn"
+                class="y-btn y-btn-sm y-btn-danger uninstall-btn"
                 disabled=${loading()}
                 onClick=${() => void uninstallApp(app)}
               >Uninstall</button>

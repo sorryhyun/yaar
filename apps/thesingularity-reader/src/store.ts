@@ -1,76 +1,60 @@
-import { createSignal, batch } from '@bundled/solid-js';
+import { createEffect } from '@bundled/solid-js';
+import { createStore } from '@bundled/solid-js/store';
+import { createPersistedSignal } from '@bundled/yaar';
 import type { Post, AppSettings, Recommendation, Comment } from './types';
-import { storage } from '@bundled/yaar';
 
-const DEFAULT_SETTINGS: AppSettings = {
-  refreshInterval: 300, // 5 minutes
-};
+// ── Persisted settings (auto-load + auto-save) ──────────────────────────────
+const DEFAULT_SETTINGS: AppSettings = { refreshInterval: 300 };
+export const [settings, setSettings] = createPersistedSignal<AppSettings>('settings.json', DEFAULT_SETTINGS);
 
-export const [posts, setPosts] = createSignal<Post[]>([]);
-export const [loading, setLoading] = createSignal(false);
-export const [error, setError] = createSignal<string | null>(null);
-export const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null);
-export const [newPostCount, setNewPostCount] = createSignal(0);
-export const [settings, setSettings] = createSignal<AppSettings>(DEFAULT_SETTINGS);
-export const [selectedPost, setSelectedPost] = createSignal<Post | null>(null);
-export const [postContent, setPostContent] = createSignal<string | null>(null);
-export const [postLoading, setPostLoading] = createSignal(false);
-export const [countdown, setCountdown] = createSignal(0);
-export const [showSettings, setShowSettings] = createSignal(false);
-
-// 원본 보기 (screenshot)
-export const [showOriginal, setShowOriginal] = createSignal(false);
-export const [screenshotSrc, setScreenshotSrc] = createSignal<string | null>(null);
-export const [screenshotLoading, setScreenshotLoading] = createSignal(false);
-
-// 댓글
-export const [comments, setComments] = createSignal<Comment[]>([]);
-export const [commentsLoading, setCommentsLoading] = createSignal(false);
-export const [showComments, setShowComments] = createSignal(false);
-
-// 도배기 안 보기 (localStorage에 저장)
+// ── Main app state (one store replaces 23 signals) ──────────────────────────
 const HIDE_SPAMMER_KEY = 'singularity-hide-spammer';
-const savedHideSpammer = localStorage.getItem(HIDE_SPAMMER_KEY);
-export const [hideSpammer, setHideSpammer] = createSignal<boolean>(
-  savedHideSpammer !== null ? savedHideSpammer === 'true' : true
-);
+
+export const [state, setState] = createStore({
+  // Feed
+  posts: [] as Post[],
+  loading: false,
+  error: null as string | null,
+  lastUpdated: null as Date | null,
+  newPostCount: 0,
+  countdown: 0,
+
+  // Post detail
+  selectedPost: null as Post | null,
+  postContent: null as string | null,
+  postLoading: false,
+
+  // Screenshot
+  showOriginal: false,
+  screenshotSrc: null as string | null,
+  screenshotLoading: false,
+
+  // Comments
+  comments: [] as Comment[],
+  commentsLoading: false,
+  showComments: false,
+
+  // AI recommendation
+  recommendation: null as Recommendation | null,
+  recLoading: false,
+  showRec: false,
+
+  // UI
+  showSettings: false,
+  hideSpammer: localStorage.getItem(HIDE_SPAMMER_KEY) !== 'false',
+  filterKeyword: null as string | null,
+});
+
+// Auto-sync hideSpammer to localStorage
+createEffect(() => {
+  localStorage.setItem(HIDE_SPAMMER_KEY, String(state.hideSpammer));
+});
 
 export function toggleHideSpammer() {
-  const next = !hideSpammer();
-  setHideSpammer(next);
-  localStorage.setItem(HIDE_SPAMMER_KEY, String(next));
+  setState('hideSpammer', !state.hideSpammer);
 }
 
-// AI 추천
-export const [recommendation, setRecommendation] = createSignal<Recommendation | null>(null);
-export const [recLoading, setRecLoading] = createSignal(false);
-export const [showRec, setShowRec] = createSignal(false);
-
-// 키워드 필터 (파던 주제 클릭 시)
-export const [filterKeyword, setFilterKeyword] = createSignal<string | null>(null);
-
-export async function loadSettings() {
-  if (!storage) return;
-  try {
-    const saved = await storage.read('settings.json', { as: 'json' }).catch(() => null) as AppSettings | null;
-    if (saved) {
-      setSettings(saved);
-    }
-  } catch {
-    // ignore
-  }
-}
-
-export async function saveSettings(newSettings: AppSettings) {
-  setSettings(newSettings);
-  if (!storage) return;
-  try {
-    await storage.save('settings.json', JSON.stringify(newSettings));
-  } catch {
-    // ignore
-  }
-}
-
+// ── Post update logic (tracks new post IDs) ─────────────────────────────────
 let knownPostIds = new Set<string>();
 
 export function updatePosts(newPosts: Post[]) {
@@ -86,9 +70,9 @@ export function updatePosts(newPosts: Post[]) {
 
   knownPostIds = newIds;
 
-  batch(() => {
-    setPosts(newPosts);
-    setNewPostCount(count);
-    setLastUpdated(new Date());
+  setState({
+    posts: newPosts,
+    newPostCount: count,
+    lastUpdated: new Date(),
   });
 }
