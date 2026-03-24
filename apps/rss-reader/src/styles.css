@@ -61,7 +61,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 12px;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3); /* was 10px 12px */
   border-bottom: 1px solid var(--yaar-border);
   font-size: 13px;
   flex-shrink: 0;
@@ -81,7 +81,7 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 8px;
+  padding: 7px var(--yaar-sp-2); /* was 7px 8px */
   border-radius: var(--yaar-radius);
   cursor: pointer;
   font-size: 13px;
@@ -105,7 +105,7 @@ body {
 
 .unread-pill {
   background: var(--yaar-accent);
-  color: #fff;
+  color: var(--yaar-bg); /* was #fff — use dark bg for contrast on accent */
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
@@ -133,7 +133,7 @@ body {
 }
 .rm-btn:hover {
   color: var(--yaar-error);
-  background: rgba(248, 81, 73, 0.12);
+  background: color-mix(in srgb, var(--yaar-error) 12%, transparent); /* was rgba(248,81,73,0.12) */
 }
 
 .dot-blink {
@@ -158,7 +158,7 @@ body {
 /* ── Add feed area ────────────────────────────────────────────────── */
 
 .add-area {
-  padding: 8px;
+  padding: var(--yaar-sp-2); /* was 8px */
   border-top: 1px solid var(--yaar-border);
 }
 .add-form {
@@ -179,7 +179,7 @@ body {
 }
 
 .article-item {
-  padding: 8px 10px;
+  padding: var(--yaar-sp-2); /* was 8px 10px */
   border-radius: var(--yaar-radius);
   border-left: 2px solid transparent;
   cursor: pointer;
@@ -198,10 +198,7 @@ body {
   font-size: 13px;
   line-height: 1.4;
   margin-bottom: 3px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  /* clamp handled by y-clamp-2 utility class */
 }
 .article-item.unread .art-title {
   font-weight: 700;
@@ -212,12 +209,11 @@ body {
   color: var(--yaar-text-muted);
 }
 
+/* Augments y-empty: custom font-size and line-height for hint text */
 .empty-hint {
-  padding: 24px 12px;
-  text-align: center;
   font-size: 13px;
-  color: var(--yaar-text-muted);
   line-height: 1.6;
+  padding: var(--yaar-sp-4) var(--yaar-sp-3); /* was 24px 12px → 16px 12px */
 }
 
 /* ── Splash (no article selected) ────────────────────────────────── */
@@ -258,11 +254,11 @@ body {
   font-size: 16px;
   font-weight: 700;
   line-height: 1.4;
-  margin-bottom: 8px;
+  margin-bottom: var(--yaar-sp-2); /* was 8px */
 }
 .art-view-meta {
   display: flex;
-  gap: 12px;
+  gap: var(--yaar-sp-3); /* was 12px */
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--yaar-text-muted);
@@ -278,7 +274,7 @@ body {
 
 .art-body {
   overflow-y: auto;
-  padding: 16px 18px;
+  padding: var(--yaar-sp-4); /* was 16px 18px */
   font-size: 14px;
   line-height: 1.7;
 }
@@ -291,17 +287,17 @@ body {
   color: var(--yaar-accent);
 }
 .art-body p {
-  margin: 0 0 12px;
+  margin: 0 0 var(--yaar-sp-3); /* was 0 0 12px */
 }
 .art-body h1,
 .art-body h2,
 .art-body h3 {
-  margin: 16px 0 8px;
+  margin: var(--yaar-sp-4) 0 var(--yaar-sp-2); /* was 16px 0 8px */
   line-height: 1.3;
 }
 .art-body pre {
   background: var(--yaar-bg-surface);
-  padding: 10px 12px;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3); /* was 10px 12px */
   border-radius: var(--yaar-radius);
   overflow-x: auto;
   font-size: 13px;
@@ -311,19 +307,9 @@ body {
 }
 .art-body blockquote {
   border-left: 3px solid var(--yaar-border);
-  margin: 0 0 12px;
-  padding: 4px 12px;
+  margin: 0 0 var(--yaar-sp-3); /* was 0 0 12px */
+  padding: var(--yaar-sp-1) var(--yaar-sp-3); /* was 4px 12px */
   color: var(--yaar-text-muted);
 }
 
-/* ── Status bar ───────────────────────────────────────────────────── */
-
-.status-bar {
-  padding: 5px 12px;
-  border-top: 1px solid var(--yaar-border);
-  font-size: 11px;
-  color: var(--yaar-text-muted);
-  display: flex;
-  gap: 16px;
-  flex-shrink: 0;
-}
+/* ── Status bar: handled by y-statusbar utility class ─────────────── */

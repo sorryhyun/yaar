@@ -98,7 +98,7 @@ All compiled apps include shared CSS custom properties (`--yaar-*`) and utility 
 | `--yaar-border` | `#30363d` | Borders |
 | `--yaar-success` | `#3fb950` | Success states |
 | `--yaar-error` | `#f85149` | Error states |
-| `--yaar-sp-{1-8}` | 4px increments | Spacing scale |
+| `--yaar-sp-{1-4}`, `--yaar-sp-8` | 4px increments, 32px | Spacing scale |
 | `--yaar-radius` | `6px` | Default border radius |
 
 **Utility classes:**
@@ -114,13 +114,17 @@ All compiled apps include shared CSS custom properties (`--yaar-*`) and utility 
 | `y-text-muted`, `y-text-dim`, `y-text-accent` | Text colors |
 | `y-card` | Surface with border + padding |
 | `y-surface` | Surface background |
-| `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-sm` | Buttons |
+| `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-btn-sm` | Buttons |
+| `y-list-item` | Interactive list row (hover + `.active` accent border) |
 | `y-input` | Text input |
 | `y-select` | Styled dropdown |
 | `y-badge`, `y-badge-success`, `y-badge-error`, `y-badge-warning`, `y-badge-accent` | Badges |
 | `y-spinner`, `y-spinner-lg` | Loading spinner |
 | `y-scroll` | Styled scrollbar container (needs a fixed height) |
 | `y-truncate` | Text ellipsis overflow |
+| `y-clamp-2`, `y-clamp-3` | Multi-line text truncation (2 or 3 lines) |
+| `y-label` | Uppercase muted section header |
+| `y-empty`, `y-empty-icon` | Centered empty-state placeholder |
 | `y-toolbar` | Flex row with surface background, border-bottom |
 | `y-sidebar` | Flex column with border-right |
 | `y-statusbar` | Space-between flex row, border-top, muted text |
@@ -140,7 +144,7 @@ All compiled apps include shared CSS custom properties (`--yaar-*`) and utility 
 - Declare own `:root { --bg: ...; }` custom properties — use `--yaar-*`
 - Write `font-family: Inter, system-ui, ...` — use `var(--yaar-font)`
 - Hardcode hex color values that match token values
-- Reimplement scrollbar, button, modal, or toolbar CSS — use `y-*` classes
+- Reimplement scrollbar, button, modal, toolbar, list-item, or empty-state CSS — use `y-*` classes
 
 ## `@bundled/solid-js` — Reactive DOM Library
 
@@ -459,6 +463,20 @@ setState(produce(s => { s.items.push(newItem); })); // mutate nested data
 ```
 
 Use `createStore` when an app has 5+ related signals. Keep `createSignal` for isolated values.
+
+### Shared CSS utility classes — replaces repeated custom styles
+
+Common UI patterns are provided as `y-*` classes. When editing `styles.css`, replace hand-rolled equivalents:
+
+| Custom CSS pattern | Shared class |
+|---|---|
+| `.item { display:flex; align-items:center; gap:8px; cursor:pointer; }` + hover/active states | `y-list-item` (+ `.active` or `[aria-selected]` for selection) |
+| `.label { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--yaar-text-muted) }` | `y-label` |
+| `.empty { display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--yaar-text-muted) }` | `y-empty` (+ `y-empty-icon` for the large faded icon) |
+| `-webkit-line-clamp: 2` boilerplate (display, box-orient, overflow) | `y-clamp-2` or `y-clamp-3` |
+| `.btn-danger { color:var(--yaar-error); border-color:var(--yaar-error) }` | `y-btn y-btn-danger` |
+
+`y-list-item` provides: flex row with gap, `border-left: 2px solid transparent`, hover background, and `.active` state with accent left border + tinted background. Override padding or add `flex-direction: column` as needed.
 
 ### Earlier SDK migrations (Tier 1–2)
 

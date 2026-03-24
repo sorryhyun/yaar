@@ -192,9 +192,10 @@ Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packa
 
 All compiled apps get YAAR CSS custom properties and utility classes injected automatically:
 - **Colors**: `--yaar-bg`, `--yaar-bg-surface`, `--yaar-text`, `--yaar-text-muted`, `--yaar-accent`, `--yaar-border`, `--yaar-success`, `--yaar-error`
-- **Spacing**: `--yaar-sp-1` through `--yaar-sp-8` (4px increments)
-- **Layout**: `y-app` (root container), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`
-- **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`
+- **Spacing**: `--yaar-sp-1` through `--yaar-sp-4` (4px increments), `--yaar-sp-8` (32px)
+- **Layout**: `y-app` (root container), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`, `y-empty` (centered placeholder with `y-empty-icon`)
+- **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item` (interactive row with hover/`.active` states)
+- **Typography**: `y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3` (multi-line truncation)
 
 Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common patterns.
 

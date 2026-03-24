@@ -48,7 +48,7 @@ render(() => html`
         <div class="side-head y-p-2 y-text-xs y-text-muted y-border-b">Loaded Images</div>
         <div class="thumbs y-scroll">
           <${Show} when=${() => images().length === 0}>
-            <div class="empty">No images loaded.</div>
+            <div class="y-empty empty">No images loaded.</div>
           </${Show}>
           <${For} each=${images}>${(item: ImageItem) => html`
             <button class=${() => 'thumb' + (selectedIds().has(item.id) ? ' active' : '')} onClick=${() => selectImage(item)}>
@@ -61,7 +61,7 @@ render(() => html`
       <div class="viewer-wrap">
         <div style="width:100%;min-height:0;">
           <${Show} when=${() => images().length === 0}>
-            <div class="empty">Load files or send images via App Protocol.</div>
+            <div class="y-empty empty">Load files or send images via App Protocol.</div>
           </${Show}>
           <${Show} when=${() => images().length > 0}>
             <div
@@ -79,7 +79,7 @@ render(() => html`
         </div>
       </div>
     </div>
-    <div class="status y-text-xs y-text-muted">${() => status()}</div>
+    <div class="y-statusbar y-text-xs y-text-muted">${() => status()}</div>
   </div>
 `, document.getElementById('app')!);
 

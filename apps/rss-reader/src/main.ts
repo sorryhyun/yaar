@@ -203,7 +203,7 @@ render(() => html`
       </div>
       <div class="article-list">
         ${() => visibleArticles().length === 0
-          ? html`<div class="empty-hint">No articles yet — select a feed and click refresh.</div>`
+          ? html`<div class="y-empty empty-hint">No articles yet — select a feed and click refresh.</div>`
           : null}
         ${() => visibleArticles().map(article => html`
           <div
@@ -215,7 +215,7 @@ render(() => html`
             }}
             onClick=${() => openArticle(article)}
           >
-            <div class="art-title">${article.title}</div>
+            <div class="art-title y-clamp-2">${article.title}</div>
             <div class="art-meta">${article.feedName} · ${formatDate(article.pubDate)}</div>
           </div>
         `)}
@@ -256,7 +256,7 @@ render(() => html`
             </div>`}
       </div>
 
-      <div class="status-bar">
+      <div class="y-statusbar">
         <span>${() => `${feeds().length} feeds · ${visibleArticles().length} articles · ${totalUnread()} unread`}</span>
 
       </div>
