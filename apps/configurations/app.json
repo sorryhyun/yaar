@@ -1,7 +1,7 @@
 {
   "icon": "⚙️",
   "name": "Configurations",
-  "run": "index.html",
+  "run": "dist/index.html",
   "permissions": ["yaar://config/"],
   "version": "1.0.0",
   "author": "YAAR"

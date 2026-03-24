@@ -2,7 +2,7 @@
   "icon": "🛒",
   "name": "Market Apps",
   "description": "Browse and manage marketplace apps",
-  "run": "index.html",
+  "run": "dist/index.html",
   "capture": "dom",
   "permissions": ["yaar://storage/", "yaar://apps/", "yaar://market/"],
   "version": "1.0.4",

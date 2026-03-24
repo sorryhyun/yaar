@@ -2,7 +2,7 @@
   "icon": "🌐",
   "name": "Browser",
   "description": "Second-hand browser tool for rendering server-side browser.",
-  "run": "index.html",
+  "run": "dist/index.html",
   "createShortcut": false,
   "variant": "standard",
   "capture": "canvas",

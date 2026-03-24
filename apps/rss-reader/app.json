@@ -2,7 +2,7 @@
   "icon": "📰",
   "name": "RSS Reader",
   "description": "Multi-feed RSS reader with resizable panels, article view, and unread tracking",
-  "run": "index.html",
+  "run": "dist/index.html",
   "capture": "dom",
   "permissions": ["yaar://http", "yaar://apps/self/storage/"],
   "version": "1.0.0",

@@ -131,7 +131,7 @@ export async function doDeploy(
     try {
       await stat(appPath);
       await rm(join(appPath, 'src'), { recursive: true, force: true });
-      await rm(join(appPath, 'index.html'), { force: true });
+      await rm(join(appPath, 'dist'), { recursive: true, force: true });
     } catch {
       // App doesn't exist yet
     }
@@ -139,7 +139,9 @@ export async function doDeploy(
     await mkdir(appPath, { recursive: true });
 
     if (hasCompiledApp) {
-      await cp(distIndexPath, join(appPath, 'index.html'));
+      const appDistDir = join(appPath, 'dist');
+      await mkdir(appDistDir, { recursive: true });
+      await cp(distIndexPath, join(appDistDir, 'index.html'));
     }
 
     if (keepSource) {
@@ -179,7 +181,7 @@ export async function doDeploy(
     if (icon !== undefined) metadata.icon = icon;
     else if (!metadata.icon) metadata.icon = resolvedIcon;
     if (description !== undefined) metadata.description = description;
-    if (hasCompiledApp) metadata.run = 'index.html';
+    if (hasCompiledApp) metadata.run = 'dist/index.html';
     if (!metadata.version) metadata.version = '1.0.0';
     if (!metadata.author) metadata.author = 'YAAR';
     // Remove legacy fields

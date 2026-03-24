@@ -58,7 +58,7 @@ export function isYaarUri(uri: string): boolean {
 /**
  * Resolve a yaar:// URI to an API path.
  *
- *   yaar://apps/{appId}           → /api/apps/{appId}/index.html
+ *   yaar://apps/{appId}           → /api/apps/{appId}/dist/index.html
  *   yaar://apps/{appId}/{subpath} → /api/apps/{appId}/{subpath}
  *   yaar://storage/{path}         → /api/storage/{path}
  */
@@ -68,7 +68,7 @@ export function resolveContentUri(uri: string): string | null {
   switch (parsed.authority) {
     case 'apps': {
       const slashIdx = parsed.path.indexOf('/');
-      if (slashIdx === -1) return `/api/apps/${parsed.path}/index.html`;
+      if (slashIdx === -1) return `/api/apps/${parsed.path}/dist/index.html`;
       return `/api/apps/${parsed.path}`;
     }
     case 'storage':
@@ -166,7 +166,7 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
  * Reverse of resolveContentUri() for storage/apps paths.
  *
  *   /api/storage/docs/file.txt      → { authority: 'storage', path: 'docs/file.txt' }
- *   /api/apps/dock/index.html       → { authority: 'apps', appId: 'dock', path: 'index.html' }
+ *   /api/apps/dock/dist/index.html  → { authority: 'apps', appId: 'dock', path: 'dist/index.html' }
  */
 export function parseContentPath(pathname: string): ParsedContentPath | null {
   if (pathname.startsWith('/api/storage/')) {

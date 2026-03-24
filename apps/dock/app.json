@@ -2,7 +2,7 @@
   "icon": "📡",
   "name": "Dock",
   "description": "Clock, weather and notifications dock panel",
-  "run": "index.html",
+  "run": "dist/index.html",
   "createShortcut": false,
   "frameless": true,
   "windowStyle": {

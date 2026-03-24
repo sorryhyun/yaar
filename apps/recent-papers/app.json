@@ -1,7 +1,7 @@
 {
   "icon": "📚",
   "name": "Recent Papers",
-  "run": "index.html",
+  "run": "dist/index.html",
   "capture": "dom",
   "description": "Browse and discover recent AI research papers",
   "permissions": ["yaar://http"],

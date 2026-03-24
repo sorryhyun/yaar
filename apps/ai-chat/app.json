@@ -1,7 +1,7 @@
 {
   "icon": "💬",
   "name": "AI Chat",
-  "run": "index.html",
+  "run": "dist/index.html",
   "permissions": [],
   "version": "1.0.0",
   "author": "YAAR",

@@ -141,7 +141,7 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
   let hasCompiledApp = false;
   let hasProtocolJson = false;
   try {
-    await Bun.file(join(appPath, 'index.html')).text();
+    await Bun.file(join(appPath, 'dist', 'index.html')).text();
     hasCompiledApp = true;
   } catch {
     /* no compiled app */

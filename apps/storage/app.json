@@ -2,7 +2,7 @@
   "icon": "🗂️",
   "name": "Storage",
   "description": "Visual file manager for YAAR storage",
-  "run": "index.html",
+  "run": "dist/index.html",
   "createShortcut": false,
   "capture": "dom",
   "permissions": [

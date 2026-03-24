@@ -91,7 +91,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
     case 'apps': {
       const slashIdx = parsed.path.indexOf('/');
       const appId = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-      const subpath = slashIdx === -1 ? 'index.html' : parsed.path.slice(slashIdx + 1);
+      const subpath = slashIdx === -1 ? 'dist/index.html' : parsed.path.slice(slashIdx + 1);
       const base = join(PROJECT_ROOT, 'apps', appId);
       const absolutePath = safePath(base, subpath);
       if (!absolutePath) return null;

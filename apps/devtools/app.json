@@ -5,7 +5,7 @@
   "createShortcut": false,
   "capture": "dom",
   "permissions": ["yaar://storage/", "yaar://apps/", "yaar://http", "yaar://windows/"],
-  "run": "index.html",
+  "run": "dist/index.html",
   "version": "1.0.0",
   "author": "YAAR"
 }

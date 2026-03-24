@@ -254,7 +254,7 @@ Content URIs are resolved via `resolveContentUri()` in `@yaar/shared`:
 import { resolveContentUri } from '@yaar/shared';
 
 resolveContentUri('yaar://apps/excel-lite')
-// -> '/api/apps/excel-lite/index.html'
+// -> '/api/apps/excel-lite/dist/index.html'
 
 resolveContentUri('yaar://storage/docs/file.txt')
 // -> '/api/storage/docs/file.txt'

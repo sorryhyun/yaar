@@ -1,7 +1,7 @@
 {
   "icon": "🟦",
   "name": "Falling Blocks",
-  "run": "index.html",
+  "run": "dist/index.html",
   "description": "Canvas-based Tetris game with gradient/glow blocks, particle effects, sound effects via Tone.js, ghost piece, hold system, combo scoring, and animated starfield background",
   "capture": "canvas",
   "permissions": ["yaar://storage/*"],

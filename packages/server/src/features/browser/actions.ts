@@ -86,7 +86,7 @@ export async function handleOpen(
         },
         content: {
           renderer: 'iframe',
-          data: `/api/apps/browser/index.html?browserId=${bid}`,
+          data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
         },
       },
       3000,

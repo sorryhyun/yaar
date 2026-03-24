@@ -53,7 +53,7 @@ export interface AppInfo {
   hasSkill: boolean;
   hasConfig: boolean;
   createShortcut?: boolean;
-  run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/index.html)
+  run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/dist/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   protocol?: Pick<AppManifest, 'state' | 'commands'>; // From protocol.json — implies appProtocol support
   fileAssociations?: FileAssociation[];
@@ -93,7 +93,7 @@ export async function listApps(): Promise<AppInfo[]> {
       // Check for compiled app (index.html)
       let isCompiled = false;
       try {
-        await stat(join(appPath, 'index.html'));
+        await stat(join(appPath, 'dist', 'index.html'));
         isCompiled = true;
       } catch {
         // File doesn't exist
