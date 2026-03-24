@@ -1,9 +1,10 @@
 {
-  "icon": "\ud83d\udcc4",
+  "icon": "📄",
   "name": "PDF Viewer",
   "run": "index.html",
   "capture": "dom",
   "permissions": ["yaar://apps/self/storage/"],
   "version": "1.0.0",
-  "author": "YAAR"
+  "author": "YAAR",
+  "description": "PDF and HTML document viewer with storage integration"
 }

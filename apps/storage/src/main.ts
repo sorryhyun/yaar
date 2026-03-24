@@ -11,20 +11,7 @@ import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-d
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
 import { storageSave, storageDelete, storageUrl } from './storage-api';
-
-// ── Toast helper ───────────────────────────────────────────────────────────────────
-
-function showToast(msg: string, type: 'success' | 'error' = 'success', ms = 3000) {
-  const el = document.createElement('div');
-  el.className = `y-toast y-toast-${type}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('y-toast-visible'));
-  setTimeout(() => {
-    el.classList.remove('y-toast-visible');
-    setTimeout(() => el.remove(), 300);
-  }, ms);
-}
+import { showToast } from '@bundled/yaar';
 
 // ── Upload ───────────────────────────────────────────────────────────────────────
 

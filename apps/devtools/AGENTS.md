@@ -159,7 +159,7 @@ CSS: Prefer `import './styles.css'` over inline styles.
 `@bundled/yaar` provides common helpers — **always use these instead of hand-rolling**:
 
 ```ts
-import { showToast, errMsg, appStorage } from '@bundled/yaar';
+import { showToast, errMsg, withLoading, onShortcut, appStorage } from '@bundled/yaar';
 
 // Toast notifications (uses y-toast CSS, auto-dismisses)
 showToast('Saved!', 'success');
@@ -170,6 +170,20 @@ catch (err) { showToast(errMsg(err), 'error'); }
 
 // Read JSON with fallback (no try-catch needed for first-run defaults)
 const settings = await appStorage.readJsonOr<Settings>('settings.json', { theme: 'dark', fontSize: 14 });
+
+// Read binary as Blob (replaces atob → charCodeAt → Uint8Array dance)
+const blob = await appStorage.readBlob('image.png');
+
+// Async loading state (replaces try/loading/catch/error/finally boilerplate)
+await withLoading(setLoading, async () => {
+  const data = await fetchData();
+  setItems(data);
+}, setError);  // onError is optional — defaults to console.error
+
+// Keyboard shortcuts (returns cleanup fn, ctrl matches Ctrl+Cmd)
+onShortcut('ctrl+s', () => save());
+onShortcut('ctrl+shift+z', () => redo());
+onShortcut('escape', () => close());
 ```
 
 ## App Protocol
@@ -394,32 +408,41 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 
 When editing existing apps, replace these legacy patterns with SDK equivalents:
 
-
-### `errMsg` — use SDK import
+### `withLoading` — use SDK for async state management
 
 ```ts
-// ❌ OLD: inline everywhere
-catch (err) {
-  const msg = err instanceof Error ? err.message : String(err);
-  setError(msg);
+// ❌ OLD: 8-line try/loading/catch/error/finally skeleton
+setLoading(true);
+try {
+  const data = await fetchData();
+  setItems(data);
+} catch (err) {
+  setError(errMsg(err));
+} finally {
+  setLoading(false);
 }
 
-// ✅ NEW: one import
-import { errMsg } from '@bundled/yaar';
-catch (err) { setError(errMsg(err)); }
+// ✅ NEW: one call
+import { withLoading } from '@bundled/yaar';
+await withLoading(setLoading, async () => {
+  const data = await fetchData();
+  setItems(data);
+}, setError);
 ```
 
-### `readJsonOr` — use SDK for first-run defaults
+### `onShortcut` — use SDK for keyboard shortcuts
 
 ```ts
-// ❌ OLD: try-catch wrapper for missing file on first run
-let settings: Settings;
-try {
-  settings = await appStorage.readJson<Settings>('settings.json');
-} catch {
-  settings = { theme: 'dark', fontSize: 14 };
-}
+// ❌ OLD: manual addEventListener + modifier checks
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    save();
+  }
+});
 
-// ✅ NEW: single call with fallback
-const settings = await appStorage.readJsonOr<Settings>('settings.json', { theme: 'dark', fontSize: 14 });
+// ✅ NEW: declarative, auto-cleanup, cross-platform ctrl/cmd
+import { onShortcut } from '@bundled/yaar';
+const cleanup = onShortcut('ctrl+s', () => save());
+// ctrl matches both Ctrl and Cmd automatically
 ```

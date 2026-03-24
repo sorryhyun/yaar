@@ -11,6 +11,7 @@ import {
   waitForLoadedMetadata,
 } from './export-utils';
 import { clamp } from './utils/time';
+import { errMsg } from '@bundled/yaar';
 
 export interface EditMode {
   loadSourceUrl(url: string, storagePath?: string | null): boolean;
@@ -237,7 +238,7 @@ export function createEditMode(
         exportMessage: `Export complete. Downloaded ${selectedDuration.toFixed(2)}s clip.`,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown export error.';
+      const message = errMsg(error);
       store.setExportState({
         exporting: false,
         exportProgress: 0,

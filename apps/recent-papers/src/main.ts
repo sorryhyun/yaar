@@ -2,7 +2,7 @@ export {};
 import { createSignal, createEffect, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { app } from '@bundled/yaar';
+import { app, errMsg } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation } from './types';
 import {
   getComments, getPublishedAt, getPublishedMs, getSource, getUpvotes,
@@ -78,10 +78,10 @@ async function loadPapers() {
 
     setSourcePapers([...hfItems, ...arxivItems]);
     applyFiltersAndSort();
-  } catch (err: any) {
+  } catch (err) {
     setSourcePapers([]);
     setPapers([]);
-    setErrorMsg(err?.message || String(err));
+    setErrorMsg(errMsg(err));
   } finally {
     setLoading(false);
   }

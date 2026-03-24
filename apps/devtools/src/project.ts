@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, dev, invoke } from '@bundled/yaar';
+import { appStorage, dev, invoke, errMsg } from '@bundled/yaar';
 
 // ── Types ──
 
@@ -109,12 +109,8 @@ export async function loadProjects(): Promise<void> {
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
       let name = id;
-      try {
-        const meta = await appStorage.readJson<{ name: string }>(`projects/${id}/app.json`);
-        if (meta?.name) name = meta.name;
-      } catch {
-        /* no metadata */
-      }
+      const meta = await appStorage.readJsonOr<{ name: string } | null>(`projects/${id}/app.json`, null);
+      if (meta?.name) name = meta.name;
       metas.push({ id, name, lastModified: Date.now() });
     }
     setProjects(metas);
@@ -313,7 +309,7 @@ export async function compile(): Promise<void> {
       });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
+    const msg = errMsg(err);
     batch(() => {
       setCompileStatus('error');
       setCompileErrors([msg]);
@@ -338,7 +334,7 @@ export async function typecheck(): Promise<void> {
       setStatusText(`${parsed.length || raw.length} type error(s)`);
     }
   } catch (err) {
-    setStatusText(`Typecheck error: ${err instanceof Error ? err.message : 'Unknown'}`);
+    setStatusText(`Typecheck error: ${errMsg(err)}`);
   }
 }
 
@@ -360,7 +356,7 @@ export async function deploy(opts: {
       setStatusText(`Deploy failed: ${result.error ?? 'Unknown'}`);
     }
   } catch (err) {
-    setStatusText(`Deploy failed: ${err instanceof Error ? err.message : 'Unknown'}`);
+    setStatusText(`Deploy failed: ${errMsg(err)}`);
   }
 }
 

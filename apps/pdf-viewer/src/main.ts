@@ -2,7 +2,7 @@ export {};
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { invoke, read, list } from '@bundled/yaar';
+import { invoke, list, errMsg, appStorage } from '@bundled/yaar';
 import './styles.css';
 
 type Mode = 'viewer' | 'export';
@@ -18,16 +18,6 @@ type StorageEntry = {
 async function storageSave(path: string, content: string): Promise<void> {
   const r = await invoke(`yaar://apps/self/storage/${path}`, { action: 'write', content });
   if (r.isError) throw new Error(r.content[0]?.text);
-}
-
-async function storageReadBinary(path: string): Promise<ArrayBuffer> {
-  const r = await read(`yaar://apps/self/storage/${path}`);
-  if (r.isError) throw new Error(r.content[0]?.text);
-  const b64 = r.content[0]?.data ?? '';
-  const binaryStr = atob(b64);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-  return bytes.buffer;
 }
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
@@ -103,13 +93,11 @@ async function openFromStorage(path: string) {
     return;
   }
   try {
-    const bytes = await storageReadBinary(clean);
-    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const blob = await appStorage.readBlob(clean);
     const url = URL.createObjectURL(blob);
     showPdfUrl(url, clean);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    setPdfStatus(`Failed to read storage file: ${msg}`);
+    setPdfStatus(`Failed to read storage file: ${errMsg(err)}`);
   }
 }
 
@@ -166,8 +154,7 @@ async function loadStorageList(dir = storageDir()) {
       storageListEl.selectedIndex = 0;
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    setStorageListPlaceholder(`Load failed: ${msg}`);
+    setStorageListPlaceholder(`Load failed: ${errMsg(err)}`);
   }
 }
 
@@ -324,8 +311,7 @@ render(() => html`
               try {
                 await saveHtmlSnapshot();
               } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                setGlobalStatus(`Save failed: ${msg}`);
+                setGlobalStatus(`Save failed: ${errMsg(err)}`);
               }
             }}>Save HTML to Storage</button>
           </div>

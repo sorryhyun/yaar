@@ -16,15 +16,17 @@ No new concepts, just extract what every app already writes.
 | `errMsg(e)` | `err instanceof Error ? err.message : String(err)` everywhere | same |
 | `appStorage.readJsonOr(path, fallback)` | `try { read() } catch { defaults }` on every first-run | same |
 
-Migration: update `AGENTS.md` so the devtools agent uses the new APIs by default and stops generating the old patterns.
+Migration: apps audited and migrated — storage (showToast), video-editor-lite/recent-papers/session-logs (errMsg), devtools/slides-lite (readJsonOr). Update `AGENTS.md` so the devtools agent uses the new APIs by default.
 
-### Tier 2 — Small helpers (next)
+### Tier 2 — Small helpers (done)
 
-| Addition | What it kills | Complexity |
-|----------|---------------|------------|
-| `appStorage.readBlob(path): Blob` | `atob` → `charCodeAt` → `Uint8Array` dance (28 files) | Small |
-| `withLoading(setLoading, setError, fn)` | The 8-line try/loading/catch/error/finally skeleton | Small |
-| `onShortcut(combo, handler)` with auto-cleanup | 5+ apps with manual `window.addEventListener('keydown', ...)` | Small |
+| Addition | What it kills | Files touched |
+|----------|---------------|---------------|
+| `appStorage.readBlob(path): Blob` | `atob` → `charCodeAt` → `Uint8Array` dance | `shims/yaar.ts`, `bundled-types/index.d.ts` |
+| `withLoading(setLoading, fn, onError?)` | The 8-line try/loading/catch/error/finally skeleton | same |
+| `onShortcut(combo, handler)` with auto-cleanup | 5+ apps with manual `window.addEventListener('keydown', ...)` | same |
+
+Migration: `readBlob` adopted in pdf-viewer and excel-lite. `withLoading` and `onShortcut` available for new code and future migration.
 
 ### Tier 3 — Medium ergonomics (later)
 

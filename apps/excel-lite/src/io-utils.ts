@@ -12,11 +12,7 @@ import {
   tryImportWorkbook, importWorkbook,
   serializeWorkbook, getRaw,
 } from './state';
-
-/** Extract a human-readable message from an unknown error value. */
-function getErrorMessage(err: unknown, fallback: string): string {
-  return err instanceof Error ? err.message : fallback;
-}
+import { errMsg } from '@bundled/yaar';
 
 export async function saveWorkbookToStorage() {
   try {
@@ -25,7 +21,7 @@ export async function saveWorkbookToStorage() {
     await storageSave(path, binary);
     setIoStatus(`Saved XLSX to storage: ${path}`);
   } catch (err) {
-    setIoStatus(getErrorMessage(err, 'Failed to save'), true);
+    setIoStatus(errMsg(err), true);
   }
 }
 
@@ -48,7 +44,7 @@ export async function openWorkbookFromStorage() {
     importWorkbook(parseXlsxWorkbook(bytes));
     setIoStatus(`Opened XLSX from storage: ${path}`);
   } catch (err) {
-    setIoStatus(getErrorMessage(err, 'Failed to open file'), true);
+    setIoStatus(errMsg(err), true);
   }
 }
 

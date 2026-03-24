@@ -73,11 +73,8 @@ export async function storageSave(path: string, content: string | Uint8Array): P
 
 export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuffer' = 'text'): Promise<any> {
   if (as === 'arraybuffer') {
-    const { data } = await appStorage.readBinary(path);
-    const bin = atob(data);
-    const buf = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    return buf.buffer;
+    const blob = await appStorage.readBlob(path);
+    return blob.arrayBuffer();
   }
   const text = await appStorage.read(path);
   if (as === 'json') return JSON.parse(text);

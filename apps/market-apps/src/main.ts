@@ -2,7 +2,7 @@ export {};
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { invoke, del, listJson, storage } from '@bundled/yaar';
+import { invoke, del, listJson, storage, errMsg } from '@bundled/yaar';
 import './styles.css';
 import './protocol.js';
 
@@ -47,11 +47,6 @@ export const [apiBase, setApiBase] = createSignal('');
 export const [hideInstalled, setHideInstalled] = createSignal(false);
 
 // ── Pure helper functions ────────────────────────────────────────────────────
-
-/** Format an unknown thrown value as a readable message. */
-function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 function normalizeDomain(input?: string | null): string {
   const value = (input || '').trim();

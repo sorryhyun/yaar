@@ -8,8 +8,5 @@ export async function saveDeck(deck: Deck): Promise<void> {
 }
 
 export async function loadDeck(): Promise<Deck | null> {
-  try {
-    const text = await appStorage.read(STORAGE_PATH);
-    return JSON.parse(text) as Deck;
-  } catch { return null; }
+  return appStorage.readJsonOr<Deck | null>(STORAGE_PATH, null);
 }

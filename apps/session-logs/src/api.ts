@@ -1,4 +1,4 @@
-import { list, read } from '@bundled/yaar';
+import { list, read, errMsg } from '@bundled/yaar';
 import {
   sessions,
   setSessions,
@@ -27,7 +27,7 @@ export async function loadSessions(): Promise<void> {
     setTotalCount(arr.length);
   } catch (e) {
     console.error('Failed to load sessions', e);
-    setLoadError(String(e));
+    setLoadError(errMsg(e));
   } finally {
     setLoading(false);
   }

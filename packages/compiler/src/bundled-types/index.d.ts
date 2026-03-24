@@ -227,6 +227,8 @@ interface YaarAppStorage {
   /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
   readJsonOr<T>(path: string, fallback: T): Promise<T>;
   readBinary(path: string): Promise<{ data: string; mimeType: string }>;
+  /** Read binary data and return as a Blob. Handles the base64 → binary conversion. */
+  readBlob(path: string): Promise<Blob>;
   list(dirPath?: string): Promise<unknown[]>;
   remove(path: string): Promise<void>;
 }
@@ -377,6 +379,24 @@ declare module '@bundled/yaar' {
 
   /** Show a toast notification using the built-in `y-toast` CSS classes. Auto-dismisses after `ms` (default 3000). */
   export function showToast(msg: string, type?: 'info' | 'success' | 'error', ms?: number): void;
+
+  /**
+   * Run an async function with loading/error state management.
+   * Sets loading to true, runs fn, catches errors via onError, and clears loading in finally.
+   */
+  export function withLoading<T>(
+    setLoading: (v: boolean) => void,
+    fn: () => Promise<T>,
+    onError?: (msg: string) => void,
+  ): Promise<T | undefined>;
+
+  /**
+   * Register a keyboard shortcut. Returns a cleanup function.
+   *
+   * Combo format: modifier keys joined with `+`, e.g. `"ctrl+s"`, `"alt+arrowup"`, `"escape"`.
+   * `ctrl` matches both Ctrl and Cmd (Meta) for cross-platform shortcuts.
+   */
+  export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): () => void;
 
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;

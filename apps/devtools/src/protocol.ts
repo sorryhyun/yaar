@@ -318,14 +318,11 @@ export function registerProtocol() {
           // Read project's app.json to get declared permissions for the preview iframe
           let permissions: string[] | undefined;
           if (proj) {
-            try {
-              const appJson = await appStorage.readJson<{ permissions?: string[] }>(
-                `projects/${proj.id}/app.json`,
-              );
-              if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
-            } catch {
-              /* no app.json or no permissions */
-            }
+            const appJson = await appStorage.readJsonOr<{ permissions?: string[] } | null>(
+              `projects/${proj.id}/app.json`,
+              null,
+            );
+            if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
           }
           const result = await invoke<{ windowId?: string }>('yaar://windows/', {
             action: 'create',

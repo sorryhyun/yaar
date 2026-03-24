@@ -1,4 +1,4 @@
-import { app } from '@bundled/yaar';
+import { app, errMsg } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation, PaperDetails } from './types';
 import { fetchPaperDetailsById } from './data';
 import { paperId, paperTitle, paperSummary, getUpvotes, getComments, getSource } from './paper-utils';
@@ -88,8 +88,8 @@ export function registerProtocol(deps: ProtocolDeps): void {
           for (const id of ids) {
             try {
               details.push(await fetchPaperDetailsById(id, paperDetailsCache));
-            } catch (e: any) {
-              details.push({ id, error: e?.message || String(e) });
+            } catch (e) {
+              details.push({ id, error: errMsg(e) });
             }
           }
           return { ok: true, count: details.length, details };

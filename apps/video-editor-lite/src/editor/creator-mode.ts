@@ -7,6 +7,7 @@ import type { SceneProps } from '../core/scene-registry';
 import { PreviewPlayer } from '../player/preview-player';
 import { exportComposition, downloadBlob } from '../player/exporter';
 import { makeExportFilename } from './export-utils';
+import { errMsg } from '@bundled/yaar';
 import { nextSceneId, getDefaultPropsForType } from './scene-defaults';
 
 export interface CreatorMode {
@@ -102,7 +103,7 @@ export function createCreatorMode(ui: EditorUI, store: EditorStore): CreatorMode
         exportMessage: 'Export complete!',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown export error.';
+      const message = errMsg(error);
       store.setExportState({
         exporting: false,
         exportProgress: 0,
