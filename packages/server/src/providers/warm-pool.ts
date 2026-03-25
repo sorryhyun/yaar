@@ -66,7 +66,7 @@ class ProviderWarmPool {
 
     // Determine which provider to use
     const forcedProvider = getForcedProvider();
-    const providerTypes: ProviderType[] = forcedProvider ? [forcedProvider] : ['codex', 'claude'];
+    const providerTypes: ProviderType[] = forcedProvider ? [forcedProvider] : ['claude', 'codex'];
 
     // Find first available provider and warm it up
     for (const providerType of providerTypes) {

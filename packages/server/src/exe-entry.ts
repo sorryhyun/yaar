@@ -86,11 +86,10 @@ function openAppWindow() {
   const chromium = findChromiumBrowser();
 
   if (chromium) {
-    // Use a dedicated user-data-dir so the --app window launches as an
-    // independent Chrome process.  Without this, Chrome reuses the
-    // already-running instance which can suppress file-picker dialogs
-    // and other OS-level popups in --app mode.
-    const userDataDir = join(tmpdir(), 'yaar-chrome-profile');
+    // Use a unique user-data-dir per launch so Chrome always starts a fresh
+    // process.  A shared profile causes Chrome to delegate to the already-
+    // running instance and exit immediately, which triggers the shutdown handler.
+    const userDataDir = join(tmpdir(), `yaar-chrome-${Date.now()}`);
     try {
       mkdirSync(userDataDir, { recursive: true });
     } catch {
@@ -106,6 +105,7 @@ function openAppWindow() {
     ];
 
     console.log(`Opening app window: ${chromium} ${args.join(' ')}`);
+    const launchTime = Date.now();
     const browserProc = Bun.spawn([chromium, ...args], {
       stdio: ['ignore', 'ignore', 'ignore'],
     });
@@ -114,7 +114,17 @@ function openAppWindow() {
     hideConsole();
 
     // Terminate the server when the browser window is closed.
+    // Guard against Chrome exiting immediately (e.g. delegating to an
+    // already-running instance) — if it exits within 3 seconds, keep
+    // the server alive instead of shutting down.
     browserProc.exited.then(() => {
+      const elapsed = Date.now() - launchTime;
+      if (elapsed < 3000) {
+        console.log(
+          `Browser process exited after ${elapsed}ms — likely delegated to existing instance. Server will keep running.`,
+        );
+        return;
+      }
       console.log('Browser closed — shutting down.');
       // Force-kill our own process tree on Windows; process.exit() can hang
       // when Bun has active server handles.
