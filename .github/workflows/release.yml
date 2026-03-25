@@ -33,7 +33,9 @@ jobs:
           mv dist/yaar.exe dist/yaar-windows-x64.exe
 
       - name: Sign Windows executable
-        if: ${{ secrets.DEV_CERT_PFX != '' }}
+        if: env.HAS_CERT == 'true'
+        env:
+          HAS_CERT: ${{ secrets.DEV_CERT_PFX != '' }}
         run: |
           sudo apt-get install -y osslsigncode
           echo "${{ secrets.DEV_CERT_PFX }}" | base64 -d > dev-cert.pfx

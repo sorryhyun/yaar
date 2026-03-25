@@ -34,7 +34,7 @@ Codex 혹은 Claude Code 사용자 인증이 필수입니다.
 ### 원라인 설치 (권장)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sorryhyun/claudeos/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
 ```
 
 Linux, macOS (Intel & Apple Silicon), Windows (WSL) 지원. 바이너리 하나로 실행되며, Bun이나 Node.js 설치가 필요 없습니다.
@@ -52,12 +52,12 @@ INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 변경
 
 ### Windows 유저
 
-[릴리즈 페이지](https://github.com/sorryhyun/claudeos/releases)에서 `yaar-windows-x64.exe`를 다운받아 실행하세요. 스마트스크린 경고가 뜰 수 있습니다.
+[릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 `yaar-windows-x64.exe`를 다운받아 실행하세요. 스마트스크린 경고가 뜰 수 있습니다.
 
 ### 소스에서 빌드
 
 ```bash
-git clone https://github.com/sorryhyun/claudeos.git && cd claudeos
+git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
 make dev          # 브라우저가 자동으로 열립니다
 ```

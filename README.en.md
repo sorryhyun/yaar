@@ -33,7 +33,7 @@ Codex or Claude Code authentication is required.
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sorryhyun/claudeos/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
 ```
 
 Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary — no Bun or Node.js required.
@@ -51,12 +51,12 @@ INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Custom install path
 
 ### Windows
 
-Download `yaar-windows-x64.exe` from the [Releases page](https://github.com/sorryhyun/claudeos/releases). You may see a SmartScreen warning.
+Download `yaar-windows-x64.exe` from the [Releases page](https://github.com/sorryhyun/yaar/releases). You may see a SmartScreen warning.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/sorryhyun/claudeos.git && cd claudeos
+git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
 make dev          # Browser opens automatically
 ```
