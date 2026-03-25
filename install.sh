@@ -2,7 +2,7 @@
 # YAAR installer — downloads the latest release binary for your platform.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sorryhyun/claudeos/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
 #
 # Options (env vars):
 #   INSTALL_DIR  — where to put the binary (default: ~/.local/bin)
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO="sorryhyun/claudeos"
+REPO="sorryhyun/yaar"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="yaar"
 
