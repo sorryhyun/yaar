@@ -30,6 +30,8 @@ import {
   handleExtract,
   handleExtractImages,
   handleHtml,
+  handleAnnotate,
+  handleRemoveAnnotations,
 } from '../features/browser/actions.js';
 
 export async function registerBrowserHandlers(registry: ResourceRegistry): Promise<void> {
@@ -58,7 +60,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
   registry.register('yaar://browser/*', {
     description:
       'Browser instance. Read for current state (URL, title). ' +
-      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html. ' +
+      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html, annotate, remove_annotations. ' +
       'Delete to close.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -80,6 +82,8 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             'extract',
             'extract_images',
             'html',
+            'annotate',
+            'remove_annotations',
           ],
         },
         url: { type: 'string', description: 'URL for open action' },
@@ -162,6 +166,10 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             return await handleExtractImages(browserId, p);
           case 'html':
             return await handleHtml(browserId, p);
+          case 'annotate':
+            return await handleAnnotate(browserId);
+          case 'remove_annotations':
+            return await handleRemoveAnnotations(browserId);
           default:
             return error(`Unknown action "${action}".`);
         }

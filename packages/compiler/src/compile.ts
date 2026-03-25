@@ -37,6 +37,8 @@ export function getSandboxDir(): string {
 export interface CompileOptions {
   minify?: boolean;
   title?: string;
+  /** Allowed yaar-* bundle names from app.json. Gates @bundled/yaar-dev, @bundled/yaar-web, etc. */
+  bundles?: string[];
 }
 
 export interface CompileResult {
@@ -129,13 +131,17 @@ function escapeHtml(text: string): string {
 /**
  * Bundle an entry point using Bun.build().
  */
-async function compileWithBun(entryPoint: string, minify: boolean): Promise<string> {
+async function compileWithBun(
+  entryPoint: string,
+  minify: boolean,
+  bundles?: string[],
+): Promise<string> {
   const result = await Bun.build({
     entrypoints: [toForwardSlash(entryPoint)],
     minify,
     format: 'esm',
     target: 'browser',
-    plugins: [bundledLibraryPluginBun(), cssFilePlugin(), solidHtmlClosingTagPlugin()],
+    plugins: [bundledLibraryPluginBun(bundles), cssFilePlugin(), solidHtmlClosingTagPlugin()],
   });
 
   if (!result.success) {
@@ -201,7 +207,7 @@ export async function compileTypeScript(
     await mkdir(distDir, { recursive: true });
 
     // Bundle TypeScript to JavaScript
-    const jsCode = await compileWithBun(entryPoint, minify);
+    const jsCode = await compileWithBun(entryPoint, minify, options.bundles);
 
     // Get SDK scripts (minified when minify is enabled)
     const sdkCode = await getSdkScripts(minify);

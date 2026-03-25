@@ -4,6 +4,7 @@
   "icon": "🛠️",
   "createShortcut": false,
   "capture": "dom",
+  "bundles": ["yaar-dev"],
   "permissions": ["yaar://storage/", "yaar://apps/", "yaar://http", "yaar://windows/"],
   "run": "dist/index.html",
   "version": "1.0.0",

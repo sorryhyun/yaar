@@ -3,40 +3,172 @@
     "currentUrl": {
       "description": "Currently displayed URL"
     },
+    "pageTitle": {
+      "description": "Current page title"
+    },
     "browserId": {
-      "description": "Currently connected browser ID"
+      "description": "Currently connected browser session ID"
     }
   },
   "commands": {
-    "refresh": {
-      "description": "Refresh screenshot and optionally update URL bar. Params: { url?, title? }",
+    "open": {
+      "description": "Navigate to a URL. Auto-creates browser session if needed.",
       "params": {
         "type": "object",
         "properties": {
-          "url": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          }
+          "url": { "type": "string" },
+          "mobile": { "type": "boolean" }
+        },
+        "required": ["url"]
+      }
+    },
+    "click": {
+      "description": "Click an element by selector, visible text, or coordinates.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "text": { "type": "string" },
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "index": { "type": "number" }
+        }
+      }
+    },
+    "type": {
+      "description": "Type text into a focused element or element matching selector.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "text": { "type": "string" }
+        },
+        "required": ["selector", "text"]
+      }
+    },
+    "press": {
+      "description": "Press a key (Enter, Tab, Escape, Backspace, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Space).",
+      "params": {
+        "type": "object",
+        "properties": {
+          "key": { "type": "string" },
+          "selector": { "type": "string" }
+        },
+        "required": ["key"]
+      }
+    },
+    "scroll": {
+      "description": "Scroll the page up or down.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "direction": { "type": "string", "enum": ["up", "down"] }
+        },
+        "required": ["direction"]
+      }
+    },
+    "navigate_back": {
+      "description": "Go back in browser history.",
+      "params": { "type": "object", "properties": {} }
+    },
+    "navigate_forward": {
+      "description": "Go forward in browser history.",
+      "params": { "type": "object", "properties": {} }
+    },
+    "hover": {
+      "description": "Hover over an element to reveal dropdowns or tooltips.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "text": { "type": "string" },
+          "x": { "type": "number" },
+          "y": { "type": "number" }
+        }
+      }
+    },
+    "wait_for": {
+      "description": "Wait for a CSS selector to appear on the page.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "timeout": { "type": "number" }
+        },
+        "required": ["selector"]
+      }
+    },
+    "screenshot": {
+      "description": "Take a screenshot. Optionally clip to a region (4x magnification).",
+      "params": {
+        "type": "object",
+        "properties": {
+          "x0": { "type": "number" },
+          "y0": { "type": "number" },
+          "x1": { "type": "number" },
+          "y1": { "type": "number" }
+        }
+      }
+    },
+    "extract": {
+      "description": "Extract page text, links, and forms metadata.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "mainContentOnly": { "type": "boolean" },
+          "maxTextLength": { "type": "number" },
+          "maxLinks": { "type": "number" }
+        }
+      }
+    },
+    "extract_images": {
+      "description": "Extract images from the page with base64 data URLs.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" },
+          "mainContentOnly": { "type": "boolean" }
+        }
+      }
+    },
+    "html": {
+      "description": "Get raw innerHTML of an element or the full page body.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": { "type": "string" }
+        }
+      }
+    },
+    "annotate": {
+      "description": "Show numbered badges on all interactive elements for identification.",
+      "params": { "type": "object", "properties": {} }
+    },
+    "remove_annotations": {
+      "description": "Remove annotation badges from the page.",
+      "params": { "type": "object", "properties": {} }
+    },
+    "refresh": {
+      "description": "Refresh the displayed screenshot and optionally update URL bar.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "title": { "type": "string" }
         }
       }
     },
     "clear": {
-      "description": "Clear the browser display. Params: {}",
-      "params": {
-        "type": "object",
-        "properties": {}
-      }
+      "description": "Clear the browser display.",
+      "params": { "type": "object", "properties": {} }
     },
     "attach": {
-      "description": "Switch to a different browser by ID. Params: { browserId }",
+      "description": "Switch to a different browser session by ID.",
       "params": {
         "type": "object",
         "properties": {
-          "browserId": {
-            "type": "string"
-          }
+          "browserId": { "type": "string" }
         },
         "required": ["browserId"]
       }

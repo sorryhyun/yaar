@@ -4,6 +4,7 @@
   "description": "Second-hand browser tool for rendering server-side browser.",
   "run": "dist/index.html",
   "createShortcut": false,
+  "bundles": ["yaar-web"],
   "variant": "standard",
   "capture": "canvas",
   "permissions": ["yaar://browser/", "yaar://storage/", "yaar://windows/"],

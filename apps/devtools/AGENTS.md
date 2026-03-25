@@ -317,6 +317,8 @@ Use `command("deploy", { appId, name?, icon?, description? })`.
 
 **All app metadata lives in `app.json`** — permissions, variant, frameless, windowStyle, capture, createShortcut, fileAssociations, etc. When cloning, `app.json` is copied into the sandbox. Edit it directly with `command("writeFile", { path: "app.json", content: "..." })` before deploying. Deploy reads it from the sandbox automatically.
 
+**bundle permissions:** If the app uses special bundle like `@bundled/yaar-{dev, web}`, those should be included in 'bundles' field like `"bundles": ["yaar-dev"],`
+
 **Permissions:** If the app uses Verb API, declare permissions in `app.json`. Without them, verb calls return 403. Supports both string and object formats:
 
 ```json

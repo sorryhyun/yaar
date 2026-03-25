@@ -7,7 +7,7 @@
 import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { app } from '@bundled/yaar';
+import { app, invoke } from '@bundled/yaar';
 import { registerBrowserProtocol } from './protocol';
 import './styles.css';
 
@@ -106,8 +106,15 @@ function clearDisplay() {
 
 // ── Event handlers ────────────────────────────────────────────────────
 
-/** Unified navigation handler — avoids duplicating sendInteraction calls. */
-function handleNav(direction: 'navigate_back' | 'navigate_forward') {
+/** Navigate back/forward — invoke directly for immediate effect, then notify agent. */
+async function handleNav(direction: 'navigate_back' | 'navigate_forward') {
+  const bid = activeBrowserId();
+  const dir = direction === 'navigate_back' ? 'back' : 'forward';
+  try {
+    await invoke(`yaar://browser/${bid}`, { action: 'navigate', direction: dir });
+  } catch (err) {
+    console.error('[browser] Nav error:', err);
+  }
   app?.sendInteraction({ event: direction });
 }
 
@@ -149,6 +156,7 @@ function handleUrlKeydown(e: KeyboardEvent) {
     (e.target as HTMLInputElement).value = url;
     (e.target as HTMLInputElement).blur();
     navigateDirect(url);
+    app?.sendInteraction({ event: 'user_navigated', url });
   }
 }
 
@@ -276,7 +284,12 @@ render(() => html`
 
 registerBrowserProtocol({
   getCurrentUrl: () => currentUrl(),
+  getPageTitle: () => pageTitle(),
   getActiveBrowserId: () => activeBrowserId(),
+  setActiveBrowserId: (id: string) => {
+    setActiveBrowserId(id);
+    connectSSE(id);
+  },
   updateUrlBar,
   refreshScreenshot,
   clearDisplay,

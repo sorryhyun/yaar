@@ -126,15 +126,9 @@ function openAppWindow() {
         return;
       }
       console.log('Browser closed — shutting down.');
-      // Force-kill our own process tree on Windows; process.exit() can hang
-      // when Bun has active server handles. Use Bun.spawn (not spawnSync)
-      // because taskkill will kill this process — spawnSync would deadlock.
-      if (platform() === 'win32') {
-        Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
-          stdio: ['ignore', 'ignore', 'ignore'],
-        });
-      }
-      process.exit(0);
+      // Trigger graceful shutdown via SIGTERM so lifecycle.shutdown() runs,
+      // which cleans up headless Chrome, warm providers, etc.
+      process.kill(process.pid, 'SIGTERM');
     });
     return;
   }
@@ -161,21 +155,8 @@ function openAppWindow() {
   }
 }
 
-// Force-kill on signals — the main.ts shutdown handler does graceful cleanup,
-// but as a last resort ensure the process tree dies on Windows.
-function forceExit() {
-  console.log('\nShutting down...');
-  if (platform() === 'win32') {
-    Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
-  }
-  process.exit(0);
-}
-
-// Give main.ts shutdown handler 5 seconds, then force-kill
-process.on('SIGINT', () => setTimeout(forceExit, 5_000));
-process.on('SIGTERM', () => setTimeout(forceExit, 5_000));
+// main.ts registers SIGINT/SIGTERM handlers for graceful shutdown.
+// lifecycle.ts has a 5-second force-kill timer as a last resort.
 
 // Wait for the server to be fully ready, then open the app window.
 try {

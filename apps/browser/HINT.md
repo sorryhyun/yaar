@@ -1,1 +1,1 @@
-Use `yaar://browser/` URI verb for using headless browser. browser app is for hook rendering, not server-side browsing.
+For sustained web browsing tasks (navigating sites, filling forms, extracting content, interacting with pages), open the browser app and delegate to its app agent — it is a specialist with direct Chrome control. Use `yaar://browser/` verbs directly only for quick one-off operations (e.g., a single headless screenshot without opening a window).

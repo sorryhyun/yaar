@@ -372,9 +372,6 @@ declare module '@bundled/yaar' {
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
 
-  /** Dev tools — compile, typecheck, deploy from iframe apps. */
-  export const dev: YaarDev;
-
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;
 
@@ -415,4 +412,83 @@ declare module '@bundled/yaar' {
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;
   export default YaarGlobal;
+}
+
+// ── Gated SDKs ─────────────────────────────────────────────────────────────
+// Require "bundles": ["yaar-dev"] or ["yaar-web"] in app.json to import.
+
+declare module '@bundled/yaar-dev' {
+  export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
+  export function typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  export function deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
+  export function bundledLibraries(): Promise<string[]>;
+}
+
+declare module '@bundled/yaar-web' {
+  export function open(
+    url: string,
+    opts?: {
+      browserId?: string;
+      mobile?: boolean;
+      visible?: boolean;
+      waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
+    },
+  ): Promise<unknown>;
+  export function click(opts: {
+    selector?: string;
+    text?: string;
+    x?: number;
+    y?: number;
+    index?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function type(opts: {
+    selector: string;
+    text: string;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function press(opts: {
+    key: string;
+    selector?: string;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function scroll(opts: { direction: 'up' | 'down'; browserId?: string }): Promise<unknown>;
+  export function navigateBack(browserId?: string): Promise<unknown>;
+  export function navigateForward(browserId?: string): Promise<unknown>;
+  export function hover(opts: {
+    selector?: string;
+    text?: string;
+    x?: number;
+    y?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function waitFor(opts: {
+    selector: string;
+    timeout?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function screenshot(opts?: {
+    x0?: number;
+    y0?: number;
+    x1?: number;
+    y1?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function extract(opts?: {
+    selector?: string;
+    mainContentOnly?: boolean;
+    maxTextLength?: number;
+    maxLinks?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function extractImages(opts?: {
+    selector?: string;
+    mainContentOnly?: boolean;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;
+  export function annotate(browserId?: string): Promise<unknown>;
+  export function removeAnnotations(browserId?: string): Promise<unknown>;
+  export function listSessions(): Promise<unknown[]>;
+  export function closeSession(browserId?: string): Promise<unknown>;
 }

@@ -334,6 +334,14 @@ function forceKillProcess(): void {
     } catch {
       /* ignore — fall through to process.exit */
     }
+  } else {
+    // Kill entire process group so child processes (headless Chrome, etc.)
+    // don't survive as orphans.
+    try {
+      process.kill(-process.pid, 'SIGKILL');
+    } catch {
+      /* ignore — process group may not exist */
+    }
   }
   process.exit(0);
 }

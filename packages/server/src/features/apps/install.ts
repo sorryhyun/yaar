@@ -8,12 +8,34 @@ import { rm, unlink, mkdir, rename } from 'fs/promises';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { getSessionId } from '../../agents/session.js';
 import { listApps } from './discovery.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';
+import { ServerEventType, type OSAction } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/routes/verb.js';
+
+/**
+ * Broadcast a desktop action through the session-scoped 'desktop-shortcut' channel
+ * so it reaches the frontend even outside agent context (e.g. HTTP route handlers).
+ */
+function broadcastDesktopAction(action: OSAction): void {
+  const sessionId = getSessionId();
+  if (sessionId) {
+    actionEmitter.emit('desktop-shortcut', {
+      sessionId,
+      event: {
+        type: ServerEventType.ACTIONS,
+        actions: [action],
+        agentId: 'system',
+      },
+    });
+  } else {
+    actionEmitter.emitAction(action);
+  }
+}
 
 /** Format permission entries into a human-readable string for the dialog. */
 function formatPermissions(permissions: PermissionEntry[]): string {
@@ -129,12 +151,12 @@ export async function installApp(appId: string): Promise<VerbResult> {
       icon: installed.icon,
       iconType: installed.iconType,
     });
-    actionEmitter.emitAction({ type: 'desktop.createShortcut', shortcut });
+    broadcastDesktopAction({ type: 'desktop.createShortcut', shortcut } as OSAction);
   }
 
   // Emit refreshApps AFTER shortcut is persisted to disk, so the frontend
   // fetch of /api/shortcuts (triggered by appsVersion bump) includes the new shortcut.
-  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+  broadcastDesktopAction({ type: 'desktop.refreshApps' } as OSAction);
 
   return ok(`${isUpdate ? 'Updated' : 'Installed'} app "${appId}" successfully.`);
 }
@@ -152,11 +174,14 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
 
   const removed = await removeAppShortcut(appId);
   if (removed) {
-    actionEmitter.emitAction({ type: 'desktop.removeShortcut', shortcutId: `app-${appId}` });
+    broadcastDesktopAction({
+      type: 'desktop.removeShortcut',
+      shortcutId: `app-${appId}`,
+    } as OSAction);
   }
 
   // Emit refreshApps AFTER shortcut removal is persisted to disk.
-  actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+  broadcastDesktopAction({ type: 'desktop.refreshApps' } as OSAction);
 
   return ok(`Deleted app "${appId}" successfully.`);
 }

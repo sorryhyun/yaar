@@ -86,8 +86,17 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   switch (action) {
     case 'compile': {
       const { compileTypeScript } = await import('@yaar/compiler');
+      // Read bundles from app.json if present (gates @bundled/yaar-* imports)
+      let bundles: string[] | undefined;
+      try {
+        const appJson = JSON.parse(await Bun.file(join(absolutePath, 'app.json')).text());
+        if (Array.isArray(appJson.bundles)) bundles = appJson.bundles;
+      } catch {
+        /* no app.json */
+      }
       const result = await compileTypeScript(absolutePath, {
         title: (body.title as string) ?? 'App',
+        bundles,
       });
       if (!result.success) {
         return jsonResponse({

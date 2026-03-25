@@ -35,6 +35,8 @@ const SHIMS_DIR = toForwardSlash(join(PLUGIN_DIR.replace(/\/dist$/, '/src'), 'sh
 export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
   yaar: toForwardSlash(join(SHIMS_DIR, 'yaar.ts')),
+  'yaar-dev': toForwardSlash(join(SHIMS_DIR, 'yaar-dev.ts')),
+  'yaar-web': toForwardSlash(join(SHIMS_DIR, 'yaar-web.ts')),
 };
 
 /**
@@ -75,6 +77,8 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   marked: 'marked',
   prismjs: 'prismjs',
   yaar: 'yaar',
+  'yaar-dev': 'yaar-dev',
+  'yaar-web': 'yaar-web',
 };
 
 /**
@@ -123,7 +127,7 @@ function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
  * 3. **node_modules** (dev): Resolves browser entry from package.json exports,
  *    falling back to Bun.resolveSync() for packages without conditional exports.
  */
-export function bundledLibraryPluginBun(): Bun.BunPlugin {
+export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugin {
   return {
     name: 'bundled-libraries-bun',
     setup(build: Bun.PluginBuilder) {
@@ -134,6 +138,15 @@ export function bundledLibraryPluginBun(): Bun.BunPlugin {
         if (!(libName in BUNDLED_LIBRARIES)) {
           const available = Object.keys(BUNDLED_LIBRARIES).join(', ');
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
+        }
+        // Gate yaar-* extended SDKs — require explicit declaration in app.json bundles
+        if (libName.startsWith('yaar-')) {
+          if (!allowedBundles?.includes(libName)) {
+            throw new Error(
+              `"@bundled/${libName}" requires "${libName}" in app.json bundles field. ` +
+                `Add "bundles": ["${libName}"] to your app.json to use this SDK.`,
+            );
+          }
         }
         // Strategy 1: embedded libs (production exe) — checked first because
         // shim source paths don't exist inside the bundled executable.

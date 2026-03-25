@@ -1,6 +1,12 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, dev, invoke, errMsg } from '@bundled/yaar';
+import { appStorage, invoke, errMsg } from '@bundled/yaar';
+import {
+  compile as devCompile,
+  typecheck as devTypecheck,
+  deploy as devDeploy,
+  bundledLibraries,
+} from '@bundled/yaar-dev';
 
 // ── Types ──
 
@@ -290,7 +296,7 @@ export async function compile(): Promise<void> {
   setCompileErrors([]);
   setStatusText('Compiling...');
   try {
-    const result = await dev.compile(projectPath(proj.id), { title: proj.name });
+    const result = await devCompile(projectPath(proj.id), { title: proj.name });
     if (result.success) {
       batch(() => {
         setCompileStatus('success');
@@ -323,7 +329,7 @@ export async function typecheck(): Promise<void> {
   if (!proj) return;
   setStatusText('Type checking...');
   try {
-    const result = await dev.typecheck(projectPath(proj.id));
+    const result = await devTypecheck(projectPath(proj.id));
     if (result.success) {
       setDiagnostics([]);
       setStatusText('No type errors');
@@ -349,7 +355,7 @@ export async function deploy(opts: {
   setStatusText('Deploying...');
   try {
     // Permissions and other metadata are read from sandbox's app.json by the server
-    const result = await dev.deploy(projectPath(proj.id), opts);
+    const result = await devDeploy(projectPath(proj.id), opts);
     if (result.success) {
       setStatusText(`Deployed as "${result.name ?? opts.appId}"`);
     } else {
@@ -364,7 +370,7 @@ export async function deploy(opts: {
 
 export async function loadBundledLibraries(): Promise<void> {
   try {
-    const libs = await dev.bundledLibraries();
+    const libs = await bundledLibraries();
     setBundledLibs(libs);
   } catch {
     /* non-fatal */

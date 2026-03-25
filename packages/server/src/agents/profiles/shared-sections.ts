@@ -23,8 +23,8 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
-| \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\` | read, invoke, delete |
-| \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\` | read, invoke, list, delete |
+| \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
+| \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://browser/\` | \`yaar://browser/pages\` | invoke (open, click, type, etc.) |
@@ -53,13 +53,21 @@ Update, manage, and close windows using the window URI:
 \`\`\`
 invoke('yaar://windows/my-window', { action: "update", operation: "append", content: "more text" })
 invoke('yaar://windows/my-window', { action: "lock" })
+invoke('yaar://windows/my-window', { action: "unlock" })
+invoke('yaar://windows/my-window', { action: "close" })
+invoke('yaar://windows/my-window', { action: "message", message: "do something" })
+invoke('yaar://windows/my-window', { action: "subscribe", events: ["content", "interaction"] })
+invoke('yaar://windows/my-window', { action: "unsubscribe", subscriptionId: "..." })
 invoke('yaar://windows/my-window', { action: "app_query", stateKey: "cells" })
 invoke('yaar://windows/my-window', { action: "app_command", command: "setCells", params: { cells: { A1: "hi" } } })
 delete('yaar://windows/my-window')
 \`\`\`
 
+**Update operations:** append, prepend, replace, insertAt, clear
 **Renderers:** markdown, html, text, table, component, iframe
 **App Protocol:** For iframe apps, use \`app_query\` and \`app_command\` actions on the window URI.
+**Message:** Send a message to an app window's agent via the \`message\` action.
+**Subscribe:** Watch for window changes (content, interaction, close, lock, unlock, move, resize, title).
 
 Button clicks send you: \`<ui:click>button "{action}" in window "{title}"</ui:click>\`
 **Forms:** Use type: "form" with an id. Buttons with submitForm collect form data on click.
@@ -69,6 +77,8 @@ export const STORAGE_SECTION = `## Storage & Files
 
 \`\`\`
 invoke('yaar://storage/docs/readme.txt', { action: "write", content: "Hello" })
+invoke('yaar://storage/docs/readme.txt', { action: "edit", old_string: "Hello", new_string: "Hi" })
+invoke('yaar://storage/', { action: "grep", pattern: "TODO", glob: "*.md" })
 read('yaar://storage/docs/readme.txt')
 list('yaar://storage/docs')
 delete('yaar://storage/docs/readme.txt')
@@ -149,7 +159,13 @@ Options: \`multiline: true\` for a textarea, \`inputLabel\` to label the input f
 
 export const RELAY_SECTION = `## Relay to Monitor Agent
 
-After completing a significant task, call relay to hand results back to the monitor agent. Only relay when the monitor agent needs to take further action.`;
+After completing a significant task, relay results back to the monitor agent:
+
+\`\`\`
+invoke('yaar://sessions/current/agents/monitor', { action: "relay", message: "Task completed: ..." })
+\`\`\`
+
+Only relay when the monitor agent needs to take further action.`;
 
 export const BACKGROUND_APPS_SECTION = `## Background Apps
 

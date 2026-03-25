@@ -62,8 +62,17 @@ export async function doDeploy(
   } catch {
     try {
       await stat(join(sandboxPath, 'src', 'main.ts'));
+      // Read bundles from app.json if present (gates @bundled/yaar-* imports)
+      let bundles: string[] | undefined;
+      try {
+        const appMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
+        if (Array.isArray(appMeta.bundles)) bundles = appMeta.bundles;
+      } catch {
+        /* no app.json */
+      }
       const compileResult = await compileTypeScript(sandboxPath, {
         title: name ?? toDisplayName(appId),
+        bundles,
       });
       if (!compileResult.success) {
         return {

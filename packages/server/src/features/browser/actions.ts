@@ -7,7 +7,7 @@
 
 import type { BrowserPool } from '../../lib/browser/index.js';
 import type { VerbResult } from '../../handlers/uri-registry.js';
-import { ok, okWithImages, error } from '../../handlers/utils.js';
+import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
@@ -258,4 +258,16 @@ export async function handleHtml(browserId: string, p: Payload): Promise<VerbRes
   const session = resolveSession(browserId);
   const html = await session.getHtml(p.selector as string | undefined);
   return ok(html);
+}
+
+export async function handleAnnotate(browserId: string): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const result = await session.annotateElements();
+  return okJson(result);
+}
+
+export async function handleRemoveAnnotations(browserId: string): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  await session.removeAnnotations();
+  return ok('Annotations removed.');
 }

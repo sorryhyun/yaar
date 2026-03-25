@@ -1,20 +1,60 @@
 /**
  * App Protocol registration for the Browser app.
- * Separated to keep main.ts focused on rendering and event logic.
+ * Command handlers bridge app agent commands to yaar://browser/ verb invocations.
  */
-import { app } from '@bundled/yaar';
+import { app, invoke } from '@bundled/yaar';
 
 export interface BrowserProtocolDeps {
   getCurrentUrl: () => string;
+  getPageTitle: () => string;
   getActiveBrowserId: () => string;
+  setActiveBrowserId: (id: string) => void;
   updateUrlBar: (url: string, title?: string) => void;
   refreshScreenshot: () => void;
   clearDisplay: () => void;
   attach: (browserId: string) => void;
 }
 
+/** Promise lock to prevent double-creation of browser sessions. */
+let creatingSession: Promise<string> | null = null;
+
 export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
   if (!app) return;
+
+  /**
+   * Ensure we have a valid browserId. If none is set (e.g. app opened without
+   * ?browserId), lazily create a session via the verb layer with visible:false
+   * to avoid opening a duplicate window.
+   */
+  async function ensureBrowserId(): Promise<string> {
+    const current = deps.getActiveBrowserId();
+    if (current && current !== '' && current !== 'new') return current;
+
+    if (creatingSession) return creatingSession;
+
+    creatingSession = (async () => {
+      const result = await invoke<{ browserId: string }>('yaar://browser/new', {
+        action: 'open',
+        url: 'about:blank',
+        visible: false,
+      });
+      const newId = result.browserId ?? '0';
+      deps.setActiveBrowserId(newId);
+      return newId;
+    })();
+
+    try {
+      return await creatingSession;
+    } finally {
+      creatingSession = null;
+    }
+  }
+
+  /** Invoke a browser verb action on the current session. */
+  async function browserInvoke(action: string, params?: Record<string, unknown>) {
+    const bid = await ensureBrowserId();
+    return invoke(`yaar://browser/${bid}`, { action, ...params });
+  }
 
   app.register({
     appId: 'browser',
@@ -23,13 +63,23 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
       manifest: {
         description: 'App capabilities',
         handler: () => ({
-          state: ['currentUrl', 'browserId'],
-          commands: ['refresh', 'clear', 'attach'],
+          state: ['currentUrl', 'pageTitle', 'browserId'],
+          commands: [
+            'open', 'click', 'type', 'press', 'scroll',
+            'navigate_back', 'navigate_forward', 'hover', 'wait_for',
+            'screenshot', 'extract', 'extract_images', 'html',
+            'annotate', 'remove_annotations',
+            'refresh', 'clear', 'attach',
+          ],
         }),
       },
       currentUrl: {
         description: 'Currently displayed URL',
         handler: () => deps.getCurrentUrl(),
+      },
+      pageTitle: {
+        description: 'Current page title',
+        handler: () => deps.getPageTitle(),
       },
       browserId: {
         description: 'Currently connected browser ID',
@@ -37,14 +87,182 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
       },
     },
     commands: {
-      refresh: {
-        description: 'Refresh screenshot and optionally update URL bar. Params: { url?, title? }',
+      // ── Navigation ──────────────────────────────────────────────────
+      open: {
+        description: 'Navigate to URL (auto-creates session if needed)',
+        params: {
+          type: 'object',
+          properties: { url: { type: 'string' }, mobile: { type: 'boolean' } },
+          required: ['url'],
+        },
+        handler: async (p: { url: string; mobile?: boolean }) => {
+          return browserInvoke('open', { url: p.url, mobile: p.mobile, visible: false });
+        },
+      },
+      navigate_back: {
+        description: 'Go back in browser history',
+        params: { type: 'object', properties: {} },
+        handler: async () => browserInvoke('navigate', { direction: 'back' }),
+      },
+      navigate_forward: {
+        description: 'Go forward in browser history',
+        params: { type: 'object', properties: {} },
+        handler: async () => browserInvoke('navigate', { direction: 'forward' }),
+      },
+      scroll: {
+        description: 'Scroll the page',
+        params: {
+          type: 'object',
+          properties: { direction: { type: 'string', enum: ['up', 'down'] } },
+          required: ['direction'],
+        },
+        handler: async (p: { direction: 'up' | 'down' }) => browserInvoke('scroll', p),
+      },
+
+      // ── Interaction ─────────────────────────────────────────────────
+      click: {
+        description: 'Click an element',
         params: {
           type: 'object',
           properties: {
-            url: { type: 'string' },
-            title: { type: 'string' },
+            selector: { type: 'string' },
+            text: { type: 'string' },
+            x: { type: 'number' },
+            y: { type: 'number' },
+            index: { type: 'number' },
           },
+        },
+        handler: async (p: {
+          selector?: string;
+          text?: string;
+          x?: number;
+          y?: number;
+          index?: number;
+        }) => browserInvoke('click', p),
+      },
+      type: {
+        description: 'Type text into an element',
+        params: {
+          type: 'object',
+          properties: { selector: { type: 'string' }, text: { type: 'string' } },
+          required: ['selector', 'text'],
+        },
+        handler: async (p: { selector: string; text: string }) => browserInvoke('type', p),
+      },
+      press: {
+        description: 'Press a key',
+        params: {
+          type: 'object',
+          properties: { key: { type: 'string' }, selector: { type: 'string' } },
+          required: ['key'],
+        },
+        handler: async (p: { key: string; selector?: string }) => browserInvoke('press', p),
+      },
+      hover: {
+        description: 'Hover over an element',
+        params: {
+          type: 'object',
+          properties: {
+            selector: { type: 'string' },
+            text: { type: 'string' },
+            x: { type: 'number' },
+            y: { type: 'number' },
+          },
+        },
+        handler: async (p: {
+          selector?: string;
+          text?: string;
+          x?: number;
+          y?: number;
+        }) => browserInvoke('hover', p),
+      },
+
+      // ── Observation ─────────────────────────────────────────────────
+      wait_for: {
+        description: 'Wait for a selector to appear',
+        params: {
+          type: 'object',
+          properties: { selector: { type: 'string' }, timeout: { type: 'number' } },
+          required: ['selector'],
+        },
+        handler: async (p: { selector: string; timeout?: number }) =>
+          browserInvoke('wait_for', p),
+      },
+      screenshot: {
+        description: 'Take a screenshot',
+        params: {
+          type: 'object',
+          properties: {
+            x0: { type: 'number' },
+            y0: { type: 'number' },
+            x1: { type: 'number' },
+            y1: { type: 'number' },
+          },
+        },
+        handler: async (p?: {
+          x0?: number;
+          y0?: number;
+          x1?: number;
+          y1?: number;
+        }) => browserInvoke('screenshot', p),
+      },
+      extract: {
+        description: 'Extract page text, links, and forms',
+        params: {
+          type: 'object',
+          properties: {
+            selector: { type: 'string' },
+            mainContentOnly: { type: 'boolean' },
+            maxTextLength: { type: 'number' },
+            maxLinks: { type: 'number' },
+          },
+        },
+        handler: async (p?: {
+          selector?: string;
+          mainContentOnly?: boolean;
+          maxTextLength?: number;
+          maxLinks?: number;
+        }) => browserInvoke('extract', p),
+      },
+      extract_images: {
+        description: 'Extract images with data URLs',
+        params: {
+          type: 'object',
+          properties: {
+            selector: { type: 'string' },
+            mainContentOnly: { type: 'boolean' },
+          },
+        },
+        handler: async (p?: { selector?: string; mainContentOnly?: boolean }) =>
+          browserInvoke('extract_images', p),
+      },
+      html: {
+        description: 'Get raw innerHTML',
+        params: {
+          type: 'object',
+          properties: { selector: { type: 'string' } },
+        },
+        handler: async (p?: { selector?: string }) => browserInvoke('html', p),
+      },
+
+      // ── Visual ──────────────────────────────────────────────────────
+      annotate: {
+        description: 'Show numbered badges on interactive elements',
+        params: { type: 'object', properties: {} },
+        handler: async () => browserInvoke('annotate', {}),
+      },
+      remove_annotations: {
+        description: 'Remove annotation badges',
+        params: { type: 'object', properties: {} },
+        handler: async () => browserInvoke('remove_annotations', {}),
+      },
+
+      // ── UI Controls (local, no verb call) ───────────────────────────
+      refresh: {
+        description: 'Refresh screenshot and optionally update URL bar',
+        params: {
+          type: 'object',
+          properties: { url: { type: 'string' }, title: { type: 'string' } },
         },
         handler: (p?: { url?: string; title?: string }) => {
           if (p?.url) deps.updateUrlBar(p.url, p.title);
@@ -53,7 +271,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         },
       },
       clear: {
-        description: 'Clear the browser display. Params: {}',
+        description: 'Clear the browser display',
         params: { type: 'object', properties: {} },
         handler: () => {
           deps.clearDisplay();
@@ -61,7 +279,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         },
       },
       attach: {
-        description: 'Switch to a different browser by ID. Params: { browserId }',
+        description: 'Switch to a different browser by ID',
         params: {
           type: 'object',
           properties: { browserId: { type: 'string' } },
