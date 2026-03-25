@@ -65,7 +65,8 @@
 
 /* Pulse animation - used for status indicators */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -75,7 +76,8 @@
 
 /* Pulse with scale - used for active agent badges */
 @keyframes pulseScale {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.8;
   }
   50% {
@@ -96,6 +98,65 @@
 
 /* Fade out */
 @keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Blink - used for cursor in CLI panel */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Snap in - used for snap preview */
+@keyframes snapIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Folder expand - used for desktop folder expand */
+@keyframes folderExpandIn {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+    transform-origin: top;
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+}
+
+/* Status fade in - used for command palette status messages */
+@keyframes statusFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Status fade out */
+@keyframes statusFadeOut {
   from {
     opacity: 1;
   }

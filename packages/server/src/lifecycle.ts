@@ -287,22 +287,53 @@ export async function printBanner(server: Server<any>): Promise<void> {
 export async function shutdown(server: Server<any>): Promise<void> {
   console.log('\nShutting down...');
 
-  // Close SSH tunnel
-  if (activeTunnel) {
-    await activeTunnel.shutdown();
-    activeTunnel = null;
-  }
+  // Hard deadline: force-kill the process if graceful shutdown takes too long.
+  // On Windows, process.exit() can hang when Bun has active server handles,
+  // so we use taskkill to force-terminate the entire process tree.
+  const forceKillTimer = setTimeout(() => {
+    console.error('Graceful shutdown timed out — force-killing process.');
+    forceKillProcess();
+  }, 5_000);
 
-  // Close browser sessions
   try {
-    const { getBrowserPool } = await import('./lib/browser/index.js');
-    await getBrowserPool().shutdown();
-  } catch {
-    // Browser module not available — nothing to clean up
+    // Close SSH tunnel
+    if (activeTunnel) {
+      await activeTunnel.shutdown();
+      activeTunnel = null;
+    }
+
+    // Close browser sessions
+    try {
+      const { getBrowserPool } = await import('./lib/browser/index.js');
+      await getBrowserPool().shutdown();
+    } catch {
+      // Browser module not available — nothing to clean up
+    }
+
+    await getWarmPool().cleanup();
+
+    server.stop();
+  } catch (err) {
+    console.error('Error during shutdown:', err);
   }
 
-  await getWarmPool().cleanup();
+  clearTimeout(forceKillTimer);
+  forceKillProcess();
+}
 
-  server.stop();
+/**
+ * Force-terminate the process. On Windows, uses taskkill to kill the entire
+ * process tree since process.exit() can hang with active Bun server handles.
+ */
+function forceKillProcess(): void {
+  if (process.platform === 'win32') {
+    try {
+      Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    } catch {
+      /* ignore — fall through to process.exit */
+    }
+  }
   process.exit(0);
 }

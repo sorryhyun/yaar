@@ -127,9 +127,10 @@ function openAppWindow() {
       }
       console.log('Browser closed — shutting down.');
       // Force-kill our own process tree on Windows; process.exit() can hang
-      // when Bun has active server handles.
+      // when Bun has active server handles. Use Bun.spawn (not spawnSync)
+      // because taskkill will kill this process — spawnSync would deadlock.
       if (platform() === 'win32') {
-        Bun.spawnSync(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
+        Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
           stdio: ['ignore', 'ignore', 'ignore'],
         });
       }
@@ -160,16 +161,21 @@ function openAppWindow() {
   }
 }
 
-// Keep the process running
-process.on('SIGINT', () => {
+// Force-kill on signals — the main.ts shutdown handler does graceful cleanup,
+// but as a last resort ensure the process tree dies on Windows.
+function forceExit() {
   console.log('\nShutting down...');
+  if (platform() === 'win32') {
+    Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+  }
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-  console.log('\nShutting down...');
-  process.exit(0);
-});
+// Give main.ts shutdown handler 5 seconds, then force-kill
+process.on('SIGINT', () => setTimeout(forceExit, 5_000));
+process.on('SIGTERM', () => setTimeout(forceExit, 5_000));
 
 // Wait for the server to be fully ready, then open the app window.
 try {

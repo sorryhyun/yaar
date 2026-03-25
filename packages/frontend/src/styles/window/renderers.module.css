@@ -9,12 +9,6 @@
  * - layout.module.css: stacks, grids, dividers, spacers
  */
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* ============ Component Renderer Root ============ */
 .componentRoot {
   font-size: var(--text-lg);

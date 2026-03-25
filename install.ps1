@@ -61,3 +61,18 @@ if ($UserPath -notlike "*$InstallDir*") {
 } else {
     Write-Host "Run 'yaar' to start."
 }
+
+# Create desktop shortcut
+try {
+    $DesktopPath = [Environment]::GetFolderPath("Desktop")
+    $ShortcutPath = Join-Path $DesktopPath "YAAR.lnk"
+    $WshShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+    $Shortcut.TargetPath = $Dest
+    $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.Description = "YAAR - AI Interface"
+    $Shortcut.Save()
+    Write-Host "Desktop shortcut created."
+} catch {
+    Write-Host "Could not create desktop shortcut: $_"
+}

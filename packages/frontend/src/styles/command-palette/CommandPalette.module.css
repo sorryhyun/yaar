@@ -196,12 +196,6 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Spinner box for active agents */
 .spinnerBox {
   display: flex;
@@ -363,26 +357,6 @@
   animation:
     statusFadeIn 0.15s ease-out,
     statusFadeOut 1.5s ease-in 0.5s forwards;
-}
-
-@keyframes statusFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes statusFadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
 }
 
 /* Drop target feedback */
