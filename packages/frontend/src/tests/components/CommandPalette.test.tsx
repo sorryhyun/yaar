@@ -1,16 +1,18 @@
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { render, screen, cleanup } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
-import { CommandPalette } from '@/components/command-palette/CommandPalette';
 
-// Mock useAgentConnection
-vi.mock('@/hooks/useAgentConnection', () => ({
+// Mock useAgentConnection — must be before importing CommandPalette
+mock.module('@/hooks/useAgentConnection', () => ({
   useAgentConnection: () => ({
     isConnected: true,
-    sendMessage: vi.fn(),
-    interrupt: vi.fn(),
-    reset: vi.fn(),
+    sendMessage: mock(() => {}),
+    interrupt: mock(() => {}),
+    reset: mock(() => {}),
   }),
 }));
+
+const { CommandPalette } = await import('@/components/command-palette/CommandPalette');
 
 describe('CommandPalette', () => {
   beforeEach(() => {
@@ -19,6 +21,10 @@ describe('CommandPalette', () => {
       hasDrawing: false,
       windows: {},
     });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders the reset button', () => {

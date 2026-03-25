@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ContextTape, windowSource, extractWindowId } from '../agents/context.js';
 import {
   getContextRestoreMessages,

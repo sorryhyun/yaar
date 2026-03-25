@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { Taskbar } from '@/components/taskbar/Taskbar';
 
@@ -27,6 +28,10 @@ describe('Taskbar', () => {
       providerType: null,
       sessionId: null,
     });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('renders only the new-monitor button when no minimized windows', () => {
@@ -78,7 +83,7 @@ describe('Taskbar', () => {
   });
 
   it('click tab restores window via userFocusWindow', () => {
-    const focusSpy = vi.fn();
+    const focusSpy = mock(() => {});
     useDesktopStore.setState({
       windows: {
         w1: createMinimizedWindow('w1', 'Restore Me'),
@@ -92,8 +97,8 @@ describe('Taskbar', () => {
   });
 
   it('click close button closes window without restoring', () => {
-    const closeSpy = vi.fn();
-    const focusSpy = vi.fn();
+    const closeSpy = mock(() => {});
+    const focusSpy = mock(() => {});
     useDesktopStore.setState({
       windows: {
         w1: createMinimizedWindow('w1', 'Close Me'),

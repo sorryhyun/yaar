@@ -7,45 +7,26 @@
  * Also tests resolvePath() which wraps both STORAGE_DIR and mount resolution.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { resolveMountPath, _setMountsForTest } from '@yaar/server/storage/mounts';
+import { resolvePath } from '@yaar/server/storage/storage-manager';
 
 // ── resolveMountPath (mount-scoped traversal) ─────────────────────────────
 
 describe('resolveMountPath — mount-scoped path traversal', () => {
-  let resolveMountPath: (typeof import('@yaar/server/storage/mounts'))['resolveMountPath'];
-  let loadMounts: (typeof import('@yaar/server/storage/mounts'))['loadMounts'];
-
-  beforeEach(async () => {
-    // Reset module so cachedMounts is null again
-    vi.resetModules();
-
-    // Stub Bun.file to return a controlled mounts config
-    vi.stubGlobal('Bun', {
-      file: vi.fn((_path: string) => ({
-        text: async () =>
-          JSON.stringify([
-            {
-              alias: 'data',
-              hostPath: '/tmp/testmount',
-              readOnly: false,
-              createdAt: new Date().toISOString(),
-            },
-          ]),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
-
-    const mod = await import('@yaar/server/storage/mounts');
-    resolveMountPath = mod.resolveMountPath;
-    loadMounts = mod.loadMounts;
-
-    // Populate cachedMounts
-    await loadMounts();
+  beforeEach(() => {
+    _setMountsForTest([
+      {
+        alias: 'data',
+        hostPath: '/tmp/testmount',
+        readOnly: false,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    _setMountsForTest(null);
   });
 
   it('blocks classic ../.. traversal above a mounted alias', () => {
@@ -80,29 +61,12 @@ describe('resolveMountPath — mount-scoped path traversal', () => {
 });
 
 describe('resolveMountPath — without any mounts configured', () => {
-  let resolveMountPath: (typeof import('@yaar/server/storage/mounts'))['resolveMountPath'];
-  let loadMounts: (typeof import('@yaar/server/storage/mounts'))['loadMounts'];
-
-  beforeEach(async () => {
-    vi.resetModules();
-
-    // Stub Bun.file to return empty mounts list
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => JSON.stringify([]),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
-
-    const mod = await import('@yaar/server/storage/mounts');
-    resolveMountPath = mod.resolveMountPath;
-    loadMounts = mod.loadMounts;
-    await loadMounts();
+  beforeEach(() => {
+    _setMountsForTest([]);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    _setMountsForTest(null);
   });
 
   it('returns null for any mounts/ path when no mounts are registered', () => {
@@ -122,40 +86,25 @@ describe('resolvePath — storage-scoped path traversal', () => {
   // resolvePath is in storage-manager.ts and uses STORAGE_DIR as the root.
   // We test that "../" sequences are rejected without needing mount setup.
 
-  it('rejects paths that escape STORAGE_DIR', async () => {
-    vi.resetModules();
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => JSON.stringify([]),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
+  beforeEach(() => {
+    // Ensure no mounts interfere with resolvePath's mount check
+    _setMountsForTest([]);
+  });
 
-    const { resolvePath } = await import('@yaar/server/storage/storage-manager');
+  afterEach(() => {
+    _setMountsForTest(null);
+  });
+
+  it('rejects paths that escape STORAGE_DIR', () => {
     expect(resolvePath('../../etc/passwd')).toBeNull();
     expect(resolvePath('../config/hooks.json')).toBeNull();
     expect(resolvePath('../../../root/.ssh/id_rsa')).toBeNull();
-
-    vi.unstubAllGlobals();
   });
 
-  it('allows normal relative paths under STORAGE_DIR', async () => {
-    vi.resetModules();
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => JSON.stringify([]),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
-
-    const { resolvePath } = await import('@yaar/server/storage/storage-manager');
+  it('allows normal relative paths under STORAGE_DIR', () => {
     const result = resolvePath('documents/notes.txt');
     expect(result).not.toBeNull();
     expect(result!.absolutePath).not.toContain('..');
     expect(result!.readOnly).toBe(false);
-
-    vi.unstubAllGlobals();
   });
 });

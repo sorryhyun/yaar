@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import {
   createWsManager,
   sendEvent,
@@ -8,34 +8,34 @@ import { dispatchServerEvent } from '@/hooks/use-agent-connection/server-event-d
 
 function createHandlers() {
   return {
-    applyActions: vi.fn(),
-    setIsConnecting: vi.fn(),
-    setConnectionStatus: vi.fn(),
-    setSession: vi.fn(),
-    checkForPreviousSession: vi.fn(),
-    addDebugEntry: vi.fn(),
-    setAgentActive: vi.fn(),
-    clearAgent: vi.fn(),
-    registerWindowAgent: vi.fn(),
-    updateWindowAgentStatus: vi.fn(),
-    updateCliStreaming: vi.fn(),
-    finalizeCliStreaming: vi.fn(),
-    addCliEntry: vi.fn(),
-    handleAppProtocolRequest: vi.fn(),
-    handleVerbSubscriptionUpdate: vi.fn(),
-    restoreCliHistory: vi.fn(),
-    acceptMessage: vi.fn(),
-    queueMessage: vi.fn(),
-    clearAllMessageStatuses: vi.fn(),
-    incrementSubagentCount: vi.fn(),
-    decrementSubagentCount: vi.fn(),
+    applyActions: mock(() => {}),
+    setIsConnecting: mock(() => {}),
+    setConnectionStatus: mock(() => {}),
+    setSession: mock(() => {}),
+    checkForPreviousSession: mock(() => {}),
+    addDebugEntry: mock(() => {}),
+    setAgentActive: mock(() => {}),
+    clearAgent: mock(() => {}),
+    registerWindowAgent: mock(() => {}),
+    updateWindowAgentStatus: mock(() => {}),
+    updateCliStreaming: mock(() => {}),
+    finalizeCliStreaming: mock(() => {}),
+    addCliEntry: mock(() => {}),
+    handleAppProtocolRequest: mock(() => {}),
+    handleVerbSubscriptionUpdate: mock(() => {}),
+    restoreCliHistory: mock(() => {}),
+    acceptMessage: mock(() => {}),
+    queueMessage: mock(() => {}),
+    clearAllMessageStatuses: mock(() => {}),
+    incrementSubagentCount: mock(() => {}),
+    decrementSubagentCount: mock(() => {}),
   };
 }
 
 describe('transport manager', () => {
   it('sends only when socket is open', () => {
     const wsManager = createWsManager();
-    const send = vi.fn();
+    const send = mock(() => {});
     wsManager.ws = { readyState: WebSocket.OPEN, send } as unknown as WebSocket;
 
     const ok = sendEvent(wsManager, { type: 'INTERRUPT' });

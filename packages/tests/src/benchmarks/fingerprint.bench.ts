@@ -9,7 +9,7 @@
  * Run with: bun run --filter @yaar/tests bench
  */
 
-import { bench, describe } from 'vitest';
+import { bench, group, run } from 'mitata';
 import {
   normalizeContent,
   computeNgrams,
@@ -84,7 +84,7 @@ const FP_POOL: Fingerprint[] = Array.from({ length: 100 }, (_, i) =>
 
 // ── Benchmarks ────────────────────────────────────────────────────────────────
 
-describe('normalizeContent', () => {
+group('normalizeContent', () => {
   bench('typical prompt with XML wrappers', () => {
     normalizeContent(TYPICAL_PROMPT);
   });
@@ -94,7 +94,7 @@ describe('normalizeContent', () => {
   });
 });
 
-describe('computeNgrams', () => {
+group('computeNgrams', () => {
   bench('bigrams from 100-word text', () => {
     computeNgrams(WORDS_100, 2);
   });
@@ -108,7 +108,7 @@ describe('computeNgrams', () => {
   });
 });
 
-describe('jaccardSimilarity', () => {
+group('jaccardSimilarity', () => {
   bench('two similar ~40-ngram sets', () => {
     jaccardSimilarity(NGRAMS_A, NGRAMS_B);
   });
@@ -122,7 +122,7 @@ describe('jaccardSimilarity', () => {
   });
 });
 
-describe('computeSimilarity', () => {
+group('computeSimilarity', () => {
   bench('high-similarity pair', () => {
     computeSimilarity(FP_QUERY, FP_SIMILAR);
   });
@@ -132,7 +132,7 @@ describe('computeSimilarity', () => {
   });
 });
 
-describe('findMatches simulation (O(n) scan)', () => {
+group('findMatches simulation (O(n) scan)', () => {
   bench('scan 100 fingerprints — all misses', () => {
     for (const fp of FP_POOL) {
       computeSimilarity(FP_QUERY, fp);
@@ -147,3 +147,5 @@ describe('findMatches simulation (O(n) scan)', () => {
     }
   });
 });
+
+await run();

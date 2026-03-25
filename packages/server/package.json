@@ -11,7 +11,7 @@
     "start": "bun src/main.ts",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "lint": "eslint src",
-    "test": "vitest run"
+    "test": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.81",
@@ -37,8 +37,7 @@
     "eslint": "^10.0.2",
     "globals": "^17.3.0",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.54.0",
-    "vitest": "^4.0.18"
+    "typescript-eslint": "^8.54.0"
   },
   "engines": {
     "bun": ">=1.1.22"

@@ -1,7 +1,9 @@
 /**
  * Comprehensive tests for desktop store.
  */
-import { useDesktopStore, selectVisibleWindows, selectWindowsInOrder } from '../../store';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { useDesktopStore } from '../../store/desktop';
+import { selectVisibleWindows, selectWindowsInOrder } from '../../store/selectors';
 
 // Window store keys are scoped by monitorId: "0/w1"
 const key = (id: string) => `0/${id}`;

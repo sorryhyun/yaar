@@ -4,18 +4,13 @@
  * Uses checkHttpAuth and createFetchHandler directly — no Bun.serve() needed.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { checkHttpAuth, generateRemoteToken } from '@yaar/server/http/auth';
 import { checkWsAuth } from '@yaar/server/http/auth';
 
 // ── checkHttpAuth ──────────────────────────────────────────────────────────
 
 describe('checkHttpAuth', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.resetModules();
-  });
-
   it('allows all requests when IS_REMOTE is false (local dev)', () => {
     // IS_REMOTE defaults to false in test environment (no REMOTE=1 env var)
     const req = new Request('http://localhost:8000/api/apps');
@@ -66,11 +61,6 @@ describe('createFetchHandler CORS + routing', () => {
   // Heavy server deps are lazy-loaded or have graceful degradation.
   // We test the routing behavior without actually running any agents.
 
-  beforeEach(() => {
-    // Reset module state (e.g., session hub singleton)
-    vi.resetModules();
-  });
-
   it('handles OPTIONS preflight and returns 204 with no CORS from non-allowed origin', async () => {
     const { createFetchHandler } = await import('@yaar/server/http/server');
     const handler = createFetchHandler();
@@ -99,16 +89,8 @@ describe('createFetchHandler CORS + routing', () => {
   });
 
   it('returns 404 for completely unknown routes', async () => {
-    // Stub Bun so the static file handler can run (it calls Bun.file().exists())
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        exists: async () => false,
-        text: async () => '',
-        arrayBuffer: async () => new ArrayBuffer(0),
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
-
+    // In bun runtime, Bun.file().exists() works natively — no dist folder
+    // means static handler returns 404 for unknown routes.
     const { createFetchHandler } = await import('@yaar/server/http/server');
     const handler = createFetchHandler();
     const req = new Request('http://localhost:8000/this-route-does-not-exist-at-all');
@@ -117,8 +99,6 @@ describe('createFetchHandler CORS + routing', () => {
     expect(res).toBeDefined();
     // Static fallback with no dist → 404; or index.html if dist exists → 200
     expect([200, 404]).toContain(res!.status);
-
-    vi.unstubAllGlobals();
   });
 
   it('returns 200 for /health', async () => {

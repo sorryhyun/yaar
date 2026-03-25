@@ -2,7 +2,7 @@
  * Tests for pool drain on reset — verifies that ContextPool, AgentPool,
  * AppServer, and CodexProvider correctly handle in-flight tasks during reset.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { mock, describe, it, expect } from 'bun:test';
 import { InteractionTimeline } from '../agents/interaction-timeline.js';
 import { ContextTape, monitorSource, windowSource } from '../agents/context.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
@@ -61,13 +61,13 @@ describe('AgentPool.cleanup() interrupt-before-dispose', () => {
     const callOrder: string[] = [];
 
     const mockSession = {
-      interrupt: vi.fn(async () => {
+      interrupt: mock(async () => {
         callOrder.push('interrupt');
       }),
-      cleanup: vi.fn(async () => {
+      cleanup: mock(async () => {
         callOrder.push('cleanup');
       }),
-      isRunning: vi.fn(() => false),
+      isRunning: mock(() => false),
     };
 
     // Simulate what AgentPool.cleanup does
@@ -84,7 +84,6 @@ describe('AgentPool.cleanup() interrupt-before-dispose', () => {
     }
 
     expect(callOrder).toEqual(['interrupt', 'cleanup']);
-    expect(mockSession.interrupt).toHaveBeenCalledBefore(mockSession.cleanup);
   });
 });
 
@@ -204,12 +203,14 @@ describe('AgentLimiter.clearWaiting during reset', () => {
     limiter.tryAcquire();
 
     // Queue a waiter
-    const waiterPromise = limiter.acquire();
+    const waiterPromise = limiter.acquire().catch((e: Error) => e);
 
     // Clear with reset error
     limiter.clearWaiting(new Error('Pool resetting'));
 
-    await expect(waiterPromise).rejects.toThrow('Pool resetting');
+    const result = await waiterPromise;
+    expect(result).toBeInstanceOf(Error);
+    expect((result as Error).message).toBe('Pool resetting');
     expect(limiter.getWaitingCount()).toBe(0);
 
     limiter.reset();

@@ -4,37 +4,35 @@
  * Mocks CDPClient to test session logic in isolation: creation with domain
  * initialization, navigation, clicking, typing, and screenshot capture.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mock, describe, it, expect, beforeEach } from 'bun:test';
 
 // ── Mock CDP ────────────────────────────────────────────────────────────────
 
 const FAKE_IMAGE_BASE64 = Buffer.from('fake-image').toString('base64');
 
-/**
- * vi.hoisted() ensures these variables exist before the vi.mock factory runs,
- * since vi.mock is hoisted to the top of the file by vitest.
- */
-const { mockSend, mockWaitForEvent, mockClose, mockOn } = vi.hoisted(() => ({
-  mockSend: vi.fn(),
-  mockWaitForEvent: vi.fn(),
-  mockClose: vi.fn(),
-  mockOn: vi.fn(),
-}));
+const mockSend = mock((_method: string, _params?: Record<string, unknown>) =>
+  Promise.resolve({} as Record<string, unknown>),
+);
+const mockWaitForEvent = mock(() => Promise.resolve(undefined));
+const mockClose = mock(() => undefined);
+const mockOn = mock(() => {});
 
-vi.mock('../lib/browser/cdp.js', () => ({
+mock.module('../lib/browser/cdp.js', () => ({
   CDPClient: {
-    connect: vi.fn().mockResolvedValue({
-      send: mockSend,
-      waitForEvent: mockWaitForEvent,
-      close: mockClose,
-      on: mockOn,
-    }),
+    connect: mock(() =>
+      Promise.resolve({
+        send: mockSend,
+        waitForEvent: mockWaitForEvent,
+        close: mockClose,
+        on: mockOn,
+      }),
+    ),
   },
 }));
 
 // Import after mocks are established
-import { BrowserSession } from '../lib/browser/session.js';
-import { CDPClient } from '../lib/browser/cdp.js';
+const { BrowserSession } = await import('../lib/browser/session.js');
+const { CDPClient } = await import('../lib/browser/cdp.js');
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -64,7 +62,12 @@ function defaultSendHandler(method: string) {
 
 describe('BrowserSession', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockSend.mockClear();
+    mockWaitForEvent.mockClear();
+    mockClose.mockClear();
+    mockOn.mockClear();
+    (CDPClient.connect as ReturnType<typeof mock>).mockClear();
+
     mockSend.mockImplementation(defaultSendHandler);
     mockWaitForEvent.mockResolvedValue(undefined);
     mockClose.mockReturnValue(undefined);
@@ -102,7 +105,11 @@ describe('BrowserSession', () => {
 
   it('navigate sends Page.navigate, waits for load, takes screenshot, returns state', async () => {
     const session = await BrowserSession.create('nav-1', 'ws://localhost:9222/devtools/page/x');
-    vi.clearAllMocks();
+    mockSend.mockClear();
+    mockWaitForEvent.mockClear();
+    mockClose.mockClear();
+    mockOn.mockClear();
+    (CDPClient.connect as ReturnType<typeof mock>).mockClear();
 
     // Track Runtime.evaluate call sequence to return appropriate values
     let evalCallCount = 0;
@@ -159,7 +166,7 @@ describe('BrowserSession', () => {
 
   it('click with selector evaluates JS for coordinates, dispatches mouse events', async () => {
     const session = await BrowserSession.create('click-1', 'ws://localhost:9222/devtools/page/y');
-    vi.clearAllMocks();
+    mockSend.mockClear();
 
     let evalCallCount = 0;
     mockSend.mockImplementation((method: string, params?: Record<string, unknown>) => {
@@ -200,9 +207,9 @@ describe('BrowserSession', () => {
     const state = await session.click('#my-button');
 
     // Evaluated JS to find element coordinates using the provided selector
-    const evalCalls = mockSend.mock.calls.filter(([m]) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(([m]: any) => m === 'Runtime.evaluate');
     expect(evalCalls.length).toBeGreaterThanOrEqual(1);
-    expect(evalCalls[0][1].expression).toContain('#my-button');
+    expect((evalCalls[0] as any)[1].expression).toContain('#my-button');
 
     // Mouse press and release dispatched at element center coordinates
     expect(mockSend).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
@@ -227,7 +234,7 @@ describe('BrowserSession', () => {
 
   it('type clicks element, focuses input, inserts text, fires events', async () => {
     const session = await BrowserSession.create('type-1', 'ws://localhost:9222/devtools/page/z');
-    vi.clearAllMocks();
+    mockSend.mockClear();
 
     let evalCallCount = 0;
     mockSend.mockImplementation((method: string) => {
@@ -260,10 +267,10 @@ describe('BrowserSession', () => {
 
     const state = await session.type('#search-input', 'hello world');
 
-    const evalCalls = mockSend.mock.calls.filter(([m]) => m === 'Runtime.evaluate');
+    const evalCalls = mockSend.mock.calls.filter(([m]: any) => m === 'Runtime.evaluate');
 
     // First evaluate: FIND_BY_SELECTOR to get coordinates for pre-click
-    expect(evalCalls[0][1].expression).toContain('#search-input');
+    expect((evalCalls[0] as any)[1].expression).toContain('#search-input');
 
     // Mouse click dispatched before focus (fires SPA focus handlers)
     expect(mockSend).toHaveBeenCalledWith('Input.dispatchMouseEvent', {
@@ -275,8 +282,8 @@ describe('BrowserSession', () => {
     });
 
     // Second evaluate: FOCUS_AND_CLEAR (focuses and clears the input element)
-    expect(evalCalls[1][1].expression).toContain('#search-input');
-    expect(evalCalls[1][1].expression).toContain('focus');
+    expect((evalCalls[1] as any)[1].expression).toContain('#search-input');
+    expect((evalCalls[1] as any)[1].expression).toContain('focus');
 
     // Text was inserted via CDP Input.insertText
     expect(mockSend).toHaveBeenCalledWith('Input.insertText', {
@@ -284,8 +291,8 @@ describe('BrowserSession', () => {
     });
 
     // Third evaluate: fires input and change events
-    expect(evalCalls[2][1].expression).toContain('input');
-    expect(evalCalls[2][1].expression).toContain('change');
+    expect((evalCalls[2] as any)[1].expression).toContain('input');
+    expect((evalCalls[2] as any)[1].expression).toContain('change');
 
     // Returns updated page state
     expect(state.url).toBe('https://example.com');
@@ -294,7 +301,7 @@ describe('BrowserSession', () => {
 
   it('screenshot returns buffer from CDP captureScreenshot', async () => {
     const session = await BrowserSession.create('ss-1', 'ws://localhost:9222/devtools/page/ss');
-    vi.clearAllMocks();
+    mockSend.mockClear();
 
     mockSend.mockImplementation((method: string) => {
       if (method === 'Page.captureScreenshot') return Promise.resolve({ data: FAKE_IMAGE_BASE64 });

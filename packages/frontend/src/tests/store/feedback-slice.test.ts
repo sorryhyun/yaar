@@ -2,6 +2,7 @@
  * Tests for the feedback slice of the Zustand store.
  * Covers App Protocol responses and App Interactions queues.
  */
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { useDesktopStore } from '../../store/desktop';
 
 describe('Feedback Slice', () => {

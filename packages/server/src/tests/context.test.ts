@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { ContextTape, monitorSource, windowSource } from '../agents/context.js';
 
 describe('ContextTape', () => {

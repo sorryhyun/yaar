@@ -7,7 +7,7 @@
  * Uses a TestableAppProtocolEmitter that reproduces the app protocol
  * methods to avoid AsyncLocalStorage and other server dependencies.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { EventEmitter } from 'events';
 
 interface AppProtocolRequest {
@@ -154,35 +154,20 @@ describe('ActionEmitter App Protocol', () => {
     });
 
     it('times out and resolves with false', async () => {
-      vi.useFakeTimers();
-      try {
-        const promise = emitter.waitForAppReady('win-1', 1000);
+      const promise = emitter.waitForAppReady('win-1', 50);
 
-        vi.advanceTimersByTime(1000);
-
-        const result = await promise;
-        expect(result).toBe(false);
-      } finally {
-        vi.useRealTimers();
-      }
+      const result = await promise;
+      expect(result).toBe(false);
     });
 
     it('only resolves for the correct windowId', async () => {
-      vi.useFakeTimers();
-      try {
-        const promise = emitter.waitForAppReady('win-1', 2000);
+      const promise = emitter.waitForAppReady('win-1', 50);
 
-        // Notify a different window - should not resolve win-1's promise
-        emitter.notifyAppReady('win-2');
+      // Notify a different window - should not resolve win-1's promise
+      emitter.notifyAppReady('win-2');
 
-        // win-1 should still be waiting, advance past timeout
-        vi.advanceTimersByTime(2000);
-
-        const result = await promise;
-        expect(result).toBe(false);
-      } finally {
-        vi.useRealTimers();
-      }
+      const result = await promise;
+      expect(result).toBe(false);
     });
   });
 
@@ -231,18 +216,11 @@ describe('ActionEmitter App Protocol', () => {
     });
 
     it('request times out and returns null', async () => {
-      vi.useFakeTimers();
-      try {
-        const request: AppProtocolRequest = { kind: 'command', command: 'doSomething' };
-        const responsePromise = emitter.emitAppProtocolRequest('win-1', request, 1000);
+      const request: AppProtocolRequest = { kind: 'command', command: 'doSomething' };
+      const responsePromise = emitter.emitAppProtocolRequest('win-1', request, 50);
 
-        vi.advanceTimersByTime(1000);
-
-        const result = await responsePromise;
-        expect(result).toBeNull();
-      } finally {
-        vi.useRealTimers();
-      }
+      const result = await responsePromise;
+      expect(result).toBeNull();
     });
 
     it('generates unique requestIds for consecutive requests', async () => {

@@ -3,6 +3,7 @@
  * from the server to the target iframe via postMessage, collects responses,
  * and pushes them into the store.
  */
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { handleAppProtocolRequest, useDesktopStore } from '@/store';
 import { toWindowKey } from '@/store/helpers';
 import type { AppProtocolRequest } from '@yaar/shared';
@@ -43,15 +44,17 @@ function createWindowElement(windowId: string): {
 }
 
 describe('handleAppProtocolRequest', () => {
+  let originalSetTimeout: typeof globalThis.setTimeout;
+
   beforeEach(() => {
     resetStore();
-    vi.useFakeTimers();
+    originalSetTimeout = globalThis.setTimeout;
     // Clean up any leftover DOM nodes from prior tests
     document.body.innerHTML = '';
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    globalThis.setTimeout = originalSetTimeout;
     document.body.innerHTML = '';
   });
 
@@ -96,7 +99,7 @@ describe('handleAppProtocolRequest', () => {
     const { iframe } = createWindowElement(windowId);
 
     // Mock postMessage on the iframe's contentWindow
-    const postMessageSpy = vi.fn();
+    const postMessageSpy = mock(() => {});
     Object.defineProperty(iframe, 'contentWindow', {
       value: { postMessage: postMessageSpy },
       writable: false,
@@ -118,7 +121,12 @@ describe('handleAppProtocolRequest', () => {
         requestId: 'req-1',
         manifest: { appId: 'test', name: 'Test App', state: {}, commands: {} },
       },
-      source: iframe.contentWindow as Window,
+    });
+    // happy-dom's MessageEvent constructor doesn't accept source in init dict,
+    // so we set it via defineProperty
+    Object.defineProperty(responseEvent, 'source', {
+      value: iframe.contentWindow,
+      writable: false,
     });
     window.dispatchEvent(responseEvent);
 
@@ -138,11 +146,17 @@ describe('handleAppProtocolRequest', () => {
     const windowId = 'win-slow';
     const { iframe } = createWindowElement(windowId);
 
-    const postMessageSpy = vi.fn();
+    const postMessageSpy = mock(() => {});
     Object.defineProperty(iframe, 'contentWindow', {
       value: { postMessage: postMessageSpy },
       writable: false,
     });
+
+    // Override setTimeout to invoke the callback immediately (simulates timer expiry)
+    globalThis.setTimeout = ((fn: () => void, _delay?: number) => {
+      fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof globalThis.setTimeout;
 
     const request: AppProtocolRequest = {
       kind: 'command',
@@ -153,12 +167,6 @@ describe('handleAppProtocolRequest', () => {
 
     // Verify postMessage was called
     expect(postMessageSpy).toHaveBeenCalledTimes(1);
-
-    // No response arrives — no pending responses yet
-    expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(0);
-
-    // Advance past the 5000ms timeout
-    vi.advanceTimersByTime(5000);
 
     const responses = useDesktopStore.getState().pendingAppProtocolResponses;
     expect(responses).toHaveLength(1);

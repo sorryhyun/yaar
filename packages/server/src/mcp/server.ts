@@ -64,6 +64,14 @@ const skipAuth = process.env.MCP_SKIP_AUTH === '1';
 let initialized = false;
 
 /**
+ * Whether MCP auth is skipped (MCP_SKIP_AUTH=1 at module load time).
+ * @internal — exposed for testing.
+ */
+export function isMcpAuthSkipped(): boolean {
+  return skipAuth;
+}
+
+/**
  * Get the MCP authentication token.
  * Must be called after initMcpServer().
  */

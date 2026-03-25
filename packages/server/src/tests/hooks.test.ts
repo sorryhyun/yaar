@@ -1,47 +1,51 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
-import {
-  loadHooks,
-  addHook,
-  removeHook,
-  getHooksByEvent,
-  getToolUseHooks,
-  _resetHooksCache,
-} from '../features/config/hooks.js';
 
 // Use a temporary config directory for tests
 const TEST_CONFIG_DIR = join(import.meta.dirname, '__test-config__');
 
-// Mock getConfigDir to point to our test directory
-vi.mock('../../src/storage/storage-manager.js', async () => {
-  return {
-    configRead: async (filePath: string) => {
-      const { readFile } = await import('fs/promises');
-      const { join: pathJoin, normalize, relative } = await import('path');
-      const normalizedPath = normalize(pathJoin(TEST_CONFIG_DIR, filePath));
-      const rel = relative(TEST_CONFIG_DIR, normalizedPath);
-      if (rel.startsWith('..')) return { success: false, error: 'traversal' };
-      try {
-        const content = await readFile(normalizedPath, 'utf-8');
-        return { success: true, content };
-      } catch {
-        return { success: false, error: 'not found' };
-      }
-    },
-    configWrite: async (filePath: string, content: string) => {
-      const { writeFile: wf, mkdir: mkd } = await import('fs/promises');
-      const { join: pathJoin, normalize, relative, dirname } = await import('path');
-      const normalizedPath = normalize(pathJoin(TEST_CONFIG_DIR, filePath));
-      const rel = relative(TEST_CONFIG_DIR, normalizedPath);
-      if (rel.startsWith('..')) return { success: false, path: filePath, error: 'traversal' };
-      await mkd(dirname(normalizedPath), { recursive: true });
-      await wf(normalizedPath, content, 'utf-8');
-      return { success: true, path: filePath };
-    },
-    getConfigDir: () => TEST_CONFIG_DIR,
-  };
-});
+// Mock storage-manager to point to our test directory
+mock.module('../storage/storage-manager.js', () => ({
+  configRead: async (filePath: string) => {
+    const { readFile } = await import('fs/promises');
+    const { join: pathJoin, normalize, relative } = await import('path');
+    const normalizedPath = normalize(pathJoin(TEST_CONFIG_DIR, filePath));
+    const rel = relative(TEST_CONFIG_DIR, normalizedPath);
+    if (rel.startsWith('..')) return { success: false, error: 'traversal' };
+    try {
+      const content = await readFile(normalizedPath, 'utf-8');
+      return { success: true, content };
+    } catch {
+      return { success: false, error: 'not found' };
+    }
+  },
+  configWrite: async (filePath: string, content: string) => {
+    const { writeFile: wf, mkdir: mkd } = await import('fs/promises');
+    const { join: pathJoin, normalize, relative, dirname } = await import('path');
+    const normalizedPath = normalize(pathJoin(TEST_CONFIG_DIR, filePath));
+    const rel = relative(TEST_CONFIG_DIR, normalizedPath);
+    if (rel.startsWith('..')) return { success: false, path: filePath, error: 'traversal' };
+    await mkd(dirname(normalizedPath), { recursive: true });
+    await wf(normalizedPath, content, 'utf-8');
+    return { success: true, path: filePath };
+  },
+  getConfigDir: () => TEST_CONFIG_DIR,
+  resolvePath: (path: string) => ({ absolutePath: `/mock-storage/${path}`, readOnly: false }),
+  resolvePathAsync: async (path: string) => ({
+    absolutePath: `/mock-storage/${path}`,
+    readOnly: false,
+  }),
+  ensureStorageDir: async () => {},
+  storageRead: async () => ({ success: false }),
+  storageWrite: async () => ({ success: true }),
+  storageList: async () => ({ success: true, entries: [] }),
+  storageDelete: async () => ({ success: true }),
+  storageGrep: async () => ({ success: true, matches: [] }),
+}));
+
+const { loadHooks, addHook, removeHook, getHooksByEvent, getToolUseHooks, _resetHooksCache } =
+  await import('../features/config/hooks.js');
 
 describe('hooks storage', () => {
   beforeEach(async () => {

@@ -5,7 +5,7 @@
  * These test the actual (unmocked) functions from chrome.ts to verify
  * the cleanup logic works end-to-end.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFile, readFile, mkdir, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';

@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
-    "bench": "vitest bench",
+    "test": "bun test",
+    "bench": "bun run src/benchmarks/context-tape.bench.ts && bun run src/benchmarks/fingerprint.bench.ts && bun run src/benchmarks/startup.bench.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -12,6 +12,6 @@
     "@yaar/server": "workspace:*",
     "@yaar/shared": "workspace:*",
     "bun-types": "^1.2.15",
-    "vitest": "^4.0.18"
+    "mitata": "^1.0.34"
   }
 }

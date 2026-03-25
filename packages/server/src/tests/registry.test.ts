@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { ResourceRegistry } from '../handlers/uri-registry.js';
 import type { ResourceHandler } from '../handlers/uri-registry.js';
 

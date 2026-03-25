@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["bun-types", "vitest/globals"],
+    "types": ["bun-types"],
     "paths": {
       "@yaar/server/*": ["../server/src/*"],
       "@yaar/shared": ["../shared/src/index.ts"]

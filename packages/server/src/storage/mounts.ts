@@ -153,3 +153,11 @@ export function resolveMountPath(storagePath: string): ResolvedPath | null {
 
   return { absolutePath, readOnly: mount.readOnly };
 }
+
+/**
+ * Override the cached mounts for testing. Pass null to reset.
+ * @internal — only for use in test files.
+ */
+export function _setMountsForTest(mounts: MountEntry[] | null): void {
+  cachedMounts = mounts;
+}

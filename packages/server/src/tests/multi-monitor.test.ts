@@ -4,7 +4,7 @@
  * Validates createMonitorAgent, removeMonitorAgent, hasMonitorAgent,
  * and independent coexistence of multiple monitors.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { AITransport } from '../providers/types.js';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
@@ -14,109 +14,235 @@ function createMockProvider(): AITransport {
     name: 'mock',
     providerType: 'claude',
     systemPrompt: '',
-    dispose: vi.fn(async () => {}),
+    dispose: mock(async () => {}),
     isAvailable: async () => true,
-    query: vi.fn(),
-    interrupt: vi.fn(),
-  };
+    query: mock(() => {}),
+    interrupt: mock(() => {}),
+  } as unknown as AITransport;
 }
 
-vi.mock('../providers/factory.js', () => ({
-  acquireWarmProvider: vi.fn(async () => createMockProvider()),
-  getWarmPool: () => ({ resetCodexProviders: vi.fn() }),
+mock.module('../providers/factory.js', () => ({
+  providerRegistry: {},
+  getAvailableProviders: mock(async () => []),
+  createProvider: mock(async () => null),
+  getFirstAvailableProvider: mock(async () => null),
+  getProviderInfo: mock(() => undefined),
+  getAllProviderInfo: mock(() => []),
+  initWarmPool: mock(async () => {}),
+  acquireWarmProvider: mock(async () => createMockProvider()),
+  getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
 }));
 
-vi.mock('../logging/index.js', () => {
+mock.module('../logging/index.js', () => {
   class MockSessionLogger {
-    logUserMessage = vi.fn();
-    logAgentMessage = vi.fn();
-    logAction = vi.fn();
-    logThreadId = vi.fn();
-    registerAgent = vi.fn();
-    close = vi.fn();
-    setLogger = vi.fn();
+    logUserMessage = mock(() => {});
+    logAgentMessage = mock(() => {});
+    logAction = mock(() => {});
+    logThreadId = mock(() => {});
+    registerAgent = mock(() => {});
+    close = mock(() => {});
+    setLogger = mock(() => {});
   }
   return {
-    createSession: vi.fn(async () => ({
+    SESSIONS_DIR: '/tmp/test-sessions',
+    ensureSessionsDir: mock(async () => {}),
+    createSession: mock(async () => ({
       sessionId: 'test-session',
       logPath: '/tmp/test',
       directory: '/tmp/test',
     })),
     SessionLogger: MockSessionLogger,
+    listSessions: mock(async () => []),
+    parseSessionMessages: mock(() => []),
+    getWindowRestoreActions: mock(() => []),
+    refreshIframeTokens: mock(() => []),
+    getContextRestoreMessages: mock(() => []),
+    FULL_RESTORE_POLICY: { mode: 'full' },
+    getCliRestoreEntries: mock(() => []),
   };
 });
 
-vi.mock('../agents/limiter.js', () => ({
+// Provide a real AgentLimiter class (mock.module persists across files).
+class RealAgentLimiter {
+  private maxAgents: number;
+  private currentCount = 0;
+  private waitingQueue: Array<{
+    resolve: () => void;
+    reject: (e: Error) => void;
+    timeoutId?: NodeJS.Timeout;
+  }> = [];
+  constructor(maxAgents?: number) {
+    this.maxAgents = maxAgents ?? 10;
+  }
+  getMaxAgents() {
+    return this.maxAgents;
+  }
+  getCurrentCount() {
+    return this.currentCount;
+  }
+  getWaitingCount() {
+    return this.waitingQueue.length;
+  }
+  getStats() {
+    return {
+      maxAgents: this.maxAgents,
+      currentCount: this.currentCount,
+      waitingCount: this.waitingQueue.length,
+    };
+  }
+  tryAcquire() {
+    if (this.currentCount < this.maxAgents) {
+      this.currentCount++;
+      return true;
+    }
+    return false;
+  }
+  async acquire(timeoutMs?: number) {
+    if (this.tryAcquire()) return;
+    return new Promise<void>((resolve, reject) => {
+      const req = {
+        resolve: () => {
+          this.currentCount++;
+          resolve();
+        },
+        reject,
+      } as any;
+      if (timeoutMs && timeoutMs > 0) {
+        req.timeoutId = setTimeout(() => {
+          const idx = this.waitingQueue.indexOf(req);
+          if (idx !== -1) this.waitingQueue.splice(idx, 1);
+          reject(new Error(`Agent acquisition timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }
+      this.waitingQueue.push(req);
+    });
+  }
+  release() {
+    if (this.currentCount <= 0) {
+      console.warn('[AgentLimiter] release() called when currentCount is 0');
+      return;
+    }
+    this.currentCount--;
+    if (this.waitingQueue.length > 0) {
+      const next = this.waitingQueue.shift();
+      if (next) {
+        if (next.timeoutId) clearTimeout(next.timeoutId);
+        next.resolve();
+      }
+    }
+  }
+  clearWaiting(error?: Error) {
+    const err = error ?? new Error('AgentLimiter shutting down');
+    for (const r of this.waitingQueue) {
+      if (r.timeoutId) clearTimeout(r.timeoutId);
+      r.reject(err);
+    }
+    this.waitingQueue = [];
+  }
+  reset() {
+    this.clearWaiting();
+    this.currentCount = 0;
+  }
+}
+
+mock.module('../agents/limiter.js', () => ({
+  AgentLimiter: RealAgentLimiter,
   getAgentLimiter: () => ({
     tryAcquire: () => true,
-    release: vi.fn(),
-    clearWaiting: vi.fn(),
+    release: mock(() => {}),
+    clearWaiting: mock(() => {}),
   }),
+  resetAgentLimiter: mock(() => {}),
 }));
 
-vi.mock('../storage/storage-manager.js', () => ({
-  configRead: vi.fn(async () => ({ success: false })),
-  configWrite: vi.fn(async () => {}),
+mock.module('../storage/storage-manager.js', () => ({
+  configRead: mock(async () => ({ success: false })),
+  configWrite: mock(async () => {}),
+  resolvePath: (path: string) => ({ absolutePath: `/mock-storage/${path}`, readOnly: false }),
+  resolvePathAsync: async (path: string) => ({
+    absolutePath: `/mock-storage/${path}`,
+    readOnly: false,
+  }),
+  getConfigDir: () => '/tmp/mock-config',
+  ensureStorageDir: async () => {},
+  storageRead: mock(async () => ({ success: false })),
+  storageWrite: mock(async () => ({ success: true })),
+  storageList: mock(async () => ({ success: true, entries: [] })),
+  storageDelete: mock(async () => ({ success: true })),
+  storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
 
-vi.mock('../providers/environment.js', () => ({
-  buildEnvironmentSection: vi.fn(async () => ''),
+mock.module('../providers/environment.js', () => ({
+  buildEnvironmentSection: mock(async () => ''),
 }));
 
-vi.mock('../session/action-emitter.js', () => ({
+mock.module('../session/action-emitter.js', () => ({
   actionEmitter: {
-    onAction: vi.fn(() => vi.fn()),
-    emitAction: vi.fn(),
-    resolveFeedback: vi.fn(),
+    onAction: mock(() => mock(() => {})),
+    emitAction: mock(() => {}),
+    resolveFeedback: mock(() => {}),
   },
 }));
 
-vi.mock('../agents/profiles/index.js', () => ({
-  getProfile: vi.fn(() => ({ id: 'web', systemPrompt: '', allowedTools: [] })),
+mock.module('../agents/profiles/index.js', () => ({
+  getProfile: mock(() => ({ id: 'web', systemPrompt: '', allowedTools: [] })),
   DEVELOPER_PROFILE: { id: 'developer', systemPrompt: '', allowedTools: [] },
+  SESSION_AGENT_PROFILE: { id: 'session', systemPrompt: '', allowedTools: [] },
+  WEB_PROFILE: { id: 'web', systemPrompt: '', allowedTools: [] },
+  VERB_TOOL_NAMES: [],
+  VERB_TOOLS: [],
+  APP_AGENT_TOOL_NAMES: [],
+  buildAppAgentProfile: mock(() => ({ id: 'app', systemPrompt: '', allowedTools: [] })),
+  ORCHESTRATOR_PROMPT: '',
+  getOrchestratorPrompt: mock(() => ''),
+  getDeveloperAllowedTools: mock(() => []),
+  buildAgentDefinitions: mock(() => []),
+  CODEX_AGENT_ROLES: {},
+  codexRoleToToml: mock(() => ''),
 }));
 
 // Mock AgentSession so we don't need real providers
-vi.mock('../agents/session.js', () => {
+mock.module('../agents/session.js', () => {
   class MockAgentSession {
-    initialize = vi.fn(async () => true);
-    handleMessage = vi.fn(async () => {});
-    isRunning = vi.fn(() => false);
-    interrupt = vi.fn(async () => {});
-    cleanup = vi.fn(async () => {});
-    getRawSessionId = vi.fn(() => null);
-    getRecordedActions = vi.fn(() => []);
-    setOutputCallback = vi.fn();
-    getInstanceId = vi.fn(() => `agent-${Date.now()}`);
-    getConnectionId = vi.fn(() => 'test-conn');
-    getCurrentRole = vi.fn(() => null);
-    getCurrentMessageId = vi.fn(() => null);
-    steer = vi.fn(async () => false);
+    initialize = mock(async () => true);
+    handleMessage = mock(async () => {});
+    isRunning = mock(() => false);
+    interrupt = mock(async () => {});
+    cleanup = mock(async () => {});
+    getRawSessionId = mock(() => null);
+    getRecordedActions = mock(() => []);
+    setOutputCallback = mock(() => {});
+    getInstanceId = mock(() => `agent-${Date.now()}`);
+    getConnectionId = mock(() => 'test-conn');
+    getCurrentRole = mock(() => null);
+    getCurrentMessageId = mock(() => null);
+    steer = mock(async () => false);
   }
   return {
     AgentSession: MockAgentSession,
-    getAgentId: vi.fn(),
-    getCurrentConnectionId: vi.fn(),
-    getSessionId: vi.fn(),
-    getMonitorId: vi.fn(),
-    runWithAgentId: vi.fn(),
-    runWithAgentContext: vi.fn(),
+    getAgentId: mock(() => undefined),
+    getCurrentConnectionId: mock(() => undefined),
+    getSessionId: mock(() => undefined),
+    getMonitorId: mock(() => '0'),
+    getWindowId: mock(() => undefined),
+    runWithAgentId: mock((_id: string, fn: () => unknown) => fn()),
+    runWithAgentContext: mock((_ctx: unknown, fn: () => unknown) => fn()),
   };
 });
 
 // ── Test setup ─────────────────────────────────────────────────────────────
 
-import { ContextPool } from '../agents/context-pool.js';
-import type { SessionId } from '../session/types.js';
+const { ContextPool } = await import('../agents/context-pool.js');
+type SessionId = import('../session/types.js').SessionId;
 
 function createMockWindowState() {
   return {
     listWindows: () => [],
-    clear: vi.fn(),
-    getWindow: vi.fn(),
-    setWindow: vi.fn(),
-    removeWindow: vi.fn(),
-    setAppProtocol: vi.fn(),
+    clear: mock(() => {}),
+    getWindow: mock(() => {}),
+    setWindow: mock(() => {}),
+    removeWindow: mock(() => {}),
+    setAppProtocol: mock(() => {}),
   };
 }
 
@@ -124,19 +250,19 @@ function createMockReloadCache() {
   return {
     findMatches: () => [],
     record: () => {},
-    clear: vi.fn(),
+    clear: mock(() => {}),
   };
 }
 
 describe('Multi-monitor lifecycle', () => {
-  let pool: ContextPool;
+  let pool: InstanceType<typeof ContextPool>;
 
   beforeEach(async () => {
     pool = new ContextPool(
       'test-session' as SessionId,
       createMockWindowState() as any,
       createMockReloadCache() as any,
-      vi.fn(), // broadcast callback
+      mock(() => {}), // broadcast callback
     );
     // Initialize creates the default default monitor agent
     await pool.initialize();

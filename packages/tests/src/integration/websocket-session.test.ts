@@ -6,21 +6,21 @@
  * connection required.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { createMockWs } from '../helpers/mocks.js';
 
 // Mock warm pool to prevent AI provider initialization
-vi.mock('@yaar/server/providers/warm-pool', () => ({
-  getWarmPool: vi.fn(() => ({
+mock.module('@yaar/server/providers/warm-pool', () => ({
+  getWarmPool: mock(() => ({
     getPreferredProvider: () => null,
-    acquire: vi.fn(),
+    acquire: mock(() => {}),
     stats: () => ({ warm: 0, pending: 0, total: 0 }),
   })),
-  initWarmPool: vi.fn().mockResolvedValue(true),
+  initWarmPool: mock(() => Promise.resolve(true)),
 }));
 
-import { prepareWsData } from '@yaar/server/websocket/server';
-import { initSessionHub, getSessionHub } from '@yaar/server/session/session-hub';
+const { prepareWsData } = await import('@yaar/server/websocket/server');
+const { initSessionHub, getSessionHub } = await import('@yaar/server/session/session-hub');
 
 // ── prepareWsData ──────────────────────────────────────────────────────────
 

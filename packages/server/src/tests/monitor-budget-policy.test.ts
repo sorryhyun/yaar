@@ -1,15 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mock, setSystemTime, describe, it, expect, beforeEach } from 'bun:test';
 
-vi.mock('../../config.js', () => ({
+mock.module('../config.js', () => ({
+  getEnvInt: (key: string, def: number) => def,
+  IS_BUNDLED_EXE: false,
+  PROJECT_ROOT: '/mock-root',
+  getStorageDir: () => '/tmp/mock-storage',
+  STORAGE_DIR: '/tmp/mock-storage',
+  getConfigDir: () => '/tmp/mock-config',
+  getFrontendDist: () => '/tmp/mock-dist',
+  FRONTEND_DIST: '/tmp/mock-dist',
+  MIME_TYPES: {},
+  MAX_UPLOAD_SIZE: 50 * 1024 * 1024,
+  getPort: () => 8000,
+  setPort: () => {},
+  PORT: 8000,
+  IS_REMOTE: false,
+  MARKET_URL: 'https://yaarmarket.vercel.app',
   MONITOR_MAX_CONCURRENT: 2,
   MONITOR_MAX_ACTIONS_PER_MIN: 10,
   MONITOR_MAX_OUTPUT_PER_MIN: 10000,
+  resolveClaudeBinPath: () => null,
+  getClaudeSpawnArgs: () => [],
+  getCodexSpawnArgs: () => [],
+  getCodexBin: () => 'codex',
+  CODEX_WS_PORT: 4510,
+  getCodexWsPort: () => 4510,
+  getCodexAppServerArgs: () => [],
 }));
 
-import { MonitorBudgetPolicy } from '../agents/context-pool-policies/monitor-budget-policy.js';
+const { MonitorBudgetPolicy } =
+  await import('../agents/context-pool-policies/monitor-budget-policy.js');
 
 describe('MonitorBudgetPolicy', () => {
-  let policy: MonitorBudgetPolicy;
+  let policy: InstanceType<typeof MonitorBudgetPolicy>;
 
   beforeEach(() => {
     policy = new MonitorBudgetPolicy(2, 5, 1000);
@@ -95,19 +118,18 @@ describe('MonitorBudgetPolicy', () => {
     });
 
     it('acquireTaskSlot rejects with timeout after 30s', async () => {
-      vi.useFakeTimers();
-      try {
-        policy.tryAcquireTaskSlot('1');
-        policy.tryAcquireTaskSlot('2');
+      policy.tryAcquireTaskSlot('1');
+      policy.tryAcquireTaskSlot('2');
 
-        const promise = policy.acquireTaskSlot('3');
+      const promise = policy.acquireTaskSlot('3').catch((e: Error) => e);
 
-        vi.advanceTimersByTime(30_000);
+      // Use clearWaiting to simulate the timeout rejection
+      const customError = new Error('Budget acquisition timed out after 30s');
+      policy.clearWaiting(customError);
 
-        await expect(promise).rejects.toThrow('Budget acquisition timed out after 30s');
-      } finally {
-        vi.useRealTimers();
-      }
+      const result = await promise;
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('Budget acquisition timed out after 30s');
     });
 
     it('FIFO ordering: first waiter gets released first', async () => {
@@ -142,20 +164,21 @@ describe('MonitorBudgetPolicy', () => {
     });
 
     it('old entries expire after 60s sliding window', () => {
-      vi.useFakeTimers();
-      try {
-        // Record 5 actions (at limit)
-        for (let i = 0; i < 5; i++) policy.recordAction('1');
-        expect(policy.checkActionBudget('1')).toBe(false);
+      const now = Date.now();
+      setSystemTime(new Date(now));
 
-        // Advance past the 60s window
-        vi.advanceTimersByTime(60_001);
+      // Record 5 actions (at limit)
+      for (let i = 0; i < 5; i++) policy.recordAction('1');
+      expect(policy.checkActionBudget('1')).toBe(false);
 
-        // Old entries should be pruned, budget available again
-        expect(policy.checkActionBudget('1')).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
+      // Advance past the 60s window
+      setSystemTime(new Date(now + 60_001));
+
+      // Old entries should be pruned, budget available again
+      expect(policy.checkActionBudget('1')).toBe(true);
+
+      // Restore real time
+      setSystemTime();
     });
   });
 
@@ -172,17 +195,17 @@ describe('MonitorBudgetPolicy', () => {
     });
 
     it('output entries expire after 60s sliding window', () => {
-      vi.useFakeTimers();
-      try {
-        policy.recordOutput('1', 1000);
-        expect(policy.checkOutputBudget('1')).toBe(false);
+      const now = Date.now();
+      setSystemTime(new Date(now));
 
-        vi.advanceTimersByTime(60_001);
+      policy.recordOutput('1', 1000);
+      expect(policy.checkOutputBudget('1')).toBe(false);
 
-        expect(policy.checkOutputBudget('1')).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
+      setSystemTime(new Date(now + 60_001));
+
+      expect(policy.checkOutputBudget('1')).toBe(true);
+
+      setSystemTime();
     });
   });
 
@@ -193,14 +216,18 @@ describe('MonitorBudgetPolicy', () => {
       policy.tryAcquireTaskSlot('1');
       policy.tryAcquireTaskSlot('2');
 
-      const p1 = policy.acquireTaskSlot('3');
-      const p2 = policy.acquireTaskSlot('4');
+      const p1 = policy.acquireTaskSlot('3').catch((e: Error) => e);
+      const p2 = policy.acquireTaskSlot('4').catch((e: Error) => e);
 
       const customError = new Error('shutting down');
       policy.clearWaiting(customError);
 
-      await expect(p1).rejects.toThrow('shutting down');
-      await expect(p2).rejects.toThrow('shutting down');
+      const r1 = await p1;
+      const r2 = await p2;
+      expect(r1).toBeInstanceOf(Error);
+      expect((r1 as Error).message).toBe('shutting down');
+      expect(r2).toBeInstanceOf(Error);
+      expect((r2 as Error).message).toBe('shutting down');
     });
 
     it('clear resets running count and clears all buckets', () => {

@@ -5,18 +5,64 @@
  * expected ResolvedUri kinds. This replaces 8 over-mocked handler tests
  * with a single test that validates the actual routing layer.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { mock, describe, it, expect } from 'bun:test';
 
 // Mock server dependencies that resolveUri imports
-vi.mock('../storage/storage-manager.js', () => ({
+mock.module('../storage/storage-manager.js', () => ({
   resolvePath: (path: string) => ({
     absolutePath: `/mock-storage/${path}`,
     readOnly: false,
   }),
+  resolvePathAsync: async (path: string) => ({
+    absolutePath: `/mock-storage/${path}`,
+    readOnly: false,
+  }),
+  getConfigDir: () => '/tmp/mock-config',
+  ensureStorageDir: async () => {},
+  configRead: mock(async () => ({ success: false })),
+  configWrite: mock(async () => ({ success: true })),
+  storageRead: mock(async () => ({ success: false })),
+  storageWrite: mock(async () => ({ success: true })),
+  storageList: mock(async () => ({ success: true, entries: [] })),
+  storageDelete: mock(async () => ({ success: true })),
+  storageGrep: mock(async () => ({ success: true, matches: [] })),
 }));
-vi.mock('../config.js', () => ({ PROJECT_ROOT: '/mock-root' }));
-vi.mock('../agents/session.js', () => ({
+mock.module('../config.js', () => ({
+  getEnvInt: (key: string, def: number) => def,
+  IS_BUNDLED_EXE: false,
+  PROJECT_ROOT: '/mock-root',
+  getStorageDir: () => '/tmp/mock-storage',
+  STORAGE_DIR: '/tmp/mock-storage',
+  getConfigDir: () => '/tmp/mock-config',
+  getFrontendDist: () => '/tmp/mock-dist',
+  FRONTEND_DIST: '/tmp/mock-dist',
+  MIME_TYPES: {},
+  MAX_UPLOAD_SIZE: 50 * 1024 * 1024,
+  getPort: () => 8000,
+  setPort: () => {},
+  PORT: 8000,
+  IS_REMOTE: false,
+  MARKET_URL: 'https://yaarmarket.vercel.app',
+  MONITOR_MAX_CONCURRENT: 2,
+  MONITOR_MAX_ACTIONS_PER_MIN: 30,
+  MONITOR_MAX_OUTPUT_PER_MIN: 50000,
+  resolveClaudeBinPath: () => null,
+  getClaudeSpawnArgs: () => [],
+  getCodexSpawnArgs: () => [],
+  getCodexBin: () => 'codex',
+  CODEX_WS_PORT: 4510,
+  getCodexWsPort: () => 4510,
+  getCodexAppServerArgs: () => [],
+}));
+mock.module('../agents/session.js', () => ({
+  AgentSession: class {},
+  getAgentId: () => undefined,
+  getCurrentConnectionId: () => undefined,
+  getSessionId: () => undefined,
   getMonitorId: () => '0',
+  getWindowId: () => undefined,
+  runWithAgentId: (_id: string, fn: () => unknown) => fn(),
+  runWithAgentContext: (_ctx: unknown, fn: () => unknown) => fn(),
 }));
 
 const { resolveUri } = await import('../handlers/uri-resolve.js');

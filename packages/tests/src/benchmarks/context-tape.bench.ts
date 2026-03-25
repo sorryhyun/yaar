@@ -9,7 +9,7 @@
  * Run with: bun run --filter @yaar/tests bench
  */
 
-import { bench, describe } from 'vitest';
+import { bench, group, run } from 'mitata';
 import { ContextTape, monitorSource, windowSource } from '@yaar/server/agents/context';
 import { MonitorBudgetPolicy } from '@yaar/server/agents/context-pool-policies/monitor-budget-policy';
 
@@ -43,7 +43,7 @@ const TAPE_400 = buildTape(200, 200); // 400 messages: close to the 200-monitor 
 
 // ── ContextTape append ────────────────────────────────────────────────────────
 
-describe('ContextTape.append', () => {
+group('ContextTape.append', () => {
   bench('100 monitor messages', () => {
     const tape = new ContextTape();
     for (let i = 0; i < 100; i++) {
@@ -74,7 +74,7 @@ describe('ContextTape.append', () => {
 
 // ── ContextTape getMessages ───────────────────────────────────────────────────
 
-describe('ContextTape.getMessages (200 messages)', () => {
+group('ContextTape.getMessages (200 messages)', () => {
   bench('all messages (no filter)', () => {
     TAPE_200.getMessages();
   });
@@ -94,7 +94,7 @@ describe('ContextTape.getMessages (200 messages)', () => {
 
 // ── ContextTape formatForPrompt ───────────────────────────────────────────────
 
-describe('ContextTape.formatForPrompt (200 messages)', () => {
+group('ContextTape.formatForPrompt (200 messages)', () => {
   bench('monitor-only (default for monitor agents)', () => {
     TAPE_200.formatForPrompt({ includeWindows: false });
   });
@@ -108,7 +108,7 @@ describe('ContextTape.formatForPrompt (200 messages)', () => {
   });
 });
 
-describe('ContextTape.formatForPrompt (400 messages)', () => {
+group('ContextTape.formatForPrompt (400 messages)', () => {
   bench('monitor-only on large tape', () => {
     TAPE_400.formatForPrompt({ includeWindows: false });
   });
@@ -116,7 +116,7 @@ describe('ContextTape.formatForPrompt (400 messages)', () => {
 
 // ── ContextTape pruneWindow ───────────────────────────────────────────────────
 
-describe('ContextTape.pruneWindow', () => {
+group('ContextTape.pruneWindow', () => {
   bench('prune one window from a 200-message tape', () => {
     // Build fresh each iteration so the window messages are always present.
     const tape = buildTape(150, 50);
@@ -126,7 +126,7 @@ describe('ContextTape.pruneWindow', () => {
 
 // ── MonitorBudgetPolicy ───────────────────────────────────────────────────────
 
-describe('MonitorBudgetPolicy.recordAction', () => {
+group('MonitorBudgetPolicy.recordAction', () => {
   bench('record 1000 actions across 5 background monitors', () => {
     const policy = new MonitorBudgetPolicy(2, 30, 50_000);
     for (let i = 0; i < 1000; i++) {
@@ -135,7 +135,7 @@ describe('MonitorBudgetPolicy.recordAction', () => {
   });
 });
 
-describe('MonitorBudgetPolicy.checkActionBudget', () => {
+group('MonitorBudgetPolicy.checkActionBudget', () => {
   bench('check budget on empty monitor ×1000', () => {
     const policy = new MonitorBudgetPolicy(2, 30, 50_000);
     for (let i = 0; i < 1000; i++) {
@@ -159,7 +159,7 @@ describe('MonitorBudgetPolicy.checkActionBudget', () => {
   });
 });
 
-describe('MonitorBudgetPolicy.tryAcquireTaskSlot', () => {
+group('MonitorBudgetPolicy.tryAcquireTaskSlot', () => {
   bench('acquire + release cycle ×1000 (no contention)', () => {
     const policy = new MonitorBudgetPolicy(4, 30, 50_000);
     for (let i = 0; i < 1000; i++) {
@@ -176,7 +176,7 @@ describe('MonitorBudgetPolicy.tryAcquireTaskSlot', () => {
   });
 });
 
-describe('MonitorBudgetPolicy.getStats', () => {
+group('MonitorBudgetPolicy.getStats', () => {
   bench('stats over 10 monitors each with 30 recorded actions', () => {
     const policy = new MonitorBudgetPolicy(2, 30, 50_000);
     for (let i = 1; i <= 10; i++) {
@@ -187,3 +187,5 @@ describe('MonitorBudgetPolicy.getStats', () => {
     policy.getStats();
   });
 });
+
+await run();

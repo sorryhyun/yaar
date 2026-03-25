@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { spyOn, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AgentLimiter } from '../agents/limiter.js';
 
 describe('AgentLimiter', () => {
@@ -35,7 +35,7 @@ describe('AgentLimiter', () => {
     });
 
     it('warns on underflow but does not go negative', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
       limiter.release();
       expect(limiter.getCurrentCount()).toBe(0);
       expect(warnSpy).toHaveBeenCalled();
@@ -74,7 +74,9 @@ describe('AgentLimiter', () => {
       limiter.tryAcquire();
       limiter.tryAcquire();
 
-      await expect(limiter.acquire(10)).rejects.toThrow('timed out');
+      const result = await limiter.acquire(10).catch((e: Error) => e);
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toContain('timed out');
     });
   });
 
@@ -84,13 +86,15 @@ describe('AgentLimiter', () => {
       limiter.tryAcquire();
       limiter.tryAcquire();
 
-      const p1 = limiter.acquire();
-      const p2 = limiter.acquire();
+      const p1 = limiter.acquire().catch((e: Error) => e);
+      const p2 = limiter.acquire().catch((e: Error) => e);
 
       limiter.clearWaiting();
 
-      await expect(p1).rejects.toThrow();
-      await expect(p2).rejects.toThrow();
+      const r1 = await p1;
+      const r2 = await p2;
+      expect(r1).toBeInstanceOf(Error);
+      expect(r2).toBeInstanceOf(Error);
       expect(limiter.getWaitingCount()).toBe(0);
     });
   });

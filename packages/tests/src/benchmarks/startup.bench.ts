@@ -4,7 +4,7 @@
  * Run with: bun run --filter @yaar/tests bench
  */
 
-import { bench, describe } from 'vitest';
+import { bench, group, run } from 'mitata';
 import { parseSessionMessages } from '@yaar/server/logging/session-reader';
 import { resolveMountPath } from '@yaar/server/storage/mounts';
 
@@ -82,7 +82,7 @@ const SAMPLE_10K = generateSampleJsonl(10_000);
 
 // ── Benchmarks ─────────────────────────────────────────────────────────────
 
-describe('parseSessionMessages', () => {
+group('parseSessionMessages', () => {
   bench('parse 1k-line session log', () => {
     parseSessionMessages(SAMPLE_1K);
   });
@@ -92,7 +92,7 @@ describe('parseSessionMessages', () => {
   });
 });
 
-describe('resolveMountPath', () => {
+group('resolveMountPath', () => {
   bench('reject non-mount path ×1000', () => {
     for (let i = 0; i < 1_000; i++) {
       resolveMountPath(`../../etc/passwd${i}`);
@@ -105,3 +105,5 @@ describe('resolveMountPath', () => {
     }
   });
 });
+
+await run();

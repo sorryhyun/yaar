@@ -45,6 +45,8 @@ export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckRe
     compilerOptions: {
       strict: false,
       noEmit: true,
+      noUnusedLocals: true,
+      noUnusedParameters: true,
       target: 'ES2022',
       module: 'ES2022',
       moduleResolution: 'bundler',

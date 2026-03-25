@@ -6,7 +6,7 @@
  * Sandbox: executeCode() must not allow escape from the vm context.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, mock } from 'bun:test';
 import { extractDomain } from '@yaar/server/features/config/domains';
 
 // ── extractDomain ──────────────────────────────────────────────────────────
@@ -26,28 +26,20 @@ describe('extractDomain', () => {
   });
 
   it('handles subdomains correctly', () => {
-    expect(extractDomain('https://sub.domain.example.co.uk/path')).toBe('sub.domain.example.co.uk');
+    expect(extractDomain('https://sub.domain.example.co.uk/path')).toBe(
+      'sub.domain.example.co.uk',
+    );
   });
 });
 
 // ── isDomainAllowed ────────────────────────────────────────────────────────
 
-describe('isDomainAllowed — with Bun stub', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
+describe('isDomainAllowed — with storage mock', () => {
   it('returns false for unlisted domains when allowlist is empty', async () => {
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => 'allowed_domains: []\n',
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
+    mock.module('@yaar/server/storage/index', () => ({
+      configRead: mock(() => Promise.resolve({ success: true, content: 'allowed_domains: []\n' })),
+      configWrite: mock(() => Promise.resolve({ success: true })),
+    }));
 
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('example.com')).toBe(false);
@@ -55,12 +47,15 @@ describe('isDomainAllowed — with Bun stub', () => {
   });
 
   it('returns true for domains in the allowlist', async () => {
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => 'allowed_domains:\n  - example.com\n  - api.test.io\n',
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
+    mock.module('@yaar/server/storage/index', () => ({
+      configRead: mock(() =>
+        Promise.resolve({
+          success: true,
+          content: 'allowed_domains:\n  - example.com\n  - api.test.io\n',
+        }),
+      ),
+      configWrite: mock(() => Promise.resolve({ success: true })),
+    }));
 
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('example.com')).toBe(true);
@@ -68,12 +63,12 @@ describe('isDomainAllowed — with Bun stub', () => {
   });
 
   it('returns false for domains NOT in allowlist even if others are allowed', async () => {
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => 'allowed_domains:\n  - example.com\n',
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
+    mock.module('@yaar/server/storage/index', () => ({
+      configRead: mock(() =>
+        Promise.resolve({ success: true, content: 'allowed_domains:\n  - example.com\n' }),
+      ),
+      configWrite: mock(() => Promise.resolve({ success: true })),
+    }));
 
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('evil.example.com')).toBe(false);
@@ -81,23 +76,29 @@ describe('isDomainAllowed — with Bun stub', () => {
   });
 
   it('returns true for any domain when allow_all_domains is true', async () => {
-    vi.stubGlobal('Bun', {
-      file: vi.fn(() => ({
-        text: async () => 'allow_all_domains: true\nallowed_domains: []\n',
-      })),
-      write: vi.fn().mockResolvedValue(0),
-    });
+    mock.module('@yaar/server/storage/index', () => ({
+      configRead: mock(() =>
+        Promise.resolve({
+          success: true,
+          content: 'allow_all_domains: true\nallowed_domains: []\n',
+        }),
+      ),
+      configWrite: mock(() => Promise.resolve({ success: true })),
+    }));
 
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
     expect(await isDomainAllowed('anything.example.com')).toBe(true);
     expect(await isDomainAllowed('totally-unknown.net')).toBe(true);
   });
 
-  it('defaults to empty allowlist (safe) when config file missing (Bun unavailable)', async () => {
-    // No Bun stub → configRead throws → falls back to empty config
+  it('defaults to empty allowlist (safe) when config read fails', async () => {
+    mock.module('@yaar/server/storage/index', () => ({
+      configRead: mock(() => Promise.resolve({ success: false, error: 'not found' })),
+      configWrite: mock(() => Promise.resolve({ success: true })),
+    }));
+
     const { isDomainAllowed } = await import('@yaar/server/features/config/domains');
-    // Without Bun, returns false (safe default — deny)
+    // Falls back to default empty config → deny
     expect(await isDomainAllowed('example.com')).toBe(false);
   });
 });
-

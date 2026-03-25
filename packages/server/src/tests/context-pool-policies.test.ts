@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { MonitorQueuePolicy } from '../agents/context-pool-policies/monitor-queue-policy.js';
 import { WindowQueuePolicy } from '../agents/context-pool-policies/window-queue-policy.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
