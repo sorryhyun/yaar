@@ -5,7 +5,6 @@ React desktop UI for YAAR. Renders AI-generated windows, handles user input, and
 ## Quick start
 
 ```bash
-bun run dev          # Dev server at localhost:5173 (proxies /ws and /api to server)
 bun run build        # Production build
 bun run test         # Run tests
 bun run typecheck    # Type check
@@ -14,7 +13,7 @@ bun run lint         # Lint
 
 ## Stack
 
-- **React 19** + **Vite**
+- **React 19** + **Bun bundler**
 - **Zustand** + **Immer** for state (split into slices under `store/slices/`)
 - **CSS Modules** for component styles
 - **i18next** for internationalization

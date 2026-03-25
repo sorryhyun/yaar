@@ -75,17 +75,17 @@ describe('createFetchHandler CORS + routing', () => {
     expect(res?.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  it('includes CORS headers for localhost:5173 (allowed dev origin)', async () => {
+  it('includes CORS headers for localhost on server port (allowed origin)', async () => {
     const { createFetchHandler } = await import('@yaar/server/http/server');
     const handler = createFetchHandler();
     const req = new Request('http://localhost:8000/api/apps', {
       method: 'OPTIONS',
-      headers: { origin: 'http://localhost:5173' },
+      headers: { origin: 'http://localhost:8000' },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await handler(req, {} as any);
     expect(res?.status).toBe(204);
-    expect(res?.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(res?.headers.get('access-control-allow-origin')).toBe('http://localhost:8000');
   });
 
   it('returns 404 for completely unknown routes', async () => {

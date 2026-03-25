@@ -33,7 +33,7 @@ mock.module('../providers/factory.js', () => ({
   getWarmPool: () => ({ resetCodexProviders: mock(() => {}) }),
 }));
 
-mock.module('../logging/index.js', () => {
+mock.module('../logging/session-logger.js', () => {
   class MockSessionLogger {
     logUserMessage = mock(() => {});
     logAgentMessage = mock(() => {});
@@ -44,21 +44,12 @@ mock.module('../logging/index.js', () => {
     setLogger = mock(() => {});
   }
   return {
-    SESSIONS_DIR: '/tmp/test-sessions',
-    ensureSessionsDir: mock(async () => {}),
     createSession: mock(async () => ({
       sessionId: 'test-session',
       logPath: '/tmp/test',
       directory: '/tmp/test',
     })),
     SessionLogger: MockSessionLogger,
-    listSessions: mock(async () => []),
-    parseSessionMessages: mock(() => []),
-    getWindowRestoreActions: mock(() => []),
-    refreshIframeTokens: mock(() => []),
-    getContextRestoreMessages: mock(() => []),
-    FULL_RESTORE_POLICY: { mode: 'full' },
-    getCliRestoreEntries: mock(() => []),
   };
 });
 

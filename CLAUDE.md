@@ -144,8 +144,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 
 ## Development Workflow
 
-- `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server → polls `/health` until ready → starts frontend
-- Frontend dev server (port 5173) proxies `/ws` → `ws://localhost:8000` and `/api` → `http://localhost:8000`
+- `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branch: uses `master` (not `main`)
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
 - **CI** (`.github/workflows/ci.yml`): `bun install` → build shared → typecheck → test (runs on push/PR to master)

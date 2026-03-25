@@ -96,7 +96,7 @@ export function createFetchHandler() {
       }
     } else {
       // Local mode: whitelist localhost origins (same-origin requests won't have Origin header)
-      const allowedOrigins = [`http://localhost:${getPort()}`, 'http://localhost:3000'];
+      const allowedOrigins = [`http://localhost:${getPort()}`];
       if (origin && allowedOrigins.includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
