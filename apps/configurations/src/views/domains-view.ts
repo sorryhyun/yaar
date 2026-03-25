@@ -1,6 +1,6 @@
-import { createSignal, onMount, For, Show } from '@bundled/solid-js';
+import { createSignal, onMount, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { readJson, invoke, del } from '@bundled/yaar';
+import { read, invoke, del } from '@bundled/yaar';
 import { showToast } from '../store';
 import type { DomainsData } from '../types';
 import { onInputHandler } from '../helpers';
@@ -13,7 +13,7 @@ export function DomainsView() {
 
   const load = async () => {
     try {
-      const raw = await readJson<DomainsData>('yaar://config/domains');
+      const raw = await read<DomainsData>('yaar://config/domains');
       setData(raw);
     } catch {
       showToast('Failed to load domains', 'error');

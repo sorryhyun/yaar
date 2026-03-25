@@ -1,4 +1,4 @@
-import { readJson } from '@bundled/yaar';
+import { read } from '@bundled/yaar';
 
 /**
  * Generic loader for yaar://config/* list endpoints.
@@ -11,7 +11,7 @@ export async function loadConfigList<T>(
   setter: (items: T[]) => void
 ): Promise<void> {
   try {
-    const data = await readJson<Record<string, T[]>>(uri);
+    const data = await read<Record<string, T[]>>(uri);
     setter(data?.[key] ?? []);
   } catch {
     setter([]);

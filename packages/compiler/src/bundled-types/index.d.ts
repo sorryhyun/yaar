@@ -353,16 +353,6 @@ declare module '@bundled/yaar' {
   /** Subscribe to reactive URI updates. */
   export function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void>;
 
-  // Aliases (backwards-compat) — identical to the typed verbs above
-  export const readJson: typeof read;
-  export function readText(uri: string): Promise<string>;
-  export const invokeJson: typeof invoke;
-  export function invokeText(uri: string, payload?: Record<string, unknown>): Promise<string>;
-  export const listJson: typeof list;
-  export function listText(uri: string): Promise<string>;
-  export const describeJson: typeof describe;
-  export function deleteText(uri: string): Promise<string>;
-
   /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). */
   export const appStorage: YaarAppStorage;
 

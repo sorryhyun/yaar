@@ -82,6 +82,14 @@ import { animate, createTimeline } from '@bundled/anime';
 import { format } from '@bundled/date-fns';
 ```
 
+### Gated SDKs
+
+Some SDKs require `"bundles"` in `app.json` to import:
+- `@bundled/yaar-dev` — `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`. Requires `"bundles": ["yaar-dev"]`.
+- `@bundled/yaar-web` — browser automation (`open`, `click`, `extract`, etc.). Requires `"bundles": ["yaar-web"]`.
+
+When creating or editing `app.json` for apps that use these, include the appropriate `bundles` entry.
+
 ## Design Tokens (CSS)
 
 All compiled apps include shared CSS custom properties (`--yaar-*`) and utility classes (`y-*`). No imports needed.

@@ -127,6 +127,31 @@ import { debounce } from '@bundled/lodash';
 import anime from '@bundled/anime';
 ```
 
+### 게이트 SDK
+
+일부 `@bundled/*` SDK는 `app.json`의 `"bundles"` 필드에 명시적으로 선언해야 사용할 수 있습니다. 선언하지 않으면 컴파일러가 import를 거부합니다.
+
+| SDK | Import 경로 | 용도 | 필요한 `bundles` 값 |
+|-----|------------|------|-------------------|
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
+| Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()` 등 | `"yaar-web"` |
+
+**app.json:**
+```json
+{
+  "bundles": ["yaar-dev"],
+  "permissions": ["yaar://storage/", "yaar://apps/"]
+}
+```
+
+**사용 예시:**
+```typescript
+import { compile, typecheck, deploy } from '@bundled/yaar-dev';
+import { open, click, extract } from '@bundled/yaar-web';
+```
+
+기본 `@bundled/yaar` SDK(verb, storage, app protocol, 유틸리티)는 모든 앱에서 선언 없이 사용할 수 있습니다.
+
 ## TypeScript 주의 사항
 
 모든 앱의 `src/main.ts`는 파일 상단에 `export {};`를 포함해야 합니다. `apps/tsconfig.json`이 모든 앱을 하나의 프로그램으로 컴파일하기 때문에, 이 구문이 없으면 TypeScript가 파일을 스크립트로 인식하여 앱 간 최상위 변수가 충돌합니다.

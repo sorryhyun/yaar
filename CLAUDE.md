@@ -182,9 +182,10 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Animation**: `anime`
 - **Audio**: `tone`
 - **Parsing**: `marked`, `prismjs`, `mammoth`
-- **YAAR SDK**: `yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `dev.compile()`, etc.
+- **YAAR SDK**: `yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, etc.
+- **Gated SDKs** (require `"bundles"` in `app.json`): `yaar-dev` (compile, typecheck, deploy), `yaar-web` (browser automation: open, click, extract, etc.)
 
-Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution), `packages/compiler/src/shims/yaar.ts` (@bundled/yaar SDK), `packages/compiler/src/extract-protocol.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
+Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution + gated SDK enforcement), `packages/compiler/src/shims/` (yaar.ts, yaar-dev.ts, yaar-web.ts), `packages/compiler/src/extract-protocol.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 
 ### Design Tokens
 

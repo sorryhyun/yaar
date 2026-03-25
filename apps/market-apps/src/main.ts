@@ -2,7 +2,7 @@ export {};
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { invoke, del, listJson, storage, errMsg } from '@bundled/yaar';
+import { invoke, del, list, storage, errMsg } from '@bundled/yaar';
 import './styles.css';
 import './protocol.js';
 
@@ -215,7 +215,7 @@ async function hostDelete(app: { id: string }): Promise<void> {
 
 /** Fetch installed apps via yaar://apps list verb. Requires yaar://apps/ permission. */
 async function hostListInstalled(): Promise<InstalledApp[]> {
-  const result = await listJson('yaar://apps');
+  const result = await list('yaar://apps');
   return parseInstalledAny(result);
 }
 

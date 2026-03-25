@@ -1,6 +1,6 @@
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { readJson, invoke } from '@bundled/yaar';
+import { read, invoke } from '@bundled/yaar';
 import { showToast } from '../store';
 import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpers';
 
@@ -25,7 +25,7 @@ export function SettingsView() {
 
   onMount(async () => {
     try {
-      const raw = await readJson<Record<string, unknown>>('yaar://config/settings');
+      const raw = await read<Record<string, unknown>>('yaar://config/settings');
       const s: Record<string, unknown> = (raw as { settings?: Record<string, unknown> })?.settings ?? raw ?? {};
       setData(s);
       const extra: Record<string, unknown> = {};

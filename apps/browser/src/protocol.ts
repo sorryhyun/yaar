@@ -1,8 +1,9 @@
 /**
  * App Protocol registration for the Browser app.
- * Command handlers bridge app agent commands to yaar://browser/ verb invocations.
+ * Command handlers use the @bundled/yaar-web SDK for browser automation.
  */
 import { app, invoke } from '@bundled/yaar';
+import * as web from '@bundled/yaar-web';
 
 export interface BrowserProtocolDeps {
   getCurrentUrl: () => string;
@@ -50,10 +51,9 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
     }
   }
 
-  /** Invoke a browser verb action on the current session. */
-  async function browserInvoke(action: string, params?: Record<string, unknown>) {
-    const bid = await ensureBrowserId();
-    return invoke(`yaar://browser/${bid}`, { action, ...params });
+  /** Get browserId option for yaar-web calls. */
+  async function bid() {
+    return { browserId: await ensureBrowserId() };
   }
 
   app.register({
@@ -96,18 +96,18 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           required: ['url'],
         },
         handler: async (p: { url: string; mobile?: boolean }) => {
-          return browserInvoke('open', { url: p.url, mobile: p.mobile, visible: false });
+          return web.open(p.url, { ...await bid(), mobile: p.mobile, visible: false });
         },
       },
       navigate_back: {
         description: 'Go back in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => browserInvoke('navigate', { direction: 'back' }),
+        handler: async () => web.navigateBack((await bid()).browserId),
       },
       navigate_forward: {
         description: 'Go forward in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => browserInvoke('navigate', { direction: 'forward' }),
+        handler: async () => web.navigateForward((await bid()).browserId),
       },
       scroll: {
         description: 'Scroll the page',
@@ -116,7 +116,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           properties: { direction: { type: 'string', enum: ['up', 'down'] } },
           required: ['direction'],
         },
-        handler: async (p: { direction: 'up' | 'down' }) => browserInvoke('scroll', p),
+        handler: async (p: { direction: 'up' | 'down' }) =>
+          web.scroll({ ...p, ...await bid() }),
       },
 
       // ── Interaction ─────────────────────────────────────────────────
@@ -138,7 +139,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           x?: number;
           y?: number;
           index?: number;
-        }) => browserInvoke('click', p),
+        }) => web.click({ ...p, ...await bid() }),
       },
       type: {
         description: 'Type text into an element',
@@ -147,7 +148,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           properties: { selector: { type: 'string' }, text: { type: 'string' } },
           required: ['selector', 'text'],
         },
-        handler: async (p: { selector: string; text: string }) => browserInvoke('type', p),
+        handler: async (p: { selector: string; text: string }) =>
+          web.type({ ...p, ...await bid() }),
       },
       press: {
         description: 'Press a key',
@@ -156,7 +158,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           properties: { key: { type: 'string' }, selector: { type: 'string' } },
           required: ['key'],
         },
-        handler: async (p: { key: string; selector?: string }) => browserInvoke('press', p),
+        handler: async (p: { key: string; selector?: string }) =>
+          web.press({ ...p, ...await bid() }),
       },
       hover: {
         description: 'Hover over an element',
@@ -174,7 +177,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           text?: string;
           x?: number;
           y?: number;
-        }) => browserInvoke('hover', p),
+        }) => web.hover({ ...p, ...await bid() }),
       },
 
       // ── Observation ─────────────────────────────────────────────────
@@ -186,7 +189,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           required: ['selector'],
         },
         handler: async (p: { selector: string; timeout?: number }) =>
-          browserInvoke('wait_for', p),
+          web.waitFor({ ...p, ...await bid() }),
       },
       screenshot: {
         description: 'Take a screenshot',
@@ -204,7 +207,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           y0?: number;
           x1?: number;
           y1?: number;
-        }) => browserInvoke('screenshot', p),
+        }) => web.screenshot({ ...p, ...await bid() }),
       },
       extract: {
         description: 'Extract page text, links, and forms',
@@ -222,7 +225,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           mainContentOnly?: boolean;
           maxTextLength?: number;
           maxLinks?: number;
-        }) => browserInvoke('extract', p),
+        }) => web.extract({ ...p, ...await bid() }),
       },
       extract_images: {
         description: 'Extract images with data URLs',
@@ -234,7 +237,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           },
         },
         handler: async (p?: { selector?: string; mainContentOnly?: boolean }) =>
-          browserInvoke('extract_images', p),
+          web.extractImages({ ...p, ...await bid() }),
       },
       html: {
         description: 'Get raw innerHTML',
@@ -242,19 +245,20 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           type: 'object',
           properties: { selector: { type: 'string' } },
         },
-        handler: async (p?: { selector?: string }) => browserInvoke('html', p),
+        handler: async (p?: { selector?: string }) =>
+          web.html({ ...p, ...await bid() }),
       },
 
       // ── Visual ──────────────────────────────────────────────────────
       annotate: {
         description: 'Show numbered badges on interactive elements',
         params: { type: 'object', properties: {} },
-        handler: async () => browserInvoke('annotate', {}),
+        handler: async () => web.annotate((await bid()).browserId),
       },
       remove_annotations: {
         description: 'Remove annotation badges',
         params: { type: 'object', properties: {} },
-        handler: async () => browserInvoke('remove_annotations', {}),
+        handler: async () => web.removeAnnotations((await bid()).browserId),
       },
 
       // ── UI Controls (local, no verb call) ───────────────────────────

@@ -127,6 +127,31 @@ import { debounce } from '@bundled/lodash';
 import anime from '@bundled/anime';
 ```
 
+### Gated SDKs
+
+Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app.json`. The compiler will reject the import if not declared.
+
+| SDK | Import Path | Purpose | Required `bundles` value |
+|-----|------------|---------|------------------------|
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
+| Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
+
+**app.json:**
+```json
+{
+  "bundles": ["yaar-dev"],
+  "permissions": ["yaar://storage/", "yaar://apps/"]
+}
+```
+
+**Usage:**
+```typescript
+import { compile, typecheck, deploy } from '@bundled/yaar-dev';
+import { open, click, extract } from '@bundled/yaar-web';
+```
+
+The base `@bundled/yaar` SDK (verbs, storage, app protocol, utilities) remains available to all apps without declaration.
+
 ## TypeScript Notes
 
 Every app's `src/main.ts` must include `export {};` at the top of the file. Because `apps/tsconfig.json` compiles all apps in a single program, files without this are treated as scripts by TypeScript, causing top-level variable name collisions across apps.

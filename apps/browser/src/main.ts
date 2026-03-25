@@ -7,7 +7,8 @@
 import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { app, invoke } from '@bundled/yaar';
+import { app } from '@bundled/yaar';
+import { navigateBack, navigateForward } from '@bundled/yaar-web';
 import { registerBrowserProtocol } from './protocol';
 import './styles.css';
 
@@ -109,9 +110,9 @@ function clearDisplay() {
 /** Navigate back/forward — invoke directly for immediate effect, then notify agent. */
 async function handleNav(direction: 'navigate_back' | 'navigate_forward') {
   const bid = activeBrowserId();
-  const dir = direction === 'navigate_back' ? 'back' : 'forward';
   try {
-    await invoke(`yaar://browser/${bid}`, { action: 'navigate', direction: dir });
+    if (direction === 'navigate_back') await navigateBack(bid);
+    else await navigateForward(bid);
   } catch (err) {
     console.error('[browser] Nav error:', err);
   }
