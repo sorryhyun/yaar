@@ -26,18 +26,42 @@ Just tell the AI what you want — it builds apps, visualizes data, and connects
 </details>
 
 
-## Quick Start
+## Install
 
 Codex or Claude Code authentication is required.
 
-**Windows:** Install the [Codex CLI](https://github.com/openai/codex), then download `yaar.exe` from the Releases tab. You may see a SmartScreen warning (code signing not applied).
+### One-liner (recommended)
 
-**Other platforms:**
 ```bash
-git clone https://github.com/sorryhyun/yaar.git && cd yaar
-bun install && make codex-types
+curl -fsSL https://raw.githubusercontent.com/sorryhyun/claudeos/master/install.sh | bash
+```
+
+Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary — no Bun or Node.js required.
+
+Then:
+```bash
+yaar                # Browser opens automatically
+```
+
+You can pin a version or change the install directory:
+```bash
+VERSION=v0.1.0 curl -fsSL ... | bash             # Specific version
+INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Custom install path
+```
+
+### Windows
+
+Download `yaar-windows-x64.exe` from the [Releases page](https://github.com/sorryhyun/claudeos/releases). You may see a SmartScreen warning.
+
+### Build from source
+
+```bash
+git clone https://github.com/sorryhyun/claudeos.git && cd claudeos
+bun install
 make dev          # Browser opens automatically
 ```
+
+Requires [Bun](https://bun.sh/) >= 1.1.
 
 Once running, start with something like "install essential apps".
 

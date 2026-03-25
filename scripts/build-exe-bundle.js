@@ -34,15 +34,20 @@ function getArg(name) {
 
 const target = getArg('target') ?? 'linux';
 
+const arch = getArg('arch') ?? 'x64';
+
 const bunTargets = {
-  windows: 'bun-windows-x64',
-  linux: 'bun-linux-x64',
-  macos: 'bun-darwin-x64',
+  'windows-x64': 'bun-windows-x64',
+  'linux-x64': 'bun-linux-x64',
+  'linux-arm64': 'bun-linux-arm64',
+  'macos-x64': 'bun-darwin-x64',
+  'macos-arm64': 'bun-darwin-arm64',
 };
 
-const bunTarget = bunTargets[target];
+const key = `${target}-${arch}`;
+const bunTarget = bunTargets[key];
 if (!bunTarget) {
-  console.error(`Invalid target: ${target}. Use "windows", "linux", or "macos".`);
+  console.error(`Invalid target/arch: ${key}. Valid combinations: ${Object.keys(bunTargets).join(', ')}`);
   process.exit(1);
 }
 

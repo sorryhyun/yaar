@@ -27,18 +27,42 @@
 </details>
 
 
-## 빠른 시작
+## 설치
 
 Codex 혹은 Claude Code 사용자 인증이 필수입니다.
 
-**윈도우 유저:** [Codex CLI](https://github.com/openai/codex) 설치 후, 릴리즈 탭에서 `yaar.exe`를 다운받아 실행하세요. 스마트스크린 경고가 뜰 수 있습니다 (코드 서명 미적용).
+### 원라인 설치 (권장)
 
-**그 외 유저:**
 ```bash
-git clone https://github.com/sorryhyun/yaar.git && cd yaar
-bun install && make codex-types
+curl -fsSL https://raw.githubusercontent.com/sorryhyun/claudeos/master/install.sh | bash
+```
+
+Linux, macOS (Intel & Apple Silicon), Windows (WSL) 지원. 바이너리 하나로 실행되며, Bun이나 Node.js 설치가 필요 없습니다.
+
+설치 후:
+```bash
+yaar                # 브라우저가 자동으로 열립니다
+```
+
+특정 버전을 설치하거나 설치 경로를 변경할 수 있습니다:
+```bash
+VERSION=v0.1.0 curl -fsSL ... | bash     # 특정 버전
+INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 변경
+```
+
+### Windows 유저
+
+[릴리즈 페이지](https://github.com/sorryhyun/claudeos/releases)에서 `yaar-windows-x64.exe`를 다운받아 실행하세요. 스마트스크린 경고가 뜰 수 있습니다.
+
+### 소스에서 빌드
+
+```bash
+git clone https://github.com/sorryhyun/claudeos.git && cd claudeos
+bun install
 make dev          # 브라우저가 자동으로 열립니다
 ```
+
+[Bun](https://bun.sh/) >= 1.1 필요.
 
 실행 후 "필수 앱 설치해줘" 같은 말로 시작하시면 됩니다.
 

@@ -27,10 +27,13 @@ jobs:
       - name: Prebundle libraries
         run: bun run build:exe:libs
 
-      - name: Build Windows executable
-        run: bun run build:exe:bundle
+      - name: Build Windows x64
+        run: |
+          bun scripts/build-exe-bundle.js --target windows --arch x64
+          mv dist/yaar.exe dist/yaar-windows-x64.exe
 
       - name: Sign Windows executable
+        if: ${{ secrets.DEV_CERT_PFX != '' }}
         run: |
           sudo apt-get install -y osslsigncode
           echo "${{ secrets.DEV_CERT_PFX }}" | base64 -d > dev-cert.pfx
@@ -39,27 +42,39 @@ jobs:
             -pass "${{ secrets.DEV_CERT_PASSWORD }}" \
             -n "YAAR" \
             -t http://timestamp.digicert.com \
-            -in dist/yaar.exe \
+            -in dist/yaar-windows-x64.exe \
             -out dist/yaar-signed.exe
-          mv dist/yaar-signed.exe dist/yaar.exe
+          mv dist/yaar-signed.exe dist/yaar-windows-x64.exe
           rm dev-cert.pfx
 
-      - name: Build Linux executable
+      - name: Build Linux x64
         run: |
-          bun run build:exe:bundle:linux
-          mv dist/yaar dist/yaar-linux
+          bun scripts/build-exe-bundle.js --target linux --arch x64
+          mv dist/yaar dist/yaar-linux-x64
 
-      - name: Build macOS executable
+      - name: Build Linux arm64
         run: |
-          bun run build:exe:bundle:macos
-          mv dist/yaar dist/yaar-macos
+          bun scripts/build-exe-bundle.js --target linux --arch arm64
+          mv dist/yaar dist/yaar-linux-arm64
+
+      - name: Build macOS x64
+        run: |
+          bun scripts/build-exe-bundle.js --target macos --arch x64
+          mv dist/yaar dist/yaar-macos-x64
+
+      - name: Build macOS arm64 (Apple Silicon)
+        run: |
+          bun scripts/build-exe-bundle.js --target macos --arch arm64
+          mv dist/yaar dist/yaar-macos-arm64
 
       - name: Upload assets
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            dist/yaar.exe \
-            dist/yaar-linux \
-            dist/yaar-macos \
+            dist/yaar-windows-x64.exe \
+            dist/yaar-linux-x64 \
+            dist/yaar-linux-arm64 \
+            dist/yaar-macos-x64 \
+            dist/yaar-macos-arm64 \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
