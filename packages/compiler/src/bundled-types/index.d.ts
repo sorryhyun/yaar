@@ -443,6 +443,7 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<unknown>;
   export function scroll(opts: { direction: 'up' | 'down'; browserId?: string }): Promise<unknown>;
+  export function navigate(url: string, browserId?: string): Promise<unknown>;
   export function navigateBack(browserId?: string): Promise<unknown>;
   export function navigateForward(browserId?: string): Promise<unknown>;
   export function hover(opts: {

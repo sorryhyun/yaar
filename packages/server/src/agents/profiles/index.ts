@@ -4,11 +4,10 @@
  * Re-exports profile definitions, builder functions, and Codex role config.
  */
 
-import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentProfile } from './types.js';
 import { VERB_TOOL_NAMES } from './types.js';
 import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
-import { WEB_PROFILE } from './web.js';
+
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
 export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
@@ -16,39 +15,23 @@ export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
 // App agent profile builder
 export { buildAppAgentProfile } from './app-agent.js';
 
-// Re-export individual profiles
-export { WEB_PROFILE } from './web.js';
-
 // Re-export orchestrator
 export { ORCHESTRATOR_PROMPT, getOrchestratorPrompt } from './orchestrator.js';
 
 // Re-export session agent profile
 export { SESSION_AGENT_PROFILE } from './session-agent.js';
 
-// ── Profile registry ──────────────────────────────────────────────────
-
-const profiles: Record<string, AgentProfile> = {
-  web: WEB_PROFILE,
-};
-
-/**
- * Get a profile by ID. Returns the 'web' profile for unknown IDs.
- */
-export function getProfile(id: string): AgentProfile {
-  return profiles[id] ?? profiles.web;
-}
-
 // ── Developer profile (monitor agent) ────────────────────────────────
 
 /**
  * Developer profile — applied to the monitor agent.
- * Can handle quick actions directly and delegates complex work via Task tool.
+ * Acts directly using verbs and delegates browser tasks to the browser app.
  */
 export const DEVELOPER_PROFILE: AgentProfile = {
   id: 'developer',
-  description: 'Developer agent — handles quick actions directly, delegates complex work',
+  description: 'Developer agent — acts directly, delegates browser tasks to browser app',
   systemPrompt: '',
-  allowedTools: ['Task', 'WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
+  allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
 };
 
 /**
@@ -56,64 +39,6 @@ export const DEVELOPER_PROFILE: AgentProfile = {
  */
 export function getDeveloperAllowedTools(): string[] {
   return [...DEVELOPER_PROFILE.allowedTools];
-}
-
-// ── Claude SDK agent definitions ─────────────────────────────────────
-
-/** Extract MCP server names from tool names (mcp__<server>__<tool> → server). */
-function extractMcpServerNames(tools: string[]): string[] {
-  const servers = new Set<string>();
-  for (const tool of tools) {
-    const m = tool.match(/^mcp__(\w+)__/);
-    if (m) servers.add(m[1]);
-  }
-  return [...servers];
-}
-
-/** MCP HTTP server config shape (matches SDK's McpHttpServerConfig). */
-interface McpHttpConfig {
-  type: 'http';
-  url: string;
-  headers?: Record<string, string>;
-}
-
-/**
- * Build Claude SDK AgentDefinition records for native subagents.
- * Each definition maps to a profile with a specific tool subset.
- * mcpServers must be explicitly provided — subagents don't inherit parent MCP servers.
- */
-export function buildAgentDefinitions(
-  mcpServerConfigs?: Record<string, McpHttpConfig>,
-): Record<string, AgentDefinition> {
-  return Object.fromEntries(
-    Object.entries(profiles).map(([id, profile]) => {
-      const tools = [...profile.allowedTools];
-      const neededServers = extractMcpServerNames(tools);
-
-      // Build mcpServers: single Record mapping server name → HTTP config
-      let mcpServers: AgentDefinition['mcpServers'];
-      if (mcpServerConfigs && neededServers.length > 0) {
-        const serverRecord: Record<string, McpHttpConfig> = {};
-        for (const name of neededServers) {
-          if (mcpServerConfigs[name]) serverRecord[name] = mcpServerConfigs[name];
-        }
-        if (Object.keys(serverRecord).length > 0) {
-          mcpServers = [serverRecord];
-        }
-      }
-
-      return [
-        id,
-        {
-          description: profile.description,
-          prompt: profile.systemPrompt,
-          tools,
-          disallowedTools: ['Task'],
-          mcpServers,
-        } satisfies AgentDefinition,
-      ];
-    }),
-  );
 }
 
 // ── Codex agent roles ────────────────────────────────────────────────

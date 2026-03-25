@@ -1,5 +1,5 @@
 export { handleApiRoutes } from './api.js';
-export { handleBrowseRoutes } from './browse.js';
+export { handleBrowserRoutes } from './browser.js';
 export { handleDevRoutes } from './dev.js';
 export { handleFileRoutes } from './files.js';
 export { handleProxyRoutes } from './proxy.js';

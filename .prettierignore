@@ -2,6 +2,7 @@ dist/
 node_modules/
 bun.lock
 *.md
+*.json
 packages/server/src/lib/bundled-types/
 storage/
 config/

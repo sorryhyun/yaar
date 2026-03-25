@@ -20,7 +20,7 @@ import { checkHttpAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
 import {
   handleApiRoutes,
-  handleBrowseRoutes,
+  handleBrowserRoutes,
   handleDevRoutes,
   handleFileRoutes,
   handleProxyRoutes,
@@ -29,6 +29,7 @@ import {
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
+import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from './routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
@@ -45,7 +46,14 @@ interface PublicRoute {
 }
 
 function buildPublicRoutes(): PublicRoute[] {
-  const all = [...API_PUBLIC, ...DEV_PUBLIC, ...FILES_PUBLIC, ...PROXY_PUBLIC, ...VERB_PUBLIC];
+  const all = [
+    ...API_PUBLIC,
+    ...BROWSER_PUBLIC,
+    ...DEV_PUBLIC,
+    ...FILES_PUBLIC,
+    ...PROXY_PUBLIC,
+    ...VERB_PUBLIC,
+  ];
   return all.map((ep) => {
     // Strip query string from path pattern
     const pathOnly = ep.path.split('?')[0];
@@ -171,8 +179,8 @@ export function createFetchHandler() {
     const proxyResponse = await handleProxyRoutes(req, url);
     if (proxyResponse) return withCors(proxyResponse, corsHeaders);
 
-    const browseResponse = await handleBrowseRoutes(req, url);
-    if (browseResponse) return withCors(browseResponse, corsHeaders);
+    const browserResponse = await handleBrowserRoutes(req, url);
+    if (browserResponse) return withCors(browserResponse, corsHeaders);
 
     const devResponse = await handleDevRoutes(req, url);
     if (devResponse) return withCors(devResponse, corsHeaders);

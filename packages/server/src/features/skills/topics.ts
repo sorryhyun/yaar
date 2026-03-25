@@ -11,7 +11,7 @@ import type { EndpointMeta } from '../../http/utils.js';
 import { PUBLIC_ENDPOINTS as apiEndpoints } from '../../http/routes/api.js';
 import { PUBLIC_ENDPOINTS as fileEndpoints } from '../../http/routes/files.js';
 import { PUBLIC_ENDPOINTS as proxyEndpoints } from '../../http/routes/proxy.js';
-import { PUBLIC_ENDPOINTS as browseEndpoints } from '../../http/routes/browse.js';
+import { PUBLIC_ENDPOINTS as browserEndpoints } from '../../http/routes/browser.js';
 
 // Bun text imports — content inlined at build time for exe bundles
 // @ts-expect-error: Bun text import
@@ -34,7 +34,7 @@ function renderEndpointTable(): string {
     ...apiEndpoints,
     ...fileEndpoints,
     ...proxyEndpoints,
-    ...browseEndpoints,
+    ...browserEndpoints,
   ];
   const rows = all.map((e) => `| ${e.method} | \`${e.path}\` | ${e.response} | ${e.description} |`);
   return [

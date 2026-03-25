@@ -1,5 +1,5 @@
 /**
- * App development deploy logic - deploy and clone.
+ * App development deploy logic.
  */
 
 import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
@@ -8,7 +8,7 @@ import { compileTypeScript, getSandboxPath } from '@yaar/compiler';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
-import { toDisplayName, generateSandboxId, generateSkillMd } from './helpers.js';
+import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
@@ -254,63 +254,5 @@ export async function doDeploy(
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return { success: false, error: `Failed to deploy app: ${msg}` };
-  }
-}
-
-export interface CloneResult {
-  success: true;
-  sandboxId: string;
-  appId: string;
-  files: string[];
-}
-
-/** Files to clone from the app directory root (alongside src/). */
-const CLONE_ROOT_FILES = ['app.json', 'SKILL.md', 'HINT.md'];
-
-export async function doClone(
-  appId: string,
-): Promise<CloneResult | { success: false; error: string }> {
-  if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-    return { success: false, error: 'Invalid app ID.' };
-  }
-
-  const appPath = join(APPS_DIR, appId);
-  const appSrcPath = join(appPath, 'src');
-
-  try {
-    await stat(appSrcPath);
-  } catch {
-    return {
-      success: false,
-      error: `No source found for app "${appId}". Only apps deployed with keepSource can be cloned.`,
-    };
-  }
-
-  const sandboxId = generateSandboxId();
-  const sandboxPath = getSandboxPath(sandboxId);
-
-  try {
-    await mkdir(join(sandboxPath, 'src'), { recursive: true });
-    await cp(appSrcPath, join(sandboxPath, 'src'), { recursive: true });
-
-    const files = await readdir(appSrcPath, { recursive: true });
-    const fileList = (files as string[])
-      .filter((f) => !f.includes('node_modules'))
-      .map((f) => `src/${f}`);
-
-    // Copy root-level metadata files (app.json, protocol.json, SKILL.md)
-    for (const file of CLONE_ROOT_FILES) {
-      try {
-        await cp(join(appPath, file), join(sandboxPath, file));
-        fileList.push(file);
-      } catch {
-        // File doesn't exist — skip
-      }
-    }
-
-    return { success: true, sandboxId, appId, files: fileList };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: `Failed to clone app: ${msg}` };
   }
 }

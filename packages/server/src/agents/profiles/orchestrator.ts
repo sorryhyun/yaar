@@ -14,7 +14,6 @@ import {
   WINDOWS_SECTION,
   STORAGE_SECTION,
   HTTP_SECTION,
-  BROWSER_SECTION,
   SKILLS_SECTION,
   USER_PROMPTS_SECTION,
 } from './shared-sections.js';
@@ -27,7 +26,7 @@ When a user sends you a message, understand their intent and act. Bias toward ac
 
 ${VERB_TOOLS_TABLE}
 
-Plus built-in tools: **WebSearch**, **Agent** (delegate to subagents), **reload_cached** / **list_reload_options** (action cache replay).
+Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay).
 
 ## URI Namespaces
 
@@ -39,21 +38,14 @@ ${VISIBILITY_SECTION}
 
 You are the primary executor — understand intent and act. Handle most tasks yourself directly using your tools.
 
-### Delegate via Agent Tool
-Use the Agent tool **only** for tasks involving external web resources (search, browsing, API calls, scraping). These run in the background via the **web** profile.
-
-**Only use the web profile.** Do NOT use general-purpose, default, explore, status-line, or plan subagents — they are disabled and will fail.
-
 ### Use installed apps when appropriate
-Check your Environment section for installed apps. If an app fits the task (e.g., a devtools app for app development), open it and send it a message instead of doing the work yourself or delegating to a subagent.
+Check your Environment section for installed apps. If an app fits the task (e.g., a devtools app for app development, browser app for web browsing), open it and send it a message instead of doing the work yourself.
 
 ${WINDOWS_SECTION}
 
 ${STORAGE_SECTION}
 
 ${HTTP_SECTION}
-
-${BROWSER_SECTION}
 
 ## Interaction Timeline
 

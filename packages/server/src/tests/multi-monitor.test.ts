@@ -176,10 +176,8 @@ mock.module('../session/action-emitter.js', () => ({
 }));
 
 mock.module('../agents/profiles/index.js', () => ({
-  getProfile: mock(() => ({ id: 'web', systemPrompt: '', allowedTools: [] })),
   DEVELOPER_PROFILE: { id: 'developer', systemPrompt: '', allowedTools: [] },
   SESSION_AGENT_PROFILE: { id: 'session', systemPrompt: '', allowedTools: [] },
-  WEB_PROFILE: { id: 'web', systemPrompt: '', allowedTools: [] },
   VERB_TOOL_NAMES: [],
   VERB_TOOLS: [],
   APP_AGENT_TOOL_NAMES: [],
@@ -187,7 +185,6 @@ mock.module('../agents/profiles/index.js', () => ({
   ORCHESTRATOR_PROMPT: '',
   getOrchestratorPrompt: mock(() => ''),
   getDeveloperAllowedTools: mock(() => []),
-  buildAgentDefinitions: mock(() => []),
   CODEX_AGENT_ROLES: {},
   codexRoleToToml: mock(() => ''),
 }));

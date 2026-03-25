@@ -135,6 +135,20 @@ export async function handleScroll(browserId: string, p: Payload): Promise<VerbR
 
 export async function handleNavigate(browserId: string, p: Payload): Promise<VerbResult> {
   const session = resolveSession(browserId);
+
+  // Navigate to a URL
+  if (p.url) {
+    const url = p.url as string;
+    const domain = extractDomain(url);
+    if (!domain) return error('Invalid URL');
+    if (!(await isDomainAllowed(domain))) {
+      return error(`Domain "${domain}" not allowed.`);
+    }
+    const state = await session.navigate(url);
+    return ok(formatPageState(state));
+  }
+
+  // History navigation (back/forward)
   const dir = p.direction as string;
   if (dir !== 'back' && dir !== 'forward') return error('"direction" must be "back" or "forward".');
   const state = await session.navigateHistory(dir);

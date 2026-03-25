@@ -2,7 +2,7 @@
 /**
  * Gated SDK for @bundled/yaar-web.
  *
- * Ergonomic browser automation wrapping yaar://browser/ verbs.
+ * Ergonomic browser automation via direct HTTP routes.
  * Requires "yaar-web" in app.json bundles field to import.
  *
  * Usage:
@@ -13,15 +13,21 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const y = (window as any).yaar;
-
-function browserUri(browserId?: string): string {
-  return `yaar://browser/${browserId ?? '0'}`;
+function browserHeaders(): Record<string, string> {
+  const t = (window as any).__YAAR_TOKEN__ || '';
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (t) h['X-Iframe-Token'] = t;
+  return h;
 }
 
-async function browserInvoke(action: string, opts?: Record<string, unknown>) {
-  const { browserId, ...params } = opts ?? {};
-  return y.invoke(browserUri(browserId), { action, ...params });
+async function browserPost<T>(body: Record<string, unknown>): Promise<T> {
+  if (!body.browserId) body.browserId = '0';
+  const res = await fetch('/api/browser', {
+    method: 'POST',
+    headers: browserHeaders(),
+    body: JSON.stringify(body),
+  });
+  return res.json();
 }
 
 // ── Navigation ──────────────────────────────────────────────────
@@ -31,19 +37,24 @@ export async function open(
   opts?: { browserId?: string; mobile?: boolean; visible?: boolean; waitUntil?: string },
 ) {
   const { browserId, ...params } = opts ?? {};
-  return y.invoke(browserUri(browserId), { action: 'open', url, ...params });
+  return browserPost({ action: 'open', browserId, url, ...params });
 }
 
 export async function scroll(opts: { direction: 'up' | 'down'; browserId?: string }) {
-  return browserInvoke('scroll', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'scroll', browserId, ...params });
+}
+
+export async function navigate(url: string, browserId?: string) {
+  return browserPost({ action: 'navigate', browserId, url });
 }
 
 export async function navigateBack(browserId?: string) {
-  return y.invoke(browserUri(browserId), { action: 'navigate', direction: 'back' });
+  return browserPost({ action: 'navigate', browserId, direction: 'back' });
 }
 
 export async function navigateForward(browserId?: string) {
-  return y.invoke(browserUri(browserId), { action: 'navigate', direction: 'forward' });
+  return browserPost({ action: 'navigate', browserId, direction: 'forward' });
 }
 
 // ── Interaction ─────────────────────────────────────────────────
@@ -56,15 +67,18 @@ export async function click(opts: {
   index?: number;
   browserId?: string;
 }) {
-  return browserInvoke('click', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'click', browserId, ...params });
 }
 
 export async function type(opts: { selector: string; text: string; browserId?: string }) {
-  return browserInvoke('type', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'type', browserId, ...params });
 }
 
 export async function press(opts: { key: string; selector?: string; browserId?: string }) {
-  return browserInvoke('press', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'press', browserId, ...params });
 }
 
 export async function hover(opts: {
@@ -74,13 +88,15 @@ export async function hover(opts: {
   y?: number;
   browserId?: string;
 }) {
-  return browserInvoke('hover', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'hover', browserId, ...params });
 }
 
 // ── Observation ─────────────────────────────────────────────────
 
 export async function waitFor(opts: { selector: string; timeout?: number; browserId?: string }) {
-  return browserInvoke('wait_for', opts);
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'wait_for', browserId, ...params });
 }
 
 export async function screenshot(opts?: {
@@ -90,7 +106,8 @@ export async function screenshot(opts?: {
   y1?: number;
   browserId?: string;
 }) {
-  return browserInvoke('screenshot', opts);
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'screenshot', browserId, ...params });
 }
 
 export async function extract(opts?: {
@@ -100,7 +117,8 @@ export async function extract(opts?: {
   maxLinks?: number;
   browserId?: string;
 }) {
-  return browserInvoke('extract', opts);
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'extract', browserId, ...params });
 }
 
 export async function extractImages(opts?: {
@@ -108,29 +126,36 @@ export async function extractImages(opts?: {
   mainContentOnly?: boolean;
   browserId?: string;
 }) {
-  return browserInvoke('extract_images', opts);
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'extract_images', browserId, ...params });
 }
 
 export async function html(opts?: { selector?: string; browserId?: string }) {
-  return browserInvoke('html', opts);
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'html', browserId, ...params });
 }
 
 // ── Visual ──────────────────────────────────────────────────────
 
 export async function annotate(browserId?: string) {
-  return y.invoke(browserUri(browserId), { action: 'annotate' });
+  return browserPost({ action: 'annotate', browserId });
 }
 
 export async function removeAnnotations(browserId?: string) {
-  return y.invoke(browserUri(browserId), { action: 'remove_annotations' });
+  return browserPost({ action: 'remove_annotations', browserId });
 }
 
 // ── Session management ──────────────────────────────────────────
 
 export async function listSessions() {
-  return y.list('yaar://browser/');
+  const res = await fetch('/api/browser/sessions', { headers: browserHeaders() });
+  return res.json();
 }
 
 export async function closeSession(browserId?: string) {
-  return y.delete(browserUri(browserId));
+  const res = await fetch(`/api/browser/${browserId ?? '0'}`, {
+    method: 'DELETE',
+    headers: browserHeaders(),
+  });
+  return res.json();
 }
