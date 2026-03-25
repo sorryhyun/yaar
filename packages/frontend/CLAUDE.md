@@ -1,13 +1,12 @@
 # Frontend Package
 
-React + Zustand + Vite frontend that renders the YAAR desktop.
+React + Zustand frontend that renders the YAAR desktop. Bundled with Bun's built-in bundler (no Vite).
 
 ## Commands
 
 ```bash
-bun run dev              # Start dev server (proxies /ws and /api to localhost:8000)
 bun run build            # Build for production
-bun run vitest run       # Run tests once (add --watch for watch mode)
+bun run test             # Run tests once
 ```
 
 ## Code Style
@@ -78,4 +77,4 @@ Bidirectional agent-to-iframe communication. Frontend relays between server (Web
 
 ## Testing
 
-Vitest + Testing Library + jsdom. Store tests use `useDesktopStore.getState()` directly. Reset store in `beforeEach` for isolation.
+Bun test + Testing Library + happy-dom. Store tests use `useDesktopStore.getState()` directly. Reset store in `beforeEach` for isolation.

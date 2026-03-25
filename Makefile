@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server frontend install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
+.PHONY: dev claude codex claude-dev codex-dev server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
 
 # Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
 CODEX_BIN ?= codex
@@ -23,13 +23,9 @@ claude-dev:
 codex-dev:
 	@MCP_SKIP_AUTH=1 ./scripts/dev.sh codex
 
-# Run server only
+# Run server only (also serves frontend in dev mode)
 server:
 	bun run --filter @yaar/server dev
-
-# Run frontend only
-frontend:
-	bun run --filter @yaar/frontend dev
 
 # Install all dependencies
 install:

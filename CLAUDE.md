@@ -37,7 +37,6 @@ make frontend                                # Start frontend only
 
 # Testing
 bun run --filter @yaar/frontend test                 # Run all frontend tests
-bun run --filter @yaar/frontend exec vitest run store  # Run tests matching "store"
 bun run --filter @yaar/server test                    # Run all server tests
 bun run --filter @yaar/shared test                    # Run all shared tests
 

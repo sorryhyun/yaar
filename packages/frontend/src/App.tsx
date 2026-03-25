@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DesktopSurface } from './components/desktop';
 import { ConnectionDialog } from './components/overlays/ConnectionDialog';
-import { LoadingScreen } from './components/overlays/LoadingScreen';
 import {
   parseHashConnection,
   getRemoteConnection,
@@ -57,14 +56,9 @@ export default function App() {
       .catch(() => setState('dialog'));
   }
 
-  if (state === 'checking') return <LoadingScreen />;
+  if (state === 'checking') return null;
   if (state === 'dialog') {
     return <ConnectionDialog onConnected={() => setState('remote')} />;
   }
-  return (
-    <>
-      <DesktopSurface />
-      <LoadingScreen />
-    </>
-  );
+  return <DesktopSurface />;
 }

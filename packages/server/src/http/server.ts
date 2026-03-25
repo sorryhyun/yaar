@@ -8,6 +8,14 @@
 
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
 import { getPort, IS_REMOTE } from '../config.js';
+
+// ── Dev reload SSE handler (set by dev-bundler.ts) ──────────────────
+let _devReloadHandler: (() => Response) | null = null;
+
+/** Register the SSE handler for dev live-reload. Called by dev-bundler.ts. */
+export function registerDevReloadHandler(handler: () => Response): void {
+  _devReloadHandler = handler;
+}
 import { checkHttpAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
 import {
@@ -87,8 +95,8 @@ export function createFetchHandler() {
         corsHeaders['Access-Control-Allow-Credentials'] = 'true';
       }
     } else {
-      // Local mode: whitelist localhost origins
-      const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+      // Local mode: whitelist localhost origins (same-origin requests won't have Origin header)
+      const allowedOrigins = [`http://localhost:${getPort()}`, 'http://localhost:3000'];
       if (origin && allowedOrigins.includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
@@ -149,6 +157,11 @@ export function createFetchHandler() {
         const response = await handleMcpRequest(req, serverName);
         return withCors(response, corsHeaders);
       }
+    }
+
+    // Dev live-reload SSE endpoint
+    if (_devReloadHandler && url.pathname === '/dev-reload') {
+      return _devReloadHandler();
     }
 
     // Route dispatch — short-circuit on first match

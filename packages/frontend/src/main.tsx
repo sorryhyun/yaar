@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './styles/base/tokens.css';
 import './i18n'; // Must be imported before React renders
 import App from './App';
 

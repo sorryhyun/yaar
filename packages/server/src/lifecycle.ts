@@ -20,7 +20,7 @@ import {
   getContextRestoreMessages,
   getCliRestoreEntries,
 } from './logging/index.js';
-import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, getPort } from './config.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, IS_DEV, getPort } from './config.js';
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
@@ -75,6 +75,12 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
         console.warn('[Tunnel] Could not establish tunnel — LAN-only mode');
       }
     }
+  }
+
+  // Dev mode: build frontend and start file watcher with live reload
+  if (IS_DEV) {
+    const { initDevBundler } = await import('./http/dev-bundler.js');
+    await initDevBundler();
   }
 
   // Initialize session hub (LiveSession instances created on first WS connection)

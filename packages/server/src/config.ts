@@ -118,6 +118,9 @@ export const PORT = DEFAULT_PORT;
 
 export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
+/** Dev mode: local development with live reload (not remote, not bundled). */
+export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
+
 /** Marketplace base URL. */
 export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
