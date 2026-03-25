@@ -49,9 +49,13 @@ VERSION=v0.1.0 curl -fsSL ... | bash             # Specific version
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Custom install path
 ```
 
-### Windows
+### Windows (PowerShell)
 
-Download `yaar-windows-x64.exe` from the [Releases page](https://github.com/sorryhyun/yaar/releases). You may see a SmartScreen warning.
+```powershell
+irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex
+```
+
+Downloads `yaar.exe` and adds it to your PATH automatically. Or download directly from the [Releases page](https://github.com/sorryhyun/yaar/releases).
 
 ### Build from source
 

@@ -50,9 +50,13 @@ VERSION=v0.1.0 curl -fsSL ... | bash     # 특정 버전
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 변경
 ```
 
-### Windows 유저
+### Windows (PowerShell)
 
-[릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 `yaar-windows-x64.exe`를 다운받아 실행하세요. 스마트스크린 경고가 뜰 수 있습니다.
+```powershell
+irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex
+```
+
+자동으로 `yaar.exe`를 다운받아 PATH에 추가합니다. 또는 [릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 직접 다운로드할 수 있습니다.
 
 ### 소스에서 빌드
 
