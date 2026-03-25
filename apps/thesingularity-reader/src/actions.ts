@@ -1,6 +1,7 @@
 import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
-import { app, invoke, withLoading } from '@bundled/yaar';
+import { app, withLoading } from '@bundled/yaar';
+import * as web from '@bundled/yaar-web';
 import type { Post } from './types';
 import { toMobileUrl } from './helpers';
 
@@ -129,18 +130,17 @@ export async function takeScreenshot(post: Post): Promise<void> {
   setState({ screenshotLoading: true, screenshotSrc: null });
   try {
     const mobileUrl = toMobileUrl(post.url);
-    await invoke('yaar://browser/pages', {
-      action: 'open',
-      url: mobileUrl,
+    await web.open(mobileUrl, {
+      browserId: 'pages',
       visible: false,
       mobile: true,
       waitUntil: 'networkidle',
     });
-    await invoke('yaar://browser/pages', { action: 'scroll', direction: 'down', y: 350 });
-    const result = await invoke<{
-      data: string;
+    await web.scroll({ direction: 'down', browserId: 'pages' });
+    const result = await web.screenshot({ browserId: 'pages' }) as {
+      ok: boolean;
       images?: Array<{ data: string; mimeType?: string }>;
-    }>('yaar://browser/pages', { action: 'screenshot' });
+    };
     const images = result?.images ?? [];
     if (images.length > 0) {
       const img = images[0];

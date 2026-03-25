@@ -290,7 +290,6 @@ When building apps that use `yaar://` URIs (e.g., session-logs, storage browser)
 | `yaar://storage/` | File storage |
 | `yaar://windows/` | Window management |
 | `yaar://config/` | Settings, hooks, app config |
-| `yaar://browser/` | Browser automation |
 | `yaar://sessions/` | Session listing and transcripts |
 
 ### `yaar://sessions/` URIs
@@ -425,68 +424,6 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 ```
 
 ## Migration Patterns
-
-When editing existing apps, replace these legacy patterns with SDK equivalents:
-
-### `createPersistedSignal` — replaces manual load/save
-
-Before:
-```ts
-const [theme, setTheme] = createSignal<Theme>({ dark: true });
-onMount(async () => {
-  const saved = await appStorage.readJsonOr<Theme>('theme.json', { dark: true });
-  setTheme(saved);
-});
-// ... and every mutation must manually save:
-function toggleDark() {
-  setTheme(t => { const next = { ...t, dark: !t.dark }; appStorage.save('theme.json', JSON.stringify(next)); return next; });
-}
-```
-
-After:
-```ts
-const [theme, setTheme] = createPersistedSignal<Theme>('theme.json', { dark: true });
-// loads automatically, saves automatically on every setTheme()
-function toggleDark() {
-  setTheme(t => ({ ...t, dark: !t.dark }));
-}
-```
-
-### `createStore` — replaces signal explosion
-
-Before (10+ loose signals):
-```ts
-const [items, setItems] = createSignal([]);
-const [filter, setFilter] = createSignal('');
-const [page, setPage] = createSignal(1);
-const [selected, setSelected] = createSignal(null);
-const [loading, setLoading] = createSignal(false);
-const [error, setError] = createSignal('');
-```
-
-After (one store):
-```ts
-import { createStore, produce } from '@bundled/solid-js/store';
-const [state, setState] = createStore({ items: [], filter: '', page: 1, selected: null, loading: false, error: '' });
-setState('filter', 'active');                       // update one field
-setState(produce(s => { s.items.push(newItem); })); // mutate nested data
-```
-
-Use `createStore` when an app has 5+ related signals. Keep `createSignal` for isolated values.
-
-### Shared CSS utility classes — replaces repeated custom styles
-
-Common UI patterns are provided as `y-*` classes. When editing `styles.css`, replace hand-rolled equivalents:
-
-| Custom CSS pattern | Shared class |
-|---|---|
-| `.item { display:flex; align-items:center; gap:8px; cursor:pointer; }` + hover/active states | `y-list-item` (+ `.active` or `[aria-selected]` for selection) |
-| `.label { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--yaar-text-muted) }` | `y-label` |
-| `.empty { display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--yaar-text-muted) }` | `y-empty` (+ `y-empty-icon` for the large faded icon) |
-| `-webkit-line-clamp: 2` boilerplate (display, box-orient, overflow) | `y-clamp-2` or `y-clamp-3` |
-| `.btn-danger { color:var(--yaar-error); border-color:var(--yaar-error) }` | `y-btn y-btn-danger` |
-
-`y-list-item` provides: flex row with gap, `border-left: 2px solid transparent`, hover background, and `.active` state with accent left border + tinted background. Override padding or add `flex-direction: column` as needed.
 
 ### Earlier SDK migrations (Tier 1–2)
 

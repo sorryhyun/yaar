@@ -1,15 +1,18 @@
 import type { Post, Comment } from './types';
-import { invoke } from '@bundled/yaar';
+import * as web from '@bundled/yaar-web';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
 
 async function browseUrl(url: string, tabId: string, waitForIdle = false): Promise<string> {
-  const openPayload: Record<string, unknown> = { action: 'open', url, visible: false, mobile: true };
-  if (waitForIdle) openPayload.waitUntil = 'networkidle';
-  await invoke('yaar://browser/' + tabId, openPayload);
-  const result = await invoke<string>('yaar://browser/' + tabId, { action: 'html' });
-  return typeof result === 'string' ? result : '';
+  await web.open(url, {
+    browserId: tabId,
+    visible: false,
+    mobile: true,
+    ...(waitForIdle && { waitUntil: 'networkidle' }),
+  });
+  const result = await web.html({ browserId: tabId }) as { ok: boolean; data?: string };
+  return result?.data ?? '';
 }
 
 /**
@@ -20,18 +23,14 @@ async function extractUrl(
   url: string,
   tabId: string,
 ): Promise<{ text: string; links: Array<{ label: string; url: string }> }> {
-  await invoke('yaar://browser/' + tabId, {
-    action: 'open',
-    url,
+  await web.open(url, {
+    browserId: tabId,
     visible: false,
     mobile: true,
     waitUntil: 'networkidle',
   });
-  const result = await invoke<string>('yaar://browser/' + tabId, {
-    action: 'extract',
-    mainContentOnly: true,
-  });
-  const raw = typeof result === 'string' ? result : '';
+  const result = await web.extract({ browserId: tabId, mainContentOnly: true }) as { ok: boolean; data?: string };
+  const raw = result?.data ?? '';
   return parseExtractResult(raw);
 }
 
@@ -526,23 +525,22 @@ export async function fetchPostDetail(
   post: Post,
 ): Promise<{ content: string; comments: Comment[] }> {
   const tabId = 'singularity-post';
-  await invoke('yaar://browser/' + tabId, {
-    action: 'open',
-    url: post.url,
+  await web.open(post.url, {
+    browserId: tabId,
     visible: false,
     mobile: true,
     waitUntil: 'networkidle',
   });
 
   // DC loads comments via AJAX after page load — wait for mobile (#comment_box) or desktop (.comment_wrap) selectors
-  await invoke('yaar://browser/' + tabId, {
-    action: 'wait_for',
+  await web.waitFor({
     selector: '#comment_box li.comment, .comment_wrap .comment_list, .comment_wrap .list_comment, .reply_wrap',
     timeout: 4000,
+    browserId: tabId,
   }).catch(() => {});
 
-  const rawHtml = await invoke<string>('yaar://browser/' + tabId, { action: 'html' });
-  const html = typeof rawHtml === 'string' ? rawHtml : '';
+  const rawHtml = await web.html({ browserId: tabId }) as { ok: boolean; data?: string };
+  const html = rawHtml?.data ?? '';
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   doc.querySelectorAll('script, noscript, style').forEach(e => e.remove());

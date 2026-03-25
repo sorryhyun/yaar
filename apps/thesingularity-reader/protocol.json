@@ -26,10 +26,15 @@
                 "description": "AI 추천 이유 (2~3문장)"
               }
             },
-            "required": ["num", "reason"]
+            "required": [
+              "num",
+              "reason"
+            ]
           }
         },
-        "required": ["topics"]
+        "required": [
+          "topics"
+        ]
       }
     }
   }
