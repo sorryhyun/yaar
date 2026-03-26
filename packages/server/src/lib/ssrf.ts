@@ -75,7 +75,7 @@ export async function safeFetch(url: string, init?: RequestInit): Promise<Respon
 
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
     // Build headers with accumulated cookies
-    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    const headers = new Headers(init?.headers as ConstructorParameters<typeof Headers>[0]);
     if (cookieJar.size > 0) {
       headers.set(
         'Cookie',
