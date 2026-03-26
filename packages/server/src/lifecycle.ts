@@ -327,12 +327,29 @@ export async function shutdown(server: Server<any>): Promise<void> {
  */
 function forceKillProcess(): void {
   if (process.platform === 'win32') {
+    // On Windows, process.exit() can hang when Bun has active server handles.
+    // Use taskkill /F /T to force-kill the entire process tree (including this
+    // process and any child processes like conhost). Do NOT call process.exit()
+    // afterward — it races with taskkill and can leave the process half-alive.
     try {
-      Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
+      const proc = Bun.spawn(['taskkill', '/F', '/T', '/PID', String(process.pid)], {
         stdio: ['ignore', 'ignore', 'ignore'],
       });
+      // Keep the event loop alive until taskkill terminates us.
+      // If taskkill somehow fails, fall back to process.exit after a timeout.
+      proc.exited
+        .then(() => {
+          // taskkill killed everything but we're somehow still here
+          process.exit(0);
+        })
+        .catch(() => {
+          process.exit(0);
+        });
+      // Safety net: if still alive after 3s, force exit
+      setTimeout(() => process.exit(0), 3_000).unref?.();
+      return;
     } catch {
-      /* ignore — fall through to process.exit */
+      /* taskkill spawn failed — fall through to process.exit */
     }
   } else {
     // Kill entire process group so child processes (headless Chrome, etc.)
