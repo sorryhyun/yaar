@@ -13,10 +13,11 @@ import { createMockWs } from '../helpers/mocks.js';
 mock.module('@yaar/server/providers/warm-pool', () => ({
   getWarmPool: mock(() => ({
     getPreferredProvider: () => null,
-    acquire: mock(() => {}),
+    acquire: mock(() => null),
     stats: () => ({ warm: 0, pending: 0, total: 0 }),
   })),
   initWarmPool: mock(() => Promise.resolve(true)),
+  acquireWarmProvider: mock(() => Promise.resolve(null)),
 }));
 
 const { prepareWsData } = await import('@yaar/server/websocket/server');
