@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
-import { state, setState } from './store';
-import { doRefresh, triggerAnalysis } from './actions';
-import { formatCountdown, formatTime } from './helpers';
+import { state, setState } from '../store';
+import { doRefresh, triggerAnalysis } from '../actions';
+import { formatCountdown, formatTime } from '../helpers';
 
 export function Header() {
   return html`
@@ -46,8 +46,37 @@ export function Header() {
           ${() => (state.loading ? html`<span class="y-spinner"></span>` : '🔄')}
         </button>
         <button
+          class=${() => {
+            if (state.showLogin) return 'y-btn y-btn-sm rec-btn-active';
+            if (state.isLoggedIn) return 'y-btn y-btn-sm login-btn-active';
+            if (state.savedCredentials) return 'y-btn y-btn-sm login-btn-saved';
+            return 'y-btn y-btn-sm y-btn-ghost';
+          }}
+          onClick=${() => {
+            const next = !state.showLogin;
+            setState('showLogin', next);
+            if (next) setState('showSettings', false);
+          }}
+          title=${() => {
+            if (state.isLoggedIn) return `로그인: ${state.savedCredentials?.username ?? ''}`;
+            if (state.savedCredentials) return `저장된 계정: ${state.savedCredentials.username}`;
+            return '로그인';
+          }}
+        >
+          ${() => {
+            if (state.loginLoading) return html`<span class="y-spinner"></span>`;
+            if (state.isLoggedIn) return '👤';
+            if (state.savedCredentials) return '🔓';
+            return '🔐';
+          }}
+        </button>
+        <button
           class="y-btn y-btn-sm y-btn-ghost"
-          onClick=${() => setState('showSettings', (s: boolean) => !s)}
+          onClick=${() => {
+            const next = !state.showSettings;
+            setState('showSettings', next);
+            if (next) setState('showLogin', false);
+          }}
           title="설정"
         >
           ⚙️

@@ -39,7 +39,9 @@
             "description": "Project name"
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     "openProject": {
@@ -51,7 +53,9 @@
             "type": "string"
           }
         },
-        "required": ["id"]
+        "required": [
+          "id"
+        ]
       }
     },
     "deleteProject": {
@@ -63,7 +67,9 @@
             "type": "string"
           }
         },
-        "required": ["id"]
+        "required": [
+          "id"
+        ]
       }
     },
     "openFile": {
@@ -118,7 +124,9 @@
             "description": "Also open file(s) in editor UI"
           }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       }
     },
     "writeFile": {
@@ -133,7 +141,10 @@
             "type": "string"
           }
         },
-        "required": ["path", "content"]
+        "required": [
+          "path",
+          "content"
+        ]
       }
     },
     "editFile": {
@@ -153,7 +164,11 @@
             "description": "Replacement text (alias: newString)"
           }
         },
-        "required": ["path", "search", "replace"]
+        "required": [
+          "path",
+          "search",
+          "replace"
+        ]
       }
     },
     "deleteFile": {
@@ -165,7 +180,29 @@
             "type": "string"
           }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
+      }
+    },
+    "copyFile": {
+      "description": "Copy a file to another path within the active project. ",
+      "params": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Source file path (e.g. \"src/Foo.ts\")"
+          },
+          "to": {
+            "type": "string",
+            "description": "Destination file path (e.g. \"src/ui/Foo.ts\")"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
       }
     },
     "grep": {
@@ -182,7 +219,9 @@
             "description": "File glob filter (e.g. \"src/**/*.ts\")"
           }
         },
-        "required": ["pattern"]
+        "required": [
+          "pattern"
+        ]
       }
     },
     "compile": {
@@ -217,7 +256,9 @@
             "type": "string"
           }
         },
-        "required": ["appId"]
+        "required": [
+          "appId"
+        ]
       }
     },
     "preview": {
@@ -244,7 +285,9 @@
             "description": "State key to query"
           }
         },
-        "required": ["stateKey"]
+        "required": [
+          "stateKey"
+        ]
       }
     },
     "previewCommand": {
@@ -261,7 +304,9 @@
             "description": "Command parameters"
           }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     },
     "describeUri": {
@@ -274,7 +319,9 @@
             "description": "yaar:// URI to describe (e.g. \"yaar://sessions/\")"
           }
         },
-        "required": ["uri"]
+        "required": [
+          "uri"
+        ]
       }
     },
     "listUri": {
@@ -287,7 +334,9 @@
             "description": "yaar:// URI to list (e.g. \"yaar://sessions/\")"
           }
         },
-        "required": ["uri"]
+        "required": [
+          "uri"
+        ]
       }
     },
     "cloneApp": {
@@ -300,7 +349,9 @@
             "description": "App ID to clone"
           }
         },
-        "required": ["appId"]
+        "required": [
+          "appId"
+        ]
       }
     },
     "clearConsole": {

@@ -32,6 +32,9 @@ import {
   handleHtml,
   handleAnnotate,
   handleRemoveAnnotations,
+  handleGetCookies,
+  handleSetCookie,
+  handleDeleteCookies,
 } from '../features/browser/actions.js';
 
 export async function registerBrowserHandlers(registry: ResourceRegistry): Promise<void> {
@@ -60,7 +63,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
   registry.register('yaar://browser/*', {
     description:
       'Browser instance. Read for current state (URL, title). ' +
-      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html, annotate, remove_annotations. ' +
+      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html, annotate, remove_annotations, get_cookies, set_cookie, delete_cookies. ' +
       'Delete to close.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -84,6 +87,9 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             'html',
             'annotate',
             'remove_annotations',
+            'get_cookies',
+            'set_cookie',
+            'delete_cookies',
           ],
         },
         url: { type: 'string', description: 'URL for open action' },
@@ -113,6 +119,20 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
         maxLinks: { type: 'number' },
         maxTextLength: { type: 'number' },
         mainContentOnly: { type: 'boolean' },
+        // cookie options
+        name: { type: 'string', description: 'Cookie name (for set_cookie, delete_cookies)' },
+        value: { type: 'string', description: 'Cookie value (for set_cookie)' },
+        domain: { type: 'string', description: 'Cookie domain' },
+        path: { type: 'string', description: 'Cookie path' },
+        expires: { type: 'number', description: 'Cookie expiry (Unix timestamp)' },
+        httpOnly: { type: 'boolean' },
+        secure: { type: 'boolean' },
+        sameSite: { type: 'string', enum: ['Strict', 'Lax', 'None'] },
+        urls: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'URLs to get cookies for (defaults to current page)',
+        },
       },
     },
 
@@ -170,6 +190,12 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             return await handleAnnotate(browserId);
           case 'remove_annotations':
             return await handleRemoveAnnotations(browserId);
+          case 'get_cookies':
+            return await handleGetCookies(browserId, p);
+          case 'set_cookie':
+            return await handleSetCookie(browserId, p);
+          case 'delete_cookies':
+            return await handleDeleteCookies(browserId, p);
           default:
             return error(`Unknown action "${action}".`);
         }

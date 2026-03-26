@@ -1,7 +1,7 @@
 import { createMemo } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import type { Post } from './types';
-import { state } from './store';
+import type { Post } from '../types';
+import { state } from '../store';
 
 export function PostItem(props: { post: Post }) {
   const isSelected = createMemo(() => state.selectedPost?.id === props.post.id);

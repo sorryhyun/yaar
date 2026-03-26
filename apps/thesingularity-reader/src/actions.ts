@@ -1,21 +1,28 @@
 import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
-import { app, withLoading } from '@bundled/yaar';
+import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import type { Post } from './types';
 import { toMobileUrl } from './helpers';
+import {
+  loginToDC,
+  logoutFromDC,
+  checkLoginStatus,
+  postCommentToDC,
+  loadSession,
+} from './auth';
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let fetchVersion = 0;
 
-/** 타이머를 모두 정지 (열림 시 cleanup) */
+/** 타이머를 모두 정지 */
 export function clearTimers(): void {
   if (refreshTimer) clearInterval(refreshTimer);
   if (countdownTimer) clearInterval(countdownTimer);
 }
 
-/** 게시물 목록을 지금 증해서 가져온다 */
+/** 게시물 목록 새로고침 */
 export async function doRefresh(): Promise<void> {
   if (state.loading) return;
   setState('error', null);
@@ -26,13 +33,11 @@ export async function doRefresh(): Promise<void> {
       updatePosts(newPosts);
       setState('countdown', settings().refreshInterval);
     },
-    (msg) => {
-      setState('error', msg || '불러오기 실패');
-    },
+    (msg) => setState('error', msg || '불러오기 실패'),
   );
 }
 
-/** 자동 새로고침 타이머를 시작한다 */
+/** 자동 새로고침 타이머 시작 */
 export function startRefreshTimer(): void {
   if (refreshTimer) clearInterval(refreshTimer);
   if (countdownTimer) clearInterval(countdownTimer);
@@ -40,21 +45,14 @@ export function startRefreshTimer(): void {
   const interval = settings().refreshInterval;
   setState('countdown', interval);
 
-  refreshTimer = setInterval(() => {
-    doRefresh();
-  }, interval * 1000);
+  refreshTimer = setInterval(() => doRefresh(), interval * 1000);
 
   countdownTimer = setInterval(() => {
-    setState('countdown', (c) => {
-      if (c <= 1) return settings().refreshInterval;
-      return c - 1;
-    });
+    setState('countdown', (c) => (c <= 1 ? settings().refreshInterval : c - 1));
   }, 1000);
 }
 
-/**
- * 게시물을 선택하고 본문과 댓글을 동시에 비동기로 가져온다.
- */
+/** 게시물 선택 → 본문 + 댓글 로드 */
 export async function selectPost(post: Post): Promise<void> {
   if (state.selectedPost?.id === post.id && state.postContent) return;
 
@@ -69,28 +67,26 @@ export async function selectPost(post: Post): Promise<void> {
     comments: [],
     commentsLoading: true,
     showComments: false,
+    commentText: '',
   });
 
   try {
     const { content, comments } = await fetchPostDetail(post);
     if (version !== fetchVersion) return;
     setState({ postContent: content, comments });
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (version !== fetchVersion) return;
+    const msg = e instanceof Error ? e.message : String(e);
     setState(
       'postContent',
-      '<p style="color:var(--yaar-error)">게시물을 불러올 수 없습니다: ' +
-        (e?.message ?? '') +
-        '</p>',
+      `<p style="color:var(--yaar-error)">게시물을 불러올 수 없습니다: ${msg}</p>`,
     );
   } finally {
-    if (version === fetchVersion) {
-      setState({ postLoading: false, commentsLoading: false });
-    }
+    if (version === fetchVersion) setState({ postLoading: false, commentsLoading: false });
   }
 }
 
-/** AI 분석 트리거: 상위 5개 게시물 내용을 에이전트에게 전달 */
+/** AI 분석 트리거 */
 export async function triggerAnalysis(): Promise<void> {
   if (state.recLoading) return;
   const currentPosts = state.posts;
@@ -101,54 +97,164 @@ export async function triggerAnalysis(): Promise<void> {
     const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
     app.sendInteraction({
       type: 'analyze_posts',
-      description:
-        '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 커맨드로 결과를 돌려주세요',
+      description: '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 코맨드로 결과를 돌려주세요',
       allPosts: currentPosts.map((p) => ({
-        num: p.num,
-        title: p.title,
-        author: p.author,
-        views: p.views,
-        recommend: p.recommend,
-        category: p.category ?? null,
+        num: p.num, title: p.title, author: p.author,
+        views: p.views, recommend: p.recommend, category: p.category ?? null,
       })),
       topPosts: topPostsData.map(({ post, text }) => ({
-        num: post.num,
-        title: post.title,
-        views: post.views,
-        recommend: post.recommend,
-        contentText: text,
+        num: post.num, title: post.title, views: post.views,
+        recommend: post.recommend, contentText: text,
       })),
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Analysis trigger failed:', e);
     setState('recLoading', false);
   }
 }
 
-/** 모바일 브라우저로 포스트 URL 스크린셛 찍기 */
+/** 스크린쓷 찍기 */
 export async function takeScreenshot(post: Post): Promise<void> {
   setState({ screenshotLoading: true, screenshotSrc: null });
   try {
     const mobileUrl = toMobileUrl(post.url);
-    await web.open(mobileUrl, {
-      browserId: 'pages',
-      visible: false,
-      mobile: true,
-      waitUntil: 'networkidle',
-    });
+    await web.open(mobileUrl, { browserId: 'pages', visible: false, mobile: true, waitUntil: 'networkidle' });
     await web.scroll({ direction: 'down', browserId: 'pages' });
     const result = await web.screenshot({ browserId: 'pages' }) as {
-      ok: boolean;
-      images?: Array<{ data: string; mimeType?: string }>;
+      ok: boolean; images?: Array<{ data: string; mimeType?: string }>;
     };
     const images = result?.images ?? [];
     if (images.length > 0) {
       const img = images[0];
       setState('screenshotSrc', `data:${img.mimeType ?? 'image/png'};base64,${img.data}`);
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Screenshot failed:', e);
   } finally {
     setState('screenshotLoading', false);
+  }
+}
+
+// =====================================================================
+// 로그인 / 로그아웃 / 세션 초기화
+// =====================================================================
+
+/**
+ * 앱 시작 시 쿠키 → appStorage 순으로 세션 복원 후 자동 로그인
+ * getCookies()로 dc_session_token이 있으면 바로 로그인 상태로 복원
+ */
+export async function initLoginStatus(): Promise<void> {
+  try {
+    // loadSession() 내부에서 getCookies() → appStorage 순으로 자동 복원
+    const session = await loadSession();
+    if (!session?.dcPaPP) {
+      setState('isLoggedIn', false);
+      return;
+    }
+
+    // 세션 username을 savedCredentials에 반영 (UI 표시용)
+    if (session.username && !state.savedCredentials?.username) {
+      setState('savedCredentials', {
+        username: session.username,
+        password: state.savedCredentials?.password ?? '',
+        savedAt: session.savedAt,
+      });
+    }
+
+    // 저장된 세션이 있으면 실제 로그인 상태 확인
+    setState('loginLoading', true);
+    const ok = await checkLoginStatus();
+    setState({ isLoggedIn: ok, loginLoading: false });
+
+    if (ok) {
+      showToast(`🔓 자동 로그인됨 (${session.username})`, 'success', 3000);
+    }
+  } catch {
+    setState({ isLoggedIn: false, loginLoading: false });
+  }
+}
+
+/**
+ * 로그인 실행
+ * username/password를 받아서 DC에 로그인, 성공 시 세션 저장
+ */
+export async function doLogin(username?: string, password?: string): Promise<void> {
+  const u = username ?? state.savedCredentials?.username ?? '';
+  const p = password ?? state.savedCredentials?.password ?? '';
+
+  if (!u) {
+    showToast('아이디를 입력해주세요', 'error');
+    return;
+  }
+
+  setState('loginLoading', true);
+  try {
+    const result = await loginToDC(u, p);
+    if (result.ok) {
+      setState('isLoggedIn', true);
+      showToast(`🔓 로그인 성공! (${u})`, 'success');
+    } else {
+      setState('isLoggedIn', false);
+      showToast(result.error ?? '로그인 실패', 'error');
+    }
+  } catch (e: unknown) {
+    setState('isLoggedIn', false);
+    showToast(errMsg(e), 'error');
+  } finally {
+    setState('loginLoading', false);
+  }
+}
+
+/** 로그아웃 */
+export async function doLogout(): Promise<void> {
+  setState('loginLoading', true);
+  try {
+    await logoutFromDC();
+    setState('isLoggedIn', false);
+    showToast('로그아웃 완료', 'success');
+  } catch (e: unknown) {
+    showToast(errMsg(e), 'error');
+  } finally {
+    setState('loginLoading', false);
+  }
+}
+
+// =====================================================================
+// 댓글 제출
+// =====================================================================
+
+export async function submitComment(): Promise<void> {
+  const post = state.selectedPost;
+  if (!post) return;
+  const text = state.commentText.trim();
+  if (!text) {
+    showToast('댓글 내용을 입력해주세요', 'error');
+    return;
+  }
+  if (!state.isLoggedIn) {
+    showToast('로그인이 필요합니다', 'error');
+    return;
+  }
+
+  setState('commentSubmitting', true);
+  try {
+    const result = await postCommentToDC(post, text);
+    if (result.ok) {
+      setState('commentText', '');
+      showToast('💬 댓글이 등록되었습니다!', 'success');
+      // 댓글 목록 리프레시
+      setTimeout(async () => {
+        try {
+          const { comments } = await fetchPostDetail(post);
+          setState('comments', comments);
+        } catch { /* 실패해도 무시 */ }
+      }, 1200);
+    } else {
+      showToast(result.error ?? '댓글 작성 실패', 'error');
+    }
+  } catch (e: unknown) {
+    showToast(errMsg(e), 'error');
+  } finally {
+    setState('commentSubmitting', false);
   }
 }

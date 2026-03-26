@@ -1,13 +1,13 @@
 import { createEffect } from '@bundled/solid-js';
 import { createStore } from '@bundled/solid-js/store';
 import { createPersistedSignal } from '@bundled/yaar';
-import type { Post, AppSettings, Recommendation, Comment } from './types';
+import type { Post, AppSettings, Recommendation, Comment, Credentials } from './types';
 
-// ── Persisted settings (auto-load + auto-save) ──────────────────────────────
+// ── Persisted settings (auto-load + auto-save) ────────────────────────────────────────────
 const DEFAULT_SETTINGS: AppSettings = { refreshInterval: 300 };
 export const [settings, setSettings] = createPersistedSignal<AppSettings>('settings.json', DEFAULT_SETTINGS);
 
-// ── Main app state (one store replaces 23 signals) ──────────────────────────
+// ── Main app state (one store replaces 23 signals) ──────────────────────────────
 const HIDE_SPAMMER_KEY = 'singularity-hide-spammer';
 
 export const [state, setState] = createStore({
@@ -34,6 +34,10 @@ export const [state, setState] = createStore({
   commentsLoading: false,
   showComments: false,
 
+  // Comment write
+  commentSubmitting: false,
+  commentText: '',
+
   // AI recommendation
   recommendation: null as Recommendation | null,
   recLoading: false,
@@ -41,8 +45,14 @@ export const [state, setState] = createStore({
 
   // UI
   showSettings: false,
+  showLogin: false,
   hideSpammer: localStorage.getItem(HIDE_SPAMMER_KEY) !== 'false',
   filterKeyword: null as string | null,
+
+  // Auth
+  savedCredentials: null as Credentials | null,
+  isLoggedIn: false,
+  loginLoading: false,
 });
 
 // Auto-sync hideSpammer to localStorage
@@ -54,7 +64,7 @@ export function toggleHideSpammer() {
   setState('hideSpammer', !state.hideSpammer);
 }
 
-// ── Post update logic (tracks new post IDs) ─────────────────────────────────
+// ── Post update logic (tracks new post IDs) ───────────────────────────────────────────
 let knownPostIds = new Set<string>();
 
 export function updatePosts(newPosts: Post[]) {

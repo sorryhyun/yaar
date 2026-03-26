@@ -112,6 +112,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         MAX_MCP_OUTPUT_TOKENS: '131072',
         CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: 'true',
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: 'true',
+        ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
       },
     };
   }

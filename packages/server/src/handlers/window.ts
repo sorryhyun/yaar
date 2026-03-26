@@ -269,12 +269,13 @@ export function registerWindowHandlers(
           if (!pool) return error('Session not initialized.');
 
           const messageId = `agent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const taggedContent = `[from: orchestrator]\n${p.message as string}`;
           pool
             .handleTask({
               type: 'window',
               messageId,
               windowId,
-              content: p.message as string,
+              content: taggedContent,
               monitorId: getMonitorId() ?? undefined,
             })
             .catch((err: unknown) => console.error('[window.message] Failed:', err));

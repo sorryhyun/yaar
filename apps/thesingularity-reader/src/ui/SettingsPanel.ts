@@ -1,6 +1,6 @@
 import html from '@bundled/solid-js/html';
-import { settings, setSettings } from './store';
-import { startRefreshTimer } from './actions';
+import { settings, setSettings } from '../store';
+import { startRefreshTimer } from '../actions';
 
 const INTERVALS = [
   { label: '1분', value: 60 },
@@ -14,7 +14,7 @@ export function SettingsPanel() {
     <div class="settings-overlay">
       <div class="settings-title">⚙️ 설정</div>
       <div class="settings-row">
-        <span>새로고침 간갩</span>
+        <span>새로고침 간격</span>
         <select
           class="settings-select"
           value=${() => settings().refreshInterval}

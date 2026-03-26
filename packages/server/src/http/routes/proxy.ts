@@ -14,6 +14,8 @@ import {
   FetchResponseError,
   FetchTimeoutError,
 } from '../../features/http/fetch.js';
+import { validateIframeToken } from '../iframe-tokens.js';
+import { jarKey } from '../../features/http/cookie-jar.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -68,12 +70,25 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     }
   }
 
+  // Resolve cookie jar key from iframe token context
+  let cookieJarKey: string | undefined;
+  const iframeToken = req.headers.get('x-iframe-token');
+  if (iframeToken) {
+    const tokenEntry = validateIframeToken(iframeToken);
+    if (tokenEntry) {
+      cookieJarKey = jarKey(tokenEntry.sessionId, tokenEntry.appId);
+      // Also use token's sessionId if none was provided explicitly
+      if (!sessionId) sessionId = tokenEntry.sessionId;
+    }
+  }
+
   try {
     const result = await performFetch(targetUrl, {
       method: body.method,
       headers: body.headers,
       body: body.body,
       sessionId,
+      cookieJarKey,
     });
     return jsonResponse(result);
   } catch (err) {

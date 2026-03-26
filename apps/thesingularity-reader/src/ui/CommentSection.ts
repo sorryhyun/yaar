@@ -1,9 +1,10 @@
-import { For, Show } from '@bundled/solid-js';
+import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { state, setState } from './store';
-import type { Comment } from './types';
+import { state, setState } from '../store';
+import { submitComment } from '../actions';
+import type { Comment } from '../types';
 
-/** 닉네임 타입 뱃지 */
+/** 닉네임 타입 및지 */
 function NickBadge(props: { nickType?: Comment['nickType'] }) {
   if (props.nickType === 'sub-gonick') {
     return html`<span class="nick-badge nick-badge-manager" title="운영진/매니저">★</span>`;
@@ -11,7 +12,6 @@ function NickBadge(props: { nickType?: Comment['nickType'] }) {
   if (props.nickType === 'gonick') {
     return html`<span class="nick-badge nick-badge-gonick" title="고정닉">🔒</span>`;
   }
-  // nogonick 또는 undefined → 뱃지 없음
   return null;
 }
 
@@ -40,6 +40,50 @@ function CommentItem(props: { comment: Comment }) {
   `;
 }
 
+/** 댓글 작성 폼 (isLoggedIn일 때만 활성화) */
+function CommentWriteForm() {
+  return html`
+    <div class="comment-write-wrap">
+      ${() => !state.isLoggedIn ? html`
+        <div class="comment-login-prompt">
+          <span class="comment-login-icon">🔐</span>
+          <span class="comment-login-text">댓글을 작성하려면 로그인이 필요합니다</span>
+          <button
+            class="y-btn y-btn-sm y-btn-primary"
+            onClick=${() => { setState('showLogin', true); setState('showSettings', false); }}
+          >로그인</button>
+        </div>
+      ` : html`
+        <div class="comment-write-form">
+          <div class="comment-write-user">
+            <span class="comment-write-nick">👤 ${() => state.savedCredentials?.username ?? '사용자'}</span>
+          </div>
+          <textarea
+            class="comment-write-textarea"
+            placeholder="댓글을 입력하세요..."
+            value=${() => state.commentText}
+            onInput=${(e: Event) => setState('commentText', (e.target as HTMLTextAreaElement).value)}
+            rows="3"
+            disabled=${() => state.commentSubmitting}
+          ></textarea>
+          <div class="comment-write-actions">
+            <span class="comment-write-count">${() => state.commentText.length}자</span>
+            <button
+              class="y-btn y-btn-primary y-btn-sm comment-submit-btn"
+              onClick=${submitComment}
+              disabled=${() => state.commentSubmitting || !state.commentText.trim()}
+            >
+              ${() => state.commentSubmitting
+                ? html`<span class="y-spinner"></span>`
+                : '💬 등록'}
+            </button>
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
 export function CommentSection() {
   const bestComments = () => state.comments.filter(c => c.isBest);
   const regularComments = () => state.comments.filter(c => !c.isBest);
@@ -62,7 +106,7 @@ export function CommentSection() {
         disabled=${() => state.commentsLoading}
       >
         <span innerHTML=${toggleLabel}></span>
-        <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>⌄</span>
+        <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>⏄</span>
       </button>
 
       ${() => state.showComments ? html`
@@ -99,6 +143,8 @@ export function CommentSection() {
               </${For}>
             </div>
           ` : null}
+
+          <${CommentWriteForm} />
         </div>
       ` : null}
     </div>

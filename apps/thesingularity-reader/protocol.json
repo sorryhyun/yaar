@@ -1,6 +1,37 @@
 {
-  "state": {},
+  "state": {
+    "credentials": {
+      "description": "저장된 자격증명 (username, savedAt). 비밀번호는 노출안 함."
+    }
+  },
   "commands": {
+    "saveCredentials": {
+      "description": "아이디/비밀번호를 앱 스토리지(auth/credentials.json)에 저장합니다.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "저장할 아이디"
+          },
+          "password": {
+            "type": "string",
+            "description": "저장할 비밀번호 (평문)"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ]
+      }
+    },
+    "loadCredentials": {
+      "description": "저장된 자격증명을 불러옵니다. 없으면 ok: false 반환.",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
     "setRecommendations": {
       "description": "AI 분석 결과를 앱에 반영합니다. topics는 현재 뜨는 주제 키워드 목록(5~8개), bestPost는 오늘의 베스트 게시물 번호와 추천 이유",
       "params": {

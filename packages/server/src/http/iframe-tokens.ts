@@ -7,6 +7,7 @@
  */
 
 import type { PermissionEntry } from './routes/verb.js';
+import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -33,6 +34,8 @@ export function generateIframeToken(
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
+    const entry = tokens.get(token);
+    if (entry) clearJar(jarKey(entry.sessionId, entry.appId));
     tokens.delete(token);
   }, TOKEN_TTL_MS);
   tokens.set(token, { windowId, sessionId, appId, permissions, createdAt: Date.now(), timer });
@@ -51,12 +54,21 @@ export async function generateAppIframeToken(
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
-  return generateIframeToken(
-    windowId,
-    sessionId,
-    appId,
-    explicitPermissions ?? appMeta?.permissions,
-  );
+  let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
+
+  // Auto-grant app-scoped storage access — every app can read/write its own storage
+  if (appId) {
+    const selfStorageUri = 'yaar://apps/self/storage/';
+    const hasStoragePerm = permissions.some((p) => {
+      const uri = typeof p === 'string' ? p : p.uri;
+      return uri === selfStorageUri || uri.startsWith(selfStorageUri);
+    });
+    if (!hasStoragePerm) {
+      permissions = [...permissions, selfStorageUri];
+    }
+  }
+
+  return generateIframeToken(windowId, sessionId, appId, permissions);
 }
 
 /**
@@ -68,6 +80,7 @@ export function validateIframeToken(token: string): TokenEntry | null {
   if (!entry) return null;
   if (Date.now() - entry.createdAt > TOKEN_TTL_MS) {
     clearTimeout(entry.timer);
+    clearJar(jarKey(entry.sessionId, entry.appId));
     tokens.delete(token);
     return null;
   }
@@ -81,6 +94,7 @@ export function revokeIframeToken(token: string): void {
   const entry = tokens.get(token);
   if (entry) {
     clearTimeout(entry.timer);
+    clearJar(jarKey(entry.sessionId, entry.appId));
     tokens.delete(token);
   }
 }

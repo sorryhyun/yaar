@@ -791,6 +791,294 @@
   display: block;
 }
 
+/* ============ Login Panel ============ */
+.login-overlay {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  width: 280px;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-3);
+  z-index: 101;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  animation: slideDown 0.18s ease;
+}
+.login-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.login-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+.login-saved-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  background: rgba(63, 185, 80, 0.08);
+  border: 1px solid rgba(63, 185, 80, 0.25);
+  border-radius: var(--yaar-radius);
+  padding: 8px 10px;
+}
+.login-saved-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.login-saved-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.login-saved-user {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yaar-success);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.login-saved-at {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+}
+.login-no-cred {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  text-align: center;
+  padding: 4px 0;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.login-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.login-input {
+  width: 100%;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+.login-pw-wrap {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.login-pw-wrap .login-input {
+  flex: 1;
+  min-width: 0;
+}
+.login-pw-toggle {
+  background: none;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  padding: 5px 8px;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+  line-height: 1;
+}
+.login-pw-toggle:hover {
+  border-color: var(--yaar-accent);
+  color: var(--yaar-text);
+}
+.login-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  margin-top: 4px;
+}
+.login-notice {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  border-top: 1px solid var(--yaar-border);
+  padding-top: var(--yaar-sp-2);
+  line-height: 1.5;
+}
+.login-btn-saved {
+  background: rgba(63, 185, 80, 0.1) !important;
+  border: 1px solid rgba(63, 185, 80, 0.3) !important;
+  color: var(--yaar-success) !important;
+}
+.login-btn-active {
+  background: rgba(88, 166, 255, 0.15) !important;
+  border: 1px solid rgba(88, 166, 255, 0.4) !important;
+  color: var(--yaar-accent) !important;
+}
+
+/* Login status bar */
+.login-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  border-radius: var(--yaar-radius);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.login-status-ok {
+  background: rgba(63, 185, 80, 0.08);
+  border: 1px solid rgba(63, 185, 80, 0.25);
+  color: var(--yaar-success);
+}
+.login-status-saved {
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  color: var(--yaar-text-muted);
+}
+.login-status-none {
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  color: var(--yaar-text-muted);
+}
+.login-status-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.login-status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow: hidden;
+}
+.login-status-user {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.login-status-label {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+}
+
+/* Login how-to */
+.login-how {
+  border-top: 1px solid var(--yaar-border);
+  padding-top: var(--yaar-sp-2);
+}
+.login-how-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--yaar-text-muted);
+  margin-bottom: 6px;
+}
+.login-how-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.login-how-list li {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  padding-left: 10px;
+  position: relative;
+  line-height: 1.5;
+}
+.login-how-list li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+}
+.login-how-list b {
+  color: var(--yaar-accent);
+}
+
+/* Comment write form */
+.comment-write-wrap {
+  margin-top: var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  padding-top: var(--yaar-sp-3);
+}
+.comment-login-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--yaar-text-muted);
+}
+.comment-login-icon {
+  font-size: 16px;
+}
+.comment-login-text {
+  flex: 1;
+}
+.comment-write-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+.comment-write-user {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+}
+.comment-write-nick {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yaar-accent);
+}
+.comment-write-textarea {
+  width: 100%;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color 0.15s;
+  line-height: 1.5;
+}
+.comment-write-textarea:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+.comment-write-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.comment-write-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--yaar-sp-2);
+}
+.comment-write-count {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+}
+.comment-submit-btn {
+  min-width: 64px;
+}
+
 /* Screenshot */
 .screenshot-wrap {
   display: flex;

@@ -1,5 +1,5 @@
 export {};
-import { app, appStorage, invoke, read, describe, list } from '@bundled/yaar';
+import { app, appStorage, invoke, read, describe, list, errMsg } from '@bundled/yaar';
 import {
   activeProject,
   projects,
@@ -28,6 +28,7 @@ import {
   clearConsoleLogs,
   grep,
   readFileContent,
+  copyFile,
 } from './project';
 
 export function registerProtocol() {
@@ -245,6 +246,32 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           await deleteFile(String(p.path));
           return { ok: true };
+        },
+      },
+      copyFile: {
+        description:
+          'Copy a file to another path within the active project. ' +
+          'Reads the source and writes it to the destination — destination directories are created automatically. ' +
+          'Useful for restructuring (e.g. moving files into a subdirectory) without a separate read+write cycle. ' +
+          'Does NOT delete the original; pair with deleteFile to move.',
+        params: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Source file path (e.g. "src/Foo.ts")' },
+            to:   { type: 'string', description: 'Destination file path (e.g. "src/ui/Foo.ts")' },
+          },
+          required: ['from', 'to'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const from = String(p.from);
+          const to   = String(p.to);
+          if (from === to) return { ok: false, error: 'Source and destination are the same path' };
+          try {
+            await copyFile(from, to);
+            return { ok: true, from, to };
+          } catch (err) {
+            return { ok: false, error: errMsg(err) };
+          }
         },
       },
       grep: {

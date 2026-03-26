@@ -29,6 +29,9 @@ import {
   handleHtml,
   handleAnnotate,
   handleRemoveAnnotations,
+  handleGetCookies,
+  handleSetCookie,
+  handleDeleteCookies,
 } from '../../features/browser/actions.js';
 import type { EndpointMeta } from '../utils.js';
 
@@ -285,6 +288,15 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           break;
         case 'remove_annotations':
           result = await handleRemoveAnnotations(browserId);
+          break;
+        case 'get_cookies':
+          result = await handleGetCookies(browserId, body);
+          break;
+        case 'set_cookie':
+          result = await handleSetCookie(browserId, body);
+          break;
+        case 'delete_cookies':
+          result = await handleDeleteCookies(browserId, body);
           break;
         default:
           return jsonResponse({ ok: false, error: `Unknown action "${action}"` }, 400);

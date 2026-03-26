@@ -145,6 +145,40 @@ export async function removeAnnotations(browserId?: string) {
   return browserPost({ action: 'remove_annotations', browserId });
 }
 
+// ── Cookies ────────────────────────────────────────────────────
+
+export async function getCookies(opts?: { urls?: string[]; browserId?: string }) {
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'get_cookies', browserId, ...params });
+}
+
+export async function setCookie(opts: {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+  url?: string;
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'set_cookie', browserId, ...params });
+}
+
+export async function deleteCookies(opts: {
+  name: string;
+  domain?: string;
+  path?: string;
+  url?: string;
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'delete_cookies', browserId, ...params });
+}
+
 // ── Session management ──────────────────────────────────────────
 
 export async function listSessions() {

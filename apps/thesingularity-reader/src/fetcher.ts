@@ -19,7 +19,7 @@ async function browseUrl(url: string, tabId: string, waitForIdle = false): Promi
  * extract 액션을 사용해 URL을 열고 주요 텍스트 콘텐츠를 추출한다.
  * 반환값: { text: string, links: Array<{ label: string, url: string }> }
  */
-async function extractUrl(
+export async function extractUrl(
   url: string,
   tabId: string,
 ): Promise<{ text: string; links: Array<{ label: string; url: string }> }> {

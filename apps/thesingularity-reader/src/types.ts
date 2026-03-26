@@ -41,6 +41,12 @@ export type AppState = {
   postLoading: boolean;
 };
 
+export type Credentials = {
+  username: string;
+  password: string;
+  savedAt: string;
+};
+
 export type Recommendation = {
   topics: string[];
   bestPostNum: string | null;

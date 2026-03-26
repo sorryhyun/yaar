@@ -84,5 +84,8 @@
     "three": "*",
     "tone": "*",
     "uuid": "*"
+  },
+  "dependencies": {
+    "typescript": "^6.0.2"
   }
 }

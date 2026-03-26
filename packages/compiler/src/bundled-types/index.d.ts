@@ -480,6 +480,37 @@ declare module '@bundled/yaar-web' {
   export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;
   export function annotate(browserId?: string): Promise<unknown>;
   export function removeAnnotations(browserId?: string): Promise<unknown>;
+  export function getCookies(opts?: { urls?: string[]; browserId?: string }): Promise<
+    Array<{
+      name: string;
+      value: string;
+      domain: string;
+      path: string;
+      expires: number;
+      httpOnly: boolean;
+      secure: boolean;
+      sameSite: string;
+    }>
+  >;
+  export function setCookie(opts: {
+    name: string;
+    value: string;
+    domain?: string;
+    path?: string;
+    expires?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+    url?: string;
+    browserId?: string;
+  }): Promise<unknown>;
+  export function deleteCookies(opts: {
+    name: string;
+    domain?: string;
+    path?: string;
+    url?: string;
+    browserId?: string;
+  }): Promise<unknown>;
   export function listSessions(): Promise<unknown[]>;
   export function closeSession(browserId?: string): Promise<unknown>;
 }

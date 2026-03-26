@@ -9,6 +9,7 @@ import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../features/config/domains.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionHub } from '../../session/session-hub.js';
+import { getCookieHeader, captureResponseCookies } from './cookie-jar.js';
 
 export const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 export const TIMEOUT_MS = 30_000;
@@ -18,6 +19,8 @@ export interface FetchOptions {
   headers?: Record<string, string>;
   body?: string;
   sessionId?: string;
+  /** Cookie jar key — when set, stored cookies are sent and Set-Cookie headers captured. */
+  cookieJarKey?: string;
 }
 
 export interface FetchResult {
@@ -115,6 +118,17 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
       }
     }
 
+    // Inject stored cookies from the jar
+    if (options?.cookieJarKey) {
+      const cookieValue = getCookieHeader(options.cookieJarKey, url);
+      if (cookieValue) {
+        // Merge with any existing Cookie header from the app
+        const existing = fetchHeaders['cookie'] || fetchHeaders['Cookie'] || '';
+        fetchHeaders['Cookie'] = existing ? `${existing}; ${cookieValue}` : cookieValue;
+        delete fetchHeaders['cookie']; // normalize to capitalized key
+      }
+    }
+
     const method = options?.method || 'GET';
     const response = await safeFetch(url, {
       method,
@@ -155,6 +169,23 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
     response.headers.forEach((v, k) => {
       responseHeaders[k] = v;
     });
+
+    // Capture Set-Cookie headers into the cookie jar
+    if (options?.cookieJarKey) {
+      // response.headers.getSetCookie() preserves individual Set-Cookie values
+      const setCookies = response.headers.getSetCookie?.() ?? [];
+      if (setCookies.length > 0) {
+        captureResponseCookies(
+          options.cookieJarKey,
+          url,
+          // Pass individual Set-Cookie values joined — captureResponseCookies splits them
+          { 'set-cookie': setCookies.join(', ') },
+        );
+      } else if (responseHeaders['set-cookie']) {
+        // Fallback for runtimes without getSetCookie
+        captureResponseCookies(options.cookieJarKey, url, responseHeaders);
+      }
+    }
 
     // Determine if response is text or binary
     const responseContentType = response.headers.get('content-type') || '';

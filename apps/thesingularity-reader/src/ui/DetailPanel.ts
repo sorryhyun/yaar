@@ -1,8 +1,8 @@
 import { createSignal, createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { state, setState } from './store';
-import { takeScreenshot } from './actions';
-import { stripImages } from './helpers';
+import { state, setState } from '../store';
+import { takeScreenshot } from '../actions';
+import { stripImages } from '../helpers';
 import { CommentSection } from './CommentSection';
 
 export function DetailPanel() {
@@ -50,7 +50,7 @@ export function DetailPanel() {
                     takeScreenshot(post);
                   }
                 }}
-                title="브라우저 스크린셛으로 원본 보기"
+                title="브라우저 스크린쌏으로 원본 보기"
               >
                 ${() => (state.showOriginal ? '📷 원본 보는 중' : '📷 원본 보기')}
               </button>
@@ -78,7 +78,7 @@ export function DetailPanel() {
                 if (src)
                   return html`
                     <div class="screenshot-wrap">
-                      <div class="screenshot-notice">📷 브라우저 스크린셛</div>
+                      <div class="screenshot-notice">📷 브라우저 스크린쌏</div>
                       <img
                         src=${src}
                         style="width:100%;border-radius:6px;display:block"
@@ -88,7 +88,7 @@ export function DetailPanel() {
                   `;
                 return html`
                   <div class="loading-center">
-                    <span style="color:var(--yaar-text-muted)">스크린셛 실패</span>
+                    <span style="color:var(--yaar-text-muted)">스크린쌏 실패</span>
                   </div>
                 `;
               }

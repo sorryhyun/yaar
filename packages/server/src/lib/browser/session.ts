@@ -683,6 +683,99 @@ export class BrowserSession extends EventEmitter {
     await this.eval(REMOVE_ANNOTATIONS).catch(() => {});
   }
 
+  /** Get cookies from the browser for the current page (or a specific URL). */
+  async getCookies(urls?: string[]): Promise<
+    Array<{
+      name: string;
+      value: string;
+      domain: string;
+      path: string;
+      expires: number;
+      httpOnly: boolean;
+      secure: boolean;
+      sameSite: string;
+    }>
+  > {
+    this.touch();
+    const params: Record<string, unknown> = {};
+    if (urls && urls.length > 0) {
+      params.urls = urls;
+    } else if (this.currentUrl && this.currentUrl !== 'about:blank') {
+      params.urls = [this.currentUrl];
+    }
+    const result = await this.cdp.send('Network.getCookies', params);
+    return (result.cookies || []).map(
+      (c: {
+        name: string;
+        value: string;
+        domain: string;
+        path: string;
+        expires: number;
+        httpOnly: boolean;
+        secure: boolean;
+        sameSite: string;
+      }) => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path,
+        expires: c.expires,
+        httpOnly: c.httpOnly,
+        secure: c.secure,
+        sameSite: c.sameSite,
+      }),
+    );
+  }
+
+  /** Set a cookie in the browser. */
+  async setCookie(cookie: {
+    name: string;
+    value: string;
+    domain?: string;
+    path?: string;
+    expires?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+    url?: string;
+  }): Promise<boolean> {
+    this.touch();
+    const params: Record<string, unknown> = {
+      name: cookie.name,
+      value: cookie.value,
+    };
+    if (cookie.url) params.url = cookie.url;
+    else if (!cookie.domain && this.currentUrl && this.currentUrl !== 'about:blank') {
+      params.url = this.currentUrl;
+    }
+    if (cookie.domain) params.domain = cookie.domain;
+    if (cookie.path) params.path = cookie.path;
+    if (cookie.expires !== undefined) params.expires = cookie.expires;
+    if (cookie.httpOnly !== undefined) params.httpOnly = cookie.httpOnly;
+    if (cookie.secure !== undefined) params.secure = cookie.secure;
+    if (cookie.sameSite) params.sameSite = cookie.sameSite;
+    const result = await this.cdp.send('Network.setCookie', params);
+    return result.success !== false;
+  }
+
+  /** Delete cookies from the browser. */
+  async deleteCookies(opts: {
+    name: string;
+    domain?: string;
+    path?: string;
+    url?: string;
+  }): Promise<void> {
+    this.touch();
+    const params: Record<string, unknown> = { name: opts.name };
+    if (opts.url) params.url = opts.url;
+    else if (!opts.domain && this.currentUrl && this.currentUrl !== 'about:blank') {
+      params.url = this.currentUrl;
+    }
+    if (opts.domain) params.domain = opts.domain;
+    if (opts.path) params.path = opts.path;
+    await this.cdp.send('Network.deleteCookies', params);
+  }
+
   async extractImages(
     selector?: string,
   ): Promise<

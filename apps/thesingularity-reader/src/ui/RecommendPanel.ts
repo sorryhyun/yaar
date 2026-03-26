@@ -1,7 +1,7 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { state, setState } from './store';
-import { selectPost, triggerAnalysis } from './actions';
+import { state, setState } from '../store';
+import { selectPost, triggerAnalysis } from '../actions';
 
 export function RecommendPanel() {
   return html`

@@ -1,9 +1,8 @@
-import { createMemo } from '@bundled/solid-js';
-import { For } from '@bundled/solid-js';
+import { createMemo, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import type { Post } from './types';
-import { state, setState, toggleHideSpammer } from './store';
-import { selectPost, doRefresh } from './actions';
+import type { Post } from '../types';
+import { state, setState, toggleHideSpammer } from '../store';
+import { selectPost, doRefresh } from '../actions';
 import { PostItem } from './PostItem';
 
 export function PostList() {

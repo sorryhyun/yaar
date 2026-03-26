@@ -273,6 +273,16 @@ export async function editFile(path: string, oldString: string, newString: strin
   return true;
 }
 
+export async function copyFile(from: string, to: string): Promise<void> {
+  const proj = activeProject();
+  if (!proj) throw new Error('No active project');
+  const raw = await appStorage.read(projectPath(proj.id, from));
+  const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+  await appStorage.save(projectPath(proj.id, to), content);
+  await refreshFiles();
+  setStatusText(`Copied ${from} → ${to}`);
+}
+
 export async function deleteFile(path: string): Promise<void> {
   const proj = activeProject();
   if (!proj) return;

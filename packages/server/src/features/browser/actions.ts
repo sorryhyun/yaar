@@ -268,6 +268,43 @@ export async function handleExtractImages(browserId: string, p: Payload): Promis
   );
 }
 
+export async function handleGetCookies(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  const urls = p.urls as string[] | undefined;
+  const cookies = await session.getCookies(urls);
+  return okJson(cookies);
+}
+
+export async function handleSetCookie(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.name) return error('"name" is required for set_cookie.');
+  if (p.value === undefined) return error('"value" is required for set_cookie.');
+  const success = await session.setCookie({
+    name: p.name as string,
+    value: p.value as string,
+    domain: p.domain as string | undefined,
+    path: p.path as string | undefined,
+    expires: p.expires as number | undefined,
+    httpOnly: p.httpOnly as boolean | undefined,
+    secure: p.secure as boolean | undefined,
+    sameSite: p.sameSite as 'Strict' | 'Lax' | 'None' | undefined,
+    url: p.url as string | undefined,
+  });
+  return success ? ok('Cookie set.') : error('Failed to set cookie.');
+}
+
+export async function handleDeleteCookies(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.name) return error('"name" is required for delete_cookies.');
+  await session.deleteCookies({
+    name: p.name as string,
+    domain: p.domain as string | undefined,
+    path: p.path as string | undefined,
+    url: p.url as string | undefined,
+  });
+  return ok(`Cookie "${p.name}" deleted.`);
+}
+
 export async function handleHtml(browserId: string, p: Payload): Promise<VerbResult> {
   const session = resolveSession(browserId);
   const html = await session.getHtml(p.selector as string | undefined);
