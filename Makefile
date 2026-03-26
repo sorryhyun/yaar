@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
+.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
 
 # Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
 CODEX_BIN ?= codex
@@ -14,6 +14,14 @@ claude:
 # Run with Codex provider (remote mode - accessible over network with auth)
 codex:
 	@REMOTE=1 ./scripts/dev.sh codex
+
+# Run with Claude provider in app window (simulates exe from source)
+claude-windows:
+	@powershell -ExecutionPolicy Bypass -File scripts/dev-windows.ps1 -Provider claude
+
+# Run with Codex provider in app window (simulates exe from source)
+codex-windows:
+	@powershell -ExecutionPolicy Bypass -File scripts/dev-windows.ps1 -Provider codex
 
 # Run with Claude provider (dev mode - no MCP auth)
 claude-dev:

@@ -1,0 +1,8 @@
+{
+  "name": "Test Counter",
+  "icon": "🔢",
+  "description": "Hello from DevTools! 버튼 클릭 카운터 앱",
+  "run": "dist/index.html",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

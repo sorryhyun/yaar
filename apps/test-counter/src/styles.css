@@ -1,0 +1,23 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--yaar-sp-4);
+  background: var(--yaar-bg);
+  font-family: var(--yaar-font);
+}
+
+.counter {
+  font-size: 4rem;
+  font-weight: bold;
+  color: var(--yaar-accent);
+  line-height: 1;
+}
+
+.label {
+  font-size: var(--yaar-text-sm, 0.875rem);
+  color: var(--yaar-text-muted);
+  margin-bottom: var(--yaar-sp-2);
+}
