@@ -48,16 +48,73 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  */
 export async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
   validateUrl(url);
+
+  // If caller explicitly wants manual redirect handling, do a single request
+  if (init?.redirect === 'manual') {
+    return fetch(url, { ...init, redirect: 'manual' });
+  }
+
   let currentUrl = url;
+  // Accumulate cookies across redirects (needed for SSO flows)
+  const cookieJar = new Map<string, string>();
+
+  // Seed jar with any cookies from the original request
+  const initCookie =
+    (init?.headers instanceof Headers
+      ? init.headers.get('cookie')
+      : Array.isArray(init?.headers)
+        ? init.headers.find(([k]) => k.toLowerCase() === 'cookie')?.[1]
+        : ((init?.headers as Record<string, string> | undefined)?.['Cookie'] ??
+          (init?.headers as Record<string, string> | undefined)?.['cookie'])) ?? '';
+  if (initCookie) {
+    for (const pair of initCookie.split(';')) {
+      const eq = pair.indexOf('=');
+      if (eq > 0) cookieJar.set(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim());
+    }
+  }
 
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
+    // Build headers with accumulated cookies
+    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    if (cookieJar.size > 0) {
+      headers.set(
+        'Cookie',
+        Array.from(cookieJar.entries())
+          .map(([k, v]) => `${k}=${v}`)
+          .join('; '),
+      );
+    }
+
     const response = await fetch(currentUrl, {
       ...init,
+      headers,
       redirect: 'manual',
     });
 
     if (!REDIRECT_STATUSES.has(response.status)) {
+      // Merge accumulated Set-Cookie headers from redirect hops into final response
+      if (cookieJar.size > 0) {
+        const mergedHeaders = new Headers(response.headers);
+        // Append redirect-hop cookies as Set-Cookie headers so callers see them
+        for (const [name, value] of cookieJar) {
+          mergedHeaders.append('Set-Cookie', `${name}=${value}; path=/`);
+        }
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: mergedHeaders,
+        });
+      }
       return response;
+    }
+
+    // Capture Set-Cookie from this hop
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+    for (const sc of setCookies) {
+      const nameValue = sc.split(';')[0] ?? '';
+      const eq = nameValue.indexOf('=');
+      if (eq > 0)
+        cookieJar.set(nameValue.substring(0, eq).trim(), nameValue.substring(eq + 1).trim());
     }
 
     const location = response.headers.get('location');

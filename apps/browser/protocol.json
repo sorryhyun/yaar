@@ -10,5 +10,264 @@
       "description": "Currently connected browser ID"
     }
   },
-  "commands": {}
+  "commands": {
+    "open": {
+      "description": "Navigate to URL (auto-creates session if needed)",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "mobile": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    "navigate_back": {
+      "description": "Go back in browser history",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "navigate_forward": {
+      "description": "Go forward in browser history",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "scroll": {
+      "description": "Scroll the page",
+      "params": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ]
+          }
+        },
+        "required": [
+          "direction"
+        ]
+      }
+    },
+    "click": {
+      "description": "Click an element",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "index": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "type": {
+      "description": "Type text into an element",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "text"
+        ]
+      }
+    },
+    "press": {
+      "description": "Press a key",
+      "params": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    "hover": {
+      "description": "Hover over an element",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "wait_for": {
+      "description": "Wait for a selector to appear",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      }
+    },
+    "screenshot": {
+      "description": "Take a screenshot",
+      "params": {
+        "type": "object",
+        "properties": {
+          "x0": {
+            "type": "number"
+          },
+          "y0": {
+            "type": "number"
+          },
+          "x1": {
+            "type": "number"
+          },
+          "y1": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "extract": {
+      "description": "Extract page text, links, and forms",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "mainContentOnly": {
+            "type": "boolean"
+          },
+          "maxTextLength": {
+            "type": "number"
+          },
+          "maxLinks": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "extract_images": {
+      "description": "Extract images with data URLs",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "mainContentOnly": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "html": {
+      "description": "Get raw innerHTML",
+      "params": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "annotate": {
+      "description": "Show numbered badges on interactive elements",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "remove_annotations": {
+      "description": "Remove annotation badges",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "refresh": {
+      "description": "Refresh screenshot and optionally update URL bar",
+      "params": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "clear": {
+      "description": "Clear the browser display",
+      "params": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "attach": {
+      "description": "Switch to a different browser by ID",
+      "params": {
+        "type": "object",
+        "properties": {
+          "browserId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "browserId"
+        ]
+      }
+    }
+  }
 }

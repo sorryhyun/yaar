@@ -87,7 +87,15 @@ function verbResultToResponse(result: {
     .filter((c) => c.type === 'text')
     .map((c) => c.text)
     .join('\n');
-  return jsonResponse({ ok: true, data: text });
+
+  // If the text is valid JSON (from okJson), parse it so clients get clean data
+  // instead of a double-serialized string.
+  try {
+    const parsed = JSON.parse(text);
+    return jsonResponse({ ok: true, data: parsed });
+  } catch {
+    return jsonResponse({ ok: true, data: text });
+  }
 }
 
 function requireAuth(req: Request): ReturnType<typeof validateIframeToken> | Response {

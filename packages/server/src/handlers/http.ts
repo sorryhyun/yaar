@@ -29,6 +29,11 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
           additionalProperties: { type: 'string' },
         },
         body: { type: 'string', description: 'Request body (for POST/PUT/PATCH)' },
+        redirect: {
+          type: 'string',
+          enum: ['follow', 'manual'],
+          description: 'Redirect handling: "follow" (default) or "manual" (return 3xx as-is)',
+        },
       },
       required: ['url'],
     },
@@ -45,13 +50,17 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
           ? (payload.headers as Record<string, string>)
           : undefined;
       const body = typeof payload?.body === 'string' ? payload.body : undefined;
+      const redirect =
+        typeof payload?.redirect === 'string' && payload.redirect === 'manual'
+          ? ('manual' as const)
+          : undefined;
 
       // Use the agent's session context if available, otherwise performFetch
       // will fall back to the default session for permission dialogs.
       const sessionId = getSessionId() ?? undefined;
 
       try {
-        const result = await performFetch(url, { method, headers, body, sessionId });
+        const result = await performFetch(url, { method, headers, body, sessionId, redirect });
         return okJson(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Fetch failed';

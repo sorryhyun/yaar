@@ -1,18 +1,9 @@
 /**
- * auth.ts — DCinside 브라우저 자동화 로그인 / 댓글 작성
+ * auth.ts — DCinside 로그인 / 댓글 작성
  *
- * 로그인 흐름 (브라우저 자동화 방식):
- *  1) open(DC 로그인 페이지)       → 헤드리스 브라우저 시작
- *  2) type(아이디/비밀번호 입력필드) → 자동 폼 입력
- *  3) click(로그인 버튼)              → 폼 제출 → 리다이렉트
- *  4) getCookies(같은 브라우저)      → DCPaPP 등 세션 쿠키 수집
- *  5) saveSession()                 → appStorage + 브라우저 쿠키에 저장
- *
- * 세션 복원:
- *  앱 시작 시 getCookies()로 dc_session_token 읽어 자동 로그인
- *
- * 댓글 흐름:
- *  POST https://gall.dcinside.com/board/comment/write_comment
+ * 로그인: 헤드리스 브라우저로 DC 로그인 페이지 자동화
+ * 세션 복원: appStorage에서 세션 읽어 자동 로그인
+ * 댓글: POST https://gall.dcinside.com/board/comment/write_comment
  */
 import { invoke, appStorage } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
@@ -22,20 +13,23 @@ const GALLERY_ID = 'thesingularity';
 const COMMENT_WRITE_URL = 'https://gall.dcinside.com/board/comment/write_comment';
 const SESSION_PATH = 'auth/session.json';
 
-/** 로그인에 사용할 헤드리스 브라우저 ID */
 const DC_LOGIN_BROWSER = 'dc-login';
 
-/** DC 로그인 URL */
-const DC_LOGIN_URL = 'https://sign.dcinside.com/login';
-const DC_VERIFY_URL = 'https://m.dcinside.com/';
+const DC_LOGIN_URL = 'https://sign.dcinside.com/login?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmini%2Fboard%2Flists%2F%3Fid%3Dsingularity';
+const DC_VERIFY_URL = 'https://gall.dcinside.com/mini/board/lists/?id=singularity';
 
-/** 세션 쿠키 이름 상수 (스토리지 키) */
-const COOKIE_TOKEN   = 'dc_session_token';
-const COOKIE_USER    = 'dc_username';
-const COOKIE_SAVED_AT = 'dc_saved_at';
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
-/** DC에서 수개해야 할 세션 쿠키 목록 */
-const DC_COOKIE_NAMES = ['DCPaPP', 'PHPSESSID', 'DCcookiek', 'ci_c'];
+/** DC에서 수집해야 할 세션 쿠키 목록 */
+const DC_COOKIE_NAMES = ['DCPaPP', 'PHPSESSID', 'DCcookiek', 'ci_c', 'sso_token_dcinside'];
+
+/** getCookies 시 쿠키를 조회할 DC 도메인 URL 목록 */
+const DC_COOKIE_URLS = [
+  'https://www.dcinside.com/',
+  'https://sign.dcinside.com/',
+  'https://accounts.dcinside.com/',
+  'https://gall.dcinside.com/',
+];
 
 export interface DcSession {
   /** 소켓 포맷 쿠키 헤더 ("Name=Value; Name2=Value2") */
@@ -53,62 +47,30 @@ type HttpResult = {
   headers?: Record<string, string>;
 };
 
+/** Extract cookie array from web.getCookies response ({ ok, data }) */
+function parseCookieResponse(raw: unknown): CookieInfo[] {
+  if (Array.isArray(raw)) return raw as CookieInfo[];
+  if (raw && typeof raw === 'object') {
+    const data = (raw as { data?: unknown }).data;
+    if (Array.isArray(data)) return data as CookieInfo[];
+  }
+  return [];
+}
+
 // =====================================================================
 // 세션 저장 / 불러오기
 // =====================================================================
 
-/**
- * 세션을 appStorage + 브라우저 쿠키 두 곳에 저장
- */
 export async function saveSession(session: DcSession): Promise<void> {
   await appStorage.save(SESSION_PATH, JSON.stringify(session));
-  try {
-    await web.setCookie({ name: COOKIE_TOKEN,    value: session.dcPaPP,   secure: true, sameSite: 'Lax' });
-    await web.setCookie({ name: COOKIE_USER,     value: session.username, secure: true, sameSite: 'Lax' });
-    await web.setCookie({ name: COOKIE_SAVED_AT, value: session.savedAt,  secure: true, sameSite: 'Lax' });
-  } catch (e) {
-    console.warn('[auth] setCookie 실패:', e);
-  }
 }
 
-/**
- * 세션 불러오기
- * 우선순위: 브라우저 쿠키 → appStorage
- */
 export async function loadSession(): Promise<DcSession | null> {
-  try {
-    const cookies = (await web.getCookies()) as CookieInfo[];
-    const tokenCookie   = cookies.find(c => c.name === COOKIE_TOKEN);
-    const userCookie    = cookies.find(c => c.name === COOKIE_USER);
-    const savedAtCookie = cookies.find(c => c.name === COOKIE_SAVED_AT);
-
-    if (tokenCookie?.value) {
-      const s: DcSession = {
-        dcPaPP:   tokenCookie.value,
-        username: userCookie?.value    ?? '',
-        savedAt:  savedAtCookie?.value ?? new Date().toISOString(),
-      };
-      await appStorage.save(SESSION_PATH, JSON.stringify(s));
-      return s;
-    }
-  } catch (e) {
-    console.warn('[auth] getCookies 실패, appStorage fallback:', e);
-  }
   return appStorage.readJsonOr<DcSession | null>(SESSION_PATH, null);
 }
 
-/**
- * 세션 삭제 (appStorage + 브라우저 쿠키 모두)
- */
 export async function clearSession(): Promise<void> {
   await appStorage.save(SESSION_PATH, 'null');
-  try {
-    await web.deleteCookies({ name: COOKIE_TOKEN });
-    await web.deleteCookies({ name: COOKIE_USER });
-    await web.deleteCookies({ name: COOKIE_SAVED_AT });
-  } catch (e) {
-    console.warn('[auth] deleteCookies 실패:', e);
-  }
 }
 
 // =====================================================================
@@ -118,41 +80,52 @@ export async function clearSession(): Promise<void> {
 /**
  * DCinside 로그인 — 브라우저 자동화 방식
  *
- * 1) 헤드리스 브라우저에 DC 로그인 페이지 열기
- * 2) #user_id / #pw 필드에 자동 입력
- * 3) .btn_login 주클 → 폼 제출 → 리다이렉트
- * 4) m.dcinside.com 이동 후 로그인 확인 + 쿠키 수각
- * 5) DCPaPP 등 세션 쿠키를 appStorage + setCookie()에 저장
+ * 1) DC 메인 페이지 방문 → 초기 세션 쿠키(ci_c 등) 브라우저에 설정
+ * 2) 로그인 페이지 방문 → getCookies()로 초기 쿠키 확보 확인
+ * 3) #id / password 필드 자동 입력
+ * 4) 폼 제출 → 리다이렉트 완료 대기
+ * 5) 검증 URL에서 로그인 성공 여부 확인
+ * 6) getCookies()로 DC 세션 쿠키(DCPaPP 등) 수집 → saveSession()
  */
 export async function loginToDC(
   username: string,
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    // ── Step 1: DC 로그인 페이지 열기 ───────────────────────────────────────
+    // ── Step 1: DC 메인 페이지 방문 → 초기 세션 쿠키 브라우저에 설정 ─────────
+    await web.open('https://www.dcinside.com/', {
+      browserId: DC_LOGIN_BROWSER,
+      visible:   false,
+      waitUntil: 'domcontentloaded',
+    });
+
+    // ── Step 2: 로그인 페이지 방문 ──────────────────────────────────────────
     await web.open(DC_LOGIN_URL, {
-      browserId:  DC_LOGIN_BROWSER,
-      visible:    false,
-      waitUntil:  'networkidle',
+      browserId: DC_LOGIN_BROWSER,
+      visible:   false,
+      waitUntil: 'networkidle',
     });
 
-    // ── Step 2: 아이디 / 비밀번호 자동 입력 ───────────────────────────────
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#user_id', text: username });
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#pw',      text: password });
+    // 초기 쿠키 수집
+    const rawInitCookies = await web.getCookies({ browserId: DC_LOGIN_BROWSER, urls: DC_COOKIE_URLS });
+    const initCookies: CookieInfo[] = parseCookieResponse(rawInitCookies);
+    console.log('[auth] 초기 세션 쿠키 확보:', initCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
-    // ── Step 3: 로그인 버튼 클릭 → 폼 제출 + 리다이렉트 ────────────────
-    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '.btn_login' });
+    // ── Step 3: 아이디 / 비밀번호 자동 입력 ─────────────────────────────────
+    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#id' });
+    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#id',                    text: username });
+    await web.type({ browserId: DC_LOGIN_BROWSER, selector: 'input[type="password"]', text: password });
 
-    // ── Step 4: 리다이렉트 완료 대기 ───────────────────────────────────────
-    // m.dcinside.com 이동으로 로그인 상태 + 쿠키를 한번에 확인
+    // ── Step 4: 폼 제출 ────────────────────────────────────────────────────
+    await web.click({ browserId: DC_LOGIN_BROWSER, selector: 'button[type="submit"]' });
+
+    // ── Step 5: 리다이렉트 완료 대기 + 로그인 상태 확인 ─────────────────────
     await web.open(DC_VERIFY_URL, {
-      browserId:  DC_LOGIN_BROWSER,
-      visible:    false,
-      mobile:     true,
-      waitUntil:  'networkidle',
+      browserId: DC_LOGIN_BROWSER,
+      visible:   false,
+      waitUntil: 'networkidle',
     });
 
-    // ── Step 5: HTML로 로그인 성공 여부 확인 ───────────────────────────
     const htmlResult = await web.html({ browserId: DC_LOGIN_BROWSER }) as
       { ok: boolean; data?: string };
     const pageBody = htmlResult?.data ?? '';
@@ -168,11 +141,15 @@ export async function loginToDC(
       return { ok: false, error: '로그인에 실패했습니다.\n아이디 또는 비밀번호를 확인해주세요.' };
     }
 
-    // ── Step 6: 브라우저 세션에서 DC 쿠키 수각 ─────────────────────────
-    const allCookies = (await web.getCookies({ browserId: DC_LOGIN_BROWSER })) as CookieInfo[];
+    // ── Step 6: 로그인 후 DC 세션 쿠키 수집 ──────────────────────────────────
+    const rawAllCookies = await web.getCookies({ browserId: DC_LOGIN_BROWSER, urls: DC_COOKIE_URLS });
+    const allCookies: CookieInfo[] = parseCookieResponse(rawAllCookies);
+    console.log('[auth] 로그인 후 전체 쿠키:', allCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
-    // DC API 요청에 필요한 세션 쿠키만 필터
-    const sessionCookies = allCookies.filter(c => DC_COOKIE_NAMES.includes(c.name));
+    // Use all cookies from DC domains — not just the hardcoded list
+    // DC may set different cookie names across versions
+    const sessionCookies = allCookies.length > 0 ? allCookies : [];
+    console.log('[auth] 매칭된 세션 쿠키:', sessionCookies.map(c => c.name).join(', ') || '(없음)');
 
     if (sessionCookies.length === 0) {
       return { ok: false, error: '세션 쿠키를 가져올 수 없습니다. 로그인을 다시 시도해주세요.' };
@@ -182,7 +159,7 @@ export async function loginToDC(
       .map(c => `${c.name}=${c.value}`)
       .join('; ');
 
-    // ── Step 7: 세션 저장 (appStorage + 앱 쿠키) ──────────────────────────
+    // ── Step 7: 세션 저장 ────────────────────────────────────────────────
     await saveSession({
       dcPaPP:   cookieHeader,
       username,
@@ -208,10 +185,6 @@ export async function logoutFromDC(): Promise<void> {
 // 로그인 상태 확인
 // =====================================================================
 
-/**
- * 저장된 세션으로 로그인 상태 확인
- * m.dcinside.com에 요청하여 로그아웃 에레먼트 여부 확인
- */
 export async function checkLoginStatus(): Promise<boolean> {
   const session = await loadSession();
   if (!session?.dcPaPP) return false;
@@ -221,9 +194,9 @@ export async function checkLoginStatus(): Promise<boolean> {
       url:     DC_VERIFY_URL,
       method:  'GET',
       headers: {
-        Cookie:          session.dcPaPP,
-        'User-Agent':    'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept':        'text/html,application/xhtml+xml',
+        'Cookie':          session.dcPaPP,
+        'User-Agent':      MOBILE_UA,
+        'Accept':          'text/html,application/xhtml+xml',
         'Accept-Language': 'ko-KR,ko;q=0.9',
       },
     }) as HttpResult;
@@ -243,10 +216,6 @@ export async function checkLoginStatus(): Promise<boolean> {
 // 댓글 작성
 // =====================================================================
 
-/**
- * DCinside 댓글 작성
- * 로그인 세션의 쿠키를 Cookie 헤더에 포함하여 POST
- */
 export async function postCommentToDC(
   post: Post,
   commentText: string,
@@ -273,7 +242,7 @@ export async function postCommentToDC(
         'Referer':          referer,
         'Origin':           'https://m.dcinside.com',
         'Cookie':           session.dcPaPP,
-        'User-Agent':       'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent':       MOBILE_UA,
         'Accept':           'application/json, text/javascript, */*; q=0.01',
         'Accept-Language':  'ko-KR,ko;q=0.9',
       },
@@ -303,9 +272,6 @@ export async function postCommentToDC(
 // 댓글 불러오기 (AJAX API)
 // =====================================================================
 
-/**
- * DCinside AJAX 댓글 API
- */
 export async function fetchCommentsViaApi(
   postNum: string,
 ): Promise<{ html: string; ok: boolean }> {
@@ -326,7 +292,7 @@ export async function fetchCommentsViaApi(
         'Content-Type':     'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer':          `https://m.dcinside.com/board/${GALLERY_ID}/${postNum}`,
-        'User-Agent':       'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent':       MOBILE_UA,
         'Accept':           'application/json, text/javascript, */*; q=0.01',
         'Accept-Language':  'ko-KR,ko;q=0.9',
       },

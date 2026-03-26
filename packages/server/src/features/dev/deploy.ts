@@ -4,7 +4,7 @@
 
 import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
 import { join } from 'path';
-import { compileTypeScript, getSandboxPath } from '@yaar/compiler';
+import { compileTypeScript, getSandboxPath, extractProtocolFromSource } from '@yaar/compiler';
 import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
@@ -90,7 +90,19 @@ export async function doDeploy(
     const protocolJson = await Bun.file(join(sandboxPath, 'dist', 'protocol.json')).text();
     extractedProtocol = JSON.parse(protocolJson);
   } catch {
-    // No protocol extracted
+    // No dist/protocol.json — try extracting directly from source files
+    for (const file of ['main.ts', 'protocol.ts']) {
+      try {
+        const source = await Bun.file(join(sandboxPath, 'src', file)).text();
+        const protocol = extractProtocolFromSource(source);
+        if (protocol) {
+          extractedProtocol = protocol;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
   }
 
   const componentFiles: string[] = [];

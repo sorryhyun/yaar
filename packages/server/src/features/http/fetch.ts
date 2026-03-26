@@ -21,6 +21,8 @@ export interface FetchOptions {
   sessionId?: string;
   /** Cookie jar key — when set, stored cookies are sent and Set-Cookie headers captured. */
   cookieJarKey?: string;
+  /** Set to 'manual' to not follow redirects (returns 3xx as-is with Location header). */
+  redirect?: 'follow' | 'manual';
 }
 
 export interface FetchResult {
@@ -135,6 +137,7 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
       headers: fetchHeaders,
       body: method !== 'GET' && method !== 'HEAD' ? options?.body : undefined,
       signal: controller.signal,
+      redirect: options?.redirect === 'manual' ? 'manual' : 'follow',
     });
 
     // Check Content-Length before reading body (fast reject)
@@ -145,21 +148,19 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
 
     // Read response body with streaming size limit
     const reader = response.body?.getReader();
-    if (!reader) {
-      throw new FetchResponseError('No response body');
-    }
-
     const chunks: Uint8Array[] = [];
     let totalSize = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalSize += value.length;
-      if (totalSize > MAX_RESPONSE_SIZE) {
-        reader.cancel();
-        throw new FetchResponseError('Response too large (max 10MB)');
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalSize += value.length;
+        if (totalSize > MAX_RESPONSE_SIZE) {
+          reader.cancel();
+          throw new FetchResponseError('Response too large (max 10MB)');
+        }
+        chunks.push(value);
       }
-      chunks.push(value);
     }
 
     const responseBuffer = Buffer.concat(chunks);

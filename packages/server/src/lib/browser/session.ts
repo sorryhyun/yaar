@@ -697,6 +697,7 @@ export class BrowserSession extends EventEmitter {
     }>
   > {
     this.touch();
+    await this.cdp.send('Network.enable');
     const params: Record<string, unknown> = {};
     if (urls && urls.length > 0) {
       params.urls = urls;
