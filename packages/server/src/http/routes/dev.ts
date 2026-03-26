@@ -44,7 +44,20 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   if (!url.pathname.startsWith('/api/dev/')) return null;
 
   // GET /api/dev/bundled-libraries — no auth required (static list)
+  // GET /api/dev/bundled-libraries?lib=yaar — returns detailed type info for a specific library
+  // GET /api/dev/bundled-libraries?lib=design-tokens — returns design tokens CSS
   if (url.pathname === '/api/dev/bundled-libraries' && req.method === 'GET') {
+    const lib = url.searchParams.get('lib');
+    if (lib) {
+      if (lib === 'design-tokens') {
+        const { YAAR_DESIGN_TOKENS_CSS } = await import('@yaar/compiler');
+        return jsonResponse({ name: lib, types: YAAR_DESIGN_TOKENS_CSS });
+      }
+      const { getBundledLibraryDetail } = await import('@yaar/compiler');
+      const detail = getBundledLibraryDetail(lib);
+      if (!detail) return errorResponse(`Unknown bundled library: "${lib}"`, 404);
+      return jsonResponse({ name: lib, types: detail });
+    }
     const { getAvailableBundledLibraries } = await import('@yaar/compiler');
     return jsonResponse(getAvailableBundledLibraries());
   }

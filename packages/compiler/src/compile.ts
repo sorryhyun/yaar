@@ -24,8 +24,8 @@ import {
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_CONSOLE_CAPTURE_SCRIPT,
-  YAAR_DESIGN_TOKENS_CSS,
 } from '@yaar/shared';
+import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 
 /**
  * Get the sandbox directory path.

@@ -1,5 +1,6 @@
 export {};
 import { app, appStorage, invoke, read, describe, list, errMsg } from '@bundled/yaar';
+import { bundledLibraries } from '@bundled/yaar-dev';
 import {
   activeProject,
   projects,
@@ -475,6 +476,24 @@ export function registerProtocol() {
             project: proj ? { id: proj.id, name: proj.name } : undefined,
             files: files().map((f) => f.path),
           };
+        },
+      },
+      describeBundledLibrary: {
+        description: 'Get detailed type information (methods, interfaces) for a @bundled/* library',
+        params: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Library name (e.g. "yaar", "anime", "three")' },
+          },
+          required: ['name'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          try {
+            const result = await bundledLibraries(String(p.name));
+            return { ok: true, ...result };
+          } catch (err) {
+            return { ok: false, error: errMsg(err) };
+          }
         },
       },
       clearConsole: {

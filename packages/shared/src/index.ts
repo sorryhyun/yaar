@@ -22,7 +22,6 @@ export {
   IFRAME_APP_PROTOCOL_SCRIPT,
   IFRAME_CONSOLE_CAPTURE_SCRIPT,
 } from './iframe-scripts/index.js';
-export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 export {
   type YaarAuthority,
   type ParsedYaarUri,

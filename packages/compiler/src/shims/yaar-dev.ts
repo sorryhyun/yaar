@@ -53,7 +53,10 @@ export function deploy(
   }>('deploy', { path, ...opts });
 }
 
-export async function bundledLibraries(): Promise<string[]> {
-  const res = await fetch('/api/dev/bundled-libraries', { headers: devHeaders() });
+export async function bundledLibraries(name?: string) {
+  const url = name
+    ? `/api/dev/bundled-libraries?lib=${encodeURIComponent(name)}`
+    : '/api/dev/bundled-libraries';
+  const res = await fetch(url, { headers: devHeaders() });
   return res.json();
 }

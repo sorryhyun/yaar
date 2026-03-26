@@ -11,8 +11,10 @@ export { typecheckSandbox, type TypecheckResult } from './typecheck.js';
 export {
   BUNDLED_LIBRARIES,
   getAvailableBundledLibraries,
+  getBundledLibraryDetail,
   bundledLibraryPluginBun,
   cssFilePlugin,
   solidHtmlClosingTagPlugin,
 } from './plugins.js';
 export { extractProtocolFromSource } from './extract-protocol.js';
+export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';

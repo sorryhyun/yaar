@@ -411,7 +411,10 @@ declare module '@bundled/yaar-dev' {
   export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   export function typecheck(path: string): Promise<YaarDevTypecheckResult>;
   export function deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
+  /** Get all available bundled library names. */
   export function bundledLibraries(): Promise<string[]>;
+  /** Get detailed type information for a specific bundled library. */
+  export function bundledLibraries(name: string): Promise<{ name: string; types: string }>;
 }
 
 declare module '@bundled/yaar-web' {

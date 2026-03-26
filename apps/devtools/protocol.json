@@ -354,6 +354,21 @@
         ]
       }
     },
+    "describeBundledLibrary": {
+      "description": "Get detailed type information (methods, interfaces) for a @bundled/* library",
+      "params": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Library name (e.g. \"yaar\", \"anime\", \"three\")"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
     "clearConsole": {
       "description": "Clear console output",
       "params": {

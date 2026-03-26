@@ -283,3 +283,85 @@ export function solidHtmlClosingTagPlugin(): Bun.BunPlugin {
 export function getAvailableBundledLibraries(): string[] {
   return Object.keys(BUNDLED_LIBRARIES).filter((k) => !k.includes('/'));
 }
+
+// Lazily cached .d.ts content
+let _dtsContent: string | null = null;
+
+function loadDtsContent(): string {
+  if (_dtsContent == null) {
+    // Always resolve from src/ — the .d.ts lives there, not in dist/
+    const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+    const dtsPath = join(pkgRoot, 'src', 'bundled-types', 'index.d.ts');
+    _dtsContent = readFileSync(dtsPath, 'utf-8');
+  }
+  return _dtsContent;
+}
+
+/**
+ * Get detailed type information for a specific bundled library.
+ * Extracts the `declare module '@bundled/...'` block(s) from the .d.ts file,
+ * plus any preceding interface/type declarations that the module references.
+ */
+export function getBundledLibraryDetail(name: string): string | null {
+  if (!(name in BUNDLED_LIBRARIES) && !name.includes('/')) return null;
+
+  const content = loadDtsContent();
+
+  // Collect all `declare module '@bundled/<name>...'` blocks
+  const modulePattern = new RegExp(
+    `^declare module '@bundled/${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:/[^']*)?'\\s*\\{`,
+    'gm',
+  );
+  const blocks: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = modulePattern.exec(content)) !== null) {
+    const start = match.index;
+    let depth = 0;
+    let end = start;
+    for (let i = start; i < content.length; i++) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    blocks.push(content.slice(start, end));
+  }
+
+  if (blocks.length === 0) return null;
+
+  // For yaar/yaar-dev/yaar-web, also include the preceding interface declarations they reference
+  const moduleText = blocks.join('\n\n');
+  const referencedInterfaces = new Set<string>();
+  const ifaceRefPattern = /:\s*(Yaar\w+)/g;
+  let ifaceMatch: RegExpExecArray | null;
+  while ((ifaceMatch = ifaceRefPattern.exec(moduleText)) !== null) {
+    referencedInterfaces.add(ifaceMatch[1]);
+  }
+
+  const preambles: string[] = [];
+  for (const ifaceName of referencedInterfaces) {
+    const ifacePattern = new RegExp(`^interface ${ifaceName}[\\s<{]`, 'm');
+    const ifaceStart = content.search(ifacePattern);
+    if (ifaceStart === -1) continue;
+    let depth = 0;
+    let end = ifaceStart;
+    for (let i = ifaceStart; i < content.length; i++) {
+      if (content[i] === '{') depth++;
+      else if (content[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    preambles.push(content.slice(ifaceStart, end));
+  }
+
+  const parts = preambles.length > 0 ? [...preambles, '', ...blocks] : blocks;
+  return parts.join('\n\n');
+}
