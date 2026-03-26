@@ -20,6 +20,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
   {
     method: 'GET',
+    path: '/api/storage',
+    response: 'JSON',
+    description: 'Storage root (list/read)',
+  },
+  {
+    method: 'GET',
     path: '/api/storage/{path}',
     response: 'file',
     description: 'Read a storage file',
