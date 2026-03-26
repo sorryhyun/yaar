@@ -524,10 +524,10 @@ function extractContentFromDoc(doc: Document, post: Post): string {
 export async function fetchPostDetail(
   post: Post,
 ): Promise<{ content: string; comments: Comment[] }> {
-  const tabId = 'singularity-post';
+  const tabId = 'dc-login';
   await web.open(post.url, {
     browserId: tabId,
-    visible: false,
+    visible: true,
     mobile: true,
     waitUntil: 'networkidle',
   });

@@ -3,25 +3,21 @@
  *
  * 로그인: 헤드리스 브라우저로 DC 로그인 페이지 자동화
  * 세션 복원: appStorage에서 세션 읽어 자동 로그인
- * 댓글: POST https://gall.dcinside.com/board/comment/write_comment
+ * 댓글: 헤드리스 브라우저 자동화 (yaar-web) — m.dcinside.com 댓글 폼 직접 제출
  */
 import { invoke, appStorage } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import type { Post } from './types';
 
 const GALLERY_ID = 'thesingularity';
-const COMMENT_WRITE_URL = 'https://gall.dcinside.com/board/comment/write_comment';
 const SESSION_PATH = 'auth/session.json';
 
 const DC_LOGIN_BROWSER = 'dc-login';
 
-const DC_LOGIN_URL = 'https://sign.dcinside.com/login?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmini%2Fboard%2Flists%2F%3Fid%3Dsingularity';
+const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com';
 const DC_VERIFY_URL = 'https://gall.dcinside.com/mini/board/lists/?id=singularity';
 
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-
-/** DC에서 수집해야 할 세션 쿠키 목록 */
-const DC_COOKIE_NAMES = ['DCPaPP', 'PHPSESSID', 'DCcookiek', 'ci_c', 'sso_token_dcinside'];
 
 /** getCookies 시 쿠키를 조회할 DC 도메인 URL 목록 */
 const DC_COOKIE_URLS = [
@@ -93,9 +89,10 @@ export async function loginToDC(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     // ── Step 1: DC 메인 페이지 방문 → 초기 세션 쿠키 브라우저에 설정 ─────────
-    await web.open('https://www.dcinside.com/', {
+    await web.open('https://m.dcinside.com/', {
       browserId: DC_LOGIN_BROWSER,
       visible:   false,
+      mobile:    true,
       waitUntil: 'domcontentloaded',
     });
 
@@ -112,12 +109,12 @@ export async function loginToDC(
     console.log('[auth] 초기 세션 쿠키 확보:', initCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
     // ── Step 3: 아이디 / 비밀번호 자동 입력 ─────────────────────────────────
-    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#id' });
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#id',                    text: username });
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: 'input[type="password"]', text: password });
+    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#code' });
+    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#code',      text: username });
+    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#password',  text: password });
 
     // ── Step 4: 폼 제출 ────────────────────────────────────────────────────
-    await web.click({ browserId: DC_LOGIN_BROWSER, selector: 'button[type="submit"]' });
+    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#loginAction' });
 
     // ── Step 5: 리다이렉트 완료 대기 + 로그인 상태 확인 ─────────────────────
     await web.open(DC_VERIFY_URL, {
@@ -213,11 +210,20 @@ export async function checkLoginStatus(): Promise<boolean> {
 }
 
 // =====================================================================
-// 댓글 작성
+// 댓글 작성 — dc-login 브라우저 (로그인 세션 보유) 사용
 // =====================================================================
 
+/**
+ * loginToDC() 때 쓴 'dc-login' 브라우저는 DC 로그인 쿠키가 실제로
+ * 살아있는 세션이다. 그 브라우저로 게시물 페이지에 이동한 뒤
+ * 스크롤 → 입력 → 제출 순으로 댓글을 등록한다.
+ *
+ * - 'singularity-post': 본문/댓글 로드 전용, 로그인 쿠키 없음
+ * - 'pages'           : 스크린샷 전용, 로그인 쿠키 없음
+ * - 'dc-login'        : 로그인 자동화에 쓰인 브라우저, 쿠키 보유 ✓
+ */
 export async function postCommentToDC(
-  post: Post,
+  _post: Post,
   commentText: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await loadSession();
@@ -225,43 +231,48 @@ export async function postCommentToDC(
     return { ok: false, error: '로그인이 필요합니다.' };
   }
 
+  const browserId = DC_LOGIN_BROWSER; // 'dc-login' — 쿠키 보유 세션
+
   try {
-    const referer = `https://m.dcinside.com/board/${GALLERY_ID}/${post.num}`;
-    const body = new URLSearchParams({
-      id:   GALLERY_ID,
-      no:   post.num,
-      memo: commentText,
-    }).toString();
 
-    const res = await invoke('yaar://http', {
-      url:    COMMENT_WRITE_URL,
-      method: 'POST',
-      headers: {
-        'Content-Type':     'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer':          referer,
-        'Origin':           'https://m.dcinside.com',
-        'Cookie':           session.dcPaPP,
-        'User-Agent':       MOBILE_UA,
-        'Accept':           'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language':  'ko-KR,ko;q=0.9',
-      },
-      body,
-    }) as HttpResult;
+    // Step 2: 페이지 맨 아래로 스크롤 (댓글 입력창 노출)
+    await web.scroll({ direction: 'down', browserId });
+    await web.scroll({ direction: 'down', browserId });
 
-    const rawBody = (res.body ?? '').trim();
-    try {
-      const json = JSON.parse(rawBody);
-      const result = json?.result;
-      if (result === 'success' || result === 1 || result === '1' || result === true) {
-        return { ok: true };
-      }
-      const msg = json?.msg ?? json?.message ?? '댓글 작성에 실패했습니다.';
-      return { ok: false, error: String(msg) };
-    } catch {
-      if (res.status && res.status >= 200 && res.status < 300) return { ok: true };
-      return { ok: false, error: `서버 오류 (HTTP ${res.status ?? '?'}): ${rawBody.slice(0, 100)}` };
+    // Step 3: 댓글 textarea 대기
+    await web.waitFor({
+      browserId,
+      selector: '#comment_memo, #reply_memo, textarea[name="memo"]',
+      timeout: 8000,
+    });
+
+    // Step 4: 텍스트 입력
+    await web.type({
+      browserId,
+      selector: '#comment_memo, #reply_memo, textarea[name="memo"]',
+      text: commentText,
+    });
+
+    // Step 5: 등록 버튼 클릭
+    await web.click({
+      browserId,
+      selector: '.btn-comment-write, .btn_submit, button[type="submit"]',
+    });
+
+    // Step 6: 요청 완료 대기 후 결과 확인
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+
+    const htmlResult = await web.html({ browserId }) as { ok?: boolean; data?: string };
+    const pageBody = (htmlResult?.data ?? '').trim();
+
+    if (pageBody.includes('로그인') && pageBody.includes('필요')) {
+      return { ok: false, error: '세션이 만료되었습니다. 다시 로그인해 주세요.' };
     }
+    if (pageBody.includes('차단') || pageBody.includes('blocked') || pageBody.includes('금지')) {
+      return { ok: false, error: '댓글이 차단되었습니다.' };
+    }
+
+    return { ok: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: `댓글 작성 오류: ${msg}` };

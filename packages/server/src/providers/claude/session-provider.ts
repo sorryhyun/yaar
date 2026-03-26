@@ -64,9 +64,12 @@ export class ClaudeSessionProvider extends BaseTransport {
       mcpHeaders['X-Agent-Id'] = agentId;
     }
 
-    // Only enable Task built-in tool if allowedTools includes it (or is unfiltered)
+    // Only enable builtin tools if allowedTools includes them (or is unfiltered)
     const effectiveAllowed = allowedTools ?? getToolNames();
-    const builtinTools: SDKOptions['tools'] = ['WebSearch'];
+    const builtinTools: SDKOptions['tools'] = [];
+    if (!allowedTools || allowedTools.includes('WebSearch')) {
+      builtinTools.push('WebSearch');
+    }
 
     // Build MCP server configs — only include servers needed by allowedTools.
     // This prevents the 'app' MCP server from being connected for monitor agents.

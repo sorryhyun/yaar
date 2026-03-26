@@ -72,11 +72,6 @@ The `web` subagent profile bundles browser automation, HTTP, and web search into
 - Rewrite `apps/browser/SKILL.md` — describe browser app as an active autonomous agent
 - Enrich `apps/browser/AGENTS.md` — add patterns for autonomous multi-step browsing, research, extraction
 
-### 6. Migrate dependent apps
-
-- `apps/thesingularity-reader/app.json` — remove `yaar://browser/` from permissions, use `yaar-web` SDK if needed
-- `apps/devtools/AGENTS.md` — remove `yaar://browser/` references
-
 ### 7. Update docs
 
 - Server `CLAUDE.md` — update handler list, verb namespace table, REST API section
