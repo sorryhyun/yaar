@@ -249,7 +249,23 @@ export async function handleNavigate(browserId: string, p: Payload): Promise<Ver
     const domain = extractDomain(url);
     if (!domain) return error('Invalid URL');
     if (!(await isDomainAllowed(domain))) {
-      return error(`Domain "${domain}" not allowed.`);
+      const sessionId = resolveSessionId();
+      if (!sessionId) {
+        return error(
+          `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
+        );
+      }
+      const confirmed = await actionEmitter.showPermissionDialogToSession(
+        sessionId,
+        'Allow Domain Access',
+        `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
+        'http_domain',
+        domain,
+      );
+      if (!confirmed) {
+        return error(`User denied access to domain "${domain}".`);
+      }
+      await addAllowedDomain(domain);
     }
     const state = await session.navigate(url);
     return ok(formatPageState(state));
@@ -410,6 +426,13 @@ export async function handleDeleteCookies(browserId: string, p: Payload): Promis
     url: p.url as string | undefined,
   });
   return ok(`Cookie "${p.name}" deleted.`);
+}
+
+export async function handleEvaluate(browserId: string, p: Payload): Promise<VerbResult> {
+  const session = resolveSession(browserId);
+  if (!p.expression) return error('"expression" is required for evaluate.');
+  const result = await session.evaluate(p.expression as string);
+  return okJson((result as object) ?? null);
 }
 
 export async function handleHtml(browserId: string, p: Payload): Promise<VerbResult> {

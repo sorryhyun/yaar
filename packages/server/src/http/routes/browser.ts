@@ -29,6 +29,7 @@ import {
   handleScreenshot,
   handleExtract,
   handleExtractImages,
+  handleEvaluate,
   handleHtml,
   handleAnnotate,
   handleRemoveAnnotations,
@@ -293,6 +294,9 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           break;
         case 'extract_images':
           result = await handleExtractImages(browserId, body);
+          break;
+        case 'evaluate':
+          result = await handleEvaluate(browserId, body);
           break;
         case 'html':
           result = await handleHtml(browserId, body);

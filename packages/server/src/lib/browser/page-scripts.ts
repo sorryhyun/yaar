@@ -192,6 +192,25 @@ export const FIRE_CHANGE_EVENTS = `function(sel) {
   }
 }`;
 
+/**
+ * Function({sel, text}) — set value via JS and fire events.
+ * Fallback for when Input.insertText doesn't update the DOM value.
+ */
+export const SET_VALUE = `function(args) {
+  var el = document.querySelector(args.sel);
+  if (!el) return;
+  var nativeSetter = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(el), 'value'
+  );
+  if (nativeSetter && nativeSetter.set) {
+    nativeSetter.set.call(el, args.text);
+  } else {
+    el.value = args.text;
+  }
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+  el.dispatchEvent(new Event('change', {bubbles: true}));
+}`;
+
 // ── extractContent ────────────────────────────────────────────────────
 
 /**

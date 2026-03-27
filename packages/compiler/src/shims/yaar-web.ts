@@ -152,6 +152,11 @@ export async function html(opts?: { selector?: string; browserId?: string }) {
   return browserPost({ action: 'html', browserId, ...params });
 }
 
+export async function evaluate(opts: { expression: string; browserId?: string }) {
+  const { browserId, ...params } = opts;
+  return browserPost({ action: 'evaluate', browserId, ...params });
+}
+
 // ── Visual ──────────────────────────────────────────────────────
 
 export async function annotate(browserId?: string) {

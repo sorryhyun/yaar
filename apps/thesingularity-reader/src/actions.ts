@@ -243,13 +243,11 @@ export async function submitComment(): Promise<void> {
     if (result.ok) {
       setState('commentText', '');
       showToast('💬 댓글이 등록되었습니다!', 'success');
-      // 댓글 목록 리프레시
-      setTimeout(async () => {
-        try {
-          const { comments } = await fetchPostDetail(post);
-          setState('comments', comments);
-        } catch { /* 실패해도 무시 */ }
-      }, 1200);
+      // 댓글 목록 리프레시 — comment_write_ok AJAX 완료 후이므로 바로 가능
+      try {
+        const { comments } = await fetchPostDetail(post);
+        setState('comments', comments);
+      } catch { /* 실패해도 무시 */ }
     } else {
       showToast(result.error ?? '댓글 작성 실패', 'error');
     }

@@ -512,6 +512,7 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<unknown>;
   export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;
+  export function evaluate(opts: { expression: string; browserId?: string }): Promise<unknown>;
 
   // ── Visual ─────────────────────────────────────────────────────
   export function annotate(browserId?: string): Promise<unknown>;

@@ -14,7 +14,7 @@ const GALLERY_ID = 'thesingularity';
 const SESSION_PATH = 'auth/session.json';
 
 const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com%2Fboard%2Fthesingularity';
-const DC_VERIFY_URL = 'https://gall.dcinside.com/mini/board/lists/?id=singularity';
+const DC_VERIFY_URL = 'https://gall.dcinside.com/mgallery/board/lists?id=thesingularity';
 
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
@@ -105,19 +105,34 @@ export async function loginToDC(
     const initCookies: CookieInfo[] = parseCookieResponse(rawInitCookies);
     console.log('[auth] 초기 세션 쿠키 확보:', initCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
-    // ── Step 3: 아이디 / 비밀번호 자동 입력 ─────────────────────────────────
-    await web.click({ browserId: MAIN_TAB, selector: '#code' });
-    await web.type({ browserId: MAIN_TAB, selector: '#code',      text: username });
-    await web.type({ browserId: MAIN_TAB, selector: '#password',  text: password });
+    // ── Step 3: 아이디 / 비밀번호 자동 입력 (JS로 직접 설정) ────────────────
+    const setVal = (sel: string, val: string) => `(function(){
+      var el = document.querySelector('${sel}');
+      if (!el) return false;
+      var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+      if (s && s.set) s.set.call(el, ${JSON.stringify(val)});
+      else el.value = ${JSON.stringify(val)};
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.dispatchEvent(new Event('change', {bubbles:true}));
+      return true;
+    })()`;
+    await web.evaluate({ browserId: MAIN_TAB, expression: setVal('#code', username) });
+    await web.evaluate({ browserId: MAIN_TAB, expression: setVal('#password', password) });
 
     // ── Step 4: 폼 제출 → 리다이렉트 대기 ──────────────────────────────────
-    await web.click({ browserId: MAIN_TAB, selector: '#loginAction' });
-    // Wait for login redirect to complete (r_url → gallery page)
-    await new Promise<void>(resolve => setTimeout(resolve, 3000));
+    await web.evaluate({ browserId: MAIN_TAB, expression: `(function(){
+      var form = document.getElementById('loginProcess');
+      if (form && typeof loginRequest === 'function') {
+        var ok = loginRequest();
+        if (ok !== false) form.submit();
+      }
+    })()` });
+    // 리다이렉트 완료 대기 — r_url 갤러리 페이지의 요소 확인
+    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .login-group', timeout: 15000 }).catch(() => {});
 
     // ── Step 5: 검증 페이지로 이동 + 로그인 상태 확인 ──────────────────────
     await web.navigate(DC_VERIFY_URL, MAIN_TAB);
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .nick_btn, [data-type="logout"]', timeout: 10000 }).catch(() => {});
 
     const htmlResult = await web.html({ browserId: MAIN_TAB }) as
       { ok: boolean; data?: string };
@@ -214,41 +229,75 @@ export async function postCommentToDC(
 
   try {
 
-    // Step 2: 페이지 맨 아래로 스크롤 (댓글 입력창 노출)
+    // Step 2: 댓글 textarea에 값 설정 + 제출 (evaluate로 직접 실행)
     await web.scroll({ direction: 'down', browserId });
     await web.scroll({ direction: 'down', browserId });
 
-    // Step 3: 댓글 textarea 대기
     await web.waitFor({
       browserId,
       selector: '#comment_memo, #reply_memo, textarea[name="memo"]',
       timeout: 8000,
     });
 
-    // Step 4: 텍스트 입력
-    await web.type({
-      browserId,
-      selector: '#comment_memo, #reply_memo, textarea[name="memo"]',
-      text: commentText,
-    });
+    // 텍스트 입력 via JS
+    console.log('[auth] 댓글 텍스트:', JSON.stringify(commentText));
+    await web.evaluate({ browserId, expression: `(function(){
+      var el = document.querySelector('#comment_memo') ||
+               document.querySelector('#reply_memo') ||
+               document.querySelector('textarea[name="memo"]');
+      if (!el) return false;
+      var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+      if (s && s.set) s.set.call(el, ${JSON.stringify(commentText)});
+      else el.value = ${JSON.stringify(commentText)};
+      el.dispatchEvent(new Event('input', {bubbles:true}));
+      el.dispatchEvent(new Event('change', {bubbles:true}));
+      console.log('[auth] textarea value set to:', el.value);
+      return true;
+    })()` });
 
-    // Step 5: 등록 버튼 클릭
-    await web.click({
-      browserId,
-      selector: '.btn-comment-write, .btn_submit, button[type="submit"]',
-    });
+    // _token 설정 + 폼 상태 디버그 로그
+    const formState = await web.evaluate({ browserId, expression: `(function(){
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      var token = csrf ? csrf.getAttribute('content') : '';
+      var tokenField = document.querySelector('#comment_write input[name="_token"]');
+      if (tokenField) tokenField.value = token;
 
-    // Step 6: 요청 완료 대기 후 결과 확인
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+      // 디버그: 폼 필드 상태 수집
+      var form = document.getElementById('comment_write');
+      if (!form) return { error: 'form not found' };
+      var fields = {};
+      var inputs = form.querySelectorAll('input, textarea');
+      for (var i = 0; i < inputs.length; i++) {
+        var inp = inputs[i];
+        var name = inp.name || inp.id || inp.className || ('input_' + i);
+        fields[name] = (inp.value || '').substring(0, 50);
+      }
+      return fields;
+    })()` });
+    console.log('[auth] 댓글 폼 상태:', JSON.stringify(formState));
 
-    const htmlResult = await web.html({ browserId }) as { ok?: boolean; data?: string };
-    const pageBody = (htmlResult?.data ?? '').trim();
+    // 등록 버튼 클릭 → onsubmit → comment_write_ok() 실행
+    await web.click({ browserId, selector: '.btn-comment-write' });
 
-    if (pageBody.includes('로그인') && pageBody.includes('필요')) {
-      return { ok: false, error: '세션이 만료되었습니다. 다시 로그인해 주세요.' };
-    }
-    if (pageBody.includes('차단') || pageBody.includes('blocked') || pageBody.includes('금지')) {
-      return { ok: false, error: '댓글이 차단되었습니다.' };
+    // comment_write_ok()의 AJAX 완료 대기 — textarea가 비워지면 성공
+    const submitted = await web.evaluate({ browserId, expression: `new Promise(function(resolve) {
+      var attempts = 0;
+      var check = setInterval(function() {
+        var memo = document.getElementById('comment_memo') ||
+                   document.querySelector('textarea[name="memo"]');
+        attempts++;
+        if (memo && memo.value.trim() === '') {
+          clearInterval(check);
+          resolve(true);
+        } else if (attempts > 200) {
+          clearInterval(check);
+          resolve(false);
+        }
+      }, 300);
+    })` }) as { data?: boolean };
+
+    if (submitted?.data === false) {
+      return { ok: false, error: '댓글 등록 시간 초과 — 다시 시도해주세요.' };
     }
 
     return { ok: true };

@@ -19,6 +19,7 @@ const initialized = new Set<string>();
 export const DC_COOKIE_URLS = [
   'https://www.dcinside.com/',
   'https://sign.dcinside.com/',
+  'https://msign.dcinside.com/',
   'https://accounts.dcinside.com/',
   'https://gall.dcinside.com/',
   'https://m.dcinside.com/',

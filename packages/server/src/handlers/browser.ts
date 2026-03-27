@@ -32,6 +32,7 @@ import {
   handleScreenshot,
   handleExtract,
   handleExtractImages,
+  handleEvaluate,
   handleHtml,
   handleAnnotate,
   handleRemoveAnnotations,
@@ -192,6 +193,8 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             return await handleExtract(browserId, p);
           case 'extract_images':
             return await handleExtractImages(browserId, p);
+          case 'evaluate':
+            return await handleEvaluate(browserId, p);
           case 'html':
             return await handleHtml(browserId, p);
           case 'annotate':

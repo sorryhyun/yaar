@@ -23,7 +23,7 @@ import {
   ANNOTATE_ELEMENTS,
   REMOVE_ANNOTATIONS,
   FOCUS_AND_CLEAR,
-  FIRE_CHANGE_EVENTS,
+  SET_VALUE,
   EXTRACT_CONTENT,
   EXTRACT_IMAGES,
   FIND_MAIN_CONTENT,
@@ -434,11 +434,12 @@ export class BrowserSession extends EventEmitter {
     // Focus and clear the input
     await this.evalFn(FOCUS_AND_CLEAR, selector);
 
-    // Insert text
+    // Insert text via CDP (for visual keystroke rendering)
     await this.cdp.send('Input.insertText', { text });
 
-    // Fire change events
-    await this.evalFn(FIRE_CHANGE_EVENTS, selector);
+    // Also set value via JS + native setter to ensure DOM is updated
+    // (Input.insertText can silently fail to update .value on some pages)
+    await this.evalFn(SET_VALUE, { sel: selector, text });
 
     if (!this.closed) await this.takeScreenshot();
     const state = await this.getPageState();
@@ -626,6 +627,24 @@ export class BrowserSession extends EventEmitter {
       return this.takeScreenshot({ ...opts.clip, scale: 4 });
     }
     return this.takeScreenshot();
+  }
+
+  /** Evaluate arbitrary JS expression in the page and return the result. */
+  async evaluate(expression: string): Promise<unknown> {
+    this.touch();
+    const result = await this.cdp.send('Runtime.evaluate', {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    if (result.exceptionDetails) {
+      const msg =
+        result.exceptionDetails.exception?.description ||
+        result.exceptionDetails.text ||
+        'Evaluation failed';
+      throw new Error(msg);
+    }
+    return result.result?.value;
   }
 
   /** Return raw innerHTML of a selector (or document.body). */
