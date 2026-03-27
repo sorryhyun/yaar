@@ -11,4 +11,3 @@ export { SessionsModal } from './SessionsModal';
 export { TerminalPane } from './TerminalPane';
 export { ToastContainer } from './ToastContainer';
 export { UserPrompt } from './UserPrompt';
-export { WindowContextMenu } from './WindowContextMenu';

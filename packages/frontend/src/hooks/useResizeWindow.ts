@@ -19,6 +19,7 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
 
   const handleResizeStart = useCallback(
     (direction: string, e: React.MouseEvent) => {
+      if (e.button !== 0) return; // Only left-click initiates resize
       e.preventDefault();
       e.stopPropagation();
       setIsResizing(true);

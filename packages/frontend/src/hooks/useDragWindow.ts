@@ -40,6 +40,7 @@ export function useDragWindow({
 
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
+      if (e.button !== 0) return; // Only left-click initiates drag
       e.preventDefault();
       setIsDragging(true);
       document.documentElement.classList.add(DRAGGING_CSS_CLASS);

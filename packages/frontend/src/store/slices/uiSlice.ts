@@ -1,35 +1,12 @@
 /**
- * UI slice - manages context menu, sessions modal, and restore prompt.
+ * UI slice - manages sessions modal and restore prompt.
  */
-import type { SliceCreator, UiSlice, DesktopStore } from '../types';
+import type { SliceCreator, UiSlice } from '../types';
 
 export const createUiSlice: SliceCreator<UiSlice> = (set, _get) => ({
-  contextMenu: null,
   sessionsModalOpen: false,
   restorePrompt: null,
   selectedWindowIds: [],
-
-  showContextMenu: (x, y, windowId?) =>
-    set((state) => {
-      if (windowId) {
-        const win = (state as DesktopStore).windows[windowId];
-        if (win) {
-          state.contextMenu = { x, y, windowId, windowTitle: win.title };
-        }
-      } else {
-        state.contextMenu = { x, y };
-      }
-    }),
-
-  showShortcutContextMenu: (x, y, shortcut) =>
-    set((state) => {
-      state.contextMenu = { x, y, shortcut };
-    }),
-
-  hideContextMenu: () =>
-    set((state) => {
-      state.contextMenu = null;
-    }),
 
   toggleSessionsModal: () =>
     set((state) => {

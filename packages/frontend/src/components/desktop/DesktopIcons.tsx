@@ -10,7 +10,6 @@ import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
 import { extractAppId } from '@yaar/shared';
-import type { ShortcutContextTarget } from '@/store/types';
 import { toWindowKey } from '@/store/helpers';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
@@ -33,7 +32,6 @@ interface AppInfo {
 interface DesktopIconsProps {
   selectedAppIds: Set<string>;
   sendMessage: (msg: string) => void;
-  showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
 }
 
 /** A folder derived from shortcuts sharing the same folderId. */
@@ -44,11 +42,7 @@ interface DerivedFolder {
   createdAt: number;
 }
 
-export function DesktopIcons({
-  selectedAppIds,
-  sendMessage,
-  showShortcutContextMenu,
-}: DesktopIconsProps) {
+export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps) {
   const appsVersion = useDesktopStore((s) => s.appsVersion);
   const appBadges = useDesktopStore((s) => s.appBadges);
   const shortcuts = useDesktopStore((s) => s.shortcuts);
@@ -259,15 +253,6 @@ export function DesktopIcons({
         data-shortcut-id={shortcut.id}
         {...(appId ? { 'data-app-id': appId } : {})}
         onClick={() => handleShortcutClick(shortcut)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          showShortcutContextMenu(e.clientX, e.clientY, {
-            id: shortcut.id,
-            label: shortcut.label,
-            target: shortcut.target,
-          });
-        }}
         disabled={cooldownId === shortcut.id}
         draggable={!!appId}
         onDragStart={

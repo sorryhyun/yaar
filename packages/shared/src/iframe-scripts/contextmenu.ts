@@ -2,25 +2,28 @@
  * Inline JS interaction helper for iframe apps.
  *
  * Handles interactions inside same-origin iframes:
- * 1. Context menu — prevents browser default, posts `yaar:contextmenu`
- * 2. Left click — posts `yaar:click` so parent can dismiss context menu
- * 3. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
+ * 1. Right-click drawing — forwards pointer events to parent for freehand drawing
+ * 2. Context menu — always suppressed (drawing uses right-click drag)
+ * 3. Left click — posts `yaar:click` so parent can dismiss overlays
+ * 4. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
  */
 export const IFRAME_CONTEXTMENU_SCRIPT = `
 (function() {
   if (window.__yaarContextMenuInstalled) return;
   window.__yaarContextMenuInstalled = true;
 
-  // Right-click drawing forwarding — the parent uses mousedown/mousemove/mouseup
-  // with button 2 for freehand drawing, but those events don't cross
-  // iframe boundaries. Forward them via postMessage so the parent can drive the drawing.
+  // Right-click drawing forwarding — the parent uses right-button drag for
+  // freehand drawing, but pointer events don't cross iframe boundaries.
+  // We use pointer events + setPointerCapture so the iframe keeps receiving
+  // events even after the cursor exits, ensuring seamless cross-boundary strokes.
   var rightDragging = false;
-  var rightDragMoved = false;
+  var rightPointerId = -1;
 
-  document.addEventListener('mousedown', function(e) {
+  document.addEventListener('pointerdown', function(e) {
     if (e.button !== 2) return;
     rightDragging = true;
-    rightDragMoved = false;
+    rightPointerId = e.pointerId;
+    try { e.target.setPointerCapture(e.pointerId); } catch(ex) {}
     window.parent.postMessage({
       type: 'yaar:arrow-drag-start',
       clientX: e.clientX,
@@ -28,9 +31,8 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }, '*');
   });
 
-  document.addEventListener('mousemove', function(e) {
-    if (!rightDragging) return;
-    rightDragMoved = true;
+  document.addEventListener('pointermove', function(e) {
+    if (!rightDragging || e.pointerId !== rightPointerId) return;
     window.parent.postMessage({
       type: 'yaar:arrow-drag-move',
       clientX: e.clientX,
@@ -38,9 +40,10 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }, '*');
   });
 
-  document.addEventListener('mouseup', function(e) {
-    if (!rightDragging) return;
+  document.addEventListener('pointerup', function(e) {
+    if (!rightDragging || e.pointerId !== rightPointerId) return;
     rightDragging = false;
+    rightPointerId = -1;
     window.parent.postMessage({
       type: 'yaar:arrow-drag-end',
       clientX: e.clientX,
@@ -48,40 +51,14 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }, '*');
   });
 
-  // Left click — notify parent so it can dismiss context menu, etc.
+  // Left click — notify parent so it can dismiss overlays, etc.
   document.addEventListener('click', function() {
     window.parent.postMessage({ type: 'yaar:click' }, '*');
   });
 
+  // Always suppress the native context menu inside iframes.
   document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
-    // After a right-click drag, suppress the context menu forwarding —
-    // the parent already processed the drag gesture.
-    if (rightDragMoved) {
-      rightDragMoved = false;
-      return;
-    }
-    // Simple right-click (no drag) — cancel drawing tracking.
-    // The parent's context menu overlay may steal the mouseup event,
-    // leaving rightDragging stuck at true. Reset it and notify parent.
-    if (rightDragging) {
-      rightDragging = false;
-      window.parent.postMessage({
-        type: 'yaar:arrow-drag-end',
-        clientX: e.clientX,
-        clientY: e.clientY
-      }, '*');
-    }
-    var selectedText = '';
-    try {
-      selectedText = (window.getSelection() || '').toString().trim();
-    } catch(ex) {}
-    window.parent.postMessage({
-      type: 'yaar:contextmenu',
-      clientX: e.clientX,
-      clientY: e.clientY,
-      selectedText: selectedText
-    }, '*');
   });
 
   // Forward global keyboard shortcuts to the parent so they work even

@@ -358,15 +358,7 @@ export function initIframeMessageHandlers() {
     });
   });
 
-  iframeMessages.on('yaar:click', () => {
-    useDesktopStore.getState().hideContextMenu();
-  });
-
-  iframeMessages.on('yaar:contextmenu', (ctx) => {
-    if (!ctx.source) return;
-    const { x, y } = ctx.source.toViewport(ctx.data.clientX ?? 0, ctx.data.clientY ?? 0);
-    useDesktopStore.getState().showContextMenu(x, y, ctx.source.windowId);
-  });
+  // yaar:click — no-op (context menu removed)
 
   iframeMessages.on('yaar:drag-start', (ctx) => {
     if (!ctx.source) return;

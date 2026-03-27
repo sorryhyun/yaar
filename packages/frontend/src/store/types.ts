@@ -12,8 +12,6 @@ import type {
   DialogModel,
   UserPromptModel,
   ConnectionStatus,
-  ContextMenuState,
-  ShortcutContextTarget,
   RestorePrompt,
   DebugEntry,
   ActiveAgent,
@@ -40,8 +38,6 @@ export type {
   DialogModel,
   UserPromptModel,
   ConnectionStatus,
-  ContextMenuState,
-  ShortcutContextTarget,
   RestorePrompt,
   DebugEntry,
   ActiveAgent,
@@ -169,16 +165,12 @@ export interface AgentsSliceActions {
 export type AgentsSlice = AgentsSliceState & AgentsSliceActions;
 
 export interface UiSliceState {
-  contextMenu: ContextMenuState | null;
   sessionsModalOpen: boolean;
   restorePrompt: RestorePrompt | null;
   selectedWindowIds: string[];
 }
 
 export interface UiSliceActions {
-  showContextMenu: (x: number, y: number, windowId?: string) => void;
-  showShortcutContextMenu: (x: number, y: number, shortcut: ShortcutContextTarget) => void;
-  hideContextMenu: () => void;
   toggleSessionsModal: () => void;
   setRestorePrompt: (prompt: RestorePrompt | null) => void;
   dismissRestorePrompt: () => void;

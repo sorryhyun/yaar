@@ -20,6 +20,7 @@ import {
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 import { getRawWindowId } from '@/store/helpers';
+import { captureMonitorScreenshot } from '@/lib/captureMonitorScreenshot';
 
 let sessionCheckDone = false;
 
@@ -218,7 +219,15 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   }, []);
 
   const sendMessage = useCallback(
-    (content: string) => {
+    async (content: string) => {
+      // Capture full monitor screenshot (with drawing strokes composited)
+      // before consuming the drawing, so the sent image includes the desktop.
+      const hasDrawingNow = useDesktopStore.getState().hasDrawing;
+      let screenshotDataUrl: string | null = null;
+      if (hasDrawingNow) {
+        screenshotDataUrl = await captureMonitorScreenshot();
+      }
+
       const drawing = consumeDrawing();
       const images = consumeAttachedImages();
       const messageId = generateMessageId();
@@ -227,8 +236,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       addCliEntry({ type: 'user', content, monitorId });
 
       const interactions: Array<{ type: 'draw'; timestamp: number; imageData: string }> = [];
-      if (drawing) {
-        interactions.push({ type: 'draw', timestamp: Date.now(), imageData: drawing });
+      // Prefer the composite screenshot; fall back to raw strokes
+      const drawingImage = screenshotDataUrl ?? drawing;
+      if (drawingImage) {
+        interactions.push({ type: 'draw', timestamp: Date.now(), imageData: drawingImage });
       }
       for (const img of images) {
         interactions.push({ type: 'draw', timestamp: Date.now(), imageData: img });

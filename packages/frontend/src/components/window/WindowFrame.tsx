@@ -35,7 +35,6 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
-  const showContextMenu = useDesktopStore((s) => s.showContextMenu);
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id));
   const windowAgent = useDesktopStore(selectWindowAgent(window.id));
   const isSelected = useDesktopStore((s) => s.selectedWindowIds.includes(window.id));
@@ -234,15 +233,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
 
       {/* Title bar — standard variant only (hidden for frameless) */}
       {!isWidget && !isPanel && !isFrameless && (
-        <div
-          className={styles.titleBar}
-          onMouseDown={handleTitleBarDragStart}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            showContextMenu(e.clientX, e.clientY, window.id);
-          }}
-        >
+        <div className={styles.titleBar} onMouseDown={handleTitleBarDragStart}>
           <div className={styles.titleSection}>
             <div className={styles.title}>{window.title}</div>
             {window.locked && (
@@ -321,10 +312,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
           if (selectedText) {
             e.preventDefault();
             setSelectionAction({ x: e.clientX, y: e.clientY, text: selectedText });
-            return;
           }
-          e.preventDefault();
-          showContextMenu(e.clientX, e.clientY, window.id);
         }}
       >
         <WindowCallbackProvider callbacks={windowCallbacks}>

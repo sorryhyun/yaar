@@ -80,20 +80,6 @@ export interface UserPromptModel {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export interface ShortcutContextTarget {
-  id: string;
-  label: string;
-  target: string;
-}
-
-export interface ContextMenuState {
-  x: number;
-  y: number;
-  windowId?: string;
-  windowTitle?: string;
-  shortcut?: ShortcutContextTarget;
-}
-
 export interface RestorePrompt {
   sessionId: string;
   sessionDate: string;
@@ -175,9 +161,6 @@ export interface DesktopState {
   // Recent actions panel
   recentActionsPanelOpen: boolean;
 
-  // Context menu state
-  contextMenu: ContextMenuState | null;
-
   // Sessions modal
   sessionsModalOpen: boolean;
 
@@ -233,10 +216,6 @@ export interface DesktopActions {
   // Recent actions panel
   toggleRecentActionsPanel: () => void;
   clearActivityLog: () => void;
-
-  // Context menu
-  showContextMenu: (x: number, y: number, windowId?: string) => void;
-  hideContextMenu: () => void;
 
   // Sessions modal
   toggleSessionsModal: () => void;

@@ -11,7 +11,6 @@
  * - Composition of sub-components
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useDesktopStore, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
@@ -26,7 +25,6 @@ import {
   NotificationCenter,
   ConfirmDialog,
   UserPrompt,
-  WindowContextMenu,
   CursorSpinner,
   CliPanel,
 } from '../overlays';
@@ -38,12 +36,6 @@ import { DesktopIcons } from './DesktopIcons';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 export function DesktopSurface() {
-  const { t } = useTranslation();
-  const contextMenu = useDesktopStore((s) => s.contextMenu);
-  const hideContextMenu = useDesktopStore((s) => s.hideContextMenu);
-  const showContextMenu = useDesktopStore((s) => s.showContextMenu);
-  const showShortcutContextMenu = useDesktopStore((s) => s.showShortcutContextMenu);
-  const windowAgents = useDesktopStore((s) => s.windowAgents);
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
@@ -52,14 +44,8 @@ export function DesktopSurface() {
   const wallpaper = useDesktopStore((s) => s.wallpaper);
   const accentColor = useDesktopStore((s) => s.accentColor);
   const iconSize = useDesktopStore((s) => s.iconSize);
-  const {
-    sendMessage,
-    sendWindowMessage,
-    sendComponentAction,
-    sendToastAction,
-    interruptAgent,
-    interrupt,
-  } = useAgentConnection({ autoConnect: false });
+  const { sendMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } =
+    useAgentConnection({ autoConnect: false });
 
   // Rubber-band selection state
   const [selectionRect, setSelectionRect] = useState<{
@@ -153,21 +139,8 @@ export function DesktopSurface() {
         setSelectedWindows([]);
         setSelectedAppIds(new Set());
       }
-      // Always close context menu on background click
-      hideContextMenu();
     },
-    [hideContextMenu, setSelectedWindows],
-  );
-
-  const handleBackgroundContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      // Only handle right-clicks directly on the desktop background
-      if (e.target === e.currentTarget) {
-        e.preventDefault();
-        showContextMenu(e.clientX, e.clientY);
-      }
-    },
-    [showContextMenu],
+    [setSelectedWindows],
   );
 
   // Image drop on desktop background
@@ -365,7 +338,6 @@ export function DesktopSurface() {
         }
         data-image-dragover={isImageDragOver || undefined}
         onClick={handleBackgroundClick}
-        onContextMenu={handleBackgroundContextMenu}
         onMouseDown={handleDesktopMouseDown}
         onDragOver={handleDesktopDragOver}
         onDragLeave={handleDesktopDragLeave}
@@ -373,11 +345,7 @@ export function DesktopSurface() {
       >
         <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
 
-        <DesktopIcons
-          selectedAppIds={selectedAppIds}
-          sendMessage={sendMessage}
-          showShortcutContextMenu={showShortcutContextMenu}
-        />
+        <DesktopIcons selectedAppIds={selectedAppIds} sendMessage={sendMessage} />
 
         {/* Rubber-band selection rectangle */}
         {selectionRect && (
@@ -407,48 +375,6 @@ export function DesktopSurface() {
 
         {/* Notification center (top-right) */}
         <NotificationCenter />
-
-        {/* Context menu */}
-        {contextMenu && (
-          <WindowContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            windowId={contextMenu.windowId}
-            windowTitle={contextMenu.windowTitle}
-            hasWindowAgent={
-              contextMenu.windowId
-                ? Object.values(windowAgents).some((wa) => wa.windowId === contextMenu.windowId)
-                : false
-            }
-            actions={
-              contextMenu.shortcut
-                ? [
-                    {
-                      label: t('shortcutMenu.about', { name: contextMenu.shortcut.label }),
-                      onClick: () => {
-                        const s = contextMenu.shortcut!;
-                        sendMessage(
-                          `<ui:shortcut_action action="about" shortcutId="${s.id}" label="${s.label}" target="${s.target}">User wants to know about this shortcut</ui:shortcut_action>`,
-                        );
-                      },
-                    },
-                    {
-                      label: t('shortcutMenu.delete'),
-                      destructive: true,
-                      onClick: () => {
-                        sendMessage(
-                          `<ui:shortcut_action action="delete" shortcutId="${contextMenu.shortcut!.id}">User chose to delete this shortcut from the desktop</ui:shortcut_action>`,
-                        );
-                      },
-                    },
-                  ]
-                : undefined
-            }
-            onSend={sendMessage}
-            onSendToWindow={sendWindowMessage}
-            onClose={hideContextMenu}
-          />
-        )}
 
         {/* Cursor spinner when AI is thinking */}
         <CursorSpinner />
