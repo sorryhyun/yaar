@@ -6,11 +6,8 @@
  */
 
 import { join } from 'path';
+import { parseYaarUri, resolveContentUri, parseWindowUri, parseBareWindowUri } from '@yaar/shared';
 import {
-  parseYaarUri,
-  resolveContentUri,
-  parseWindowUri,
-  parseBareWindowUri,
   parseConfigUri,
   parseBrowserUri,
   parseSessionUri,
@@ -18,7 +15,7 @@ import {
   type ParsedBrowserUri,
   type SessionResource,
   type SessionSubKind,
-} from '@yaar/shared';
+} from '../lib/yaar-uri-server.js';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';

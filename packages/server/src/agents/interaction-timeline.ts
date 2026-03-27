@@ -7,7 +7,7 @@
  */
 
 import type { OSAction, UserInteraction } from '@yaar/shared';
-import { formatCompactInteraction } from '@yaar/shared';
+import { formatCompactInteraction } from '../lib/format-interaction.js';
 
 interface TimelineEntry {
   type: 'user' | 'AI';

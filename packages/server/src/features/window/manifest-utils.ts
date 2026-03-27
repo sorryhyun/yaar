@@ -3,7 +3,8 @@
  */
 
 import type { AppManifest } from '@yaar/shared';
-import { parseWindowKey, buildWindowResourceUri } from '@yaar/shared';
+import { parseWindowKey } from '@yaar/shared';
+import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 
 /**
  * Add `uri` fields to each state key and command in a manifest response.

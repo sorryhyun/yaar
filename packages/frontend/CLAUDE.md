@@ -42,7 +42,8 @@ src/
 **Zustand + Immer** pattern:
 - Store split into slices under `store/slices/` (windows, monitors, agents, cli, notifications, toasts, dialogs, connection, settings, etc.)
 - Composed in `store/desktop.ts`
-- AI actions processed via `applyAction()` reducer — this is the core of how OS Actions become UI state
+- AI actions processed via `applyAction()` reducer — this is the core of how OS Actions become UI state; logs a warning for unhandled action types
+- `applyWindowAction()` in `store/slices/windowsSlice.ts` takes the narrower `WindowAction` type and uses an exhaustive `never` guard — all window action variants must be handled
 - User interactions (focus, close, move, resize) logged and sent to server
 - Selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`, etc. — grep `store/slices/` for the full list
 

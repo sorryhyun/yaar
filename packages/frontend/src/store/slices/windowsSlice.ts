@@ -6,7 +6,7 @@
  * This prevents collisions when multiple monitors create windows with the same ID.
  */
 import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../types';
-import type { OSAction, WindowCreateAction } from '@yaar/shared';
+import type { WindowAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
 import { notifyIframeClose } from '../iframe-bridge';
@@ -79,7 +79,7 @@ function rejectIfLocked(
  * Pure mutation function that applies a window action to an Immer draft.
  * Can be called standalone inside a batched set() or via handleWindowAction.
  */
-export function applyWindowAction(state: DesktopStore, action: OSAction): void {
+export function applyWindowAction(state: DesktopStore, action: WindowAction): void {
   // Resolve an action's windowId to the correct store key.
   const resolveKey = (rawId: string): string => {
     if (state.windows[rawId]) return rawId;
@@ -346,6 +346,17 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       }
       break;
     }
+
+    case 'window.capture':
+      break;
+
+    default: {
+      const _exhaustive: never = action;
+      console.warn(
+        '[windowsSlice] Unhandled window action:',
+        (_exhaustive as { type: string }).type,
+      );
+    }
   }
 }
 
@@ -354,7 +365,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
   zOrder: [],
   focusedWindowId: null,
 
-  handleWindowAction: (action: OSAction) =>
+  handleWindowAction: (action: WindowAction) =>
     set((state) => {
       applyWindowAction(state as DesktopStore, action);
     }),

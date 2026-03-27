@@ -40,7 +40,7 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
   const files: { path: string; content: string }[] = [];
 
   // Include top-level app files so permissions, protocol, skill docs, etc. are preserved
-  for (const filename of ['app.json', 'protocol.json', 'SKILL.md', 'AGENTS.md', 'HINT.md']) {
+  for (const filename of ['app.json', 'SKILL.md', 'AGENTS.md', 'HINT.md']) {
     try {
       const content = await Bun.file(join(appDir, filename)).text();
       if (filename.endsWith('.json')) JSON.parse(content); // validate JSON

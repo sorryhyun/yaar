@@ -1,7 +1,7 @@
 import { mkdir, appendFile } from 'fs/promises';
 import { join } from 'path';
 import type { OSAction, UserInteraction } from '@yaar/shared';
-import { formatCompactInteraction } from '@yaar/shared';
+import { formatCompactInteraction } from '../lib/format-interaction.js';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';

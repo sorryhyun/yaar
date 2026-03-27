@@ -5,9 +5,10 @@ Shared types between frontend and server.
 ## Exports
 
 - `actions.ts` - OS Actions DSL (includes `WindowState` with `appProtocol?: boolean`)
-- `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants, `formatCompactInteraction()`
+- `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants
 - `components.ts` - Component schemas, types, type guards (Zod v4), `DisplayContent`/`displayContentSchema`
 - `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
+- `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `isYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `buildFileUri`, `parseWindowUri`, `buildWindowUri`, `parseBareWindowUri`, `isBareWindowsAuthority`, `buildWindowKey`, `parseWindowKey`, `expandBraceUri`
 - `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
 
 ## OS Actions

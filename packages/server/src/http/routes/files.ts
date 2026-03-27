@@ -8,7 +8,7 @@ import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
-import { parseContentPath, type ParsedContentPath } from '@yaar/shared';
+import { parseContentPath, type ParsedContentPath } from '../../lib/yaar-uri-server.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [

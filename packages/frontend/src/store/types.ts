@@ -25,6 +25,7 @@ import type {
 } from '@/types/state';
 import type {
   OSAction,
+  WindowAction,
   UserInteraction,
   AppProtocolResponse,
   DesktopShortcut,
@@ -65,7 +66,7 @@ export interface WindowsSliceActions {
   userMoveWindow: (windowId: string, x: number, y: number) => void;
   userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
   userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
-  handleWindowAction: (action: OSAction) => void;
+  handleWindowAction: (action: WindowAction) => void;
   queueBoundsUpdate: (windowId: string) => void;
 }
 

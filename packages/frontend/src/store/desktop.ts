@@ -12,6 +12,7 @@ import { immer } from 'zustand/middleware/immer';
 import type { DesktopStore } from './types';
 import type {
   OSAction,
+  WindowAction,
   WindowCaptureAction,
   DesktopShortcut,
   DesktopCreateShortcutAction,
@@ -122,7 +123,7 @@ export const useDesktopStore = create<DesktopStore>()(
       }
 
       if (actionType.startsWith('window.')) {
-        store.handleWindowAction(action);
+        store.handleWindowAction(action as WindowAction);
       } else if (actionType.startsWith('notification.')) {
         store.handleNotificationAction(action);
       } else if (actionType.startsWith('toast.')) {
@@ -165,6 +166,8 @@ export const useDesktopStore = create<DesktopStore>()(
       } else if (actionType === 'desktop.updateSettings') {
         const { settings } = action as DesktopUpdateSettingsAction;
         store.applyServerSettings(settings);
+      } else {
+        console.warn(`[applyAction] Unhandled action type: ${actionType}`);
       }
     },
 
@@ -185,7 +188,8 @@ export const useDesktopStore = create<DesktopStore>()(
           for (const action of syncActions) {
             state.activityLog.push(action);
             const t = action.type;
-            if (t.startsWith('window.')) applyWindowAction(state as DesktopStore, action);
+            if (t.startsWith('window.'))
+              applyWindowAction(state as DesktopStore, action as WindowAction);
             else if (t.startsWith('notification.')) applyNotificationAction(state, action);
             else if (t.startsWith('toast.')) applyToastAction(state, action);
             else if (t.startsWith('dialog.')) applyDialogAction(state, action);
@@ -204,6 +208,8 @@ export const useDesktopStore = create<DesktopStore>()(
               const { shortcutId, updates } = action as DesktopUpdateShortcutAction;
               const sc = state.shortcuts.find((s) => s.id === shortcutId);
               if (sc) Object.assign(sc, updates);
+            } else {
+              console.warn(`[applyActions] Unhandled action type: ${t}`);
             }
           }
         });

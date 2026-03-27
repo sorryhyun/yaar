@@ -70,7 +70,9 @@ src/
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
-    └── browser/ pdf/ pick-directory.ts
+    ├── browser/ pdf/ pick-directory.ts
+    ├── format-interaction.ts  # formatCompactInteraction() — compact log string for UserInteraction
+    └── yaar-uri-server.ts     # Server-only URI parsers: parseContentPath, parseWindowResourceUri/buildWindowResourceUri, parseConfigUri/buildConfigUri, parseBrowserUri/buildBrowserUri, parseSessionUri/buildSessionUri (+ associated types)
 ```
 
 ## Architecture

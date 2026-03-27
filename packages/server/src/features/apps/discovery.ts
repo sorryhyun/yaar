@@ -137,9 +137,9 @@ export async function listApps(): Promise<AppInfo[]> {
         // No metadata or invalid JSON
       }
 
-      // Load protocol.json (implies appProtocol support)
+      // Load dist/protocol.json (implies appProtocol support)
       try {
-        const protocolContent = await Bun.file(join(appPath, 'protocol.json')).text();
+        const protocolContent = await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
         protocol = JSON.parse(protocolContent);
       } catch {
         // No protocol.json
@@ -239,12 +239,12 @@ export async function getAppMeta(appId: string): Promise<{
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
-    // Check for protocol.json to determine appProtocol support
+    // Check for dist/protocol.json to determine appProtocol support
     try {
-      await Bun.file(join(APPS_DIR, appId, 'protocol.json')).text();
+      await Bun.file(join(APPS_DIR, appId, 'dist', 'protocol.json')).text();
       result.hasProtocol = true;
     } catch {
-      // No protocol.json
+      // No dist/protocol.json
     }
     return Object.keys(result).length > 0 ? result : null;
   } catch {

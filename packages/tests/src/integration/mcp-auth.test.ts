@@ -22,9 +22,8 @@ mock.module('@yaar/server/mcp/browser/index', () => ({
   BROWSER_TOOL_NAMES: [],
 }));
 
-const { handleMcpRequest, initMcpServer, getMcpToken, isMcpAuthSkipped } = await import(
-  '@yaar/server/mcp/server'
-);
+const { handleMcpRequest, initMcpServer, getMcpToken, isMcpAuthSkipped } =
+  await import('@yaar/server/mcp/server');
 
 describe('MCP auth — token validation', () => {
   beforeAll(async () => {

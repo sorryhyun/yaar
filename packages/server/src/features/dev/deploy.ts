@@ -228,14 +228,14 @@ export async function doDeploy(
     delete metadata.protocol;
     await Bun.write(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
-    // Write protocol.json separately (or remove if no protocol)
+    // Write protocol.json to dist/ (compiler already writes it, but cover source-only extraction)
     if (extractedProtocol) {
+      const protocolDistDir = join(appPath, 'dist');
+      await mkdir(protocolDistDir, { recursive: true });
       await Bun.write(
-        join(appPath, 'protocol.json'),
+        join(protocolDistDir, 'protocol.json'),
         JSON.stringify(extractedProtocol, null, 2) + '\n',
       );
-    } else {
-      await rm(join(appPath, 'protocol.json'), { force: true });
     }
 
     const finalName = (metadata.name as string) ?? displayName;

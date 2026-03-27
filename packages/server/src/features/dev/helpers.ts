@@ -147,10 +147,10 @@ export async function regenerateSkillMd(appId: string, appPath: string): Promise
     /* no compiled app */
   }
   try {
-    await Bun.file(join(appPath, 'protocol.json')).text();
+    await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
     hasProtocolJson = true;
   } catch {
-    /* no protocol.json */
+    /* no dist/protocol.json */
   }
 
   const componentFiles: string[] = [];
