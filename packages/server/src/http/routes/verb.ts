@@ -80,21 +80,31 @@ interface SubscribeRequest {
 }
 
 /**
+ * Try to parse a raw string as JSON, returning the string itself on failure.
+ */
+function tryParseJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * Transform a VerbResult into a standard JSON envelope for iframe apps.
+ *
+ * Single-URI results have one text block → `{ ok, data }`.
+ * Batch results (from brace expansion) have interleaved URI headers and data blocks
+ * produced by formatBatchResults() → `{ ok, data: { [uri]: parsed } }`.
  */
 function toEnvelope(result: VerbResult): Record<string, unknown> {
-  const textItem = result.content.find((c) => c.type === 'text');
-  const raw = (textItem as { text?: string } | undefined)?.text ?? '';
+  const textItems = result.content.filter(
+    (c): c is { type: 'text'; text: string } => c.type === 'text',
+  );
 
   if (result.isError) {
-    return { ok: false, error: raw };
-  }
-
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = raw;
+    const errorTexts = textItems.map((t) => t.text);
+    return { ok: false, error: errorTexts.join('\n') };
   }
 
   const images = result.content
@@ -103,6 +113,32 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
       const img = c as { data: string; mimeType: string };
       return { data: img.data, mimeType: img.mimeType };
     });
+
+  // Detect batch results: formatBatchResults() produces "--- uri ---" header blocks
+  // interleaved with data blocks.
+  const isBatch =
+    textItems.length > 1 &&
+    textItems[0].text.startsWith('--- ') &&
+    textItems[0].text.endsWith(' ---');
+
+  let data: unknown;
+  if (isBatch) {
+    const batchData: Record<string, unknown> = {};
+    let currentUri: string | null = null;
+    for (const item of textItems) {
+      const headerMatch = item.text.match(/^--- (.+) ---$/);
+      if (headerMatch) {
+        currentUri = headerMatch[1];
+      } else if (currentUri) {
+        batchData[currentUri] = tryParseJson(item.text);
+        currentUri = null;
+      }
+    }
+    data = batchData;
+  } else {
+    const raw = textItems[0]?.text ?? '';
+    data = tryParseJson(raw);
+  }
 
   const envelope: Record<string, unknown> = { ok: true, data };
   if (images.length > 0) envelope.images = images;

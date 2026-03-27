@@ -28,27 +28,25 @@ const totalUnread = createMemo(() =>
 
 // ── Actions ────────────────────────────────────────────────────────────────
 
-async function refresh(): Promise<{ ok: boolean; totalUnread: number }> {
+async function refresh(): Promise<{ totalUnread: number }> {
   await fetchAllFeeds();
   await saveState();
   notifyUnreadUpdate(totalUnread());
-  return { ok: true, totalUnread: totalUnread() };
+  return { totalUnread: totalUnread() };
 }
 
-function markAllRead(): { ok: boolean } {
+function markAllRead(): void {
   const ids = visibleArticles().map(a => a.id);
   setState('readArticleIds', Array.from(new Set([...state.readArticleIds, ...ids])));
   void saveState();
-  return { ok: true };
 }
 
-function selectFeed(feedId: string): { ok: boolean } {
+function selectFeed(feedId: string): void {
   setState('selectedFeedId', feedId);
   setState('selectedArticle', null);
-  return { ok: true };
 }
 
-async function addFeed(url: string, name?: string): Promise<{ ok: boolean; feedId: string }> {
+async function addFeed(url: string, name?: string): Promise<{ feedId: string }> {
   let normalized: string;
   try { normalized = new URL(url).toString(); } catch { throw new Error('Invalid URL'); }
   if (state.feeds.some(f => f.url === normalized)) throw new Error('Feed already exists');
@@ -58,7 +56,7 @@ async function addFeed(url: string, name?: string): Promise<{ ok: boolean; feedI
   await fetchSingleFeed(feed);
   await saveState();
   showToast(`Added: ${feed.name}`, 'success');
-  return { ok: true, feedId: id };
+  return { feedId: id };
 }
 
 function removeFeed(feedId: string): void {

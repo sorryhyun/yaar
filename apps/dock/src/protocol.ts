@@ -67,7 +67,7 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
         params: { type: 'object', properties: {} },
         handler: () => {
           deps.renderNow();
-          return { ok: true, nowIso: deps.getNowIso() };
+          return { nowIso: deps.getNowIso() };
         },
       },
       refreshWeather: {
@@ -76,7 +76,6 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
         handler: async () => {
           await deps.initWeather();
           return {
-            ok: true,
             weather: {
               icon: deps.getWeatherIcon(),
               temp: deps.getWeatherTemp(),
@@ -104,7 +103,6 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
             deps.setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx as number)));
           // Signals are reactive — DOM updates automatically, no applyAppearance() needed
           return {
-            ok: true,
             appearance: {
               showPanel: deps.getShowPanel(),
               panelOpacity: deps.getPanelOpacity(),

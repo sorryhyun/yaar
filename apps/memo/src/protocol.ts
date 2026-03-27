@@ -42,7 +42,7 @@ export function registerProtocol() {
         handler: async (p: unknown) => {
           const { title, content } = p as { title: string; content: string };
           const memo = await addMemo(title, content);
-          return { ok: true, memo };
+          return { memo };
         },
       },
       updateMemo: {
@@ -59,7 +59,7 @@ export function registerProtocol() {
         handler: async (p: unknown) => {
           const { id, title, content } = p as { id: string; title?: string; content?: string };
           const memo = await updateMemo(id, title, content);
-          return { ok: memo !== null, memo };
+          return { memo };
         },
       },
       deleteMemo: {
@@ -72,7 +72,7 @@ export function registerProtocol() {
         handler: async (p: unknown) => {
           const { id } = p as { id: string };
           const deleted = await deleteMemo(id);
-          return { ok: deleted };
+          return { deleted };
         },
       },
     },

@@ -271,7 +271,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         handler: (p?: { url?: string; title?: string }) => {
           if (p?.url) deps.updateUrlBar(p.url, p.title);
           deps.refreshScreenshot();
-          return { ok: true, currentUrl: deps.getCurrentUrl() };
+          return { currentUrl: deps.getCurrentUrl() };
         },
       },
       clear: {
@@ -279,7 +279,6 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         params: { type: 'object', properties: {} },
         handler: () => {
           deps.clearDisplay();
-          return { ok: true };
         },
       },
       attach: {
@@ -291,7 +290,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         },
         handler: (p: { browserId: string }) => {
           deps.attach(p.browserId);
-          return { ok: true, browserId: p.browserId };
+          return { browserId: p.browserId };
         },
       },
     },

@@ -1,4 +1,4 @@
-import { app, storage, windows } from '@bundled/yaar';
+import { app, storage, windows, AppCommandError } from '@bundled/yaar';
 import { countTextStats, nowLabel, textToHtml } from './utils';
 import { editorEl, docTitleEl, saveStateText, setSaveStateText } from './state';
 import { refreshStats } from './editor';
@@ -77,7 +77,6 @@ export function registerAppProtocol() {
           }
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
-          return { ok: true };
         },
       },
       setTitle: {
@@ -91,7 +90,6 @@ export function registerAppProtocol() {
           docTitleEl.value = ((p.title as string) || '').trim() || 'Untitled Document';
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
-          return { ok: true };
         },
       },
       appendContent: {
@@ -115,7 +113,6 @@ export function registerAppProtocol() {
           }
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
-          return { ok: true };
         },
       },
       setDocuments: {
@@ -130,7 +127,7 @@ export function registerAppProtocol() {
           setEditorFromHtml(docsToMergedHtml(docs));
           setSaveStateText(`Loaded ${docs.length} document(s) via app protocol`);
           saveDoc();
-          return { ok: true, count: docs.length };
+          return { count: docs.length };
         },
       },
       appendDocuments: {
@@ -145,7 +142,7 @@ export function registerAppProtocol() {
           appendHtmlFragment(docsToMergedHtml(docs));
           setSaveStateText(`Appended ${docs.length} document(s) via app protocol`);
           saveDoc();
-          return { ok: true, count: docs.length };
+          return { count: docs.length };
         },
       },
       saveToStorage: {
@@ -156,12 +153,12 @@ export function registerAppProtocol() {
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           const title = getTitle();
           const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
           await storage.save(p.path as string, htmlContent);
           setSaveStateText(`Saved to storage: ${p.path}`);
-          return { ok: true, path: p.path, savedAt: nowLabel() };
+          return { path: p.path, savedAt: nowLabel() };
         },
       },
       loadFromStorage: {
@@ -175,7 +172,7 @@ export function registerAppProtocol() {
           },
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
 
           const candidatePaths = [
             ...(p.path ? [p.path as string] : []),
@@ -183,7 +180,7 @@ export function registerAppProtocol() {
           ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 
           if (!candidatePaths.length) {
-            return { ok: false, error: 'Provide path or paths' };
+            throw new AppCommandError('Provide path or paths');
           }
 
           const loadedDocs: BatchDocInput[] = [];
@@ -205,7 +202,7 @@ export function registerAppProtocol() {
 
           setSaveStateText(`Loaded ${loadedDocs.length} file(s) from storage`);
           saveDoc();
-          return { ok: true, count: loadedDocs.length, paths: candidatePaths, mode };
+          return { count: loadedDocs.length, paths: candidatePaths, mode };
         },
       },
       readStorageFile: {
@@ -219,10 +216,10 @@ export function registerAppProtocol() {
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           const readAs = ((p.as as string) || 'text') as StorageReadAs;
           const content = await storage.read(p.path as string, { as: readAs });
-          return { ok: true, path: p.path, as: readAs, content };
+          return { path: p.path, as: readAs, content };
         },
       },
       readStorageFiles: {
@@ -236,7 +233,7 @@ export function registerAppProtocol() {
           required: ['paths'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
 
           const paths = (Array.isArray(p.paths) ? (p.paths as string[]) : []).filter(
             (v): v is string => typeof v === 'string' && v.trim().length > 0,
@@ -250,7 +247,7 @@ export function registerAppProtocol() {
             })),
           );
 
-          return { ok: true, as: readAs, files };
+          return { as: readAs, files };
         },
       },
       newDocument: {
@@ -261,7 +258,6 @@ export function registerAppProtocol() {
           docTitleEl.value = 'Untitled Document';
           refreshStats();
           setSaveStateText('Unsaved new document');
-          return { ok: true };
         },
       },
       saveDraft: {
@@ -269,7 +265,7 @@ export function registerAppProtocol() {
         params: { type: 'object', properties: {} },
         handler: () => {
           saveDoc();
-          return { ok: true, savedAt: nowLabel() };
+          return { savedAt: nowLabel() };
         },
       },
       importFromWindow: {
@@ -284,10 +280,10 @@ export function registerAppProtocol() {
           required: ['windowId'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!windows) return { ok: false, error: 'yaar.windows API not available' };
+          if (!windows) throw new AppCommandError('yaar.windows API not available');
 
           const result = await (windows as any).read(p.windowId as string, { includeImage: (p.includeImage as boolean) ?? false });
-          if (!result) return { ok: false, error: `Window "${p.windowId}" not found or returned no data` };
+          if (!result) throw new AppCommandError(`Window "${p.windowId}" not found or returned no data`);
 
           const mode = (p.mode as string) ?? 'append';
           let html = '';
@@ -300,7 +296,7 @@ export function registerAppProtocol() {
             html += `<p><img src="${result.image}" alt="Window screenshot: ${p.windowId}" style="max-width:100%;border:1px solid #ddd;border-radius:4px;"></p>`;
           }
 
-          if (!html) return { ok: false, error: 'No content to import from window' };
+          if (!html) throw new AppCommandError('No content to import from window');
 
           if (mode === 'replace') {
             setEditorFromHtml(html);
@@ -310,7 +306,7 @@ export function registerAppProtocol() {
 
           setSaveStateText(`Imported from window: ${p.windowId}`);
           saveDoc();
-          return { ok: true, windowId: p.windowId, mode, hasImage: !!(p.includeImage && result.image) };
+          return { windowId: p.windowId, mode, hasImage: !!(p.includeImage && result.image) };
         },
       },
     },

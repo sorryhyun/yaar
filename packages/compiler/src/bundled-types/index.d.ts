@@ -370,6 +370,14 @@ declare module '@bundled/yaar' {
   /** Extract a human-readable message from any thrown value. */
   export function errMsg(e: unknown): string;
 
+  /**
+   * Throw from a command handler to signal failure to the agent.
+   * The message is delivered as-is — no stack trace, no noise.
+   */
+  export class AppCommandError extends Error {
+    constructor(message: string);
+  }
+
   /** Show a toast notification using the built-in `y-toast` CSS classes. Auto-dismisses after `ms` (default 3000). */
   export function showToast(msg: string, type?: 'info' | 'success' | 'error', ms?: number): void;
 

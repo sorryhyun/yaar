@@ -50,7 +50,7 @@ export function registerAppProtocol() {
           }
           refreshAll();
           scheduleAutosave();
-          return { ok: true, count: Object.keys(p.cells).length };
+          return { count: Object.keys(p.cells).length };
         },
       },
       setStyles: {
@@ -67,7 +67,6 @@ export function registerAppProtocol() {
           }
           refreshAll();
           scheduleAutosave();
-          return { ok: true };
         },
       },
       selectCell: {
@@ -85,7 +84,6 @@ export function registerAppProtocol() {
           const end = (p.end ?? start).toUpperCase();
           mutable.selected = start;
           setSelection(start, end, true);
-          return { ok: true };
         },
       },
       clearRange: {
@@ -104,7 +102,7 @@ export function registerAppProtocol() {
           }
           refreshAll();
           scheduleAutosave();
-          return { ok: true, cleared: count };
+          return { cleared: count };
         },
       },
       importWorkbook: {
@@ -112,7 +110,6 @@ export function registerAppProtocol() {
         params: { type: 'object', properties: { data: { type: 'object' } }, required: ['data'] },
         handler: (p: { data: any }) => {
           importWorkbook(p.data);
-          return { ok: true };
         },
       },
     },

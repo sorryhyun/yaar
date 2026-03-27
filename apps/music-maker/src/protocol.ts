@@ -39,12 +39,12 @@ export function registerProtocol(
       play: {
         description: 'Start playback',
         params: { type: 'object', properties: {} },
-        handler: () => { onPlay(); return { ok: true }; },
+        handler: () => { onPlay(); },
       },
       stop: {
         description: 'Stop playback',
         params: { type: 'object', properties: {} },
-        handler: () => { onStop(); return { ok: true }; },
+        handler: () => { onStop(); },
       },
       setBpm: {
         description: 'Set BPM',
@@ -52,7 +52,7 @@ export function registerProtocol(
         handler: (p: { bpm: number }) => {
           setBpm(p.bpm);
           setBpmValue(p.bpm);
-          return { ok: true, bpm: p.bpm };
+          return { bpm: p.bpm };
         },
       },
       setScale: {
@@ -60,7 +60,6 @@ export function registerProtocol(
         params: { type: 'object', properties: { scale: { type: 'string' } }, required: ['scale'] },
         handler: (p: { scale: string }) => {
           setScale(p.scale as ScaleType);
-          return { ok: true };
         },
       },
       generateMelody: {
@@ -70,7 +69,7 @@ export function registerProtocol(
           const notes = generateMelody(scale(), chordProgression());
           setMelodyPattern(notes);
           scheduleMelody(notes);
-          return { ok: true, noteCount: notes.length };
+          return { noteCount: notes.length };
         },
       },
       setDrumStep: {
@@ -91,7 +90,6 @@ export function registerProtocol(
           pat[p.track] = arr;
           setDrumPattern(pat);
           scheduleDrums(pat);
-          return { ok: true };
         },
       },
       randomizeDrums: {
@@ -101,7 +99,6 @@ export function registerProtocol(
           const pat = randomizeDrumPattern();
           setDrumPattern(pat);
           scheduleDrums(pat);
-          return { ok: true };
         },
       },
     },

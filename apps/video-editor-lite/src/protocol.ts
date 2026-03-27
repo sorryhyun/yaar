@@ -7,26 +7,26 @@ export interface EditorControllerApi {
   getPlaybackState: () => { playing: boolean; paused: boolean; playbackRate: number; loopPreview: boolean };
   getTimeline: () => { currentTime: number; duration: number };
   getTrimRange: () => { trimStart: number; trimEnd: number; selectedDuration: number };
-  loadSource: (params: { url?: string; path?: string }) => { ok: true; source: string };
-  play: () => Promise<{ ok: true }>;
-  pause: () => { ok: true };
-  seek: (time: number) => { ok: true; currentTime: number };
-  setPlaybackRate: (rate: number) => { ok: true; playbackRate: number };
+  loadSource: (params: { url?: string; path?: string }) => { source: string };
+  play: () => Promise<void>;
+  pause: () => void;
+  seek: (time: number) => { currentTime: number };
+  setPlaybackRate: (rate: number) => { playbackRate: number };
   // Creator mode API
-  createComposition: (params: { width?: number; height?: number; fps?: number; durationInFrames?: number }) => { ok: true; config: Composition['config'] };
-  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps; layerId?: string }) => { ok: true; sceneId: string };
-  updateScene: (params: { id: string; from?: number; durationInFrames?: number; props?: SceneProps }) => { ok: true };
-  removeScene: (params: { id: string }) => { ok: true };
-  reorderScenes: (params: { ids: string[] }) => { ok: true };
+  createComposition: (params: { width?: number; height?: number; fps?: number; durationInFrames?: number }) => { config: Composition['config'] };
+  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps; layerId?: string }) => { sceneId: string };
+  updateScene: (params: { id: string; from?: number; durationInFrames?: number; props?: SceneProps }) => void;
+  removeScene: (params: { id: string }) => void;
+  reorderScenes: (params: { ids: string[] }) => void;
   getComposition: () => { composition: unknown };
-  preview: () => { ok: true };
-  exportVideo: () => Promise<{ ok: true }>;
-  addLayer: (params: { name?: string; index?: number }) => { ok: true; layerId: string; layerName: string };
-  removeLayer: (params: { id: string }) => { ok: true };
-  updateLayer: (params: { id: string; name?: string; visible?: boolean; locked?: boolean }) => { ok: true };
-  reorderLayers: (params: { ids: string[] }) => { ok: true };
-  selectLayer: (params: { id: string }) => { ok: true };
-  moveSceneToLayer: (params: { sceneId: string; layerId: string }) => { ok: true };
+  preview: () => void;
+  exportVideo: () => Promise<void>;
+  addLayer: (params: { name?: string; index?: number }) => { layerId: string; layerName: string };
+  removeLayer: (params: { id: string }) => void;
+  updateLayer: (params: { id: string; name?: string; visible?: boolean; locked?: boolean }) => void;
+  reorderLayers: (params: { ids: string[] }) => void;
+  selectLayer: (params: { id: string }) => void;
+  moveSceneToLayer: (params: { sceneId: string; layerId: string }) => void;
   getLayers: () => { layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; sceneIds: string[] }> };
 }
 

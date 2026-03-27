@@ -1,5 +1,5 @@
 import { state, setState } from './store';
-import { app } from '@bundled/yaar';
+import { app, AppCommandError } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
 
 export function registerProtocol() {
@@ -31,18 +31,17 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           const creds = await saveCredentials(p.username as string, p.password as string);
           setState('savedCredentials', creds);
-          return { ok: true, username: creds.username, savedAt: creds.savedAt };
+          return { username: creds.username, savedAt: creds.savedAt };
         },
       },
       loadCredentials: {
-        description: '저장된 자격증명을 불러옵니다. 없으면 ok: false 반환.',
+        description: '저장된 자격증명을 불러옵니다. 없으면 에러를 던집니다.',
         params: { type: 'object', properties: {} },
         handler: async () => {
           const creds = await loadCredentials();
-          if (creds) setState('savedCredentials', creds);
-          return creds
-            ? { ok: true, username: creds.username, savedAt: creds.savedAt }
-            : { ok: false, message: '저장된 자격증명 없음' };
+          if (!creds) throw new AppCommandError('저장된 자격증명 없음');
+          setState('savedCredentials', creds);
+          return { username: creds.username, savedAt: creds.savedAt };
         },
       },
       setRecommendations: {
@@ -77,7 +76,6 @@ export function registerProtocol() {
             bestPostReason: bestPost?.reason ?? null,
             analyzedAt: new Date(),
           });
-          return { ok: true };
         },
       },
     },

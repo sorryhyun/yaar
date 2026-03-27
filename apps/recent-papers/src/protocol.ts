@@ -51,7 +51,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
         params: { type: 'object', properties: {} },
         handler: async () => {
           await loadPapers();
-          return { ok: true, count: getPapers().length };
+          return { count: getPapers().length };
         },
       },
       recommendTop2Today: {
@@ -60,7 +60,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
         handler: async () => {
           if (!getSourcePapers().length) await loadPapers();
           requestRecommendationsFromAgent('app-command');
-          return { ok: true, queued: true, candidateCount: getPapers().length };
+          return { queued: true, candidateCount: getPapers().length };
         },
       },
       fetchPaperDetails: {
@@ -72,7 +72,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
         },
         handler: async (p: Record<string, unknown>) => {
           const detail = await fetchPaperDetailsById(p.id as string, paperDetailsCache);
-          return { ok: true, detail };
+          return { detail };
         },
       },
       fetchPaperDetailsBatch: {
@@ -92,7 +92,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
               details.push({ id, error: errMsg(e) });
             }
           }
-          return { ok: true, count: details.length, details };
+          return { count: details.length, details };
         },
       },
       setRecommendations: {
@@ -131,7 +131,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
               url: String(r.url || ''),
             })),
           );
-          return { ok: true, count: getRecommendations().length };
+          return { count: getRecommendations().length };
         },
       },
     },

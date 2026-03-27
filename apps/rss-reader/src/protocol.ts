@@ -3,10 +3,10 @@ import { state } from './store';
 import { app } from '@bundled/yaar';
 
 export interface ProtocolActions {
-  refresh: () => Promise<{ ok: boolean; totalUnread: number }>;
-  markAllRead: () => { ok: boolean };
-  selectFeed: (feedId: string) => { ok: boolean };
-  addFeed: (url: string, name?: string) => Promise<{ ok: boolean; feedId: string }>;
+  refresh: () => Promise<{ totalUnread: number }>;
+  markAllRead: () => void;
+  selectFeed: (feedId: string) => void;
+  addFeed: (url: string, name?: string) => Promise<{ feedId: string }>;
 }
 
 function getTotalUnread(): number {

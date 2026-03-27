@@ -72,7 +72,7 @@ if (app) {
         handler: async (p: { domain: string; autoRefresh?: boolean }) => {
           setDomain(p.domain);
           if (p.autoRefresh !== false) await refreshData();
-          return { ok: true, domain: apiBase() };
+          return { domain: apiBase() };
         },
       },
       refresh: {
@@ -80,7 +80,7 @@ if (app) {
         params: { type: 'object', properties: {} },
         handler: async () => {
           await refreshData();
-          return { ok: true, marketCount: marketApps().length, installedCount: installedApps().length };
+          return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
       },
       setData: {
@@ -98,7 +98,7 @@ if (app) {
           if (p.installedApps) setInstalledApps(p.installedApps);
           if (p.status) setStatus(p.status);
           else touch();
-          return { ok: true, marketCount: marketApps().length, installedCount: installedApps().length };
+          return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
       },
       setStatus: {
@@ -110,7 +110,6 @@ if (app) {
         },
         handler: (p: { status: string }) => {
           setStatus(p.status);
-          return { ok: true };
         },
       },
       setHideInstalled: {
@@ -122,7 +121,7 @@ if (app) {
         },
         handler: (p: { hide: boolean }) => {
           setHideInstalled(p.hide);
-          return { ok: true, hideInstalled: hideInstalled() };
+          return { hideInstalled: hideInstalled() };
         },
       },
       clearData: {
@@ -132,7 +131,6 @@ if (app) {
           setMarketApps([]);
           setInstalledApps([]);
           setStatus('Cleared');
-          return { ok: true };
         },
       },
     },

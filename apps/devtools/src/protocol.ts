@@ -1,5 +1,5 @@
 export {};
-import { app, appStorage, invoke, read, describe, list, errMsg } from '@bundled/yaar';
+import { app, appStorage, invoke, read, describe, list, errMsg, AppCommandError } from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
 import {
   activeProject,
@@ -104,7 +104,7 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const id = await createProject(String(p.name));
-          return { ok: true, projectId: id };
+          return { projectId: id };
         },
       },
       openProject: {
@@ -117,9 +117,8 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           await openProject(String(p.id));
           const proj = activeProject();
-          if (!proj) return { ok: false, error: 'Project not found' };
+          if (!proj) throw new AppCommandError('Project not found');
           return {
-            ok: true,
             project: { id: proj.id, name: proj.name },
             files: files().map((f) => f.path),
           };
@@ -134,7 +133,6 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           await deleteProject(String(p.id));
-          return { ok: true };
         },
       },
       openFile: {
@@ -150,9 +148,9 @@ export function registerProtocol() {
           const paths: string[] = [];
           if (Array.isArray(p.files)) paths.push(...p.files.map(String));
           if (p.path) paths.push(String(p.path));
-          if (paths.length === 0) return { ok: false, error: 'Provide path or files[]' };
+          if (paths.length === 0) throw new AppCommandError('Provide path or files[]');
           for (const fp of paths) await openFile(fp);
-          return { ok: true, opened: paths };
+          return { opened: paths };
         },
       },
       readFile: {
@@ -194,11 +192,11 @@ export function registerProtocol() {
           if (paths.length === 1) {
             // Single file: return flat result for backwards compat
             const r = results[0];
-            return { ok: true, path: r.path, content: r.content, totalLines: r.totalLines };
+            return { path: r.path, content: r.content, totalLines: r.totalLines };
           }
           // Multiple files: return array + concatenated content
           const combined = results.map((r) => r.content).join('\n\n');
-          return { ok: true, files: results, combined };
+          return { files: results, combined };
         },
       },
       writeFile: {
@@ -213,7 +211,6 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           await writeFile(String(p.path), String(p.content));
-          return { ok: true };
         },
       },
       editFile: {
@@ -231,10 +228,9 @@ export function registerProtocol() {
           const search = String(p.search ?? p.oldString);
           const replace = String(p.replace ?? p.newString);
           if (!search || search === 'undefined')
-            return { ok: false, error: 'Missing search string' };
+            throw new AppCommandError('Missing search string');
           const changed = await editFile(String(p.path), search, replace);
-          if (!changed) return { ok: false, error: 'Search string not found in file' };
-          return { ok: true };
+          if (!changed) throw new AppCommandError('Search string not found in file');
         },
       },
       deleteFile: {
@@ -246,7 +242,6 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           await deleteFile(String(p.path));
-          return { ok: true };
         },
       },
       copyFile: {
@@ -266,12 +261,12 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           const from = String(p.from);
           const to   = String(p.to);
-          if (from === to) return { ok: false, error: 'Source and destination are the same path' };
+          if (from === to) throw new AppCommandError('Source and destination are the same path');
           try {
             await copyFile(from, to);
-            return { ok: true, from, to };
+            return { from, to };
           } catch (err) {
-            return { ok: false, error: errMsg(err) };
+            throw new AppCommandError(errMsg(err));
           }
         },
       },
@@ -287,7 +282,7 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
-          return { ok: true, ...result };
+          return result;
         },
       },
       compile: {
@@ -298,7 +293,6 @@ export function registerProtocol() {
           const status = compileStatus();
           const errors = compileErrors();
           return {
-            ok: true,
             status,
             previewUrl: previewUrl(),
             ...(status === 'error' && errors.length > 0 ? { errors } : {}),
@@ -310,7 +304,7 @@ export function registerProtocol() {
         params: { type: 'object', properties: {} },
         handler: async () => {
           await typecheck();
-          return { ok: true, diagnostics: diagnostics() };
+          return { diagnostics: diagnostics() };
         },
       },
       deploy: {
@@ -332,7 +326,6 @@ export function registerProtocol() {
             icon: p.icon ? String(p.icon) : undefined,
             description: p.description ? String(p.description) : undefined,
           });
-          return { ok: true };
         },
       },
       preview: {
@@ -340,7 +333,7 @@ export function registerProtocol() {
         params: { type: 'object', properties: {} },
         handler: async () => {
           const url = previewUrl();
-          if (!url) return { ok: false, error: 'No compiled output. Run compile first.' };
+          if (!url) throw new AppCommandError('No compiled output. Run compile first.');
           const proj = activeProject();
           const name = proj?.name ?? 'Preview';
           // Read project's app.json to get declared permissions for the preview iframe
@@ -360,7 +353,7 @@ export function registerProtocol() {
             ...(permissions ? { permissions } : {}),
           });
           if (result?.windowId) setPreviewWindowId(result.windowId);
-          return { ok: true, previewUrl: url, ...result };
+          return { previewUrl: url, ...result };
         },
       },
       viewPreview: {
@@ -368,13 +361,13 @@ export function registerProtocol() {
         params: { type: 'object', properties: {} },
         handler: async () => {
           const wid = previewWindowId();
-          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
           try {
             const info = await read<Record<string, unknown>>(`yaar://windows/${wid}`);
-            return { ok: true, ...info };
+            return info;
           } catch {
             setPreviewWindowId(null);
-            return { ok: false, error: 'Preview window no longer exists.' };
+            throw new AppCommandError('Preview window no longer exists.');
           }
         },
       },
@@ -387,14 +380,14 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const wid = previewWindowId();
-          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
           try {
             return await invoke(`yaar://windows/${wid}`, {
               action: 'app_query',
               stateKey: String(p.stateKey),
             });
           } catch {
-            return { ok: false, error: 'Preview window not responding.' };
+            throw new AppCommandError('Preview window not responding.');
           }
         },
       },
@@ -410,7 +403,7 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const wid = previewWindowId();
-          if (!wid) return { ok: false, error: 'No preview window open. Run preview first.' };
+          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
           try {
             return await invoke(`yaar://windows/${wid}`, {
               action: 'app_command',
@@ -418,7 +411,7 @@ export function registerProtocol() {
               params: (p.params as Record<string, unknown>) ?? {},
             });
           } catch {
-            return { ok: false, error: 'Preview window not responding.' };
+            throw new AppCommandError('Preview window not responding.');
           }
         },
       },
@@ -434,9 +427,9 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           try {
             const result = await describe(String(p.uri));
-            return { ok: true, result };
+            return { result };
           } catch {
-            return { ok: false, error: `Failed to describe URI: ${p.uri}` };
+            throw new AppCommandError(`Failed to describe URI: ${p.uri}`);
           }
         },
       },
@@ -452,9 +445,9 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           try {
             const result = await list(String(p.uri));
-            return { ok: true, items: result };
+            return { items: result };
           } catch {
-            return { ok: false, error: `Failed to list URI: ${p.uri}` };
+            throw new AppCommandError(`Failed to list URI: ${p.uri}`);
           }
         },
       },
@@ -471,7 +464,6 @@ export function registerProtocol() {
           const projectId = await cloneApp(String(p.appId));
           const proj = activeProject();
           return {
-            ok: true,
             projectId,
             project: proj ? { id: proj.id, name: proj.name } : undefined,
             files: files().map((f) => f.path),
@@ -490,9 +482,9 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           try {
             const result = await bundledLibraries(String(p.name));
-            return { ok: true, ...result };
+            return result;
           } catch (err) {
-            return { ok: false, error: errMsg(err) };
+            throw new AppCommandError(errMsg(err));
           }
         },
       },
@@ -501,7 +493,6 @@ export function registerProtocol() {
         params: { type: 'object', properties: {} },
         handler: () => {
           clearConsoleLogs();
-          return { ok: true };
         },
       },
     },

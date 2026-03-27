@@ -5,9 +5,16 @@
 import type { AppProtocolRequest } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { okJson, error } from '../../handlers/utils.js';
+import { ok, okJson, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+
+/** Wrap an unknown app protocol value into the appropriate VerbResult. */
+function wrapAppValue(value: unknown): VerbResult {
+  if (value != null && typeof value === 'object') return okJson(value as object);
+  if (value === undefined || value === null) return ok('Done.');
+  return ok(String(value));
+}
 
 /** Ensure app protocol is ready, waiting if needed. Returns error on timeout. */
 async function requireAppReady(
@@ -47,7 +54,7 @@ export async function handleAppQuery(
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
     if (response.manifest) enrichManifestWithUris(response.manifest, win.id);
-    return okJson(response.manifest);
+    return wrapAppValue(response.manifest);
   }
 
   const response = await actionEmitter.emitAppProtocolRequest(
@@ -58,7 +65,7 @@ export async function handleAppQuery(
   if (!response) return error('App did not respond (timeout).');
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  return okJson(response.data);
+  return wrapAppValue(response.data);
 }
 
 /** Handle app_command: send a command to an app via the app protocol. */
@@ -87,5 +94,5 @@ export async function handleAppCommand(
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   windowState.recordAppCommand(windowId, request);
-  return okJson(response.result);
+  return wrapAppValue(response.result);
 }

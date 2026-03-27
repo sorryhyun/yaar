@@ -28,7 +28,7 @@ const IMAGE_ITEMS_SCHEMA = {
 function processImages(inputs: RawImageInput[], replace: boolean) {
   const items = inputs.map(normalizeInputImage).filter(Boolean) as ImageItem[];
   setImages(items, replace);
-  return { ok: true, count: items.length };
+  return { count: items.length };
 }
 
 export function setupProtocol(appApi: AppApi): void {
@@ -72,7 +72,7 @@ export function setupProtocol(appApi: AppApi): void {
         },
         handler: (p: { paths: string[]; replace?: boolean }) => {
           loadStoragePaths(p.paths, p.replace ?? false);
-          return { ok: true, count: p.paths.length };
+          return { count: p.paths.length };
         },
       },
       loadStorageAll: {
@@ -80,7 +80,7 @@ export function setupProtocol(appApi: AppApi): void {
         params: { type: 'object', properties: {} },
         handler: async () => {
           await loadAllStorageImages();
-          return { ok: true, count: images().length };
+          return { count: images().length };
         },
       },
       setLayout: {
@@ -97,7 +97,7 @@ export function setupProtocol(appApi: AppApi): void {
           setMode(p.mode);
           if (typeof p.columns === 'number') setColumns(clampColumns(p.columns));
           setStatus(makeStatusText(images().length, mode(), columns()));
-          return { ok: true, layout: { mode: mode(), columns: columns() } };
+          return { layout: { mode: mode(), columns: columns() } };
         },
       },
       selectImages: {
@@ -112,13 +112,13 @@ export function setupProtocol(appApi: AppApi): void {
           const valid = new Set(p.ids.filter((id) => imgs.some((img) => img.id === id)));
           if (!valid.size && imgs.length) valid.add(imgs[0].id);
           setSelectedIds(valid);
-          return { ok: true, selectedIds: [...selectedIds()] };
+          return { selectedIds: [...selectedIds()] };
         },
       },
       clear: {
         description: 'Clear all loaded images.',
         params: { type: 'object', properties: {} },
-        handler: () => { setImages([], true); return { ok: true }; },
+        handler: () => { setImages([], true); },
       },
     },
   });

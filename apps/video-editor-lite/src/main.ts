@@ -454,15 +454,13 @@ registerProtocol({
     if (!loaded) {
       throw new Error('Unable to load source.');
     }
-    return { ok: true as const, source: targetUrl };
+    return { source: targetUrl };
   },
   play: async () => {
     await ui.video.play();
-    return { ok: true as const };
   },
   pause: () => {
     ui.video.pause();
-    return { ok: true as const };
   },
   seek: (time) => {
     if (!Number.isFinite(time)) {
@@ -473,7 +471,7 @@ registerProtocol({
       throw new Error('Load a video before seeking.');
     }
     ui.video.currentTime = clamp(time, 0, duration);
-    return { ok: true as const, currentTime: ui.video.currentTime };
+    return { currentTime: ui.video.currentTime };
   },
   setPlaybackRate: (rate) => {
     if (!ALLOWED_PLAYBACK_RATES.has(rate)) {
@@ -482,7 +480,7 @@ registerProtocol({
     ui.video.playbackRate = rate;
     store.setPlaybackRate(rate);
     persistPrefs({ playbackRate: rate });
-    return { ok: true as const, playbackRate: rate };
+    return { playbackRate: rate };
   },
 
   // Creator mode API
@@ -498,7 +496,7 @@ registerProtocol({
     store.setComposition(comp);
     store.setMode('create');
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const, config };
+    return { config };
   },
 
   addScene: (params) => {
@@ -510,7 +508,7 @@ registerProtocol({
       store.setSelectedLayer(params.layerId);
     }
     const id = creatorMode.addSceneToComposition(params.type, params.from, params.durationInFrames, params.props);
-    return { ok: true as const, sceneId: id };
+    return { sceneId: id };
   },
 
   updateScene: (params) => {
@@ -525,19 +523,16 @@ registerProtocol({
     const updated = createScene(existing.type, existing.id, from, dur, mergedProps);
     store.updateScene(params.id, updated);
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   removeScene: (params) => {
     store.removeScene(params.id);
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   reorderScenes: (params) => {
     store.reorderScenes(params.ids);
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   getComposition: () => {
@@ -574,12 +569,10 @@ registerProtocol({
       player.play();
       store.setCreatorPlaying(true);
     }
-    return { ok: true as const };
   },
 
   exportVideo: async () => {
     await creatorMode.handleCreatorExport();
-    return { ok: true as const };
   },
 
   addLayer: (params) => {
@@ -601,7 +594,7 @@ registerProtocol({
       store.reorderLayers(filteredIds);
     }
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const, layerId: newLayer.id, layerName: newLayer.name };
+    return { layerId: newLayer.id, layerName: newLayer.name };
   },
 
   removeLayer: (params) => {
@@ -612,7 +605,6 @@ registerProtocol({
     if (comp.layers.length <= 1) throw new Error('Cannot remove the last layer.');
     store.removeLayer(params.id);
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   updateLayer: (params) => {
@@ -626,7 +618,6 @@ registerProtocol({
     if (typeof params.locked === 'boolean') patch.locked = params.locked;
     store.updateLayer(params.id, patch);
     if (patch.visible !== undefined) creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   reorderLayers: (params) => {
@@ -634,7 +625,6 @@ registerProtocol({
     if (!comp) throw new Error('No composition.');
     store.reorderLayers(params.ids);
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   selectLayer: (params) => {
@@ -643,7 +633,6 @@ registerProtocol({
     const layer = comp.layers.find((l) => l.id === params.id);
     if (!layer) throw new Error(`Layer "${params.id}" not found.`);
     store.setSelectedLayer(params.id);
-    return { ok: true as const };
   },
 
   moveSceneToLayer: (params) => {
@@ -654,7 +643,7 @@ registerProtocol({
     // Find the scene
     const sourceLayer = comp.layers.find((l) => l.scenes.some((s) => s.id === params.sceneId));
     if (!sourceLayer) throw new Error(`Scene "${params.sceneId}" not found.`);
-    if (sourceLayer.id === params.layerId) return { ok: true as const }; // already there
+    if (sourceLayer.id === params.layerId) return; // already there
     const scene = sourceLayer.scenes.find((s) => s.id === params.sceneId)!;
     // Remove from source, add to target
     const newLayers = comp.layers.map((l) => {
@@ -664,7 +653,6 @@ registerProtocol({
     });
     store.composition[1]({ ...comp, layers: newLayers });
     creatorMode.syncPlayerToComposition();
-    return { ok: true as const };
   },
 
   getLayers: () => {

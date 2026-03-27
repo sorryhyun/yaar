@@ -2,7 +2,7 @@ import { normalizeAspectRatio } from './aspect-ratio';
 import { isFontSize, newSlide, normalizeDeck, normalizeSlideInput } from './deck-utils';
 import { isThemeId } from './theme';
 import type { Deck, FontSize, Slide, ThemeId } from './types';
-import { app, storage } from '@bundled/yaar';
+import { app, storage, AppCommandError } from '@bundled/yaar';
 
 // === Types used only in protocol ===
 type StorageReadMode = 'text' | 'json' | 'auto';
@@ -170,7 +170,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           'Replace the entire deck at once. All fields are normalized on write. ' +
           'Deck-level fontSize defaults to "md" if absent. ' +
           'Individual slides may include a fontSize field to override the deck-level setting per slide. ' +
-          'Returns { ok, slideCount }.',
+          'Returns { slideCount }.',
         params: {
           type: 'object',
           properties: {
@@ -214,7 +214,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.persist(false);
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
-          return { ok: true, slideCount: ctx.getDeck().slides.length };
+          return { slideCount: ctx.getDeck().slides.length };
         },
       },
       setSlides: {
@@ -223,7 +223,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           'In replace mode the existing slides are discarded and replaced with the provided array. ' +
           'In append mode the new slides are added after the last existing slide. ' +
           'Each slide may include an optional fontSize field to override the deck-level fontSize for that slide only. ' +
-          'Returns { ok, mode, slideCount }.',
+          'Returns { mode, slideCount }.',
         params: {
           type: 'object',
           properties: {
@@ -255,7 +255,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.persist(false);
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
-          return { ok: true, mode, slideCount: deck.slides.length };
+          return { mode, slideCount: deck.slides.length };
         },
       },
       appendSlides: {
@@ -263,7 +263,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           'Append one or more slides to the end of the deck and select the last appended slide. ' +
           'Equivalent to setSlides with mode "append". ' +
           'Each slide may include an optional fontSize field to override the deck-level fontSize for that slide only. ' +
-          'Returns { ok, appended, slideCount }.',
+          'Returns { appended, slideCount }.',
         params: {
           type: 'object',
           properties: {
@@ -286,11 +286,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
             ctx.bumpDeck();
             ctx.bumpActiveIndex();
           }
-          return { ok: true, appended: slides.length, slideCount: deck.slides.length };
+          return { appended: slides.length, slideCount: deck.slides.length };
         },
       },
       setActiveIndex: {
-        description: 'Select a slide by zero-based index. Clamped to valid range. Returns { ok, activeIndex }.',
+        description: 'Select a slide by zero-based index. Clamped to valid range. Returns { activeIndex }.',
         aliases: ['selectSlide', 'goToSlide', 'jumpToSlide'],
         params: { type: 'object', properties: { index: { type: 'number', description: 'Zero-based slide index.' } }, required: ['index'] },
         handler: (p: Record<string, unknown>) => {
@@ -298,13 +298,13 @@ export function registerProtocol(ctx: ProtocolContext): void {
           deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index as number), deck.slides.length - 1));
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
-          return { ok: true, activeIndex: deck.activeIndex };
+          return { activeIndex: deck.activeIndex };
         },
       },
       setTheme: {
         description:
           'Change the deck theme. Valid themeId values: "classic-light", "midnight-dark", "ocean", "sunset". ' +
-          'Returns { ok, themeId } or { ok: false, error } for invalid IDs.',
+          'Returns { themeId } or throws for invalid IDs.',
         params: {
           type: 'object',
           properties: {
@@ -323,18 +323,18 @@ export function registerProtocol(ctx: ProtocolContext): void {
         },
         handler: (p: Record<string, unknown>) => {
           const themeId = p.themeId as ThemeId;
-          if (!isThemeId(themeId)) return { ok: false, error: `Invalid themeId: ${String(themeId)}` };
+          if (!isThemeId(themeId)) throw new AppCommandError(`Invalid themeId: ${String(themeId)}`);
           ctx.getDeck().themeId = themeId;
           ctx.persist(false);
           ctx.bumpDeck();
-          return { ok: true, themeId: ctx.getDeck().themeId };
+          return { themeId: ctx.getDeck().themeId };
         },
       },
       setAspectRatio: {
         description:
           'Set slide aspect ratio. Pass a "W:H" string. ' +
           'Named presets: "16:9" (widescreen), "4:3" (standard), "1:1" (square). ' +
-          'Custom: any "W:H" like "3:2" or "2.35:1". Returns { ok, aspectRatio }.',
+          'Custom: any "W:H" like "3:2" or "2.35:1". Returns { aspectRatio }.',
         params: {
           type: 'object',
           properties: {
@@ -349,7 +349,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.getDeck().aspectRatio = normalizeAspectRatio(p.aspectRatio as string);
           ctx.persist(false);
           ctx.bumpDeck();
-          return { ok: true, aspectRatio: ctx.getDeck().aspectRatio };
+          return { aspectRatio: ctx.getDeck().aspectRatio };
         },
       },
       setFontSize: {
@@ -357,7 +357,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           'Set global font size scale for all slides. ' +
           'Scales heading and body text proportionally via a CSS multiplier. ' +
           '"sm" = 0.78x, "md" = 1.0x (default), "lg" = 1.22x, "xl" = 1.5x. ' +
-          'Returns { ok, fontSize } or { ok: false, error } for invalid values.',
+          'Returns { fontSize } or throws for invalid values.',
         params: {
           type: 'object',
           properties: {
@@ -371,31 +371,31 @@ export function registerProtocol(ctx: ProtocolContext): void {
         },
         handler: (p: Record<string, unknown>) => {
           const size = p.size as FontSize;
-          if (!isFontSize(size)) return { ok: false, error: `Invalid size: ${String(size)}` };
+          if (!isFontSize(size)) throw new AppCommandError(`Invalid size: ${String(size)}`);
           ctx.getDeck().fontSize = size;
           ctx.persist(false);
           ctx.bumpDeck();
-          return { ok: true, fontSize: ctx.getDeck().fontSize };
+          return { fontSize: ctx.getDeck().fontSize };
         },
       },
       saveToStorage: {
-        description: 'Save current deck JSON to YAAR storage at the given path. Returns { ok, path, slideCount }.',
+        description: 'Save current deck JSON to YAAR storage at the given path. Returns { path, slideCount }.',
         params: {
           type: 'object',
           properties: { path: { type: 'string', description: 'Storage path, e.g. "my-deck.json".' } },
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           await storage.save(p.path as string, JSON.stringify(ctx.getDeck(), null, 2));
-          return { ok: true, path: p.path, slideCount: ctx.getDeck().slides.length };
+          return { path: p.path, slideCount: ctx.getDeck().slides.length };
         },
       },
       loadFromStorage: {
         description:
           'Load one or many deck JSON files from YAAR storage and merge into the current deck. ' +
           'Accepts path (single) and/or paths (array). mode "replace" (default) resets slides; ' +
-          '"append" adds to existing. Returns { ok, mode, loaded, paths }.',
+          '"append" adds to existing. Returns { mode, loaded, paths }.',
         params: {
           type: 'object',
           properties: {
@@ -405,12 +405,12 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           const candidatePaths = [
             ...(p.path ? [p.path as string] : []),
             ...(Array.isArray(p.paths) ? p.paths as string[] : []),
           ].filter(Boolean);
-          if (!candidatePaths.length) return { ok: false, error: 'Provide path or paths' };
+          if (!candidatePaths.length) throw new AppCommandError('Provide path or paths');
           const deck = ctx.getDeck();
           const loadedSlides: Slide[] = [];
           let firstTitle = deck.title;
@@ -435,11 +435,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.persist(false);
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
-          return { ok: true, mode, loaded: loadedSlides.length, paths: candidatePaths };
+          return { mode, loaded: loadedSlides.length, paths: candidatePaths };
         },
       },
       readStorageFile: {
-        description: 'Read a single file from YAAR storage and return its content. Returns { ok, path, as, content }.',
+        description: 'Read a single file from YAAR storage and return its content. Returns { path, as, content }.',
         params: {
           type: 'object',
           properties: {
@@ -449,14 +449,14 @@ export function registerProtocol(ctx: ProtocolContext): void {
           required: ['path'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           const as = (p.as as StorageReadMode) || 'text';
           const content = await storage.read(p.path as string, { as });
-          return { ok: true, path: p.path, as, content };
+          return { path: p.path, as, content };
         },
       },
       readStorageFiles: {
-        description: 'Read multiple files from YAAR storage. Returns { ok, as, files: [{ path, content }] }.',
+        description: 'Read multiple files from YAAR storage. Returns { as, files: [{ path, content }] }.',
         params: {
           type: 'object',
           properties: {
@@ -466,7 +466,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           required: ['paths'],
         },
         handler: async (p: Record<string, unknown>) => {
-          if (!storage) return { ok: false, error: 'Storage API not available' };
+          if (!storage) throw new AppCommandError('Storage API not available');
           const as = (p.as as StorageReadMode) || 'text';
           const paths = (Array.isArray(p.paths) ? p.paths as string[] : []).filter(Boolean);
           const files = await Promise.all(
@@ -475,7 +475,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
               content: await storage!.read(path, { as }),
             })),
           );
-          return { ok: true, as, files };
+          return { as, files };
         },
       },
     },

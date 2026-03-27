@@ -34,7 +34,6 @@ export function registerProtocol() {
           finishWithMessage(
             makeMessage('assistant', p.content as string, 'done', p.id as string | undefined),
           );
-          return { ok: true };
         },
       },
       setError: {
@@ -49,7 +48,6 @@ export function registerProtocol() {
           finishWithMessage(
             makeMessage('assistant', p.content as string, 'error'),
           );
-          return { ok: true };
         },
       },
     },
