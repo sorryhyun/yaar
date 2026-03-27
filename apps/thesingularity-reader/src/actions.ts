@@ -16,13 +16,11 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let fetchVersion = 0;
 
-/** 타이머를 모두 정지 */
 export function clearTimers(): void {
   if (refreshTimer) clearInterval(refreshTimer);
   if (countdownTimer) clearInterval(countdownTimer);
 }
 
-/** 게시물 목록 새로고침 */
 export async function doRefresh(): Promise<void> {
   if (state.loading) return;
   setState('error', null);
@@ -37,7 +35,6 @@ export async function doRefresh(): Promise<void> {
   );
 }
 
-/** 자동 새로고침 타이머 시작 */
 export function startRefreshTimer(): void {
   if (refreshTimer) clearInterval(refreshTimer);
   if (countdownTimer) clearInterval(countdownTimer);
@@ -52,7 +49,6 @@ export function startRefreshTimer(): void {
   }, 1000);
 }
 
-/** 게시물 선택 → 본문 + 댓글 로드 */
 export async function selectPost(post: Post): Promise<void> {
   if (state.selectedPost?.id === post.id && state.postContent) return;
 
@@ -86,7 +82,6 @@ export async function selectPost(post: Post): Promise<void> {
   }
 }
 
-/** AI 분석 트리거 */
 export async function triggerAnalysis(): Promise<void> {
   if (state.recLoading) return;
   const currentPosts = state.posts;
@@ -113,7 +108,6 @@ export async function triggerAnalysis(): Promise<void> {
   }
 }
 
-/** 스크린샷 찍기 — 게시물 탭에서 바로 캡처 */
 export async function takeScreenshot(post: Post): Promise<void> {
   setState({ screenshotLoading: true, screenshotSrc: null });
   try {
@@ -133,24 +127,15 @@ export async function takeScreenshot(post: Post): Promise<void> {
   }
 }
 
-// =====================================================================
-// 로그인 / 로그아웃 / 세션 초기화
-// =====================================================================
-
-/**
- * 앱 시작 시 쿠키 → appStorage 순으로 세션 복원 후 자동 로그인
- * getCookies()로 dc_session_token이 있으면 바로 로그인 상태로 복원
- */
+/** Restore login state from saved session on app startup */
 export async function initLoginStatus(): Promise<void> {
   try {
-    // loadSession() 내부에서 getCookies() → appStorage 순으로 자동 복원
     const session = await loadSession();
     if (!session?.dcPaPP) {
       setState('isLoggedIn', false);
       return;
     }
 
-    // 세션 username을 savedCredentials에 반영 (UI 표시용)
     if (session.username && !state.savedCredentials?.username) {
       setState('savedCredentials', {
         username: session.username,
@@ -159,7 +144,6 @@ export async function initLoginStatus(): Promise<void> {
       });
     }
 
-    // 저장된 세션이 있으면 실제 로그인 상태 확인
     setState('loginLoading', true);
     const ok = await checkLoginStatus();
     setState({ isLoggedIn: ok, loginLoading: false });
@@ -172,10 +156,6 @@ export async function initLoginStatus(): Promise<void> {
   }
 }
 
-/**
- * 로그인 실행
- * username/password를 받아서 DC에 로그인, 성공 시 세션 저장
- */
 export async function doLogin(username?: string, password?: string): Promise<void> {
   const u = username ?? state.savedCredentials?.username ?? '';
   const p = password ?? state.savedCredentials?.password ?? '';
@@ -203,7 +183,6 @@ export async function doLogin(username?: string, password?: string): Promise<voi
   }
 }
 
-/** 로그아웃 */
 export async function doLogout(): Promise<void> {
   setState('loginLoading', true);
   try {
@@ -216,10 +195,6 @@ export async function doLogout(): Promise<void> {
     setState('loginLoading', false);
   }
 }
-
-// =====================================================================
-// 댓글 제출
-// =====================================================================
 
 export async function submitComment(): Promise<void> {
   const post = state.selectedPost;
@@ -237,13 +212,11 @@ export async function submitComment(): Promise<void> {
   const tabId = postTabId(post.num);
   setState('commentSubmitting', true);
   try {
-    // 메인 탭의 로그인 쿠키를 게시물 탭으로 복사
     await syncCookiesToTab(tabId);
     const result = await postCommentToDC(post, text, tabId);
     if (result.ok) {
       setState('commentText', '');
       showToast('💬 댓글이 등록되었습니다!', 'success');
-      // 댓글 목록 리프레시 — comment_write_ok AJAX 완료 후이므로 바로 가능
       try {
         const { comments } = await fetchPostDetail(post);
         setState('comments', comments);

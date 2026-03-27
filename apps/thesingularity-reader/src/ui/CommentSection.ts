@@ -4,7 +4,6 @@ import { state, setState } from '../store';
 import { submitComment } from '../actions';
 import type { Comment } from '../types';
 
-/** 닉네임 타입 및지 */
 function NickBadge(props: { nickType?: Comment['nickType'] }) {
   if (props.nickType === 'sub-gonick') {
     return html`<span class="nick-badge nick-badge-manager" title="운영진/매니저">★</span>`;
@@ -40,7 +39,6 @@ function CommentItem(props: { comment: Comment }) {
   `;
 }
 
-/** 댓글 작성 폼 (isLoggedIn일 때만 활성화) */
 function CommentWriteForm() {
   return html`
     <div class="comment-write-wrap">

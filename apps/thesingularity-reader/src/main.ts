@@ -18,13 +18,11 @@ function App() {
   onMount(async () => {
     registerProtocol();
 
-    // 저장된 자격증명 불러오기
     const creds = await loadCredentials();
     if (creds) {
       setState('savedCredentials', creds);
     }
 
-    // 로그인 상태 비동기 확인 (앉 안 기다림)
     initLoginStatus().catch(() => {});
 
     await doRefresh();

@@ -106,7 +106,6 @@ export function registerWindowHandlers(
         y: { type: 'number' },
         width: { type: 'number' },
         height: { type: 'number' },
-        appId: { type: 'string' },
         minimized: { type: 'boolean' },
         jsonfile: { type: 'string' },
         // update fields
@@ -256,14 +255,15 @@ export function registerWindowHandlers(
           if (!pool) return error('Session not initialized.');
 
           const messageId = `agent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          const taggedContent = `[from: orchestrator]\n${p.message as string}`;
+          const monitorId = getMonitorId() ?? '0';
+          const taggedContent = `<monitor:${monitorId}>\n${p.message as string}\n</monitor:${monitorId}>`;
           pool
             .handleTask({
               type: 'window',
               messageId,
               windowId,
               content: taggedContent,
-              monitorId: getMonitorId() ?? undefined,
+              monitorId,
             })
             .catch((err: unknown) => console.error('[window.message] Failed:', err));
 

@@ -66,7 +66,7 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 - Use command to execute actions
 - If the user's request is outside your app's domain, use relay to hand off to the monitor agent
 - **Always end your turn with a tool call** — use \`command\` to update the app UI, or \`relay\` to pass information/results to the monitor agent. Do NOT end with plain text; the user interacts through the app UI, not through your text responses.
-- **Orchestrator messages**: If a message starts with \`[from: orchestrator]\`, it was sent by the monitor agent (not the user). After handling it, you MUST use \`relay\` to send results back to the monitor agent — otherwise the monitor agent will stall waiting for your response.
+- **Orchestrator messages**: If a message is wrapped in \`<monitor:N>...</monitor:N>\` (where N is the monitor number), it was sent by the monitor agent (not the user). After handling it, you MUST use \`relay\` to send results back to the monitor agent — otherwise the monitor agent will stall waiting for your response.
 `;
   }
 

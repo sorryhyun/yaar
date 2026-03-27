@@ -72,7 +72,6 @@ export interface WindowCreateAction {
   bounds: WindowBounds;
   content: WindowContent;
   requestId?: string; // For tracking iframe load feedback
-  appId?: string;
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;

@@ -1,6 +1,4 @@
-export {};
-
-/** HTML 콘텐츠에서 img를 제거하고 [이미지] 플레이스홀더로 교체 */
+/** Replace <img> tags with [이미지] placeholders to reduce content size */
 export function stripImages(htmlStr: string): string {
   const div = document.createElement('div');
   div.innerHTML = htmlStr;
@@ -15,7 +13,6 @@ export function stripImages(htmlStr: string): string {
   return div.innerHTML;
 }
 
-/** 초(seconds)를 m:ss 또는 Xs 형식으로 포맷 */
 export function formatCountdown(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -23,7 +20,6 @@ export function formatCountdown(secs: number): string {
   return `${s}s`;
 }
 
-/** Date를 한국어 HH:MM:SS 형식으로 포맷 */
 export function formatTime(date: Date | null): string {
   if (!date) return '';
   return date.toLocaleTimeString('ko-KR', {
