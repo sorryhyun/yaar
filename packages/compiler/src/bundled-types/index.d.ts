@@ -193,6 +193,8 @@ interface YaarAppRegistration {
   name: string;
   state: Record<string, YaarAppStateDescriptor>;
   commands: Record<string, YaarAppCommandDescriptor>;
+  /** Fire-and-forget callback invoked when the app window is closed. */
+  onClose?: () => void;
 }
 
 interface YaarApp {
@@ -418,6 +420,20 @@ declare module '@bundled/yaar-dev' {
 }
 
 declare module '@bundled/yaar-web' {
+  // ── Tab lifecycle ──────────────────────────────────────────────
+  /** Create a new browser tab without navigating. */
+  export function create(opts?: {
+    browserId?: string;
+    mobile?: boolean;
+    visible?: boolean;
+  }): Promise<unknown>;
+  /** List all open browser tabs. */
+  export function listTabs(): Promise<unknown>;
+  /** Close a browser tab. */
+  export function closeTab(browserId?: string): Promise<unknown>;
+
+  // ── Navigation ─────────────────────────────────────────────────
+  /** Open a URL (creates tab if needed, reuses if exists). */
   export function open(
     url: string,
     opts?: {
@@ -427,6 +443,15 @@ declare module '@bundled/yaar-web' {
       waitUntil?: 'load' | 'domcontentloaded' | 'networkidle';
     },
   ): Promise<unknown>;
+  /** Navigate to a URL or go back/forward in history. */
+  export function navigate(url: string, browserId?: string): Promise<unknown>;
+  export function navigate(opts: {
+    direction: 'back' | 'forward';
+    browserId?: string;
+  }): Promise<unknown>;
+  export function scroll(opts: { direction: 'up' | 'down'; browserId?: string }): Promise<unknown>;
+
+  // ── Interaction ────────────────────────────────────────────────
   export function click(opts: {
     selector?: string;
     text?: string;
@@ -445,10 +470,6 @@ declare module '@bundled/yaar-web' {
     selector?: string;
     browserId?: string;
   }): Promise<unknown>;
-  export function scroll(opts: { direction: 'up' | 'down'; browserId?: string }): Promise<unknown>;
-  export function navigate(url: string, browserId?: string): Promise<unknown>;
-  export function navigateBack(browserId?: string): Promise<unknown>;
-  export function navigateForward(browserId?: string): Promise<unknown>;
   export function hover(opts: {
     selector?: string;
     text?: string;
@@ -456,6 +477,8 @@ declare module '@bundled/yaar-web' {
     y?: number;
     browserId?: string;
   }): Promise<unknown>;
+
+  // ── Observation ────────────────────────────────────────────────
   export function waitFor(opts: {
     selector: string;
     timeout?: number;
@@ -481,8 +504,12 @@ declare module '@bundled/yaar-web' {
     browserId?: string;
   }): Promise<unknown>;
   export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;
+
+  // ── Visual ─────────────────────────────────────────────────────
   export function annotate(browserId?: string): Promise<unknown>;
   export function removeAnnotations(browserId?: string): Promise<unknown>;
+
+  // ── Cookies ────────────────────────────────────────────────────
   export function getCookies(opts?: { urls?: string[]; browserId?: string }): Promise<
     Array<{
       name: string;
@@ -514,6 +541,10 @@ declare module '@bundled/yaar-web' {
     url?: string;
     browserId?: string;
   }): Promise<unknown>;
-  export function listSessions(): Promise<unknown[]>;
+
+  // ── Deprecated ─────────────────────────────────────────────────
+  /** @deprecated Use `listTabs()` instead. */
+  export function listSessions(): Promise<unknown>;
+  /** @deprecated Use `closeTab()` instead. */
   export function closeSession(browserId?: string): Promise<unknown>;
 }

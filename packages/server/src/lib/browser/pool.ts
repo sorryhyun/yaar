@@ -305,6 +305,16 @@ export class BrowserPool {
   }
 
   /**
+   * Close all browser sessions (but keep Chrome alive for reuse).
+   */
+  async closeAll(): Promise<void> {
+    const ids = [...this.sessions.keys()];
+    for (const id of ids) {
+      await this.closeSession(id);
+    }
+  }
+
+  /**
    * Find session bound to a specific YAAR window.
    */
   findByWindowId(windowId: string): BrowserSession | undefined {

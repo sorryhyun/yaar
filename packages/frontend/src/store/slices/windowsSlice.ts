@@ -9,6 +9,7 @@ import type { SliceCreator, WindowsSlice, DesktopStore, WindowModel } from '../t
 import type { OSAction, WindowCreateAction } from '@yaar/shared';
 import { isContentUpdateOperationValid, isWindowContentData } from '@yaar/shared';
 import { emptyContentByRenderer, addDebugLogEntry, toWindowKey } from '../helpers';
+import { notifyIframeClose } from '../iframe-bridge';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import {
   TITLEBAR_HEIGHT,
@@ -143,6 +144,7 @@ export function applyWindowAction(state: DesktopStore, action: OSAction): void {
       const actionAgentId = (action as { agentId?: string }).agentId;
       const reqId = (action as { requestId?: string }).requestId;
       if (rejectIfLocked(state, win, actionAgentId, reqId, key)) break;
+      notifyIframeClose(key);
       delete state.windows[key];
       delete state.queuedActions[key];
       state.zOrder = state.zOrder.filter((id) => id !== key);
@@ -374,6 +376,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
 
   userCloseWindow: (windowId) =>
     set((state) => {
+      notifyIframeClose(windowId);
       delete state.windows[windowId];
       delete (state as DesktopStore).queuedActions[windowId];
       state.zOrder = state.zOrder.filter((id) => id !== windowId);

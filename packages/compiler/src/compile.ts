@@ -16,6 +16,12 @@ import {
 import { extractProtocolFromSource } from './extract-protocol.js';
 import { getCompilerConfig } from './config.js';
 import {
+  computeSourceHash,
+  computeAppJsonHash,
+  writeBuildManifest,
+  COMPILER_VERSION,
+} from './build-manifest.js';
+import {
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
@@ -227,6 +233,22 @@ export async function compileTypeScript(
       }
     } catch {
       // Non-fatal — protocol discovery just won't be available
+    }
+
+    // Write build manifest for change detection
+    try {
+      const [sourceHash, appJsonHash] = await Promise.all([
+        computeSourceHash(sandboxPath),
+        computeAppJsonHash(sandboxPath),
+      ]);
+      await writeBuildManifest(sandboxPath, {
+        sourceHash,
+        appJsonHash,
+        compilerVersion: COMPILER_VERSION,
+        compiledAt: new Date().toISOString(),
+      });
+    } catch {
+      // Non-fatal — auto-compile will just recompile next time
     }
 
     return {

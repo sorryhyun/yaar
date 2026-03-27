@@ -1,58 +1,18 @@
 import type { Post, Comment } from './types';
 import * as web from '@bundled/yaar-web';
+import { openOrNavigate, MAIN_TAB, postTabId } from './browser';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
 
 async function browseUrl(url: string, tabId: string, waitForIdle = false): Promise<string> {
-  await web.open(url, {
-    browserId: tabId,
-    visible: false,
+  await openOrNavigate(url, tabId, {
+    visible: true,
     mobile: true,
     ...(waitForIdle && { waitUntil: 'networkidle' }),
   });
   const result = await web.html({ browserId: tabId }) as { ok: boolean; data?: string };
   return result?.data ?? '';
-}
-
-/**
- * extract 액션을 사용해 URL을 열고 주요 텍스트 콘텐츠를 추출한다.
- * 반환값: { text: string, links: Array<{ label: string, url: string }> }
- */
-export async function extractUrl(
-  url: string,
-  tabId: string,
-): Promise<{ text: string; links: Array<{ label: string; url: string }> }> {
-  await web.open(url, {
-    browserId: tabId,
-    visible: false,
-    mobile: true,
-    waitUntil: 'networkidle',
-  });
-  const result = await web.extract({ browserId: tabId, mainContentOnly: true }) as { ok: boolean; data?: string };
-  const raw = result?.data ?? '';
-  return parseExtractResult(raw);
-}
-
-/**
- * extract 액션이 반환하는 문자열을 파싱한다.
- */
-function parseExtractResult(raw: string): { text: string; links: Array<{ label: string; url: string }> } {
-  const textMatch = raw.match(/---\s*Text\s*---\n([\s\S]*?)(?=\n---\s*Links|$)/);
-  const linksMatch = raw.match(/---\s*Links[^\n]*---\n([\s\S]*)$/);
-
-  const text = textMatch ? textMatch[1].trim() : raw.trim();
-
-  const links: Array<{ label: string; url: string }> = [];
-  if (linksMatch) {
-    const linkLines = linksMatch[1].split('\n');
-    for (const line of linkLines) {
-      const m = line.match(/^\[([^\]]+)\]\(([^)]+)\)/);
-      if (m) links.push({ label: m[1], url: m[2] });
-    }
-  }
-
-  return { text, links };
 }
 
 /**
@@ -71,7 +31,7 @@ function isMetaLine(line: string): boolean {
 }
 
 export async function fetchPosts(): Promise<Post[]> {
-  const html = await browseUrl(GALLERY_URL, 'singularity-list');
+  const html = await browseUrl(GALLERY_URL, MAIN_TAB);
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
@@ -479,7 +439,7 @@ function parseComments(doc: Document): Comment[] {
 }
 
 // ============================================================
-// 본문 추출 헬퍼 (fetchPostContent 와 공유)
+// 본문 추출 헬퍼
 // ============================================================
 
 const CONTENT_SELECTORS = [
@@ -520,13 +480,14 @@ function extractContentFromDoc(doc: Document, post: Post): string {
 
 /**
  * 게시물 본문과 댓글을 한 번의 브라우저 fetch로 동시에 가져온다.
+ * tabId를 지정하지 않으면 postTabId(post.num)을 사용한다.
  */
 export async function fetchPostDetail(
   post: Post,
+  tabId?: string,
 ): Promise<{ content: string; comments: Comment[] }> {
-  const tabId = 'dc-login';
-  await web.open(post.url, {
-    browserId: tabId,
+  tabId ??= postTabId(post.num);
+  await openOrNavigate(post.url, tabId, {
     visible: true,
     mobile: true,
     waitUntil: 'networkidle',
@@ -552,14 +513,6 @@ export async function fetchPostDetail(
 }
 
 /**
- * DCinside 모바일 게시물 본문을 HTML로 가져온다. (하위 호환용)
- */
-export async function fetchPostContent(post: Post): Promise<string> {
-  const { content } = await fetchPostDetail(post);
-  return content;
-}
-
-/**
  * 분석용: 상위 N개 게시물 내용 가져오기
  */
 export async function fetchTopPostsForAnalysis(
@@ -576,7 +529,7 @@ export async function fetchTopPostsForAnalysis(
         new Promise<{ post: Post; text: string }>(resolve => {
           setTimeout(async () => {
             try {
-              const tabId = `singularity-rec-${i % 3}`;
+              const tabId = `analysis-${i % 3}`;
               const rawHtml = await browseUrl(post.url, tabId, true);
               const parser = new DOMParser();
               const doc = parser.parseFromString(rawHtml, 'text/html');

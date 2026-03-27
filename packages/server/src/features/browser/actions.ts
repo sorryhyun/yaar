@@ -11,10 +11,109 @@ import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
-import { getSessionId } from '../../agents/session.js';
+import { getAgentId, getSessionId } from '../../agents/session.js';
 import { getSessionHub } from '../../session/session-hub.js';
+import { ServerEventType, type OSAction } from '@yaar/shared';
 
 type Payload = Record<string, unknown>;
+
+/** Resolve session ID from agent context, falling back to the default session. */
+function resolveSessionId(): string | undefined {
+  const id = getSessionId();
+  if (id) return id;
+  return getSessionHub().getDefault()?.sessionId;
+}
+
+/**
+ * Emit a window action via the session-scoped 'browser-action' channel.
+ * This ensures the frontend receives the action even when called from
+ * HTTP routes (no active agent turn / ToolActionBridge).
+ */
+function emitBrowserWindowAction(action: OSAction, sessionId?: string): void {
+  const sid = sessionId ?? resolveSessionId();
+  if (!sid) return;
+  // Only emit via session channel when there's no agent context —
+  // during agent turns, ToolActionBridge already handles broadcast.
+  if (getAgentId()) return;
+  actionEmitter.emit('browser-action', {
+    sessionId: sid,
+    event: {
+      type: ServerEventType.ACTIONS,
+      actions: [action],
+      agentId: 'system',
+    },
+  });
+}
+
+export async function handleCreate(
+  pool: BrowserPool,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const mobile = p.mobile === true;
+
+  const existing = pool.getSession(browserId);
+  if (existing) {
+    return error(
+      `Browser ${browserId} already exists. Use a different browserId or close it first.`,
+    );
+  }
+
+  const created = await pool.createSession(browserId, { mobile });
+  const session = created.session;
+  const bid = created.browserId;
+
+  const windowId = `browser-${bid}`;
+  session.windowId = windowId;
+
+  if (p.visible !== false) {
+    const isMobile = session.mobile;
+    const sessionId = resolveSessionId();
+    const windowAction = {
+      type: 'window.create' as const,
+      windowId,
+      title: 'Browser — (new tab)',
+      bounds: {
+        x: 80 + Number(bid) * 30,
+        y: 60 + Number(bid) * 30,
+        w: isMobile ? 430 : 900,
+        h: isMobile ? 750 : 650,
+      },
+      content: {
+        renderer: 'iframe' as const,
+        data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
+      },
+    };
+    await actionEmitter.emitActionWithFeedback(windowAction, 3000, sessionId);
+    emitBrowserWindowAction(windowAction, sessionId);
+  }
+  return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
+}
+
+export async function handleListTabs(pool: BrowserPool): Promise<VerbResult> {
+  const browsers = pool.getAllSessions();
+  if (browsers.size === 0) return okJson([]);
+  const items = [...browsers.entries()].map(([bid, s]) => ({
+    id: bid,
+    url: s.currentUrl,
+    title: s.currentTitle || '(no title)',
+    mobile: s.mobile,
+    windowId: s.windowId,
+  }));
+  return okJson(items);
+}
+
+export async function handleCloseTab(pool: BrowserPool, browserId: string): Promise<VerbResult> {
+  const session = pool.getSession(browserId);
+  if (!session) return error(`No browser with ID ${browserId}.`);
+  if (session.windowId) {
+    const closeAction = { type: 'window.close' as const, windowId: session.windowId };
+    actionEmitter.emitAction(closeAction);
+    emitBrowserWindowAction(closeAction);
+  }
+  await pool.closeSession(browserId);
+  return ok(`Browser ${browserId} closed.`);
+}
 
 export async function handleOpen(
   pool: BrowserPool,
@@ -27,11 +126,7 @@ export async function handleOpen(
   if (!domain) return error('Invalid URL');
   if (!(await isDomainAllowed(domain))) {
     // Try to show permission dialog instead of returning a static error
-    const hub = getSessionHub();
-    let sessionId = getSessionId();
-    if (!sessionId || !hub.get(sessionId)) {
-      sessionId = hub.getDefault()?.sessionId;
-    }
+    const sessionId = resolveSessionId();
     if (!sessionId) {
       return error(
         `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
@@ -73,29 +168,33 @@ export async function handleOpen(
   );
   if (p.visible !== false && !existing) {
     const isMobile = session.mobile;
-    await actionEmitter.emitActionWithFeedback(
-      {
-        type: 'window.create' as const,
-        windowId,
-        title: `Browser — ${state.title || domain}`,
-        bounds: {
-          x: 80 + Number(bid) * 30,
-          y: 60 + Number(bid) * 30,
-          w: isMobile ? 430 : 900,
-          h: isMobile ? 750 : 650,
-        },
-        content: {
-          renderer: 'iframe',
-          data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
-        },
+    const sessionId = resolveSessionId();
+    const windowAction = {
+      type: 'window.create' as const,
+      windowId,
+      title: `Browser — ${state.title || domain}`,
+      bounds: {
+        x: 80 + Number(bid) * 30,
+        y: 60 + Number(bid) * 30,
+        w: isMobile ? 430 : 900,
+        h: isMobile ? 750 : 650,
       },
-      3000,
-    );
+      content: {
+        renderer: 'iframe' as const,
+        data: `/api/apps/browser/dist/index.html?browserId=${bid}`,
+      },
+    };
+    await actionEmitter.emitActionWithFeedback(windowAction, 3000, sessionId);
+    emitBrowserWindowAction(windowAction, sessionId);
   }
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}]\n${formatPageState(state)}`);
 }
 
-export async function handleClick(browserId: string, p: Payload): Promise<VerbResult> {
+export async function handleClick(
+  pool: BrowserPool,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
   const session = resolveSession(browserId);
   if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
     return error('Provide "selector", "text", or both "x" and "y".');
@@ -107,6 +206,14 @@ export async function handleClick(browserId: string, p: Payload): Promise<VerbRe
     p.y as number | undefined,
     p.index as number | undefined,
   );
+
+  // Check if the click opened a new tab (via window.open)
+  const adopted = pool.consumeAdoptedTabs();
+  if (adopted.length > 0) {
+    const tab = adopted[0];
+    state.newTab = { browserId: tab.browserId, url: tab.url };
+  }
+
   return ok(formatPageState(state));
 }
 

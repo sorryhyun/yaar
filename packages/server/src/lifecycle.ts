@@ -88,6 +88,22 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   await initMcpServer();
 
+  // Auto-compile stale apps before shortcut sync (so shortcuts see fresh builds)
+  try {
+    const { autoCompileApps } = await import('./features/apps/auto-compile.js');
+    const compileResult = await autoCompileApps();
+    if (compileResult.compiled.length > 0) {
+      console.log(
+        `Auto-compiled ${compileResult.compiled.length} app(s): ${compileResult.compiled.join(', ')}`,
+      );
+    }
+    for (const f of compileResult.failed) {
+      console.warn(`Failed to compile ${f.appId}: ${f.errors.join('; ')}`);
+    }
+  } catch (err) {
+    console.error('Auto-compile error:', err);
+  }
+
   // Sync desktop shortcuts: create missing, remove stale
   try {
     const apps = await listApps();

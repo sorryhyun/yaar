@@ -15,6 +15,9 @@ import { validateIframeToken } from '../iframe-tokens.js';
 import { getBrowserPool } from '../../lib/browser/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import {
+  handleCreate,
+  handleListTabs,
+  handleCloseTab,
   handleOpen,
   handleClick,
   handleType,
@@ -255,11 +258,14 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     try {
       let result;
       switch (action) {
+        case 'create':
+          result = await handleCreate(pool, browserId, body);
+          break;
         case 'open':
           result = await handleOpen(pool, browserId, body);
           break;
         case 'click':
-          result = await handleClick(browserId, body);
+          result = await handleClick(pool, browserId, body);
           break;
         case 'type':
           result = await handleType(browserId, body);
@@ -305,6 +311,12 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           break;
         case 'delete_cookies':
           result = await handleDeleteCookies(browserId, body);
+          break;
+        case 'list_tabs':
+          result = await handleListTabs(pool);
+          break;
+        case 'close_tab':
+          result = await handleCloseTab(pool, browserId);
           break;
         default:
           return jsonResponse({ ok: false, error: `Unknown action "${action}"` }, 400);

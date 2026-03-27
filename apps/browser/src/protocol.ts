@@ -102,12 +102,12 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
       navigate_back: {
         description: 'Go back in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => web.navigateBack((await bid()).browserId),
+        handler: async () => web.navigate({ direction: 'back', browserId: (await bid()).browserId }),
       },
       navigate_forward: {
         description: 'Go forward in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => web.navigateForward((await bid()).browserId),
+        handler: async () => web.navigate({ direction: 'forward', browserId: (await bid()).browserId }),
       },
       scroll: {
         description: 'Scroll the page',

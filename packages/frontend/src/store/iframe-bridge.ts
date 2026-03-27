@@ -29,6 +29,18 @@ function getIframeTargetOrigin(iframe: HTMLIFrameElement): string {
 }
 
 /**
+ * Fire-and-forget: notify an iframe app that its window is about to close.
+ * Must be called BEFORE the window element is removed from the DOM.
+ */
+export function notifyIframeClose(windowId: string) {
+  const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${windowId}"]`) as HTMLElement | null;
+  const iframe = el?.querySelector('iframe') as HTMLIFrameElement | null;
+  if (iframe?.contentWindow) {
+    iframe.contentWindow.postMessage({ type: 'yaar:app-close' }, getIframeTargetOrigin(iframe));
+  }
+}
+
+/**
  * Try capturing iframe content via the postMessage self-capture protocol.
  * Returns a base64 PNG data URL or null if the iframe doesn't respond.
  */

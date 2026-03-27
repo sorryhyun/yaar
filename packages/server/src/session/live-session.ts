@@ -31,6 +31,7 @@ import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
+import { getBrowserPool } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
@@ -157,7 +158,13 @@ export class LiveSession {
     this.unsubscribeSessionChannels = subscribeSessionChannels(
       sessionId,
       this.broadcast.bind(this),
-      ['approval-request', 'user-prompt', 'verb-subscription', 'desktop-shortcut'],
+      [
+        'approval-request',
+        'user-prompt',
+        'verb-subscription',
+        'desktop-shortcut',
+        'browser-action',
+      ],
     );
   }
 
@@ -513,6 +520,12 @@ export class LiveSession {
                   type: 'window.close',
                   windowId: interaction.windowId,
                 });
+                // Close all browser sessions (including stale ones) when any browser window is closed
+                if (interaction.windowId.startsWith('browser-')) {
+                  getBrowserPool()
+                    ?.closeAll()
+                    .catch(() => {});
+                }
               }
               break;
             case 'window.move':
@@ -538,6 +551,17 @@ export class LiveSession {
               }
               break;
           }
+        }
+
+        // If all windows are now closed, also close any hidden browser sessions
+        // (e.g. sessions created with visible: false that have no window)
+        if (
+          event.interactions.some((i) => i.type === 'window.close') &&
+          this.windowState.listWindows().length === 0
+        ) {
+          getBrowserPool()
+            ?.closeAll()
+            .catch(() => {});
         }
 
         this.pool?.pushUserInteractions(event.interactions);

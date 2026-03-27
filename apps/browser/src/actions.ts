@@ -4,7 +4,7 @@
  * navigation APIs live here.
  */
 import { app } from '@bundled/yaar';
-import { navigate, navigateBack, navigateForward } from '@bundled/yaar-web';
+import { navigate } from '@bundled/yaar-web';
 import { activeBrowserId, setLoading, setShowScreenshot } from './store';
 
 // ── Screenshot DOM ref ──────────────────────────────────────────────
@@ -43,8 +43,8 @@ export function refreshScreenshot(fresh = false): void {
 export async function handleNav(direction: 'navigate_back' | 'navigate_forward'): Promise<void> {
   const bid = activeBrowserId();
   try {
-    if (direction === 'navigate_back') await navigateBack(bid);
-    else await navigateForward(bid);
+    const dir = direction === 'navigate_back' ? 'back' : 'forward';
+    await navigate({ direction: dir, browserId: bid });
   } catch (err) {
     console.error('[browser] Nav error:', err);
   }

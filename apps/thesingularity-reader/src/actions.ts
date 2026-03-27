@@ -2,8 +2,8 @@ import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
+import { postTabId, syncCookiesToTab } from './browser';
 import type { Post } from './types';
-import { toMobileUrl } from './helpers';
 import {
   loginToDC,
   logoutFromDC,
@@ -113,14 +113,12 @@ export async function triggerAnalysis(): Promise<void> {
   }
 }
 
-/** 스크린쓷 찍기 */
+/** 스크린샷 찍기 — 게시물 탭에서 바로 캡처 */
 export async function takeScreenshot(post: Post): Promise<void> {
   setState({ screenshotLoading: true, screenshotSrc: null });
   try {
-    const mobileUrl = toMobileUrl(post.url);
-    await web.open(mobileUrl, { browserId: 'pages', visible: false, mobile: true, waitUntil: 'networkidle' });
-    await web.scroll({ direction: 'down', browserId: 'pages' });
-    const result = await web.screenshot({ browserId: 'pages' }) as {
+    const tabId = postTabId(post.num);
+    const result = await web.screenshot({ browserId: tabId }) as {
       ok: boolean; images?: Array<{ data: string; mimeType?: string }>;
     };
     const images = result?.images ?? [];
@@ -236,9 +234,12 @@ export async function submitComment(): Promise<void> {
     return;
   }
 
+  const tabId = postTabId(post.num);
   setState('commentSubmitting', true);
   try {
-    const result = await postCommentToDC(post, text);
+    // 메인 탭의 로그인 쿠키를 게시물 탭으로 복사
+    await syncCookiesToTab(tabId);
+    const result = await postCommentToDC(post, text, tabId);
     if (result.ok) {
       setState('commentText', '');
       showToast('💬 댓글이 등록되었습니다!', 'success');

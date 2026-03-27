@@ -163,6 +163,15 @@ export async function doDeploy(
       const appDistDir = join(appPath, 'dist');
       await mkdir(appDistDir, { recursive: true });
       await cp(distIndexPath, join(appDistDir, 'index.html'));
+      // Copy build manifest if it exists (enables auto-compile change detection)
+      try {
+        await cp(
+          join(sandboxPath, 'dist', '.build-manifest.json'),
+          join(appDistDir, '.build-manifest.json'),
+        );
+      } catch {
+        // No manifest — will be regenerated on next server start
+      }
     }
 
     if (keepSource) {

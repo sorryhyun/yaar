@@ -61,6 +61,13 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     var msg = e.data;
     var requestId = msg.requestId;
 
+    if (msg.type === 'yaar:app-close') {
+      if (registration && typeof registration.onClose === 'function') {
+        try { registration.onClose(); } catch (_) {}
+      }
+      return;
+    }
+
     if (msg.type === 'yaar:app-manifest-request') {
       if (!registration) {
         window.parent.postMessage({

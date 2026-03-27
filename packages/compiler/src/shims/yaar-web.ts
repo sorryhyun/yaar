@@ -30,6 +30,24 @@ async function browserPost<T>(body: Record<string, unknown>): Promise<T> {
   return res.json();
 }
 
+// ── Tab lifecycle ───────────────────────────────────────────────
+
+/** Create a new browser tab without navigating. Returns browserId info. */
+export async function create(opts?: { browserId?: string; mobile?: boolean; visible?: boolean }) {
+  const { browserId, ...params } = opts ?? {};
+  return browserPost({ action: 'create', browserId, ...params });
+}
+
+/** List all open browser tabs. */
+export async function listTabs() {
+  return browserPost({ action: 'list_tabs' });
+}
+
+/** Close a browser tab. */
+export async function closeTab(browserId?: string) {
+  return browserPost({ action: 'close_tab', browserId });
+}
+
 // ── Navigation ──────────────────────────────────────────────────
 
 export async function open(
@@ -45,16 +63,15 @@ export async function scroll(opts: { direction: 'up' | 'down'; browserId?: strin
   return browserPost({ action: 'scroll', browserId, ...params });
 }
 
-export async function navigate(url: string, browserId?: string) {
-  return browserPost({ action: 'navigate', browserId, url });
-}
-
-export async function navigateBack(browserId?: string) {
-  return browserPost({ action: 'navigate', browserId, direction: 'back' });
-}
-
-export async function navigateForward(browserId?: string) {
-  return browserPost({ action: 'navigate', browserId, direction: 'forward' });
+export async function navigate(
+  urlOrOpts: string | { direction: 'back' | 'forward'; browserId?: string },
+  browserId?: string,
+) {
+  if (typeof urlOrOpts === 'string') {
+    return browserPost({ action: 'navigate', browserId, url: urlOrOpts });
+  }
+  const { browserId: bid, ...params } = urlOrOpts;
+  return browserPost({ action: 'navigate', browserId: bid, ...params });
 }
 
 // ── Interaction ─────────────────────────────────────────────────
@@ -179,17 +196,14 @@ export async function deleteCookies(opts: {
   return browserPost({ action: 'delete_cookies', browserId, ...params });
 }
 
-// ── Session management ──────────────────────────────────────────
+// ── Session management (deprecated — use listTabs / closeTab) ───
 
+/** @deprecated Use `listTabs()` instead. */
 export async function listSessions() {
-  const res = await fetch('/api/browser/sessions', { headers: browserHeaders() });
-  return res.json();
+  return listTabs();
 }
 
+/** @deprecated Use `closeTab()` instead. */
 export async function closeSession(browserId?: string) {
-  const res = await fetch(`/api/browser/${browserId ?? '0'}`, {
-    method: 'DELETE',
-    headers: browserHeaders(),
-  });
-  return res.json();
+  return closeTab(browserId);
 }

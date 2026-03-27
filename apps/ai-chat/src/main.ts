@@ -124,7 +124,7 @@ const InputArea = () => html`
     <div class="input-wrapper">
       <textarea
         class="chat-textarea"
-        placeholder="메시지를 입력하세요... (Enter로 전송, Shift+Enter 줄바꿈)"
+        placeholder="메시지를 입력하세요...! (Enter로 전송, Shift+Enter 줄바꿈)"
         value=${inputValue}
         onInput=${handleInput}
         onKeydown=${handleKeyDown}

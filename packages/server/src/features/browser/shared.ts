@@ -59,6 +59,9 @@ export function formatPageState(state: PageState): string {
       result += `\n  [${link.text}](${link.href})`;
     }
   }
+  if (state.newTab) {
+    result += `\n\nNew tab opened: [browser:${state.newTab.browserId}] ${state.newTab.url}`;
+  }
   return result;
 }
 

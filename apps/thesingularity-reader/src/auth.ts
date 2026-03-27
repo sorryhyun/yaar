@@ -7,25 +7,16 @@
  */
 import { invoke, appStorage } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
+import { openOrNavigate, MAIN_TAB, DC_COOKIE_URLS } from './browser';
 import type { Post } from './types';
 
 const GALLERY_ID = 'thesingularity';
 const SESSION_PATH = 'auth/session.json';
 
-const DC_LOGIN_BROWSER = 'dc-login';
-
-const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com';
+const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com%2Fboard%2Fthesingularity';
 const DC_VERIFY_URL = 'https://gall.dcinside.com/mini/board/lists/?id=singularity';
 
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
-
-/** getCookies 시 쿠키를 조회할 DC 도메인 URL 목록 */
-const DC_COOKIE_URLS = [
-  'https://www.dcinside.com/',
-  'https://sign.dcinside.com/',
-  'https://accounts.dcinside.com/',
-  'https://gall.dcinside.com/',
-];
 
 export interface DcSession {
   /** 소켓 포맷 쿠키 헤더 ("Name=Value; Name2=Value2") */
@@ -51,6 +42,16 @@ function parseCookieResponse(raw: unknown): CookieInfo[] {
     if (Array.isArray(data)) return data as CookieInfo[];
   }
   return [];
+}
+
+/** DC 페이지 HTML에 로그인 상태 마커가 있는지 확인 */
+function isLoggedInPage(html: string): boolean {
+  return (
+    html.includes('/user/logout') ||
+    html.includes('class="nick_btn"') ||
+    html.includes('data-type="logout"') ||
+    html.includes('로그아웃')
+  );
 }
 
 // =====================================================================
@@ -88,58 +89,46 @@ export async function loginToDC(
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    // ── Step 1: DC 메인 페이지 방문 → 초기 세션 쿠키 브라우저에 설정 ─────────
-    await web.open('https://m.dcinside.com/', {
-      browserId: DC_LOGIN_BROWSER,
-      visible:   false,
+    // ── Step 1: DC 메인 페이지 방문 (main 탭) → 초기 세션 쿠키 + 브라우저 초기화 ──
+    await openOrNavigate('https://m.dcinside.com/board/thesingularity', MAIN_TAB, {
+      visible:   true,
       mobile:    true,
       waitUntil: 'domcontentloaded',
     });
 
-    // ── Step 2: 로그인 페이지 방문 ──────────────────────────────────────────
-    await web.open(DC_LOGIN_URL, {
-      browserId: DC_LOGIN_BROWSER,
-      visible:   false,
-      waitUntil: 'networkidle',
-    });
+    // ── Step 2: 로그인 페이지로 이동 ─────────────────────────────────────────
+    await web.navigate(DC_LOGIN_URL, MAIN_TAB);
+    await web.waitFor({ browserId: MAIN_TAB, selector: '#code', timeout: 8000 });
 
     // 초기 쿠키 수집
-    const rawInitCookies = await web.getCookies({ browserId: DC_LOGIN_BROWSER, urls: DC_COOKIE_URLS });
+    const rawInitCookies = await web.getCookies({ browserId: MAIN_TAB, urls: DC_COOKIE_URLS });
     const initCookies: CookieInfo[] = parseCookieResponse(rawInitCookies);
     console.log('[auth] 초기 세션 쿠키 확보:', initCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
     // ── Step 3: 아이디 / 비밀번호 자동 입력 ─────────────────────────────────
-    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#code' });
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#code',      text: username });
-    await web.type({ browserId: DC_LOGIN_BROWSER, selector: '#password',  text: password });
+    await web.click({ browserId: MAIN_TAB, selector: '#code' });
+    await web.type({ browserId: MAIN_TAB, selector: '#code',      text: username });
+    await web.type({ browserId: MAIN_TAB, selector: '#password',  text: password });
 
-    // ── Step 4: 폼 제출 ────────────────────────────────────────────────────
-    await web.click({ browserId: DC_LOGIN_BROWSER, selector: '#loginAction' });
+    // ── Step 4: 폼 제출 → 리다이렉트 대기 ──────────────────────────────────
+    await web.click({ browserId: MAIN_TAB, selector: '#loginAction' });
+    // Wait for login redirect to complete (r_url → gallery page)
+    await new Promise<void>(resolve => setTimeout(resolve, 3000));
 
-    // ── Step 5: 리다이렉트 완료 대기 + 로그인 상태 확인 ─────────────────────
-    await web.open(DC_VERIFY_URL, {
-      browserId: DC_LOGIN_BROWSER,
-      visible:   false,
-      waitUntil: 'networkidle',
-    });
+    // ── Step 5: 검증 페이지로 이동 + 로그인 상태 확인 ──────────────────────
+    await web.navigate(DC_VERIFY_URL, MAIN_TAB);
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
 
-    const htmlResult = await web.html({ browserId: DC_LOGIN_BROWSER }) as
+    const htmlResult = await web.html({ browserId: MAIN_TAB }) as
       { ok: boolean; data?: string };
     const pageBody = htmlResult?.data ?? '';
 
-    const loggedIn = (
-      pageBody.includes('/user/logout')       ||
-      pageBody.includes('class="nick_btn"')   ||
-      pageBody.includes('data-type="logout"') ||
-      pageBody.includes('로그아웃')
-    );
-
-    if (!loggedIn) {
+    if (!isLoggedInPage(pageBody)) {
       return { ok: false, error: '로그인에 실패했습니다.\n아이디 또는 비밀번호를 확인해주세요.' };
     }
 
     // ── Step 6: 로그인 후 DC 세션 쿠키 수집 ──────────────────────────────────
-    const rawAllCookies = await web.getCookies({ browserId: DC_LOGIN_BROWSER, urls: DC_COOKIE_URLS });
+    const rawAllCookies = await web.getCookies({ browserId: MAIN_TAB, urls: DC_COOKIE_URLS });
     const allCookies: CookieInfo[] = parseCookieResponse(rawAllCookies);
     console.log('[auth] 로그인 후 전체 쿠키:', allCookies.map(c => `${c.name}@${(c as CookieInfo & { domain?: string }).domain ?? '?'}`).join(', ') || '(없음)');
 
@@ -198,40 +187,30 @@ export async function checkLoginStatus(): Promise<boolean> {
       },
     }) as HttpResult;
 
-    const body = res.body ?? '';
-    return (
-      body.includes('/user/logout')       ||
-      body.includes('class="nick_btn"')   ||
-      body.includes('data-type="logout"')
-    );
+    return isLoggedInPage(res.body ?? '');
   } catch {
     return false;
   }
 }
 
 // =====================================================================
-// 댓글 작성 — dc-login 브라우저 (로그인 세션 보유) 사용
+// 댓글 작성 — 게시물 탭에서 쿠키 동기화 후 실행
 // =====================================================================
 
 /**
- * loginToDC() 때 쓴 'dc-login' 브라우저는 DC 로그인 쿠키가 실제로
- * 살아있는 세션이다. 그 브라우저로 게시물 페이지에 이동한 뒤
- * 스크롤 → 입력 → 제출 순으로 댓글을 등록한다.
- *
- * - 'singularity-post': 본문/댓글 로드 전용, 로그인 쿠키 없음
- * - 'pages'           : 스크린샷 전용, 로그인 쿠키 없음
- * - 'dc-login'        : 로그인 자동화에 쓰인 브라우저, 쿠키 보유 ✓
+ * 게시물 탭에서 댓글을 등록한다.
+ * 호출 전에 syncCookiesToTab()으로 로그인 쿠키를 복사해야 한다.
+ * browserId는 해당 게시물이 열린 탭 (postTabId).
  */
 export async function postCommentToDC(
   _post: Post,
   commentText: string,
+  browserId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await loadSession();
   if (!session?.dcPaPP) {
     return { ok: false, error: '로그인이 필요합니다.' };
   }
-
-  const browserId = DC_LOGIN_BROWSER; // 'dc-login' — 쿠키 보유 세션
 
   try {
 

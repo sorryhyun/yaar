@@ -1,9 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build outputs
+# Build outputs (including compiled apps — rebuilt on server start)
 dist/
-!apps/*/dist/
 
 # Environment variables
 .env

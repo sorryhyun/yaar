@@ -18,6 +18,9 @@ import { actionEmitter } from '../session/action-emitter.js';
 import { ok, okJson, error, assertUri, requireAction } from './utils.js';
 import { resolveSession } from '../features/browser/shared.js';
 import {
+  handleCreate,
+  handleListTabs,
+  handleCloseTab,
   handleOpen,
   handleClick,
   handleType,
@@ -63,7 +66,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
   registry.register('yaar://browser/*', {
     description:
       'Browser instance. Read for current state (URL, title). ' +
-      'Invoke actions: open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html, annotate, remove_annotations, get_cookies, set_cookie, delete_cookies. ' +
+      'Invoke actions: create, open, navigate, click, type, press, scroll, hover, wait_for, screenshot, extract, extract_images, html, annotate, remove_annotations, get_cookies, set_cookie, delete_cookies, list_tabs, close_tab. ' +
       'Delete to close.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -73,6 +76,7 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
         action: {
           type: 'string',
           enum: [
+            'create',
             'open',
             'navigate',
             'click',
@@ -90,6 +94,8 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             'get_cookies',
             'set_cookie',
             'delete_cookies',
+            'list_tabs',
+            'close_tab',
           ],
         },
         url: { type: 'string', description: 'URL for open action' },
@@ -162,10 +168,12 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
 
       try {
         switch (action) {
+          case 'create':
+            return await handleCreate(pool, browserId, p);
           case 'open':
             return await handleOpen(pool, browserId, p);
           case 'click':
-            return await handleClick(browserId, p);
+            return await handleClick(pool, browserId, p);
           case 'type':
             return await handleType(browserId, p);
           case 'press':
@@ -196,6 +204,10 @@ export async function registerBrowserHandlers(registry: ResourceRegistry): Promi
             return await handleSetCookie(browserId, p);
           case 'delete_cookies':
             return await handleDeleteCookies(browserId, p);
+          case 'list_tabs':
+            return await handleListTabs(pool);
+          case 'close_tab':
+            return await handleCloseTab(pool, browserId);
           default:
             return error(`Unknown action "${action}".`);
         }

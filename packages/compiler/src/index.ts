@@ -18,3 +18,12 @@ export {
 } from './plugins.js';
 export { extractProtocolFromSource } from './extract-protocol.js';
 export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+export {
+  isAppStale,
+  writeBuildManifest,
+  readBuildManifest,
+  computeSourceHash,
+  computeAppJsonHash,
+  COMPILER_VERSION,
+  type BuildManifest,
+} from './build-manifest.js';

@@ -80,13 +80,19 @@ export interface AppCommandResponse {
   error?: string;
 }
 
+/** Fire-and-forget notification sent to iframe before window is destroyed. */
+export interface AppCloseNotification {
+  type: 'yaar:app-close';
+}
+
 export type AppProtocolPostMessage =
   | AppManifestRequest
   | AppManifestResponse
   | AppQueryRequest
   | AppQueryResponse
   | AppCommandRequest
-  | AppCommandResponse;
+  | AppCommandResponse
+  | AppCloseNotification;
 
 // ── WebSocket event types (server ↔ client) ─────────────────────────
 

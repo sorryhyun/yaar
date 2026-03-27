@@ -15,20 +15,6 @@ export function stripImages(htmlStr: string): string {
   return div.innerHTML;
 }
 
-/** 데스크탑 URL을 모바일 URL로 변환 */
-export function toMobileUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    if (u.hostname === 'm.dcinside.com') return url;
-    const id = u.searchParams.get('id');
-    const no = u.searchParams.get('no');
-    if (id && no) return `https://m.dcinside.com/board/${id}/${no}`;
-  } catch {
-    // ignore
-  }
-  return url;
-}
-
 /** 초(seconds)를 m:ss 또는 Xs 형식으로 포맷 */
 export function formatCountdown(secs: number): string {
   const m = Math.floor(secs / 60);
