@@ -22,17 +22,7 @@ export async function listSessions(): Promise<SessionInfo[]> {
       const metadataContent = await Bun.file(metadataPath).text();
       const rawMetadata = JSON.parse(metadataContent);
 
-      // Handle backward compatibility - add agents field if missing
-      const metadata: SessionMetadata = {
-        ...rawMetadata,
-        agents: rawMetadata.agents ?? {
-          default: {
-            agentId: 'default',
-            parentAgentId: null,
-            createdAt: rawMetadata.createdAt,
-          },
-        },
-      };
+      const metadata: SessionMetadata = rawMetadata;
 
       sessions.push({
         sessionId: entry.name,

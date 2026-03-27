@@ -4,7 +4,7 @@
  * Covers: window capture, App Protocol relay, verb subscription forwarding,
  * iframe message routing, windows SDK handler, and notification broadcasting.
  */
-import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -237,8 +237,8 @@ export function handleAppProtocolRequest(
 
   function handler(e: MessageEvent) {
     if (!e.data?.requestId || e.data.requestId !== requestId) return;
-    const type = e.data.type as string;
-    if (!type?.startsWith('yaar:app-')) return;
+    const msg = e.data as AppProtocolPostMessage;
+    if (!msg.type?.startsWith('yaar:app-')) return;
 
     // Validate that the response came from the expected iframe
     if (e.source !== iframe!.contentWindow) {
@@ -252,26 +252,26 @@ export function handleAppProtocolRequest(
     window.removeEventListener('message', handler);
 
     let response: AppProtocolResponse;
-    if (type === 'yaar:app-manifest-response') {
-      if (e.data.manifest == null && e.data.error == null) {
+    if (msg.type === 'yaar:app-manifest-response') {
+      if (msg.manifest == null && msg.error == null) {
         console.warn(`[AppProtocol] Manifest response missing both manifest and error fields`);
       }
-      response = { kind: 'manifest', manifest: e.data.manifest, error: e.data.error };
-    } else if (type === 'yaar:app-query-response') {
-      if (e.data.data === undefined && e.data.error == null) {
+      response = { kind: 'manifest', manifest: msg.manifest, error: msg.error };
+    } else if (msg.type === 'yaar:app-query-response') {
+      if (msg.data === undefined && msg.error == null) {
         console.warn(`[AppProtocol] Query response missing both data and error fields`);
       }
-      response = { kind: 'query', data: e.data.data, error: e.data.error };
-    } else if (type === 'yaar:app-command-response') {
-      if (e.data.result === undefined && e.data.error == null) {
+      response = { kind: 'query', data: msg.data, error: msg.error };
+    } else if (msg.type === 'yaar:app-command-response') {
+      if (msg.result === undefined && msg.error == null) {
         console.warn(`[AppProtocol] Command response missing both result and error fields`);
       }
-      response = { kind: 'command', result: e.data.result, error: e.data.error };
+      response = { kind: 'command', result: msg.result, error: msg.error };
     } else {
-      console.warn(`[AppProtocol] Unknown response type: ${type}`);
+      console.warn(`[AppProtocol] Unknown response type: ${msg.type}`);
       response = {
         kind: request.kind,
-        error: `Unknown response type: ${type}`,
+        error: `Unknown response type: ${msg.type}`,
       } as AppProtocolResponse;
     }
 

@@ -2,105 +2,23 @@
  * App configuration — read/write per-app config stored at config/{appId}.json.
  *
  * Each app gets a single JSON file containing all its config (credentials,
- * preferences, etc.). Old credential locations are auto-migrated on first read.
+ * preferences, etc.).
  */
 
 import { stat, mkdir, unlink, readdir } from 'fs/promises';
 import { join, basename } from 'path';
 import { getConfigDir } from '../../storage/storage-manager.js';
-import { PROJECT_ROOT } from '../../config.js';
 
 function getAppConfigPath(appId: string): string {
   return join(getConfigDir(), `${appId}.json`);
 }
 
-// ── Legacy paths (for migration) ────────────────────────────────────
-
-function getOldCredentialsDir(): string {
-  return join(getConfigDir(), 'credentials');
-}
-
-function getOldCredentialsPath(appId: string): string {
-  return join(getOldCredentialsDir(), `${appId}.json`);
-}
-
-function getOldAppCredentialsPath(appId: string): string {
-  return join(PROJECT_ROOT, 'apps', appId, 'credentials.json');
-}
-
-function getLegacyStorageCredentialsPath(appId: string): string {
-  return join(PROJECT_ROOT, 'storage', 'credentials', `${appId}.json`);
-}
-
 /**
- * Migrate credentials from old locations to config/{appId}.json.
- * Checks (in order): config/credentials/{appId}.json, storage/credentials/, apps/{appId}/.
- */
-async function migrateIfNeeded(appId: string): Promise<void> {
-  const newPath = getAppConfigPath(appId);
-
-  // Already has new-format config — skip
-  try {
-    await stat(newPath);
-    return;
-  } catch {
-    // Not yet migrated
-  }
-
-  const legacyPaths = [
-    getOldCredentialsPath(appId),
-    getLegacyStorageCredentialsPath(appId),
-    getOldAppCredentialsPath(appId),
-  ];
-
-  for (const oldPath of legacyPaths) {
-    try {
-      await stat(oldPath);
-    } catch {
-      continue;
-    }
-
-    // Found old credentials — migrate
-    try {
-      await mkdir(getConfigDir(), { recursive: true });
-      const content = await Bun.file(oldPath).text();
-      await Bun.write(newPath, content);
-      await unlink(oldPath);
-      console.log(`[Apps] Migrated config for ${appId} → config/${appId}.json`);
-    } catch (err) {
-      console.error(`[Apps] Failed to migrate config for ${appId}:`, err);
-    }
-    return;
-  }
-}
-
-/**
- * Check if an app has any config (in current or legacy locations).
+ * Check if an app has config.
  */
 export async function hasConfig(appId: string): Promise<boolean> {
   try {
     await stat(getAppConfigPath(appId));
-    return true;
-  } catch {
-    /* not in new location */
-  }
-
-  try {
-    await stat(getOldCredentialsPath(appId));
-    return true;
-  } catch {
-    /* not in old config/credentials/ */
-  }
-
-  try {
-    await stat(getLegacyStorageCredentialsPath(appId));
-    return true;
-  } catch {
-    /* not in storage/credentials/ */
-  }
-
-  try {
-    await stat(getOldAppCredentialsPath(appId));
     return true;
   } catch {
     return false;
@@ -108,13 +26,12 @@ export async function hasConfig(appId: string): Promise<boolean> {
 }
 
 /**
- * Read an app's config. Auto-migrates from legacy locations.
+ * Read an app's config.
  */
 export async function readAppConfig(
   appId: string,
 ): Promise<{ success: boolean; content?: unknown; error?: string }> {
   try {
-    await migrateIfNeeded(appId);
     const content = await Bun.file(getAppConfigPath(appId)).text();
     try {
       return { success: true, content: JSON.parse(content) };
@@ -139,7 +56,6 @@ export async function writeAppConfig(
   config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await migrateIfNeeded(appId);
     await mkdir(getConfigDir(), { recursive: true });
 
     const configPath = getAppConfigPath(appId);

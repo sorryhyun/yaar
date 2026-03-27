@@ -8,31 +8,11 @@ import { buildYaarUri, extractAppId } from '@yaar/shared';
 
 const SHORTCUTS_FILE = 'shortcuts.json';
 
-/** Migrate legacy shortcut format ({ type: 'app', target: 'storage' }) to URI-based. */
-function normalizeShortcut(s: DesktopShortcut): DesktopShortcut {
-  const legacy = s as DesktopShortcut & { type?: string };
-  if (!legacy.type || s.target.startsWith('yaar://') || s.target.startsWith('https://') || s.target.startsWith('http://')) {
-    return s;
-  }
-  console.warn(`[shortcuts] Migrating legacy shortcut "${s.id}" (type=${legacy.type}) to URI-based target`);
-  const { type, ...rest } = legacy;
-  switch (type) {
-    case 'app':
-    case 'skill':
-      return { ...rest, target: buildYaarUri('apps', s.target || s.id) };
-    case 'file':
-      return { ...rest, target: buildYaarUri('storage', s.target) };
-    default:
-      return rest;
-  }
-}
-
 export async function readShortcuts(): Promise<DesktopShortcut[]> {
   const result = await configRead(SHORTCUTS_FILE);
   if (!result.success || !result.content) return [];
   try {
-    const shortcuts: DesktopShortcut[] = JSON.parse(result.content);
-    return shortcuts.map(normalizeShortcut);
+    return JSON.parse(result.content);
   } catch {
     return [];
   }

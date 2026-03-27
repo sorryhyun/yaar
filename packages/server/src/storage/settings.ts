@@ -1,6 +1,5 @@
 /**
  * Unified settings helper — reads/writes config/settings.json.
- * Migrates legacy onboarding.json on first read.
  */
 
 import { configRead, configWrite } from './storage-manager.js';
@@ -59,9 +58,6 @@ export function getLanguageLabel(code: string): string {
   return LANGUAGE_LABELS[code] ?? code;
 }
 
-/**
- * Read settings, migrating from legacy onboarding.json if needed.
- */
 export async function readSettings(): Promise<Settings> {
   const result = await configRead('settings.json');
   if (result.success && result.content) {
@@ -69,25 +65,10 @@ export async function readSettings(): Promise<Settings> {
       const parsed = JSON.parse(result.content);
       return { ...DEFAULTS, ...parsed };
     } catch {
-      // Fall through to migration
-    }
-  }
-
-  // Try migrating from legacy onboarding.json
-  const legacy = await configRead('onboarding.json');
-  let onboardingCompleted = false;
-  if (legacy.success && legacy.content) {
-    try {
-      const parsed = JSON.parse(legacy.content);
-      onboardingCompleted = parsed.completed === true;
-    } catch {
       // ignore
     }
   }
-
-  const settings: Settings = { ...DEFAULTS, onboardingCompleted };
-  await configWrite('settings.json', JSON.stringify(settings));
-  return settings;
+  return DEFAULTS;
 }
 
 /**

@@ -81,17 +81,13 @@ interface SubscribeRequest {
 
 /**
  * Transform a VerbResult into a standard JSON envelope for iframe apps.
- *
- * Backwards-compatible: includes both new fields (ok, data, error, images)
- * and legacy fields (content, isError) so already-compiled apps keep working
- * while newly-compiled apps use the cleaner envelope.
  */
 function toEnvelope(result: VerbResult): Record<string, unknown> {
   const textItem = result.content.find((c) => c.type === 'text');
   const raw = (textItem as { text?: string } | undefined)?.text ?? '';
 
   if (result.isError) {
-    return { ok: false, error: raw, ...result };
+    return { ok: false, error: raw };
   }
 
   let data: unknown;
@@ -108,7 +104,7 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
       return { data: img.data, mimeType: img.mimeType };
     });
 
-  const envelope: Record<string, unknown> = { ok: true, data, ...result };
+  const envelope: Record<string, unknown> = { ok: true, data };
   if (images.length > 0) envelope.images = images;
   return envelope;
 }

@@ -13,8 +13,6 @@ export type HookAction =
   | { type: 'os_action'; payload: OSAction | OSAction[] };
 
 export interface HookFilter {
-  /** Legacy tool name filter (for non-verb tools like web_search). */
-  toolName?: string | string[];
   /** Verb filter: 'invoke', 'read', 'list', 'delete'. */
   verb?: string | string[];
   /** URI prefix/glob pattern: 'yaar://storage/*', 'yaar://apps/my-app'. */
@@ -143,19 +141,9 @@ export async function getToolUseHooks(ctx: ToolUseContext): Promise<Hook[]> {
     const f = h.filter;
     if (!f) return true; // no filter = matches everything
 
-    // If hook has verb/uri/action filters, use those (verb-style matching)
-    if (f.verb || f.uri || f.action) {
-      if (f.verb && (!ctx.verb || !matchesFilter(ctx.verb, f.verb))) return false;
-      if (f.uri && (!ctx.uri || !matchesFilter(ctx.uri, f.uri))) return false;
-      if (f.action && (!ctx.action || !matchesFilter(ctx.action, f.action))) return false;
-      return true;
-    }
-
-    // Legacy: toolName-based matching
-    if (f.toolName) {
-      return matchesFilter(ctx.toolName, f.toolName);
-    }
-
+    if (f.verb && (!ctx.verb || !matchesFilter(ctx.verb, f.verb))) return false;
+    if (f.uri && (!ctx.uri || !matchesFilter(ctx.uri, f.uri))) return false;
+    if (f.action && (!ctx.action || !matchesFilter(ctx.action, f.action))) return false;
     return true;
   });
 }

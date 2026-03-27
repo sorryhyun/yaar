@@ -220,11 +220,7 @@ export function registerWindowHandlers(
 
       // Collection-level invoke: only create (windowId derived from payload)
       if (isWindowCollection(resolved)) {
-        if (action === 'create' || action === 'create_component')
-          return handleCreate(
-            '',
-            action === 'create_component' ? { ...p, renderer: 'component' } : p,
-          );
+        if (action === 'create') return handleCreate('', p);
         return error(
           `Action "${action}" requires a window URI (yaar://windows/{windowId}). ` +
             'Only "create" can be invoked on a bare windows URI.',
@@ -237,17 +233,8 @@ export function registerWindowHandlers(
       switch (action) {
         case 'create':
           return handleCreate(windowId, p);
-        case 'create_component': // deprecated alias
-          return handleCreate(windowId, { ...p, renderer: 'component' });
         case 'update':
           return handleUpdate(getWindowState(), windowId, p);
-        case 'update_component': // deprecated alias
-          return handleUpdate(getWindowState(), windowId, {
-            ...p,
-            operation: 'replace',
-            renderer: 'component',
-            content: { components: p.components, cols: p.cols, gap: p.gap },
-          });
         case 'close':
           return handleManage(getWindowState(), windowId, 'close');
         case 'lock':

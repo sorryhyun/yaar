@@ -169,8 +169,6 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
 
   const configPath = join(getConfigDir(), `${appId}.json`);
   await unlink(configPath).catch(() => {});
-  const oldCredPath = join(getConfigDir(), 'credentials', `${appId}.json`);
-  await unlink(oldCredPath).catch(() => {});
 
   const removed = await removeAppShortcut(appId);
   if (removed) {

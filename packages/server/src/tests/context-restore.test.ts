@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { ContextTape, windowSource, extractWindowId } from '../agents/context.js';
+import { ContextTape, monitorSource, windowSource, extractWindowId } from '../agents/context.js';
 import {
   getContextRestoreMessages,
   type ContextRestorePolicy,
@@ -13,7 +13,7 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:00.000Z',
       agentId: 'main-a1',
       parentAgentId: null,
-      source: 'main',
+      source: monitorSource('0'),
       content: 'main question',
     }),
     JSON.stringify({
@@ -21,7 +21,7 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:01.000Z',
       agentId: 'main-a1',
       parentAgentId: null,
-      source: 'main',
+      source: monitorSource('0'),
       content: 'main answer',
     }),
     JSON.stringify({
@@ -29,7 +29,7 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:02.000Z',
       agentId: 'window-w1',
       parentAgentId: 'default',
-      source: { window: 'w1' },
+      source: windowSource('w1'),
       content: 'w1 ask',
     }),
     JSON.stringify({
@@ -37,7 +37,7 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:03.000Z',
       agentId: 'window-w1',
       parentAgentId: 'default',
-      source: { window: 'w1' },
+      source: windowSource('w1'),
       content: 'w1 answer',
     }),
     JSON.stringify({
@@ -45,7 +45,7 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:04.000Z',
       agentId: 'window-w2',
       parentAgentId: 'default',
-      source: { window: 'w2' },
+      source: windowSource('w2'),
       content: 'w2 ask',
     }),
     JSON.stringify({
@@ -53,28 +53,13 @@ function makeSessionJsonl(): string {
       timestamp: '2026-01-01T00:00:05.000Z',
       agentId: 'window-w2',
       parentAgentId: 'default',
-      source: { window: 'w2' },
+      source: windowSource('w2'),
       content: 'w2 answer',
     }),
   ].join('\n');
 }
 
 describe('context restore pipeline', () => {
-  it('infers window source from legacy agentId when source metadata is missing', () => {
-    const legacyJsonl = [
-      JSON.stringify({
-        type: 'user',
-        timestamp: '2026-01-01T00:00:00.000Z',
-        agentId: 'window-legacy',
-        parentAgentId: 'default',
-        content: 'legacy question',
-      }),
-    ].join('\n');
-
-    const restored = getContextRestoreMessages(parseSessionMessages(legacyJsonl));
-    expect(restored).toHaveLength(1);
-    expect(restored[0].source).toBe(windowSource('legacy'));
-  });
   it('restores full multi-window history and preserves source + timestamp after restart', () => {
     const messages = parseSessionMessages(makeSessionJsonl());
     const restored = getContextRestoreMessages(messages);

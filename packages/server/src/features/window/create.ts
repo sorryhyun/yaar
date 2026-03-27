@@ -95,13 +95,6 @@ export async function handleCreate(
         cols: contentObj.cols as ComponentLayout['cols'],
         gap: contentObj.gap as ComponentLayout['gap'],
       };
-    } else if (payload.components) {
-      // Legacy: top-level components/cols/gap (from deprecated create_component)
-      layoutData = {
-        components: payload.components as ComponentLayout['components'],
-        cols: payload.cols as ComponentLayout['cols'],
-        gap: payload.gap as ComponentLayout['gap'],
-      };
     } else {
       return error(
         'Provide "content" with { components: [...] } or "jsonfile" for component renderer.',

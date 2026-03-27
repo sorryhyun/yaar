@@ -18,40 +18,15 @@ export const FULL_RESTORE_POLICY: ContextRestorePolicy = {
   mode: 'full',
 };
 
-/**
- * Normalize a source value from old or new log formats into a ContextSource URI.
- * Old formats: 'main' or { window: string }
- * New format: 'yaar://monitors/...' or 'yaar://windows/...'
- * Note: 'main' is kept for backward compatibility with old session logs.
- */
-function normalizeSource(raw: unknown): ContextSource {
-  if (typeof raw === 'string') {
-    if (raw === 'main') return monitorSource('0');
-    if (raw.startsWith('yaar://')) return raw as ContextSource;
-    return monitorSource('0');
-  }
-  if (typeof raw === 'object' && raw !== null && 'window' in raw) {
-    return windowSource((raw as { window: string }).window);
-  }
-  return monitorSource('0');
-}
-
-function inferWindowSource(agentId: string): ContextSource | null {
-  if (!agentId.startsWith('window-')) {
-    return null;
-  }
-
-  return windowSource(agentId.slice('window-'.length));
-}
-
 function toContextMessage(msg: ParsedMessage): ContextMessage | null {
   if ((msg.type !== 'user' && msg.type !== 'assistant') || !msg.content) {
     return null;
   }
 
-  const source = msg.source
-    ? normalizeSource(msg.source)
-    : (inferWindowSource(msg.agentId) ?? monitorSource('0'));
+  const source: ContextSource =
+    typeof msg.source === 'string' && msg.source.startsWith('yaar://')
+      ? (msg.source as ContextSource)
+      : monitorSource('0');
 
   return {
     role: msg.type,

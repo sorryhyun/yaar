@@ -113,9 +113,6 @@ export function setPort(p: number): void {
   process.env.PORT = String(p);
 }
 
-/** @deprecated Use getPort() for runtime port. This is the initial configured value. */
-export const PORT = DEFAULT_PORT;
-
 export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
 /** Dev mode: local development with live reload (not remote, not bundled). */
@@ -206,11 +203,6 @@ export function getCodexSpawnArgs(): string[] {
     }
   }
   return ['codex'];
-}
-
-/** @deprecated Use getCodexSpawnArgs() instead */
-export function getCodexBin(): string {
-  return getCodexSpawnArgs()[0];
 }
 
 // ── Codex app-server configuration ────────────────────────────────────

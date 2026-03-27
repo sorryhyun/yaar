@@ -226,21 +226,6 @@ describe('getToolUseHooks — URI-based matching', () => {
     expect(editMatch).toHaveLength(1);
   });
 
-  it('still supports legacy toolName filter', async () => {
-    await addHook(
-      'tool_use',
-      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'Searching...' } },
-      'Web search toast',
-      { toolName: 'WebSearch' },
-    );
-
-    const matched = await getToolUseHooks({ toolName: 'WebSearch' });
-    expect(matched).toHaveLength(1);
-
-    const noMatch = await getToolUseHooks({ toolName: 'verbs:invoke' });
-    expect(noMatch).toHaveLength(0);
-  });
-
   it('hook with no filter matches everything', async () => {
     await addHook(
       'tool_use',

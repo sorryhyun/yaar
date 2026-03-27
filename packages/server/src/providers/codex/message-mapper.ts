@@ -63,12 +63,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       return { type: 'complete' };
     }
 
-    case 'turn/failed': {
-      // Legacy event — not in generated schema but still emitted by some versions
-      const p = params as { error?: string; message?: string } | undefined;
-      return { type: 'error', error: p?.error ?? p?.message ?? 'Turn failed' };
-    }
-
     // ========================================================================
     // Agent message events (streaming text response)
     // ========================================================================
