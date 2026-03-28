@@ -13,59 +13,43 @@
 
 ![YAAR Desktop](./docs/image.png)
 
-Just tell the AI what you want — it builds apps, visualizes data, and connects to external services, all within a sandboxed, type-safe environment.
-
-<details>
-<summary><b>Safe · Capable · Typed · Discoverable</b></summary>
-
-- **Safe** — Code runs in a `node:vm` sandbox; external requests go through a domain allowlist.
-- **Capable** — 50+ bundled libraries, CDP browser automation, single-HTML builds.
-- **Typed** — Every AI ↔ UI message is validated by Zod v4 schemas.
-- **Discoverable** — One folder = one app. One `SKILL.md` = the AI knows how to use it.
-
-</details>
+MCP tools, skills, plugins, and A2A — all within an 8K-token system prompt. Build apps, visualize data, and connect to external services.
 
 
 ## Install
 
 Codex or Claude Code authentication is required.
 
-### One-liner (recommended)
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
+yaar                # Browser opens automatically
 ```
 
 Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary — no Bun or Node.js required.
 
-Then:
-```bash
-yaar                # Browser opens automatically
-```
+Windows (PowerShell): `irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex`
 
-You can pin a version or change the install directory:
+Once running, start with something like "install essential apps".
+
+<details>
+<summary>Other install options</summary>
+
+**Pin a version / custom install path:**
 ```bash
 VERSION=v0.1.0 curl -fsSL ... | bash             # Specific version
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Custom install path
 ```
 
-### Windows (PowerShell)
+**Windows:** You can also download `yaar.exe` directly from the [Releases page](https://github.com/sorryhyun/yaar/releases).
 
-```powershell
-irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex
-```
-
-Downloads `yaar.exe` and adds it to your PATH automatically. Or download directly from the [Releases page](https://github.com/sorryhyun/yaar/releases).
-
-### Build from source
-
+**Build from source** (requires [Bun](https://bun.sh/) >= 1.1):
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
 make dev          # Browser opens automatically
 ```
 
-Requires [Bun](https://bun.sh/) >= 1.1.
+</details>
 
 Once running, start with something like "install essential apps".
 
@@ -78,42 +62,178 @@ Once running, start with something like "install essential apps".
 - **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable browser app in a static form.
 
 
+## What's Different?
+
+- **Everything runs on just 5 tools.** Agents discover tool descriptions on demand, keeping the initial context minimal. All I/O and functions are unified into URI-based "verb" handlers.
+
+    <details>
+    <summary>Compared to the traditional approach</summary>
+
+    Traditional MCP servers register a separate tool for each capability. As apps and features grow, so does the tool count — and the system prompt.
+
+    ```
+    ❌ Traditional: tool count grows with features
+    ┌──────────────────────────────────────┐
+    │ read_file, write_file, delete_file,  │
+    │ list_directory, create_window,       │
+    │ update_window, close_window,         │
+    │ get_app_info, install_app,           │
+    │ send_notification, run_code,         │
+    │ fetch_url, manage_config, ...        │
+    │                                      │
+    │ → 20+ tools (keeps growing)          │
+    │ → System prompt 30K+ tokens          │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: all resources unified under URIs, accessed via 5 verbs
+    ┌──────────────────────────────────────┐
+    │ describe · read · list · invoke · delete │
+    │                                      │
+    │ describe('yaar://apps/slides-lite')  │
+    │ → returns supported verbs, schema    │
+    │                                      │
+    │ invoke('yaar://windows/main', {...}) │
+    │ read('yaar://storage/data.csv')      │
+    │ list('yaar://apps')                  │
+    │ delete('yaar://windows/old-panel')   │
+    │                                      │
+    │ → Install 100 apps, still 5 tools    │
+    │ → System prompt stays under 8K tokens│
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **Skills, plugins, and UI are unified into a single concept: the 'app'.** One folder = one app. Install by adding a folder, uninstall by removing it.
+
+    <details>
+    <summary>Compared to the traditional approach</summary>
+
+    Traditional AI tools have separate formats and registration flows for skills, plugins, and custom UI. YAAR unifies all of these into a single folder convention.
+
+    ```
+    ❌ Traditional: different formats for each role
+    ┌──────────────────────────────────────┐
+    │ skills/                              │
+    │   slide-maker.yaml    ← AI ability  │
+    │ plugins/                             │
+    │   slide-export.js     ← server ext  │
+    │ ui-components/                       │
+    │   slide-viewer.tsx    ← frontend    │
+    │ configs/                             │
+    │   slide-settings.json ← settings    │
+    │                                      │
+    │ → Scattered across 4 locations       │
+    │ → Each requires its own registration │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: one folder = one app
+    ┌──────────────────────────────────────┐
+    │ apps/slides-lite/                    │
+    │   app.json         ← metadata       │
+    │   SKILL.md         ← AI-readable doc│
+    │   src/main.ts      ← UI + logic     │
+    │   dist/                              │
+    │     index.html     ← built output   │
+    │     protocol.json  ← state/commands │
+    │                                      │
+    │ → Drop folder to install, delete to  │
+    │   uninstall. Zero registration code. │
+    │ → Builds to a single HTML file.      │
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **Permissions are explicitly separated and visible.** App access scope, filesystem, and network are all transparent and user-controlled.
+
+    <details>
+    <summary>Compared to the traditional approach</summary>
+
+    Traditional AI tools grant broad access once authorized. YAAR isolates app storage, enforces a domain allowlist, and records every approval decision.
+
+    ```
+    ❌ Traditional: permissions are implicit and global
+    ┌──────────────────────────────────────┐
+    │ Grant AI file access                 │
+    │ → Full filesystem access             │
+    │ → No visibility into what was read   │
+    │ → Network requests unrestricted      │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: permissions are explicit and scoped
+    ┌──────────────────────────────────────┐
+    │ app.json                             │
+    │ { "permissions": [                   │
+    │     "yaar://apps/self/storage/"      │
+    │   ] }                                │
+    │ → App can only access its own storage│
+    │                                      │
+    │ config/curl_allowed_domains.yaml     │
+    │ allowed_domains:                     │
+    │   - github.com                       │
+    │   - api.example.com                  │
+    │ → Only listed domains are allowed    │
+    │ → New domains require user approval  │
+    │                                      │
+    │ config/permissions.json              │
+    │ → Every allow/deny decision is logged│
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **The AI responds with UI, not text.** Instead of markdown replies, it opens windows, shows notifications, and manipulates apps to react to your actions.
+
+    <details>
+    <summary>Compared to the traditional approach</summary>
+
+    Traditional AI tools respond with text or markdown. If you need a UI, you build a separate frontend.
+
+    ```
+    ❌ Traditional: text-based responses
+    ┌──────────────────────────────────────┐
+    │ User: "Analyze this CSV"             │
+    │ AI: "Here are the results:\n- Avg: 42│
+    │                                      │
+    │ → Need a chart? Run separate code    │
+    │ → Interaction? Not possible          │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: AI responds with UI directly
+    ┌──────────────────────────────────────┐
+    │ User: "Analyze this CSV"             │
+    │ AI: invoke('yaar://windows/chart',   │
+    │       { renderer: "iframe", ... })   │
+    │                                      │
+    │ → Chart window opens                 │
+    │ → Click, drag, interact              │
+    │ → Responses cached for instant reuse │
+    └──────────────────────────────────────┘
+    ```
+
+    | Input | Action |
+    |-------|--------|
+    | Typing | Send a message |
+    | Paste image / drag & drop | Send image to AI |
+    | Right-click drag | Draw and send sketch to AI |
+    | Button click | Execute in-window action |
+    | Right-click → select window | Send instructions to a specific window |
+    | Drag file/selection to app | Transfer data between apps |
+
+    </details>
+
+
 ## How It Works
 
 ```
 Browser (UI) ←→ Local Server ←→ Claude Code / Codex (AI)
 ```
 
-You're essentially having a 1:1 conversation with Claude Code or Codex, but interacting through a UI instead of plain text.
-
-Only 7 tools are exposed to the AI — 5 URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) and 2 system tools. All resource access is routed through `yaar://` URIs, so adding apps or handlers never increases the tool count. This keeps the initial system prompt under 8K tokens.
-
-```
-invoke('yaar://storage/data.csv')       # Read a file
-invoke('yaar://windows/main', { ... })  # Create a window
-invoke('yaar://apps/github-manager')    # Load an app skill
-```
-
 On startup, the program creates `storage/, config/, apps/, session_logs/` folders. The AI **cannot access anything outside these folders.** To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
 
 
 ## Key Features
-
-### AI Interprets and Renders
-
-The AI responds by **directly creating UI** — opening windows or showing notifications to react to user actions.
-
-| Input | Action |
-|-------|--------|
-| Typing | Send a message |
-| Paste image / drag & drop | Send image to AI |
-| Right-click drag | Draw and send sketch to AI |
-| Button click | Execute in-window action |
-| Right-click → select window | Send instructions to a specific window |
-| Drag file/selection to app | Transfer data between apps |
-
-User actions accumulate as context and are sent to the AI together when you submit a message. AI responses are automatically cached — identical instructions can instantly reuse previous responses.
-
 
 ### App Ecosystem
 

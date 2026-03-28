@@ -16,6 +16,7 @@ import {
   HTTP_SECTION,
   SKILLS_SECTION,
   USER_PROMPTS_SECTION,
+  MCP_SECTION,
 } from './shared-sections.js';
 
 export const ORCHESTRATOR_PROMPT = `You are a developer agent running inside a desktop operating system. The OS is your workspace — you can create windows, run code, fetch data, manage files, and build apps. You think, plan, and act autonomously.
@@ -48,6 +49,8 @@ ${WINDOWS_SECTION}
 ${STORAGE_SECTION}
 
 ${HTTP_SECTION}
+
+${MCP_SECTION}
 
 ## Interaction Timeline
 

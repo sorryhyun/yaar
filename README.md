@@ -14,68 +14,202 @@
 
 ![YAAR Desktop](./docs/image.png)
 
-말만 하면 AI가 앱을 만들고, 데이터를 시각화하고, 외부 서비스와 연동합니다 — 격리된 샌드박스 위에서, 타입이 검증된 프로토콜로, 안전하게.
-
-<details>
-<summary><b>Safe · Capable · Typed · Discoverable</b></summary>
-
-- **Safe** — 코드는 `node:vm` 샌드박스에서 실행되고, 외부 통신은 허용 목록 기반입니다.
-- **Capable** — 50+ 번들 라이브러리, CDP 브라우저 자동화, 단일 HTML 빌드.
-- **Typed** — AI ↔ UI 사이 모든 통신이 Zod v4 스키마로 검증됩니다.
-- **Discoverable** — 폴더 하나 = 앱 하나. `SKILL.md` 하나면 AI가 사용법을 압니다.
-
-</details>
+MCP 도구, 스킬, 플러그인, A2A까지 — 시스템 프롬프트 8K 토큰 안에서 전부 동작합니다. 앱을 만들고, 데이터를 시각화하고, 외부 서비스와 연동합니다.
 
 
 ## 설치
 
 Codex 혹은 Claude Code 사용자 인증이 필수입니다.
 
-### 원라인 설치 (권장)
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
+yaar                # 브라우저가 자동으로 열립니다
 ```
 
 Linux, macOS (Intel & Apple Silicon), Windows (WSL) 지원. 바이너리 하나로 실행되며, Bun이나 Node.js 설치가 필요 없습니다.
 
-설치 후:
-```bash
-yaar                # 브라우저가 자동으로 열립니다
-```
+Windows (PowerShell): `irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex`
 
-특정 버전을 설치하거나 설치 경로를 변경할 수 있습니다:
+실행 후 "필수 앱 설치해줘" 같은 말로 시작하시면 됩니다.
+
+<details>
+<summary>기타 설치 옵션</summary>
+
+**특정 버전 / 설치 경로 변경:**
 ```bash
 VERSION=v0.1.0 curl -fsSL ... | bash     # 특정 버전
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 변경
 ```
 
-### Windows (PowerShell)
+**Windows:** `yaar.exe`를 [릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 직접 다운로드할 수도 있습니다.
 
-```powershell
-irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex
-```
-
-자동으로 `yaar.exe`를 다운받아 PATH에 추가합니다. 또는 [릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 직접 다운로드할 수 있습니다.
-
-### 소스에서 빌드
-
+**소스에서 빌드** ([Bun](https://bun.sh/) >= 1.1 필요):
 ```bash
 git clone https://github.com/sorryhyun/yaar.git && cd yaar
 bun install
 make dev          # 브라우저가 자동으로 열립니다
 ```
 
-[Bun](https://bun.sh/) >= 1.1 필요.
-
-실행 후 "필수 앱 설치해줘" 같은 말로 시작하시면 됩니다.
+</details>
 
 ## 뭐가 다른가요?
 
-- tool description을 에이전트가 스스로 찾게 하여 초기 컨텍스트를 최소화하고, I/O와 function을 'verb'라는 핸들러로 단일화하여 단 5가지의 tool로 모든것을 할 수 있게 했습니다.
-    - (예시)
+- **단 5개의 도구로 모든 것을 합니다.** tool description을 에이전트가 스스로 찾게 하여 초기 컨텍스트를 최소화하고, I/O와 function을 'verb'라는 핸들러로 단일화했습니다.
 
-- 
+    <details>
+    <summary>기존 방식과 비교</summary>
+
+    기존 MCP 서버는 기능마다 별도의 tool을 등록합니다. 앱이나 기능이 추가될수록 tool 수가 늘어나고, 시스템 프롬프트가 비대해집니다.
+
+    ```
+    ❌ 기존: tool 수가 기능에 비례하여 증가
+    ┌──────────────────────────────────────┐
+    │ read_file, write_file, delete_file,  │
+    │ list_directory, create_window,       │
+    │ update_window, close_window,         │
+    │ get_app_info, install_app,           │
+    │ send_notification, run_code,         │
+    │ fetch_url, manage_config, ...        │
+    │                                      │
+    │ → tool 20개+ (앱 추가 시 계속 증가)  │
+    │ → 시스템 프롬프트 30K+ 토큰          │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: 모든 리소스를 URI로 통일, 5개 verb로 접근
+    ┌──────────────────────────────────────┐
+    │ describe · read · list · invoke · delete │
+    │                                      │
+    │ describe('yaar://apps/slides-lite')  │
+    │ → 지원 verb, 스키마, 설명 반환       │
+    │                                      │
+    │ invoke('yaar://windows/main', {...}) │
+    │ read('yaar://storage/data.csv')      │
+    │ list('yaar://apps')                  │
+    │ delete('yaar://windows/old-panel')   │
+    │                                      │
+    │ → 앱 100개를 설치해도 tool은 5개     │
+    │ → 시스템 프롬프트 8K 토큰 이하 유지  │
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **skill, plugin, UI를 모두 통일한 구조 'app'을 사용합니다.** 폴더 하나가 곧 앱이고, 설치도 삭제도 폴더 단위입니다.
+
+    <details>
+    <summary>기존 방식과 비교</summary>
+
+    기존 AI 도구에서는 skill, plugin, custom UI가 각각 다른 형식과 등록 방식을 가집니다. YAAR에서는 하나의 폴더 구조가 이 모든 것을 통일합니다.
+
+    ```
+    ❌ 기존: 역할마다 다른 형식, 다른 등록 방식
+    ┌──────────────────────────────────────┐
+    │ skills/                              │
+    │   slide-maker.yaml    ← AI 능력     │
+    │ plugins/                             │
+    │   slide-export.js     ← 서버 확장   │
+    │ ui-components/                       │
+    │   slide-viewer.tsx    ← 프론트엔드  │
+    │ configs/                             │
+    │   slide-settings.json ← 설정        │
+    │                                      │
+    │ → 4곳에 분산, 각각 등록 코드 필요    │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: 폴더 하나 = 앱 하나
+    ┌──────────────────────────────────────┐
+    │ apps/slides-lite/                    │
+    │   app.json         ← 메타데이터     │
+    │   SKILL.md         ← AI가 읽는 설명 │
+    │   src/main.ts      ← UI + 로직      │
+    │   dist/                              │
+    │     index.html     ← 빌드 결과물    │
+    │     protocol.json  ← 상태/명령 스키마│
+    │                                      │
+    │ → 폴더 넣으면 설치, 삭제하면 제거    │
+    │ → 등록 코드 zero, 빌드는 단일 HTML   │
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **권한 영역을 명시적으로 분리합니다.** 앱의 접근 범위, 파일시스템, 네트워크가 가시화되며 사용자가 제어합니다.
+
+    <details>
+    <summary>기존 방식과 비교</summary>
+
+    기존 AI 도구는 한번 권한을 부여하면 모든 파일과 네트워크에 접근 가능합니다. YAAR은 앱별 스토리지 격리, 도메인 허용 목록, 사용자 승인 흐름을 분리합니다.
+
+    ```
+    ❌ 기존: 권한이 암묵적이고 전역적
+    ┌──────────────────────────────────────┐
+    │ AI에게 파일 접근 권한 부여           │
+    │ → 시스템 전체 파일시스템 접근 가능   │
+    │ → 어떤 파일에 접근했는지 불투명      │
+    │ → 네트워크 요청도 제한 없음          │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: 권한이 명시적이고 범위가 한정적
+    ┌──────────────────────────────────────┐
+    │ app.json                             │
+    │ { "permissions": [                   │
+    │     "yaar://apps/self/storage/"      │
+    │   ] }                                │
+    │ → 앱은 자기 스토리지만 접근 가능     │
+    │                                      │
+    │ config/curl_allowed_domains.yaml     │
+    │ allowed_domains:                     │
+    │   - github.com                       │
+    │   - api.example.com                  │
+    │ → 등록된 도메인만 요청 허용          │
+    │ → 신규 도메인은 사용자에게 승인 요청 │
+    │                                      │
+    │ config/permissions.json              │
+    │ → 모든 승인/거부 이력이 기록됨       │
+    └──────────────────────────────────────┘
+    ```
+
+    </details>
+
+- **AI가 UI를 직접 생성합니다.** 텍스트 응답 대신 윈도우를 띄우고, 알림을 표시하고, 앱을 조작하는 방식으로 반응합니다.
+
+    <details>
+    <summary>기존 방식과 비교</summary>
+
+    기존 AI 도구는 텍스트(또는 마크다운)로 응답합니다. UI가 필요하면 별도로 프론트엔드를 만들어야 합니다.
+
+    ```
+    ❌ 기존: 텍스트 기반 응답
+    ┌──────────────────────────────────────┐
+    │ User: "이 CSV 분석해줘"              │
+    │ AI: "분석 결과입니다:\n- 평균: 42..."│
+    │                                      │
+    │ → 차트가 필요하면? 별도 코드 실행    │
+    │ → 인터랙션? 불가능                   │
+    └──────────────────────────────────────┘
+
+    ✅ YAAR: AI가 UI로 직접 응답
+    ┌──────────────────────────────────────┐
+    │ User: "이 CSV 분석해줘"              │
+    │ AI: invoke('yaar://windows/chart',   │
+    │       { renderer: "iframe", ... })   │
+    │                                      │
+    │ → 차트 윈도우가 열림                 │
+    │ → 버튼 클릭, 드래그 등 인터랙션 가능 │
+    │ → 응답 캐싱으로 즉시 재사용          │
+    └──────────────────────────────────────┘
+    ```
+
+    | 입력 방식 | 동작 |
+    |-----------|------|
+    | 타이핑 | 메시지 전송 |
+    | 이미지 붙여넣기 / 드래그 앤 드롭 | AI에게 이미지 전달 |
+    | 우클릭 드래그 | 그림을 그려서 AI에게 전달 |
+    | 버튼 클릭 | 윈도우 내 액션 실행 |
+    | 우클릭 → 윈도우 선택 | 특정 윈도우에 지시사항 전송 |
+    | 파일/영역을 앱으로 드래그 | 앱 간 데이터 전달 |
+
+    </details>
 
 
 ## 기본 구조
@@ -84,36 +218,10 @@ make dev          # 브라우저가 자동으로 열립니다
 브라우저 (UI) ←→ 로컬 서버 ←→ Claude Code / Codex (AI)
 ```
 
-사실상 Claude Code나 Codex와 1:1 대화를 하는 것이지만, 텍스트가 아닌 UI 상에서 인터랙션을 할 수 있게 한다는 컨셉입니다.
-
-AI에게 노출되는 도구는 단 7개입니다 — 5개의 URI 동사(`describe`, `read`, `list`, `invoke`, `delete`)와 2개의 시스템 도구. 모든 리소스 접근은 `yaar://` URI로 라우팅되므로, 앱이나 핸들러를 추가해도 도구 수가 늘지 않습니다. 덕분에 초기 시스템 프롬프트가 8K 토큰 이하로 유지됩니다.
-
-```
-invoke('yaar://storage/data.csv')       # 파일 읽기
-invoke('yaar://windows/main', { ... })  # 윈도우 생성
-invoke('yaar://apps/github-manager')    # 앱 스킬 로드
-```
-
 실행 시 자동으로 `storage/, config/, apps/, session_logs/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
 
 
 ## 주요 기능
-
-### AI가 해석하고 렌더링
-
-AI는 **UI를 직접 생성**하여 응답합니다. 윈도우를 띄우거나, 알림 메세지를 표시하는 방식으로 유저의 행동에 반응합니다.
-
-| 입력 방식 | 동작 |
-|-----------|------|
-| 타이핑 | 메시지 전송 |
-| 이미지 붙여넣기 / 드래그 앤 드롭 | AI에게 이미지 전달 |
-| 우클릭 드래그 | 그림을 그려서 AI에게 전달 |
-| 버튼 클릭 | 윈도우 내 액션 실행 |
-| 우클릭 → 윈도우 선택 | 특정 윈도우에 지시사항 전송 |
-| 파일/영역을 앱으로 드래그 | 앱 간 데이터 전달 |
-
-유저의 행동은 컨텍스트로 축적되었다가 메세지 전송 시 한꺼번에 AI에게 전달됩니다. AI 응답은 자동으로 캐싱되어, 동일한 지시 시 이전 응답을 즉시 재사용할 수 있습니다.
-
 
 ### 앱 생태계
 

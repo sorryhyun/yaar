@@ -27,7 +27,8 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
-| \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |`;
+| \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |
+| \`yaar://mcp/\` | \`yaar://mcp/github\`, \`yaar://mcp/github/create_issue\` | list, describe, invoke |`;
 
 export const VISIBILITY_SECTION = `## Visibility
 
@@ -135,6 +136,25 @@ Options: \`multiline: true\` for a textarea, \`inputLabel\` to label the input f
 **When to use prompts vs. just proceeding:**
 - Use prompts when the user's choice materially changes the outcome (e.g., which file to delete, which option to configure)
 - Do NOT prompt for trivial or recoverable decisions — just pick a reasonable default and act`;
+
+export const MCP_SECTION = `## External MCP Servers
+
+Access tools from external MCP servers (GitHub, Slack, etc.) via the \`yaar://mcp/\` namespace:
+
+\`\`\`
+list('yaar://mcp')                                    # list configured servers
+list('yaar://mcp/github')                             # list tools on a server (lazy-connects)
+describe('yaar://mcp/github/create_issue')            # get tool input schema
+invoke('yaar://mcp/github/create_issue', { title: "Bug", body: "..." })  # call the tool
+\`\`\`
+
+Manage servers at runtime:
+\`\`\`
+invoke('yaar://mcp', { action: "reload" })            # re-read config file
+invoke('yaar://mcp', { action: "refresh", name: "github" })  # refresh tool cache
+\`\`\`
+
+Always \`describe\` a tool first to learn its input schema before invoking it.`;
 
 export const RELAY_SECTION = `## Relay to Monitor Agent
 
