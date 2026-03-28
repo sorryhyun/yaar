@@ -326,6 +326,15 @@ export async function shutdown(server: Server<any>): Promise<void> {
       // Browser module not available — nothing to clean up
     }
 
+    // Disconnect external MCP servers
+    try {
+      const { getMcpClientManager } = await import('./mcp/external/index.js');
+      const manager = await getMcpClientManager();
+      await manager.disconnectAll();
+    } catch {
+      // External MCP module not initialized — nothing to clean up
+    }
+
     await getWarmPool().cleanup();
 
     server.stop();

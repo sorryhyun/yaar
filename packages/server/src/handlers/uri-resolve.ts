@@ -196,13 +196,14 @@ export function resolveUri(uri: string): ResolvedUri | null {
   // Fallback: collection-level URIs or verb-layer-only authorities (skills, market).
   // These have a valid authority but no dedicated parser — resolve as root kind.
   const parsed = parseYaarUri(uri);
-  if (parsed && (!parsed.path || parsed.authority === 'skills' || parsed.authority === 'market')) {
+  const auth = parsed?.authority as string | undefined;
+  if (parsed && (!parsed.path || auth === 'skills' || auth === 'market' || auth === 'mcp')) {
     return { kind: 'root', sourceUri: uri };
   }
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market|http)$/,
+    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };
