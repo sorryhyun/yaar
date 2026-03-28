@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFile, readFile, mkdir, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { cleanupStaleChrome, writePidFile, removePidFile } from '../lib/browser/chrome.js';
+import { cleanupStaleChrome, writePidFile, removePidFile } from '../lib/browser/pid-file.js';
 
 const PID_FILE = join(tmpdir(), 'yaar-browser.pid');
 
