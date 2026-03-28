@@ -1,0 +1,209 @@
+.mcp-app {
+  padding: var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-4);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-header .y-label {
+  margin: 0;
+}
+
+/* ── Scan ──────────────────────────────────────────────────── */
+
+.scan-fields {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.scan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 80px;
+}
+
+.scan-field-sm {
+  flex: 0 0 80px;
+}
+
+.scan-field-btn {
+  flex: 0 0 auto;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scan-progress {
+  color: var(--yaar-text-muted);
+  font-size: 0.85rem;
+}
+
+.scan-done {
+  color: var(--yaar-text);
+  font-size: 0.85rem;
+}
+
+/* ── Discovered cards ─────────────────────────────────────── */
+
+.discovered-card {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.discovered-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.server-url {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--yaar-text-muted);
+}
+
+.version {
+  color: var(--yaar-text-muted);
+  font-size: 0.85rem;
+}
+
+.tool-count {
+  color: var(--yaar-text-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Server cards ──────────────────────────────────────────── */
+
+.server-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.server-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  cursor: pointer;
+}
+
+.server-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.server-type {
+  color: var(--yaar-text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.server-error {
+  color: var(--yaar-error);
+  font-size: 0.8rem;
+}
+
+.server-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}
+
+.server-tools {
+  border-top: 1px solid var(--yaar-border);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+
+.no-tools {
+  color: var(--yaar-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* ── Tools list ────────────────────────────────────────────── */
+
+.tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-radius: 4px;
+  background: var(--yaar-bg);
+}
+
+.tool-name {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--yaar-accent);
+}
+
+.tool-desc {
+  font-size: 0.8rem;
+  color: var(--yaar-text-muted);
+}
+
+/* ── Dot indicators ────────────────────────────────────────── */
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-ok {
+  background: var(--yaar-success);
+}
+
+.dot-warn {
+  background: #f5a623;
+}
+
+.dot-err {
+  background: var(--yaar-error);
+}
+
+/* ── Small buttons ─────────────────────────────────────────── */
+
+.btn-sm {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+}

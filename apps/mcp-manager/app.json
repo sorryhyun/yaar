@@ -1,0 +1,9 @@
+{
+  "icon": "🔌",
+  "name": "MCP Manager",
+  "description": "Discover and manage external MCP servers",
+  "run": "dist/index.html",
+  "permissions": ["yaar://mcp/", "yaar://http/", "yaar://config/mcp/"],
+  "version": "1.0.0",
+  "author": "YAAR"
+}

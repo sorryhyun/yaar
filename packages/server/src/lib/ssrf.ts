@@ -2,20 +2,25 @@
  * SSRF protection utilities — URL validation and safe fetch with redirect following.
  */
 
+/** Loopback addresses — allowed through SSRF protection. */
+const LOOPBACK_PATTERNS = [/^127\./, /^localhost$/i, /^\[?::1\]?$/];
+
 /** Private/internal IP patterns — block SSRF to internal networks. */
 const INTERNAL_HOSTNAME_PATTERNS = [
-  /^127\./,
-  /^localhost$/i,
   /^10\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
   /^192\.168\./,
   /^169\.254\./,
   /^0\./,
-  /^\[?::1\]?$/,
   /^\[?fe80:/i,
 ];
 
+export function isLoopback(hostname: string): boolean {
+  return LOOPBACK_PATTERNS.some((p) => p.test(hostname));
+}
+
 export function isPrivateHostname(hostname: string): boolean {
+  if (isLoopback(hostname)) return false;
   return INTERNAL_HOSTNAME_PATTERNS.some((p) => p.test(hostname));
 }
 

@@ -107,7 +107,14 @@ function extractResourceFromSubPath(
 
 // ============ Config URIs ============
 
-export type ConfigSection = 'settings' | 'hooks' | 'shortcuts' | 'mounts' | 'app' | 'domains';
+export type ConfigSection =
+  | 'settings'
+  | 'hooks'
+  | 'shortcuts'
+  | 'mounts'
+  | 'app'
+  | 'domains'
+  | 'mcp';
 
 export interface ParsedConfigUri {
   section: ConfigSection;
@@ -122,6 +129,7 @@ const CONFIG_SECTIONS: ReadonlySet<string> = new Set([
   'mounts',
   'app',
   'domains',
+  'mcp',
 ]);
 
 /**

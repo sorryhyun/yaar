@@ -7,6 +7,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
+import { configRead, configWrite } from '../storage/storage-manager.js';
 import { handleSetSettings, handleGetSettings } from '../features/config/settings.js';
 import {
   handleSetHook,
@@ -37,7 +38,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'list', 'read'],
 
     async list() {
-      const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app', 'domains'];
+      const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app', 'domains', 'mcp'];
       return okJson({ sections: sections.map((s) => `yaar://config/${s}`) });
     },
 
@@ -116,6 +117,89 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         return error(`Failed to add domain "${domain}" to the allowed list.`);
       }
       return error(`User denied access to domain "${domain}".`);
+    },
+  });
+
+  // ── yaar://config/mcp — MCP server config (mcp-servers.json) ──
+  const MCP_CONFIG_FILE = 'mcp-servers.json';
+
+  async function readMcpConfig(): Promise<Record<string, unknown>> {
+    const result = await configRead(MCP_CONFIG_FILE);
+    if (!result.success) return {};
+    try {
+      return JSON.parse(result.content!) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+
+  async function writeMcpConfig(config: Record<string, unknown>): Promise<void> {
+    await configWrite(MCP_CONFIG_FILE, JSON.stringify(config, null, 2));
+  }
+
+  registry.register('yaar://config/mcp', {
+    description:
+      'MCP server configuration (mcp-servers.json). Read to list all server configs, invoke to add/update a server.',
+    verbs: ['describe', 'read', 'invoke'],
+    invokeSchema: {
+      type: 'object',
+      required: ['name', 'config'],
+      properties: {
+        name: { type: 'string', description: 'Server name' },
+        config: {
+          type: 'object',
+          description: 'Server config',
+          properties: {
+            type: { type: 'string', enum: ['stdio', 'http'] },
+            command: { type: 'string' },
+            args: { type: 'array', items: { type: 'string' } },
+            env: { type: 'object' },
+            cwd: { type: 'string' },
+            url: { type: 'string' },
+            headers: { type: 'object' },
+          },
+          required: ['type'],
+        },
+      },
+    },
+
+    async read(): Promise<VerbResult> {
+      const config = await readMcpConfig();
+      return okJson({ servers: config });
+    },
+
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      const name = payload?.name as string | undefined;
+      const serverConfig = payload?.config as Record<string, unknown> | undefined;
+      if (!name || !serverConfig) return error('"name" and "config" are required.');
+      const config = await readMcpConfig();
+      config[name] = serverConfig;
+      await writeMcpConfig(config);
+      return ok(`Server "${name}" saved to config.`);
+    },
+  });
+
+  registry.register('yaar://config/mcp/*', {
+    description: 'A specific MCP server config entry. Read to view, delete to remove.',
+    verbs: ['describe', 'read', 'delete'],
+
+    async read(resolved: ResolvedUri): Promise<VerbResult> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return error('Server name required.');
+      const config = await readMcpConfig();
+      const entry = config[resolved.id];
+      if (!entry) return error(`Server "${resolved.id}" not found in config.`);
+      return okJson({ name: resolved.id, config: entry });
+    },
+
+    async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return error('Server name required.');
+      const config = await readMcpConfig();
+      if (!(resolved.id in config)) return error(`Server "${resolved.id}" not found in config.`);
+      delete config[resolved.id];
+      await writeMcpConfig(config);
+      return ok(`Server "${resolved.id}" removed from config.`);
     },
   });
 
