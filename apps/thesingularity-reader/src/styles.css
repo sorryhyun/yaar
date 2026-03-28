@@ -331,6 +331,23 @@
   border-radius: 2px;
 }
 
+/* Page navigation */
+.page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+.page-indicator {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  min-width: 50px;
+  text-align: center;
+}
+
 /* Post item */
 .post-item {
   display: flex;

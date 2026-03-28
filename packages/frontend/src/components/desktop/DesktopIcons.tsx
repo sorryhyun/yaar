@@ -27,6 +27,8 @@ interface AppInfo {
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 interface DesktopIconsProps {
@@ -144,12 +146,14 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             // Request iframe token from server so verb SDK can resolve `self`
             const openWindow = (iframeToken?: string) => {
               const content = { renderer: 'iframe' as const, data: app.run! };
+              const w = app.defaultWidth ?? 500;
+              const h = app.defaultHeight ?? 400;
               store.applyActions([
                 {
                   type: 'window.create',
                   windowId: app.id,
                   title: app.name,
-                  bounds: { x: 100, y: 100, w: 500, h: 400 },
+                  bounds: { x: 100, y: 100, w, h },
                   content,
                   appId: app.id,
                   ...(iframeToken ? { iframeToken } : {}),
@@ -168,7 +172,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
                     windowId: app.id,
                     windowTitle: app.name,
                     monitorId,
-                    bounds: { x: 100, y: 100, w: 500, h: 400 },
+                    bounds: { x: 100, y: 100, w, h },
                     content,
                     appId: app.id,
                   },

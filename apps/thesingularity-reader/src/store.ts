@@ -16,6 +16,7 @@ export const [state, setState] = createStore({
   lastUpdated: null as Date | null,
   newPostCount: 0,
   countdown: 0,
+  page: 1,
 
   // Post detail
   selectedPost: null as Post | null,
@@ -64,21 +65,22 @@ export function toggleHideSpammer() {
 let knownPostIds = new Set<string>();
 
 export function updatePosts(newPosts: Post[]) {
+  const onFirstPage = state.page === 1;
   const isFirstLoad = knownPostIds.size === 0;
   const newIds = new Set(newPosts.map(p => p.id));
   let count = 0;
 
-  if (!isFirstLoad) {
+  if (onFirstPage && !isFirstLoad) {
     for (const id of newIds) {
       if (!knownPostIds.has(id)) count++;
     }
   }
 
-  knownPostIds = newIds;
+  if (onFirstPage) knownPostIds = newIds;
 
   setState({
     posts: newPosts,
-    newPostCount: count,
+    newPostCount: onFirstPage ? count : 0,
     lastUpdated: new Date(),
   });
 }

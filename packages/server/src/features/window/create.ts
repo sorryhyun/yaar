@@ -111,8 +111,8 @@ export async function handleCreate(
       bounds: {
         x: (payload.x as number) ?? 100 + cascade.x,
         y: (payload.y as number) ?? 100 + cascade.y,
-        w: (payload.width as number) ?? 500,
-        h: (payload.height as number) ?? 400,
+        w: (payload.width as number) ?? appMeta?.defaultWidth ?? 500,
+        h: (payload.height as number) ?? appMeta?.defaultHeight ?? 400,
       },
       content: { renderer: 'component', data: layoutData },
       ...getAppMetaOverrides(appMeta),
@@ -157,8 +157,8 @@ export async function handleCreate(
     bounds: {
       x: (payload.x as number) ?? 100 + cascade.x,
       y: (payload.y as number) ?? 100 + cascade.y,
-      w: (payload.width as number) ?? 500,
-      h: (payload.height as number) ?? 400,
+      w: (payload.width as number) ?? appMeta?.defaultWidth ?? 500,
+      h: (payload.height as number) ?? appMeta?.defaultHeight ?? 400,
     },
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),

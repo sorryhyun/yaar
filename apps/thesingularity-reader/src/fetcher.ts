@@ -60,8 +60,9 @@ const META_SELECTORS = [
   '[class*="num"]',
 ].join(', ');
 
-export async function fetchPosts(): Promise<Post[]> {
-  const html = await browseUrl(GALLERY_URL, MAIN_TAB);
+export async function fetchPosts(page = 1): Promise<Post[]> {
+  const url = page > 1 ? `${GALLERY_URL}?page=${page}` : GALLERY_URL;
+  const html = await browseUrl(url, MAIN_TAB);
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 

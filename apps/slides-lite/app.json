@@ -5,6 +5,8 @@
   "run": "dist/index.html",
   "capture": "dom",
   "permissions": ["yaar://apps/self/storage/"],
+  "defaultWidth": 800,
+  "defaultHeight": 550,
   "version": "1.0.0",
   "author": "YAAR"
 }

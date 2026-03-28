@@ -114,6 +114,8 @@ export async function listApps(): Promise<AppInfo[]> {
       let dockEdge: DockEdgeType | undefined;
       let frameless: boolean | undefined;
       let windowStyle: Record<string, string | number> | undefined;
+      let defaultWidth: number | undefined;
+      let defaultHeight: number | undefined;
       let permissions: PermissionEntry[] | undefined;
       try {
         const metaContent = await Bun.file(join(appPath, 'app.json')).text();
@@ -132,6 +134,8 @@ export async function listApps(): Promise<AppInfo[]> {
         if (meta.frameless === true) frameless = true;
         if (meta.windowStyle && typeof meta.windowStyle === 'object')
           windowStyle = meta.windowStyle;
+        if (typeof meta.defaultWidth === 'number') defaultWidth = meta.defaultWidth;
+        if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
         if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
       } catch {
         // No metadata or invalid JSON
@@ -200,6 +204,8 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(dockEdge && { dockEdge }),
         ...(frameless && { frameless }),
         ...(windowStyle && { windowStyle }),
+        ...(defaultWidth && { defaultWidth }),
+        ...(defaultHeight && { defaultHeight }),
         ...(permissions && { permissions }),
       });
     }
@@ -221,6 +227,8 @@ export async function getAppMeta(appId: string): Promise<{
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
   hasProtocol?: boolean;
+  defaultWidth?: number;
+  defaultHeight?: number;
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -232,12 +240,16 @@ export async function getAppMeta(appId: string): Promise<{
       windowStyle?: Record<string, string | number>;
       permissions?: PermissionEntry[];
       hasProtocol?: boolean;
+      defaultWidth?: number;
+      defaultHeight?: number;
     } = {};
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
     if (meta.frameless === true) result.frameless = true;
     if (meta.windowStyle && typeof meta.windowStyle === 'object')
       result.windowStyle = meta.windowStyle;
+    if (typeof meta.defaultWidth === 'number') result.defaultWidth = meta.defaultWidth;
+    if (typeof meta.defaultHeight === 'number') result.defaultHeight = meta.defaultHeight;
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
     // Check for dist/protocol.json to determine appProtocol support
     try {

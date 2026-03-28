@@ -27,12 +27,18 @@ export async function doRefresh(): Promise<void> {
   await withLoading(
     (v: boolean) => setState('loading', v),
     async () => {
-      const newPosts = await fetchPosts();
+      const newPosts = await fetchPosts(state.page);
       updatePosts(newPosts);
       setState('countdown', settings().refreshInterval);
     },
     (msg) => setState('error', msg || '불러오기 실패'),
   );
+}
+
+export async function goToPage(page: number): Promise<void> {
+  if (page < 1 || state.loading) return;
+  setState('page', page);
+  await doRefresh();
 }
 
 export function startRefreshTimer(): void {

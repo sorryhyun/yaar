@@ -2,7 +2,7 @@ import { createMemo, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import type { Post } from '../types';
 import { state, setState, toggleHideSpammer } from '../store';
-import { selectPost, doRefresh } from '../actions';
+import { selectPost, doRefresh, goToPage } from '../actions';
 import { PostItem } from './PostItem';
 
 export function PostList() {
@@ -80,6 +80,19 @@ export function PostList() {
                     </div>
                   `
                 : null}
+          </div>
+          <div class="page-nav">
+            <button
+              class="y-btn y-btn-sm y-btn-ghost"
+              onClick=${() => goToPage(state.page - 1)}
+              disabled=${() => state.page <= 1 || state.loading}
+            >◀ 이전</button>
+            <span class="page-indicator">${() => state.page}페이지</span>
+            <button
+              class="y-btn y-btn-sm y-btn-ghost"
+              onClick=${() => goToPage(state.page + 1)}
+              disabled=${() => state.loading}
+            >다음 ▶</button>
           </div>
         `;
       }}

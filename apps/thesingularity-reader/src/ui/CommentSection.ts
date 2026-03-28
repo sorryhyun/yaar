@@ -1,7 +1,6 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state, setState } from '../store';
-import { submitComment } from '../actions';
 import type { Comment } from '../types';
 
 function NickBadge(props: { nickType?: Comment['nickType'] }) {
@@ -42,42 +41,10 @@ function CommentItem(props: { comment: Comment }) {
 function CommentWriteForm() {
   return html`
     <div class="comment-write-wrap">
-      ${() => !state.isLoggedIn ? html`
-        <div class="comment-login-prompt">
-          <span class="comment-login-icon">🔐</span>
-          <span class="comment-login-text">댓글을 작성하려면 로그인이 필요합니다</span>
-          <button
-            class="y-btn y-btn-sm y-btn-primary"
-            onClick=${() => { setState('showLogin', true); setState('showSettings', false); }}
-          >로그인</button>
-        </div>
-      ` : html`
-        <div class="comment-write-form">
-          <div class="comment-write-user">
-            <span class="comment-write-nick">👤 ${() => state.savedCredentials?.username ?? '사용자'}</span>
-          </div>
-          <textarea
-            class="comment-write-textarea"
-            placeholder="댓글을 입력하세요..."
-            value=${() => state.commentText}
-            onInput=${(e: Event) => setState('commentText', (e.target as HTMLTextAreaElement).value)}
-            rows="3"
-            disabled=${() => state.commentSubmitting}
-          ></textarea>
-          <div class="comment-write-actions">
-            <span class="comment-write-count">${() => state.commentText.length}자</span>
-            <button
-              class="y-btn y-btn-primary y-btn-sm comment-submit-btn"
-              onClick=${submitComment}
-              disabled=${() => state.commentSubmitting || !state.commentText.trim()}
-            >
-              ${() => state.commentSubmitting
-                ? html`<span class="y-spinner"></span>`
-                : '💬 등록'}
-            </button>
-          </div>
-        </div>
-      `}
+      <div class="comment-login-prompt">
+        <span class="comment-login-icon">🚧</span>
+        <span class="comment-login-text">댓글 작성 기능은 준비 중입니다</span>
+      </div>
     </div>
   `;
 }

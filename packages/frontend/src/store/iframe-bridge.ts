@@ -62,9 +62,12 @@ export function tryIframeSelfCapture(
         e.data.requestId === requestId &&
         e.source === iframe.contentWindow
       ) {
+        // Ignore null responses — an upgraded capture handler may still
+        // respond with actual image data (e.g. foreignObject DOM capture).
+        if (!e.data.imageData) return;
         clearTimeout(timer);
         window.removeEventListener('message', handler);
-        resolve(e.data.imageData ?? null);
+        resolve(e.data.imageData);
       }
     }
 
@@ -77,12 +80,11 @@ export function tryIframeSelfCapture(
 }
 
 /**
- * Capture a window element as a PNG image and push feedback.
+ * Capture a window element as an image and push feedback.
  *
- * Three-tier capture for iframe windows:
- *   1. Iframe self-capture via postMessage (canvas/svg inside the iframe; returns null for plain DOM)
- *   2. html2canvas on the iframe's content document (same-origin only)
- *   3. html2canvas on the window frame element (non-iframe or cross-origin fallback)
+ * Sends a postMessage capture request to the iframe. The injected capture
+ * script handles canvas, SVG, and DOM (via foreignObject) capture using
+ * the browser's native CSS engine.
  */
 export async function captureWindow(windowId: string, requestId: string) {
   try {
@@ -100,69 +102,37 @@ export async function captureWindow(windowId: string, requestId: string) {
       return;
     }
 
-    // If the window contains an iframe, try capture strategies in order
     const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
-    if (iframe?.contentWindow) {
-      // Tier 1: iframe self-capture (captures canvas/svg elements inside)
-      const iframeData = await tryIframeSelfCapture(iframe);
-      if (iframeData) {
-        const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '');
-        useDesktopStore.getState().addRenderingFeedback({
-          requestId,
-          windowId,
-          renderer: 'capture',
-          success: true,
-          imageData: base64,
-        });
-        return;
-      }
-
-      // Tier 2: html2canvas on iframe's content document (same-origin only)
-      try {
-        const doc = iframe.contentDocument;
-        if (doc?.documentElement) {
-          const { default: html2canvas } = await import('html2canvas');
-          const canvas = await html2canvas(doc.documentElement, {
-            useCORS: true,
-            logging: false,
-            scale: 1,
-            width: iframe.clientWidth || undefined,
-            height: iframe.clientHeight || undefined,
-          });
-          const dataUrl = canvas.toDataURL('image/webp', 0.9);
-          const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
-          useDesktopStore.getState().addRenderingFeedback({
-            requestId,
-            windowId,
-            renderer: 'capture',
-            success: true,
-            imageData: base64,
-          });
-          return;
-        }
-      } catch {
-        // Cross-origin or html2canvas failure — fall through to Tier 3
-      }
+    if (!iframe?.contentWindow) {
+      useDesktopStore.getState().addRenderingFeedback({
+        requestId,
+        windowId,
+        renderer: 'capture',
+        success: false,
+        error: 'No iframe found in window',
+      });
+      return;
     }
 
-    // Tier 3: html2canvas on the window frame element
-    const { default: html2canvas } = await import('html2canvas');
-    const canvas = await html2canvas(el, {
-      useCORS: true,
-      logging: false,
-      scale: 1,
-    });
-
-    const dataUrl = canvas.toDataURL('image/webp', 0.9);
-    const base64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
-
-    useDesktopStore.getState().addRenderingFeedback({
-      requestId,
-      windowId,
-      renderer: 'capture',
-      success: true,
-      imageData: base64,
-    });
+    const iframeData = await tryIframeSelfCapture(iframe);
+    if (iframeData) {
+      const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '');
+      useDesktopStore.getState().addRenderingFeedback({
+        requestId,
+        windowId,
+        renderer: 'capture',
+        success: true,
+        imageData: base64,
+      });
+    } else {
+      useDesktopStore.getState().addRenderingFeedback({
+        requestId,
+        windowId,
+        renderer: 'capture',
+        success: false,
+        error: 'Capture returned empty',
+      });
+    }
   } catch (error) {
     useDesktopStore.getState().addRenderingFeedback({
       requestId,
@@ -437,53 +407,14 @@ export function initWindowsSdkHandler() {
     };
 
     if (includeImage) {
-      // Reuse the capture infrastructure
       const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
 
       if (el) {
         const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
-        let imageData: string | null = null;
-
-        // Try iframe self-capture first
         if (iframe?.contentWindow) {
-          imageData = await tryIframeSelfCapture(iframe);
-          // Fall back to html2canvas on iframe content
-          if (!imageData) {
-            try {
-              const doc = iframe.contentDocument;
-              if (doc?.documentElement) {
-                const { default: html2canvas } = await import('html2canvas');
-                const canvas = await html2canvas(doc.documentElement, {
-                  useCORS: true,
-                  logging: false,
-                  scale: 1,
-                  width: iframe.clientWidth || undefined,
-                  height: iframe.clientHeight || undefined,
-                });
-                imageData = canvas.toDataURL('image/webp', 0.9);
-              }
-            } catch {
-              // Cross-origin or failure — fall through
-            }
-          }
+          const imageData = await tryIframeSelfCapture(iframe);
+          if (imageData) result.imageData = imageData;
         }
-
-        // Fall back to html2canvas on the window frame
-        if (!imageData) {
-          try {
-            const { default: html2canvas } = await import('html2canvas');
-            const canvas = await html2canvas(el, {
-              useCORS: true,
-              logging: false,
-              scale: 1,
-            });
-            imageData = canvas.toDataURL('image/webp', 0.9);
-          } catch {
-            // Capture failed
-          }
-        }
-
-        if (imageData) result.imageData = imageData;
       }
     }
 
