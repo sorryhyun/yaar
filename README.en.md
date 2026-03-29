@@ -132,6 +132,7 @@ Once running, start with something like "install essential apps".
     │ apps/slides-lite/                    │
     │   app.json         ← metadata       │
     │   SKILL.md         ← AI-readable doc│
+    │   AGENTS.md        ← app agent def  │
     │   src/main.ts      ← UI + logic     │
     │   dist/                              │
     │     index.html     ← built output   │

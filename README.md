@@ -94,12 +94,12 @@ make dev          # 브라우저가 자동으로 열립니다
 
     </details>
 
-- **skill, plugin, UI를 모두 통일한 구조 'app'을 사용합니다.** 폴더 하나가 곧 앱이고, 설치도 삭제도 폴더 단위입니다.
+- **AGENTS.md, skill, plugin, UI를 모두 통일한 구조 'app'을 사용합니다.** 폴더 하나가 곧 앱이고, 설치도 삭제도 폴더 단위입니다.
 
     <details>
     <summary>기존 방식과 비교</summary>
 
-    기존 AI 도구에서는 skill, plugin, custom UI가 각각 다른 형식과 등록 방식을 가집니다. YAAR에서는 하나의 폴더 구조가 이 모든 것을 통일합니다.
+    기존 AI 도구에서는 agent, skill, plugin, custom UI가 각각 다른 형식과 등록 방식을 가집니다. YAAR에서는 하나의 폴더 구조가 이 모든 것을 통일합니다.
 
     ```
     ❌ 기존: 역할마다 다른 형식, 다른 등록 방식
@@ -121,6 +121,7 @@ make dev          # 브라우저가 자동으로 열립니다
     │ apps/slides-lite/                    │
     │   app.json         ← 메타데이터     │
     │   SKILL.md         ← AI가 읽는 설명 │
+    │   AGENTS.md        ← 앱 에이전트 정의│
     │   src/main.ts      ← UI + 로직      │
     │   dist/                              │
     │     index.html     ← 빌드 결과물    │
