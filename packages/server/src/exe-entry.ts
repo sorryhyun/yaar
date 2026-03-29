@@ -101,6 +101,7 @@ function openAppWindow() {
       `--user-data-dir=${userDataDir}`,
       '--disable-background-networking',
       '--disable-default-apps',
+      '--disable-features=TranslateUI',
       '--no-first-run',
     ];
 
