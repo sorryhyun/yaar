@@ -1,6 +1,7 @@
 // GENERATED CODE! DO NOT MODIFY BY HAND!
 
 export type { AbsolutePathBuf } from "./AbsolutePathBuf.js";
+export type { AgentPath } from "./AgentPath.js";
 export type { ApplyPatchApprovalParams } from "./ApplyPatchApprovalParams.js";
 export type { ApplyPatchApprovalResponse } from "./ApplyPatchApprovalResponse.js";
 export type { AuthMode } from "./AuthMode.js";
@@ -18,6 +19,7 @@ export type { FileChange } from "./FileChange.js";
 export type { ForcedLoginMethod } from "./ForcedLoginMethod.js";
 export type { FunctionCallOutputBody } from "./FunctionCallOutputBody.js";
 export type { FunctionCallOutputContentItem } from "./FunctionCallOutputContentItem.js";
+export type { FuzzyFileSearchMatchType } from "./FuzzyFileSearchMatchType.js";
 export type { FuzzyFileSearchParams } from "./FuzzyFileSearchParams.js";
 export type { FuzzyFileSearchResponse } from "./FuzzyFileSearchResponse.js";
 export type { FuzzyFileSearchResult } from "./FuzzyFileSearchResult.js";

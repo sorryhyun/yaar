@@ -8,10 +8,12 @@ import type { CollabAgentState } from "./CollabAgentState.js";
 import type { CollabAgentTool } from "./CollabAgentTool.js";
 import type { CollabAgentToolCallStatus } from "./CollabAgentToolCallStatus.js";
 import type { CommandAction } from "./CommandAction.js";
+import type { CommandExecutionSource } from "./CommandExecutionSource.js";
 import type { CommandExecutionStatus } from "./CommandExecutionStatus.js";
 import type { DynamicToolCallOutputContentItem } from "./DynamicToolCallOutputContentItem.js";
 import type { DynamicToolCallStatus } from "./DynamicToolCallStatus.js";
 import type { FileUpdateChange } from "./FileUpdateChange.js";
+import type { HookPromptFragment } from "./HookPromptFragment.js";
 import type { McpToolCallError } from "./McpToolCallError.js";
 import type { McpToolCallResult } from "./McpToolCallResult.js";
 import type { McpToolCallStatus } from "./McpToolCallStatus.js";
@@ -20,7 +22,7 @@ import type { PatchApplyStatus } from "./PatchApplyStatus.js";
 import type { UserInput } from "./UserInput.js";
 import type { WebSearchAction } from "./WebSearchAction.js";
 
-export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, memoryCitation: MemoryCitation | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string, 
+export type ThreadItem = { "type": "userMessage", id: string, content: Array<UserInput>, } | { "type": "hookPrompt", id: string, fragments: Array<HookPromptFragment>, } | { "type": "agentMessage", id: string, text: string, phase: MessagePhase | null, memoryCitation: MemoryCitation | null, } | { "type": "plan", id: string, text: string, } | { "type": "reasoning", id: string, summary: Array<string>, content: Array<string>, } | { "type": "commandExecution", id: string, 
 /**
  * The command to be executed.
  */
@@ -32,7 +34,7 @@ cwd: string,
 /**
  * Identifier for the underlying PTY process (when available).
  */
-processId: string | null, status: CommandExecutionStatus, 
+processId: string | null, source: CommandExecutionSource, status: CommandExecutionStatus, 
 /**
  * A best-effort parsing of the command to understand the action(s) it will perform.
  * This returns a list of CommandAction objects because a single shell command may
@@ -95,4 +97,4 @@ reasoningEffort: ReasoningEffort | null,
 /**
  * Last known status of the target agents, when available.
  */
-agentsStates: { [key in string]?: CollabAgentState }, } | { "type": "webSearch", id: string, query: string, action: WebSearchAction | null, } | { "type": "imageView", id: string, path: string, } | { "type": "imageGeneration", id: string, status: string, revisedPrompt: string | null, result: string, } | { "type": "enteredReviewMode", id: string, review: string, } | { "type": "exitedReviewMode", id: string, review: string, } | { "type": "contextCompaction", id: string, };
+agentsStates: { [key in string]?: CollabAgentState }, } | { "type": "webSearch", id: string, query: string, action: WebSearchAction | null, } | { "type": "imageView", id: string, path: string, } | { "type": "imageGeneration", id: string, status: string, revisedPrompt: string | null, result: string, savedPath?: string, } | { "type": "enteredReviewMode", id: string, review: string, } | { "type": "exitedReviewMode", id: string, review: string, } | { "type": "contextCompaction", id: string, };
