@@ -97,7 +97,15 @@ export class ContextPool implements PoolContext {
         `[ContextPool] Restored ${restoredContext.length} context messages from previous session`,
       );
     }
-    this.agentPool = new AgentPool(sessionId, broadcast);
+    this.agentPool = new AgentPool(sessionId, broadcast, (rawId, monitorId) => {
+      // Resolve raw window ID to scoped handle via the handle map.
+      // If monitorId is provided, register/resolve; otherwise try lookup.
+      if (monitorId) {
+        const existing = windowState.handleMap.resolve(rawId);
+        return existing ?? windowState.handleMap.register(rawId, monitorId);
+      }
+      return windowState.handleMap.resolve(rawId) ?? rawId;
+    });
 
     // Create processors
     this.monitorProcessor = new MonitorTaskProcessor(this);

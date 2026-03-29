@@ -32,6 +32,7 @@ export function buildReloadContext(
   const openWindowsContext = ctx.contextAssembly.formatOpenWindows(windowSnapshot, {
     monitorId: task.monitorId,
     currentWindowId: options?.currentWindowId,
+    getRawWindowId: (handle) => ctx.windowState.handleMap.getRawWindowId(handle),
   });
   const fp = ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
   const reloadPrefix = ctx.reloadPolicy.formatReloadOptions(ctx.reloadPolicy.findMatches(fp, 3));

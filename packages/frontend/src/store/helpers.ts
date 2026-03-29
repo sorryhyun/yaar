@@ -22,20 +22,14 @@ export function toWindowKey(monitorId: string, rawId: string): string {
 }
 
 /**
- * Extract the raw windowId from a (possibly) scoped store key.
- * "0/win-storage" → "win-storage"
- * "win-storage" → "win-storage" (backward compat)
- */
-export function getRawWindowId(key: string): string {
-  const idx = key.indexOf('/');
-  return idx >= 0 ? key.slice(idx + 1) : key;
-}
-
-/**
  * Resolve a raw windowId to its scoped store key by searching all windows.
  * Returns the raw ID as-is if it already exists as a key, otherwise scans
  * for a key ending with `/rawId`. Falls back to scoping with the given
  * monitorId if no match is found.
+ *
+ * Used only in iframe-bridge for server messages that may carry raw IDs
+ * (app protocol, verb subscriptions, window SDK). Action processing
+ * no longer needs this — the server stamps handles before sending.
  */
 export function resolveWindowKey(
   windows: Record<string, unknown>,

@@ -171,6 +171,7 @@ export class AgentSession {
     instanceId?: string,
     liveSessionId?: SessionId,
     broadcast?: (event: ServerEvent) => void,
+    resolveWindowHandle?: (rawId: string, monitorId?: string) => string,
   ) {
     this.connectionId = connectionId;
     this.liveSessionId = liveSessionId ?? connectionId;
@@ -225,6 +226,7 @@ export class AgentSession {
       this.getFilterAgentId.bind(this),
       () => this.sessionLogger,
       (action) => this.recordedActions.push(action),
+      resolveWindowHandle,
     );
     this.unsubscribeAction = actionEmitter.onAction(
       this.toolActionBridge.handleToolAction.bind(this.toolActionBridge),

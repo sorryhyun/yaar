@@ -80,25 +80,33 @@ function rejectIfLocked(
  * Can be called standalone inside a batched set() or via handleWindowAction.
  */
 export function applyWindowAction(state: DesktopStore, action: WindowAction): void {
-  // Resolve an action's windowId to the correct store key.
-  const resolveKey = (rawId: string): string => {
-    if (state.windows[rawId]) return rawId;
-    const actionMonitorId = (action as { monitorId?: string }).monitorId;
-    if (!actionMonitorId) {
-      console.warn(
-        `[windowsSlice] OS action "${action.type}" missing monitorId, falling back to activeMonitorId="${state.activeMonitorId}"`,
-      );
+  // Server stamps scoped handles onto windowId before sending — use directly.
+  // Fallback: if the windowId isn't found, check as-is (for user-initiated actions
+  // that already use the store key).
+  const resolveKey = (windowId: string): string => {
+    if (state.windows[windowId]) return windowId;
+    // Backward compat: scan for suffix match (handles rare cases where raw ID arrives)
+    const suffix = `/${windowId}`;
+    for (const key of Object.keys(state.windows)) {
+      if (key.endsWith(suffix)) return key;
     }
-    const monId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-    return toWindowKey(monId, rawId);
+    return windowId;
   };
 
   switch (action.type) {
     case 'window.create': {
       const createAction = action as WindowCreateAction;
+      // Server sends windowId as the scoped handle (e.g., "0/notes").
+      // User-initiated creates may send raw IDs — scope them using
+      // the action's monitorId property or the active monitor.
+      const rawId = createAction.windowId;
+      const slashIdx = rawId.indexOf('/');
       const actionMonitorId = (createAction as { monitorId?: string }).monitorId;
-      const monitorId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-      const key = toWindowKey(monitorId, createAction.windowId);
+      const monitorId =
+        slashIdx >= 0
+          ? rawId.slice(0, slashIdx)
+          : (actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID);
+      const key = slashIdx >= 0 ? rawId : toWindowKey(monitorId, rawId);
       const variant = createAction.variant;
       const vw =
         typeof globalThis.innerWidth === 'number' ? globalThis.innerWidth : DEFAULT_VIEWPORT_WIDTH;

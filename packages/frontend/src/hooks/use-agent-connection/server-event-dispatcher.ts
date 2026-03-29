@@ -79,10 +79,9 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
   switch (message.type) {
     case ServerEventType.ACTIONS: {
       const monitorId = (message as { monitorId?: string }).monitorId;
-      const actions = monitorId
-        ? message.actions.map((action) => ({ ...action, monitorId }))
-        : message.actions;
-      handlers.applyActions(actions);
+      // Server already stamps scoped handles on windowId — just pass actions through.
+      // monitorId is only used for CLI entry attribution below.
+      handlers.applyActions(message.actions);
       // Summarize actions for CLI
       const summary = message.actions
         .map((a) => {

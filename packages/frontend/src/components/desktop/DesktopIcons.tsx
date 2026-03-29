@@ -10,7 +10,7 @@ import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
 import { extractAppId } from '@yaar/shared';
-import { toWindowKey } from '@/store/helpers';
+import { toWindowKey } from '@/store/helpers'; // Used for user-initiated window creation
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** App info from /api/apps endpoint */

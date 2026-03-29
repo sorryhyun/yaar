@@ -16,14 +16,23 @@ export class ContextAssemblyPolicy {
 
   formatOpenWindows(
     windows: WindowState[],
-    options?: { monitorId?: string; currentWindowId?: string },
+    options?: {
+      monitorId?: string;
+      currentWindowId?: string;
+      getRawWindowId?: (handle: string) => string;
+    },
   ): string {
     if (windows.length === 0) return '';
+    const getRaw =
+      options?.getRawWindowId ??
+      ((id: string) => {
+        const slashIdx = id.indexOf('/');
+        return slashIdx >= 0 ? id.slice(slashIdx + 1) : id;
+      });
     const lines = windows.map((w) => {
       const label = w.title || w.content.renderer;
       const current = options?.currentWindowId === w.id ? ' (you)' : '';
-      const slashIdx = w.id.indexOf('/');
-      const rawId = slashIdx >= 0 ? w.id.slice(slashIdx + 1) : w.id;
+      const rawId = getRaw(w.id);
       return `  yaar://windows/${rawId} — ${label}${current}`;
     });
     const monitor = options?.monitorId ? ` monitor="${options.monitorId}"` : '';

@@ -4,13 +4,13 @@
  * Tracks windows created via actions and provides query methods
  * for list_windows and view_window tools.
  *
- * Uses monitorId-scoped keys internally to prevent collision when
- * multiple monitors create windows with the same raw ID.
- * Key format: "monitorId/rawWindowId" (e.g., "0/win-storage").
+ * Delegates handle creation/resolution to WindowHandleMap — this class
+ * never constructs composite keys directly.
  */
 
 import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
-import { buildWindowKey, applyContentOperation } from '@yaar/shared';
+import { applyContentOperation } from '@yaar/shared';
+import { WindowHandleMap } from './window-handle-map.js';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
@@ -21,8 +21,13 @@ export type { WindowState } from '@yaar/shared';
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
-  private suffixIndex: Map<string, string> = new Map();
   private onWindowCloseCallback?: (windowId: string) => void;
+
+  readonly handleMap: WindowHandleMap;
+
+  constructor(handleMap?: WindowHandleMap) {
+    this.handleMap = handleMap ?? new WindowHandleMap();
+  }
 
   /**
    * Set a callback to be invoked when a window is closed.
@@ -33,22 +38,19 @@ export class WindowStateRegistry {
   }
 
   /**
-   * Resolve a windowId to its internal map key.
-   * Tries exact match first, then scans for a key ending with /rawId.
+   * Resolve a windowId (raw or handle) to its internal map key.
    * Returns the resolved key and the stored WindowState, or undefined.
    */
   private resolve(windowId: string): [string, WindowState] | undefined {
-    // 1. Exact match (scoped or legacy raw key)
+    // 1. Exact match (handle or legacy raw key)
     const exact = this.windows.get(windowId);
     if (exact) return [windowId, exact];
 
-    // 2. O(1) suffix lookup via index
-    const indexed = this.suffixIndex.get(windowId);
-    if (indexed) {
-      const state = this.windows.get(indexed);
-      if (state) return [indexed, state];
-      // Stale index entry
-      this.suffixIndex.delete(windowId);
+    // 2. Resolve via handle map (raw ID → handle)
+    const handle = this.handleMap.resolve(windowId);
+    if (handle) {
+      const state = this.windows.get(handle);
+      if (state) return [handle, state];
     }
 
     return undefined;
@@ -58,8 +60,8 @@ export class WindowStateRegistry {
    * Determine the internal key for a given action windowId + monitorId.
    */
   private actionKey(rawId: string, monitorId?: string): string {
-    if (monitorId) return buildWindowKey(monitorId, rawId);
-    // Backward compat: try to find an existing scoped key for this raw ID
+    if (monitorId) return this.handleMap.register(rawId, monitorId);
+    // Backward compat: try to find an existing handle for this raw ID
     const resolved = this.resolve(rawId);
     return resolved ? resolved[0] : rawId;
   }
@@ -69,7 +71,7 @@ export class WindowStateRegistry {
 
     switch (action.type) {
       case 'window.create': {
-        const key = monitorId ? buildWindowKey(monitorId, action.windowId) : action.windowId;
+        const key = this.actionKey(action.windowId, monitorId);
         this.windows.set(key, {
           id: key,
           title: action.title,
@@ -85,10 +87,6 @@ export class WindowStateRegistry {
           createdAt: now,
           updatedAt: now,
         });
-        // Index: rawId → scoped key for O(1) suffix lookups
-        if (monitorId) {
-          this.suffixIndex.set(action.windowId, key);
-        }
         break;
       }
 
@@ -96,11 +94,7 @@ export class WindowStateRegistry {
         const key = this.actionKey(action.windowId, monitorId);
         this.windows.delete(key);
         this.appCommands.delete(key);
-        // Clean up suffix index
-        const slashIdx = key.indexOf('/');
-        if (slashIdx !== -1) {
-          this.suffixIndex.delete(key.slice(slashIdx + 1));
-        }
+        this.handleMap.remove(key);
         this.onWindowCloseCallback?.(key);
         break;
       }
@@ -249,7 +243,7 @@ export class WindowStateRegistry {
   clear(): void {
     this.windows.clear();
     this.appCommands.clear();
-    this.suffixIndex.clear();
+    this.handleMap.clear();
   }
 
   getWindowCount(): number {

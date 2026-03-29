@@ -1,8 +1,8 @@
 /**
  * Iframe Bridge - all communication between the desktop store and iframe windows.
  *
- * Covers: window capture, App Protocol relay, verb subscription forwarding,
- * iframe message routing, windows SDK handler, and notification broadcasting.
+ * Covers: window capture (direct WS send), App Protocol relay, verb subscription
+ * forwarding, iframe message routing, windows SDK handler, and notification broadcasting.
  */
 import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
@@ -10,7 +10,7 @@ import { ClientEventType } from '@/types';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
-import { getRawWindowId, resolveWindowKey } from './helpers';
+import { resolveWindowKey } from './helpers';
 // Circular import — safe because useDesktopStore is only accessed at runtime (live ESM binding)
 import { useDesktopStore } from './desktop';
 
@@ -80,67 +80,49 @@ export function tryIframeSelfCapture(
 }
 
 /**
- * Capture a window element as an image and push feedback.
+ * Capture a window element as an image and send feedback directly over WebSocket.
  *
  * Sends a postMessage capture request to the iframe. The injected capture
- * script handles canvas, SVG, and DOM (via foreignObject) capture using
- * the browser's native CSS engine.
+ * script handles canvas and DOM (via foreignObject) capture using the
+ * browser's native CSS engine. Feedback is sent directly over WebSocket
+ * (bypassing the Zustand queue) to minimize latency.
  */
 export async function captureWindow(windowId: string, requestId: string) {
+  const sendFeedback = (success: boolean, extra?: { imageData?: string; error?: string }) => {
+    sendEvent(wsManager, {
+      type: ClientEventType.RENDERING_FEEDBACK,
+      requestId,
+      windowId,
+      renderer: 'capture',
+      success,
+      ...extra,
+    });
+  };
+
   try {
     const el = document.querySelector(
       `[${WINDOW_ID_DATA_ATTR}="${windowId}"]`,
     ) as HTMLElement | null;
     if (!el) {
-      useDesktopStore.getState().addRenderingFeedback({
-        requestId,
-        windowId,
-        renderer: 'capture',
-        success: false,
-        error: `Window element not found in DOM`,
-      });
+      sendFeedback(false, { error: 'Window element not found in DOM' });
       return;
     }
 
     const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
     if (!iframe?.contentWindow) {
-      useDesktopStore.getState().addRenderingFeedback({
-        requestId,
-        windowId,
-        renderer: 'capture',
-        success: false,
-        error: 'No iframe found in window',
-      });
+      sendFeedback(false, { error: 'No iframe found in window' });
       return;
     }
 
     const iframeData = await tryIframeSelfCapture(iframe);
     if (iframeData) {
       const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '');
-      useDesktopStore.getState().addRenderingFeedback({
-        requestId,
-        windowId,
-        renderer: 'capture',
-        success: true,
-        imageData: base64,
-      });
+      sendFeedback(true, { imageData: base64 });
     } else {
-      useDesktopStore.getState().addRenderingFeedback({
-        requestId,
-        windowId,
-        renderer: 'capture',
-        success: false,
-        error: 'Capture returned empty',
-      });
+      sendFeedback(false, { error: 'Capture returned empty' });
     }
   } catch (error) {
-    useDesktopStore.getState().addRenderingFeedback({
-      requestId,
-      windowId,
-      renderer: 'capture',
-      success: false,
-      error: error instanceof Error ? error.message : 'Capture failed',
-    });
+    sendFeedback(false, { error: error instanceof Error ? error.message : 'Capture failed' });
   }
 }
 
@@ -310,7 +292,7 @@ export function initIframeMessageHandlers() {
     // Zustand pending queue to eliminate the subscription-drain latency.
     sendEvent(wsManager, {
       type: ClientEventType.APP_PROTOCOL_READY,
-      windowId: getRawWindowId(ctx.source.windowId),
+      windowId: ctx.source.windowId,
     });
   });
 

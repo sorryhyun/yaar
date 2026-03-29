@@ -4,7 +4,6 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
-import { getRawWindowId } from '@/store/helpers';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface SelectionActionInputProps {
@@ -46,13 +45,12 @@ export function SelectionActionInput({
   const handleSubmit = useCallback(
     (instruction: string) => {
       if (!instruction.trim()) return;
-      const rawId = getRawWindowId(windowId);
       const tag = isRegion && !selectedText ? 'region_select' : 'selection';
       const textPart = selectedText ? `\n  selected_text: "${selectedText.slice(0, 1000)}"` : '';
       useDesktopStore
         .getState()
         .queueGestureMessage(
-          `<ui:${tag}>\n  instruction: "${instruction}"${textPart}\n  source: window "${windowTitle}" (id: ${rawId})\n</ui:${tag}>`,
+          `<ui:${tag}>\n  instruction: "${instruction}"${textPart}\n  source: window "${windowTitle}" (id: ${windowId})\n</ui:${tag}>`,
         );
       onClose();
     },

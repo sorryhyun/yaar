@@ -35,6 +35,7 @@ export class AgentPool {
   private nextAgentId = 0;
   private logger: SessionLogger | null = null;
   private broadcastFn: (event: ServerEvent) => void;
+  private resolveWindowHandle: (rawId: string, monitorId?: string) => string;
 
   /** Persistent monitor agents, keyed by monitorId. */
   private monitorAgents = new Map<string, PooledAgent>();
@@ -51,9 +52,14 @@ export class AgentPool {
   /** All agent instanceIds for O(1) lookup. */
   private agentIds = new Set<string>();
 
-  constructor(sessionId: SessionId, broadcast: (event: ServerEvent) => void) {
+  constructor(
+    sessionId: SessionId,
+    broadcast: (event: ServerEvent) => void,
+    resolveWindowHandle?: (rawId: string, monitorId?: string) => string,
+  ) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
+    this.resolveWindowHandle = resolveWindowHandle ?? ((id) => id);
   }
 
   setLogger(logger: SessionLogger): void {
@@ -83,6 +89,7 @@ export class AgentPool {
       instanceId,
       this.sessionId, // liveSessionId for session-scoped broadcasting
       this.broadcastFn,
+      this.resolveWindowHandle,
     );
 
     const initialized = await session.initialize(preWarmedProvider);

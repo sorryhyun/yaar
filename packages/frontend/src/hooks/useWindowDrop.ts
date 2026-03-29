@@ -4,7 +4,6 @@
  */
 import { useCallback, useState } from 'react';
 import { useDesktopStore, getIframeDragSource, consumeIframeDragSource } from '@/store';
-import { getRawWindowId } from '@/store/helpers';
 import { filterImageFiles, uploadImages, isExternalFileDrag } from '@/lib/uploadImage';
 
 interface UseWindowDropOptions {
@@ -65,7 +64,7 @@ export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
       const appId = e.dataTransfer.getData('application/x-yaar-app');
       if (appId) {
         e.preventDefault();
-        const rawId = getRawWindowId(windowId);
+        const rawId = windowId;
         useDesktopStore
           .getState()
           .queueGestureMessage(
@@ -81,8 +80,8 @@ export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
         const store = useDesktopStore.getState();
         const sourceWin = store.windows[dragSource.windowId];
         const sourceTitle = sourceWin?.title ?? dragSource.windowId;
-        const sourceRawId = getRawWindowId(dragSource.windowId);
-        const targetRawId = getRawWindowId(windowId);
+        const sourceRawId = dragSource.windowId;
+        const targetRawId = windowId;
         store.queueGestureMessage(
           `<ui:select>\n  selected_text: "${dragSource.text.slice(0, 1000)}"\n  source: window "${sourceTitle}" (id: ${sourceRawId})\n</ui:select>\n<ui:drag>\n  target: window "${windowTitle}" (id: ${targetRawId})\n</ui:drag>`,
         );
@@ -95,7 +94,7 @@ export function useWindowDrop({ windowId, windowTitle }: UseWindowDropOptions) {
         if (imageFiles.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-          const rawId = getRawWindowId(windowId);
+          const rawId = windowId;
           uploadImages(imageFiles).then((paths) => {
             if (paths.length > 0) {
               const imageLines = paths.map((p) => `  image: ${p}`).join('\n');

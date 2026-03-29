@@ -266,12 +266,25 @@ export class LiveSession {
           const action = hook.action.payload as OSAction;
           if (action.type.startsWith('window.')) {
             this.windowState.handleAction(action, '0');
+            // Stamp the handle onto the action so frontend receives the scoped windowId
+            const raw = (action as { windowId?: string }).windowId;
+            const resolved = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
+            const stamped =
+              resolved && resolved !== raw
+                ? ({ ...action, windowId: resolved } as OSAction)
+                : action;
+            this.broadcast({
+              type: ServerEventType.ACTIONS,
+              actions: [stamped],
+              monitorId: '0',
+            });
+          } else {
+            this.broadcast({
+              type: ServerEventType.ACTIONS,
+              actions: [action],
+              monitorId: '0',
+            });
           }
-          this.broadcast({
-            type: ServerEventType.ACTIONS,
-            actions: [action],
-            monitorId: '0',
-          });
         }
       }
     } catch (err) {

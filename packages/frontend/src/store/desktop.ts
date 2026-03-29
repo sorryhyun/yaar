@@ -20,7 +20,6 @@ import type {
   DesktopUpdateShortcutAction,
   DesktopUpdateSettingsAction,
 } from '@yaar/shared';
-import { resolveWindowKey } from './helpers';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
 import {
@@ -112,12 +111,8 @@ export const useDesktopStore = create<DesktopStore>()(
         // Handle capture async (outside Immer)
         const { windowId, requestId } = action as WindowCaptureAction & { requestId?: string };
         if (requestId) {
-          // Resolve scoped key: server sends raw windowId, store uses monitorId-scoped keys
-          const state = useDesktopStore.getState();
-          const actionMonitorId = (action as { monitorId?: string }).monitorId;
-          const monitorId = actionMonitorId ?? state.activeMonitorId ?? DEFAULT_MONITOR_ID;
-          const key = resolveWindowKey(state.windows, windowId, monitorId);
-          captureWindow(key, requestId);
+          // Server stamps scoped handle on windowId — use directly
+          captureWindow(windowId, requestId);
         }
         return;
       }

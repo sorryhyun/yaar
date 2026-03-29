@@ -15,3 +15,4 @@ export {
 } from './broadcast-center.js';
 export { actionEmitter, type ActionEvent, type RenderingFeedback } from './action-emitter.js';
 export { WindowStateRegistry, type WindowState } from './window-state.js';
+export { WindowHandleMap } from './window-handle-map.js';

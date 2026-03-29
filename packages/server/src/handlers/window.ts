@@ -10,7 +10,6 @@
  *   delete('yaar://windows/{w}')          → close window
  */
 
-import { parseWindowKey } from '@yaar/shared';
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
@@ -49,8 +48,7 @@ export function registerWindowHandlers(
       if (windows.length === 0) return okJson([]);
 
       const windowList = windows.map((win) => {
-        const parsed = parseWindowKey(win.id);
-        const windowId = parsed?.windowId ?? win.id;
+        const windowId = getWindowState().handleMap.getRawWindowId(win.id);
         return {
           id: windowId,
           uri: `yaar://windows/${windowId}`,
@@ -151,12 +149,10 @@ export function registerWindowHandlers(
 
         const monitorId = resolved.monitorId;
         const stats = pool.getStats();
+        const monitorHandles = new Set(getWindowState().handleMap.listByMonitor(monitorId));
         const windows = getWindowState()
           .listWindows()
-          .filter((w) => {
-            const parsed = parseWindowKey(w.id);
-            return parsed?.monitorId === monitorId;
-          });
+          .filter((w) => monitorHandles.has(w.id));
 
         return okJson({
           monitorId,

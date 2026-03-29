@@ -2,7 +2,7 @@
  * Selectors for the desktop store.
  */
 import type { DesktopStore, WindowModel, WindowAgent } from './types';
-import { getRawWindowId } from './helpers';
+// Window IDs are opaque handles — no parsing needed.
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 
 export const selectWindowsInOrder = (state: DesktopStore) =>
@@ -102,8 +102,6 @@ function getWindowAgentMap(agents: Record<string, WindowAgent>): Map<string, Win
   for (const key in agents) {
     const wa = agents[key];
     map.set(wa.windowId, wa);
-    const raw = getRawWindowId(wa.windowId);
-    if (raw !== wa.windowId) map.set(raw, wa);
   }
   windowAgentReverseCache = { agents, map };
   return map;
@@ -113,11 +111,7 @@ const windowAgentSelectors = new Map<string, (state: DesktopStore) => WindowAgen
 export const selectWindowAgent = (windowId: string) => {
   let sel = windowAgentSelectors.get(windowId);
   if (!sel) {
-    const rawId = getRawWindowId(windowId);
-    sel = (state: DesktopStore) => {
-      const map = getWindowAgentMap(state.windowAgents);
-      return map.get(windowId) ?? map.get(rawId);
-    };
+    sel = (state: DesktopStore) => getWindowAgentMap(state.windowAgents).get(windowId);
     windowAgentSelectors.set(windowId, sel);
   }
   return sel;

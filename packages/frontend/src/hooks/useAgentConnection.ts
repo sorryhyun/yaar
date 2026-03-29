@@ -19,7 +19,7 @@ import {
   useMonitorSync,
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
-import { getRawWindowId } from '@/store/helpers';
+// Window IDs in the store are opaque handles — send as-is to server.
 import { captureMonitorScreenshot } from '@/lib/captureMonitorScreenshot';
 
 let sessionCheckDone = false;
@@ -263,7 +263,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       send({
         type: ClientEventType.WINDOW_MESSAGE,
         messageId,
-        windowId: getRawWindowId(windowId),
+        windowId: windowId,
         content,
       });
     },
@@ -310,7 +310,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       const actionId = generateActionId(parallel);
       send({
         type: ClientEventType.COMPONENT_ACTION,
-        windowId: getRawWindowId(windowId),
+        windowId: windowId,
         windowTitle,
         action,
         actionId,

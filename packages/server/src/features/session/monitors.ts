@@ -6,7 +6,6 @@
 
 import type { LiveSession } from '../../session/live-session.js';
 import type { ContextPool } from '../../agents/context-pool.js';
-import { parseWindowKey } from '@yaar/shared';
 
 export interface MonitorSummary {
   monitorId: string;
@@ -36,15 +35,14 @@ export function listMonitors(session: LiveSession, pool: ContextPool): MonitorSu
   const monitorIds = pool.getMonitorAgentIds();
   const allWindows = session.windowState.listWindows();
 
+  const handleMap = session.windowState.handleMap;
   return monitorIds.map((id) => {
-    const windows = allWindows.filter((w) => {
-      const parsed = parseWindowKey(w.id);
-      return parsed?.monitorId === id;
-    });
+    const monitorHandles = new Set(handleMap.listByMonitor(id));
+    const windowCount = allWindows.filter((w) => monitorHandles.has(w.id)).length;
     return {
       monitorId: id,
       hasMonitorAgent: pool.hasMonitorAgent(id),
-      windowCount: windows.length,
+      windowCount,
     };
   });
 }
@@ -57,11 +55,9 @@ export function getMonitorStatus(
 ): MonitorStatus | null {
   if (!pool.hasMonitorAgent(monitorId)) return null;
 
+  const monitorHandles = new Set(session.windowState.handleMap.listByMonitor(monitorId));
   const allWindows = session.windowState.listWindows();
-  const windows = allWindows.filter((w) => {
-    const parsed = parseWindowKey(w.id);
-    return parsed?.monitorId === monitorId;
-  });
+  const windows = allWindows.filter((w) => monitorHandles.has(w.id));
 
   const agentPool = pool.agentPool;
   const agent = agentPool.getMonitorAgent(monitorId);

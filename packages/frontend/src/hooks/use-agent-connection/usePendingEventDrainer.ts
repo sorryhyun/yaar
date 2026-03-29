@@ -4,7 +4,6 @@ import { ClientEventType } from '@/types';
 import type { ClientEvent } from '@/types';
 import { wsManager } from './transport-manager';
 import { generateMessageId } from './outbound-command-helpers';
-import { getRawWindowId } from '@/store/helpers';
 
 /**
  * Drain a pending queue: check length, consume, and process items.
@@ -64,7 +63,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           send({
             type: ClientEventType.RENDERING_FEEDBACK,
             requestId: item.requestId,
-            windowId: getRawWindowId(item.windowId),
+            windowId: item.windowId,
             renderer: item.renderer,
             success: item.success,
             error: item.error,
@@ -80,7 +79,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
           send({
             type: ClientEventType.APP_PROTOCOL_RESPONSE,
             requestId: item.requestId,
-            windowId: getRawWindowId(item.windowId),
+            windowId: item.windowId,
             response: item.response,
           });
         }
@@ -97,7 +96,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
             send({
               type: ClientEventType.WINDOW_MESSAGE,
               messageId,
-              windowId: getRawWindowId(item.windowId),
+              windowId: item.windowId,
               content,
             });
           }
@@ -105,10 +104,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
       });
 
       drainQueue(state.pendingInteractions, consumePendingInteractions, (interactions) => {
-        const unscopedInteractions = interactions.map((i) =>
-          i.windowId ? { ...i, windowId: getRawWindowId(i.windowId) } : i,
-        );
-        send({ type: ClientEventType.USER_INTERACTION, interactions: unscopedInteractions });
+        send({ type: ClientEventType.USER_INTERACTION, interactions });
       });
 
       drainQueue(state.pendingGestureMessages, consumeGestureMessages, (messages) => {

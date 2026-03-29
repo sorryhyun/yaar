@@ -53,7 +53,7 @@ export async function handleAppQuery(
     if (!response) return error('App did not respond to manifest request (timeout).');
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
-    if (response.manifest) enrichManifestWithUris(response.manifest, win.id);
+    if (response.manifest) enrichManifestWithUris(response.manifest, win.id, windowState.handleMap);
     return wrapAppValue(response.manifest);
   }
 

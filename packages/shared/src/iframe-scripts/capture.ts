@@ -4,8 +4,7 @@
  * Injected into iframes so the parent can request a screenshot via postMessage.
  * Capture priority:
  *   1. Largest <canvas> element (direct toDataURL)
- *   2. Largest <svg> element (serialize → Image → canvas)
- *   3. DOM capture via foreignObject SVG (browser-native CSS rendering)
+ *   2. DOM capture via foreignObject SVG (browser-native CSS rendering)
  *
  * Supports hot-upgrade: if an older version was compiled into the HTML,
  * the frontend-injected newer version removes the old handler and takes over.
@@ -182,31 +181,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         return;
       }
 
-      // Tier 2: capture the largest SVG element
-      var svgs = document.querySelectorAll('svg');
-      if (svgs.length > 0) {
-        var largest = null;
-        var largestArea = 0;
-        for (var i = 0; i < svgs.length; i++) {
-          var rect = svgs[i].getBoundingClientRect();
-          var area = rect.width * rect.height;
-          if (area > largestArea) {
-            largestArea = area;
-            largest = svgs[i];
-          }
-        }
-        if (largest) {
-          var serializer = new XMLSerializer();
-          var svgStr = serializer.serializeToString(largest);
-          var rect = largest.getBoundingClientRect();
-          svgToCanvas(svgStr, rect.width || 300, rect.height || 150, function(data) {
-            respond(requestId, data);
-          });
-          return; // async
-        }
-      }
-
-      // Tier 3: DOM capture via foreignObject SVG
+      // Tier 2: DOM capture via foreignObject SVG
       // Clone the document, inline all computed styles and external resources
       // (images, CSS background-images as data URIs), then render through the
       // browser's native CSS engine.

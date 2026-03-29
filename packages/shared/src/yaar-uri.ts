@@ -165,34 +165,6 @@ export function buildFileUri(_authority: 'storage', path: string): string {
   return `yaar://storage/${path}`;
 }
 
-// ============ Window Keys ============
-
-export interface ParsedWindowKey {
-  monitorId: string;
-  windowId: string;
-}
-
-/**
- * Build a scoped window key from monitorId and windowId.
- *   buildWindowKey('0', 'win-storage') → '0/win-storage'
- */
-export function buildWindowKey(monitorId: string, windowId: string): string {
-  return `${monitorId}/${windowId}`;
-}
-
-/**
- * Parse a scoped window key into monitorId and windowId.
- *   parseWindowKey('0/win-storage') → { monitorId: '0', windowId: 'win-storage' }
- */
-export function parseWindowKey(key: string): ParsedWindowKey | null {
-  const slashIdx = key.indexOf('/');
-  if (slashIdx === -1) return null;
-  return {
-    monitorId: key.slice(0, slashIdx),
-    windowId: key.slice(slashIdx + 1),
-  };
-}
-
 // ============ Window URIs ============
 
 /**
