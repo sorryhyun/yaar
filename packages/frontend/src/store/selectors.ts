@@ -38,7 +38,8 @@ function createCachedWindowSelector(
  * restart).
  */
 export const selectVisibleWindows = createCachedWindowSelector(
-  (w) => !w.minimized && (!w.variant || w.variant === 'standard'),
+  (w) =>
+    !w.minimized && (!w.variant || w.variant === 'standard') && w.content.renderer !== 'iframe',
 );
 
 export const selectMinimizedWindows = (state: DesktopStore) =>
@@ -61,16 +62,14 @@ export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[]
   );
 
 /**
- * Iframe windows on *inactive* monitors — kept in the DOM (hidden) so that
- * app-protocol agents can still communicate with them after a monitor switch.
+ * ALL iframe windows across every monitor — rendered in a single React list so
+ * that switching monitors only toggles `hidden` via CSS instead of
+ * unmounting/remounting, which would destroy iframe state.
  */
-export const selectOffscreenIframeWindows = (state: DesktopStore): WindowModel[] =>
+export const selectAllIframeWindows = (state: DesktopStore): WindowModel[] =>
   Object.values(state.windows).filter(
     (w): w is WindowModel =>
-      w != null &&
-      w.content.renderer === 'iframe' &&
-      (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) !== state.activeMonitorId,
+      w != null && w.content.renderer === 'iframe' && (!w.variant || w.variant === 'standard'),
   );
 
 export const selectWidgetWindows = createCachedWindowSelector(

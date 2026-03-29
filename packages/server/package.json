@@ -14,11 +14,11 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.84",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.87",
     "@modelcontextprotocol/sdk": "1.25.3",
     "@yaar/compiler": "workspace:*",
     "@yaar/shared": "workspace:*",
-    "node-poppler": "^7.2.0",
+    "node-poppler": "^9.1.1",
     "qrcode-terminal": "^0.12.0",
     "ssh2": "^1.17.0",
     "ws": "^8.18.0",
