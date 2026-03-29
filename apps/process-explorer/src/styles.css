@@ -1,0 +1,162 @@
+.pe-app {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* ── Stats bar ────────────────────────────────────────────── */
+
+.stats-bar {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-3) var(--yaar-sp-3) 0;
+}
+
+.stat-card {
+  flex: 1;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.stat-card.active {
+  border-color: var(--yaar-accent);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-sub {
+  font-size: 0.7rem;
+  color: var(--yaar-text-muted);
+}
+
+/* ── Tab content ──────────────────────────────────────────── */
+
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3) var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Process rows ─────────────────────────────────────────── */
+
+.process-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-radius: 6px;
+}
+
+.process-row:hover {
+  background: var(--yaar-bg-surface);
+}
+
+.process-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  min-width: 0;
+}
+
+.process-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.process-title {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.process-meta {
+  font-size: 0.75rem;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.process-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}
+
+/* ── Dot indicators ───────────────────────────────────────── */
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-ok {
+  background: var(--yaar-success);
+}
+
+.dot-warn {
+  background: #f5a623;
+}
+
+.dot-err {
+  background: var(--yaar-error);
+}
+
+/* ── Status bar ───────────────────────────────────────────── */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  font-size: 0.75rem;
+  color: var(--yaar-text-muted);
+}
+
+/* ── Small button ─────────────────────────────────────────── */
+
+.btn-sm {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+}
+
+.btn-danger {
+  color: var(--yaar-error);
+}
+
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--yaar-error) 10%, transparent);
+}
+
+/* ── Lock icon ────────────────────────────────────────────── */
+
+.lock-icon {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
