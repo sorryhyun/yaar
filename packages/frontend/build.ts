@@ -100,10 +100,11 @@ export function generateHtml(
   const jsScripts = jsFiles.map((f) => `    <script type="module" src="${f}"></script>`).join('\n');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google" content="notranslate" />
     <title>YAAR</title>
 ${cssLinks}
     <style>
