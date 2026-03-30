@@ -63,7 +63,7 @@ export interface WindowsSliceActions {
   userResizeWindow: (windowId: string, w: number, h: number, x?: number, y?: number) => void;
   userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
   handleWindowAction: (action: WindowAction) => void;
-  queueBoundsUpdate: (windowId: string) => void;
+  queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
 }
 
 export type WindowsSlice = WindowsSliceState & WindowsSliceActions;

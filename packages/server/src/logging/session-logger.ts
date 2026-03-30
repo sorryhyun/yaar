@@ -126,8 +126,10 @@ export class SessionLogger {
     agentId: string | undefined,
     fields: Record<string, unknown>,
   ): void {
-    const agent = agentId ?? 'monitor-0';
-    const parentAgentId = this.sessionInfo.metadata.agents[agent]?.parentAgentId ?? null;
+    const agent = agentId ?? null;
+    const parentAgentId = agent
+      ? (this.sessionInfo.metadata.agents[agent]?.parentAgentId ?? null)
+      : null;
     const entry = {
       type,
       timestamp: new Date().toISOString(),
@@ -142,10 +144,12 @@ export class SessionLogger {
     const globalPath = join(this.sessionInfo.directory, 'messages.jsonl');
     this.bufferLine(globalPath, line);
 
-    // Buffer per-agent JSONL
-    const agentFilename = agent.replace(/[^a-zA-Z0-9-_]/g, '_');
-    const agentPath = join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`);
-    this.bufferLine(agentPath, line);
+    // Buffer per-agent JSONL (skip for agent-less entries like user interactions)
+    if (agent) {
+      const agentFilename = agent.replace(/[^a-zA-Z0-9-_]/g, '_');
+      const agentPath = join(this.sessionInfo.directory, 'agents', `${agentFilename}.jsonl`);
+      this.bufferLine(agentPath, line);
+    }
 
     this.scheduleFlush();
   }

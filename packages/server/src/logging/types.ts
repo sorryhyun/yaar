@@ -26,7 +26,7 @@ export interface SessionInfo {
 export interface ParsedMessage {
   type: 'user' | 'assistant' | 'action' | 'thinking' | 'tool_use' | 'tool_result' | 'interaction';
   timestamp: string;
-  agentId: string;
+  agentId: string | null;
   parentAgentId: string | null;
   source?: ContextSource;
   content?: string;

@@ -79,7 +79,9 @@ export function useDragWindow({
 
       const yClamp = !variant || variant === 'standard' ? TITLEBAR_HEIGHT : 0;
 
+      let didMove = false;
       const handleMouseMove = (e: MouseEvent) => {
+        didMove = true;
         const vw =
           typeof globalThis.innerWidth === 'number'
             ? globalThis.innerWidth
@@ -123,7 +125,9 @@ export function useDragWindow({
           setSnapPreviewBounds(null);
         }
 
-        useDesktopStore.getState().queueBoundsUpdate(windowId);
+        if (didMove) {
+          useDesktopStore.getState().queueBoundsUpdate(windowId);
+        }
         cleanup();
       };
       const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);

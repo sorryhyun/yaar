@@ -76,6 +76,11 @@ export function DesktopSurface() {
   // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors, Ctrl+W to close focused window
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Block browser refresh shortcuts (F5, Ctrl+R)
+      if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault();
         useDesktopStore.getState().toggleCliMode();
@@ -106,6 +111,8 @@ export function DesktopSurface() {
   useEffect(() => {
     return iframeMessages.on('yaar:keydown', (ctx) => {
       const { key, shiftKey, ctrlKey } = ctx.data;
+      // F5 / Ctrl+R from iframes — nothing to do (iframe can't refresh parent)
+      if (key === 'F5' || (ctrlKey && key === 'r')) return;
       if (key === 'Tab' && shiftKey) {
         useDesktopStore.getState().toggleCliMode();
         return;

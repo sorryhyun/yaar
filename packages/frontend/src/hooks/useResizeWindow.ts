@@ -36,7 +36,9 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
 
       const TASKBAR_H = 36;
 
+      let didResize = false;
       const handleMouseMove = (e: MouseEvent) => {
+        didResize = true;
         const dx = e.clientX - startMouseX;
         const dy = e.clientY - startMouseY;
         const vh = globalThis.innerHeight;
@@ -103,7 +105,9 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
       const handleMouseUp = () => {
         setIsResizing(false);
         document.documentElement.classList.remove('yaar-dragging');
-        useDesktopStore.getState().queueBoundsUpdate(windowId);
+        if (didResize) {
+          useDesktopStore.getState().queueBoundsUpdate(windowId, 'window.resize');
+        }
         cleanup();
       };
       const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);

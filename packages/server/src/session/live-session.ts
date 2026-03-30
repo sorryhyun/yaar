@@ -601,8 +601,6 @@ export class LiveSession {
                 };
                 this.windowState.handleAction(moveAction);
                 this.windowState.handleAction(resizeAction);
-                logger?.logAction(moveAction);
-                logger?.logAction(resizeAction);
               }
               break;
           }

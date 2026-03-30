@@ -14,7 +14,8 @@ const MAX_CLI_RESTORE_ENTRIES = 200;
  * Extract monitor ID from an agent ID like "monitor-0" → "0".
  * Returns null for non-monitor agents (window agents, app agents).
  */
-function getMonitorIdFromAgent(agentId: string): string | null {
+function getMonitorIdFromAgent(agentId: string | null): string | null {
+  if (!agentId) return null;
   const match = agentId.match(/^monitor-(\d+)$/);
   return match ? match[1] : null;
 }
@@ -38,7 +39,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
           entries.push({
             type: 'user',
             content: msg.content,
-            agentId: msg.agentId,
+            agentId: msg.agentId ?? undefined,
             monitorId,
             timestamp,
           });
@@ -50,7 +51,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
           entries.push({
             type: 'response',
             content: msg.content,
-            agentId: msg.agentId,
+            agentId: msg.agentId ?? undefined,
             monitorId,
             timestamp,
           });
@@ -62,7 +63,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
           entries.push({
             type: 'thinking',
             content: msg.content,
-            agentId: msg.agentId,
+            agentId: msg.agentId ?? undefined,
             monitorId,
             timestamp,
           });
@@ -76,7 +77,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
           entries.push({
             type: 'tool',
             content: `[${msg.toolName}] ${inputStr}`,
-            agentId: msg.agentId,
+            agentId: msg.agentId ?? undefined,
             monitorId,
             timestamp,
           });
@@ -97,7 +98,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
           entries.push({
             type: 'action-summary',
             content: summary,
-            agentId: msg.agentId,
+            agentId: msg.agentId ?? undefined,
             monitorId,
             timestamp,
           });

@@ -382,14 +382,17 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
     set((state) => {
       const win = state.windows[windowId];
       if (win) {
+        const alreadyFocused = state.focusedWindowId === windowId && !win.minimized;
         insertIntoZOrder(state, windowId, win.variant);
         state.focusedWindowId = windowId;
         win.minimized = false;
-        (state as DesktopStore).pendingInteractions.push({
-          type: 'window.focus',
-          timestamp: Date.now(),
-          windowId,
-        });
+        if (!alreadyFocused) {
+          (state as DesktopStore).pendingInteractions.push({
+            type: 'window.focus',
+            timestamp: Date.now(),
+            windowId,
+          });
+        }
       }
     }),
 
@@ -444,7 +447,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
     }),
 
   // On drag-end / resize-end: push a consolidated interaction with bounds for immediate send
-  queueBoundsUpdate: (windowId) =>
+  queueBoundsUpdate: (windowId, action = 'window.move' as const) =>
     set((state) => {
       const win = state.windows[windowId];
       if (!win) return;
@@ -457,7 +460,7 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
           i.bounds,
       );
       const interaction = {
-        type: 'window.move' as const,
+        type: action,
         timestamp: Date.now(),
         windowId,
         bounds: {
