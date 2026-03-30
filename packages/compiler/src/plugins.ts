@@ -98,17 +98,28 @@ function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
 
   try {
     const pkgJsonPath = Bun.resolveSync(`${pkgName}/package.json`, fromDir);
-    const pkgDir = dirname(pkgJsonPath);
+    const pkgDir = toForwardSlash(dirname(pkgJsonPath));
     const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
 
     const exportEntry = pkgJson.exports?.[subpath];
     if (!exportEntry) return null;
 
-    // Prefer browser > default import condition
+    // Prefer browser > default import condition.
+    // The browser condition can be a string or nested object with import/default.
     const browser = exportEntry.browser;
     if (browser) {
       const entry = typeof browser === 'string' ? browser : (browser.import ?? browser.default);
       if (entry) return toForwardSlash(join(pkgDir, entry));
+    }
+
+    // Fallback: use the top-level import/default condition.
+    // For solid-js, the top-level `import` points to the browser build (dist/solid.js),
+    // while node/worker/deno conditions point to server.js. If the browser condition
+    // failed to resolve (e.g. on Windows where Bun.resolveSync may behave differently),
+    // the top-level import is still the correct browser build.
+    const topImport = exportEntry.import ?? exportEntry.default;
+    if (typeof topImport === 'string' && !topImport.includes('server')) {
+      return toForwardSlash(join(pkgDir, topImport));
     }
 
     return null;
@@ -171,7 +182,13 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         if (browserPath) return { path: browserPath };
 
         try {
-          const resolved = Bun.resolveSync(npmName, PLUGIN_DIR);
+          const resolved = toForwardSlash(Bun.resolveSync(npmName, PLUGIN_DIR));
+          // Guard: reject SSR builds for libs with browser/node conditional exports.
+          // On Windows, resolveBrowserEntry can fail while Bun.resolveSync picks the
+          // node condition (e.g. solid-js/dist/server.js instead of dist/solid.js).
+          if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
+            throw new Error(`Resolved SSR build for ${npmName}, need browser build`);
+          }
           return { path: resolved };
         } catch {
           // fall through to namespace for disk-based resolution
@@ -191,7 +208,10 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
         if (browserPath) return { path: browserPath };
         try {
-          return { path: Bun.resolveSync(libName, PLUGIN_DIR) };
+          const resolved = toForwardSlash(Bun.resolveSync(libName, PLUGIN_DIR));
+          // Reject SSR builds — see guard in @bundled/* resolver above
+          if (resolved.includes('/server.')) return undefined;
+          return { path: resolved };
         } catch {
           return undefined;
         }
