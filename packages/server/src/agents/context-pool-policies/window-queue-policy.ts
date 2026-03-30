@@ -32,6 +32,10 @@ export class WindowQueuePolicy {
     return queue?.shift();
   }
 
+  clearQueue(key: string): void {
+    this.queues.delete(key);
+  }
+
   getQueueSize(key: string): number {
     return this.queues.get(key)?.length ?? 0;
   }

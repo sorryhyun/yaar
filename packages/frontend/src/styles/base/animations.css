@@ -170,10 +170,10 @@
   0%,
   100% {
     opacity: 0.4;
-    border-color: rgba(137, 180, 250, 0.4);
+    border-color: rgba(234, 179, 8, 0.4);
   }
   50% {
     opacity: 0.9;
-    border-color: rgba(137, 180, 250, 0.8);
+    border-color: rgba(234, 179, 8, 0.8);
   }
 }

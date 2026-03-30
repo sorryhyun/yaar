@@ -1,0 +1,1 @@
+Use the Search app when users want to find content across storage files — text search, regex grep, finding files containing specific patterns. Also supports cloning app source code into storage for inspection. For browsing/navigating directories, use Storage instead.

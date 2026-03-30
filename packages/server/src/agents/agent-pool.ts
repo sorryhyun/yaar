@@ -255,6 +255,13 @@ export class AgentPool {
   }
 
   /**
+   * Get the app agent for a given appId (if it exists).
+   */
+  getAppAgent(appId: string): PooledAgent | undefined {
+    return this.appAgents.get(appId);
+  }
+
+  /**
    * Check if an app agent exists for the given appId.
    */
   hasAppAgent(appId: string): boolean {

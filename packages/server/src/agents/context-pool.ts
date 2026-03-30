@@ -343,10 +343,17 @@ export class ContextPool implements PoolContext {
     });
   }
 
-  handleWindowClose(windowId: string): void {
+  handleWindowClose(windowId: string, appId?: string): void {
     // Clean up subscriptions and prune context for this window
     this.windowSubscriptionPolicy.clearForWindow(windowId);
     this.contextTape.pruneWindow(windowId);
+
+    // If this window belongs to an app, interrupt the running agent and clear its queue
+    if (appId) {
+      this.appProcessor.handleWindowClose(windowId, appId).catch((err) => {
+        console.error(`[ContextPool] Error interrupting app agent on window close:`, err);
+      });
+    }
   }
 
   // ── Query methods ──────────────────────────────────────────────────

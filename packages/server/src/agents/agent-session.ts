@@ -52,6 +52,8 @@ export interface HandleMessageOptions {
   systemPromptOverride?: string;
   /** Profile-specific tool subset (passed through to transport) */
   allowedTools?: string[];
+  /** Override the model for this turn (e.g. from app.json agentType) */
+  model?: string;
   /** Window ID for app agent tool resolution (set in AsyncLocalStorage context) */
   windowId?: string;
 }
@@ -286,6 +288,7 @@ export class AgentSession {
         monitorId: options.monitorId,
         agentId: stableAgentId,
         allowedTools: options.allowedTools,
+        model: options.model,
       };
       this.hasProcessedFirstUserTurn = true;
 

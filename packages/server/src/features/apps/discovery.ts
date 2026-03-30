@@ -62,6 +62,7 @@ export interface AppInfo {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
+  agentType?: string;
 }
 
 /**
@@ -117,6 +118,7 @@ export async function listApps(): Promise<AppInfo[]> {
       let defaultWidth: number | undefined;
       let defaultHeight: number | undefined;
       let permissions: PermissionEntry[] | undefined;
+      let agentType: string | undefined;
       try {
         const metaContent = await Bun.file(join(appPath, 'app.json')).text();
         const meta = JSON.parse(metaContent);
@@ -137,6 +139,7 @@ export async function listApps(): Promise<AppInfo[]> {
         if (typeof meta.defaultWidth === 'number') defaultWidth = meta.defaultWidth;
         if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
         if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
+        if (typeof meta.agentType === 'string') agentType = meta.agentType;
       } catch {
         // No metadata or invalid JSON
       }
@@ -207,6 +210,7 @@ export async function listApps(): Promise<AppInfo[]> {
         ...(defaultWidth && { defaultWidth }),
         ...(defaultHeight && { defaultHeight }),
         ...(permissions && { permissions }),
+        ...(agentType && { agentType }),
       });
     }
 

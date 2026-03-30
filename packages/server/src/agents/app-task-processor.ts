@@ -122,6 +122,7 @@ export class AppTaskProcessor {
         monitorId: task.monitorId,
         allowedTools: [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
+        model: profile.model,
         onAssistantResponse: (text) => {
           appResponseText = text;
         },
@@ -172,6 +173,34 @@ export class AppTaskProcessor {
    */
   getActiveWindowId(appId: string): string | undefined {
     return this.activeWindows.get(appId);
+  }
+
+  /**
+   * Handle a window being closed — interrupt the app agent if it's running for this window,
+   * clear queued tasks, and remove active window tracking.
+   */
+  async handleWindowClose(windowId: string, appId: string): Promise<void> {
+    const processingKey = `app-${appId}`;
+
+    // Clear any queued tasks for this app
+    this.ctx.windowQueuePolicy.clearQueue(processingKey);
+
+    // Remove active window tracking
+    if (this.activeWindows.get(appId) === windowId) {
+      this.activeWindows.delete(appId);
+    }
+
+    // Interrupt the app agent if it's currently running
+    const agent = this.ctx.agentPool.getAppAgent(appId);
+    if (agent?.session.isRunning()) {
+      console.log(
+        `[AppTaskProcessor] Interrupting app agent for ${appId} (window ${windowId} closed)`,
+      );
+      await agent.session.interrupt();
+    }
+
+    // Clear processing state so the agent isn't stuck in "busy" state
+    this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
   }
 
   /**

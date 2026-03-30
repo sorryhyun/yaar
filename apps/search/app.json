@@ -1,0 +1,15 @@
+{
+  "icon": "🔍",
+  "name": "Search",
+  "description": "Full-text search across YAAR storage with app source cloning",
+  "run": "dist/index.html",
+  "capture": "dom",
+  "createShortcut": false,
+  "agentType": "haiku",
+  "permissions": [
+    "yaar://storage/",
+    "yaar://apps/"
+  ],
+  "version": "1.0.0",
+  "author": "YAAR"
+}

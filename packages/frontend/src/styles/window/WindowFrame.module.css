@@ -35,7 +35,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 1.5px solid var(--color-accent, rgba(137, 180, 250, 0.6));
+  border: 1.5px solid rgba(234, 179, 8, 0.6);
   opacity: 0.7;
   animation: agentGlow 2s ease-in-out infinite;
   pointer-events: none;

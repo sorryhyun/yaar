@@ -21,7 +21,7 @@ export type { WindowState } from '@yaar/shared';
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
-  private onWindowCloseCallback?: (windowId: string) => void;
+  private onWindowCloseCallback?: (windowId: string, appId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
 
@@ -33,7 +33,7 @@ export class WindowStateRegistry {
    * Set a callback to be invoked when a window is closed.
    * Used to invalidate reload cache entries that depend on the closed window.
    */
-  setOnWindowClose(cb: (windowId: string) => void): void {
+  setOnWindowClose(cb: (windowId: string, appId?: string) => void): void {
     this.onWindowCloseCallback = cb;
   }
 
@@ -92,10 +92,11 @@ export class WindowStateRegistry {
 
       case 'window.close': {
         const key = this.actionKey(action.windowId, monitorId);
+        const appId = this.windows.get(key)?.appId;
         this.windows.delete(key);
         this.appCommands.delete(key);
         this.handleMap.remove(key);
-        this.onWindowCloseCallback?.(key);
+        this.onWindowCloseCallback?.(key, appId);
         break;
       }
 

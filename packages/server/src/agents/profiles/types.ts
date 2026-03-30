@@ -10,6 +10,7 @@ export interface AgentProfile {
   description: string;
   systemPrompt: string;
   allowedTools: string[];
+  model?: string;
 }
 
 // Inlined to avoid circular dependency: handlers/index → session-hub → live-session → context-pool → monitor-task-processor → profiles → handlers/index

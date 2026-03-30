@@ -166,7 +166,7 @@ For browser-level info (screenshots, DOM state) or system config, use `relay(mes
 
 Use `command("deploy", { appId, name?, icon?, description? })`.
 
-**All app metadata lives in `app.json`** — permissions, variant, frameless, windowStyle, capture, createShortcut, fileAssociations, etc. When cloning, `app.json` is copied into the sandbox. Edit it directly with `command("writeFile", { path: "app.json", content: "..." })` before deploying. Deploy reads it from the sandbox automatically.
+**All app metadata lives in `app.json`** — permissions, variant, frameless, windowStyle, capture, createShortcut, fileAssociations, agentType, etc. When cloning, `app.json` is copied into the sandbox. Edit it directly with `command("writeFile", { path: "app.json", content: "..." })` before deploying. Deploy reads it from the sandbox automatically.
 
 **bundle permissions:** If the app uses special bundle like `@bundled/yaar-{dev, web}`, those should be included in 'bundles' field like `"bundles": ["yaar-dev"],`
 
@@ -182,6 +182,8 @@ Use `command("deploy", { appId, name?, icon?, description? })`.
 ```
 
 Permission URIs use prefix matching — `yaar://storage/` matches all paths under storage. Do **not** use glob patterns like `yaar://storage/*`.
+
+**agentType:** Controls which model runs the app agent. Set `"agentType"` in `app.json` to `"haiku"`, `"sonnet"`, `"opus"`, or a full model ID. Omit to use the default (`claude-sonnet-4-6`).
 
 ## Agent Prompt Files
 
