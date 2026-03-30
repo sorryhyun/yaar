@@ -421,7 +421,7 @@ export class LiveSession {
 
       case ClientEventType.WINDOW_MESSAGE:
         await this.pool?.handleTask({
-          type: 'window',
+          type: 'app',
           messageId: event.messageId,
           windowId: event.windowId,
           content: event.content,
@@ -444,7 +444,7 @@ export class LiveSession {
         }
 
         await this.pool?.handleTask({
-          type: 'window',
+          type: 'app',
           messageId:
             event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           windowId: event.windowId,

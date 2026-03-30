@@ -53,11 +53,11 @@ const NGRAMS_EMPTY: string[] = [];
 function makeFingerprint(
   contentHash: string,
   windowStateHash: string,
-  type: 'monitor' | 'window' = 'monitor',
+  type: 'monitor' | 'app' = 'monitor',
 ): Fingerprint {
   return {
     triggerType: type,
-    triggerTarget: type === 'window' ? 'win-1' : undefined,
+    triggerTarget: type === 'app' ? 'win-1' : undefined,
     ngrams: NGRAMS_A.slice(),
     contentHash,
     windowStateHash,
@@ -78,7 +78,7 @@ const FP_POOL: Fingerprint[] = Array.from({ length: 100 }, (_, i) =>
   makeFingerprint(
     `hash${String(i).padStart(28, '0')}`,
     `state${String(i % 10).padStart(15, '0')}`,
-    i % 3 === 0 ? 'window' : 'monitor',
+    i % 3 === 0 ? 'app' : 'monitor',
   ),
 );
 

@@ -6,6 +6,7 @@ export interface Shortcut {
   icon: string;
   iconType?: string;
   target: string;
+  folderId?: string;
   createdAt?: number;
 }
 

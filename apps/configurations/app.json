@@ -2,7 +2,10 @@
   "icon": "⚙️",
   "name": "Configurations",
   "run": "dist/index.html",
-  "permissions": ["yaar://config/"],
+  "permissions": [
+    "yaar://config/"
+  ],
   "version": "1.0.0",
-  "author": "YAAR"
+  "author": "YAAR",
+  "description": "No description"
 }

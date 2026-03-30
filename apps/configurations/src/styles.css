@@ -459,6 +459,116 @@ body,
   color: var(--yaar-text-muted);
 }
 
+/* ── Folder groups (Shortcuts sidebar) ── */
+.folder-create-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: var(--yaar-sp-3);
+}
+
+.folder-group {
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.folder-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px var(--yaar-sp-3);
+  cursor: pointer;
+  user-select: none;
+  background: var(--yaar-bg-surface);
+  transition: background 0.12s;
+}
+
+.folder-header:hover {
+  background: var(--yaar-bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.folder-header-ungrouped {
+  background: var(--yaar-bg);
+}
+
+.folder-arrow {
+  font-size: 9px;
+  color: var(--yaar-text-muted);
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.folder-hicon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.folder-hname {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yaar-text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-hcount {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: 8px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.folder-del-btn {
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+  flex-shrink: 0;
+}
+
+.folder-header:hover .folder-del-btn {
+  opacity: 1;
+}
+
+.folder-del-btn:hover {
+  color: var(--yaar-error);
+  background: rgba(255, 80, 80, 0.1);
+}
+
+.sc-item-indented {
+  padding-left: calc(var(--yaar-sp-3) + 22px) !important;
+}
+
+/* Folder assignment in detail panel */
+.sc-folder-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sc-folder-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sc-folder-current {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  margin-top: 4px;
+}
+
 /* Domains view */
 .domain-list {
   display: flex;

@@ -255,7 +255,7 @@ export function registerWindowHandlers(
           const taggedContent = `<monitor:${monitorId}>\n${p.message as string}\n</monitor:${monitorId}>`;
           pool
             .handleTask({
-              type: 'window',
+              type: 'app',
               messageId,
               windowId,
               content: taggedContent,

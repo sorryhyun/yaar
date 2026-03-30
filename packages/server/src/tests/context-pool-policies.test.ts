@@ -29,8 +29,8 @@ describe('MonitorQueuePolicy', () => {
 describe('WindowQueuePolicy', () => {
   it('queues sequentially per key', () => {
     const policy = new WindowQueuePolicy();
-    policy.enqueue('w1', { type: 'window', windowId: 'w1', messageId: '1', content: 'first' });
-    policy.enqueue('w1', { type: 'window', windowId: 'w1', messageId: '2', content: 'second' });
+    policy.enqueue('w1', { type: 'app', windowId: 'w1', messageId: '1', content: 'first' });
+    policy.enqueue('w1', { type: 'app', windowId: 'w1', messageId: '2', content: 'second' });
 
     expect(policy.dequeue('w1')?.task.messageId).toBe('1');
     expect(policy.dequeue('w1')?.task.messageId).toBe('2');
@@ -150,7 +150,7 @@ describe('ReloadCachePolicy', () => {
     ).toBe('Open moltbook app');
     expect(
       policy.generateCacheLabel({
-        type: 'window',
+        type: 'app',
         windowId: 'w',
         messageId: '2',
         content: 'click button "Save" now',

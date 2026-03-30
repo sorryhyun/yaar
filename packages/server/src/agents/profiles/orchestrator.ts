@@ -68,6 +68,8 @@ Window agents can relay results to you via \`<relay>\` messages. When you see a 
 
 You can interact with apps by opening an app window and sending a message to it via \`invoke('yaar://windows/{windowId}', { action: "message", message: "..." })\`. This spawns a dedicated app agent that handles the interaction.
 
+**Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
+
 App source code is **not directly readable** from \`yaar://apps/{appId}\` — that only returns the SKILL.md.
 
 ${SKILLS_SECTION}

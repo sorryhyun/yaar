@@ -1,7 +1,7 @@
 /**
  * WindowSubscriptionPolicy — agent-level window subscriptions.
  *
- * Allows agents (monitor or window) to subscribe to changes on specific windows.
+ * Allows agents (monitor or app) to subscribe to changes on specific windows.
  * When a subscribed window changes, the subscribing agent receives a synthetic
  * task describing what changed, delivered through the normal task pipeline.
  *
@@ -15,7 +15,7 @@ import type { Task } from '../pool-types.js';
 export interface WindowSubscription {
   id: string;
   subscriberAgentKey: string;
-  subscriberType: 'monitor' | 'window';
+  subscriberType: 'monitor' | 'app';
   subscriberWindowId?: string;
   subscriberMonitorId: string;
   targetWindowId: string;
@@ -43,7 +43,7 @@ export class WindowSubscriptionPolicy {
 
   subscribe(opts: {
     subscriberAgentKey: string;
-    subscriberType: 'monitor' | 'window';
+    subscriberType: 'monitor' | 'app';
     subscriberWindowId?: string;
     subscriberMonitorId: string;
     targetWindowId: string;
