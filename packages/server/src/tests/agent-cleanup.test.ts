@@ -140,7 +140,7 @@ const mockInterrupt = mock(() => Promise.resolve() as Promise<void>);
 const mockIsRunning = mock(() => false);
 const mockInitialize = mock(() => Promise.resolve(true));
 
-mock.module('../agents/session.js', () => {
+mock.module('../agents/agent-session.js', () => {
   class MockAgentSession {
     cleanup = mockCleanup;
     interrupt = mockInterrupt;
@@ -169,7 +169,7 @@ mock.module('../agents/session.js', () => {
 });
 
 const { AgentPool } = await import('../agents/agent-pool.js');
-type SessionId = import('../session/types.js').SessionId;
+import type { SessionId } from '../session/types.js';
 
 // ── Setup ────────────────────────────────────────────────────────────────
 

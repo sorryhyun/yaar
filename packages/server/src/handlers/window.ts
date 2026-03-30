@@ -28,7 +28,7 @@ import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
 import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
-import { getMonitorId } from '../agents/session.js';
+import { getMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {

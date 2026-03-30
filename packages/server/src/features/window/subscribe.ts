@@ -7,7 +7,7 @@
 
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error } from '../../handlers/utils.js';
-import { getAgentId, getMonitorId } from '../../agents/session.js';
+import { getAgentId, getMonitorId } from '../../agents/agent-context.js';
 import { getActivePool } from '../../handlers/utils.js';
 import { WINDOW_CHANGE_EVENTS, type WindowChangeEvent } from '@yaar/shared';
 import { requireWindowExists } from './helpers.js';

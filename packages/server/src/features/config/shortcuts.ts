@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getSessionId } from '../../agents/session.js';
+import { getSessionId } from '../../agents/agent-context.js';
 import {
   readShortcuts,
   addShortcut,

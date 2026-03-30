@@ -18,7 +18,7 @@ import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
-import { runWithAgentContext } from '../../agents/session.js';
+import { runWithAgentContext } from '../../agents/agent-context.js';
 import type { SessionId } from '../../session/types.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [

@@ -10,7 +10,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { getAgentId, getMonitorId } from '../agents/session.js';
+import { getAgentId, getMonitorId } from '../agents/agent-context.js';
 import { ok, okJson, error, getActivePool, requireAction } from './utils.js';
 import { executeSessionAction } from '../features/agents/session-actions.js';
 import { relayToMonitor } from '../features/agents/relay.js';

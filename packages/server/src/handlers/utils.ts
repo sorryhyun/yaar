@@ -4,7 +4,7 @@
 
 import type { VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { getSessionId } from '../agents/session.js';
+import { getSessionId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import type { LiveSession } from '../session/live-session.js';
 import type { ContextPool } from '../agents/context-pool.js';

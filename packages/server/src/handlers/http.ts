@@ -10,7 +10,7 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { okJson, error } from './utils.js';
 import { performFetch } from '../features/http/fetch.js';
-import { getSessionId } from '../agents/session.js';
+import { getSessionId } from '../agents/agent-context.js';
 
 export function registerHttpHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://http', {

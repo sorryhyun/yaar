@@ -13,7 +13,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJson, error, getActiveSession } from './utils.js';
-import { getSessionId, getMonitorId } from '../agents/session.js';
+import { getSessionId, getMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
 import { listSessions, readSessionTranscript } from '../logging/session-reader.js';

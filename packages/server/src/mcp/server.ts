@@ -12,7 +12,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { runWithAgentContext, getSessionId } from '../agents/session.js';
+import { runWithAgentContext, getSessionId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';

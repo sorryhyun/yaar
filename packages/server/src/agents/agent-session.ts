@@ -1,11 +1,10 @@
 /**
- * Agent session management.
+ * AgentSession — manages a single AI provider session.
  *
- * Manages a single WebSocket session with an AI provider via the transport layer.
- * Role is assigned dynamically per-message via handleMessage options.
+ * Handles message sending, streaming, interruption, and provider lifecycle
+ * for one agent. Role is assigned dynamically per-message via handleMessage options.
  */
 
-import { AsyncLocalStorage } from 'async_hooks';
 import type { AITransport, TransportOptions, ProviderType } from '../providers/types.js';
 import {
   ServerEventType,
@@ -23,6 +22,7 @@ import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
+import { runInAgentContext } from './agent-context.js';
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -54,65 +54,6 @@ export interface HandleMessageOptions {
   allowedTools?: string[];
   /** Window ID for app agent tool resolution (set in AsyncLocalStorage context) */
   windowId?: string;
-}
-
-interface AgentContext {
-  agentId: string;
-  connectionId: ConnectionId;
-  sessionId: SessionId;
-  monitorId?: string;
-  windowId?: string;
-}
-
-const agentContext = new AsyncLocalStorage<AgentContext>();
-
-export function getAgentId(): string | undefined {
-  return agentContext.getStore()?.agentId;
-}
-
-export function getCurrentConnectionId(): ConnectionId | undefined {
-  return agentContext.getStore()?.connectionId;
-}
-
-export function getSessionId(): SessionId | undefined {
-  return agentContext.getStore()?.sessionId;
-}
-
-export function getMonitorId(): string | undefined {
-  return agentContext.getStore()?.monitorId;
-}
-
-export function getWindowId(): string | undefined {
-  return agentContext.getStore()?.windowId;
-}
-
-/**
- * Run a function within a specific agent context.
- * Used to restore agent identity from HTTP headers (e.g., X-Agent-Id in MCP requests).
- */
-export function runWithAgentId<T>(agentId: string, fn: () => T): T {
-  return runWithAgentContext({ agentId }, fn);
-}
-
-/**
- * Run a function with a full agent context (agentId + optional sessionId).
- * Used by the MCP HTTP handler to restore both identity and session scope.
- */
-export function runWithAgentContext<T>(
-  ctx: { agentId: string; sessionId?: SessionId; monitorId?: string; windowId?: string },
-  fn: () => T,
-): T {
-  const existing = agentContext.getStore();
-  return agentContext.run(
-    {
-      agentId: ctx.agentId,
-      connectionId: existing?.connectionId ?? ('' as ConnectionId),
-      sessionId: ctx.sessionId ?? existing?.sessionId ?? ('' as SessionId),
-      monitorId: ctx.monitorId ?? existing?.monitorId,
-      windowId: ctx.windowId ?? existing?.windowId,
-    },
-    fn,
-  );
 }
 
 /**
@@ -383,7 +324,7 @@ export class AgentSession {
       console.log(
         `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
       );
-      await agentContext.run(
+      await runInAgentContext(
         {
           agentId: stableAgentId,
           connectionId: this.connectionId,

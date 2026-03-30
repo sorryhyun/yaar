@@ -18,7 +18,7 @@ import {
   type UserPromptOption,
   type UserPromptInputField,
 } from '@yaar/shared';
-import { getAgentId, getSessionId } from '../agents/session.js';
+import { getAgentId, getSessionId } from '../agents/agent-context.js';
 import {
   checkPermission,
   savePermission,

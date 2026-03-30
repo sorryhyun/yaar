@@ -12,7 +12,7 @@ import {
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error, validateRelativePath } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getSessionId } from '../../agents/session.js';
+import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';

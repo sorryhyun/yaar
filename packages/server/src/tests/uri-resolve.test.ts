@@ -52,8 +52,7 @@ mock.module('../config.js', () => ({
   getCodexWsPort: () => 4510,
   getCodexAppServerArgs: () => [],
 }));
-mock.module('../agents/session.js', () => ({
-  AgentSession: class {},
+mock.module('../agents/agent-context.js', () => ({
   getAgentId: () => undefined,
   getCurrentConnectionId: () => undefined,
   getSessionId: () => undefined,

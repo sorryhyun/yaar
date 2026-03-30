@@ -190,7 +190,7 @@ mock.module('../agents/profiles/index.js', () => ({
 }));
 
 // Mock AgentSession so we don't need real providers
-mock.module('../agents/session.js', () => {
+mock.module('../agents/agent-session.js', () => {
   class MockAgentSession {
     initialize = mock(async () => true);
     handleMessage = mock(async () => {});
@@ -221,7 +221,7 @@ mock.module('../agents/session.js', () => {
 // ── Test setup ─────────────────────────────────────────────────────────────
 
 const { ContextPool } = await import('../agents/context-pool.js');
-type SessionId = import('../session/types.js').SessionId;
+import type { SessionId } from '../session/types.js';
 
 function createMockWindowState() {
   return {

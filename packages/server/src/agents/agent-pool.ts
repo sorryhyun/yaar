@@ -9,7 +9,7 @@
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
 
-import { AgentSession } from './session.js';
+import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';

@@ -12,7 +12,8 @@
  * - Turn helpers: buildReloadContext, runAgentTurn, createBudgetOutputCallback
  */
 
-export * from './session.js';
+export * from './agent-context.js';
+export * from './agent-session.js';
 export * from './limiter.js';
 export * from './context.js';
 export * from './agent-pool.js';

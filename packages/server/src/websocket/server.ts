@@ -17,6 +17,7 @@ import {
   type CliRestoreEntry,
 } from '@yaar/shared';
 import type { ContextMessage } from '../agents/context.js';
+import type { SessionLogger } from '../logging/session-logger.js';
 import { checkWsAuth } from '../http/auth.js';
 
 export interface WebSocketServerOptions {
@@ -24,7 +25,7 @@ export interface WebSocketServerOptions {
   contextMessages: ContextMessage[];
   savedThreadIds?: Record<string, string>;
   cliEntries?: CliRestoreEntry[];
-  sessionLogger?: import('../logging/session-logger.js').SessionLogger;
+  sessionLogger?: SessionLogger;
 }
 
 export interface WsData {

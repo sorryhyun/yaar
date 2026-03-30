@@ -11,7 +11,7 @@ import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
-import { getAgentId, getSessionId } from '../../agents/session.js';
+import { getAgentId, getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
 

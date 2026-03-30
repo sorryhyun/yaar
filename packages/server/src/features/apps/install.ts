@@ -8,7 +8,7 @@ import { rm, unlink, mkdir, rename } from 'fs/promises';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getSessionId } from '../../agents/session.js';
+import { getSessionId } from '../../agents/agent-context.js';
 import { listApps } from './discovery.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';

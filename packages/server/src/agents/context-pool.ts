@@ -15,7 +15,8 @@
  */
 
 import { ContextTape, type ContextMessage } from './context.js';
-import { AgentPool } from './agent-pool.js';
+import { AgentPool, type PooledAgent } from './agent-pool.js';
+import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import { ServerEventType, type ServerEvent, type UserInteraction } from '@yaar/shared';
 import type { ProviderType } from '../providers/types.js';
@@ -255,7 +256,7 @@ export class ContextPool implements PoolContext {
 
   // ── Session agent ─────────────────────────────────────────────────
 
-  async getOrCreateSessionAgent(): Promise<import('./agent-pool.js').PooledAgent | null> {
+  async getOrCreateSessionAgent(): Promise<PooledAgent | null> {
     const existing = this.agentPool.getSessionAgent();
     if (existing) return existing;
     return this.agentPool.createSessionAgent();
@@ -374,7 +375,7 @@ export class ContextPool implements PoolContext {
     return this.sharedLogger;
   }
 
-  getPrimaryAgent(monitorId?: string): import('./session.js').AgentSession | null {
+  getPrimaryAgent(monitorId?: string): AgentSession | null {
     return this.agentPool.getMonitorAgentSession(monitorId);
   }
 

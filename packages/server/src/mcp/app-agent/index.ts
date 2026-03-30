@@ -13,7 +13,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
-import { getWindowId, getSessionId } from '../../agents/session.js';
+import { getWindowId, getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import {
