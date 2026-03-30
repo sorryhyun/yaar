@@ -5,6 +5,7 @@
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { rm, unlink, mkdir, rename } from 'fs/promises';
+import { compileTypeScript } from '@yaar/compiler';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -140,6 +141,25 @@ export async function installApp(appId: string): Promise<VerbResult> {
   } catch {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
     return error('Failed to move app to install directory.');
+  }
+
+  // Compile the app if it has source code
+  if (existsSync(join(appDir, 'src', 'main.ts'))) {
+    let bundles: string[] | undefined;
+    let title = appId;
+    try {
+      const meta = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
+      if (Array.isArray(meta.bundles)) bundles = meta.bundles;
+      if (typeof meta.name === 'string') title = meta.name;
+    } catch {
+      // No app.json or invalid JSON
+    }
+    const compileResult = await compileTypeScript(appDir, { title, bundles });
+    if (!compileResult.success) {
+      return error(
+        `Installed "${appId}" but compilation failed: ${compileResult.errors?.join(', ') ?? 'Unknown error'}`,
+      );
+    }
   }
 
   const apps = await listApps();
