@@ -47,14 +47,6 @@ See the devtools app's `SKILL.md` for the full list of available commands.
 | `read` | `yaar://config/app/{appId}` | Read app config |
 | `delete` | `yaar://config/app/{appId}` | Remove app config |
 
-### Marketplace — `yaar://market/`
-
-| Verb | URI | Description |
-|------|-----|-------------|
-| `list` | `yaar://market` | Browse marketplace apps |
-| `read` | `yaar://market/{appId}` | Get details for a marketplace app |
-| `invoke` | `yaar://market/{appId}`, `{ action: "install" }` | Install app from marketplace |
-
 ### Skills — `yaar://skills/`
 
 | Verb | URI | Description |

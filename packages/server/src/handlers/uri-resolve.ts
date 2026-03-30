@@ -9,10 +9,8 @@ import { join } from 'path';
 import { parseYaarUri, resolveContentUri, parseWindowUri, parseBareWindowUri } from '@yaar/shared';
 import {
   parseConfigUri,
-  parseBrowserUri,
   parseSessionUri,
   type ParsedConfigUri,
-  type ParsedBrowserUri,
   type SessionResource,
   type SessionSubKind,
 } from '../lib/yaar-uri-server.js';
@@ -48,13 +46,6 @@ export interface ResolvedConfig {
   sourceUri: string;
 }
 
-export interface ResolvedBrowser {
-  kind: 'browser';
-  resource: ParsedBrowserUri['resource'];
-  subResource?: ParsedBrowserUri['subResource'];
-  sourceUri: string;
-}
-
 export interface ResolvedSession {
   kind: 'session';
   resource: SessionResource;
@@ -74,7 +65,6 @@ export type ResolvedUri =
   | ResolvedResource
   | ResolvedWindow
   | ResolvedConfig
-  | ResolvedBrowser
   | ResolvedSession;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
@@ -171,16 +161,6 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  const browser = parseBrowserUri(uri);
-  if (browser) {
-    return {
-      kind: 'browser',
-      resource: browser.resource,
-      subResource: browser.subResource,
-      sourceUri: uri,
-    };
-  }
-
   const session = parseSessionUri(uri);
   if (session) {
     return {
@@ -193,17 +173,17 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  // Fallback: collection-level URIs or verb-layer-only authorities (skills, market).
+  // Fallback: collection-level URIs or verb-layer-only authorities (skills).
   // These have a valid authority but no dedicated parser — resolve as root kind.
   const parsed = parseYaarUri(uri);
   const auth = parsed?.authority as string | undefined;
-  if (parsed && (!parsed.path || auth === 'skills' || auth === 'market' || auth === 'mcp')) {
+  if (parsed && (!parsed.path || auth === 'skills' || auth === 'mcp')) {
     return { kind: 'root', sourceUri: uri };
   }
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|skills|market|http|mcp)$/,
+    /^yaar:\/\/(apps|storage|monitors|windows|config|sessions|skills|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

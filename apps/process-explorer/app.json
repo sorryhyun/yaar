@@ -5,9 +5,9 @@
   "run": "dist/index.html",
   "permissions": [
     "yaar://sessions/",
-    "yaar://windows/",
-    "yaar://browser/"
+    "yaar://windows/"
   ],
+  "bundles": ["yaar-web"],
   "version": "1.0.0",
   "author": "YAAR"
 }

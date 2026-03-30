@@ -82,7 +82,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps/{appId} — per-app operations + app-scoped storage ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app. Read to load its SKILL.md, invoke to set_badge, delete to uninstall. ' +
+      'A specific app. Read to load its SKILL.md, invoke to set_badge/install, delete to uninstall. ' +
       'Sub-path /storage/{path} provides app-scoped file storage.',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
@@ -91,8 +91,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       properties: {
         action: {
           type: 'string',
-          enum: ['set_badge', 'write', 'clone'],
-          description: 'set_badge for app badge, write for app storage, clone for source cloning',
+          enum: ['set_badge', 'install', 'write', 'clone'],
+          description:
+            'set_badge for app badge, install from marketplace, write for app storage, clone for source cloning',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for write)' },
@@ -237,6 +238,11 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         );
       }
 
+      if (payload.action === 'install') {
+        const { installApp } = await import('../features/apps/install.js');
+        return installApp(appId);
+      }
+
       if (payload.action === 'clone') {
         const { cloneAppSource } = await import('../features/dev/clone.js');
         const result = await cloneAppSource(appId);
@@ -266,5 +272,3 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
   });
 }
-
-export { installApp } from '../features/apps/install.js';

@@ -84,7 +84,7 @@ MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/
 
 | Verb | OS analogy | URI pattern examples |
 |---|---|---|
-| `describe` | stat / introspect | `yaar://windows/{id}`, `yaar://apps/{id}`, `yaar://browser/{id}` |
+| `describe` | stat / introspect | `yaar://windows/{id}`, `yaar://apps/{id}`, `yaar://config/settings` |
 | `read` | read / open | `yaar://storage/{path}`, `yaar://skills/{topic}` |
 | `list` | readdir / ls | `yaar://windows/`, `yaar://apps/`, `yaar://config/hooks/` |
 | `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://config/app/{id}` |

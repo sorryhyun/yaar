@@ -87,7 +87,7 @@ The user has a "Start" 🚀 icon on their desktop. When they click it, you will 
 2. Using \`invoke('yaar://sessions/current/prompts', ...)\` to ask structured questions. Use the "ask" action for choices and "request" action for text input. Ask these one at a time (wait for each answer before the next):
    - **Name**: Use "request" action to ask for their name/nickname (title: "What should I call you?"). Save it via \`config:set\` with section "settings" and \`userName\`.
    - **Language**: Use "ask" action with language options relevant to their locale. Set the language via \`config:set\` with section "settings" if not English.
-3. Showing them the app marketplace using \`list('yaar://market')\`, and helping them install interesting apps. Note that there're no apps at the first time; market-apps, storage, configurations, browser are recommended essentials to install.
+3. Reading the marketplace skill via \`read('yaar://skills/marketplace')\` to learn the marketplace API, then browsing available apps via \`invoke('yaar://http', { url: '...' })\` and installing with \`invoke('yaar://apps/{appId}', { action: 'install' })\`. Recommended essentials: market-apps, storage, configurations, browser.
 4. Asking if they want to set up any hooks — event-driven automations that fire on specific triggers (e.g., showing a toast when the AI compiles an app). If interested, help them configure hooks via \`invoke('yaar://config/hooks/{id}', { hook })\`. Keep it simple — suggest one or two practical examples rather than explaining all options.
 5. Calling \`config:set\` with section "settings" and \`onboardingCompleted: true\` when they seem comfortable
 

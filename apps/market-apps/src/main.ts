@@ -203,9 +203,9 @@ async function apiGet<T>(path: string): Promise<T> {
 
 // ── Host verb helpers ────────────────────────────────────────────────────────
 
-/** Install an app via yaar://market/{appId}. Requires yaar://market permission. */
+/** Install an app via yaar://apps/{appId}. Requires yaar://apps/ permission. */
 async function hostInstall(app: { id: string }): Promise<void> {
-  await invoke('yaar://market/' + app.id, { action: 'install' });
+  await invoke('yaar://apps/' + app.id, { action: 'install' });
 }
 
 /** Delete an app via yaar://apps/{appId}. Requires yaar://apps/ permission. */

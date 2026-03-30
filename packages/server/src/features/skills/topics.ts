@@ -7,6 +7,7 @@
  */
 
 import { getAvailableBundledLibraries } from '@yaar/compiler';
+import { MARKET_URL } from '../../config.js';
 import type { EndpointMeta } from '../../http/utils.js';
 import { PUBLIC_ENDPOINTS as apiEndpoints } from '../../http/routes/api.js';
 import { PUBLIC_ENDPOINTS as fileEndpoints } from '../../http/routes/files.js';
@@ -20,11 +21,14 @@ import componentsMd from './components.md' with { type: 'text' };
 import hostApiMd from './host_api.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
 import configMd from './config.md' with { type: 'text' };
+// @ts-expect-error: Bun text import
+import marketplaceMd from './marketplace.md' with { type: 'text' };
 
 export const TOPICS: Record<string, string> = {
   components: componentsMd,
   host_api: hostApiMd,
   config: configMd,
+  marketplace: marketplaceMd,
 };
 
 export const TOPIC_NAMES = Object.keys(TOPICS);
@@ -60,6 +64,9 @@ export function getTopicContent(topic: string): string | null {
   }
   if (content.includes('{{HOST_API_ENDPOINTS}}')) {
     content = content.replace('{{HOST_API_ENDPOINTS}}', renderEndpointTable());
+  }
+  if (content.includes('{{MARKET_URL}}')) {
+    content = content.replaceAll('{{MARKET_URL}}', MARKET_URL);
   }
   return content;
 }

@@ -2,7 +2,7 @@
  * App Protocol registration for the Browser app.
  * Command handlers use the @bundled/yaar-web SDK for browser automation.
  */
-import { app, invoke } from '@bundled/yaar';
+import { app } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 
 export interface BrowserProtocolDeps {
@@ -34,12 +34,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
     if (creatingSession) return creatingSession;
 
     creatingSession = (async () => {
-      const result = await invoke<{ browserId: string }>('yaar://browser/new', {
-        action: 'open',
-        url: 'about:blank',
-        visible: false,
-      });
-      const newId = result.browserId ?? '0';
+      const result = await web.open('about:blank', { visible: false }) as { browserId?: string };
+      const newId = result?.browserId ?? '0';
       deps.setActiveBrowserId(newId);
       return newId;
     })();

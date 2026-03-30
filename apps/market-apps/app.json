@@ -4,7 +4,7 @@
   "description": "Browse and manage marketplace apps",
   "run": "dist/index.html",
   "capture": "dom",
-  "permissions": ["yaar://storage/", "yaar://apps/", "yaar://market/"],
+  "permissions": ["yaar://storage/", "yaar://apps/"],
   "version": "1.0.4",
   "author": "YAAR"
 }

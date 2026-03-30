@@ -4,8 +4,6 @@ import {
   parseWindowResourceUri,
   parseConfigUri,
   buildConfigUri,
-  parseBrowserUri,
-  buildBrowserUri,
   parseSessionUri,
   buildSessionUri,
 } from '../lib/yaar-uri-server.js';
@@ -169,66 +167,6 @@ describe('buildConfigUri', () => {
     const uri = buildConfigUri('shortcuts', 'shortcut-42');
     const parsed = parseConfigUri(uri);
     expect(parsed).toEqual({ section: 'shortcuts', id: 'shortcut-42' });
-  });
-});
-
-// ============ Browser URIs ============
-
-describe('parseBrowserUri', () => {
-  it('parses numeric browser ID', () => {
-    expect(parseBrowserUri('yaar://browser/0')).toEqual({
-      resource: '0',
-      subResource: undefined,
-    });
-  });
-
-  it('parses browser ID with sub-resource', () => {
-    expect(parseBrowserUri('yaar://browser/1/screenshot')).toEqual({
-      resource: '1',
-      subResource: 'screenshot',
-    });
-  });
-
-  it('parses browser ID with content sub-resource', () => {
-    expect(parseBrowserUri('yaar://browser/0/content')).toEqual({
-      resource: '0',
-      subResource: 'content',
-    });
-  });
-
-  it('parses browser ID with navigate sub-resource', () => {
-    expect(parseBrowserUri('yaar://browser/2/navigate')).toEqual({
-      resource: '2',
-      subResource: 'navigate',
-    });
-  });
-
-  it('returns null for empty resource', () => {
-    expect(parseBrowserUri('yaar://browser/')).toBeNull();
-  });
-
-  it('returns null for non-browser URI', () => {
-    expect(parseBrowserUri('yaar://apps/browser')).toBeNull();
-  });
-
-  it('returns null for non-yaar URI', () => {
-    expect(parseBrowserUri('https://example.com')).toBeNull();
-  });
-});
-
-describe('buildBrowserUri', () => {
-  it('builds browser URI with numeric ID', () => {
-    expect(buildBrowserUri('0')).toBe('yaar://browser/0');
-  });
-
-  it('builds browser URI with sub-resource', () => {
-    expect(buildBrowserUri('1', 'screenshot')).toBe('yaar://browser/1/screenshot');
-  });
-
-  it('roundtrips with parseBrowserUri', () => {
-    const uri = buildBrowserUri('2', 'navigate');
-    const parsed = parseBrowserUri(uri);
-    expect(parsed).toEqual({ resource: '2', subResource: 'navigate' });
   });
 });
 

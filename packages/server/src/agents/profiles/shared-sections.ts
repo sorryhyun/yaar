@@ -22,11 +22,10 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|
 | \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
-| \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, describe |
+| \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
 | \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
-| \`yaar://market/\` | \`yaar://market\`, \`yaar://market/{appId}\` | list, read, invoke (install) |
 | \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |
 | \`yaar://mcp/\` | \`yaar://mcp/github\`, \`yaar://mcp/github/create_issue\` | list, describe, invoke |`;
 
@@ -101,7 +100,8 @@ read('yaar://skills/components')   # load a specific skill
 Available skills:
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **host_api** — REST endpoints available to iframe apps
-- **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)`;
+- **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
+- **marketplace** — App marketplace API for browsing and installing apps`;
 
 export const USER_PROMPTS_SECTION = `## User Prompts
 

@@ -13,4 +13,4 @@ create({
 })
 ```
 
-The app agent takes over browser control — delegate sustained browsing tasks to it rather than using `yaar://browser/` verbs directly.
+The app agent handles all browser automation — delegate browsing tasks to it via protocol commands.

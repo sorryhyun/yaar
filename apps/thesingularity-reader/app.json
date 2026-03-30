@@ -6,7 +6,6 @@
     "yaar-web"
   ],
   "permissions": [
-    "yaar://browser/",
     "yaar://http/",
     "yaar://storage/"
   ],

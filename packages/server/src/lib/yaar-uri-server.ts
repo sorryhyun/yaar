@@ -162,46 +162,6 @@ export function buildConfigUri(section: ConfigSection, id?: string): string {
   return id ? `yaar://config/${section}/${id}` : `yaar://config/${section}`;
 }
 
-// ============ Browser URIs ============
-
-export interface ParsedBrowserUri {
-  /** Browser ID (numeric string, e.g. '0', '1'). */
-  resource: string;
-  /** Sub-resource (e.g., 'content', 'screenshot', 'navigate', 'click'). */
-  subResource?: string;
-}
-
-/**
- * Parse a yaar://browser/... URI.
- *
- *   parseBrowserUri('yaar://browser/0')            -> { resource: '0' }
- *   parseBrowserUri('yaar://browser/1/screenshot')  -> { resource: '1', subResource: 'screenshot' }
- */
-export function parseBrowserUri(uri: string): ParsedBrowserUri | null {
-  const parsed = parseYaarUri(uri);
-  if (!parsed || parsed.authority !== 'browser') return null;
-
-  const slashIdx = parsed.path.indexOf('/');
-  const resource = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-  if (!resource) return null;
-
-  if (slashIdx === -1) return { resource };
-
-  const sub = parsed.path.slice(slashIdx + 1);
-  if (!sub) return null;
-  return { resource, subResource: sub };
-}
-
-/**
- * Build a yaar://browser/... URI.
- *
- *   buildBrowserUri('0')              -> 'yaar://browser/0'
- *   buildBrowserUri('1', 'screenshot') -> 'yaar://browser/1/screenshot'
- */
-export function buildBrowserUri(resource: string, subResource?: string): string {
-  return subResource ? `yaar://browser/${resource}/${subResource}` : `yaar://browser/${resource}`;
-}
-
 // ============ Session URIs ============
 
 export type SessionResource = 'current' | (string & {});

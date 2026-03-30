@@ -88,18 +88,6 @@ describe('resolveUri', () => {
     }
   });
 
-  it('resolves browser URIs', () => {
-    const browsers = resolveUri('yaar://browser/sessions');
-    expect(browsers?.kind).toBe('browser');
-
-    const session = resolveUri('yaar://browser/sessions/abc');
-    expect(session?.kind).toBe('browser');
-    if (session?.kind === 'browser') {
-      expect(session.resource).toBe('sessions');
-      expect(session.subResource).toBe('abc');
-    }
-  });
-
   it('resolves session URIs', () => {
     const agents = resolveUri('yaar://sessions/current/agents');
     expect(agents?.kind).toBe('session');
@@ -145,7 +133,7 @@ describe('resolveUri', () => {
   });
 
   it('resolves bare authority URIs', () => {
-    for (const authority of ['apps', 'storage', 'config', 'browser', 'sessions', 'skills']) {
+    for (const authority of ['apps', 'storage', 'config', 'sessions', 'skills']) {
       const r = resolveUri(`yaar://${authority}`);
       expect(r, `yaar://${authority} should resolve`).not.toBeNull();
     }

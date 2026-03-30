@@ -53,7 +53,7 @@ src/
 │   ├── uri-registry.ts   # ResourceRegistry — central handler registry
 │   ├── uri-resolve.ts    # Server-side URI resolution
 │   ├── utils.ts          # Shared handler utilities
-│   ├── agents.ts / apps.ts / storage.ts / browser.ts / config.ts
+│   ├── agents.ts / apps.ts / storage.ts / config.ts
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
@@ -72,7 +72,7 @@ src/
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ pick-directory.ts
     ├── format-interaction.ts  # formatCompactInteraction() — compact log string for UserInteraction
-    └── yaar-uri-server.ts     # Server-only URI parsers: parseContentPath, parseWindowResourceUri/buildWindowResourceUri, parseConfigUri/buildConfigUri, parseBrowserUri/buildBrowserUri, parseSessionUri/buildSessionUri (+ associated types)
+    └── yaar-uri-server.ts     # Server-only URI parsers: parseContentPath, parseWindowResourceUri/buildWindowResourceUri, parseConfigUri/buildConfigUri, parseSessionUri/buildSessionUri (+ associated types)
 ```
 
 ## Architecture

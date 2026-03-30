@@ -10,7 +10,6 @@
   "variant": "standard",
   "capture": "canvas",
   "permissions": [
-    "yaar://browser/",
     "yaar://storage/",
     "yaar://windows/"
   ],

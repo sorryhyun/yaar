@@ -60,6 +60,8 @@ Lowercase letters, numbers, and hyphens. Must start with a letter: `/^[a-z][a-z0
 
 ## Compile & Typecheck
 
+**Auto-compile on server restart:** The server automatically recompiles any stale apps at startup (see `features/apps/auto-compile.ts`). If you only edit source files and the server will be restarted (e.g., via `make dev`), you do NOT need to compile manually — the server handles it. Only compile manually when you need to verify the build succeeds or when the server is not being restarted.
+
 ### Compile an app
 
 ```bash
@@ -278,10 +280,10 @@ const data = await invoke('yaar://http', { url: 'https://api.example.com/data', 
 1. **Create/edit source files** in `apps/{appId}/src/`
 2. **Create/edit `app.json`** with metadata, permissions, bundles
 3. **Typecheck** to catch type errors early
-4. **Compile** to produce `dist/index.html`
+4. **Compile** only if you need to verify the build — the server auto-compiles stale apps on restart
 5. **Fix errors iteratively** — read compile/typecheck output, edit files, re-run
 6. **Write SKILL.md / AGENTS.md / HINT.md** as appropriate
-7. The server auto-detects changes and serves the updated app
+7. The server auto-compiles stale apps and serves them on restart
 
 ## Existing Apps Reference
 

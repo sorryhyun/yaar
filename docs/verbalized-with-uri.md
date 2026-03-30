@@ -44,12 +44,6 @@ The primary way agents address windows. Monitor ID is injected automatically fro
 | `yaar://config/mounts` | Host directory mounts |
 | `yaar://config/app/{appId}` | App credentials/config |
 
-### Browser — `yaar://browser/{browserId}`
-
-| URI | Description |
-|-----|-------------|
-| `yaar://browser/{browserId}` | Browser instance (URL, title, content, screenshot via `read`; navigate, click, type via `invoke` with `action`) |
-
 ### Sessions — `yaar://sessions/current/...`
 
 All session-scoped resources live under this namespace. Agents, notifications, prompts, clipboard, and monitors are sub-resources of the current session.
@@ -97,11 +91,6 @@ invoke('yaar://windows/win-1', { action: 'subscribe', events: ['content', 'inter
 invoke('yaar://windows/win-1', { action: 'unsubscribe', subscriptionId: 'wsub-...' })
 delete('yaar://windows/win-1')                          -> close window
 
-read('yaar://browser/0')                                -> { url, title }
-invoke('yaar://browser/0', { action: 'navigate', url: '...' })
-invoke('yaar://browser/0', { action: 'click', selector: '#btn' })
-invoke('yaar://browser/0', { action: 'screenshot' })
-
 list('yaar://sessions/current/agents')                  -> active agents
 invoke('yaar://sessions/current/agents/agent-1', { action: 'interrupt' })
 
@@ -114,7 +103,6 @@ read('yaar://sessions/current/monitors/0')              -> monitor status
 read('yaar://sessions/current')                         -> session info
 
 describe('yaar://config/settings')                      -> { verbs: ['read', 'invoke'], schema: { ... } }
-describe('yaar://browser/0')                            -> { verbs: ['read', 'invoke'], actions: ['navigate', 'click', 'screenshot', ...] }
 ```
 
 ### MCP Surface

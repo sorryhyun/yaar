@@ -2,6 +2,7 @@ export {};
 
 import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
 import { list, invoke, del, showToast } from '@bundled/yaar';
+import { listTabs, closeTab } from '@bundled/yaar-web';
 import type { AgentStats, AgentEntry, WindowInfo, BrowserTab } from './types';
 
 // ── Signals ──────────────────────────────────────────────────
@@ -61,8 +62,9 @@ async function fetchWindows() {
 
 async function fetchBrowsers() {
   try {
-    const data = await list<BrowserTab[]>('yaar://browser');
-    setBrowsers(Array.isArray(data) ? data : []);
+    const data = await listTabs() as BrowserTab[] | { data: BrowserTab[] };
+    const tabs = Array.isArray(data) ? data : Array.isArray((data as { data: BrowserTab[] })?.data) ? (data as { data: BrowserTab[] }).data : [];
+    setBrowsers(tabs);
   } catch {
     setBrowsers([]);
   }
@@ -105,7 +107,7 @@ export async function closeWindow(windowId: string) {
 
 export async function closeBrowser(browserId: string) {
   try {
-    await del(`yaar://browser/${browserId}`);
+    await closeTab(browserId);
     showToast(`Closed browser tab`, 'success');
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Close failed', 'error');

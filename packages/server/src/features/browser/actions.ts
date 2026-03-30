@@ -2,7 +2,7 @@
  * Browser action implementations extracted from the browser handler.
  *
  * Each function corresponds to one `action` value in the
- * `invoke('yaar://browser/{id}', { action, ... })` dispatch table.
+ * `POST /api/browser` dispatch table.
  */
 
 import type { BrowserPool } from '../../lib/browser/index.js';
