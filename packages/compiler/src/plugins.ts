@@ -88,7 +88,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
  * solid-js resolves to the SSR build (dist/server.js) instead of the browser build
  * (dist/solid.js). This helper reads the exports map and picks the browser condition.
  */
-function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
+export function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
   // Split 'solid-js/web' → pkg='solid-js', subpath='./web'
   const parts = npmName.split('/');
   const isScoped = npmName.startsWith('@');
@@ -139,6 +139,18 @@ function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
  *    falling back to Bun.resolveSync() for packages without conditional exports.
  */
 export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugin {
+  // Log bundled libs state once at plugin creation time
+  const embeddedLibsSnapshot = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
+    | Record<string, string>
+    | undefined;
+  console.log(
+    `[bundled-lib] plugin init: __YAAR_BUNDLED_LIBS is ${
+      embeddedLibsSnapshot === undefined
+        ? 'undefined'
+        : `set (${Object.keys(embeddedLibsSnapshot).length} libs: ${Object.keys(embeddedLibsSnapshot).slice(0, 5).join(', ')}...)`
+    }, PLUGIN_DIR=${PLUGIN_DIR}, SHIMS_DIR=${SHIMS_DIR}`,
+  );
+
   return {
     name: 'bundled-libraries-bun',
     setup(build: Bun.PluginBuilder) {
@@ -165,11 +177,17 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
+          console.log(`[bundled-lib] @bundled/${libName} → embedded (namespace=${NAMESPACE})`);
           return { path: libName, namespace: NAMESPACE };
         }
 
-        // Strategy 0: local shim file (wraps npm package with compat fixes)
-        if (BUNDLED_SHIMS[libName]) {
+        // Strategy 0: local shim file (wraps npm package with compat fixes).
+        // Skip in exe mode — shim .ts sources aren't usable as Bun.build() input
+        // inside the embedded filesystem (paths like B:/~BUN/root/shims/yaar.ts).
+        // In exe mode, shims are pre-bundled and must be in __YAAR_BUNDLED_LIBS.
+        const isExeMode = embeddedLibs !== undefined;
+        if (BUNDLED_SHIMS[libName] && !isExeMode) {
+          console.log(`[bundled-lib] @bundled/${libName} → shim ${BUNDLED_SHIMS[libName]}`);
           return { path: BUNDLED_SHIMS[libName] };
         }
 
@@ -179,7 +197,10 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         // packages without conditional exports.
         const npmName = BUNDLED_LIBRARIES[libName];
         const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
-        if (browserPath) return { path: browserPath };
+        if (browserPath) {
+          console.log(`[bundled-lib] @bundled/${libName} → browser entry ${browserPath}`);
+          return { path: browserPath };
+        }
 
         try {
           const resolved = toForwardSlash(Bun.resolveSync(npmName, PLUGIN_DIR));
@@ -187,13 +208,18 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           // On Windows, resolveBrowserEntry can fail while Bun.resolveSync picks the
           // node condition (e.g. solid-js/dist/server.js instead of dist/solid.js).
           if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
+            console.log(`[bundled-lib] @bundled/${libName} → REJECTED SSR build ${resolved}`);
             throw new Error(`Resolved SSR build for ${npmName}, need browser build`);
           }
+          console.log(`[bundled-lib] @bundled/${libName} → Bun.resolveSync ${resolved}`);
           return { path: resolved };
         } catch {
           // fall through to namespace for disk-based resolution
         }
 
+        console.log(
+          `[bundled-lib] @bundled/${libName} → fallback namespace (will try disk/embedded in onLoad)`,
+        );
         return { path: libName, namespace: NAMESPACE };
       });
 
@@ -205,14 +231,46 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
       build.onResolve({ filter: /^solid-js(\/|$)/ }, (args: Bun.OnResolveArgs) => {
         const libName = args.path as string;
         if (!CONDITIONAL_EXPORT_LIBS.includes(libName)) return undefined;
+
+        // In exe mode, redirect to the prebundled lib (embedded or disk).
+        // The prebundled solid-js sub-packages (html, web, store) have solid-js
+        // marked as external, so their bare `import 'solid-js'` statements need
+        // to resolve to the shared prebundled bundle.
+        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
+          | Record<string, string>
+          | undefined;
+        if (embeddedLibs?.[libName]) {
+          console.log(
+            `[bundled-lib] bare ${libName} (from ${args.importer}) → embedded (namespace=${NAMESPACE})`,
+          );
+          return { path: libName, namespace: NAMESPACE };
+        }
+
+        // Dev mode: resolve browser entry from node_modules
         const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
-        if (browserPath) return { path: browserPath };
+        if (browserPath) {
+          console.log(
+            `[bundled-lib] bare ${libName} (from ${args.importer}) → browser entry ${browserPath}`,
+          );
+          return { path: browserPath };
+        }
         try {
           const resolved = toForwardSlash(Bun.resolveSync(libName, PLUGIN_DIR));
           // Reject SSR builds — see guard in @bundled/* resolver above
-          if (resolved.includes('/server.')) return undefined;
+          if (resolved.includes('/server.')) {
+            console.log(
+              `[bundled-lib] bare ${libName} (from ${args.importer}) → REJECTED SSR build ${resolved}`,
+            );
+            return undefined;
+          }
+          console.log(
+            `[bundled-lib] bare ${libName} (from ${args.importer}) → Bun.resolveSync ${resolved}`,
+          );
           return { path: resolved };
         } catch {
+          console.log(
+            `[bundled-lib] bare ${libName} (from ${args.importer}) → UNRESOLVED (returning undefined)`,
+          );
           return undefined;
         }
       });
@@ -225,7 +283,10 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
-          const contents = await Bun.file(embeddedLibs[libName]).text();
+          const filePath = embeddedLibs[libName];
+          console.log(`[bundled-lib] onLoad ${libName} → embedded file ${filePath}`);
+          const contents = await Bun.file(filePath).text();
+          console.log(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
           return { contents, loader: 'js' };
         }
 
@@ -234,10 +295,15 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         const diskPath = toForwardSlash(join(exeDir, 'bundled-libs', `${libName}.js`));
         const diskFile = Bun.file(diskPath);
         if (await diskFile.exists()) {
+          console.log(`[bundled-lib] onLoad ${libName} → disk file ${diskPath}`);
           const contents = await diskFile.text();
+          console.log(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
           return { contents, loader: 'js' };
         }
 
+        console.log(
+          `[bundled-lib] onLoad ${libName} → NOT FOUND (embedded=${embeddedLibs !== undefined}, diskPath=${diskPath})`,
+        );
         throw new Error(
           `Bundled library "${libName}" not found. ` +
             `Looked for embedded lib and disk file at ${diskPath}. ` +
@@ -251,11 +317,59 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
 /**
  * Bun plugin that converts `.css` file imports into JS modules
  * that inject a <style> element at runtime.
+ *
+ * Also resolves bare CSS imports from bundled library packages
+ * (e.g. `diff2html/bundles/css/diff2html.min.css`) which can't
+ * be found by Bun's default resolver in exe mode.
  */
 export function cssFilePlugin(): Bun.BunPlugin {
   return {
     name: 'css-file-loader',
     setup(build: Bun.PluginBuilder) {
+      const CSS_NAMESPACE = 'bundled-css';
+
+      // Resolve bare CSS imports from bundled library packages.
+      // In exe mode, these are pre-bundled as JS style-injector modules
+      // in __YAAR_BUNDLED_LIBS. In dev mode, resolve from compiler's node_modules.
+      build.onResolve({ filter: /\.css$/ }, (args: Bun.OnResolveArgs) => {
+        // Only handle bare imports (package paths), not relative/absolute
+        if (args.path.startsWith('.') || args.path.startsWith('/')) return undefined;
+
+        // Check if this is from a known bundled library
+        const matchingLib = Object.keys(BUNDLED_LIBRARIES).find(
+          (name) => args.path === name || args.path.startsWith(name + '/'),
+        );
+        if (!matchingLib) return undefined;
+
+        // Exe mode: check embedded CSS libs (pre-bundled as JS style-injectors)
+        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
+          | Record<string, string>
+          | undefined;
+        if (embeddedLibs?.[args.path]) {
+          return { path: args.path, namespace: CSS_NAMESPACE };
+        }
+
+        // Dev mode: resolve from compiler's node_modules
+        try {
+          return { path: toForwardSlash(Bun.resolveSync(args.path, PLUGIN_DIR)) };
+        } catch {
+          return undefined;
+        }
+      });
+
+      // Load pre-bundled CSS-as-JS from embedded libs (exe mode)
+      build.onLoad({ filter: /.*/, namespace: CSS_NAMESPACE }, async (args: Bun.OnLoadArgs) => {
+        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
+          | Record<string, string>
+          | undefined;
+        if (embeddedLibs?.[args.path]) {
+          const contents = await Bun.file(embeddedLibs[args.path]).text();
+          return { contents, loader: 'js' };
+        }
+        throw new Error(`Bundled CSS "${args.path}" not found in embedded libs`);
+      });
+
+      // Convert .css files to JS style-injector modules (dev mode)
       build.onLoad({ filter: /\.css$/ }, async (args: Bun.OnLoadArgs) => {
         const css = await Bun.file(toForwardSlash(args.path)).text();
         const escaped = css.replace(/`/g, '\\`').replace(/\$/g, '\\$');

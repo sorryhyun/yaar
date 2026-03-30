@@ -152,6 +152,10 @@ const generatedSource = [
   ...importLines,
   ...libImportLines,
   '',
+  '// Set globals BEFORE importing server code.',
+  '// Using dynamic import() for exe-entry ensures these assignments',
+  '// run first — static imports execute before the module body.',
+  '',
   '// Map URL paths to embedded file paths (/$bunfs/root/...)',
   '(globalThis as any).__YAAR_EMBEDDED_FRONTEND = {',
   ...mapEntries,
@@ -164,7 +168,7 @@ const generatedSource = [
     '};',
     '',
   ] : []),
-  `import './exe-entry.js';`,
+  `await import('./exe-entry.js');`,
   '',
 ].join('\n');
 
