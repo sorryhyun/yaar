@@ -2,7 +2,7 @@ import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { postTabId, syncCookiesToTab } from './browser';
+import { POST_TAB, syncCookiesToTab } from './browser';
 import type { Post } from './types';
 import {
   loginToDC,
@@ -114,11 +114,10 @@ export async function triggerAnalysis(): Promise<void> {
   }
 }
 
-export async function takeScreenshot(post: Post): Promise<void> {
+export async function takeScreenshot(_post: Post): Promise<void> {
   setState({ screenshotLoading: true, screenshotSrc: null });
   try {
-    const tabId = postTabId(post.num);
-    const result = await web.screenshot({ browserId: tabId }) as {
+    const result = await web.screenshot({ browserId: POST_TAB }) as {
       ok: boolean; images?: Array<{ data: string; mimeType?: string }>;
     };
     const images = result?.images ?? [];
@@ -215,11 +214,10 @@ export async function submitComment(): Promise<void> {
     return;
   }
 
-  const tabId = postTabId(post.num);
   setState('commentSubmitting', true);
   try {
-    await syncCookiesToTab(tabId);
-    const result = await postCommentToDC(post, text, tabId);
+    await syncCookiesToTab(POST_TAB);
+    const result = await postCommentToDC(post, text, POST_TAB);
     if (result.ok) {
       setState('commentText', '');
       showToast('💬 댓글이 등록되었습니다!', 'success');

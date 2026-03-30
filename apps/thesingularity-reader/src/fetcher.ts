@@ -11,7 +11,7 @@
  */
 import type { Post, Comment } from './types';
 import * as web from '@bundled/yaar-web';
-import { openOrNavigate, MAIN_TAB, postTabId } from './browser';
+import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
@@ -370,7 +370,7 @@ export async function fetchPostDetail(
   post: Post,
   tabId?: string,
 ): Promise<{ content: string; comments: Comment[] }> {
-  tabId ??= postTabId(post.num);
+  tabId ??= POST_TAB;
   await openOrNavigate(post.url, tabId, {
     visible: false,
     mobile: true,

@@ -3,15 +3,15 @@
  *
  * Tab layout:
  *   MAIN_TAB ('main')       — gallery list view + login flow (owns DC cookies)
- *   postTabId(num)           — per-post detail view (cookies synced from main)
+ *   POST_TAB ('post')        — single reusable post detail view (cookies synced from main)
  */
 import * as web from '@bundled/yaar-web';
 
 /** The primary tab: gallery list + login */
 export const MAIN_TAB = 'main';
 
-/** Per-post detail tab ID */
-export const postTabId = (num: string) => `post-${num}`;
+/** Single reusable tab for post detail views */
+export const POST_TAB = 'post';
 
 const initialized = new Set<string>();
 
