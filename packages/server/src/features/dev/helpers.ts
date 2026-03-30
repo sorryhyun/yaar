@@ -51,7 +51,6 @@ function generateLaunchSection(
 \`\`\`
 invoke('yaar://windows/${appId}', {
   action: "create",
-  appId: "${appId}",
   title: "${appName}",
   renderer: "iframe",
   content: "yaar://apps/${appId}"

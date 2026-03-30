@@ -24,6 +24,9 @@ import {
   handleDevRoutes,
   handleFileRoutes,
   handleProxyRoutes,
+  handleSessionRoutes,
+  handleSettingsRoutes,
+  handleShortcutRoutes,
   handleStaticRoutes,
   handleVerbRoutes,
 } from './routes/index.js';
@@ -33,6 +36,9 @@ import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from './routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
+import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from './routes/sessions.js';
+import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from './routes/settings.js';
+import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from './routes/shortcuts.js';
 import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from './routes/verb.js';
 
 // ── Public endpoint matcher ──────────────────────────────────────────
@@ -52,6 +58,9 @@ function buildPublicRoutes(): PublicRoute[] {
     ...DEV_PUBLIC,
     ...FILES_PUBLIC,
     ...PROXY_PUBLIC,
+    ...SESSIONS_PUBLIC,
+    ...SETTINGS_PUBLIC,
+    ...SHORTCUTS_PUBLIC,
     ...VERB_PUBLIC,
   ];
   return all.map((ep) => {
@@ -175,6 +184,15 @@ export function createFetchHandler() {
     // Route dispatch — short-circuit on first match
     const apiResponse = await handleApiRoutes(req, url);
     if (apiResponse) return withCors(apiResponse, corsHeaders);
+
+    const shortcutResponse = await handleShortcutRoutes(req, url);
+    if (shortcutResponse) return withCors(shortcutResponse, corsHeaders);
+
+    const sessionResponse = await handleSessionRoutes(req, url);
+    if (sessionResponse) return withCors(sessionResponse, corsHeaders);
+
+    const settingsResponse = await handleSettingsRoutes(req, url);
+    if (settingsResponse) return withCors(settingsResponse, corsHeaders);
 
     const proxyResponse = await handleProxyRoutes(req, url);
     if (proxyResponse) return withCors(proxyResponse, corsHeaders);

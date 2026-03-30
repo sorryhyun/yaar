@@ -8,7 +8,6 @@ DCinside "특이점이 온다" 마이너 갤러리 리더. 게시물 목록, 본
 ```
 invoke('yaar://windows/thesingularity-reader', {
   action: "create",
-  appId: "thesingularity-reader",
   title: "특이점이 온다",
   renderer: "iframe",
   content: "yaar://apps/thesingularity-reader"

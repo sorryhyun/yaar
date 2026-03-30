@@ -7,7 +7,6 @@ Open this app in an iframe window:
 ```
 invoke('yaar://windows/configurations', {
   action: "create",
-  appId: "configurations",
   title: "Configurations",
   renderer: "iframe",
   content: "yaar://apps/configurations"

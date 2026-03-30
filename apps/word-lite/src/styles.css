@@ -72,21 +72,45 @@ body {
 }
 .group {
   display: inline-flex;
-  gap: 6px;
+  gap: 4px;
   padding-right: 8px;
   margin-right: 4px;
-  border-right: 1px solid var(--yaar-border);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 .group:last-child {
   border-right: 0;
   padding-right: 0;
 }
 
-/* ── White border on all buttons ── */
-.app-shell button,
-.app-shell .y-btn {
-  border: 1px solid white !important;
+/* ── Toolbar buttons — subtle, modern style ── */
+.app-shell .toolbar button,
+.app-shell .toolbar .y-btn,
+.app-shell .topbar button,
+.app-shell .topbar .y-btn {
+  border: 1px solid rgba(255, 255, 255, 0.13) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
   color: var(--yaar-text) !important;
+  border-radius: 6px;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.app-shell .toolbar button:hover,
+.app-shell .toolbar .y-btn:hover,
+.app-shell .topbar button:hover,
+.app-shell .topbar .y-btn:hover {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.app-shell .toolbar button:active,
+.app-shell .toolbar .y-btn:active,
+.app-shell .topbar button:active,
+.app-shell .topbar .y-btn:active {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* ── Toolbar select (dark) ── */

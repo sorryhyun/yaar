@@ -3,5 +3,8 @@ export { handleBrowserRoutes } from './browser.js';
 export { handleDevRoutes } from './dev.js';
 export { handleFileRoutes } from './files.js';
 export { handleProxyRoutes } from './proxy.js';
+export { handleSessionRoutes } from './sessions.js';
+export { handleSettingsRoutes } from './settings.js';
+export { handleShortcutRoutes } from './shortcuts.js';
 export { handleStaticRoutes } from './static.js';
 export { handleVerbRoutes } from './verb.js';

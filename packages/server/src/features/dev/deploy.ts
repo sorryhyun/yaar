@@ -2,7 +2,7 @@
  * App development deploy logic.
  */
 
-import { mkdir, cp, readdir, stat, rm } from 'fs/promises';
+import { mkdir, cp, readdir, stat, rm, unlink } from 'fs/promises';
 import { join } from 'path';
 import { compileTypeScript, getSandboxPath, extractProtocolFromSource } from '@yaar/compiler';
 import { PROJECT_ROOT } from '../../config.js';
@@ -12,6 +12,69 @@ import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 
 const APPS_DIR = join(PROJECT_ROOT, 'apps');
+
+/**
+ * Sync a source directory to a destination, only writing files whose content changed.
+ * Preserves permissions of unchanged files. Removes files not in source.
+ */
+async function syncDir(src: string, dest: string): Promise<void> {
+  await mkdir(dest, { recursive: true });
+
+  // Collect source files
+  const srcFiles = new Set<string>();
+  const entries = await readdir(src, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    const relPath = entry.parentPath
+      ? join(entry.parentPath, entry.name).slice(src.length + 1)
+      : entry.name;
+    if (entry.isDirectory()) {
+      await mkdir(join(dest, relPath), { recursive: true });
+      continue;
+    }
+    srcFiles.add(relPath);
+    const srcBuf = await Bun.file(join(src, relPath)).arrayBuffer();
+    try {
+      const destBuf = await Bun.file(join(dest, relPath)).arrayBuffer();
+      if (
+        srcBuf.byteLength === destBuf.byteLength &&
+        Buffer.from(srcBuf).equals(Buffer.from(destBuf))
+      ) {
+        continue; // Content identical — skip to preserve permissions
+      }
+    } catch {
+      // Destination file doesn't exist yet
+    }
+    await Bun.write(join(dest, relPath), srcBuf);
+  }
+
+  // Remove files in dest that aren't in source anymore
+  // (also cleans up renamed/deleted source files)
+  try {
+    const destEntries = await readdir(dest, { recursive: true, withFileTypes: true });
+    for (const entry of destEntries) {
+      if (entry.isDirectory()) continue;
+      const relPath = entry.parentPath
+        ? join(entry.parentPath, entry.name).slice(dest.length + 1)
+        : entry.name;
+      if (!srcFiles.has(relPath)) {
+        await unlink(join(dest, relPath));
+      }
+    }
+  } catch {
+    // dest doesn't exist yet — nothing to clean
+  }
+}
+
+/** Write a file only if its content actually changed, preserving permissions. */
+async function writeIfChanged(filePath: string, content: string): Promise<void> {
+  try {
+    const existing = await Bun.file(filePath).text();
+    if (existing === content) return;
+  } catch {
+    // File doesn't exist yet
+  }
+  await Bun.write(filePath, content);
+}
 
 export interface DeployArgs {
   appId: string;
@@ -149,17 +212,11 @@ export async function doDeploy(
   const displayName = name ?? (existingMeta.name as string | undefined) ?? toDisplayName(appId);
 
   try {
-    try {
-      await stat(appPath);
-      await rm(join(appPath, 'src'), { recursive: true, force: true });
-      await rm(join(appPath, 'dist'), { recursive: true, force: true });
-    } catch {
-      // App doesn't exist yet
-    }
-
     await mkdir(appPath, { recursive: true });
 
     if (hasCompiledApp) {
+      // dist/ is generated output — safe to replace entirely
+      await rm(join(appPath, 'dist'), { recursive: true, force: true });
       const appDistDir = join(appPath, 'dist');
       await mkdir(appDistDir, { recursive: true });
       await cp(distIndexPath, join(appDistDir, 'index.html'));
@@ -178,7 +235,8 @@ export async function doDeploy(
       const srcPath = join(sandboxPath, 'src');
       try {
         await stat(srcPath);
-        await cp(srcPath, join(appPath, 'src'), { recursive: true });
+        // Sync instead of delete+copy to preserve file permissions for unchanged files
+        await syncDir(srcPath, join(appPath, 'src'));
       } catch {
         // No src directory
       }
@@ -188,25 +246,22 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    if (sandboxSkill) {
-      // Use SKILL.md from sandbox directly
-      await Bun.write(join(appPath, 'SKILL.md'), sandboxSkill);
-    } else {
-      const skillContent = generateSkillMd(
-        appId,
-        displayName,
-        hasCompiledApp,
-        componentFiles,
-        skill,
-        !!extractedProtocol,
-      );
-      await Bun.write(join(appPath, 'SKILL.md'), skillContent);
-    }
+    const skillContent = sandboxSkill
+      ? sandboxSkill
+      : generateSkillMd(
+          appId,
+          displayName,
+          hasCompiledApp,
+          componentFiles,
+          skill,
+          !!extractedProtocol,
+        );
+    await writeIfChanged(join(appPath, 'SKILL.md'), skillContent);
 
     // Copy HINT.md from sandbox if it exists (monitor agent orchestration hints)
     try {
       const hintContent = await Bun.file(join(sandboxPath, 'HINT.md')).text();
-      await Bun.write(join(appPath, 'HINT.md'), hintContent);
+      await writeIfChanged(join(appPath, 'HINT.md'), hintContent);
     } catch {
       // No HINT.md in sandbox
     }
@@ -226,13 +281,13 @@ export async function doDeploy(
     delete metadata.hidden;
     delete metadata.appProtocol;
     delete metadata.protocol;
-    await Bun.write(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
+    await writeIfChanged(join(appPath, 'app.json'), JSON.stringify(metadata, null, 2) + '\n');
 
     // Write protocol.json to dist/ (compiler already writes it, but cover source-only extraction)
     if (extractedProtocol) {
       const protocolDistDir = join(appPath, 'dist');
       await mkdir(protocolDistDir, { recursive: true });
-      await Bun.write(
+      await writeIfChanged(
         join(protocolDistDir, 'protocol.json'),
         JSON.stringify(extractedProtocol, null, 2) + '\n',
       );

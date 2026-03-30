@@ -164,3 +164,16 @@
     opacity: 0;
   }
 }
+
+/* Agent active glow - thin pulsing border on windows with active agents */
+@keyframes agentGlow {
+  0%,
+  100% {
+    opacity: 0.4;
+    border-color: rgba(137, 180, 250, 0.4);
+  }
+  50% {
+    opacity: 0.9;
+    border-color: rgba(137, 180, 250, 0.8);
+  }
+}

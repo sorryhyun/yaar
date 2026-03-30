@@ -1,0 +1,374 @@
+openapi: '3.1.0'
+info:
+  title: YAAR Server API
+  description: REST API for the YAAR reactive AI interface server.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+paths:
+  /api/apps:
+    get:
+      summary: List all installed apps
+      responses:
+        '200':
+          description: '`{ apps: AppInfo[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/apps/{appId}/{path}:
+    parameters:
+      - name: appId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: App static files
+      responses:
+        '200':
+          description: file
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/browser:
+    post:
+      summary: Execute browser action
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/browser/sessions:
+    get:
+      summary: List open browser sessions
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/browser/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Close a browser session
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/browser/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: SSE stream for browser session updates
+      responses:
+        '200':
+          description: text/event-stream
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/browser/{id}/screenshot:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Capture browser screenshot
+      responses:
+        '200':
+          description: image/webp
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/bundled-libraries:
+    get:
+      summary: List bundled libraries
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/compile:
+    post:
+      summary: Compile a project
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/deploy:
+    post:
+      summary: Deploy a project
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/typecheck:
+    post:
+      summary: Typecheck a project
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/domains:
+    get:
+      summary: Get allowed domain settings
+      responses:
+        '200':
+          description: '`{ allowAllDomains: boolean, domains: string[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+    patch:
+      summary: Update domain settings
+      responses:
+        '200':
+          description: '`{ allowAllDomains: boolean, domains: string[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/fetch:
+    post:
+      summary: 'Proxy HTTP request (for CORS-blocked APIs). Body: `{ url, method?, headers?, body? }`'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/pdf/{path}/{page}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Render PDF page as PNG
+      responses:
+        '200':
+          description: image/png
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/sessions:
+    get:
+      summary: List all saved sessions
+      responses:
+        '200':
+          description: '`{ sessions: SessionInfo[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/sessions/{id}/messages:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get session messages for replay
+      responses:
+        '200':
+          description: '`{ messages: SessionMessage[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/sessions/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Restore session with window actions and context
+      responses:
+        '200':
+          description: '`{ actions: OSAction[], contextMessages: Message[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/sessions/{id}/transcript:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get session transcript
+      responses:
+        '200':
+          description: '`{ transcript: string }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/settings:
+    patch:
+      summary: Update user settings
+      responses:
+        '200':
+          description: '`Settings`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/shortcuts:
+    get:
+      summary: List desktop shortcuts
+      responses:
+        '200':
+          description: '`{ shortcuts: DesktopShortcut[] }`'
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      summary: Create a desktop shortcut
+      responses:
+        '200':
+          description: '`{ shortcut: DesktopShortcut }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/shortcuts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Update a desktop shortcut
+      responses:
+        '200':
+          description: '`{ shortcut: DesktopShortcut }`'
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      summary: Delete a desktop shortcut
+      responses:
+        '200':
+          description: '`{ ok: true }`'
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/storage:
+    get:
+      summary: Storage root (list/read)
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/storage/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Read a storage file / List directory contents
+      responses:
+        '200':
+          description: file
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      summary: Write a storage file (body = file content)
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      summary: Delete a storage file
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/verb:
+    post:
+      summary: 'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`. Restricted to allowed URI prefixes.'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/verb/subscribe:
+    post:
+      summary: 'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId? }`.'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object

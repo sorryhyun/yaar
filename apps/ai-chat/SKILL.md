@@ -7,7 +7,6 @@ Open this app in an iframe window:
 ```
 invoke('yaar://windows/ai-chat', {
   action: "create",
-  appId: "ai-chat",
   title: "AI Chat",
   renderer: "iframe",
   content: "yaar://apps/ai-chat"

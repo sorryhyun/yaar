@@ -10,6 +10,9 @@ import { getAvailableBundledLibraries } from '@yaar/compiler';
 import { MARKET_URL } from '../../config.js';
 import type { EndpointMeta } from '../../http/utils.js';
 import { PUBLIC_ENDPOINTS as apiEndpoints } from '../../http/routes/api.js';
+import { PUBLIC_ENDPOINTS as shortcutEndpoints } from '../../http/routes/shortcuts.js';
+import { PUBLIC_ENDPOINTS as sessionEndpoints } from '../../http/routes/sessions.js';
+import { PUBLIC_ENDPOINTS as settingsEndpoints } from '../../http/routes/settings.js';
 import { PUBLIC_ENDPOINTS as fileEndpoints } from '../../http/routes/files.js';
 import { PUBLIC_ENDPOINTS as proxyEndpoints } from '../../http/routes/proxy.js';
 import { PUBLIC_ENDPOINTS as browserEndpoints } from '../../http/routes/browser.js';
@@ -36,6 +39,9 @@ export const TOPIC_NAMES = Object.keys(TOPICS);
 function renderEndpointTable(): string {
   const all: EndpointMeta[] = [
     ...apiEndpoints,
+    ...shortcutEndpoints,
+    ...sessionEndpoints,
+    ...settingsEndpoints,
     ...fileEndpoints,
     ...proxyEndpoints,
     ...browserEndpoints,

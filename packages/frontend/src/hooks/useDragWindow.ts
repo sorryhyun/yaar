@@ -80,7 +80,17 @@ export function useDragWindow({
       const yClamp = !variant || variant === 'standard' ? TITLEBAR_HEIGHT : 0;
 
       let didMove = false;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const DRAG_THRESHOLD = 3; // px — ignore sub-pixel jitter (e.g. double-click)
       const handleMouseMove = (e: MouseEvent) => {
+        if (
+          !didMove &&
+          Math.abs(e.clientX - startX) < DRAG_THRESHOLD &&
+          Math.abs(e.clientY - startY) < DRAG_THRESHOLD
+        ) {
+          return;
+        }
         didMove = true;
         const vw =
           typeof globalThis.innerWidth === 'number'

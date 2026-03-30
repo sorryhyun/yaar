@@ -54,18 +54,6 @@ export async function subscribe(uri: string, callback: (uri: string) => void): P
   return y.subscribe(uri, callback);
 }
 
-// ── Aliases (backwards-compat) ───────────────────────────────────
-
-export const readJson = read;
-export const readText = async (uri: string): Promise<string> => asText(await y.read(uri));
-export const invokeJson = invoke;
-export const invokeText = async (uri: string, payload?: Record<string, unknown>): Promise<string> =>
-  asText(await y.invoke(uri, payload));
-export const listJson = list;
-export const listText = async (uri: string): Promise<string> => asText(await y.list(uri));
-export const describeJson = describe;
-export const deleteText = async (uri: string): Promise<string> => asText(await y.delete(uri));
-
 // ── App-scoped storage ──────────────────────────────────────────
 
 function appStorageUri(path: string): string {

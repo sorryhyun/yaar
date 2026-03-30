@@ -7,7 +7,6 @@ Open this app in an iframe window:
 ```
 invoke('yaar://windows/music-maker', {
   action: "create",
-  appId: "music-maker",
   title: "Music Maker",
   renderer: "iframe",
   content: "yaar://apps/music-maker"

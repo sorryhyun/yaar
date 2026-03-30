@@ -7,7 +7,6 @@ Open this app in an iframe window:
 ```
 invoke('yaar://windows/session-logs', {
   action: "create",
-  appId: "session-logs",
   title: "Session Logs",
   renderer: "iframe",
   content: "yaar://apps/session-logs"

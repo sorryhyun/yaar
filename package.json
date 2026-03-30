@@ -26,6 +26,7 @@
     "build:exe:bundle": "bun scripts/build-exe-bundle.js --target windows",
     "build:exe:bundle:linux": "bun scripts/build-exe-bundle.js --target linux",
     "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --target macos",
+    "generate:openapi": "bun run scripts/generate-openapi.ts",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "prepare": "husky"
