@@ -74,6 +74,21 @@ export class SessionLogger {
   }
 
   /**
+   * Get the session ID for this logger.
+   */
+  getSessionId(): string {
+    return this.sessionInfo.sessionId;
+  }
+
+  /**
+   * Update the provider name in session metadata (e.g., from 'pending' to 'claude').
+   */
+  updateProvider(provider: string): void {
+    this.sessionInfo.metadata.provider = provider;
+    this.scheduleMetadataSave();
+  }
+
+  /**
    * Register a new agent in the session hierarchy.
    */
   async registerAgent(

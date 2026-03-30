@@ -35,6 +35,7 @@ import { getBrowserPool } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
+import type { SessionLogger } from '../logging/index.js';
 import {
   normalizeAgentKey,
   mapActionToSubscriptionEvent,
@@ -46,6 +47,7 @@ export interface LiveSessionOptions {
   restoreActions?: OSAction[];
   contextMessages?: ContextMessage[];
   savedThreadIds?: Record<string, string>;
+  sessionLogger?: SessionLogger;
 }
 
 /**
@@ -92,6 +94,11 @@ export class LiveSession {
   /** True once launch hooks have been executed — prevents re-firing on reconnect or second tab. */
   launchHooksExecuted = false;
 
+  // Session logger — created at server startup, passed via options.
+  // Owned by LiveSession so that user interactions are logged even before the
+  // pool is initialized (i.e., before the user sends their first message).
+  private sessionLogger: SessionLogger | null = null;
+
   // Action listener for window state tracking
   private unsubscribeAction: (() => void) | null = null;
   // App protocol listener for iframe communication
@@ -108,6 +115,9 @@ export class LiveSession {
     this.windowState = new WindowStateRegistry();
     const cachePath = join(getConfigDir(), 'reload-cache', `${sessionId}.json`);
     this.reloadCache = new ReloadCache(cachePath);
+
+    // Use the session logger created at startup
+    this.sessionLogger = options.sessionLogger ?? null;
 
     // Restore windows from previous session
     if (options.restoreActions && options.restoreActions.length > 0) {
@@ -136,6 +146,23 @@ export class LiveSession {
             );
           }
         }
+      }
+      // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
+      // ToolActionBridge to broadcast them to the frontend. Detect these by checking
+      // if the agentId starts with "iframe:" and broadcast directly.
+      if (event.agentId?.startsWith('iframe:')) {
+        const action = event.action;
+        const raw = (action as { windowId?: string }).windowId;
+        // Stamp the scoped handle if the action has a raw windowId
+        const handle = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
+        const stamped =
+          handle && handle !== raw ? ({ ...action, windowId: handle } as OSAction) : action;
+        this.broadcast({
+          type: ServerEventType.ACTIONS,
+          actions: [stamped],
+          monitorId: event.monitorId,
+        });
+        this.sessionLogger?.logAction(stamped);
       }
     });
 
@@ -219,6 +246,15 @@ export class LiveSession {
     getBroadcastCenter().publishToConnection(event, connectionId);
   }
 
+  // ── Session Logger ──────────────────────────────────────────────────
+
+  /**
+   * Get the session logger (pool's logger takes precedence if available).
+   */
+  getSessionLogger(): SessionLogger | null {
+    return this.pool?.getSessionLogger() ?? this.sessionLogger;
+  }
+
   // ── Snapshot ────────────────────────────────────────────────────────
 
   /**
@@ -239,6 +275,7 @@ export class LiveSession {
       ...(win.frameless ? { frameless: win.frameless } : {}),
       ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
       ...(win.minimized ? { minimized: win.minimized } : {}),
+      ...(win.appId ? { appId: win.appId } : {}),
     }));
     return refreshIframeTokens(actions, this.sessionId);
   }
@@ -264,6 +301,7 @@ export class LiveSession {
           );
         } else if (hook.action.type === 'os_action') {
           const action = hook.action.payload as OSAction;
+          const hookLogger = this.getSessionLogger();
           if (action.type.startsWith('window.')) {
             this.windowState.handleAction(action, '0');
             // Stamp the handle onto the action so frontend receives the scoped windowId
@@ -273,12 +311,14 @@ export class LiveSession {
               resolved && resolved !== raw
                 ? ({ ...action, windowId: resolved } as OSAction)
                 : action;
+            hookLogger?.logAction(stamped);
             this.broadcast({
               type: ServerEventType.ACTIONS,
               actions: [stamped],
               monitorId: '0',
             });
           } else {
+            hookLogger?.logAction(action);
             this.broadcast({
               type: ServerEventType.ACTIONS,
               actions: [action],
@@ -328,7 +368,9 @@ export class LiveSession {
       subscriptionRegistry.clearForWindow(wid);
     });
 
-    const success = await this.pool.initialize();
+    // Pass the session-owned logger (if already created by early user interactions)
+    // so the pool reuses the same log directory instead of creating a second one.
+    const success = await this.pool.initialize(this.sessionLogger ?? undefined);
     this.initialized = success;
     return success;
   }
@@ -502,7 +544,7 @@ export class LiveSession {
         break;
 
       case ClientEventType.USER_INTERACTION: {
-        const logger = this.pool?.getSessionLogger();
+        const logger = this.getSessionLogger();
 
         for (const interaction of event.interactions) {
           logger?.logInteraction(interaction);
@@ -651,8 +693,15 @@ export class LiveSession {
     // so awaiting tools unblock immediately instead of waiting for timeouts.
     actionEmitter.clearPendingForSession(this.sessionId);
 
-    // Flush buffered session logs before tearing down the pool
-    await this.pool?.getSessionLogger()?.dispose();
+    // Flush buffered session logs before tearing down the pool.
+    // The pool logger and sessionLogger may be the same instance (if the pool
+    // reused the session-owned logger), so dispose whichever is active.
+    const poolLogger = this.pool?.getSessionLogger();
+    if (poolLogger && poolLogger !== this.sessionLogger) {
+      await poolLogger.dispose();
+    }
+    await this.sessionLogger?.dispose();
+    this.sessionLogger = null;
 
     if (this.pool) {
       await this.pool.cleanup();

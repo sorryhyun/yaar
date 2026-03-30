@@ -1,9 +1,21 @@
+/* ── Dark theme override ───────────────────────────────────── */
+
 .pe-app {
   display: flex;
   flex-direction: column;
   position: absolute;
   inset: 0;
   overflow: hidden;
+  background: #111827;
+  color: #e2e8f0;
+  --yaar-bg: #111827;
+  --yaar-bg-surface: #1e293b;
+  --yaar-bg-overlay: #0f172a;
+  --yaar-border: #334155;
+  --yaar-text: #e2e8f0;
+  --yaar-text-muted: #94a3b8;
+  --yaar-card-bg: #1e293b;
+  --yaar-card-border: #334155;
 }
 
 /* ── Stats bar ────────────────────────────────────────────── */
@@ -23,28 +35,37 @@
   gap: 2px;
   cursor: pointer;
   transition: border-color 0.15s;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
 }
 
 .stat-card.active {
   border-color: var(--yaar-accent);
 }
 
+.stat-card:hover {
+  background: #273548;
+  border-color: #4a6080;
+}
+
 .stat-value {
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1;
+  color: #f1f5f9;
 }
 
 .stat-label {
   font-size: 0.7rem;
-  color: var(--yaar-text-muted);
+  color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .stat-sub {
   font-size: 0.7rem;
-  color: var(--yaar-text-muted);
+  color: #64748b;
 }
 
 /* ── Tab content ──────────────────────────────────────────── */
@@ -58,6 +79,21 @@
   gap: 2px;
 }
 
+/* Scrollbar styling */
+.tab-content::-webkit-scrollbar {
+  width: 6px;
+}
+.tab-content::-webkit-scrollbar-track {
+  background: #111827;
+}
+.tab-content::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+.tab-content::-webkit-scrollbar-thumb:hover {
+  background: #4a6080;
+}
+
 /* ── Process rows ─────────────────────────────────────────── */
 
 .process-row {
@@ -66,10 +102,11 @@
   gap: var(--yaar-sp-2);
   padding: var(--yaar-sp-2) var(--yaar-sp-3);
   border-radius: 6px;
+  color: #e2e8f0;
 }
 
 .process-row:hover {
-  background: var(--yaar-bg-surface);
+  background: #1e293b;
 }
 
 .process-info {
@@ -90,11 +127,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: #e2e8f0;
 }
 
 .process-meta {
   font-size: 0.75rem;
-  color: var(--yaar-text-muted);
+  color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,7 +154,7 @@
 }
 
 .dot-ok {
-  background: var(--yaar-success);
+  background: var(--yaar-success, #22c55e);
 }
 
 .dot-warn {
@@ -124,7 +162,7 @@
 }
 
 .dot-err {
-  background: var(--yaar-error);
+  background: var(--yaar-error, #ef4444);
 }
 
 /* ── Status bar ───────────────────────────────────────────── */
@@ -134,9 +172,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--yaar-sp-1) var(--yaar-sp-3);
-  border-top: 1px solid var(--yaar-border);
+  border-top: 1px solid #334155;
   font-size: 0.75rem;
-  color: var(--yaar-text-muted);
+  color: #64748b;
+  background: #0f172a;
 }
 
 /* ── Small button ─────────────────────────────────────────── */
@@ -147,11 +186,12 @@
 }
 
 .btn-danger {
-  color: var(--yaar-error);
+  color: #f87171;
 }
 
 .btn-danger:hover {
-  background: color-mix(in srgb, var(--yaar-error) 10%, transparent);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
 }
 
 /* ── Lock icon ────────────────────────────────────────────── */
@@ -159,4 +199,35 @@
 .lock-icon {
   font-size: 0.75rem;
   opacity: 0.6;
+}
+
+/* ── Badge override for dark theme ───────────────────────── */
+
+.pe-app .y-badge {
+  background: #2d3f55;
+  color: #94a3b8;
+  border: 1px solid #334155;
+}
+
+/* ── Empty state override ─────────────────────────────────── */
+
+.pe-app .y-empty {
+  color: #64748b;
+}
+
+.pe-app .y-empty-icon {
+  color: #334155;
+}
+
+/* ── Refresh button override ──────────────────────────────── */
+
+.pe-app .y-btn-ghost {
+  color: #94a3b8;
+  border-color: #334155;
+}
+
+.pe-app .y-btn-ghost:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: #4a6080;
 }

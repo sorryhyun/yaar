@@ -19,6 +19,8 @@ import {
   getWindowRestoreActions,
   getContextRestoreMessages,
   getCliRestoreEntries,
+  createSession,
+  SessionLogger,
 } from './logging/index.js';
 import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, IS_DEV, getPort } from './config.js';
 import { initCompiler } from '@yaar/compiler';
@@ -119,10 +121,15 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // Bun.serve() so the HTTP server is listening when codex app-server connects
   // to MCP endpoints at http://127.0.0.1:{PORT}/mcp/*.
 
+  // Create session log eagerly so user interactions are logged from the start
+  const sessionInfo = await createSession('pending');
+  const sessionLogger = new SessionLogger(sessionInfo);
+
   // Restore window state from the most recent previous session
   const options: WebSocketServerOptions = {
     restoreActions: [],
     contextMessages: [],
+    sessionLogger,
   };
 
   try {

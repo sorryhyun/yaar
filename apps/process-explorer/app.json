@@ -1,7 +1,13 @@
 {
-  "icon": "📊",
+  "icon": "🔍",
   "name": "Process Explorer",
   "description": "Monitor and control agents, windows, and browser tabs",
   "run": "dist/index.html",
-  "permissions": ["yaar://sessions/", "yaar://windows/", "yaar://browser/"]
+  "permissions": [
+    "yaar://sessions/",
+    "yaar://windows/",
+    "yaar://browser/"
+  ],
+  "version": "1.0.0",
+  "author": "YAAR"
 }

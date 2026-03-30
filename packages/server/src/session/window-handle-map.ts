@@ -87,6 +87,20 @@ export class WindowHandleMap {
     this.rawToHandle.clear();
   }
 
+  /**
+   * Register a scoped handle (e.g., "0/dock") by parsing it into rawId + monitorId.
+   * No-op if the handle has no slash (already raw). Returns the handle.
+   */
+  registerHandle(handle: string): string {
+    const slashIdx = handle.indexOf('/');
+    if (slashIdx >= 0) {
+      const monitorId = handle.slice(0, slashIdx);
+      const rawId = handle.slice(slashIdx + 1);
+      return this.register(rawId, monitorId);
+    }
+    return handle;
+  }
+
   // ── Internal ──
 
   private extractRawId(handle: string): string {

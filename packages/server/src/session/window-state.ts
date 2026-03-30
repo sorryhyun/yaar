@@ -253,6 +253,12 @@ export class WindowStateRegistry {
   restoreFromActions(actions: OSAction[]): void {
     for (const action of actions) {
       this.handleAction(action);
+      // Restored actions have scoped windowIds (e.g., "0/dock").
+      // Register the handle mapping so raw-ID lookups work for verb tools.
+      const windowId = (action as { windowId?: string }).windowId;
+      if (windowId) {
+        this.handleMap.registerHandle(windowId);
+      }
     }
   }
 }

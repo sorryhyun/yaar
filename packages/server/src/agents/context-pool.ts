@@ -129,7 +129,7 @@ export class ContextPool implements PoolContext {
 
   // ── Initialization ─────────────────────────────────────────────────
 
-  async initialize(): Promise<boolean> {
+  async initialize(existingLogger?: SessionLogger): Promise<boolean> {
     const provider = await acquireWarmProvider();
     if (!provider) {
       await this.sendEvent({
@@ -140,9 +140,17 @@ export class ContextPool implements PoolContext {
     }
 
     this.providerType = provider.providerType;
-    const sessionInfo = await createSession(provider.name);
-    this.sharedLogger = new SessionLogger(sessionInfo);
-    this.logSessionId = sessionInfo.sessionId;
+    if (existingLogger) {
+      // Reuse the session-owned logger (already has a log directory)
+      this.sharedLogger = existingLogger;
+      this.logSessionId = existingLogger.getSessionId();
+      // Update provider name now that we know it
+      existingLogger.updateProvider(provider.name);
+    } else {
+      const sessionInfo = await createSession(provider.name);
+      this.sharedLogger = new SessionLogger(sessionInfo);
+      this.logSessionId = sessionInfo.sessionId;
+    }
     this.agentPool.setLogger(this.sharedLogger);
 
     const monitorAgent = await this.agentPool.createMonitorAgent('0', provider);

@@ -39,6 +39,14 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
         windows.delete(action.windowId);
         break;
 
+      case 'window.setContent': {
+        const win = windows.get(action.windowId);
+        if (win && win.type === 'window.create') {
+          win.content = { ...action.content };
+        }
+        break;
+      }
+
       case 'window.updateContent': {
         const win = windows.get(action.windowId);
         if (win && win.type === 'window.create') {

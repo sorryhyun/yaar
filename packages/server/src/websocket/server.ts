@@ -24,6 +24,7 @@ export interface WebSocketServerOptions {
   contextMessages: ContextMessage[];
   savedThreadIds?: Record<string, string>;
   cliEntries?: CliRestoreEntry[];
+  sessionLogger?: import('../logging/session-logger.js').SessionLogger;
 }
 
 export interface WsData {
@@ -44,6 +45,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         restoreActions: options.restoreActions,
         contextMessages: options.contextMessages,
         savedThreadIds: options.savedThreadIds,
+        sessionLogger: options.sessionLogger,
       };
       const requestedSessionId = ws.data.sessionId;
       const session = hub.getOrCreate(requestedSessionId, sessionOptions);
