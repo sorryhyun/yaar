@@ -23,10 +23,13 @@ import type { ResolvedUri } from './uri-resolve.js';
 import {
   ok,
   okJson,
+  okResource,
+  okLinks,
   okWithImages,
   error,
   validateRelativePath,
   extractIdFromUri,
+  mimeFromPath,
 } from './utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { actionEmitter } from '../session/action-emitter.js';
@@ -63,16 +66,11 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
     async list(): Promise<VerbResult> {
       const apps = await listApps();
-      return okJson(
+      return okLinks(
         apps.map((app) => ({
-          id: app.id,
+          uri: `yaar://apps/${app.id}`,
           name: app.name,
           description: app.description,
-          icon: app.icon,
-          hasSkill: app.hasSkill,
-          hasConfig: app.hasConfig,
-          hasProtocol: !!app.protocol,
-          createShortcut: app.createShortcut,
         })),
       );
     },
@@ -134,7 +132,15 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           // Bare storage root → redirect to list
           const listResult = await storageList(prefixedPath);
           if (!listResult.success) return error(listResult.error!);
-          return okJson(listResult.entries ?? []);
+          const readEntries = listResult.entries ?? [];
+          return okLinks(
+            readEntries.map((e) => ({
+              uri: `yaar://apps/${storagePath.appId}/storage/${e.path.replace(`apps/${storagePath.appId}/`, '')}`,
+              name: e.path.split('/').pop() || e.path,
+              description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
+              mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+            })),
+          );
         }
         const result = await storageRead(prefixedPath);
         if (!result.success) return error(result.error!);
@@ -152,8 +158,8 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
             ]);
           }
         }
-        // Text content — raw (no line numbers)
-        return ok(result.content!);
+        // Text content — return as embedded resource with URI + MIME
+        return okResource(resolved.sourceUri, result.content!, mimeFromPath(storagePath.path));
       }
 
       // ── App skill (existing behavior) ──
@@ -163,7 +169,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const result = await loadAppSkillWithManifest(appId);
       if (result === null) return error(`No SKILL.md found for app "${appId}".`);
 
-      return ok(result);
+      return okResource(resolved.sourceUri, result, 'text/markdown');
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
@@ -173,15 +179,18 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
         const result = await storageList(prefixedPath);
         if (!result.success) return error(result.error!);
-        // Return JSON entries for machine-readable consumption
-        const entries = (result.entries ?? []).map((e) => ({
-          // Strip the apps/{appId}/ prefix from paths for app-relative paths
-          path: e.path.replace(`apps/${storagePath.appId}/`, ''),
-          isDirectory: e.isDirectory,
-          size: e.size,
-          modifiedAt: e.modifiedAt,
-        }));
-        return okJson(entries);
+        const entries = result.entries ?? [];
+        return okLinks(
+          entries.map((e) => {
+            const relPath = e.path.replace(`apps/${storagePath.appId}/`, '');
+            return {
+              uri: `yaar://apps/${storagePath.appId}/storage/${relPath}`,
+              name: relPath.split('/').pop() || relPath,
+              description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
+              mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+            };
+          }),
+        );
       }
 
       // Non-storage list on a specific app doesn't make sense

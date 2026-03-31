@@ -18,8 +18,8 @@ import {
   storageDelete,
   storageGrep,
 } from '../storage/index.js';
-import { ok, okJson, okWithImages, error } from './utils.js';
-import { prependNote, applyEdit, applyReadOptions } from './utils.js';
+import { ok, okJson, okWithImages, okResource, okLinks, error } from './utils.js';
+import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
 
 // ── Helpers ──
 
@@ -102,8 +102,9 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         );
       }
 
-      // Apply line range / pattern filtering for text files
-      return ok(applyReadOptions(result.content!, parsed.path, options));
+      // Apply line range / pattern filtering for text files — return as embedded resource
+      const text = applyReadOptions(result.content!, parsed.path, options);
+      return okResource(`yaar://storage/${parsed.path}`, text, mimeFromPath(parsed.path));
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
@@ -124,7 +125,15 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       }
 
       const entries = result.entries!;
-      return okJson(entries);
+      const prefix = path ? `${path}/` : '';
+      return okLinks(
+        entries.map((e) => ({
+          uri: `yaar://storage/${e.path}`,
+          name: e.path.slice(prefix.length) || e.path,
+          description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
+          mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+        })),
+      );
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

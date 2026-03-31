@@ -32,6 +32,18 @@ import {
   copyFile,
 } from './project';
 
+const MIME_MAP: Record<string, string> = {
+  ts: 'text/typescript', tsx: 'text/typescript',
+  js: 'application/javascript', jsx: 'application/javascript',
+  json: 'application/json', html: 'text/html', css: 'text/css',
+  md: 'text/markdown', txt: 'text/plain', svg: 'image/svg+xml',
+};
+
+function getMimeType(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  return MIME_MAP[ext] || 'text/plain';
+}
+
 export function registerProtocol() {
   if (!app) return;
 
@@ -189,10 +201,16 @@ export function registerProtocol() {
           if (p.openInEditor) {
             for (const fp of paths) await openFile(fp);
           }
-          // Return as content blocks — each file is a separate text block
+          // Return as embedded resource blocks — gives Claude URI + MIME metadata per file
+          const proj = activeProject();
+          const projectId = proj?.id ?? 'unknown';
           return results.map((r) => ({
-            type: 'text',
-            text: r.content,
+            type: 'resource' as const,
+            resource: {
+              uri: `yaar://storage/apps/devtools/projects/${projectId}/${r.path}`,
+              text: r.content,
+              mimeType: getMimeType(r.path),
+            },
           }));
         },
       },
@@ -279,7 +297,32 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
-          return result;
+          if (result.matches.length === 0) return 'No matches found.';
+          // Group matches by file and return as embedded resource blocks
+          const proj = activeProject();
+          const projectId = proj?.id ?? 'unknown';
+          const byFile = new Map<string, typeof result.matches>();
+          for (const m of result.matches) {
+            const arr = byFile.get(m.file) ?? [];
+            arr.push(m);
+            byFile.set(m.file, arr);
+          }
+          const blocks: { type: 'resource'; resource: { uri: string; text: string; mimeType: string } }[] = [];
+          for (const [file, matches] of byFile) {
+            const lines = matches.map((m) => `${m.line}│${m.content}`).join('\n');
+            blocks.push({
+              type: 'resource',
+              resource: {
+                uri: `yaar://storage/apps/devtools/projects/${projectId}/${file}`,
+                text: `── ${file} (${matches.length} matches) ──\n${lines}`,
+                mimeType: getMimeType(file),
+              },
+            });
+          }
+          if (result.truncated) {
+            return [...blocks, { type: 'text' as const, text: '(results truncated)' }];
+          }
+          return blocks;
         },
       },
       compile: {

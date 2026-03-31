@@ -28,7 +28,7 @@ import {
   addAllowedDomain,
   setAllowAllDomains,
 } from '../features/config/domains.js';
-import { ok, okJson, error, assertUri } from './utils.js';
+import { ok, okJsonResource, okLinks, error, assertUri } from './utils.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 export function registerConfigHandlers(registry: ResourceRegistry): void {
@@ -38,8 +38,16 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'list', 'read'],
 
     async list() {
-      const sections = ['settings', 'hooks', 'shortcuts', 'mounts', 'app', 'domains', 'mcp'];
-      return okJson({ sections: sections.map((s) => `yaar://config/${s}`) });
+      const sections: Array<{ uri: string; name: string; description: string }> = [
+        { uri: 'yaar://config/settings', name: 'settings', description: 'User preferences' },
+        { uri: 'yaar://config/hooks', name: 'hooks', description: 'Event-driven hooks' },
+        { uri: 'yaar://config/shortcuts', name: 'shortcuts', description: 'Desktop shortcuts' },
+        { uri: 'yaar://config/mounts', name: 'mounts', description: 'Host directory mounts' },
+        { uri: 'yaar://config/app', name: 'app', description: 'Per-app configuration' },
+        { uri: 'yaar://config/domains', name: 'domains', description: 'HTTP domain allowlist' },
+        { uri: 'yaar://config/mcp', name: 'mcp', description: 'MCP server configuration' },
+      ];
+      return okLinks(sections);
     },
 
     async read() {
@@ -49,7 +57,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
         handleGetShortcuts(),
         handleGetMounts(),
       ]);
-      return okJson({ ...hooks, ...settings, ...shortcuts, ...mounts });
+      return okJsonResource('yaar://config/', { ...hooks, ...settings, ...shortcuts, ...mounts });
     },
   });
 
@@ -78,7 +86,10 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const [domains, allowAll] = await Promise.all([readAllowedDomains(), isAllDomainsAllowed()]);
-      return okJson({ allow_all_domains: allowAll, allowed_domains: domains });
+      return okJsonResource('yaar://config/domains', {
+        allow_all_domains: allowAll,
+        allowed_domains: domains,
+      });
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -165,7 +176,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const config = await readMcpConfig();
-      return okJson({ servers: config });
+      return okJsonResource('yaar://config/mcp', { servers: config });
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -189,7 +200,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       const config = await readMcpConfig();
       const entry = config[resolved.id];
       if (!entry) return error(`Server "${resolved.id}" not found in config.`);
-      return okJson({ name: resolved.id, config: entry });
+      return okJsonResource(resolved.sourceUri, { name: resolved.id, config: entry });
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
@@ -238,7 +249,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetSettings();
-      return okJson(data);
+      return okJsonResource('yaar://config/settings', data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -268,7 +279,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetHooks();
-      return okJson(data);
+      return okJsonResource('yaar://config/hooks', data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -294,7 +305,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       const hook = hookId ? hooks.find((h) => h.id === hookId) : null;
       if (!hook)
         return { content: [{ type: 'text', text: `Hook "${hookId}" not found.` }], isError: true };
-      return okJson(hook);
+      return okJsonResource(resolved.sourceUri, hook);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
@@ -322,7 +333,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetShortcuts();
-      return okJson(data);
+      return okJsonResource('yaar://config/shortcuts', data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -360,7 +371,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetMounts();
-      return okJson(data);
+      return okJsonResource('yaar://config/mounts', data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -397,7 +408,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(): Promise<VerbResult> {
       const data = await handleGetApp();
-      return okJson(data);
+      return okJsonResource('yaar://config/app', data);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -422,7 +433,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       if (!resolved.id)
         return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
       const data = await handleGetApp(resolved.id);
-      return okJson(data);
+      return okJsonResource(resolved.sourceUri, data);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

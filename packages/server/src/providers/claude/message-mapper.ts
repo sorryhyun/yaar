@@ -240,12 +240,25 @@ function extractToolResult(message: unknown): StreamMessage | null {
       } else if (Array.isArray(toolResult.content)) {
         resultText = toolResult.content
           .filter(
-            (item): item is { type: string; text: string } =>
-              typeof item === 'object' &&
-              item !== null &&
-              (item as Record<string, unknown>).type === 'text',
+            (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
           )
-          .map((item) => item.text)
+          .map((item) => {
+            if (item.type === 'text' && typeof item.text === 'string') return item.text;
+            if (
+              item.type === 'resource' &&
+              typeof item.resource === 'object' &&
+              item.resource !== null
+            ) {
+              const res = item.resource as { text?: string; uri?: string };
+              return res.text ?? `[resource: ${res.uri}]`;
+            }
+            if (item.type === 'resource_link') {
+              const link = item as { uri?: string; name?: string };
+              return `[${link.name ?? 'link'}](${link.uri})`;
+            }
+            return '';
+          })
+          .filter(Boolean)
           .join('');
       }
 

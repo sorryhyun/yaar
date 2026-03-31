@@ -13,7 +13,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, error, extractIdFromUri } from './utils.js';
+import { okResource, okLinks, error, extractIdFromUri } from './utils.js';
 
 /** Known topic names — kept in sync with skills/index.ts. */
 const TOPIC_NAMES = ['components', 'host_api', 'config', 'marketplace'];
@@ -32,7 +32,13 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
-      return okJson({ topics: TOPIC_NAMES });
+      return okLinks(
+        TOPIC_NAMES.map((t) => ({
+          uri: `yaar://skills/${t}`,
+          name: t,
+          mimeType: 'text/markdown',
+        })),
+      );
     },
   });
 
@@ -50,7 +56,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
         return error(`Unknown topic "${topic}". Available: ${TOPIC_NAMES.join(', ')}`);
       }
 
-      return ok(content);
+      return okResource(resolved.sourceUri, content, 'text/markdown');
     },
   });
 }

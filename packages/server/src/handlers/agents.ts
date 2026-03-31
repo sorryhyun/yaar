@@ -11,7 +11,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { getAgentId, getMonitorId } from '../agents/agent-context.js';
-import { ok, okJson, error, getActivePool, requireAction } from './utils.js';
+import { ok, okJson, okJsonResource, error, getActivePool, requireAction } from './utils.js';
 import { executeSessionAction } from '../features/agents/session-actions.js';
 import { relayToMonitor } from '../features/agents/relay.js';
 
@@ -87,7 +87,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         if (!pool) return error('Session not initialized.');
 
         const agent = pool.agentPool.getSessionAgent();
-        return okJson({
+        return okJsonResource(resolved.sourceUri, {
           id: 'session',
           exists: agent !== null,
           busy: agent ? agent.session.isRunning() || agent.currentRole !== null : false,
@@ -101,7 +101,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       const exists = pool.hasAgent(resolved.id);
       if (!exists) return error(`Agent "${resolved.id}" not found.`);
 
-      return okJson({ id: resolved.id, exists: true });
+      return okJsonResource(resolved.sourceUri, { id: resolved.id, exists: true });
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

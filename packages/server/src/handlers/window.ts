@@ -15,8 +15,8 @@ import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import {
   ok,
-  okJson,
-  okWithImages,
+  okJsonResource,
+  okLinks,
   error,
   getActiveSession,
   assertUri,
@@ -45,24 +45,21 @@ export function registerWindowHandlers(
 
     async list(): Promise<VerbResult> {
       const windows = getWindowState().listWindows();
-      if (windows.length === 0) return okJson([]);
+      if (windows.length === 0) return okLinks([]);
 
-      const windowList = windows.map((win) => {
-        const windowId = getWindowState().handleMap.getRawWindowId(win.id);
-        return {
-          id: windowId,
-          uri: `yaar://windows/${windowId}`,
-          title: win.title,
-          position: `(${win.bounds.x}, ${win.bounds.y})`,
-          size: `${win.bounds.w}x${win.bounds.h}`,
-          renderer: win.content.renderer,
-          locked: win.locked,
-          lockedBy: win.lockedBy,
-          ...formatWindowFlags(win),
-        };
-      });
-
-      return okJson(windowList);
+      return okLinks(
+        windows.map((win) => {
+          const windowId = getWindowState().handleMap.getRawWindowId(win.id);
+          const parts = [win.content.renderer, `${win.bounds.w}x${win.bounds.h}`];
+          if (win.locked) parts.push('locked');
+          if (win.minimized) parts.push('minimized');
+          return {
+            uri: `yaar://windows/${windowId}`,
+            name: win.title || windowId,
+            description: parts.join(', '),
+          };
+        }),
+      );
     },
   };
   registry.register('yaar://windows', listHandler);
@@ -154,7 +151,7 @@ export function registerWindowHandlers(
           .listWindows()
           .filter((w) => monitorHandles.has(w.id));
 
-        return okJson({
+        return okJsonResource('yaar://windows/', {
           monitorId,
           hasMonitorAgent: pool.hasMonitorAgent(monitorId),
           windows: windows.map((w) => ({
@@ -196,13 +193,23 @@ export function registerWindowHandlers(
         if (feedback?.success && feedback.imageData) {
           // Omit raw content (compiled HTML blob) — the screenshot is more useful
           const { content: _content, ...infoWithoutContent } = windowInfo;
-          return okWithImages(JSON.stringify(infoWithoutContent, null, 2), [
-            { data: feedback.imageData, mimeType: 'image/webp' },
-          ]);
+          return {
+            content: [
+              {
+                type: 'resource',
+                resource: {
+                  uri: resolved.sourceUri,
+                  text: JSON.stringify(infoWithoutContent, null, 2),
+                  mimeType: 'application/json',
+                },
+              },
+              { type: 'image', data: feedback.imageData, mimeType: 'image/webp' },
+            ],
+          };
         }
       }
 
-      return okJson(windowInfo);
+      return okJsonResource(resolved.sourceUri, windowInfo);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {

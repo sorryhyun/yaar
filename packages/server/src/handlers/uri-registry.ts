@@ -11,9 +11,27 @@ import { resolveUri } from './uri-resolve.js';
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 
+export interface EmbeddedResourceBlock {
+  type: 'resource';
+  resource:
+    | { uri: string; text: string; mimeType?: string }
+    | { uri: string; blob: string; mimeType?: string };
+}
+
+export interface ResourceLinkBlock {
+  type: 'resource_link';
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+
 export interface VerbResult {
   content: Array<
-    { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: string }
+    | EmbeddedResourceBlock
+    | ResourceLinkBlock
   >;
   isError?: boolean;
 }

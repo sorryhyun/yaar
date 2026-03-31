@@ -12,7 +12,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { ok, okJson, error, getActiveSession } from './utils.js';
+import { ok, okJsonResource, okLinks, okResource, error, getActiveSession } from './utils.js';
 import { getSessionId, getMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
@@ -39,7 +39,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const stats = pool?.getStats();
       const browserPool = getBrowserPool();
 
-      return okJson({
+      return okJsonResource('yaar://', {
         sessionId: sid ?? session?.sessionId ?? null,
         platform: process.platform,
         uptime: Math.floor(process.uptime()),
@@ -56,15 +56,13 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
 
     async list(): Promise<VerbResult> {
-      return okJson({
-        namespaces: [
-          'yaar://apps/',
-          'yaar://storage/',
-          'yaar://windows/',
-          'yaar://config/',
-          'yaar://sessions/',
-        ],
-      });
+      return okLinks([
+        { uri: 'yaar://apps/', name: 'apps', description: 'Installed apps' },
+        { uri: 'yaar://storage/', name: 'storage', description: 'Persistent file storage' },
+        { uri: 'yaar://windows/', name: 'windows', description: 'Open windows' },
+        { uri: 'yaar://config/', name: 'config', description: 'Configuration' },
+        { uri: 'yaar://sessions/', name: 'sessions', description: 'Past sessions' },
+      ]);
     },
   });
 
@@ -90,7 +88,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         memoryUsage: process.memoryUsage(),
         cwd: process.cwd(),
       };
-      return okJson(info);
+      return okJsonResource('yaar://sessions/current', info);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -121,7 +119,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       if (!pool) return error('Session not initialized.');
 
       const monitors = listMonitors(session, pool);
-      return okJson({
+      return okJsonResource('yaar://sessions/current/monitors', {
         currentMonitorId: getMonitorId() ?? '0',
         monitors,
       });
@@ -152,7 +150,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
 
       const status = getMonitorStatus(session, pool, monitorId);
       if (!status) return error(`Monitor "${monitorId}" not found.`);
-      return okJson(status);
+      return okJsonResource(resolved.sourceUri, status);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -203,24 +201,21 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const sessions = await listSessions();
       const pool = getActiveSession().getPool();
       const currentLogId = pool?.getLogSessionId();
-      return okJson({
-        currentSessionId: currentLogId ?? null,
-        count: sessions.length,
-        sessions: sessions.map((s) => ({
-          sessionId: s.sessionId,
-          createdAt: s.metadata.createdAt,
-          provider: s.metadata.provider,
-          lastActivity: s.metadata.lastActivity,
-          agentCount: Object.keys(s.metadata.agents).length,
+      return okLinks(
+        sessions.map((s) => ({
+          uri: `yaar://sessions/${s.sessionId}`,
+          name: s.sessionId,
+          description: `${s.metadata.provider} | ${s.metadata.createdAt}${s.sessionId === currentLogId ? ' (current)' : ''}`,
+          mimeType: 'text/plain',
         })),
-      });
+      );
     },
 
     async read(): Promise<VerbResult> {
       const sessions = await listSessions();
       const pool = getActiveSession().getPool();
       const currentLogId = pool?.getLogSessionId();
-      return okJson({
+      return okJsonResource('yaar://sessions/', {
         currentSessionId: currentLogId ?? null,
         totalSessions: sessions.length,
         latest: sessions.slice(0, 5).map((s) => ({
@@ -248,7 +243,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const transcript = await readSessionTranscript(logId);
       if (transcript === null) return error(`Session "${logId}" not found.`);
 
-      return ok(transcript);
+      return okResource(resolved.sourceUri, transcript, 'text/plain');
     },
   });
 
@@ -267,7 +262,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const windowMessages = pool.contextTape.getMessages({ includeWindows: true });
       const mainMessages = pool.contextTape.getMessages({ includeWindows: false });
 
-      return okJson({
+      return okJsonResource('yaar://sessions/current/context', {
         totalMessages: messages.length,
         mainMessages: mainMessages.length,
         windowMessages: windowMessages.length - mainMessages.length,

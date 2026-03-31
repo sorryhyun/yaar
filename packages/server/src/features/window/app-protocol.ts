@@ -22,7 +22,14 @@ function truncateText(text: string): string {
 
 type ContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'image'; data: string; mimeType: string };
+  | { type: 'image'; data: string; mimeType: string }
+  | {
+      type: 'resource';
+      resource:
+        | { uri: string; text: string; mimeType?: string }
+        | { uri: string; blob: string; mimeType?: string };
+    }
+  | { type: 'resource_link'; uri: string; name: string; description?: string; mimeType?: string };
 
 /** Check if a value is an array of MCP content blocks. */
 function isContentBlocks(value: unknown): value is ContentBlock[] {
@@ -34,7 +41,11 @@ function isContentBlocks(value: unknown): value is ContentBlock[] {
       (((item as Record<string, unknown>).type === 'text' &&
         typeof (item as Record<string, unknown>).text === 'string') ||
         ((item as Record<string, unknown>).type === 'image' &&
-          typeof (item as Record<string, unknown>).data === 'string')),
+          typeof (item as Record<string, unknown>).data === 'string') ||
+        ((item as Record<string, unknown>).type === 'resource' &&
+          typeof (item as Record<string, unknown>).resource === 'object') ||
+        ((item as Record<string, unknown>).type === 'resource_link' &&
+          typeof (item as Record<string, unknown>).uri === 'string')),
   );
 }
 
@@ -51,10 +62,17 @@ function wrapAppValue(value: unknown): VerbResult {
 
   // Content blocks — pass through directly
   if (isContentBlocks(value)) {
-    // Truncate text blocks, pass image blocks as-is
-    const content = value.map((block) =>
-      block.type === 'text' ? { ...block, text: truncateText(block.text) } : block,
-    );
+    // Truncate text/resource blocks, pass image/resource_link blocks as-is
+    const content = value.map((block): ContentBlock => {
+      if (block.type === 'text') return { ...block, text: truncateText(block.text) };
+      if (block.type === 'resource' && 'text' in block.resource) {
+        return {
+          type: 'resource',
+          resource: { ...block.resource, text: truncateText(block.resource.text) },
+        };
+      }
+      return block;
+    });
     return { content };
   }
 

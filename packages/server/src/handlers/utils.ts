@@ -8,6 +8,8 @@ import { getSessionId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import type { LiveSession } from '../session/live-session.js';
 import type { ContextPool } from '../agents/context-pool.js';
+import { MIME_TYPES } from '../config.js';
+import { extname } from 'path';
 
 /** Get the active LiveSession (from agent context or default). */
 export function getActiveSession(): LiveSession {
@@ -57,6 +59,36 @@ export const okWithImages = (text: string, images: Array<{ data: string; mimeTyp
       mimeType: img.mimeType,
     })),
   ],
+});
+
+/** Infer MIME type from a file path extension. Falls back to 'text/plain'. */
+export function mimeFromPath(filePath: string): string {
+  return MIME_TYPES[extname(filePath).toLowerCase()] || 'text/plain';
+}
+
+/** Create a successful result with an embedded resource block. */
+export const okResource = (uri: string, text: string, mimeType: string): VerbResult => ({
+  content: [{ type: 'resource', resource: { uri, text, mimeType } }],
+});
+
+/** Create a successful result with an embedded JSON resource block. */
+export const okJsonResource = (uri: string, data: object): VerbResult =>
+  okResource(uri, JSON.stringify(data, null, 2), 'application/json');
+
+/** Create a successful result with resource_link blocks for navigable lists. */
+export const okLinks = (
+  links: Array<{ uri: string; name?: string; description?: string; mimeType?: string }>,
+): VerbResult => ({
+  content:
+    links.length === 0
+      ? [{ type: 'text', text: '(empty)' }]
+      : links.map((link) => ({
+          type: 'resource_link' as const,
+          uri: link.uri,
+          name: link.name ?? link.uri,
+          ...(link.description ? { description: link.description } : {}),
+          ...(link.mimeType ? { mimeType: link.mimeType } : {}),
+        })),
 });
 
 /** Prepend a note to a VerbResult (for read/list fallback). */
