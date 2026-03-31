@@ -128,6 +128,23 @@ export class ContextPool implements PoolContext {
     this.broadcastFn(event);
   }
 
+  notifyHookResponse(
+    appId: string,
+    windowId: string,
+    monitorId: string,
+    responseText: string,
+  ): void {
+    const messageId = `hook-resp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.handleTask({
+      type: 'monitor',
+      messageId,
+      monitorId,
+      content: `<agent-hook type="response" appId="${appId}" windowId="${windowId}">${responseText || '(no response text)'}</agent-hook>`,
+    }).catch((err) => {
+      console.error('[ContextPool] Hook response delivery failed:', err);
+    });
+  }
+
   // ── Initialization ─────────────────────────────────────────────────
 
   async initialize(existingLogger?: SessionLogger): Promise<boolean> {
