@@ -89,7 +89,12 @@ function parseInstalledText(text: string): InstalledApp[] {
 function coerceInstalledApp(input: unknown): InstalledApp | null {
   if (!input || typeof input !== 'object') return null;
   const obj = input as Record<string, unknown>;
-  const id = firstString(obj.id, obj.appId, obj.slug, obj.packageName);
+  let id = firstString(obj.id, obj.appId, obj.slug, obj.packageName);
+  // resource_link format: extract id from uri (yaar://apps/{appId})
+  if (!id && typeof obj.uri === 'string') {
+    const m = (obj.uri as string).match(/^yaar:\/\/apps\/([^/]+)/);
+    if (m) id = m[1];
+  }
   if (!id) return null;
   const name = firstString(obj.name, obj.title) ?? id;
   return { id, name };

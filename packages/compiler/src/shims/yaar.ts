@@ -102,7 +102,19 @@ export const appStorage = {
   },
   async list(dirPath?: string): Promise<unknown[]> {
     const result = await y.list(appStorageUri(dirPath ?? ''));
-    return Array.isArray(result) ? result : [];
+    if (!Array.isArray(result)) return [];
+    // Convert resource_link format to storage entry shape for backward compat
+    return result.map((entry: any) => {
+      if (entry.uri && entry.name != null && !entry.path) {
+        return {
+          path: entry.name,
+          isDirectory: entry.description === 'directory',
+          uri: entry.uri,
+          mimeType: entry.mimeType,
+        };
+      }
+      return entry;
+    });
   },
   async remove(path: string): Promise<void> {
     await y.delete(appStorageUri(path));

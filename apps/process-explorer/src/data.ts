@@ -53,8 +53,32 @@ async function fetchAgents() {
 
 async function fetchWindows() {
   try {
-    const data = await list<WindowInfo[]>('yaar://windows');
-    setWindows(Array.isArray(data) ? data : []);
+    const raw = await list<unknown[]>('yaar://windows');
+    if (!Array.isArray(raw)) {
+      setWindows([]);
+      return;
+    }
+    // Adapt resource_link format { uri, name, description } → WindowInfo
+    setWindows(
+      raw.map((entry: any) => {
+        if (entry.uri && entry.name != null && !entry.id) {
+          const id = entry.uri.replace(/^yaar:\/\/windows\//, '');
+          const parts: string[] = (entry.description ?? '').split(', ');
+          const appPart = parts.find((p: string) => p.startsWith('app:'));
+          return {
+            id,
+            uri: entry.uri,
+            title: entry.name,
+            renderer: parts[0] ?? '',
+            size: parts[1] ?? '',
+            position: '',
+            locked: parts.includes('locked'),
+            appId: appPart?.slice(4),
+          } as WindowInfo;
+        }
+        return entry as WindowInfo;
+      }),
+    );
   } catch {
     setWindows([]);
   }

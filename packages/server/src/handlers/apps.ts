@@ -134,12 +134,15 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           if (!listResult.success) return error(listResult.error!);
           const readEntries = listResult.entries ?? [];
           return okLinks(
-            readEntries.map((e) => ({
-              uri: `yaar://apps/${storagePath.appId}/storage/${e.path.replace(`apps/${storagePath.appId}/`, '')}`,
-              name: e.path.split('/').pop() || e.path,
-              description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
-              mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
-            })),
+            readEntries.map((e) => {
+              const relPath = e.path.replace(`apps/${storagePath.appId}/`, '');
+              return {
+                uri: `yaar://apps/${storagePath.appId}/storage/${relPath}`,
+                name: relPath || e.path,
+                description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
+                mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+              };
+            }),
           );
         }
         const result = await storageRead(prefixedPath);
@@ -185,7 +188,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
             const relPath = e.path.replace(`apps/${storagePath.appId}/`, '');
             return {
               uri: `yaar://apps/${storagePath.appId}/storage/${relPath}`,
-              name: relPath.split('/').pop() || relPath,
+              name: relPath || e.path,
               description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
               mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
             };

@@ -73,10 +73,14 @@ export async function loadAllStorageImages(): Promise<void> {
     return;
   }
   try {
-    const entries = await list('yaar://apps/self/storage/') as Array<{ path: string; isDirectory: boolean }>;
+    const entries = await list('yaar://apps/self/storage/') as Array<{ name: string; description?: string; path?: string; isDirectory?: boolean }>;
     const paths = entries
-      .filter((e) => !e.isDirectory && IMAGE_EXT_REGEX.test(e.path))
-      .map((e) => e.path);
+      .filter((e) => {
+        const isDir = e.isDirectory ?? e.description === 'directory';
+        const filePath = e.path ?? e.name;
+        return !isDir && IMAGE_EXT_REGEX.test(filePath);
+      })
+      .map((e) => e.path ?? e.name);
     loadStoragePaths(paths, true);
     setStatus(`Loaded ${paths.length} image(s) from storage.`);
   } catch {

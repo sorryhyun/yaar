@@ -12,7 +12,12 @@ const _yaar = (window as any).yaar;
 
 async function storageList(dir: string): Promise<StorageEntry[]> {
   const r = await _yaar.list(`yaar://apps/self/storage/${dir}`);
-  return Array.isArray(r) ? r : [];
+  if (!Array.isArray(r)) return [];
+  // Convert resource_link format to StorageEntry
+  return r.map((e: any) => ({
+    path: e.path ?? e.name ?? '',
+    isDirectory: e.isDirectory ?? e.description === 'directory',
+  }));
 }
 
 export function getStorageApi(): YaarStorageApi | null {

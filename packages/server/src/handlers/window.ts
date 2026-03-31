@@ -53,6 +53,7 @@ export function registerWindowHandlers(
           const parts = [win.content.renderer, `${win.bounds.w}x${win.bounds.h}`];
           if (win.locked) parts.push('locked');
           if (win.minimized) parts.push('minimized');
+          if (win.appId) parts.push(`app:${win.appId}`);
           return {
             uri: `yaar://windows/${windowId}`,
             name: win.title || windowId,

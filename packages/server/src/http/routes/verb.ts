@@ -96,23 +96,55 @@ function tryParseJson(raw: string): unknown {
  * Single-URI results have one text block → `{ ok, data }`.
  * Batch results (from brace expansion) have interleaved URI headers and data blocks
  * produced by formatBatchResults() → `{ ok, data: { [uri]: parsed } }`.
+ * Resource blocks → extract embedded text.
+ * Resource link blocks → return as array of link objects.
  */
 function toEnvelope(result: VerbResult): Record<string, unknown> {
-  const textItems = result.content.filter(
-    (c): c is { type: 'text'; text: string } => c.type === 'text',
-  );
+  // Collect blocks by type
+  const textItems: Array<{ type: 'text'; text: string }> = [];
+  const images: Array<{ data: string; mimeType: string }> = [];
+  const links: Array<{ uri: string; name: string; description?: string; mimeType?: string }> = [];
+
+  for (const c of result.content) {
+    switch (c.type) {
+      case 'text':
+        textItems.push(c);
+        break;
+      case 'image': {
+        const img = c as { data: string; mimeType: string };
+        images.push({ data: img.data, mimeType: img.mimeType });
+        break;
+      }
+      case 'resource': {
+        // Embedded resource → extract text content, treat as text block
+        const res = c.resource as { text?: string };
+        if (res.text) textItems.push({ type: 'text', text: res.text });
+        break;
+      }
+      case 'resource_link': {
+        const link = c as { uri: string; name: string; description?: string; mimeType?: string };
+        links.push({
+          uri: link.uri,
+          name: link.name,
+          ...(link.description ? { description: link.description } : {}),
+          ...(link.mimeType ? { mimeType: link.mimeType } : {}),
+        });
+        break;
+      }
+    }
+  }
 
   if (result.isError) {
     const errorTexts = textItems.map((t) => t.text);
     return { ok: false, error: errorTexts.join('\n') };
   }
 
-  const images = result.content
-    .filter((c) => c.type === 'image')
-    .map((c) => {
-      const img = c as { data: string; mimeType: string };
-      return { data: img.data, mimeType: img.mimeType };
-    });
+  // Resource links → return as array of navigable link objects
+  if (links.length > 0) {
+    const envelope: Record<string, unknown> = { ok: true, data: links };
+    if (images.length > 0) envelope.images = images;
+    return envelope;
+  }
 
   // Detect batch results: formatBatchResults() produces "--- uri ---" header blocks
   // interleaved with data blocks.
