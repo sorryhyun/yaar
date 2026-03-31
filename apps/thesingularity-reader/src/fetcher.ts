@@ -117,11 +117,22 @@ export async function fetchPosts(page = 1): Promise<Post[]> {
 
     // --- Title ---
     let titleRaw = '';
+    let categoryFromFlair = '';
 
     const titleEl = aEl.querySelector('.gall-tit-txt');
     if (titleEl) {
+      // Extract flair/category badge BEFORE stripping.
+      // Mobile DC renders flairs as em.sp-flair, .gall-flair, or similar inside the title element.
+      const flairEl = titleEl.querySelector('em.sp-flair, .gall-flair, [class*="flair"]');
+      if (flairEl) {
+        const ft = (flairEl.textContent ?? '').trim();
+        if (ft) categoryFromFlair = ft;
+      }
+
       const clone = titleEl.cloneNode(true) as Element;
       clone.querySelectorAll(META_SELECTORS).forEach((el) => el.remove());
+      // Remove flair elements from the clone so they don't pollute the title text.
+      clone.querySelectorAll('em.sp-flair, .gall-flair, [class*="flair"]').forEach((el) => el.remove());
       clone.querySelectorAll('em, i, b').forEach((el) => {
         if (isMetaLine((el.textContent ?? '').trim())) el.remove();
       });
@@ -160,7 +171,7 @@ export async function fetchPosts(page = 1): Promise<Post[]> {
     // --- Author & date ---
     let author = '익명';
     let date = '';
-    let category: string | undefined = categoryFromTitle || undefined;
+    let category: string | undefined = categoryFromTitle || categoryFromFlair || undefined;
 
     // data-nick on non-anchor elements (anchors may carry an empty data-nick)
     const nonAnchorNickEls = Array.from(li.querySelectorAll('[data-nick]')).filter(
@@ -201,7 +212,9 @@ export async function fetchPosts(page = 1): Promise<Post[]> {
         ginfoText = ginfoText.trim();
         if (ginfoText) {
           const parts = ginfoText.split(/\s+/);
-          if (parts.length >= 2 && /^[가-힣]+$/.test(parts[0]) && parts[0].length <= 4) {
+          // Allow emoji-prefixed categories like 📪정보 or 📢정보 (JS length up to 8),
+          // and plain Korean categories like 일반. Must contain Korean and not start with digit.
+          if (parts.length >= 2 && /[가-힣]/.test(parts[0]) && !/^\d/.test(parts[0]) && parts[0].length <= 8) {
             if (!category) category = parts[0];
             author = parts.slice(1).join(' ');
           } else {

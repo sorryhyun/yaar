@@ -6,10 +6,25 @@ import { selectPost, doRefresh, goToPage } from '../actions';
 import { PostItem } from './PostItem';
 
 export function PostList() {
+  // 현재 포스트 목록에서 동적으로 카테고리 추출
+  const availableCategories = createMemo(() => {
+    const cats = new Set<string>();
+    for (const p of state.posts) {
+      if (p.category && !p.category.includes('도배기')) {
+        cats.add(p.category);
+      }
+    }
+    return Array.from(cats).sort();
+  });
+
   const filteredPosts = createMemo(() => {
     let result = state.posts;
     if (state.hideSpammer) {
       result = result.filter(p => !(p.category && p.category.includes('도배기')));
+    }
+    const cat = state.selectedCategory;
+    if (cat) {
+      result = result.filter(p => p.category === cat);
     }
     const kw = state.filterKeyword;
     if (kw) {
@@ -20,6 +35,24 @@ export function PostList() {
 
   return html`
     <div class="post-list-panel">
+      ${() => {
+        const cats = availableCategories();
+        if (cats.length === 0) return null;
+        return html`
+          <div class="category-tabs">
+            <button
+              class=${() => 'category-tab' + (state.selectedCategory === null ? ' active' : '')}
+              onClick=${() => setState('selectedCategory', null)}
+            >전체</button>
+            <${For} each=${availableCategories}>${(cat: string) => html`
+              <button
+                class=${() => 'category-tab' + (state.selectedCategory === cat ? ' active' : '')}
+                onClick=${() => setState('selectedCategory', cat)}
+              >${cat}</button>
+            `}</${For}>
+          </div>
+        `;
+      }}
       <div class="post-list-toolbar">
         <button
           class=${() => 'y-btn y-btn-sm ' + (state.hideSpammer ? 'btn-filter-active' : 'y-btn-ghost')}
@@ -70,13 +103,13 @@ export function PostList() {
               <${PostItem} post=${post} />
             `}</${For}>
             ${() =>
-              state.filterKeyword && filteredPosts().length === 0
+              filteredPosts().length === 0 && (state.filterKeyword || state.selectedCategory)
                 ? html`
                     <div
                       class="loading-center"
                       style="padding:var(--yaar-sp-4);color:var(--yaar-text-muted);font-size:13px"
                     >
-                      "검색 결과 없음"
+                      검색 결과 없음
                     </div>
                   `
                 : null}

@@ -287,6 +287,55 @@
   flex-shrink: 0;
 }
 
+/* Category filter tabs */
+.category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.category-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.category-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--yaar-border);
+  background: transparent;
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.category-tab:hover {
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text);
+  border-color: var(--yaar-border-strong, var(--yaar-border));
+}
+
+.category-tab.active {
+  background: var(--yaar-accent);
+  color: #fff;
+  border-color: var(--yaar-accent);
+  font-weight: 600;
+}
+
 /* Post list toolbar */
 .post-list-toolbar {
   display: flex;

@@ -70,7 +70,7 @@ You can interact with apps by opening an app window and sending a message to it 
 
 **Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
 
-App source code is **not directly readable** from \`yaar://apps/{appId}\` — that only returns the SKILL.md.
+**Learn before you use:** If you're unfamiliar with an app, use \`read('yaar://apps/{appId}')\` or \`describe('yaar://apps/{appId}')\` first to learn its capabilities, protocol commands, and state keys.
 
 ${SKILLS_SECTION}
 

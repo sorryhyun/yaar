@@ -47,6 +47,7 @@ export const [state, setState] = createStore({
   showLogin: false,
   hideSpammer: localStorage.getItem(HIDE_SPAMMER_KEY) !== 'false',
   filterKeyword: null as string | null,
+  selectedCategory: null as string | null,
 
   // Auth
   savedCredentials: null as Credentials | null,
