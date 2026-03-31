@@ -203,7 +203,23 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
           y0?: number;
           x1?: number;
           y1?: number;
-        }) => web.screenshot({ ...p, ...await bid() }),
+        }) => {
+          const result = await web.screenshot({ ...p, ...await bid() }) as {
+            ok: boolean;
+            text?: string;
+            images?: Array<{ data: string; mimeType?: string }>;
+          };
+          if (!result.ok || !result.images?.length) return result;
+          // Return as content blocks so the agent sees the image natively
+          return [
+            { type: 'text', text: result.text ?? 'Browser screenshot:' },
+            ...result.images.map((img) => ({
+              type: 'image',
+              data: img.data,
+              mimeType: img.mimeType ?? 'image/webp',
+            })),
+          ];
+        },
       },
       extract: {
         description: 'Extract page text, links, and forms',

@@ -5,14 +5,65 @@
 import type { AppProtocolRequest } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, okJson, error } from '../../handlers/utils.js';
+import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 
-/** Wrap an unknown app protocol value into the appropriate VerbResult. */
+/** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
+const MAX_TEXT_BYTES = 40_000;
+
+/** Truncate text to MAX_TEXT_BYTES, appending a note if truncated. */
+function truncateText(text: string): string {
+  if (text.length <= MAX_TEXT_BYTES) return text;
+  return (
+    text.slice(0, MAX_TEXT_BYTES) + `\n... (truncated, ${(text.length / 1024).toFixed(0)}KB total)`
+  );
+}
+
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
+/** Check if a value is an array of MCP content blocks. */
+function isContentBlocks(value: unknown): value is ContentBlock[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(
+    (item) =>
+      item &&
+      typeof item === 'object' &&
+      (((item as Record<string, unknown>).type === 'text' &&
+        typeof (item as Record<string, unknown>).text === 'string') ||
+        ((item as Record<string, unknown>).type === 'image' &&
+          typeof (item as Record<string, unknown>).data === 'string')),
+  );
+}
+
+/**
+ * Wrap an app protocol value into a VerbResult.
+ *
+ * Apps can return content blocks directly for fine-grained control:
+ *   [{type:'text', text:'...'}, {type:'image', data:'base64', mimeType:'image/webp'}]
+ *
+ * Plain values (strings, objects) are auto-wrapped and truncated.
+ */
 function wrapAppValue(value: unknown): VerbResult {
-  if (value != null && typeof value === 'object') return okJson(value as object);
   if (value === undefined || value === null) return ok('Done.');
+
+  // Content blocks — pass through directly
+  if (isContentBlocks(value)) {
+    // Truncate text blocks, pass image blocks as-is
+    const content = value.map((block) =>
+      block.type === 'text' ? { ...block, text: truncateText(block.text) } : block,
+    );
+    return { content };
+  }
+
+  // Plain string
+  if (typeof value === 'string') return ok(truncateText(value));
+
+  // Object → JSON text
+  if (typeof value === 'object') return ok(truncateText(JSON.stringify(value, null, 2)));
+
   return ok(String(value));
 }
 

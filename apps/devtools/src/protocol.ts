@@ -189,14 +189,11 @@ export function registerProtocol() {
           if (p.openInEditor) {
             for (const fp of paths) await openFile(fp);
           }
-          if (paths.length === 1) {
-            // Single file: return flat result for backwards compat
-            const r = results[0];
-            return { path: r.path, content: r.content, totalLines: r.totalLines };
-          }
-          // Multiple files: return array + concatenated content
-          const combined = results.map((r) => r.content).join('\n\n');
-          return { files: results, combined };
+          // Return as content blocks — each file is a separate text block
+          return results.map((r) => ({
+            type: 'text',
+            text: r.content,
+          }));
         },
       },
       writeFile: {

@@ -1,0 +1,16 @@
+{
+  "icon": "📚",
+  "name": "DC 만화 갤러리",
+  "run": "dist/index.html",
+  "bundles": [
+    "yaar-web"
+  ],
+  "permissions": [
+    "yaar://http/",
+    "yaar://storage/"
+  ],
+  "capture": "dom",
+  "description": "디시인사이드 만화 갤러리 리더 — 전체글/개념글 탭, 글 상세 보기 (이미지 포함)",
+  "version": "1.0.0",
+  "author": "YAAR"
+}

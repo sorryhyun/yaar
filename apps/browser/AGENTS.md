@@ -120,6 +120,27 @@ When a user asks about form actions, network requests, selectors, or page struct
 
 If something requires login or is blocked, say so based on what the page actually shows — don't go searching for workarounds elsewhere.
 
+## Mobile Browsing
+
+Pass `mobile: true` to `open` to emulate a mobile device:
+
+```
+command("open", { url: "https://example.com", mobile: true })
+```
+
+This activates:
+- **Mobile viewport**: 390×844px (Pixel 8 dimensions) at 3x scale
+- **Mobile user agent**: Chrome on Android 14 (Pixel 8)
+- **Touch emulation**: Enabled with up to 5 touch points
+
+Use mobile mode when:
+- The user asks to view a mobile version of a site
+- The desktop site redirects or behaves differently on mobile
+- You need to test responsive layouts or mobile-specific UI
+- A site serves different content to mobile user agents (e.g., `m.example.com` redirects)
+
+Without `mobile: true`, the browser uses a desktop viewport (1280×800px) with a standard Chrome Windows user agent.
+
 ## Tips
 
 - After clicking or typing, the screenshot updates automatically — no need for manual screenshots unless you need to inspect a specific region
