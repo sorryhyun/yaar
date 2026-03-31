@@ -131,6 +131,11 @@ export function registerWindowHandlers(
         },
         debounceMs: { type: 'number', description: 'Debounce interval in ms (default: 500).' },
         subscriptionId: { type: 'string', description: 'Subscription ID for unsubscribe.' },
+        hook: {
+          type: 'string',
+          enum: ['response'],
+          description: 'Set to "response" to receive a notification when the app agent responds.',
+        },
       },
     },
 
@@ -261,6 +266,7 @@ export function registerWindowHandlers(
           const messageId = `agent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
           const monitorId = getMonitorId() ?? '0';
           const taggedContent = `<monitor:${monitorId}>\n${p.message as string}\n</monitor:${monitorId}>`;
+          const hook = p.hook === 'response' ? ('response' as const) : undefined;
           pool
             .handleTask({
               type: 'app',
@@ -268,6 +274,7 @@ export function registerWindowHandlers(
               windowId,
               content: taggedContent,
               monitorId,
+              hook,
             })
             .catch((err: unknown) => console.error('[window.message] Failed:', err));
 

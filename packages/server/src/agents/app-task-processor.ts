@@ -157,6 +157,11 @@ export class AppTaskProcessor {
               monitorSrc,
             );
           }
+
+          // Fire message hook if the originating agent requested it
+          if (task.hook === 'response' && task.monitorId) {
+            this.ctx.notifyHookResponse(appId, windowId, task.monitorId, appResponseText);
+          }
         },
         onFinally: async () => {
           await this.sendWindowStatus(windowId, agentRole, 'released');

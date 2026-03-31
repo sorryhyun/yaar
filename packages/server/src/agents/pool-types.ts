@@ -32,6 +32,8 @@ export interface Task {
   interactions?: UserInteraction[];
   actionId?: string; // For parallel button actions
   monitorId?: string; // Which monitor this task belongs to
+  /** One-shot hook: notify the originating agent when this task completes. */
+  hook?: 'response';
 }
 
 /**
@@ -56,4 +58,11 @@ export interface PoolContext {
   // Methods processors call back into
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
   sendEvent(event: ServerEvent): Promise<void>;
+  /** Deliver a hook-triggered response notification to the monitor agent. */
+  notifyHookResponse(
+    appId: string,
+    windowId: string,
+    monitorId: string,
+    responseText: string,
+  ): void;
 }
