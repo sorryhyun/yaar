@@ -62,7 +62,40 @@ export class MonitorTaskProcessor {
       return;
     }
 
-    // Monitor agent busy → try to steer the active turn (Codex mid-turn injection)
+    // Monitor agent busy → interrupt + queue for relay/hook messages so they
+    // never silently evaporate (streamInput can succeed but the model may not
+    // actually process the injected message).
+    const isRelay = task.messageId.startsWith('relay-') || task.messageId.startsWith('hook-resp-');
+    if (isRelay) {
+      const queue = this.ctx.getOrCreateMonitorQueue(monitorId);
+      if (!queue.canEnqueue()) {
+        await this.ctx.sendEvent({
+          type: ServerEventType.ERROR,
+          error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
+        });
+        return;
+      }
+
+      const position = queue.enqueue(task);
+      console.log(
+        `[ContextPool] Relay/hook arrived while monitor ${monitorId} busy — interrupting and queuing ${task.messageId} (position: ${position})`,
+      );
+
+      // Interrupt the running turn so processMonitorQueue drains immediately after
+      const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
+      if (agent?.session.isRunning()) {
+        await agent.session.interrupt();
+      }
+
+      await this.ctx.sendEvent({
+        type: ServerEventType.MESSAGE_QUEUED,
+        messageId: task.messageId,
+        position,
+      });
+      return;
+    }
+
+    // Non-relay: try to steer the active turn (Codex mid-turn injection)
     const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, task.content);
     if (steered) {
       console.log(
