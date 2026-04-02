@@ -3,9 +3,9 @@
  *
  * Maps agent operations to the verb layer:
  *
- *   list('yaar://sessions/current/agents')                         → list all active agents
- *   read('yaar://sessions/current/agents/{agentId}')               → agent info
- *   invoke('yaar://sessions/current/agents/{agentId}', { action }) → interrupt / relay
+ *   list('yaar://session/agents')                         → list all active agents
+ *   read('yaar://session/agents/{agentId}')               → agent info
+ *   invoke('yaar://session/agents/{agentId}', { action }) → interrupt / relay
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
@@ -25,8 +25,8 @@ function getPool() {
 }
 
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
-  // ── yaar://sessions/current/agents — list all agents ──
-  registry.register('yaar://sessions/current/agents', {
+  // ── yaar://session/agents — list all agents ──
+  registry.register('yaar://session/agents', {
     description: 'List all active agents (monitor, app, ephemeral).',
     verbs: ['describe', 'list'],
 
@@ -55,8 +55,8 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/agents/* — agent instance operations ──
-  registry.register('yaar://sessions/current/agents/*', {
+  // ── yaar://session/agents/* — agent instance operations ──
+  registry.register('yaar://session/agents/*', {
     description:
       'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
@@ -152,7 +152,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
 
       if (action === 'relay') {
         if (!resolved.id || resolved.id !== 'monitor')
-          return error('Relay is only supported on yaar://sessions/current/agents/monitor.');
+          return error('Relay is only supported on yaar://session/agents/monitor.');
         if (typeof payload!.message !== 'string' || !payload!.message)
           return error('"message" (string) is required for relay.');
 
@@ -184,7 +184,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         return ok('Session agent disposed.');
       }
 
-      return error('Delete is only supported on yaar://sessions/current/agents/session.');
+      return error('Delete is only supported on yaar://session/agents/session.');
     },
   });
 }

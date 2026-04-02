@@ -350,10 +350,9 @@ export function initWindowsSdkHandler() {
     }
 
     // yaar:window-read
-    // Normalize: agents often pass yaar:// URIs (e.g. yaar://monitors/0/win-id)
-    // but the store uses plain window IDs.
+    // Normalize: agents may pass yaar://windows/{id} URIs but the store uses plain window IDs.
     const rawWindowId: string = e.data.windowId ?? '';
-    const uriMatch = rawWindowId.match(/^yaar:\/\/monitor\/[^/]+\/([^/]+)/);
+    const uriMatch = rawWindowId.match(/^yaar:\/\/windows\/([^/]+)/);
     const targetWindowId = uriMatch ? uriMatch[1] : rawWindowId;
     const includeImage = e.data.includeImage === true;
 

@@ -82,7 +82,7 @@ Users can draw on the screen using left-click drag. The drawing is sent as an im
 
 ## Memory
 
-Use \`invoke('yaar://sessions/current', { action: "memorize", content: "..." })\` to save important facts, user preferences, or context that should persist across sessions.
+Use \`invoke('yaar://session', { action: "memorize", content: "..." })\` to save important facts, user preferences, or context that should persist across sessions.
 
 ## Config
 

@@ -44,7 +44,7 @@ export const agentList = createMemo<AgentEntry[]>(() => {
 
 async function fetchAgents() {
   try {
-    const data = await list<AgentStats>('yaar://sessions/current/agents');
+    const data = await list<AgentStats>('yaar://session/agents');
     if (data) setAgentStats(data);
   } catch {
     setAgentStats(null);
@@ -111,7 +111,7 @@ export function startPolling(interval = 3000) {
 
 export async function interruptAgent(agentId: string) {
   try {
-    await invoke(`yaar://sessions/current/agents/${agentId}`, { action: 'interrupt' });
+    await invoke(`yaar://session/agents/${agentId}`, { action: 'interrupt' });
     showToast(`Interrupted ${agentId}`, 'success');
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Interrupt failed', 'error');

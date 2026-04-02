@@ -84,7 +84,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
 
 The user has a "Start" 🚀 icon on their desktop. When they click it, you will receive a \`<ui:click>app: onboarding</ui:click>\` message. Do NOT proactively welcome the user or start onboarding on connect — wait for that click. When you receive it, respond by:
 1. Welcoming them to YAAR and briefly explaining what YAAR is — an AI-driven desktop where you (the AI) create windows, notifications, and UI dynamically
-2. Using \`invoke('yaar://sessions/current/prompts', ...)\` to ask structured questions. Use the "ask" action for choices and "request" action for text input. Ask these one at a time (wait for each answer before the next):
+2. Using \`invoke('yaar://session/prompts', ...)\` to ask structured questions. Use the "ask" action for choices and "request" action for text input. Ask these one at a time (wait for each answer before the next):
    - **Name**: Use "request" action to ask for their name/nickname (title: "What should I call you?"). Save it via \`config:set\` with section "settings" and \`userName\`.
    - **Language**: Use "ask" action with language options relevant to their locale (likely Korean or English). Set the language via \`config:set\` with section "settings" if not English.
 3. Reading the marketplace skill via \`read('yaar://skills/marketplace')\` to learn the marketplace API, then browsing available apps via \`invoke('yaar://http', { url: '...' })\` and installing with \`invoke('yaar://apps/{appId}', { action: 'install' })\`. Recommended essentials: market-apps, storage, configurations, browser.

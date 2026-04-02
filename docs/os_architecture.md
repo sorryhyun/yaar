@@ -8,7 +8,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 
 | OS Concept | YAAR Equivalent | URI Namespace | Key File(s) |
 |---|---|---|---|
-| Kernel | `LiveSession` + `ContextPool` | `yaar://sessions/current` | `session/live-session.ts`, `agents/context-pool.ts` |
+| Kernel | `LiveSession` + `ContextPool` | `yaar://session` | `session/live-session.ts`, `agents/context-pool.ts` |
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
 | Process types | Main (init), app (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |

@@ -24,7 +24,7 @@ A **session** is the top-level container for one complete conversation. It owns 
 
 ### Identity
 
-Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://sessions/current`, with sub-resources for logs (`yaar://sessions/current/logs`) and context (`yaar://sessions/current/context`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
+Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://session`, with sub-resources for logs (`yaar://session/logs`) and context (`yaar://session/context`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
 ### Multi-connection
 
@@ -108,7 +108,7 @@ When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen befo
 
 ### Monitor control URIs
 
-Individual monitors can be inspected and controlled via `yaar://sessions/current/monitors/{id}`:
+Individual monitors can be inspected and controlled via `yaar://session/monitors/{id}`:
 
 | Verb | Effect |
 |------|--------|
@@ -129,7 +129,7 @@ A **session agent** is a lazy, on-demand AI supervisor that sits above monitor a
 - **No windows** — communicates via tool results and relay messages only.
 - **Verb tools only** — same 5 generic `yaar://` verbs as other agents, no WebSearch or Task.
 
-Invoke via `yaar://sessions/current/agents/session`:
+Invoke via `yaar://session/agents/session`:
 
 | Action | Payload | Effect |
 |--------|---------|--------|

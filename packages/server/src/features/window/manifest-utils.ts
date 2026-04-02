@@ -15,21 +15,13 @@ export function enrichManifestWithUris(
   windowKey: string,
   handleMap: WindowHandleMap,
 ): void {
-  const monitorId = handleMap.getMonitorId(windowKey);
   const rawId = handleMap.getRawWindowId(windowKey);
-  if (!monitorId) return;
 
   for (const [key, desc] of Object.entries(manifest.state)) {
-    (desc as unknown as Record<string, unknown>).uri = buildWindowResourceUri(
-      monitorId,
-      rawId,
-      'state',
-      key,
-    );
+    (desc as unknown as Record<string, unknown>).uri = buildWindowResourceUri(rawId, 'state', key);
   }
   for (const [key, desc] of Object.entries(manifest.commands)) {
     (desc as unknown as Record<string, unknown>).uri = buildWindowResourceUri(
-      monitorId,
       rawId,
       'commands',
       key,

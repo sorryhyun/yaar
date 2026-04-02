@@ -1,53 +1,7 @@
 import { describe, it, expect } from 'bun:test';
-import {
-  parseYaarUri,
-  parseWindowUri,
-  buildWindowUri,
-  parseBareWindowUri,
-  isBareWindowsAuthority,
-} from '../yaar-uri.js';
+import { parseYaarUri, parseBareWindowUri, isBareWindowsAuthority } from '../yaar-uri.js';
 
-describe('parseWindowUri', () => {
-  it('parses basic window URI', () => {
-    expect(parseWindowUri('yaar://monitors/0/win-storage')).toEqual({
-      monitorId: '0',
-      windowId: 'win-storage',
-      subPath: undefined,
-    });
-  });
-
-  it('parses window URI with sub-path', () => {
-    expect(parseWindowUri('yaar://monitors/0/win-excel/state/cells')).toEqual({
-      monitorId: '0',
-      windowId: 'win-excel',
-      subPath: 'state/cells',
-    });
-  });
-
-  it('parses window URI with deep sub-path', () => {
-    expect(parseWindowUri('yaar://monitors/1/win-app/commands/save')).toEqual({
-      monitorId: '1',
-      windowId: 'win-app',
-      subPath: 'commands/save',
-    });
-  });
-
-  it('returns null for non-yaar URIs', () => {
-    expect(parseWindowUri('https://example.com')).toBeNull();
-  });
-
-  it('returns null for content URIs', () => {
-    expect(parseWindowUri('yaar://apps/excel-lite')).toBeNull();
-  });
-});
-
-describe('buildWindowUri', () => {
-  it('builds a window URI', () => {
-    expect(buildWindowUri('0', 'win-storage')).toBe('yaar://monitors/0/win-storage');
-  });
-});
-
-// ============ Bare Window URIs (yaar://windows/) ============
+// ============ Window URIs (yaar://windows/) ============
 
 describe('parseBareWindowUri', () => {
   it('parses basic bare window URI', () => {
@@ -70,10 +24,6 @@ describe('parseBareWindowUri', () => {
     });
   });
 
-  it('returns null for non-windows URI', () => {
-    expect(parseBareWindowUri('yaar://monitors/0/win-id')).toBeNull();
-  });
-
   it('returns null for non-yaar URI', () => {
     expect(parseBareWindowUri('https://example.com')).toBeNull();
   });
@@ -83,10 +33,6 @@ describe('isBareWindowsAuthority', () => {
   it('returns true for yaar://windows/ URIs', () => {
     expect(isBareWindowsAuthority('yaar://windows/my-win')).toBe(true);
     expect(isBareWindowsAuthority('yaar://windows/')).toBe(true);
-  });
-
-  it('returns false for yaar://monitors/ URIs', () => {
-    expect(isBareWindowsAuthority('yaar://monitors/0/win-id')).toBe(false);
   });
 
   it('returns false for non-yaar URIs', () => {
@@ -128,18 +74,18 @@ describe('parseYaarUri with windows', () => {
   });
 });
 
-describe('parseYaarUri with sessions', () => {
-  it('parses sessions URIs', () => {
-    expect(parseYaarUri('yaar://sessions/current')).toEqual({
-      authority: 'sessions',
-      path: 'current',
+describe('parseYaarUri with session', () => {
+  it('parses session URIs', () => {
+    expect(parseYaarUri('yaar://session/')).toEqual({
+      authority: 'session',
+      path: '',
     });
   });
 
-  it('parses sessions URIs with deep paths', () => {
-    expect(parseYaarUri('yaar://sessions/current/agents/agent-123')).toEqual({
-      authority: 'sessions',
-      path: 'current/agents/agent-123',
+  it('parses session URIs with deep paths', () => {
+    expect(parseYaarUri('yaar://session/agents/agent-123')).toEqual({
+      authority: 'session',
+      path: 'agents/agent-123',
     });
   });
 
@@ -149,5 +95,9 @@ describe('parseYaarUri with sessions', () => {
 
   it('returns null for removed user authority', () => {
     expect(parseYaarUri('yaar://user/notifications')).toBeNull();
+  });
+
+  it('returns null for removed monitors authority', () => {
+    expect(parseYaarUri('yaar://monitors/0/win-id')).toBeNull();
   });
 });

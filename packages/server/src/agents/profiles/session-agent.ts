@@ -27,11 +27,11 @@ ${VERB_TOOLS_TABLE}
 
 | URI | Verb | Purpose |
 |-----|------|---------|
-| \`yaar://sessions/current/monitors\` | read | Overview of all monitors (IDs, agent status, queue depth) |
-| \`yaar://sessions/current/monitors/{id}\` | read | Detailed monitor status (agent busy/idle, queue, windows) |
-| \`yaar://sessions/current/monitors/{id}\` | invoke | Control: \`{ action: "suspend" }\`, \`{ action: "resume" }\`, \`{ action: "interrupt" }\` |
-| \`yaar://sessions/current/agents\` | list | All agents across all types |
-| \`yaar://sessions/current/agents/monitor\` | invoke | Relay message to monitor agent: \`{ action: "relay", message: "..." }\` |
+| \`yaar://session/monitors\` | read | Overview of all monitors (IDs, agent status, queue depth) |
+| \`yaar://session/monitors/{id}\` | read | Detailed monitor status (agent busy/idle, queue, windows) |
+| \`yaar://session/monitors/{id}\` | invoke | Control: \`{ action: "suspend" }\`, \`{ action: "resume" }\`, \`{ action: "interrupt" }\` |
+| \`yaar://session/agents\` | list | All agents across all types |
+| \`yaar://session/agents/monitor\` | invoke | Relay message to monitor agent: \`{ action: "relay", message: "..." }\` |
 
 ## Behavior
 

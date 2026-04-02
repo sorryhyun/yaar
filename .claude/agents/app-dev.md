@@ -43,7 +43,7 @@ apps/my-app/
   "createShortcut": true,
   "permissions": [
     "yaar://storage/",
-    { "uri": "yaar://sessions/", "verbs": ["list", "read"] }
+    { "uri": "yaar://session/", "verbs": ["list", "read"] }
   ],
   "bundles": ["yaar-dev"]
 }

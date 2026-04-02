@@ -24,11 +24,11 @@ Test that `describe` returns valid schemas for key resources across multiple dom
 ```
 describe('yaar://config/settings')
 describe('yaar://storage')
-describe('yaar://sessions/current/monitors')
-describe('yaar://sessions/current/notifications')
+describe('yaar://session/monitors')
+describe('yaar://session/notifications')
 describe('yaar://apps')
-describe('yaar://sessions/current/agents')
-describe('yaar://sessions/current')
+describe('yaar://session/agents')
+describe('yaar://session')
 ```
 
 **PASS** if all 7 describe calls return verbs arrays and descriptions without errors.
@@ -59,7 +59,7 @@ invoke('yaar://windows/si-v-tbl', { action: "create", title: "Test: Table", widt
 
 Verify:
 ```
-list('yaar://sessions/current/monitors')   # all 5 windows should appear: si-v-md, si-v-html, si-v-text, si-v-comp, si-v-tbl
+list('yaar://session/monitors')   # all 5 windows should appear: si-v-md, si-v-html, si-v-text, si-v-comp, si-v-tbl
 ```
 
 **PASS** if all 5 windows appear in the list. Then close all:
@@ -335,7 +335,7 @@ delete('yaar://windows/si-v-multi-img')
 Read the monitor resource to verify it returns status:
 
 ```
-read('yaar://sessions/current/monitors')
+read('yaar://session/monitors')
 ```
 
 **PASS** if returns monitorId, hasMainAgent, windows list, and stats.
@@ -345,12 +345,12 @@ read('yaar://sessions/current/monitors')
 List and inspect active agents:
 
 ```
-list('yaar://sessions/current/agents')
+list('yaar://session/agents')
 ```
 
 If agents are listed, read one:
 ```
-read('yaar://sessions/current/agents/<first-agent-id>')
+read('yaar://session/agents/<first-agent-id>')
 ```
 
 **PASS** if agent list returns without error and (if agents exist) individual agent read returns agent info.
@@ -360,7 +360,7 @@ read('yaar://sessions/current/agents/<first-agent-id>')
 Test notification lifecycle through verb layer:
 
 ```
-invoke('yaar://sessions/current/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
+invoke('yaar://session/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
 ```
 
 **PASS** if notification is shown without error.

@@ -3,12 +3,12 @@
  *
  * These utilities parse and build URIs for resources that only the server
  * needs to address (window resources, config, browser, sessions).
- * Shared-layer primitives (parseYaarUri, parseWindowUri, parseBareWindowUri)
+ * Shared-layer primitives (parseYaarUri, parseBareWindowUri)
  * are imported from @yaar/shared.
  */
 
-import type { ParsedWindowUri, ParsedBareWindowUri } from '@yaar/shared';
-import { parseYaarUri, parseWindowUri, parseBareWindowUri } from '@yaar/shared';
+import type { ParsedBareWindowUri } from '@yaar/shared';
+import { parseYaarUri, parseBareWindowUri } from '@yaar/shared';
 
 // ============ Content Path Parsing ============
 
@@ -46,7 +46,6 @@ export function parseContentPath(pathname: string): ParsedContentPath | null {
 // ============ Window Resource URIs ============
 
 export interface ParsedWindowResourceUri {
-  monitorId: string;
   windowId: string;
   resourceType: 'state' | 'commands';
   key: string;
@@ -54,42 +53,28 @@ export interface ParsedWindowResourceUri {
 
 /**
  * Build a yaar:// window resource URI.
- *   buildWindowResourceUri('0', 'win-excel', 'state', 'cells') -> 'yaar://monitors/0/win-excel/state/cells'
+ *   buildWindowResourceUri('win-excel', 'state', 'cells') -> 'yaar://windows/win-excel/state/cells'
  */
 export function buildWindowResourceUri(
-  monitorId: string,
   windowId: string,
   resourceType: 'state' | 'commands',
   key: string,
 ): string {
-  return `yaar://monitors/${monitorId}/${windowId}/${resourceType}/${key}`;
+  return `yaar://windows/${windowId}/${resourceType}/${key}`;
 }
 
 /**
  * Parse a yaar:// window resource URI into its components.
- *   parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')
- *     -> { monitorId: '0', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
  *   parseWindowResourceUri('yaar://windows/win-excel/state/cells')
- *     -> { monitorId: '', windowId: 'win-excel', resourceType: 'state', key: 'cells' }
+ *     -> { windowId: 'win-excel', resourceType: 'state', key: 'cells' }
  */
 export function parseWindowResourceUri(uri: string): ParsedWindowResourceUri | null {
-  // Try yaar://monitors/{m}/{w}/{type}/{key}
-  const parsed: ParsedWindowUri | null = parseWindowUri(uri);
-  if (parsed?.subPath) {
-    const result = extractResourceFromSubPath(parsed.monitorId, parsed.windowId, parsed.subPath);
-    if (result) return result;
-  }
-  // Try yaar://windows/{w}/{type}/{key}
   const bare: ParsedBareWindowUri | null = parseBareWindowUri(uri);
-  if (bare?.subPath) {
-    const result = extractResourceFromSubPath('', bare.windowId, bare.subPath);
-    if (result) return result;
-  }
-  return null;
+  if (!bare?.subPath) return null;
+  return extractResourceFromSubPath(bare.windowId, bare.subPath);
 }
 
 function extractResourceFromSubPath(
-  monitorId: string,
   windowId: string,
   subPath: string,
 ): ParsedWindowResourceUri | null {
@@ -98,7 +83,6 @@ function extractResourceFromSubPath(
   const type = subPath.slice(0, slashIdx);
   if (type !== 'state' && type !== 'commands') return null;
   return {
-    monitorId,
     windowId,
     resourceType: type,
     key: subPath.slice(slashIdx + 1),
@@ -164,8 +148,6 @@ export function buildConfigUri(section: ConfigSection, id?: string): string {
 
 // ============ Session URIs ============
 
-export type SessionResource = 'current' | (string & {});
-
 export type SessionSubKind =
   | 'agents'
   | 'notifications'
@@ -178,7 +160,6 @@ export type SessionSubKind =
   | 'messages';
 
 export interface ParsedSessionUri {
-  resource: SessionResource;
   subKind?: SessionSubKind;
   id?: string;
   action?: string;
@@ -197,72 +178,65 @@ const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Parse a yaar://sessions/... URI with support for deep paths.
+ * Parse a yaar://session/... URI with support for deep paths.
  *
- *   parseSessionUri('yaar://sessions/current')
- *     -> { resource: 'current' }
- *   parseSessionUri('yaar://sessions/current/agents')
- *     -> { resource: 'current', subKind: 'agents' }
- *   parseSessionUri('yaar://sessions/current/agents/agent-123')
- *     -> { resource: 'current', subKind: 'agents', id: 'agent-123' }
- *   parseSessionUri('yaar://sessions/current/agents/agent-123/interrupt')
- *     -> { resource: 'current', subKind: 'agents', id: 'agent-123', action: 'interrupt' }
- *   parseSessionUri('yaar://sessions/current/notifications')
- *     -> { resource: 'current', subKind: 'notifications' }
- *   parseSessionUri('yaar://sessions/current/notifications/abc')
- *     -> { resource: 'current', subKind: 'notifications', id: 'abc' }
- *   parseSessionUri('yaar://sessions/current/prompts')
- *     -> { resource: 'current', subKind: 'prompts' }
- *   parseSessionUri('yaar://sessions/current/clipboard')
- *     -> { resource: 'current', subKind: 'clipboard' }
- *   parseSessionUri('yaar://sessions/current/monitors/0')
- *     -> { resource: 'current', subKind: 'monitors', id: '0' }
+ *   parseSessionUri('yaar://session/')
+ *     -> { }
+ *   parseSessionUri('yaar://session/agents')
+ *     -> { subKind: 'agents' }
+ *   parseSessionUri('yaar://session/agents/agent-123')
+ *     -> { subKind: 'agents', id: 'agent-123' }
+ *   parseSessionUri('yaar://session/agents/agent-123/interrupt')
+ *     -> { subKind: 'agents', id: 'agent-123', action: 'interrupt' }
+ *   parseSessionUri('yaar://session/notifications')
+ *     -> { subKind: 'notifications' }
+ *   parseSessionUri('yaar://session/notifications/abc')
+ *     -> { subKind: 'notifications', id: 'abc' }
+ *   parseSessionUri('yaar://session/prompts')
+ *     -> { subKind: 'prompts' }
+ *   parseSessionUri('yaar://session/clipboard')
+ *     -> { subKind: 'clipboard' }
+ *   parseSessionUri('yaar://session/monitors/0')
+ *     -> { subKind: 'monitors', id: '0' }
  */
 export function parseSessionUri(uri: string): ParsedSessionUri | null {
   const parsed = parseYaarUri(uri);
-  if (!parsed || parsed.authority !== 'sessions') return null;
+  if (!parsed || parsed.authority !== 'session') return null;
 
-  // Split path into segments: "current/agents/agent-123/interrupt" -> ["current", "agents", "agent-123", "interrupt"]
+  // Split path into segments: "agents/agent-123/interrupt" -> ["agents", "agent-123", "interrupt"]
   const segments = parsed.path.split('/').filter(Boolean);
-  if (segments.length === 0) return null;
 
-  const resource = segments[0];
-  const result: ParsedSessionUri = { resource };
+  const result: ParsedSessionUri = {};
+
+  if (segments.length >= 1) {
+    if (!SESSION_SUB_KINDS.has(segments[0])) return null;
+    result.subKind = segments[0] as SessionSubKind;
+  }
 
   if (segments.length >= 2) {
-    if (!SESSION_SUB_KINDS.has(segments[1])) return null;
-    result.subKind = segments[1] as SessionSubKind;
+    result.id = segments[1];
   }
 
   if (segments.length >= 3) {
-    result.id = segments[2];
-  }
-
-  if (segments.length >= 4) {
-    result.action = segments[3];
+    result.action = segments[2];
   }
 
   return result;
 }
 
 /**
- * Build a yaar://sessions/... URI.
+ * Build a yaar://session/... URI.
  *
- *   buildSessionUri('current')                                    -> 'yaar://sessions/current'
- *   buildSessionUri('current', 'agents')                          -> 'yaar://sessions/current/agents'
- *   buildSessionUri('current', 'agents', 'agent-123')             -> 'yaar://sessions/current/agents/agent-123'
- *   buildSessionUri('current', 'agents', 'agent-123', 'interrupt') -> 'yaar://sessions/current/agents/agent-123/interrupt'
- *   buildSessionUri('current', 'notifications')                   -> 'yaar://sessions/current/notifications'
- *   buildSessionUri('current', 'monitors', '0')                   -> 'yaar://sessions/current/monitors/0'
+ *   buildSessionUri()                                    -> 'yaar://session/'
+ *   buildSessionUri('agents')                            -> 'yaar://session/agents'
+ *   buildSessionUri('agents', 'agent-123')               -> 'yaar://session/agents/agent-123'
+ *   buildSessionUri('agents', 'agent-123', 'interrupt')  -> 'yaar://session/agents/agent-123/interrupt'
+ *   buildSessionUri('notifications')                     -> 'yaar://session/notifications'
+ *   buildSessionUri('monitors', '0')                     -> 'yaar://session/monitors/0'
  */
-export function buildSessionUri(
-  resource: SessionResource,
-  subKind?: SessionSubKind,
-  id?: string,
-  action?: string,
-): string {
-  let uri = `yaar://sessions/${resource}`;
-  if (subKind) uri += `/${subKind}`;
+export function buildSessionUri(subKind?: SessionSubKind, id?: string, action?: string): string {
+  let uri = 'yaar://session/';
+  if (subKind) uri += subKind;
   if (id) uri += `/${id}`;
   if (action) uri += `/${action}`;
   return uri;

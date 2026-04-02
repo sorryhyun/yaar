@@ -24,7 +24,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
-| \`yaar://sessions/\` | \`yaar://sessions/current\`, \`yaar://sessions/current/agents\`, \`yaar://sessions/current/monitors\`, \`yaar://sessions/current/prompts\`, \`yaar://sessions/current/context\` | read, invoke, list, delete |
+| \`yaar://session/\` | \`yaar://session\`, \`yaar://session/agents\`, \`yaar://session/monitors\`, \`yaar://session/prompts\`, \`yaar://session/context\` | read, invoke, list, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
 | \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |
 | \`yaar://mcp/\` | \`yaar://mcp/github\`, \`yaar://mcp/github/create_issue\` | list, describe, invoke |`;
@@ -33,8 +33,8 @@ export const VISIBILITY_SECTION = `## Visibility
 
 Plain text responses are invisible to the user. You can only communicate through:
 - **Windows** — your primary output. Show results, content, interactive UI
-- **Notifications** — brief acknowledgments, alerts, progress updates (\`invoke('yaar://sessions/current/notifications', { title, body })\`)
-- **User prompts** — ask the user a question or request input (\`invoke('yaar://sessions/current/prompts', { ... })\`)
+- **Notifications** — brief acknowledgments, alerts, progress updates (\`invoke('yaar://session/notifications', { title, body })\`)
+- **User prompts** — ask the user a question or request input (\`invoke('yaar://session/prompts', { ... })\`)
 
 Use a notification for quick responses ("done", "on it"). Open a window for anything substantial.`;
 
@@ -109,7 +109,7 @@ Ask the user questions or request text input. The call **blocks** until the user
 
 **Multiple-choice (action: "ask")** — present options for the user to pick from:
 \`\`\`
-invoke('yaar://sessions/current/prompts', {
+invoke('yaar://session/prompts', {
   action: "ask",
   title: "Pick a theme",
   message: "Which color scheme do you prefer?",
@@ -124,7 +124,7 @@ Options: \`multiSelect: true\` for multi-pick, \`allowText: true\` to also accep
 
 **Freeform input (action: "request")** — ask the user to type a response:
 \`\`\`
-invoke('yaar://sessions/current/prompts', {
+invoke('yaar://session/prompts', {
   action: "request",
   title: "Project name",
   message: "What should we call the new project?",
@@ -161,7 +161,7 @@ export const RELAY_SECTION = `## Relay to Monitor Agent
 After completing a significant task, relay results back to the monitor agent:
 
 \`\`\`
-invoke('yaar://sessions/current/agents/monitor', { action: "relay", message: "Task completed: ..." })
+invoke('yaar://session/agents/monitor', { action: "relay", message: "Task completed: ..." })
 \`\`\`
 
 Only relay when the monitor agent needs to take further action.`;

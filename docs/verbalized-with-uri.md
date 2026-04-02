@@ -44,22 +44,22 @@ The primary way agents address windows. Monitor ID is injected automatically fro
 | `yaar://config/mounts` | Host directory mounts |
 | `yaar://config/app/{appId}` | App credentials/config |
 
-### Sessions — `yaar://sessions/current/...`
+### Session — `yaar://session/...`
 
 All session-scoped resources live under this namespace. Agents, notifications, prompts, clipboard, and monitors are sub-resources of the current session.
 
 | URI | Description |
 |-----|-------------|
-| `yaar://sessions/current` | Current session info (platform, uptime, stats) |
-| `yaar://sessions/current/agents` | All active agents (list) |
-| `yaar://sessions/current/agents/{agentId}` | Agent by instance ID (read info, invoke with `{ action: 'interrupt' }`) |
-| `yaar://sessions/current/notifications` | Show notification (invoke with `{ id, title, body }`) |
-| `yaar://sessions/current/notifications/{id}` | Dismiss notification (delete) |
-| `yaar://sessions/current/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
-| `yaar://sessions/current/clipboard` | Clipboard contents |
-| `yaar://sessions/current/monitors/{monitorId}` | Monitor status (monitor agent, window list, queue stats) |
-| `yaar://sessions/current/logs` | Session logs |
-| `yaar://sessions/current/context` | Context state |
+| `yaar://session` | Current session info (platform, uptime, stats) |
+| `yaar://session/agents` | All active agents (list) |
+| `yaar://session/agents/{agentId}` | Agent by instance ID (read info, invoke with `{ action: 'interrupt' }`) |
+| `yaar://session/notifications` | Show notification (invoke with `{ id, title, body }`) |
+| `yaar://session/notifications/{id}` | Dismiss notification (delete) |
+| `yaar://session/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
+| `yaar://session/clipboard` | Clipboard contents |
+| `yaar://session/monitors/{monitorId}` | Monitor status (monitor agent, window list, queue stats) |
+| `yaar://session/logs` | Session logs |
+| `yaar://session/context` | Context state |
 
 ---
 
@@ -91,16 +91,16 @@ invoke('yaar://windows/win-1', { action: 'subscribe', events: ['content', 'inter
 invoke('yaar://windows/win-1', { action: 'unsubscribe', subscriptionId: 'wsub-...' })
 delete('yaar://windows/win-1')                          -> close window
 
-list('yaar://sessions/current/agents')                  -> active agents
-invoke('yaar://sessions/current/agents/agent-1', { action: 'interrupt' })
+list('yaar://session/agents')                  -> active agents
+invoke('yaar://session/agents/agent-1', { action: 'interrupt' })
 
-read('yaar://sessions/current/clipboard')               -> clipboard contents
-invoke('yaar://sessions/current/notifications', { id: 'n1', title: '...', body: '...' })
-delete('yaar://sessions/current/notifications/n1')      -> dismiss notification
-invoke('yaar://sessions/current/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
+read('yaar://session/clipboard')               -> clipboard contents
+invoke('yaar://session/notifications', { id: 'n1', title: '...', body: '...' })
+delete('yaar://session/notifications/n1')      -> dismiss notification
+invoke('yaar://session/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
 
-read('yaar://sessions/current/monitors/0')              -> monitor status
-read('yaar://sessions/current')                         -> session info
+read('yaar://session/monitors/0')              -> monitor status
+read('yaar://session')                         -> session info
 
 describe('yaar://config/settings')                      -> { verbs: ['read', 'invoke'], schema: { ... } }
 ```
@@ -191,8 +191,8 @@ export function registerConfigHandlers(registry: ResourceRegistry) {
 For action-bearing resources (browser, agents), the handler dispatches on `payload.action`:
 
 ```typescript
-// handlers/agents.ts — registered under yaar://sessions/current/agents
-registry.register('yaar://sessions/current/agents/*', {
+// handlers/agents.ts — registered under yaar://session/agents
+registry.register('yaar://session/agents/*', {
   verbs: ['read', 'invoke', 'describe'],
   description: 'Agent instance. Read for info, invoke to interrupt.',
   invokeSchema: {

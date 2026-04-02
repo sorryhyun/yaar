@@ -3,10 +3,10 @@
  *
  * Maps live session operations to the verb layer:
  *
- *   read('yaar://sessions/current')              → system info
- *   invoke('yaar://sessions/current', { ... })   → memorize
- *   read('yaar://sessions/current/monitors')     → list monitors
- *   read('yaar://sessions/current/context')       → current context tape summary
+ *   read('yaar://session')              → system info
+ *   invoke('yaar://session', { ... })   → memorize
+ *   read('yaar://session/monitors')     → list monitors
+ *   read('yaar://session/context')       → current context tape summary
  *
  * Historical session log browsing is in handlers/history.ts (yaar://history/).
  */
@@ -61,14 +61,14 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         { uri: 'yaar://storage/', name: 'storage', description: 'Persistent file storage' },
         { uri: 'yaar://windows/', name: 'windows', description: 'Open windows' },
         { uri: 'yaar://config/', name: 'config', description: 'Configuration' },
-        { uri: 'yaar://sessions/', name: 'sessions', description: 'Current session & monitors' },
+        { uri: 'yaar://session/', name: 'session', description: 'Current session & monitors' },
         { uri: 'yaar://history/', name: 'history', description: 'Past session logs' },
       ]);
     },
   });
 
-  // ── yaar://sessions/current — system info and memorize ──
-  registry.register('yaar://sessions/current', {
+  // ── yaar://session — system info and memorize ──
+  registry.register('yaar://session', {
     description: 'Current session. Read for system info, invoke to memorize notes.',
     verbs: ['describe', 'read', 'invoke'],
     invokeSchema: {
@@ -89,7 +89,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         memoryUsage: process.memoryUsage(),
         cwd: process.cwd(),
       };
-      return okJsonResource('yaar://sessions/current', info);
+      return okJsonResource('yaar://session', info);
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -108,8 +108,8 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/monitors — list active monitors ──
-  registry.register('yaar://sessions/current/monitors', {
+  // ── yaar://session/monitors — list active monitors ──
+  registry.register('yaar://session/monitors', {
     description:
       'Active monitors in the current session. Read for list of monitor IDs and their status.',
     verbs: ['describe', 'read'],
@@ -120,15 +120,15 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       if (!pool) return error('Session not initialized.');
 
       const monitors = listMonitors(session, pool);
-      return okJsonResource('yaar://sessions/current/monitors', {
+      return okJsonResource('yaar://session/monitors', {
         currentMonitorId: getMonitorId() ?? '0',
         monitors,
       });
     },
   });
 
-  // ── yaar://sessions/current/monitors/* — individual monitor operations ──
-  registry.register('yaar://sessions/current/monitors/*', {
+  // ── yaar://session/monitors/* — individual monitor operations ──
+  registry.register('yaar://session/monitors/*', {
     description:
       'Individual monitor. Read for status, invoke to suspend/resume/interrupt, delete to dispose.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
@@ -193,8 +193,8 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/context — current context tape summary ──
-  registry.register('yaar://sessions/current/context', {
+  // ── yaar://session/context — current context tape summary ──
+  registry.register('yaar://session/context', {
     description:
       'Current session context tape. Read for a summary of messages tracked by the context system.',
     verbs: ['describe', 'read'],
@@ -208,7 +208,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const windowMessages = pool.contextTape.getMessages({ includeWindows: true });
       const mainMessages = pool.contextTape.getMessages({ includeWindows: false });
 
-      return okJsonResource('yaar://sessions/current/context', {
+      return okJsonResource('yaar://session/context', {
         totalMessages: messages.length,
         mainMessages: mainMessages.length,
         windowMessages: windowMessages.length - mainMessages.length,

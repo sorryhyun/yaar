@@ -6,20 +6,18 @@
  */
 
 import { join } from 'path';
-import { parseYaarUri, resolveContentUri, parseWindowUri, parseBareWindowUri } from '@yaar/shared';
+import { parseYaarUri, resolveContentUri, parseBareWindowUri } from '@yaar/shared';
 import {
   parseConfigUri,
   parseSessionUri,
   parseHistoryUri,
   type ParsedConfigUri,
-  type SessionResource,
   type SessionSubKind,
   type HistorySubPath,
 } from '../lib/yaar-uri-server.js';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
 import { PROJECT_ROOT } from '../config.js';
-import { getMonitorId } from '../agents/agent-context.js';
 
 export type ResourceKind = 'app-static' | 'storage';
 
@@ -35,7 +33,6 @@ export interface ResolvedResource {
 
 export interface ResolvedWindow {
   kind: 'window';
-  monitorId: string;
   windowId: string;
   subPath?: string;
   sourceUri: string;
@@ -50,7 +47,6 @@ export interface ResolvedConfig {
 
 export interface ResolvedSession {
   kind: 'session';
-  resource: SessionResource;
   subKind?: SessionSubKind;
   id?: string;
   action?: string;
@@ -122,7 +118,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
 
 /**
  * Resolve any yaar:// URI — content resources (apps, storage) or window addresses.
- * Window URIs use `yaar://windows/{windowId}` (preferred) or legacy `yaar://monitors/{m}/{w}`.
+ * Window URIs use `yaar://windows/{windowId}` (monitor inferred from agent context).
  */
 export function resolveUri(uri: string): ResolvedUri | null {
   // Root URI: yaar://
@@ -133,32 +129,18 @@ export function resolveUri(uri: string): ResolvedUri | null {
   const resource = resolveResourceUri(uri);
   if (resource) return resource;
 
-  const win = parseWindowUri(uri);
-  if (win) {
-    return {
-      kind: 'window',
-      monitorId: win.monitorId,
-      windowId: win.windowId,
-      subPath: win.subPath,
-      sourceUri: uri,
-    };
-  }
-
-  // yaar://windows/{windowId} — monitor-less shortcut, injects current monitorId
   const bareWin = parseBareWindowUri(uri);
   if (bareWin) {
-    const monitorId = getMonitorId() ?? '0';
     if (bareWin.windowId) {
       return {
         kind: 'window',
-        monitorId,
         windowId: bareWin.windowId,
         subPath: bareWin.subPath,
         sourceUri: uri,
       };
     }
     // yaar://windows/ with no windowId → treat as window collection
-    return { kind: 'window', monitorId, windowId: '', sourceUri: uri };
+    return { kind: 'window', windowId: '', sourceUri: uri };
   }
 
   const config = parseConfigUri(uri);
@@ -175,7 +157,6 @@ export function resolveUri(uri: string): ResolvedUri | null {
   if (session) {
     return {
       kind: 'session',
-      resource: session.resource,
       subKind: session.subKind,
       id: session.id,
       action: session.action,
@@ -203,7 +184,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|monitors|windows|config|sessions|history|skills|http|mcp)$/,
+    /^yaar:\/\/(apps|storage|windows|config|session|history|skills|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

@@ -3,10 +3,10 @@
  *
  * Maps user-facing operations to the verb layer:
  *
- *   invoke('yaar://sessions/current/notifications', { title, body, ... })  → show notification
- *   delete('yaar://sessions/current/notifications/{id}')                   → dismiss notification
- *   invoke('yaar://sessions/current/prompts', { action: 'ask', ... })      → ask user a question
- *   invoke('yaar://sessions/current/prompts', { action: 'request', ... })  → request user action
+ *   invoke('yaar://session/notifications', { title, body, ... })  → show notification
+ *   delete('yaar://session/notifications/{id}')                   → dismiss notification
+ *   invoke('yaar://session/prompts', { action: 'ask', ... })      → ask user a question
+ *   invoke('yaar://session/prompts', { action: 'request', ... })  → request user action
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
@@ -16,8 +16,8 @@ import { showNotification, dismissNotification } from '../features/user/notifica
 import { askUser, requestUserInput } from '../features/user/prompts.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
-  // ── yaar://sessions/current/notifications — show/manage notifications ──
-  registry.register('yaar://sessions/current/notifications', {
+  // ── yaar://session/notifications — show/manage notifications ──
+  registry.register('yaar://session/notifications', {
     description: 'Notifications. Invoke to show a new notification.',
     verbs: ['describe', 'invoke'],
     invokeSchema: {
@@ -46,8 +46,8 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/notifications/{id} — dismiss a specific notification ──
-  registry.register('yaar://sessions/current/notifications/*', {
+  // ── yaar://session/notifications/{id} — dismiss a specific notification ──
+  registry.register('yaar://session/notifications/*', {
     description: 'A specific notification. Delete to dismiss.',
     verbs: ['describe', 'delete'],
 
@@ -59,8 +59,8 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://sessions/current/prompts — ask/request user interaction ──
-  registry.register('yaar://sessions/current/prompts', {
+  // ── yaar://session/prompts — ask/request user interaction ──
+  registry.register('yaar://session/prompts', {
     description:
       'User prompts. Invoke with action "ask" for multiple-choice questions, or "request" for freeform text input.',
     verbs: ['describe', 'invoke'],

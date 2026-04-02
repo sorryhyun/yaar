@@ -12,22 +12,21 @@ import {
 
 describe('buildWindowResourceUri', () => {
   it('builds a state URI', () => {
-    expect(buildWindowResourceUri('0', 'win-excel', 'state', 'cells')).toBe(
-      'yaar://monitors/0/win-excel/state/cells',
+    expect(buildWindowResourceUri('win-excel', 'state', 'cells')).toBe(
+      'yaar://windows/win-excel/state/cells',
     );
   });
 
   it('builds a commands URI', () => {
-    expect(buildWindowResourceUri('0', 'win-excel', 'commands', 'save')).toBe(
-      'yaar://monitors/0/win-excel/commands/save',
+    expect(buildWindowResourceUri('win-excel', 'commands', 'save')).toBe(
+      'yaar://windows/win-excel/commands/save',
     );
   });
 });
 
 describe('parseWindowResourceUri', () => {
   it('parses a state resource URI', () => {
-    expect(parseWindowResourceUri('yaar://monitors/0/win-excel/state/cells')).toEqual({
-      monitorId: '0',
+    expect(parseWindowResourceUri('yaar://windows/win-excel/state/cells')).toEqual({
       windowId: 'win-excel',
       resourceType: 'state',
       key: 'cells',
@@ -35,8 +34,7 @@ describe('parseWindowResourceUri', () => {
   });
 
   it('parses a commands resource URI', () => {
-    expect(parseWindowResourceUri('yaar://monitors/0/win-excel/commands/save')).toEqual({
-      monitorId: '0',
+    expect(parseWindowResourceUri('yaar://windows/win-excel/commands/save')).toEqual({
       windowId: 'win-excel',
       resourceType: 'commands',
       key: 'save',
@@ -44,40 +42,21 @@ describe('parseWindowResourceUri', () => {
   });
 
   it('returns null for bare window URI (no sub-path)', () => {
-    expect(parseWindowResourceUri('yaar://monitors/0/win-excel')).toBeNull();
+    expect(parseWindowResourceUri('yaar://windows/win-excel')).toBeNull();
   });
 
   it('returns null for unknown resource type', () => {
-    expect(parseWindowResourceUri('yaar://monitors/0/win-excel/unknown/key')).toBeNull();
+    expect(parseWindowResourceUri('yaar://windows/win-excel/unknown/key')).toBeNull();
   });
 
   it('returns null for sub-path without key', () => {
-    expect(parseWindowResourceUri('yaar://monitors/0/win-excel/state')).toBeNull();
-  });
-
-  it('parses bare window resource URI (yaar://windows/)', () => {
-    expect(parseWindowResourceUri('yaar://windows/win-excel/state/cells')).toEqual({
-      monitorId: '',
-      windowId: 'win-excel',
-      resourceType: 'state',
-      key: 'cells',
-    });
-  });
-
-  it('parses bare window commands URI', () => {
-    expect(parseWindowResourceUri('yaar://windows/win-app/commands/save')).toEqual({
-      monitorId: '',
-      windowId: 'win-app',
-      resourceType: 'commands',
-      key: 'save',
-    });
+    expect(parseWindowResourceUri('yaar://windows/win-excel/state')).toBeNull();
   });
 
   it('roundtrips with buildWindowResourceUri', () => {
-    const uri = buildWindowResourceUri('1', 'win-app', 'commands', 'refresh');
+    const uri = buildWindowResourceUri('win-app', 'commands', 'refresh');
     const parsed = parseWindowResourceUri(uri);
     expect(parsed).toEqual({
-      monitorId: '1',
       windowId: 'win-app',
       resourceType: 'commands',
       key: 'refresh',
@@ -174,29 +153,24 @@ describe('buildConfigUri', () => {
 
 describe('parseSessionUri', () => {
   it('parses current session', () => {
-    expect(parseSessionUri('yaar://sessions/current')).toEqual({
-      resource: 'current',
-    });
+    expect(parseSessionUri('yaar://session/')).toEqual({});
   });
 
   it('parses agents list', () => {
-    expect(parseSessionUri('yaar://sessions/current/agents')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/agents')).toEqual({
       subKind: 'agents',
     });
   });
 
   it('parses agent by ID', () => {
-    expect(parseSessionUri('yaar://sessions/current/agents/agent-123')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/agents/agent-123')).toEqual({
       subKind: 'agents',
       id: 'agent-123',
     });
   });
 
   it('parses agent with action', () => {
-    expect(parseSessionUri('yaar://sessions/current/agents/agent-123/interrupt')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/agents/agent-123/interrupt')).toEqual({
       subKind: 'agents',
       id: 'agent-123',
       action: 'interrupt',
@@ -204,53 +178,42 @@ describe('parseSessionUri', () => {
   });
 
   it('parses notifications', () => {
-    expect(parseSessionUri('yaar://sessions/current/notifications')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/notifications')).toEqual({
       subKind: 'notifications',
     });
   });
 
   it('parses notification with ID', () => {
-    expect(parseSessionUri('yaar://sessions/current/notifications/abc')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/notifications/abc')).toEqual({
       subKind: 'notifications',
       id: 'abc',
     });
   });
 
   it('parses prompts', () => {
-    expect(parseSessionUri('yaar://sessions/current/prompts')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/prompts')).toEqual({
       subKind: 'prompts',
     });
   });
 
   it('parses clipboard', () => {
-    expect(parseSessionUri('yaar://sessions/current/clipboard')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/clipboard')).toEqual({
       subKind: 'clipboard',
     });
   });
 
   it('parses monitor by ID', () => {
-    expect(parseSessionUri('yaar://sessions/current/monitors/0')).toEqual({
-      resource: 'current',
+    expect(parseSessionUri('yaar://session/monitors/0')).toEqual({
       subKind: 'monitors',
       id: '0',
     });
   });
 
-  it('parses non-current resource as session ID', () => {
-    expect(parseSessionUri('yaar://sessions/2026-03-10_13-39-16')).toEqual({
-      resource: '2026-03-10_13-39-16',
-    });
-  });
-
   it('returns null for unknown subKind', () => {
-    expect(parseSessionUri('yaar://sessions/current/unknown')).toBeNull();
+    expect(parseSessionUri('yaar://session/unknown')).toBeNull();
   });
 
-  it('returns null for non-sessions URI', () => {
+  it('returns null for non-session URI', () => {
     expect(parseSessionUri('yaar://apps/sessions')).toBeNull();
   });
 
@@ -261,54 +224,48 @@ describe('parseSessionUri', () => {
 
 describe('buildSessionUri', () => {
   it('builds current session URI', () => {
-    expect(buildSessionUri('current')).toBe('yaar://sessions/current');
+    expect(buildSessionUri()).toBe('yaar://session/');
   });
 
   it('builds agents list URI', () => {
-    expect(buildSessionUri('current', 'agents')).toBe('yaar://sessions/current/agents');
+    expect(buildSessionUri('agents')).toBe('yaar://session/agents');
   });
 
   it('builds agent by ID URI', () => {
-    expect(buildSessionUri('current', 'agents', 'agent-123')).toBe(
-      'yaar://sessions/current/agents/agent-123',
-    );
+    expect(buildSessionUri('agents', 'agent-123')).toBe('yaar://session/agents/agent-123');
   });
 
   it('builds agent with action URI', () => {
-    expect(buildSessionUri('current', 'agents', 'agent-123', 'interrupt')).toBe(
-      'yaar://sessions/current/agents/agent-123/interrupt',
+    expect(buildSessionUri('agents', 'agent-123', 'interrupt')).toBe(
+      'yaar://session/agents/agent-123/interrupt',
     );
   });
 
   it('builds notifications URI', () => {
-    expect(buildSessionUri('current', 'notifications')).toBe(
-      'yaar://sessions/current/notifications',
-    );
+    expect(buildSessionUri('notifications')).toBe('yaar://session/notifications');
   });
 
   it('builds notification with ID URI', () => {
-    expect(buildSessionUri('current', 'notifications', 'abc')).toBe(
-      'yaar://sessions/current/notifications/abc',
-    );
+    expect(buildSessionUri('notifications', 'abc')).toBe('yaar://session/notifications/abc');
   });
 
   it('builds clipboard URI', () => {
-    expect(buildSessionUri('current', 'clipboard')).toBe('yaar://sessions/current/clipboard');
+    expect(buildSessionUri('clipboard')).toBe('yaar://session/clipboard');
   });
 
   it('builds monitor URI', () => {
-    expect(buildSessionUri('current', 'monitors', '0')).toBe('yaar://sessions/current/monitors/0');
+    expect(buildSessionUri('monitors', '0')).toBe('yaar://session/monitors/0');
   });
 
   it('roundtrips agents with parseSessionUri', () => {
-    const uri = buildSessionUri('current', 'agents', 'agent-1');
+    const uri = buildSessionUri('agents', 'agent-1');
     const parsed = parseSessionUri(uri);
-    expect(parsed).toEqual({ resource: 'current', subKind: 'agents', id: 'agent-1' });
+    expect(parsed).toEqual({ subKind: 'agents', id: 'agent-1' });
   });
 
   it('roundtrips notifications with parseSessionUri', () => {
-    const uri = buildSessionUri('current', 'notifications', 'notif-42');
+    const uri = buildSessionUri('notifications', 'notif-42');
     const parsed = parseSessionUri(uri);
-    expect(parsed).toEqual({ resource: 'current', subKind: 'notifications', id: 'notif-42' });
+    expect(parsed).toEqual({ subKind: 'notifications', id: 'notif-42' });
   });
 });

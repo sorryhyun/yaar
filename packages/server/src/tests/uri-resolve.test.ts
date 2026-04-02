@@ -89,14 +89,13 @@ describe('resolveUri', () => {
   });
 
   it('resolves session URIs', () => {
-    const agents = resolveUri('yaar://sessions/current/agents');
+    const agents = resolveUri('yaar://session/agents');
     expect(agents?.kind).toBe('session');
     if (agents?.kind === 'session') {
-      expect(agents.resource).toBe('current');
       expect(agents.subKind).toBe('agents');
     }
 
-    const specific = resolveUri('yaar://sessions/current/agents/agent-0-123');
+    const specific = resolveUri('yaar://session/agents/agent-0-123');
     expect(specific?.kind).toBe('session');
     if (specific?.kind === 'session') {
       expect(specific.id).toBe('agent-0-123');
@@ -104,19 +103,15 @@ describe('resolveUri', () => {
   });
 
   it('resolves window URIs', () => {
-    const win = resolveUri('yaar://monitors/0/my-window');
+    const win = resolveUri('yaar://windows/my-window');
     expect(win?.kind).toBe('window');
     if (win?.kind === 'window') {
-      expect(win.monitorId).toBe('0');
       expect(win.windowId).toBe('my-window');
     }
+  });
 
-    // Bare window URI (no monitor)
-    const bare = resolveUri('yaar://windows/my-window');
-    expect(bare?.kind).toBe('window');
-    if (bare?.kind === 'window') {
-      expect(bare.windowId).toBe('my-window');
-    }
+  it('returns null for removed monitors authority', () => {
+    expect(resolveUri('yaar://monitors/0/my-window')).toBeNull();
   });
 
   it('resolves storage URIs', () => {
@@ -133,7 +128,7 @@ describe('resolveUri', () => {
   });
 
   it('resolves bare authority URIs', () => {
-    for (const authority of ['apps', 'storage', 'config', 'sessions', 'skills']) {
+    for (const authority of ['apps', 'storage', 'config', 'session', 'skills']) {
       const r = resolveUri(`yaar://${authority}`);
       expect(r, `yaar://${authority} should resolve`).not.toBeNull();
     }

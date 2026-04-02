@@ -150,7 +150,7 @@ export function registerWindowHandlers(
         const pool = session.getPool();
         if (!pool) return error('Session not initialized.');
 
-        const monitorId = resolved.monitorId;
+        const monitorId = getMonitorId() ?? '0';
         const stats = pool.getStats();
         const monitorHandles = new Set(getWindowState().handleMap.listByMonitor(monitorId));
         const windows = getWindowState()

@@ -1,5 +1,5 @@
 /**
- * YAAR URI scheme — unified addressing for apps, storage, monitors, and window resources.
+ * YAAR URI scheme — unified addressing for apps, storage, windows, and session resources.
  *
  * Format: yaar://{authority}/{path}
  *
@@ -7,29 +7,27 @@
  *   yaar://apps/{appId}                → app (resolved to iframe URL)
  *   yaar://storage/{path}              → persistent storage file
  *
- * File-operation URIs (for basic MCP tools):
- *   yaar://storage/{path}              → persistent storage file
- *
  * Window addressing:
- *   yaar://monitors/{monitorId}/{windowId}      → window on a monitor
+ *   yaar://windows/{windowId}                   → window (monitor inferred from context)
+ *   yaar://windows/{windowId}/state/{key}       → window state (app-protocol)
+ *   yaar://windows/{windowId}/commands/{key}    → window command (app-protocol)
  *
- * Session-scoped resources (consolidated under yaar://sessions/current/...):
- *   yaar://sessions/current/agents/{id}              → agent by ID
- *   yaar://sessions/current/agents/{id}/interrupt     → agent action
- *   yaar://sessions/current/notifications/{id}        → notification by ID
- *   yaar://sessions/current/prompts                   → user prompts
- *   yaar://sessions/current/clipboard                 → clipboard
- *   yaar://sessions/current/monitors/{monitorId}      → monitor by ID
+ * Session-scoped resources (yaar://session/...):
+ *   yaar://session/agents/{id}              → agent by ID
+ *   yaar://session/agents/{id}/interrupt     → agent action
+ *   yaar://session/notifications/{id}        → notification by ID
+ *   yaar://session/prompts                   → user prompts
+ *   yaar://session/clipboard                 → clipboard
+ *   yaar://session/monitors/{monitorId}      → monitor by ID
  */
 
 export type YaarAuthority =
   | 'apps'
   | 'storage'
-  | 'monitors'
   | 'windows'
   | 'config'
   | 'browser'
-  | 'sessions'
+  | 'session'
   | 'history'
   | 'skills'
   | 'mcp';
@@ -39,8 +37,7 @@ export interface ParsedYaarUri {
   path: string;
 }
 
-const YAAR_RE =
-  /^yaar:\/\/(apps|storage|monitors|windows|config|browser|sessions|history|skills|mcp)\/(.*)$/;
+const YAAR_RE = /^yaar:\/\/(apps|storage|windows|config|browser|session|history|skills|mcp)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -74,11 +71,10 @@ export function resolveContentUri(uri: string): string | null {
     }
     case 'storage':
       return `/api/storage/${parsed.path}`;
-    case 'monitors':
     case 'windows':
     case 'config':
     case 'browser':
-    case 'sessions':
+    case 'session':
     case 'history':
     case 'skills':
     case 'mcp':
@@ -165,38 +161,7 @@ export function buildFileUri(_authority: 'storage', path: string): string {
   return `yaar://storage/${path}`;
 }
 
-// ============ Window URIs ============
-
-/**
- * Build a yaar:// window URI from monitor and window IDs.
- *   buildWindowUri('0', 'win-storage') → 'yaar://monitors/0/win-storage'
- */
-export function buildWindowUri(monitorId: string, windowId: string): string {
-  return `yaar://monitors/${monitorId}/${windowId}`;
-}
-
-export interface ParsedWindowUri {
-  monitorId: string;
-  windowId: string;
-  subPath?: string;
-}
-
-/**
- * Parse a yaar:// window URI into monitor and window IDs, with optional sub-path.
- *   parseWindowUri('yaar://monitors/0/win-storage') → { monitorId: '0', windowId: 'win-storage' }
- *   parseWindowUri('yaar://monitors/0/win-excel/state/cells') → { monitorId: '0', windowId: 'win-excel', subPath: 'state/cells' }
- */
-export function parseWindowUri(uri: string): ParsedWindowUri | null {
-  const match = uri.match(/^yaar:\/\/monitors\/([^/]+)\/([^/]+)(?:\/(.+))?$/);
-  if (!match) return null;
-  return {
-    monitorId: match[1],
-    windowId: match[2],
-    subPath: match[3] || undefined,
-  };
-}
-
-// ============ Bare Window URIs (yaar://windows/) ============
+// ============ Window URIs (yaar://windows/) ============
 
 export interface ParsedBareWindowUri {
   windowId: string;

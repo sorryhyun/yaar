@@ -120,8 +120,8 @@ Apps communicate with the server via 5 URI verbs: `read`, `list`, `invoke`, `des
 
 When building apps that use `yaar://` URIs (e.g., session-logs, storage browser), use these commands to discover URI patterns and available verbs:
 
-- `command("describeUri", { uri: "yaar://sessions/" })` — returns supported verbs, description, invoke schema
-- `command("listUri", { uri: "yaar://sessions/" })` — lists child resources
+- `command("describeUri", { uri: "yaar://session/" })` — returns supported verbs, description, invoke schema
+- `command("listUri", { uri: "yaar://session/" })` — lists child resources
 
 `describe` works on any `yaar://` URI without needing permissions — use it to verify URI patterns before writing code.
 
@@ -134,18 +134,18 @@ When building apps that use `yaar://` URIs (e.g., session-logs, storage browser)
 | `yaar://storage/` | File storage |
 | `yaar://windows/` | Window management |
 | `yaar://config/` | Settings, hooks, app config |
-| `yaar://sessions/` | Session listing and transcripts |
+| `yaar://session/` | Session listing and transcripts |
 
-### `yaar://sessions/` URIs
+### `yaar://session/` URIs
 
 | Verb | URI | Description |
 |------|-----|-------------|
-| `list` | `yaar://sessions/` | List all past sessions (sessionId, createdAt, provider, agentCount) |
-| `read` | `yaar://sessions/current` | Current system info (platform, arch, memory, uptime, cwd) |
-| `invoke` | `yaar://sessions/current` | `{ action: "memorize", content: "..." }` — save notes across sessions |
-| `read` | `yaar://sessions/current/monitors` | List active monitors (monitorId, windowCount) |
-| `read` | `yaar://sessions/current/context` | Context tape summary (message counts by source) |
-| `read` | `yaar://sessions/{id}` | Read a specific session transcript |
+| `list` | `yaar://session/` | List all past sessions (sessionId, createdAt, provider, agentCount) |
+| `read` | `yaar://session` | Current system info (platform, arch, memory, uptime, cwd) |
+| `invoke` | `yaar://session` | `{ action: "memorize", content: "..." }` — save notes across sessions |
+| `read` | `yaar://session/monitors` | List active monitors (monitorId, windowCount) |
+| `read` | `yaar://session/context` | Context tape summary (message counts by source) |
+| `read` | `yaar://history/{id}` | Read a specific session transcript |
 
 ## Preview
 
@@ -176,7 +176,7 @@ Use `command("deploy", { appId, name?, icon?, description? })`.
 {
   "permissions": [
     "yaar://storage/",
-    { "uri": "yaar://sessions/", "verbs": ["list", "read"] }
+    { "uri": "yaar://session/", "verbs": ["list", "read"] }
   ]
 }
 ```
