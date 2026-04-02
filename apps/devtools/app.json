@@ -4,6 +4,7 @@
   "icon": "🛠️",
   "createShortcut": false,
   "capture": "dom",
+  "agentType": "opus",
   "bundles": [
     "yaar-dev"
   ],

@@ -1,7 +1,8 @@
 /**
- * fetcher.ts — Mobile DCinside comic gallery scraper
+ * fetcher.ts — DCinside comic gallery scraper
  *
- * Targets m.dcinside.com/board/comic_new2 (mobile).
+ * List page: desktop gall.dcinside.com (table-based HTML)
+ * Detail page: mobile m.dcinside.com (for content + comments)
  * Uses yaar-web headless browser to get HTML, then parses client-side with DOMParser.
  */
 import type { Post, Comment, TabMode } from './types';
@@ -9,182 +10,116 @@ import * as web from '@bundled/yaar-web';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
 
 const GALLERY_ID = 'comic_new6';
-const GALLERY_BASE = `https://m.dcinside.com/board/${GALLERY_ID}`;
+const GALLERY_LIST_BASE = 'https://gall.dcinside.com/board/lists/';
+const MOBILE_POST_BASE = `https://m.dcinside.com/board/${GALLERY_ID}`;
 
 function buildListUrl(mode: TabMode, page: number): string {
   const params = new URLSearchParams();
+  params.set('id', GALLERY_ID);
   if (mode === 'recommend') params.set('exception_mode', 'recommend');
   if (page > 1) params.set('page', String(page));
-  const qs = params.toString();
-  return qs ? `${GALLERY_BASE}?${qs}` : GALLERY_BASE;
+  return `${GALLERY_LIST_BASE}?${params.toString()}`;
 }
 
-async function browseUrl(url: string, tabId: string): Promise<string> {
-  await openOrNavigate(url, tabId, { visible: false, mobile: true });
+async function browseUrl(url: string, tabId: string, mobile = true): Promise<string> {
+  await openOrNavigate(url, tabId, { visible: false, mobile });
   const result = (await web.html({ browserId: tabId })) as { ok: boolean; data?: string };
   return result?.data ?? '';
 }
 
-function isMetaLine(line: string): boolean {
-  if (line.length <= 1) return true;
-  if (/^\d+$/.test(line)) return true;
-  if (/^\d{2}:\d{2}/.test(line)) return true;
-  if (/^\d{4}\.\d{2}/.test(line)) return true;
-  if (/^\d{2}\.\d{2}/.test(line)) return true;
-  if (/^조회/.test(line)) return true;
-  if (/^추천/.test(line)) return true;
-  if (line === '이미지' || line === '동영상' || line === '설문' || line === 'AD') return true;
-  return false;
-}
-
-const META_SELECTORS = [
-  '.view-cnt', '.recommend-cnt', '.num-date', '.gall-num', '.gall-cnt',
-  '.gall-writer', '.gall-info', '.rply-num', '.reply-num',
-  '[class*="view"]', '[class*="recom"]', '[class*="cnt"]',
-  '[class*="writer"]', '[class*="info"]', '[class*="num"]',
-].join(', ');
+// ============================================================
+// Post list (desktop HTML — table-based)
+// ============================================================
 
 export async function fetchPosts(mode: TabMode, page = 1): Promise<Post[]> {
   const url = buildListUrl(mode, page);
-  const html = await browseUrl(url, MAIN_TAB);
+  const html = await browseUrl(url, MAIN_TAB, false); // desktop mode
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
-  const listEl = doc.querySelector('ul.gall-detail-lst');
-  if (!listEl) return [];
-  const liItems = Array.from(listEl.querySelectorAll(':scope > li'));
+  // Desktop DCinside uses a table with tr.ub-content rows
+  let rows = Array.from(doc.querySelectorAll('tr.ub-content.us-post'));
+  if (rows.length === 0) {
+    // Fallback: try any tr.ub-content
+    rows = Array.from(doc.querySelectorAll('tr.ub-content'));
+  }
 
   const posts: Post[] = [];
 
-  for (const li of liItems) {
-    if (li.classList.contains('advert') || li.querySelector('.ad-wrap, .aderror')) continue;
+  for (const tr of rows) {
+    // Post number from td.gall_num
+    const numEl = tr.querySelector('td.gall_num');
+    const num = numEl ? (numEl.textContent ?? '').trim() : '';
+    if (!num || !/^\d+$/.test(num)) continue; // Skip notices, ads, etc.
 
-    const aEl =
-      (li.querySelector(`a[href*="/board/"][href*="/${GALLERY_ID}/"]:not([href*="#"])`) as HTMLAnchorElement | null) ??
-      (li.querySelector('a[href*="/board/"]') as HTMLAnchorElement | null);
-    if (!aEl) continue;
+    // Title from td.gall_tit
+    const titCell = tr.querySelector('td.gall_tit');
+    if (!titCell) continue;
+    const titleLink = titCell.querySelector('a:not(.reply_numbox)') as HTMLAnchorElement | null;
+    if (!titleLink) continue;
 
-    const href = aEl.getAttribute('href') ?? '';
-    const urlMatch = href.match(/\/board\/[^/]+\/(\d+)\/?(?:\?.*)?$/);
-    if (!urlMatch) continue;
-    const num = urlMatch[1];
-    if (!num || !/^\d+$/.test(num)) continue;
-
-    const fullUrl = href.startsWith('http') ? href : 'https://m.dcinside.com' + href;
-
-    // --- Views & recommend ---
-    let views = '0';
-    let recommend = '0';
-    let comments = '0';
-
-    const viewEl = li.querySelector('.view-cnt');
-    const recEl = li.querySelector('.recommend-cnt');
-    const cmtEl = li.querySelector('.rply-num') ?? li.querySelector('.reply-num') ?? li.querySelector('[class*="rply"]');
-
-    if (viewEl) { const m = (viewEl.textContent ?? '').match(/(\d+)/); if (m) views = m[1]; }
-    if (recEl)  { const m = (recEl.textContent ?? '').match(/(\d+)/);  if (m) recommend = m[1]; }
-    if (cmtEl)  { const m = (cmtEl.textContent ?? '').match(/(\d+)/);  if (m) comments = m[1]; }
-
-    // Regex fallback
-    if (views === '0' && recommend === '0') {
-      const liText = li.textContent ?? '';
-      const viewsMatch = liText.match(/조회\s*(\d+)/);
-      const recMatch   = liText.match(/추천\s*(\d+)/);
-      if (viewsMatch) views = viewsMatch[1];
-      if (recMatch)   recommend = recMatch[1];
-    }
-
-    // --- Image flag ---
-    const hasImage = !!li.querySelector('.icon-img, .thumb, img.thumb, [class*="img"]') ||
-      (li.textContent ?? '').includes('이미지');
-
-    // --- Title ---
-    let titleRaw = '';
-    let categoryFromFlair = '';
-
-    const titleEl = aEl.querySelector('.gall-tit-txt');
-    if (titleEl) {
-      const flairEl = titleEl.querySelector('em.sp-flair, .gall-flair, [class*="flair"]');
-      if (flairEl) { const ft = (flairEl.textContent ?? '').trim(); if (ft) categoryFromFlair = ft; }
-
-      const clone = titleEl.cloneNode(true) as Element;
-      clone.querySelectorAll(META_SELECTORS).forEach((el) => el.remove());
-      clone.querySelectorAll('em.sp-flair, .gall-flair, [class*="flair"]').forEach((el) => el.remove());
-      clone.querySelectorAll('em, i, b').forEach((el) => {
-        if (isMetaLine((el.textContent ?? '').trim())) el.remove();
-      });
-      titleRaw = (clone.textContent ?? '').trim();
-    }
-
-    if (!titleRaw) {
-      const aClone = aEl.cloneNode(true) as Element;
-      aClone.querySelectorAll(META_SELECTORS).forEach((el) => el.remove());
-      aClone.querySelectorAll('span, em, i, b').forEach((el) => {
-        const t = (el.textContent ?? '').trim();
-        if (/^조회/.test(t) || /^추천/.test(t) || isMetaLine(t)) el.remove();
-      });
-      const contentLines = (aClone.textContent ?? '')
-        .split(/\n/).map((s) => s.trim()).filter(Boolean).filter((l) => !isMetaLine(l));
-      if (contentLines.length > 0) {
-        titleRaw = contentLines.reduce((a, b) => (b.length > a.length ? b : a), contentLines[0]);
-      }
-      if (!titleRaw) titleRaw = '(제목 없음)';
-    }
+    // Extract title text (excluding icon elements)
+    const titleClone = titleLink.cloneNode(true) as Element;
+    titleClone.querySelectorAll('em, .icon_img, .icon_txt').forEach((el) => el.remove());
+    let titleRaw = (titleClone.textContent ?? '').trim();
+    if (!titleRaw) titleRaw = '(제목 없음)';
 
     // Category from [bracket] prefix
-    const titleCategoryMatch = titleRaw.match(/^\[([^\]]+)\]/);
-    const categoryFromTitle = titleCategoryMatch ? titleCategoryMatch[1].trim() : '';
-    const title = titleCategoryMatch ? titleRaw.slice(titleCategoryMatch[0].length).trim() : titleRaw;
+    let category: string | undefined;
+    const catMatch = titleRaw.match(/^\[([^\]]+)\]/);
+    if (catMatch) {
+      category = catMatch[1].trim();
+      titleRaw = titleRaw.slice(catMatch[0].length).trim();
+    }
+    const title = titleRaw;
 
-    // --- Author & date ---
+    // Extract post number from href and build mobile URL for detail view
+    const href = titleLink.getAttribute('href') ?? '';
+    const noMatch = href.match(/[?&]no=(\d+)/);
+    const postNum = noMatch ? noMatch[1] : num;
+    const fullUrl = `${MOBILE_POST_BASE}/${postNum}`;
+
+    // Comment count from reply_numbox
+    const replyEl = titCell.querySelector('.reply_numbox');
+    let comments = '0';
+    if (replyEl) {
+      const m = (replyEl.textContent ?? '').match(/(\d+)/);
+      if (m) comments = m[1];
+    }
+
+    // Has image
+    const hasImage = !!titCell.querySelector('.icon_pic, .icon_img, .icon_movie');
+
+    // Writer from td.gall_writer
+    const writerCell = tr.querySelector('td.gall_writer');
     let author = '익명';
-    let date = '';
-    const category: string | undefined = categoryFromTitle || categoryFromFlair || undefined;
-
-    const nonAnchorNickEls = Array.from(li.querySelectorAll('[data-nick]')).filter((el) => el.tagName !== 'A');
-    const writerEl: Element | null =
-      nonAnchorNickEls.find((el) => (el.getAttribute('data-nick') ?? '').trim() !== '') ??
-      li.querySelector('.gall-writer') ??
-      nonAnchorNickEls[0] ?? null;
-    const dateEl = li.querySelector('.num-date');
-
-    if (writerEl) {
-      const dataNick = writerEl.getAttribute('data-nick') ?? '';
+    if (writerCell) {
+      const dataNick = writerCell.getAttribute('data-nick') ?? '';
       if (dataNick) {
         author = dataNick;
       } else {
-        const writerClone = writerEl.cloneNode(true) as Element;
-        writerClone.querySelectorAll('img, i, em').forEach((e) => {
-          if (isMetaLine((e.textContent ?? '').trim())) e.remove();
-        });
-        author = (writerClone.textContent ?? '').trim() || '익명';
+        const nickEl = writerCell.querySelector('.nickname em, .nickname, .nick');
+        if (nickEl) author = (nickEl.textContent ?? '').trim() || '익명';
       }
     }
-    if (dateEl) date = (dateEl.textContent ?? '').trim();
 
-    // .ginfo fallback
-    if (author === '익명') {
-      const ginfoEl = li.querySelector('.ginfo');
-      if (ginfoEl) {
-        let ginfoText = (ginfoEl.textContent ?? '').trim();
-        ginfoText = ginfoText.replace(/\s*조회\s*\d+.*$/, '');
-        ginfoText = ginfoText.replace(/\s+\d{2}[:.:]\d{2}\s*$/, '');
-        ginfoText = ginfoText.replace(/\s+\d{4}\.\d{2}\.\d{2}\s*$/, '');
-        ginfoText = ginfoText.replace(/\s+\d{2}\.\d{2}\s*$/, '').trim();
-        if (ginfoText) {
-          const parts = ginfoText.split(/\s+/);
-          if (parts.length >= 2 && /[가-힣]/.test(parts[0]) && !/^\d/.test(parts[0]) && parts[0].length <= 8) {
-            author = parts.slice(1).join(' ');
-          } else {
-            author = ginfoText;
-          }
-        }
-      }
-    }
+    // Date from td.gall_date
+    const dateCell = tr.querySelector('td.gall_date');
+    const date = dateCell
+      ? (dateCell.getAttribute('title') ?? dateCell.textContent ?? '').trim()
+      : '';
+
+    // Views from td.gall_count
+    const viewsCell = tr.querySelector('td.gall_count');
+    const views = viewsCell ? (viewsCell.textContent ?? '').trim() : '0';
+
+    // Recommend from td.gall_recommend
+    const recCell = tr.querySelector('td.gall_recommend');
+    const recommend = recCell ? (recCell.textContent ?? '').trim() : '0';
 
     posts.push({
-      id: `post-${num}`,
-      num,
+      id: `post-${postNum}`,
+      num: postNum,
       title,
       url: fullUrl,
       category,
@@ -202,7 +137,7 @@ export async function fetchPosts(mode: TabMode, page = 1): Promise<Post[]> {
 }
 
 // ============================================================
-// Comment parsing
+// Comment parsing (mobile HTML)
 // ============================================================
 
 function parseCommentItem(li: Element, idx: number): Comment | null {
@@ -269,7 +204,7 @@ function parseComments(doc: Document): Comment[] {
 }
 
 // ============================================================
-// Post detail
+// Post detail (mobile HTML)
 // ============================================================
 
 const CONTENT_SELECTORS = ['.write_div', '.thum-txt', '.view_content_wrap', '.gallview_contents', '#readBody'];

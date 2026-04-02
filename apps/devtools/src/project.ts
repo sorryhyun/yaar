@@ -426,7 +426,7 @@ export async function readFileContent(
     const sliced = allLines.slice(start - 1, end);
     const width = String(totalLines).length;
     const numbered = sliced
-      .map((line, i) => `${String(start + i).padStart(width)}│${line}`)
+      .map((line, i) => `${String(start + i).padStart(width)}\t│${line}`)
       .join('\n');
     const rangeTag = (opts?.startLine || opts?.endLine) ? ` [${start}-${end}]` : '';
     const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
