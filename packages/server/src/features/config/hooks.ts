@@ -19,6 +19,8 @@ export interface HookFilter {
   uri?: string | string[];
   /** Payload action filter: 'compile', 'deploy', 'write', etc. */
   action?: string | string[];
+  /** Non-verb tool name filter: 'WebSearch', etc. */
+  toolName?: string | string[];
 }
 
 export interface Hook {
@@ -141,6 +143,7 @@ export async function getToolUseHooks(ctx: ToolUseContext): Promise<Hook[]> {
     const f = h.filter;
     if (!f) return true; // no filter = matches everything
 
+    if (f.toolName && !matchesFilter(ctx.toolName, f.toolName)) return false;
     if (f.verb && (!ctx.verb || !matchesFilter(ctx.verb, f.verb))) return false;
     if (f.uri && (!ctx.uri || !matchesFilter(ctx.uri, f.uri))) return false;
     if (f.action && (!ctx.action || !matchesFilter(ctx.action, f.action))) return false;

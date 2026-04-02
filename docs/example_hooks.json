@@ -17,7 +17,7 @@
           "variant": "info"
         }
       },
-      "label": "Toast on clone",
+      "label": "Toast on app clone",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     },
@@ -38,73 +38,33 @@
           "variant": "info"
         }
       },
-      "label": "Toast on write",
+      "label": "Toast on app write",
       "enabled": true,
       "createdAt": "2025-01-01T00:00:00.000Z"
     },
     {
-      "id": "hook-3",
+      "id": "hook-5",
       "event": "tool_use",
       "filter": {
         "verb": "invoke",
-        "uri": "yaar://apps/*",
-        "action": "compile"
+        "uri": "yaar://windows/*",
+        "action": "app_command"
       },
       "action": {
         "type": "os_action",
         "payload": {
           "type": "toast.show",
-          "id": "dev-compile",
-          "message": "Compiling app...",
+          "id": "window-app-cmd",
+          "message": "Sending command to app...",
           "variant": "info"
         }
       },
-      "label": "Toast on compile",
+      "label": "Toast on monitor→app command via verb",
       "enabled": true,
-      "createdAt": "2025-01-01T00:00:00.000Z"
+      "createdAt": "2026-04-02T00:00:00.000Z"
     },
     {
-      "id": "hook-4",
-      "event": "tool_use",
-      "filter": {
-        "verb": "invoke",
-        "uri": "yaar://apps/*",
-        "action": "deploy"
-      },
-      "action": {
-        "type": "os_action",
-        "payload": {
-          "type": "toast.show",
-          "id": "dev-deploy",
-          "message": "App deployed!",
-          "variant": "success"
-        }
-      },
-      "label": "Toast on deploy",
-      "enabled": true,
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    },
-    {
-      "id": "hook-6",
-      "event": "tool_use",
-      "filter": {
-        "toolName": "WebSearch"
-      },
-      "action": {
-        "type": "os_action",
-        "payload": {
-          "type": "toast.show",
-          "id": "web-search",
-          "message": "Running web search...",
-          "variant": "info"
-        }
-      },
-      "label": "Toast on web search",
-      "enabled": true,
-      "createdAt": "2026-02-15T07:20:39.284Z"
-    },
-    {
-      "id": "hook-7",
+      "id": "hook-8",
       "event": "launch",
       "action": {
         "type": "os_action",
@@ -112,19 +72,28 @@
           "type": "window.create",
           "windowId": "dock",
           "title": "Dock",
-          "bounds": { "x": 0, "y": 0, "w": 300, "h": 48 },
+          "bounds": {
+            "y": 0,
+            "w": 180,
+            "h": 96
+          },
           "content": {
             "renderer": "iframe",
             "data": "/api/apps/dock/dist/index.html"
           },
           "frameless": true,
-          "windowStyle": { "position": "fixed", "top": 0, "right": 0 }
+          "windowStyle": {
+            "position": "fixed",
+            "top": 0,
+            "right": 0,
+            "left": "auto"
+          }
         }
       },
       "label": "Open Dock on startup",
       "enabled": true,
-      "createdAt": "2026-02-16T04:41:46.506Z"
+      "createdAt": "2026-03-20T07:04:13.624Z"
     }
   ],
-  "idCounter": 7
+  "idCounter": 8
 }

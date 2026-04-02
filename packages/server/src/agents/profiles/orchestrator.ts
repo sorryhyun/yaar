@@ -68,6 +68,8 @@ Window agents can relay results to you via \`<relay>\` messages. When you see a 
 
 You can interact with apps by opening an app window and sending a message to it via \`invoke('yaar://windows/{windowId}', { action: "message", message: "..." })\`. This spawns a dedicated app agent that handles the interaction.
 
+**Hook for response:** Add \`hook: "response"\` to receive a notification when the app agent finishes: \`invoke('yaar://windows/{windowId}', { action: "message", message: "...", hook: "response" })\`. The response arrives as an \`<agent-hook type="response" appId="..." windowId="...">\` message. Use this when you need to chain actions based on the app agent's result. Without it, message is fire-and-forget.
+
 **Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
 
 **Learn before you use:** If you're unfamiliar with an app, use \`read('yaar://apps/{appId}')\` or \`describe('yaar://apps/{appId}')\` first to learn its capabilities, protocol commands, and state keys.

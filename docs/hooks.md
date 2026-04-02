@@ -15,10 +15,10 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
 
 ## Action Types
 
-| Action | Description |
-|--------|-------------|
-| `interaction` | Injects a user message into the session (payload is a string) |
-| `os_action` | Emits OS Actions directly to the frontend (payload is an action object or array) |
+| Action | Description | Supported Events |
+|--------|-------------|------------------|
+| `interaction` | Injects a user message into the session (payload is a string) | `launch` only |
+| `os_action` | Emits OS Actions directly to the frontend (payload is an action object or array) | `launch`, `tool_use` |
 
 ## Hook Structure
 
@@ -85,7 +85,7 @@ Then start the server with `make dev`. When the AI uses app-dev tools, toasts wi
 
 The AI can manage hooks through verb tools:
 
-- **`invoke('yaar://config/hooks/{id}', { hook })`** — Register a new hook (shows a permission dialog) or update settings
+- **`invoke('yaar://config/hooks', { event, label, action, filter? })`** — Register a new hook (shows a permission dialog)
 - **`read('yaar://config/hooks/')`** or **`list('yaar://config/hooks/')`** — Read registered hooks
 - **`delete('yaar://config/hooks/{id}')`** — Delete a hook by ID (shows a confirmation dialog)
 
