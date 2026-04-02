@@ -5,3 +5,5 @@ Use the devtools app for all app development tasks — creating, editing, compil
 2. Then, open devtools (or message the existing devtools window) with a clear description of the problem and what you observed — let the devtools agent diagnose and fix it.
 
 Do NOT read source code or attempt fixes yourself — always delegate development work to devtools.
+
+Note that source code of each app cannot be accessed by `yaar://{storage, apps}` since it's not in there.

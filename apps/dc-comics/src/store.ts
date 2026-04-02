@@ -1,5 +1,5 @@
 import { createStore } from '@bundled/solid-js/store';
-import type { Post, Comment, TabMode } from './types';
+import type { Post, Comment, TabMode, Subscription } from './types';
 
 export const [state, setState] = createStore({
   // Feed
@@ -8,7 +8,7 @@ export const [state, setState] = createStore({
   error: null as string | null,
   lastUpdated: null as Date | null,
   page: 1,
-  tabMode: 'all' as TabMode,
+  tabMode: 'recommend' as TabMode,
 
   // Post detail
   selectedPost: null as Post | null,
@@ -19,4 +19,11 @@ export const [state, setState] = createStore({
   // Comments
   comments: [] as Comment[],
   showComments: false,
+
+  // Panel
+  activePanel: 'feed' as 'feed' | 'subscriptions',
+
+  // Subscriptions
+  subscriptions: [] as Subscription[],
+  selectedSub: null as Subscription | null,
 });

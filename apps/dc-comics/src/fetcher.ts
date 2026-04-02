@@ -8,7 +8,7 @@ import type { Post, Comment, TabMode } from './types';
 import * as web from '@bundled/yaar-web';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
 
-const GALLERY_ID = 'comic_new2';
+const GALLERY_ID = 'comic_new6';
 const GALLERY_BASE = `https://m.dcinside.com/board/${GALLERY_ID}`;
 
 function buildListUrl(mode: TabMode, page: number): string {

@@ -26,3 +26,26 @@ export type Comment = {
   nickType?: 'gonick' | 'nogonick' | 'sub-gonick';
   dcconSrc?: string;
 };
+
+export type SeriesLink = {
+  title: string;
+  url: string;
+};
+
+export type SeriesPost = {
+  id: string;
+  title: string;
+  date: string;
+  isNew: boolean;
+};
+
+export type Subscription = {
+  id: string;
+  title: string;
+  url: string;
+  gallId: string;
+  lastPostId: string;
+  subscribedAt: string;
+  unreadCount: number;
+  latestPosts: SeriesPost[];
+};

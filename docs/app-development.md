@@ -52,7 +52,7 @@ See the devtools app's `SKILL.md` for the full list of available commands.
 | Verb | URI | Description |
 |------|-----|-------------|
 | `list` | `yaar://skills` | List available skill topics |
-| `read` | `yaar://skills/{topic}` | Load reference docs (`app_dev`, `components`, `host_api`, `app_protocol`) |
+| `read` | `yaar://skills/{topic}` | Load reference docs (`components`, `config`, `marketplace`) |
 
 ## Development Workflow in Detail
 

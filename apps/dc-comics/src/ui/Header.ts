@@ -1,5 +1,5 @@
 import html from '@bundled/solid-js/html';
-import { state } from '../store';
+import { state, setState } from '../store';
 import { doRefresh, setTab } from '../actions';
 
 function fmtTime(d: Date | null): string {
@@ -17,13 +17,25 @@ export function Header() {
 
       <div class="tab-bar">
         <button
-          class=${() => `tab-btn${state.tabMode === 'all' ? ' active' : ''}`}
-          onclick=${() => setTab('all')}
+          class=${() => `tab-btn${state.activePanel === 'feed' && state.tabMode === 'all' ? ' active' : ''}`}
+          onclick=${() => { setState({ activePanel: 'feed' }); setTab('all'); }}
         >전체글</button>
         <button
-          class=${() => `tab-btn${state.tabMode === 'recommend' ? ' active' : ''}`}
-          onclick=${() => setTab('recommend')}
+          class=${() => `tab-btn${state.activePanel === 'feed' && state.tabMode === 'recommend' ? ' active' : ''}`}
+          onclick=${() => { setState({ activePanel: 'feed' }); setTab('recommend'); }}
         >개념글</button>
+        <button
+          class=${() => `tab-btn${state.activePanel === 'subscriptions' ? ' active' : ''}`}
+          onclick=${() => setState({ activePanel: 'subscriptions' })}
+        >
+          구독
+          ${() => {
+            const total = state.subscriptions.reduce((acc, s) => acc + s.unreadCount, 0);
+            return total > 0
+              ? html`<span class="unread-badge" style="margin-left:4px">${total}</span>`
+              : null;
+          }}
+        </button>
       </div>
 
       <div class="header-meta">

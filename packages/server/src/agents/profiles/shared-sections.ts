@@ -25,7 +25,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
 | \`yaar://session/\` | \`yaar://session\`, \`yaar://session/agents\`, \`yaar://session/monitors\`, \`yaar://session/prompts\`, \`yaar://session/context\` | read, invoke, list, delete |
-| \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/host_api\` | list, read |
+| \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/config\` | list, read |
 | \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |
 | \`yaar://mcp/\` | \`yaar://mcp/github\`, \`yaar://mcp/github/create_issue\` | list, describe, invoke |`;
 
@@ -99,7 +99,6 @@ read('yaar://skills/components')   # load a specific skill
 
 Available skills:
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
-- **host_api** — REST endpoints available to iframe apps
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
 - **marketplace** — App marketplace API for browsing and installing apps`;
 
