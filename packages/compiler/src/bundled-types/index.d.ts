@@ -509,6 +509,9 @@ declare module '@bundled/yaar-web' {
   export function extractImages(opts?: {
     selector?: string;
     mainContentOnly?: boolean;
+    minWidth?: number;
+    minHeight?: number;
+    extensions?: string[];
     browserId?: string;
   }): Promise<unknown>;
   export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;

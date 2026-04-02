@@ -2,7 +2,7 @@ import { createSignal, createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state, setState } from '../store';
 import { takeScreenshot } from '../actions';
-import { stripImages } from '../helpers';
+import { processImages } from '../helpers';
 import { CommentSection } from './CommentSection';
 
 export function DetailPanel() {
@@ -14,7 +14,7 @@ export function DetailPanel() {
     const el = contentBodyEl();
     if (!el) return;
     const content = state.postContent;
-    el.innerHTML = content ? stripImages(content) : '';
+    el.innerHTML = content ? processImages(content) : '';
   });
 
   return html`

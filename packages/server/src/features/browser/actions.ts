@@ -359,7 +359,27 @@ export async function handleExtractImages(browserId: string, p: Payload): Promis
     p.mainContentOnly && !p.selector
       ? await findMainContent(session)
       : (p.selector as string | undefined);
-  const images = await session.extractImages(effectiveSelector ?? undefined);
+  let images = await session.extractImages(effectiveSelector ?? undefined);
+
+  // Apply size filters
+  const minW = (p.minWidth as number) || 10;
+  const minH = (p.minHeight as number) || 10;
+  images = images.filter((img) => img.width >= minW && img.height >= minH);
+
+  // Apply extension filter
+  if (Array.isArray(p.extensions) && p.extensions.length > 0) {
+    const exts = new Set((p.extensions as string[]).map((e) => e.toLowerCase().replace(/^\./, '')));
+    images = images.filter((img) => {
+      try {
+        const pathname = new URL(img.src).pathname;
+        const ext = pathname.split('.').pop()?.toLowerCase();
+        return ext && exts.has(ext);
+      } catch {
+        return false;
+      }
+    });
+  }
+
   if (images.length === 0) return ok('No images found.');
 
   // Separate images that were successfully captured vs cross-origin failures
@@ -382,13 +402,17 @@ export async function handleExtractImages(browserId: string, p: Payload): Promis
 
   if (captured.length === 0) return ok(text);
 
-  return okWithImages(
-    text,
-    captured.map((img) => ({
-      data: img.dataUrl!.replace(/^data:image\/\w+;base64,/, ''),
-      mimeType: 'image/png',
-    })),
-  );
+  return {
+    content: [
+      { type: 'text' as const, text },
+      ...captured.map((img) => ({
+        type: 'image' as const,
+        src: img.src,
+        data: img.dataUrl!.replace(/^data:image\/\w+;base64,/, ''),
+        mimeType: 'image/png',
+      })),
+    ],
+  };
 }
 
 export async function handleGetCookies(browserId: string, p: Payload): Promise<VerbResult> {

@@ -30,7 +30,7 @@ function CommentItem(props: { comment: Comment }) {
       </div>
       <div class="comment-body">
         ${() => c.dcconSrc
-          ? html`<img class="comment-dccon" src=${c.dcconSrc} alt="이모티콘" loading="lazy" />`
+          ? html`<img class="comment-dccon" src=${c.dcconSrc} alt="이모티콘" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.alt='[이모티콘]';this.style.cssText='font-size:0.8em;color:var(--yaar-text-muted)'" />`
           : html`<span class="comment-text">${c.text}</span>`
         }
       </div>

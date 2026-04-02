@@ -83,7 +83,11 @@ function verbResultToResponse(result: {
     return jsonResponse({
       ok: true,
       text,
-      images: images.map((img) => ({ data: img.data, mimeType: img.mimeType })),
+      images: images.map((img) => ({
+        data: img.data,
+        mimeType: img.mimeType,
+        ...((img as { src?: string }).src && { src: (img as { src?: string }).src }),
+      })),
     });
   }
 

@@ -1,14 +1,51 @@
-/** Replace <img> tags with [이미지] placeholders to reduce content size */
-export function stripImages(htmlStr: string): string {
+/**
+ * Process <img> tags in post HTML for display.
+ * Images should already be base64 data URIs (converted by the browser tab),
+ * but this function handles cleanup and fallback for any that weren't converted.
+ * - Removes tracking pixels (1×1)
+ * - Removes empty/invalid src
+ * - Cleans up attributes for proper display
+ * - Adds onerror fallback for non-data-URI images that fail to load
+ */
+export function processImages(htmlStr: string): string {
   const div = document.createElement('div');
   div.innerHTML = htmlStr;
   div.querySelectorAll('img').forEach(img => {
-    const placeholder = document.createElement('span');
-    placeholder.textContent = '[이미지]';
-    placeholder.style.cssText =
-      'display:inline-block;padding:2px 6px;background:var(--yaar-surface-2,#2a2a2a);' +
-      'border-radius:4px;font-size:0.8em;color:var(--yaar-text-2,#888);margin:2px';
-    img.replaceWith(placeholder);
+    const src = img.getAttribute('src') ?? '';
+    const w = img.getAttribute('width');
+    const h = img.getAttribute('height');
+
+    // Remove tiny tracking pixels
+    if ((w === '1' || w === '0') && (h === '1' || h === '0')) {
+      img.remove();
+      return;
+    }
+
+    // Remove empty/invalid src images
+    if (!src || src === 'about:blank') {
+      img.remove();
+      return;
+    }
+
+    // Clean up attributes
+    img.setAttribute('loading', 'lazy');
+    img.removeAttribute('onclick');
+    img.removeAttribute('width');
+    img.removeAttribute('height');
+
+    // For images that weren't converted to data URI, add referrerpolicy + error fallback
+    if (!src.startsWith('data:')) {
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.setAttribute('onerror',
+        "this.onerror=null;" +
+        "var s=document.createElement('span');" +
+        "s.textContent='[이미지 로드 실패]';" +
+        "s.style.cssText='display:inline-block;padding:4px 8px;" +
+        "background:var(--yaar-bg-surface,#2a2a2a);border-radius:4px;" +
+        "font-size:0.8em;color:var(--yaar-text-muted,#888);margin:2px';" +
+        "this.replaceWith(s)"
+      );
+    }
   });
   return div.innerHTML;
 }

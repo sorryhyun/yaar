@@ -802,7 +802,28 @@ export class BrowserSession extends EventEmitter {
     Array<{ src: string; alt: string; width: number; height: number; dataUrl: string | null }>
   > {
     this.touch();
-    return (await this.evalFn(EXTRACT_IMAGES, selector ?? null)) || [];
+    const images =
+      (await this.evalFn<
+        Array<{ src: string; alt: string; width: number; height: number; dataUrl: string | null }>
+      >(EXTRACT_IMAGES, selector ?? null)) || [];
+
+    // Server-side fetch fallback for cross-origin images (bypasses CORS)
+    return Promise.all(
+      images.map(async (img) => {
+        if (img.dataUrl || !img.src) return img;
+        try {
+          const resp = await fetch(img.src, {
+            headers: { Referer: this.currentUrl },
+          });
+          if (!resp.ok) return img;
+          const buf = Buffer.from(await resp.arrayBuffer());
+          const mime = resp.headers.get('content-type') || 'image/png';
+          return { ...img, dataUrl: `data:${mime};base64,${buf.toString('base64')}` };
+        } catch {
+          return img;
+        }
+      }),
+    );
   }
 
   async close(): Promise<void> {

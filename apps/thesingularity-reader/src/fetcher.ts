@@ -361,7 +361,9 @@ function extractContentFromDoc(doc: Document, post: Post): string {
     if (!el) continue;
     el.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (textContent.length > 20) {
+    const hasImages = el.querySelector('img') !== null;
+    // Accept content if it has meaningful text OR contains images
+    if (textContent.length > 20 || hasImages) {
       return el.innerHTML.trim();
     }
   }
@@ -369,15 +371,22 @@ function extractContentFromDoc(doc: Document, post: Post): string {
   return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
 }
 
+type ExtractImagesResult = {
+  ok: boolean;
+  images?: Array<{ data: string; mimeType: string; src?: string }>;
+};
+
 /**
  * Fetch post body and comments in a single browser load.
  *
  * DC injects comments via an AJAX call after the initial page render.
  * We wait for the `#comment_box li.comment` selector to appear (up to 4 s)
  * so that both the post body and the AJAX-loaded comments are captured in
- * one HTML snapshot. This is simpler and more reliable than calling the
- * comment AJAX endpoint separately, because that endpoint requires a valid
- * CSRF token and Referer header that change across sessions.
+ * one HTML snapshot.
+ *
+ * After comments load, we use extractImages (which fetches cross-origin
+ * images server-side, bypassing CORS) and replace img src URLs with the
+ * returned base64 data URIs.
  */
 export async function fetchPostDetail(
   post: Post,
@@ -390,7 +399,6 @@ export async function fetchPostDetail(
   });
 
   // Wait for AJAX-loaded comments (post body is in the initial HTML).
-  // No need for networkidle — this single waitFor covers the comment AJAX.
   await web
     .waitFor({
       selector: '#comment_box li.comment',
@@ -399,11 +407,31 @@ export async function fetchPostDetail(
     })
     .catch(() => {});
 
-  const rawHtml = (await web.html({ browserId: tabId })) as { ok: boolean; data?: string };
+  // Extract images (server-side fetch for cross-origin) and HTML in parallel
+  const [imgResult, rawHtml] = await Promise.all([
+    web.extractImages({ browserId: tabId }).catch(() => ({ ok: false })) as Promise<ExtractImagesResult>,
+    web.html({ browserId: tabId }) as Promise<{ ok: boolean; data?: string }>,
+  ]);
+
   const html = rawHtml?.data ?? '';
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
+
+  // Build src → data URI map and replace in the parsed document
+  const srcMap = new Map<string, string>();
+  for (const img of imgResult?.images ?? []) {
+    if (img.src && img.data) {
+      srcMap.set(img.src, `data:${img.mimeType};base64,${img.data}`);
+    }
+  }
+  if (srcMap.size > 0) {
+    doc.querySelectorAll('img').forEach((el) => {
+      const src = el.getAttribute('src') ?? '';
+      const dataUrl = srcMap.get(src);
+      if (dataUrl) el.setAttribute('src', dataUrl);
+    });
+  }
 
   const comments = parseComments(doc);
   const content = extractContentFromDoc(doc, post);

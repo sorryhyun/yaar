@@ -141,6 +141,9 @@ export async function extract(opts?: {
 export async function extractImages(opts?: {
   selector?: string;
   mainContentOnly?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+  extensions?: string[];
   browserId?: string;
 }) {
   const { browserId, ...params } = opts ?? {};

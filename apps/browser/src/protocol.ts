@@ -240,16 +240,28 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         }) => web.extract({ ...p, ...await bid() }),
       },
       extract_images: {
-        description: 'Extract images with data URLs',
+        description: 'Extract images with data URLs. Filter by size or extension.',
         params: {
           type: 'object',
           properties: {
             selector: { type: 'string' },
             mainContentOnly: { type: 'boolean' },
+            minWidth: { type: 'number', description: 'Min width in px (default 10)' },
+            minHeight: { type: 'number', description: 'Min height in px (default 10)' },
+            extensions: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Filter by file extension, e.g. ["jpg","png"]',
+            },
           },
         },
-        handler: async (p?: { selector?: string; mainContentOnly?: boolean }) =>
-          web.extractImages({ ...p, ...await bid() }),
+        handler: async (p?: {
+          selector?: string;
+          mainContentOnly?: boolean;
+          minWidth?: number;
+          minHeight?: number;
+          extensions?: string[];
+        }) => web.extractImages({ ...p, ...await bid() }),
       },
       html: {
         description: 'Get raw innerHTML',
