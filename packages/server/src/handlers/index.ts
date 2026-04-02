@@ -16,6 +16,7 @@ import { registerWindowHandlers } from './window.js';
 import { registerUserHandlers } from './user.js';
 import { registerAppsHandlers } from './apps.js';
 import { registerSessionHandlers } from './session.js';
+import { registerHistoryHandlers } from './history.js';
 import { registerAgentsHandlers } from './agents.js';
 import { registerSkillsHandlers } from './skills.js';
 import { registerHttpHandlers } from './http.js';
@@ -49,6 +50,7 @@ export function initRegistry(): ResourceRegistry {
   registerUserHandlers(registry);
   registerAppsHandlers(registry);
   registerSessionHandlers(registry);
+  registerHistoryHandlers(registry);
   registerAgentsHandlers(registry);
   registerSkillsHandlers(registry);
   registerHttpHandlers(registry);

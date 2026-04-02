@@ -1,22 +1,22 @@
 /**
  * Sessions domain handlers for the verb layer.
  *
- * Maps session and system operations to the verb layer:
+ * Maps live session operations to the verb layer:
  *
  *   read('yaar://sessions/current')              → system info
  *   invoke('yaar://sessions/current', { ... })   → memorize
- *   list('yaar://sessions/')                       → list all sessions
- *   read('yaar://sessions/{id}')                  → read a specific session transcript
+ *   read('yaar://sessions/current/monitors')     → list monitors
  *   read('yaar://sessions/current/context')       → current context tape summary
+ *
+ * Historical session log browsing is in handlers/history.ts (yaar://history/).
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { ok, okJsonResource, okLinks, okResource, error, getActiveSession } from './utils.js';
+import { ok, okJsonResource, okLinks, error, getActiveSession } from './utils.js';
 import { getSessionId, getMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getBrowserPool } from '../lib/browser/index.js';
-import { listSessions, readSessionTranscript } from '../logging/session-reader.js';
 import {
   listMonitors,
   getMonitorStatus,
@@ -61,7 +61,8 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         { uri: 'yaar://storage/', name: 'storage', description: 'Persistent file storage' },
         { uri: 'yaar://windows/', name: 'windows', description: 'Open windows' },
         { uri: 'yaar://config/', name: 'config', description: 'Configuration' },
-        { uri: 'yaar://sessions/', name: 'sessions', description: 'Past sessions' },
+        { uri: 'yaar://sessions/', name: 'sessions', description: 'Current session & monitors' },
+        { uri: 'yaar://history/', name: 'history', description: 'Past session logs' },
       ]);
     },
   });
@@ -189,61 +190,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
 
       await disposeMonitor(pool, monitorId);
       return ok(`Monitor "${monitorId}" disposed.`);
-    },
-  });
-
-  // ── yaar://sessions/ — list all sessions ──
-  registry.register('yaar://sessions/', {
-    description: 'All sessions. List to see past sessions, read a specific one by ID.',
-    verbs: ['describe', 'list', 'read'],
-
-    async list(): Promise<VerbResult> {
-      const sessions = await listSessions();
-      const pool = getActiveSession().getPool();
-      const currentLogId = pool?.getLogSessionId();
-      return okLinks(
-        sessions.map((s) => ({
-          uri: `yaar://sessions/${s.sessionId}`,
-          name: s.sessionId,
-          description: `${s.metadata.provider} | ${s.metadata.createdAt}${s.sessionId === currentLogId ? ' (current)' : ''}`,
-          mimeType: 'text/plain',
-        })),
-      );
-    },
-
-    async read(): Promise<VerbResult> {
-      const sessions = await listSessions();
-      const pool = getActiveSession().getPool();
-      const currentLogId = pool?.getLogSessionId();
-      return okJsonResource('yaar://sessions/', {
-        currentSessionId: currentLogId ?? null,
-        totalSessions: sessions.length,
-        latest: sessions.slice(0, 5).map((s) => ({
-          sessionId: s.sessionId,
-          createdAt: s.metadata.createdAt,
-          provider: s.metadata.provider,
-        })),
-      });
-    },
-  });
-
-  // ── yaar://sessions/* — read a specific session transcript ──
-  registry.register('yaar://sessions/*', {
-    description: 'Read a specific session transcript by session ID.',
-    verbs: ['describe', 'read'],
-
-    async read(resolved: ResolvedUri): Promise<VerbResult> {
-      const sessionResolved = resolved as ResolvedSession;
-      const logId = sessionResolved.id ?? sessionResolved.resource;
-      if (!logId || logId === 'current')
-        return error(
-          'Session ID is required. Use list("yaar://sessions/") to see available sessions.',
-        );
-
-      const transcript = await readSessionTranscript(logId);
-      if (transcript === null) return error(`Session "${logId}" not found.`);
-
-      return okResource(resolved.sourceUri, transcript, 'text/plain');
     },
   });
 

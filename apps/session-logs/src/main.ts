@@ -7,6 +7,7 @@ import { state, setState } from './store';
 import { loadSessions, loadDetail } from './api';
 import { getDateKey, formatDateLabel, providerLabel, providerCls, formatDateTime } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
+import { registerProtocol } from './protocol';
 import type { SessionSummary } from './types';
 
 // --- Computed ---
@@ -37,7 +38,8 @@ const groupedSessions = createMemo(() => {
     ] as [string, SessionSummary[]]);
 });
 
-// --- Mount ---
+// --- Protocol & Mount ---
+registerProtocol();
 onMount(() => { loadSessions(); });
 
 // --- Root render ---

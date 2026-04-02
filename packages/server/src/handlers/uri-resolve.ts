@@ -10,9 +10,11 @@ import { parseYaarUri, resolveContentUri, parseWindowUri, parseBareWindowUri } f
 import {
   parseConfigUri,
   parseSessionUri,
+  parseHistoryUri,
   type ParsedConfigUri,
   type SessionResource,
   type SessionSubKind,
+  type HistorySubPath,
 } from '../lib/yaar-uri-server.js';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
@@ -55,6 +57,13 @@ export interface ResolvedSession {
   sourceUri: string;
 }
 
+export interface ResolvedHistory {
+  kind: 'history';
+  sessionId?: string;
+  subPath?: HistorySubPath;
+  sourceUri: string;
+}
+
 export interface ResolvedRoot {
   kind: 'root';
   sourceUri: string;
@@ -65,7 +74,8 @@ export type ResolvedUri =
   | ResolvedResource
   | ResolvedWindow
   | ResolvedConfig
-  | ResolvedSession;
+  | ResolvedSession
+  | ResolvedHistory;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
   const parsed = parseYaarUri(uri);
@@ -173,6 +183,16 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
+  const history = parseHistoryUri(uri);
+  if (history) {
+    return {
+      kind: 'history',
+      sessionId: history.sessionId,
+      subPath: history.subPath,
+      sourceUri: uri,
+    };
+  }
+
   // Fallback: collection-level URIs or verb-layer-only authorities (skills).
   // These have a valid authority but no dedicated parser — resolve as root kind.
   const parsed = parseYaarUri(uri);
@@ -183,7 +203,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|monitors|windows|config|sessions|skills|http|mcp)$/,
+    /^yaar:\/\/(apps|storage|monitors|windows|config|sessions|history|skills|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

@@ -173,7 +173,9 @@ export type SessionSubKind =
   | 'clipboard'
   | 'monitors'
   | 'logs'
-  | 'context';
+  | 'context'
+  | 'transcript'
+  | 'messages';
 
 export interface ParsedSessionUri {
   resource: SessionResource;
@@ -190,6 +192,8 @@ const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
   'monitors',
   'logs',
   'context',
+  'transcript',
+  'messages',
 ]);
 
 /**
@@ -262,4 +266,46 @@ export function buildSessionUri(
   if (id) uri += `/${id}`;
   if (action) uri += `/${action}`;
   return uri;
+}
+
+// ============ History URIs ============
+
+export type HistorySubPath = 'transcript' | 'messages';
+
+export interface ParsedHistoryUri {
+  /** Session ID, or undefined for the root list. */
+  sessionId?: string;
+  /** Sub-resource within a session. */
+  subPath?: HistorySubPath;
+}
+
+const HISTORY_SUB_PATHS: ReadonlySet<string> = new Set(['transcript', 'messages']);
+
+/**
+ * Parse a yaar://history/... URI.
+ *
+ *   parseHistoryUri('yaar://history/')
+ *     -> { }
+ *   parseHistoryUri('yaar://history/2025-01-01_12-00-00')
+ *     -> { sessionId: '2025-01-01_12-00-00' }
+ *   parseHistoryUri('yaar://history/2025-01-01_12-00-00/transcript')
+ *     -> { sessionId: '2025-01-01_12-00-00', subPath: 'transcript' }
+ *   parseHistoryUri('yaar://history/2025-01-01_12-00-00/messages')
+ *     -> { sessionId: '2025-01-01_12-00-00', subPath: 'messages' }
+ */
+export function parseHistoryUri(uri: string): ParsedHistoryUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'history') return null;
+
+  const segments = parsed.path.split('/').filter(Boolean);
+  if (segments.length === 0) return {};
+
+  const result: ParsedHistoryUri = { sessionId: segments[0] };
+
+  if (segments.length >= 2) {
+    if (!HISTORY_SUB_PATHS.has(segments[1])) return null;
+    result.subPath = segments[1] as HistorySubPath;
+  }
+
+  return result;
 }

@@ -253,6 +253,18 @@ body,
   border-bottom: 1px solid var(--yaar-border);
 }
 
+.detail-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+}
+
+.download-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
 .detail-session-id {
   font-size: 13px;
   font-family: 'Courier New', monospace;
@@ -317,32 +329,38 @@ body,
   font-size: 14px;
 }
 
-/* ── Raw JSON section ───────────────────────────── */
+/* ── Transcript section ─────────────────────────── */
 
-.raw-section {
+.transcript-section {
   background: var(--yaar-bg-surface);
   border: 1px solid var(--yaar-border);
   border-radius: var(--yaar-radius);
   overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.raw-section-title {
+.transcript-title {
   font-size: 10px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--yaar-border);
   background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
 }
 
-.raw-json {
+.transcript-content {
   padding: var(--yaar-sp-2);
   font-size: 11px;
   font-family: 'Courier New', monospace;
   color: var(--yaar-text-muted);
   white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 280px;
+  word-break: break-word;
   overflow-y: auto;
   line-height: 1.55;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Scrollbars ─────────────────────────────────── */

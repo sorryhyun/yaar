@@ -62,6 +62,13 @@ async function startup() {
   // to reach MCP endpoints at http://127.0.0.1:{PORT}/mcp/*
   await initWarmProviders();
 
+  // Re-print connect URL after warm pool so it's visible at the bottom
+  if (IS_REMOTE) {
+    const { getRemoteInfo } = await import('./lifecycle.js');
+    const info = getRemoteInfo();
+    if (info) console.log(`\nConnect: ${info.connectUrl}\n`);
+  }
+
   // Guard against re-entrant shutdown (e.g. SIGINT during uncaughtException handler)
   let shutdownInProgress = false;
 

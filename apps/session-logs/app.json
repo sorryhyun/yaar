@@ -4,11 +4,11 @@
   "run": "dist/index.html",
   "permissions": [
     {
-      "uri": "yaar://sessions/",
+      "uri": "yaar://history/",
       "verbs": ["list", "read"]
     }
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "YAAR",
-  "description": "No description"
+  "description": "Browse and audit session logs — analyze workflows, tool usage, and suggest improvements"
 }

@@ -47,3 +47,4 @@ apps/*/credentials.json
 !.claude/agents/
 !.claude/settings.json
 !.claude/agent-memory/
+claude

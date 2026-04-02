@@ -48,14 +48,31 @@ export const DetailView = () => {
   const sid       = state.selectedId ?? '';
   const isCurrent = state.currentSessionId === sid;
 
-  const knownKeys = new Set(['sessionId', 'createdAt', 'lastActivity', 'provider', 'agentCount']);
-  const extraEntries = Object.entries(d).filter(([k]) => !knownKeys.has(k));
+  const downloadLog = () => {
+    const content = state.transcript ?? '';
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${sid}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return html`
     <div class="detail-content">
 
       <div class="detail-header">
-        <div class="detail-session-id">${d.sessionId ?? sid}</div>
+        <div class="detail-header-top">
+          <div class="detail-session-id">${d.sessionId ?? sid}</div>
+          <button
+            class="y-btn y-btn-sm y-btn-ghost download-btn"
+            onClick=${downloadLog}
+            disabled=${() => !state.transcript}
+            title="Download transcript"
+          >⬇ Download</button>
+        </div>
         ${isCurrent ? html`<span class="current-chip">⚡ Current Session</span>` : null}
       </div>
 
@@ -90,18 +107,13 @@ export const DetailView = () => {
 
       </div>
 
-      ${extraEntries.length > 0 ? html`
-        <div class="raw-section">
-          <div class="y-label raw-section-title">Extra Fields</div>
-          <pre class="raw-json">${JSON.stringify(
-            Object.fromEntries(extraEntries), null, 2
-          )}</pre>
-        </div>
-      ` : null}
-
-      <div class="raw-section">
-        <div class="y-label raw-section-title">Raw JSON</div>
-        <pre class="raw-json">${JSON.stringify(d, null, 2)}</pre>
+      <div class="transcript-section">
+        <div class="y-label transcript-title">Transcript</div>
+        <pre class="transcript-content">${() =>
+          state.transcript
+            ? state.transcript
+            : 'Loading transcript...'
+        }</pre>
       </div>
 
     </div>
