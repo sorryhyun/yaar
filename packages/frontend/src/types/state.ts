@@ -20,6 +20,7 @@ export interface WindowModel {
   frameless?: boolean;
   windowStyle?: Record<string, string | number>;
   iframeToken?: string;
+  appId?: string;
 }
 
 export interface CliEntry {

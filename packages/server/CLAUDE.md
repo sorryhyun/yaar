@@ -159,6 +159,10 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 **App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
 
+**Monitor ↔ App Agent Communication:**
+- **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.
+- **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. Additionally, app agent responses are pushed to `InteractionTimeline` and drained by the monitor on its next turn.
+
 ## REST API
 
 Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.

@@ -1,7 +1,7 @@
 /**
  * CommandPalette - Input for sending messages to the agent.
  */
-import { useState, useCallback, useMemo, KeyboardEvent } from 'react';
+import { useState, useCallback, useMemo, useRef, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
@@ -33,7 +33,9 @@ export function CommandPalette() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [qrCodeOpen, setQrCodeOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const { isConnected, sendMessage, interrupt, reset } = useAgentConnection();
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { isConnected, sendMessage, sendWindowMessage, interrupt, reset } = useAgentConnection();
   const activeAgents = useDesktopStore((state) => state.activeAgents);
   const applyAction = useDesktopStore((state) => state.applyAction);
   const hasDrawing = useDesktopStore((state) => state.hasDrawing);
@@ -46,6 +48,41 @@ export function CommandPalette() {
   const removeAttachedImage = useDesktopStore((state) => state.removeAttachedImage);
   const clearAttachedImages = useDesktopStore((state) => state.clearAttachedImages);
   const messageStatuses = useDesktopStore((state) => state.messageStatuses);
+  const windows = useDesktopStore((state) => state.windows);
+
+  // Open app windows for @mention dropdown
+  const appWindows = useMemo(() => {
+    const seen = new Set<string>();
+    const result: { appId: string; windowId: string; title: string }[] = [];
+    for (const w of Object.values(windows)) {
+      if (w.appId && !seen.has(w.appId)) {
+        seen.add(w.appId);
+        result.push({ appId: w.appId, windowId: w.id, title: w.title });
+      }
+    }
+    return result;
+  }, [windows]);
+
+  // Show @mention dropdown when input starts with "@" and no space yet (typing appId)
+  const mentionQuery = useMemo(() => {
+    const match = input.match(/^@(\S*)$/);
+    return match ? match[1] : null;
+  }, [input]);
+
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) return [];
+    if (mentionQuery === '') return appWindows;
+    const q = mentionQuery.toLowerCase();
+    return appWindows.filter(
+      (a) => a.appId.toLowerCase().includes(q) || a.title.toLowerCase().includes(q),
+    );
+  }, [mentionQuery, appWindows]);
+
+  const selectMention = useCallback((appId: string) => {
+    setInput(`@${appId} `);
+    setMentionIndex(0);
+    textareaRef.current?.focus();
+  }, []);
 
   // Derive the most relevant active status to display
   const activeStatus = useMemo((): MessageStatus | null => {
@@ -105,12 +142,28 @@ export function CommandPalette() {
 
     // Auto-exit pencil mode on send
     if (pencilMode) setPencilMode(false);
+
+    // @appId prefix → route directly to the app agent
+    const atMatch = trimmed.match(/^@(\S+)\s+([\s\S]+)$/);
+    if (atMatch) {
+      const [, targetAppId, message] = atMatch;
+      const windows = useDesktopStore.getState().windows;
+      const appWindow = Object.values(windows).find((w) => w.appId === targetAppId);
+      if (appWindow) {
+        sendWindowMessage(appWindow.id, message);
+        setInput('');
+        return;
+      }
+      // No matching open app window — fall through to monitor
+    }
+
     sendMessage(trimmed);
     setInput('');
   }, [
     input,
     isConnected,
     sendMessage,
+    sendWindowMessage,
     hasDrawing,
     attachedImages.length,
     pencilMode,
@@ -119,6 +172,30 @@ export function CommandPalette() {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // @mention dropdown navigation
+      if (mentionMatches.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setMentionIndex((i) => (i + 1) % mentionMatches.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+          return;
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+          e.preventDefault();
+          selectMention(mentionMatches[mentionIndex].appId);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setInput('');
+          return;
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
@@ -139,7 +216,16 @@ export function CommandPalette() {
         }
       }
     },
-    [handleSubmit, interrupt, activeAgents, applyAction, t],
+    [
+      handleSubmit,
+      interrupt,
+      activeAgents,
+      applyAction,
+      t,
+      mentionMatches,
+      mentionIndex,
+      selectMention,
+    ],
   );
 
   const handleReset = useCallback(() => {
@@ -361,10 +447,33 @@ export function CommandPalette() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
+            {mentionMatches.length > 0 && (
+              <div className={styles.mentionDropdown}>
+                {mentionMatches.map((app, i) => (
+                  <button
+                    key={app.appId}
+                    className={styles.mentionItem}
+                    data-active={i === mentionIndex}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectMention(app.appId);
+                    }}
+                    onMouseEnter={() => setMentionIndex(i)}
+                  >
+                    <span className={styles.mentionAppId}>@{app.appId}</span>
+                    <span className={styles.mentionTitle}>{app.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
+              ref={textareaRef}
               className={styles.input}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setMentionIndex(0);
+              }}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onFocus={() => setIsExpanded(true)}

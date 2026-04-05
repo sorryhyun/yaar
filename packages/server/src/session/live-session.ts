@@ -15,6 +15,7 @@ import { join } from 'path';
 import { ContextPool } from '../agents/context-pool.js';
 import type { ContextMessage } from '../agents/context.js';
 import { WindowStateRegistry } from './window-state.js';
+import { LayoutContext } from './layout-context.js';
 import { ReloadCache } from '../reload/cache.js';
 import type { SessionId } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
@@ -85,6 +86,7 @@ export class LiveSession {
   private initPromise: Promise<boolean> | null = null;
   private initialized = false;
   readonly windowState: WindowStateRegistry;
+  readonly layoutContext: LayoutContext;
   readonly reloadCache: ReloadCache;
 
   // Restored state
@@ -113,6 +115,7 @@ export class LiveSession {
     this.savedThreadIds = options.savedThreadIds;
 
     this.windowState = new WindowStateRegistry();
+    this.layoutContext = new LayoutContext(this.windowState, this.windowState.handleMap);
     const cachePath = join(getConfigDir(), 'reload-cache', `${sessionId}.json`);
     this.reloadCache = new ReloadCache(cachePath);
 
@@ -623,6 +626,9 @@ export class LiveSession {
 
       case ClientEventType.SUBSCRIBE_MONITOR:
         getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
+        if (event.viewport) {
+          this.layoutContext.setViewport(event.monitorId, event.viewport);
+        }
         break;
 
       case ClientEventType.REMOVE_MONITOR:

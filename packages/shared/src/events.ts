@@ -180,6 +180,8 @@ export interface AppProtocolReadyEvent {
 export interface SubscribeMonitorEvent {
   type: typeof ClientEventType.SUBSCRIBE_MONITOR;
   monitorId: string;
+  /** Desktop viewport dimensions (reported by frontend on subscribe and resize). */
+  viewport?: { w: number; h: number };
 }
 
 export interface RemoveMonitorEvent {

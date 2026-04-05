@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ResourceRegistry } from './uri-registry.js';
+import { ResourceRegistry, type VerbResult } from './uri-registry.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import { getActiveSession, formatBatchResults } from './utils.js';
 import { expandBraceUri } from '@yaar/shared';
@@ -22,6 +22,7 @@ import { registerSkillsHandlers } from './skills.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
+import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 
 export const VERB_TOOL_NAMES = [
   'mcp__verbs__describe',
@@ -61,6 +62,43 @@ export function initRegistry(): ResourceRegistry {
 
 // ── Tool registration (from tools.ts) ──
 
+/**
+ * Append layout context to a tool result if layout has changed since
+ * this agent last received it. Monitor agents get full layout (viewport +
+ * all windows); window/app agents get only their own window bounds.
+ */
+function appendLayoutContext(result: VerbResult): VerbResult {
+  try {
+    const agentId = getAgentId();
+    if (!agentId) return result;
+
+    const session = getActiveSession();
+    const ctx = session.layoutContext;
+    const monitorId = getMonitorId();
+    const windowId = getWindowId();
+
+    let contextText: string | null = null;
+
+    if (windowId) {
+      // Window/app agent — only own window bounds
+      contextText = ctx.getWindowAgentContext(agentId, windowId);
+    } else if (monitorId) {
+      // Monitor agent — viewport + all windows on this monitor
+      contextText = ctx.getMonitorAgentContext(agentId, monitorId);
+    }
+
+    if (contextText) {
+      return {
+        ...result,
+        content: [...result.content, { type: 'text' as const, text: contextText }],
+      };
+    }
+  } catch {
+    // No active session — skip context injection
+  }
+  return result;
+}
+
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
   const [verb, uri, payload, readOptions] = args;
@@ -70,7 +108,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
     const result = await reg.execute(...args);
-    return { ...result };
+    return { ...appendLayoutContext(result) };
   }
 
   // Multi-URI: execute all in parallel, format combined result
@@ -80,7 +118,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
       return reg.execute(verb, u, payload, readOptions);
     }),
   );
-  return { ...formatBatchResults(expanded, settled) };
+  return { ...appendLayoutContext(formatBatchResults(expanded, settled)) };
 };
 
 /** Register the 5 verb tools on an MCP server instance. */
