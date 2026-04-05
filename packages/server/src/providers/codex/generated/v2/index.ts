@@ -5,7 +5,6 @@ export type { AccountLoginCompletedNotification } from "./AccountLoginCompletedN
 export type { AccountRateLimitsUpdatedNotification } from "./AccountRateLimitsUpdatedNotification.js";
 export type { AccountUpdatedNotification } from "./AccountUpdatedNotification.js";
 export type { AdditionalFileSystemPermissions } from "./AdditionalFileSystemPermissions.js";
-export type { AdditionalMacOsPermissions } from "./AdditionalMacOsPermissions.js";
 export type { AdditionalNetworkPermissions } from "./AdditionalNetworkPermissions.js";
 export type { AdditionalPermissionProfile } from "./AdditionalPermissionProfile.js";
 export type { AgentMessageDeltaNotification } from "./AgentMessageDeltaNotification.js";
@@ -56,7 +55,6 @@ export type { CommandExecutionApprovalDecision } from "./CommandExecutionApprova
 export type { CommandExecutionOutputDeltaNotification } from "./CommandExecutionOutputDeltaNotification.js";
 export type { CommandExecutionRequestApprovalParams } from "./CommandExecutionRequestApprovalParams.js";
 export type { CommandExecutionRequestApprovalResponse } from "./CommandExecutionRequestApprovalResponse.js";
-export type { CommandExecutionRequestApprovalSkillMetadata } from "./CommandExecutionRequestApprovalSkillMetadata.js";
 export type { CommandExecutionSource } from "./CommandExecutionSource.js";
 export type { CommandExecutionStatus } from "./CommandExecutionStatus.js";
 export type { Config } from "./Config.js";
@@ -203,9 +201,11 @@ export type { ModelUpgradeInfo } from "./ModelUpgradeInfo.js";
 export type { NetworkAccess } from "./NetworkAccess.js";
 export type { NetworkApprovalContext } from "./NetworkApprovalContext.js";
 export type { NetworkApprovalProtocol } from "./NetworkApprovalProtocol.js";
+export type { NetworkDomainPermission } from "./NetworkDomainPermission.js";
 export type { NetworkPolicyAmendment } from "./NetworkPolicyAmendment.js";
 export type { NetworkPolicyRuleAction } from "./NetworkPolicyRuleAction.js";
 export type { NetworkRequirements } from "./NetworkRequirements.js";
+export type { NetworkUnixSocketPermission } from "./NetworkUnixSocketPermission.js";
 export type { NonSteerableTurnKind } from "./NonSteerableTurnKind.js";
 export type { OverriddenMetadata } from "./OverriddenMetadata.js";
 export type { PatchApplyStatus } from "./PatchApplyStatus.js";
