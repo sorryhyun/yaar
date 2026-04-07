@@ -114,8 +114,9 @@ describe('handleAppProtocolRequest', () => {
       '*',
     );
 
-    // Simulate the iframe responding via a MessageEvent on the window
-    const responseEvent = new MessageEvent('message', {
+    // Simulate the iframe responding via a MessageEvent on the window.
+    // Use window.MessageEvent so happy-dom recognises it as its own Event subclass.
+    const responseEvent = new window.MessageEvent('message', {
       data: {
         type: 'yaar:app-manifest-response',
         requestId: 'req-1',
