@@ -1,5 +1,5 @@
 import { state, setState, settings, updatePosts } from './store';
-import { fetchPosts, fetchPostDetail, fetchTopPostsForAnalysis } from './fetcher';
+import { fetchPosts, fetchPostDetail } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { POST_TAB, syncCookiesToTab } from './browser';
@@ -95,18 +95,10 @@ export async function triggerAnalysis(): Promise<void> {
 
   setState('recLoading', true);
   try {
-    const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
     app.sendInteraction({
       type: 'analyze_posts',
-      description: '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 코맨드로 결과를 돌려주세요',
-      allPosts: currentPosts.map((p) => ({
-        num: p.num, title: p.title, author: p.author,
-        views: p.views, recommend: p.recommend, category: p.category ?? null,
-      })),
-      topPosts: topPostsData.map(({ post, text }) => ({
-        num: post.num, title: post.title, views: post.views,
-        recommend: post.recommend, contentText: text,
-      })),
+      description:
+        'posts 상태를 조회하고, 관심 가는 게시물은 selectPost 커맨드로 본문을 확인한 뒤, setRecommendations 커맨드로 분석 결과를 돌려주세요',
     });
   } catch (e: unknown) {
     console.error('Analysis trigger failed:', e);
