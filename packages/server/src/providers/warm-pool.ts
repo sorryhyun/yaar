@@ -157,7 +157,7 @@ class ProviderWarmPool {
     }
 
     console.log('[WarmPool] Starting shared Codex AppServer');
-    this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.4' });
+    this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.5' });
 
     this.sharedCodexAppServer.on('error', (err) => {
       console.error('[WarmPool] Codex AppServer error:', err);

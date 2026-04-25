@@ -98,7 +98,7 @@ YAAR uses WebSocket transport (`--listen ws://127.0.0.1:{port}`). Each provider 
 
 ```json
 → {"method": "thread/start", "params": {"baseInstructions": "You are a desktop agent..."}, "id": 1}
-← {"id": 1, "result": {"thread": {"id": "thread_abc123"}, "model": "gpt-5.4"}}
+← {"id": 1, "result": {"thread": {"id": "thread_abc123"}, "model": "gpt-5.5"}}
 ```
 
 **Send a message (start a turn):**
