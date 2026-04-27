@@ -11,10 +11,14 @@
  */
 import type { Post, Comment } from './types';
 import * as web from '@bundled/yaar-web';
+import { invoke } from '@bundled/yaar';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
+
+const MOBILE_UA =
+  'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
 async function browseUrl(url: string, tabId: string, waitForIdle = false): Promise<string> {
   await openOrNavigate(url, tabId, {
@@ -335,12 +339,22 @@ function parseComments(doc: Document): Comment[] {
 // Post detail
 // ============================================================
 
+// Selectors are tried in order; first one that yields meaningful content wins.
+// Mobile DC has shifted markup over the years; we keep the legacy desktop
+// selectors plus newer mobile-specific ones to be resilient.
 const CONTENT_SELECTORS = [
-  '.write_div',
+  '.thum-txtin',
   '.thum-txt',
+  '.write_div',
   '.view_content_wrap',
   '.gallview_contents',
+  '.gallview-content',
+  '.gall-detail-content',
+  '.gall-content',
   '#readBody',
+  '.con-body',
+  '[class*="thum-txt"]',
+  '[class*="gallview"][class*="content"]',
 ];
 
 const REMOVE_INSIDE = [
@@ -353,7 +367,39 @@ const REMOVE_INSIDE = [
   '.ad',
   '.adsbygoogle',
   '.float_ad',
+  '.detail-ad',
+  '.adWrap',
+  '.dc-banner',
 ].join(', ');
+
+/**
+ * Last-ditch fallback: scan all <div>/<section> nodes outside of comments/header,
+ * pick the one with the most text content or images. Mobile DC sometimes ships
+ * bespoke markup we don't have a selector for; this rescues the body in that case.
+ */
+function findContentFallback(doc: Document): HTMLElement | null {
+  const candidates = Array.from(doc.querySelectorAll('div, section, article')) as HTMLElement[];
+  let best: HTMLElement | null = null;
+  let bestScore = 0;
+
+  for (const el of candidates) {
+    // Skip if inside excluded regions
+    if (el.closest('#comment_box, .comment_wrap, .reply_wrap, header, nav, footer, .gallview-tit-wrap, .gallview-head, .gnb_wrap, .h_top, .top_wrap')) continue;
+    // Skip if it itself is excluded
+    const cls = el.className || '';
+    if (typeof cls === 'string' && /(comment|reply|gnb|footer|header|banner|adsbygoogle|aside)/i.test(cls)) continue;
+
+    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const imgCount = el.querySelectorAll('img').length;
+    const score = text.length + imgCount * 50;
+    if (score > bestScore && (text.length > 30 || imgCount > 0)) {
+      // Prefer the deepest container that contains all the content (avoid <body>)
+      bestScore = score;
+      best = el;
+    }
+  }
+  return best;
+}
 
 function extractContentFromDoc(doc: Document, post: Post): string {
   for (const sel of CONTENT_SELECTORS) {
@@ -363,18 +409,109 @@ function extractContentFromDoc(doc: Document, post: Post): string {
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     const hasImages = el.querySelector('img') !== null;
     // Accept content if it has meaningful text OR contains images
-    if (textContent.length > 20 || hasImages) {
+    if (textContent.length > 10 || hasImages) {
       return el.innerHTML.trim();
     }
   }
+
+  // Robust fallback when none of the known selectors matched.
+  const fallback = findContentFallback(doc);
+  if (fallback) {
+    fallback.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
+    return fallback.innerHTML.trim();
+  }
+
   const safeUrl = post.url.replace(/"/g, '&quot;');
   return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
 }
 
-type ExtractImagesResult = {
-  ok: boolean;
-  images?: Array<{ data: string; mimeType: string; src?: string }>;
-};
+/**
+ * JavaScript to run inside the browser tab via web.evaluate().
+ * Converts all <img> src URLs in the post content and comment areas
+ * to base64 data URIs using fetch() with same-origin cookies.
+ * This bypasses DC's viewimage.php referrer/cookie checks because
+ * fetch() runs within the DC page context.
+ */
+const IMAGE_TO_DATA_URI_SCRIPT = `
+(async function() {
+  var sels = ['.thum-txtin','.thum-txt','.write_div','.view_content_wrap','.gallview_contents','.gallview-content','.gall-detail-content','.gall-content','#readBody','.con-body'];
+  var container = null;
+  for (var i = 0; i < sels.length; i++) {
+    container = document.querySelector(sels[i]);
+    if (container) break;
+  }
+  var commentBox = document.querySelector('#comment_box');
+  var allImgs = [];
+  if (container) allImgs = allImgs.concat(Array.from(container.querySelectorAll('img')));
+  if (commentBox) allImgs = allImgs.concat(Array.from(commentBox.querySelectorAll('img')));
+  if (allImgs.length === 0) return 0;
+
+  var converted = 0;
+  await Promise.allSettled(allImgs.map(function(img) {
+    var src = img.src;
+    if (!src || src.startsWith('data:') || src.startsWith('about:') || src.startsWith('blob:')) {
+      return Promise.resolve();
+    }
+    return fetch(src, { credentials: 'include' })
+      .then(function(resp) {
+        if (!resp.ok) throw new Error(resp.status);
+        return resp.blob();
+      })
+      .then(function(blob) {
+        return new Promise(function(resolve, reject) {
+          var reader = new FileReader();
+          reader.onloadend = function() { resolve(reader.result); };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      })
+      .then(function(dataUrl) {
+        img.src = dataUrl;
+        converted++;
+      })
+      .catch(function() {});
+  }));
+  return converted;
+})()
+`;
+
+/**
+ * Fast HTTP-only body fetch.
+ *
+ * The mobile DC post page renders the body in the initial HTML response, so
+ * a plain GET (no browser tab, no JS) returns the body in ~300–800 ms vs.
+ * 2–6 s for the browser path. Comments are AJAX-loaded so are NOT included
+ * here; this is purely a fast-path for body text/markup.
+ *
+ * Caveat: images point at viewimage.php which needs the DC cookie + referrer.
+ * Many will fail to load directly; helpers.processImages() shows a graceful
+ * placeholder for those, and the browser path will replace this content with
+ * a fully image-converted version a moment later.
+ */
+export async function fetchPostBodyFast(post: Post): Promise<string | null> {
+  try {
+    const res = (await invoke('yaar://http', {
+      url: post.url,
+      method: 'GET',
+      headers: {
+        'User-Agent': MOBILE_UA,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+    })) as { ok: boolean; status?: number; body?: string };
+    if (!res?.ok || !res.body) return null;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(res.body, 'text/html');
+    doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
+    const content = extractContentFromDoc(doc, post);
+    // If we hit the "불러올 수 없습니다" fallback, treat as no result so the caller
+    // waits for the browser path instead of flashing the error message.
+    if (content.includes('본문을 불러올 수 없습니다')) return null;
+    return content;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetch post body and comments in a single browser load.
@@ -382,11 +519,13 @@ type ExtractImagesResult = {
  * DC injects comments via an AJAX call after the initial page render.
  * We wait for the `#comment_box li.comment` selector to appear (up to 4 s)
  * so that both the post body and the AJAX-loaded comments are captured in
- * one HTML snapshot.
+ * one HTML snapshot. This is simpler and more reliable than calling the
+ * comment AJAX endpoint separately, because that endpoint requires a valid
+ * CSRF token and Referer header that change across sessions.
  *
- * After comments load, we use extractImages (which fetches cross-origin
- * images server-side, bypassing CORS) and replace img src URLs with the
- * returned base64 data URIs.
+ * After comments load, we convert images to base64 data URIs inside the
+ * browser context (which has DC cookies/session) so that images display
+ * correctly in our sandboxed iframe.
  */
 export async function fetchPostDetail(
   post: Post,
@@ -399,39 +538,30 @@ export async function fetchPostDetail(
   });
 
   // Wait for AJAX-loaded comments (post body is in the initial HTML).
+  // No need for networkidle — this single waitFor covers the comment AJAX.
   await web
     .waitFor({
       selector: '#comment_box li.comment',
-      timeout: 4000,
+      timeout: 3500,
       browserId: tabId,
     })
     .catch(() => {});
 
-  // Extract images (server-side fetch for cross-origin) and HTML in parallel
-  const [imgResult, rawHtml] = await Promise.all([
-    web.extractImages({ browserId: tabId }).catch(() => ({ ok: false })) as Promise<ExtractImagesResult>,
-    web.html({ browserId: tabId }) as Promise<{ ok: boolean; data?: string }>,
-  ]);
+  // Convert images to base64 data URIs inside the browser tab.
+  // The browser has DC's cookies/session so fetch() can access viewimage.php.
+  // Race with a timeout to avoid hanging on slow/large images. 6s is plenty
+  // for typical posts; oversized albums can finish converting later — we'll
+  // still display whatever was converted before the deadline.
+  await Promise.race([
+    web.evaluate({ expression: IMAGE_TO_DATA_URI_SCRIPT, browserId: tabId }),
+    new Promise((resolve) => setTimeout(resolve, 6000)),
+  ]).catch(() => {});
 
+  const rawHtml = (await web.html({ browserId: tabId })) as { ok: boolean; data?: string };
   const html = rawHtml?.data ?? '';
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
   doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
-
-  // Build src → data URI map and replace in the parsed document
-  const srcMap = new Map<string, string>();
-  for (const img of imgResult?.images ?? []) {
-    if (img.src && img.data) {
-      srcMap.set(img.src, `data:${img.mimeType};base64,${img.data}`);
-    }
-  }
-  if (srcMap.size > 0) {
-    doc.querySelectorAll('img').forEach((el) => {
-      const src = el.getAttribute('src') ?? '';
-      const dataUrl = srcMap.get(src);
-      if (dataUrl) el.setAttribute('src', dataUrl);
-    });
-  }
 
   const comments = parseComments(doc);
   const content = extractContentFromDoc(doc, post);

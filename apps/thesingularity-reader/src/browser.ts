@@ -15,6 +15,11 @@ export const POST_TAB = 'post';
 
 const initialized = new Set<string>();
 
+/** Has the given tab been opened (and thus is reusable via web.navigate)? */
+export function isTabInitialized(tabId: string): boolean {
+  return initialized.has(tabId);
+}
+
 /** DC domains for cookie operations */
 export const DC_COOKIE_URLS = [
   'https://www.dcinside.com/',

@@ -1,9 +1,9 @@
 import { state, setState, settings, updatePosts } from './store';
-import { fetchPosts, fetchPostDetail } from './fetcher';
+import { fetchPosts, fetchPostDetail, fetchPostBodyFast, fetchTopPostsForAnalysis } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { POST_TAB, syncCookiesToTab } from './browser';
-import type { Post } from './types';
+import type { Post, Comment } from './types';
 import {
   loginToDC,
   logoutFromDC,
@@ -15,6 +15,33 @@ import {
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let fetchVersion = 0;
+
+// In-memory cache for post detail results (body HTML + parsed comments).
+// Keyed by post.id; entries older than POST_CACHE_TTL are ignored. This avoids
+// re-fetching when a user re-clicks an already-viewed post.
+type CachedDetail = { content: string; comments: Comment[]; ts: number };
+const POST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const POST_CACHE_MAX = 80;
+const postDetailCache = new Map<string, CachedDetail>();
+
+function cacheGet(id: string): CachedDetail | null {
+  const hit = postDetailCache.get(id);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > POST_CACHE_TTL) {
+    postDetailCache.delete(id);
+    return null;
+  }
+  return hit;
+}
+
+function cacheSet(id: string, content: string, comments: Comment[]): void {
+  if (postDetailCache.size >= POST_CACHE_MAX) {
+    // Evict the oldest entry to keep the map bounded
+    const firstKey = postDetailCache.keys().next().value;
+    if (firstKey) postDetailCache.delete(firstKey);
+  }
+  postDetailCache.set(id, { content, comments, ts: Date.now() });
+}
 
 export function clearTimers(): void {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -58,6 +85,25 @@ export function startRefreshTimer(): void {
 export async function selectPost(post: Post): Promise<void> {
   if (state.selectedPost?.id === post.id && state.postContent) return;
 
+  // ——— Cache hit: instant render ———
+  const cached = cacheGet(post.id);
+  if (cached) {
+    ++fetchVersion;
+    setState({
+      selectedPost: post,
+      postContent: cached.content,
+      postLoading: false,
+      showOriginal: false,
+      screenshotSrc: null,
+      screenshotLoading: false,
+      comments: cached.comments,
+      commentsLoading: false,
+      showComments: false,
+      commentText: '',
+    });
+    return;
+  }
+
   const version = ++fetchVersion;
   setState({
     selectedPost: post,
@@ -72,17 +118,38 @@ export async function selectPost(post: Post): Promise<void> {
     commentText: '',
   });
 
+  // ——— Fast HTTP path: race a plain GET against the browser load ———
+  // Body usually arrives in <1 s via HTTP. We surface it the moment it's ready
+  // so the user sees the post text immediately. Comments + image-converted
+  // body are still produced by the slower browser path below and overwrite
+  // the fast result when ready.
+  fetchPostBodyFast(post)
+    .then((fastContent) => {
+      if (!fastContent) return;
+      if (version !== fetchVersion) return;
+      // Only apply the fast preview if the browser path hasn't already finished
+      if (!state.postContent && state.postLoading) {
+        setState({ postContent: fastContent, postLoading: false });
+      }
+    })
+    .catch(() => {});
+
   try {
     const { content, comments } = await fetchPostDetail(post);
     if (version !== fetchVersion) return;
+    cacheSet(post.id, content, comments);
     setState({ postContent: content, comments });
   } catch (e: unknown) {
     if (version !== fetchVersion) return;
     const msg = e instanceof Error ? e.message : String(e);
-    setState(
-      'postContent',
-      `<p style="color:var(--yaar-error)">게시물을 불러올 수 없습니다: ${msg}</p>`,
-    );
+    // If the fast path already populated something, leave it alone — don't
+    // overwrite a partially-rendered body with an error.
+    if (!state.postContent) {
+      setState(
+        'postContent',
+        `<p style="color:var(--yaar-error)">게시물을 불러올 수 없습니다: ${msg}</p>`,
+      );
+    }
   } finally {
     if (version === fetchVersion) setState({ postLoading: false, commentsLoading: false });
   }
@@ -95,10 +162,18 @@ export async function triggerAnalysis(): Promise<void> {
 
   setState('recLoading', true);
   try {
+    const topPostsData = await fetchTopPostsForAnalysis(currentPosts, 5);
     app.sendInteraction({
       type: 'analyze_posts',
-      description:
-        'posts 상태를 조회하고, 관심 가는 게시물은 selectPost 커맨드로 본문을 확인한 뒤, setRecommendations 커맨드로 분석 결과를 돌려주세요',
+      description: '게시물 목록과 상위 주제 게시물 내용을 분석하여 setRecommendations 코맨드로 결과를 돌려주세요',
+      allPosts: currentPosts.map((p) => ({
+        num: p.num, title: p.title, author: p.author,
+        views: p.views, recommend: p.recommend, category: p.category ?? null,
+      })),
+      topPosts: topPostsData.map(({ post, text }) => ({
+        num: post.num, title: post.title, views: post.views,
+        recommend: post.recommend, contentText: text,
+      })),
     });
   } catch (e: unknown) {
     console.error('Analysis trigger failed:', e);
@@ -213,9 +288,12 @@ export async function submitComment(): Promise<void> {
     if (result.ok) {
       setState('commentText', '');
       showToast('💬 댓글이 등록되었습니다!', 'success');
+      // Invalidate cached comments for this post so the refetch isn't shadowed
+      postDetailCache.delete(post.id);
       try {
-        const { comments } = await fetchPostDetail(post);
-        setState('comments', comments);
+        const { content, comments } = await fetchPostDetail(post);
+        cacheSet(post.id, content, comments);
+        setState({ comments, postContent: content });
       } catch { /* 실패해도 무시 */ }
     } else {
       showToast(result.error ?? '댓글 작성 실패', 'error');

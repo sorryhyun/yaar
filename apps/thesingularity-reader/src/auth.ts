@@ -14,13 +14,16 @@
  */
 import { invoke, appStorage } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { openOrNavigate, MAIN_TAB, DC_COOKIE_URLS } from './browser';
+import { openOrNavigate, isTabInitialized, MAIN_TAB, DC_COOKIE_URLS } from './browser';
 import type { Post } from './types';
 
 const SESSION_PATH = 'auth/session.json';
 
 const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com%2Fboard%2Fthesingularity';
-const DC_VERIFY_URL = 'https://gall.dcinside.com/mgallery/board/lists?id=thesingularity';
+// Use mobile gallery URL for verification — the tab is opened with mobile UA,
+// so a desktop URL forces an extra redirect / longer render wait.
+const DC_VERIFY_URL = 'https://m.dcinside.com/board/thesingularity';
+const DC_VERIFY_URL_HTTP = 'https://gall.dcinside.com/mgallery/board/lists?id=thesingularity';
 
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
 
@@ -82,42 +85,50 @@ export async function loginToDC(
   password: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    await openOrNavigate('https://m.dcinside.com/board/thesingularity', MAIN_TAB, {
-      visible:   false,
-      mobile:    true,
-      waitUntil: 'domcontentloaded',
-    });
+    // The MAIN_TAB is normally already initialized by the feed's initial fetch,
+    // which navigated to the very same gallery URL. Skip the redundant warm-up
+    // navigation in that case (≈ 1–3s saved).
+    if (!isTabInitialized(MAIN_TAB)) {
+      await openOrNavigate('https://m.dcinside.com/board/thesingularity', MAIN_TAB, {
+        visible:   false,
+        mobile:    true,
+        waitUntil: 'domcontentloaded',
+      });
+    }
 
     await web.navigate(DC_LOGIN_URL, MAIN_TAB);
-    await web.waitFor({ browserId: MAIN_TAB, selector: '#code', timeout: 8000 });
+    await web.waitFor({ browserId: MAIN_TAB, selector: '#code', timeout: 6000 });
 
-    // Use Object.getOwnPropertyDescriptor to bypass framework-controlled inputs
-    const setVal = (sel: string, val: string) => `(function(){
-      var el = document.querySelector('${sel}');
-      if (!el) return false;
-      var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
-      if (s && s.set) s.set.call(el, ${JSON.stringify(val)});
-      else el.value = ${JSON.stringify(val)};
-      el.dispatchEvent(new Event('input', {bubbles:true}));
-      el.dispatchEvent(new Event('change', {bubbles:true}));
-      return true;
-    })()`;
-    await web.evaluate({ browserId: MAIN_TAB, expression: setVal('#code', username) });
-    await web.evaluate({ browserId: MAIN_TAB, expression: setVal('#password', password) });
-
-    // Submit via DC's own loginRequest() which handles CSRF validation
+    // Batch all three steps (set username, set password, submit) into one
+    // evaluate() call. Round-trip overhead per evaluate is non-trivial, so
+    // collapsing 3 → 1 measurably tightens the login flow.
+    const uJson = JSON.stringify(username);
+    const pJson = JSON.stringify(password);
     await web.evaluate({ browserId: MAIN_TAB, expression: `(function(){
+      function setVal(sel, val) {
+        var el = document.querySelector(sel);
+        if (!el) return false;
+        var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+        if (s && s.set) s.set.call(el, val); else el.value = val;
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        return true;
+      }
+      setVal('#code', ${uJson});
+      setVal('#password', ${pJson});
       var form = document.getElementById('loginProcess');
       if (form && typeof loginRequest === 'function') {
         var ok = loginRequest();
         if (ok !== false) form.submit();
+      } else if (form) {
+        form.submit();
       }
     })()` });
-    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .login-group', timeout: 15000 }).catch(() => {});
+    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .login-group, .nick_btn, [data-type="logout"]', timeout: 6000 }).catch(() => {});
 
-    // Verify login succeeded on a known authenticated page
+    // Verify login succeeded on a known authenticated page (mobile board, same UA)
     await web.navigate(DC_VERIFY_URL, MAIN_TAB);
-    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .nick_btn, [data-type="logout"]', timeout: 10000 }).catch(() => {});
+    await web.waitFor({ browserId: MAIN_TAB, selector: '.gall-detail-lnktb, .gall-lst, .nick_btn, [data-type="logout"]', timeout: 5000 }).catch(() => {});
 
     const htmlResult = await web.html({ browserId: MAIN_TAB }) as
       { ok: boolean; data?: string };
@@ -161,7 +172,7 @@ export async function checkLoginStatus(): Promise<boolean> {
 
   try {
     const res = await invoke('yaar://http', {
-      url:     DC_VERIFY_URL,
+      url:     DC_VERIFY_URL_HTTP,
       method:  'GET',
       headers: {
         'Cookie':          session.dcPaPP,

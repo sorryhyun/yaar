@@ -1,13 +1,6 @@
 import { state, setState } from './store';
 import { app, AppCommandError } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
-import { selectPost } from './actions';
-
-/** Strip HTML tags and collapse whitespace for agent-readable text */
-function htmlToText(html: string): string {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim();
-}
 
 export function registerProtocol() {
   if (!app) return;
@@ -22,41 +15,6 @@ export function registerProtocol() {
           state.savedCredentials
             ? { username: state.savedCredentials.username, savedAt: state.savedCredentials.savedAt }
             : null,
-      },
-      posts: {
-        description: '현재 로드된 게시물 목록 (num, title, author, category, views, recommend)',
-        handler: () =>
-          state.posts.map((p) => ({
-            num: p.num,
-            title: p.title,
-            author: p.author,
-            category: p.category ?? null,
-            views: p.views,
-            recommend: p.recommend,
-            date: p.date,
-          })),
-      },
-      selectedPost: {
-        description: '현재 선택된 게시물의 상세 정보 (메타데이터 + 본문 텍스트 + 댓글)',
-        handler: () => {
-          if (!state.selectedPost) return null;
-          if (state.postLoading) return { loading: true, num: state.selectedPost.num };
-          return {
-            num: state.selectedPost.num,
-            title: state.selectedPost.title,
-            author: state.selectedPost.author,
-            category: state.selectedPost.category ?? null,
-            views: state.selectedPost.views,
-            recommend: state.selectedPost.recommend,
-            content: state.postContent ? htmlToText(state.postContent) : null,
-            comments: state.comments.map((c) => ({
-              author: c.author,
-              text: c.text,
-              recommend: c.recommend,
-              isBest: c.isBest,
-            })),
-          };
-        },
       },
     },
     commands: {
@@ -84,23 +42,6 @@ export function registerProtocol() {
           if (!creds) throw new AppCommandError('저장된 자격증명 없음');
           setState('savedCredentials', creds);
           return { username: creds.username, savedAt: creds.savedAt };
-        },
-      },
-      selectPost: {
-        description: '게시물 번호로 게시물을 선택하고 본문+댓글을 로드합니다. 완료 후 selectedPost 상태를 조회하세요.',
-        params: {
-          type: 'object',
-          properties: {
-            num: { type: 'string', description: '게시물 번호' },
-          },
-          required: ['num'],
-        },
-        handler: async (p: Record<string, unknown>) => {
-          const num = p.num as string;
-          const post = state.posts.find((pt) => pt.num === num);
-          if (!post) throw new AppCommandError(`게시물 ${num}을 찾을 수 없습니다`);
-          await selectPost(post);
-          return { ok: true, num };
         },
       },
       setRecommendations: {
