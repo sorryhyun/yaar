@@ -87,10 +87,10 @@ export class CDPClient {
   }
 
   async waitForEvent(event: string, timeout: number): Promise<unknown> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.off(event, handler);
-        reject(new Error(`Timeout waiting for ${event}`));
+        resolve(null);
       }, timeout);
 
       const handler = (params: unknown) => {

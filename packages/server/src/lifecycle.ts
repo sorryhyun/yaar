@@ -36,6 +36,12 @@ let activeTunnel: SshTunnel | null = null;
  * Returns the options to pass to createWsHandlers.
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
+  // Don't let stray async rejections (e.g. from the browser/CDP layer) take
+  // down the whole server. Log and continue.
+  process.on('unhandledRejection', (reason) => {
+    console.warn('[unhandledRejection]', reason);
+  });
+
   initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
 
   await ensureStorageDir();

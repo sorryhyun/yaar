@@ -136,13 +136,17 @@ export const MONITOR_MAX_OUTPUT_PER_MIN = getEnvInt('MONITOR_MAX_OUTPUT_PER_MIN'
 export function resolveClaudeBinPath(): string | null {
   const ext = process.platform === 'win32' ? '.exe' : '';
 
-  // 1. Check next to the executable (bundled exe ships claude alongside)
+  // 1. Honor CLAUDE_CODE_PATH override (.env or shell)
+  const override = process.env.CLAUDE_CODE_PATH;
+  if (override && existsSync(override)) return override;
+
+  // 2. Check next to the executable (bundled exe ships claude alongside)
   if (IS_BUNDLED_EXE) {
     const localBin = join(dirname(process.execPath), `claude${ext}`);
     if (existsSync(localBin)) return localBin;
   }
 
-  // 2. Check ~/.local/bin/ (standard install location on Windows and Linux)
+  // 3. Check ~/.local/bin/ (standard install location on Windows and Linux)
   const home = process.env.USERPROFILE || process.env.HOME;
   if (home) {
     const dotLocalBin = join(home, '.local', 'bin', `claude${ext}`);

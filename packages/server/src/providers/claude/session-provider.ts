@@ -96,6 +96,23 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     const claudeBin = resolveClaudeBinPath();
 
+    // When YAAR runs inside another Claude Code harness (e.g. cloud sandbox),
+    // the parent leaks vars that bind the child to parent-only resources (FDs,
+    // session IDs, host-managed mode). Strip them so the spawned CLI starts clean.
+    const cleanEnv = { ...process.env };
+    for (const k of [
+      'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
+      'CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR',
+      'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
+      'CLAUDE_CODE_SESSION_ID',
+      'CLAUDE_CODE_REMOTE_SESSION_ID',
+      'CLAUDE_CODE_CONTAINER_ID',
+      'CLAUDE_CODE_REMOTE',
+      'CLAUDECODE',
+    ]) {
+      delete cleanEnv[k];
+    }
+
     return {
       abortController: this.createAbortController(),
       executable: 'bun',
@@ -111,7 +128,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       env: {
-        ...process.env,
+        ...cleanEnv,
         MAX_MCP_OUTPUT_TOKENS: '131072',
         CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: 'true',
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: 'true',

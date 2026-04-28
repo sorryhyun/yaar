@@ -486,24 +486,41 @@ export class BrowserSession extends EventEmitter {
       Space: { key: ' ', code: 'Space', keyCode: 32 },
     };
 
-    const desc = keyMap[key] || {
-      key,
-      code: `Key${key.toUpperCase()}`,
-      keyCode: key.charCodeAt(0),
+    // Parse "Shift+Tab", "Ctrl+A", "Meta+Shift+P" — modifiers join with '+',
+    // last segment is the main key. CDP modifier bitmask: Alt=1, Ctrl=2, Meta=4, Shift=8.
+    const segments = key.split('+');
+    const mainKey = segments.pop() ?? key;
+    let modifiers = 0;
+    for (const m of segments) {
+      const lower = m.toLowerCase();
+      if (lower === 'shift') modifiers |= 8;
+      else if (lower === 'ctrl' || lower === 'control') modifiers |= 2;
+      else if (lower === 'alt') modifiers |= 1;
+      else if (lower === 'meta' || lower === 'cmd' || lower === 'command') modifiers |= 4;
+    }
+
+    const desc = keyMap[mainKey] || {
+      key: mainKey,
+      code: `Key${mainKey.toUpperCase()}`,
+      keyCode: mainKey.charCodeAt(0),
     };
 
-    // Add text/unmodifiedText for keys that produce characters
+    // Add text/unmodifiedText for keys that produce characters (skip when Ctrl/Meta held)
     const keyDownExtra: Record<string, unknown> = {};
-    if (desc.key === 'Enter') {
-      keyDownExtra.text = '\r';
-      keyDownExtra.unmodifiedText = '\r';
-    } else if (desc.key === ' ') {
-      keyDownExtra.text = ' ';
-      keyDownExtra.unmodifiedText = ' ';
+    const suppressText = (modifiers & 2) !== 0 || (modifiers & 4) !== 0;
+    if (!suppressText) {
+      if (desc.key === 'Enter') {
+        keyDownExtra.text = '\r';
+        keyDownExtra.unmodifiedText = '\r';
+      } else if (desc.key === ' ') {
+        keyDownExtra.text = ' ';
+        keyDownExtra.unmodifiedText = ' ';
+      }
     }
 
     await this.cdp.send('Input.dispatchKeyEvent', {
       type: 'keyDown',
+      modifiers,
       key: desc.key,
       code: desc.code,
       windowsVirtualKeyCode: desc.keyCode,
@@ -512,6 +529,7 @@ export class BrowserSession extends EventEmitter {
     });
     await this.cdp.send('Input.dispatchKeyEvent', {
       type: 'keyUp',
+      modifiers,
       key: desc.key,
       code: desc.code,
       windowsVirtualKeyCode: desc.keyCode,
