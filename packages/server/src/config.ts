@@ -136,13 +136,19 @@ export const MONITOR_MAX_OUTPUT_PER_MIN = getEnvInt('MONITOR_MAX_OUTPUT_PER_MIN'
 export function resolveClaudeBinPath(): string | null {
   const ext = process.platform === 'win32' ? '.exe' : '';
 
-  // 1. Check next to the executable (bundled exe ships claude alongside)
+  // 1. Explicit override via env var (highest priority).
+  // CLAUDE_CODE_PATH is YAAR's own override; CLAUDE_CODE_EXECPATH is the
+  // standard variable set by the Claude Code launcher itself.
+  const envPath = process.env.CLAUDE_CODE_PATH || process.env.CLAUDE_CODE_EXECPATH;
+  if (envPath && existsSync(envPath)) return envPath;
+
+  // 2. Check next to the executable (bundled exe ships claude alongside)
   if (IS_BUNDLED_EXE) {
     const localBin = join(dirname(process.execPath), `claude${ext}`);
     if (existsSync(localBin)) return localBin;
   }
 
-  // 2. Check ~/.local/bin/ (standard install location on Windows and Linux)
+  // 3. Check ~/.local/bin/ (standard install location on Windows and Linux)
   const home = process.env.USERPROFILE || process.env.HOME;
   if (home) {
     const dotLocalBin = join(home, '.local', 'bin', `claude${ext}`);
