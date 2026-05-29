@@ -2,7 +2,7 @@
  * Browser availability check — whether Chrome/Edge was found at startup.
  */
 
-import { getBrowserProvider } from '../../lib/browser/index.js';
+import { getHeadlessBrowser } from '../../lib/browser/index.js';
 
 let _available = false;
 
@@ -17,7 +17,7 @@ export function isBrowserAvailable(): boolean {
  * Probe browser availability. Call once at startup.
  */
 export async function probeBrowserAvailability(): Promise<boolean> {
-  const pool = getBrowserProvider();
+  const pool = getHeadlessBrowser();
   _available = await pool.isAvailable();
   return _available;
 }

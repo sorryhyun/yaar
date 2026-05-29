@@ -30,7 +30,7 @@ mock.module('../lib/browser/cdp.js', () => ({
 // ── Mock global fetch for Chrome debug HTTP API ──────────────────────────────
 
 let fetchOk = true;
- 
+
 const mockFetch = mock(() =>
   Promise.resolve({
     ok: fetchOk,

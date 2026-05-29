@@ -288,10 +288,18 @@ export interface CliSliceState {
   cliMode: boolean;
   cliHistory: Record<string, CliEntry[]>;
   cliStreaming: Record<string, CliEntry>;
+  /**
+   * Routing target for typed messages, chosen from the CLI-panel toggle:
+   *  - `'monitor'` (default) — the monitor agent, sandbox browsing only.
+   *  - `'session'` — the session agent ("act as me"), which can drive the
+   *    user's real browser. See docs/session_agent_browser_design.md §6.
+   */
+  cliTarget: 'monitor' | 'session';
 }
 
 export interface CliSliceActions {
   toggleCliMode: () => void;
+  setCliTarget: (target: 'monitor' | 'session') => void;
   addCliEntry: (entry: {
     type: CliEntry['type'];
     content: string;

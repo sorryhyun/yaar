@@ -202,6 +202,12 @@ describe('parseSessionUri', () => {
     });
   });
 
+  it('parses browser (session-agent browser door)', () => {
+    expect(parseSessionUri('yaar://session/browser')).toEqual({
+      subKind: 'browser',
+    });
+  });
+
   it('parses monitor by ID', () => {
     expect(parseSessionUri('yaar://session/monitors/0')).toEqual({
       subKind: 'monitors',

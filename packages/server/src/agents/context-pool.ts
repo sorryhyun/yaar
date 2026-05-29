@@ -14,7 +14,9 @@
  * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
  */
 
-import { ContextTape, type ContextMessage } from './context.js';
+import { ContextTape, monitorSource, type ContextMessage } from './context.js';
+import { runAgentTurn, buildReloadContext } from './turn-helpers.js';
+import { SESSION_AGENT_PROFILE } from './profiles/index.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
@@ -277,6 +279,70 @@ export class ContextPool implements PoolContext {
     const existing = this.agentPool.getSessionAgent();
     if (existing) return existing;
     return this.agentPool.createSessionAgent();
+  }
+
+  /**
+   * Process a user message routed to the **session agent** (the user's deputy).
+   *
+   * Wakes the lazy session-agent singleton (born on first use) and runs a turn
+   * with a `session-*` role — the principal tier that unlocks `yaar://session/*`,
+   * including `yaar://session/browser` (the user's real browser). Triggered by
+   * the CLI-panel "Session" target toggle. See docs/session_agent_browser_design.md §6.
+   */
+  async handleSessionTask(task: Task): Promise<void> {
+    if (this.resetting) {
+      console.log(`[ContextPool] Rejecting session task ${task.messageId} — pool is resetting`);
+      return;
+    }
+
+    this.inflightEnter();
+    try {
+      const agent = await this.getOrCreateSessionAgent();
+      if (!agent) {
+        await this.sendEvent({
+          type: ServerEventType.ERROR,
+          error: 'No AI provider available for the session agent.',
+        });
+        return;
+      }
+
+      const monitorId = task.monitorId ?? '0';
+      const source = monitorSource(monitorId);
+      const role = `session-${task.messageId}`;
+
+      // If the deputy is mid-turn, steer it rather than spawning a parallel run.
+      if (agent.session.isRunning()) {
+        const steered = await agent.session.steer(task.content);
+        if (steered) {
+          this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
+          await this.sendEvent({
+            type: ServerEventType.MESSAGE_ACCEPTED,
+            messageId: task.messageId,
+            agentId: agent.currentRole ?? role,
+          });
+          return;
+        }
+      }
+
+      const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this, task);
+      const prompt = openWindowsContext + reloadPrefix + task.content;
+      this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
+
+      await runAgentTurn(this, {
+        agent,
+        role,
+        source,
+        task,
+        prompt,
+        fp,
+        monitorId,
+        systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
+        allowedTools:
+          this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.allowedTools,
+      });
+    } finally {
+      this.inflightExit();
+    }
   }
 
   async disposeSessionAgent(): Promise<void> {

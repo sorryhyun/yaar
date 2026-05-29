@@ -88,7 +88,7 @@ Minimal example using the `claude-in-chrome` MCP tools available to an agent:
 navigate("http://127.0.0.1:8000")
 form_input(selector: "textarea", text: "create a memo window saying hello")
 press(key: "Enter", selector: "textarea")
-press(key: "Shift+Tab")                       # open CLI panel to watch streaming
+press(key: "Shift+Tab")                       # open CLI panel (streaming + Monitor/Session "act as me" target toggle)
 ```
 
 `press()` now correctly handles modifier prefixes (`Shift+Tab`, `Ctrl+1`, `Meta+P`); navigation timeouts resolve with `null` instead of rejecting, so a stalled page doesn't crash the server.

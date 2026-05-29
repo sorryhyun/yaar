@@ -89,6 +89,15 @@ export interface UserMessageEvent {
   content: string;
   interactions?: UserInteraction[];
   monitorId?: string;
+  /**
+   * Routing target for this message (default `'monitor'`):
+   *  - `'monitor'` — the monitor agent (sandbox browsing only). Today's behavior.
+   *  - `'session'` — the session agent, the user's deputy, which can drive the
+   *    user's real browser via `yaar://session/browser`.
+   * Set from the CLI-panel Monitor/Session toggle. See
+   * docs/session_agent_browser_design.md §6.
+   */
+  target?: 'monitor' | 'session';
 }
 
 export interface WindowMessageEvent {

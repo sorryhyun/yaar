@@ -17,8 +17,8 @@ bun run build                  # Build for production
 - `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
 - `CODEX_WS_PORT` (default: 4510), `CHROME_PATH` (auto-detected), `MARKET_URL`
-- `YAAR_BROWSER_PROVIDER` - Browser backend behind `POST /api/browser`: `local` attaches to the user's own Chrome (`LocalUserBrowser`), `headless`/unset uses the private server-side Chrome (`HeadlessServerBrowser`, the default). See `docs/browser_substrate_proposal.md`.
-- `CHROME_DEBUG_PORT` (default: 9222) - DevTools port the `local` browser provider attaches to (user launches Chrome with `--remote-debugging-port`).
+- `YAAR_BROWSER_PROVIDER` - **No longer a selector.** `POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`); the user's real Chrome is reached only through the session-agent door `yaar://session/browser` (`getLocalBrowser()`), which auto-attaches whenever a debuggable Chrome is reachable. The var survives only as a **force-headless opt-out**: set `=headless` to keep the agent away from your real browser (the session door then uses the sandbox too). See `docs/session_agent_browser_design.md` §5.
+- `CHROME_DEBUG_PORT` (default: 9222) - DevTools port the local (session-door) browser provider attaches to (user launches Chrome with `--remote-debugging-port`).
 
 ## Directory Structure
 
@@ -89,7 +89,7 @@ SessionHub (singleton registry)
     ├── ReloadCache                                 ← fingerprint-based action caching
     └── ContextPool (unified pool)
         ├── AgentPool
-        │   ├── Session Agent: PooledAgent | null            ← lazy singleton; cross-monitor oversight + session principal (only tier with yaar://session/* access)
+        │   ├── Session Agent: PooledAgent | null            ← lazy singleton; cross-monitor oversight + session principal (only tier with yaar://session/* access; the only principal that drives the user's real browser via yaar://session/browser)
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
         │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app

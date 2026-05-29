@@ -16,7 +16,7 @@ import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJsonResource, okLinks, error, getActiveSession } from './utils.js';
 import { getSessionId, getMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { getBrowserProvider } from '../lib/browser/index.js';
+import { getHeadlessBrowser } from '../lib/browser/index.js';
 import {
   listMonitors,
   getMonitorStatus,
@@ -24,6 +24,7 @@ import {
   disposeMonitor,
 } from '../features/session/monitors.js';
 import { memorize } from '../features/session/memorize.js';
+import { sessionBrowserRead, sessionBrowserInvoke } from '../features/session/browser.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
   // ── yaar:// — session root overview ──
@@ -37,7 +38,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
       const pool = session?.getPool();
       const stats = pool?.getStats();
-      const browserPool = getBrowserProvider();
+      const browserPool = getHeadlessBrowser();
 
       return okJsonResource('yaar://', {
         sessionId: sid ?? session?.sessionId ?? null,
@@ -106,6 +107,60 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       }
 
       return error(`Unknown action "${payload.action}".`);
+    },
+  });
+
+  // ── yaar://session/browser — drive the user's REAL browser (deputy) ──
+  registry.register('yaar://session/browser', {
+    description:
+      "Drive the user's own browser as their deputy — real Chrome, real cookies and logins " +
+      '(not the headless sandbox behind /api/browser). Read to list open tabs; invoke with ' +
+      '{ action, ... } to navigate/click/type/extract/screenshot, etc. Session agent only.',
+    verbs: ['describe', 'read', 'invoke'],
+    access: 'session-principal',
+    invokeSchema: {
+      type: 'object',
+      required: ['action'],
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'open',
+            'navigate',
+            'click',
+            'type',
+            'press',
+            'scroll',
+            'hover',
+            'wait_for',
+            'screenshot',
+            'extract',
+            'extract_images',
+            'evaluate',
+            'html',
+            'annotate',
+            'remove_annotations',
+            'get_cookies',
+            'set_cookie',
+            'delete_cookies',
+            'list_tabs',
+            'close_tab',
+            'create',
+          ],
+        },
+        browserId: { type: 'string', description: 'Tab id (default "0").' },
+        url: { type: 'string', description: 'URL for open/navigate.' },
+        selector: { type: 'string' },
+        text: { type: 'string' },
+      },
+    },
+
+    async read(): Promise<VerbResult> {
+      return sessionBrowserRead();
+    },
+
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      return sessionBrowserInvoke(payload);
     },
   });
 

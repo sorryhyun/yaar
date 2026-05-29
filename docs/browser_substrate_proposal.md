@@ -116,32 +116,43 @@ Apply the identical shape to browsing.
 
 `@bundled/yaar-web`'s surface (`open`, `navigate`, `click`, `type`, `press`, `extract`,
 `screenshot`, `evaluate`, `getCookies`, `listTabs`, ... — all keyed by an optional `browserId`)
-stays **byte-for-byte identical**. Apps and agents are unaffected. Only the backend behind
-`POST /api/browser` swaps.
+stays **byte-for-byte identical**. Apps and agents are unaffected.
 
-### Two providers behind one seam
+> **⚠️ Superseded on one axis by [`session_agent_browser_design.md`](./session_agent_browser_design.md) (Phase 2, shipped).**
+> The original plan — "*only the backend behind `POST /api/browser` swaps*" — no longer holds.
+> `POST /api/browser` is now **hard-pinned to `HeadlessServerBrowser`** and never swaps; the user's
+> real browser is reached through a *separate, principal-gated door*, `yaar://session/browser`,
+> usable only by the session agent. The `yaar-web` surface and the `LocalUserBrowser` mechanism
+> below remain authoritative — only "who selects which provider, through which door" has moved.
+
+### Two providers behind one shared action layer (two doors)
 
 ```
-@bundled/yaar-web  →  POST /api/browser  →  BrowserProvider (interface)
-                                              ├── HeadlessServerBrowser   (today's pool)
-                                              └── LocalUserBrowser        (new)
+features/browser/actions.ts   (open/click/extract/… — takes a provider instance)
+        ├── POST /api/browser        (apps, yaar-web)     → HeadlessServerBrowser   (sandbox)
+        └── yaar://session/browser   (session agent only) → LocalUserBrowser        (real Chrome)
 ```
 
 - **`HeadlessServerBrowser`** — the current `BrowserPool`/`BrowserSession` over a server-spawned
   Chrome. **Kept, not deprecated.** It is the correct answer for headless / cloud / SSH / no-display
-  / Claude-in-Claude / eval runs.
+  / Claude-in-Claude / eval runs, and the *only* thing `POST /api/browser` ever reaches.
 - **`LocalUserBrowser`** — CDP (or a companion extension) against the **user's own browser**. Real
-  cookies, real logins, real tabs, no re-auth, no screenshots: the tab *is* the window.
+  cookies, real logins, real tabs, no re-auth, no screenshots: the tab *is* the window. Reached
+  **only** through `yaar://session/browser`.
 
-### Provider selection (mirror AI provider auto-detection)
+### Provider selection — by door + detection, not environment (superseded)
 
-| Environment | Provider |
-|-------------|----------|
-| Local desktop, user browser reachable (extension installed or `--remote-debugging-port`) | `LocalUserBrowser` |
-| `REMOTE=1` / headless / cloud / no display | `HeadlessServerBrowser` |
+The original env-keyed table below is **superseded** by principal-routing + Chrome detection (see
+[`session_agent_browser_design.md`](./session_agent_browser_design.md) §5). Selection is no longer
+"environment → provider"; it is "**which door** you came through":
 
-Selection logic lives next to the existing provider factory so the two abstractions stay
-symmetrical and discoverable.
+| Door / principal | Provider | Note |
+|------------------|----------|------|
+| `POST /api/browser` (apps, monitor agents, `yaar-web`) | `HeadlessServerBrowser` | hard-pinned; ignores `YAAR_BROWSER_PROVIDER=local` |
+| `yaar://session/browser` (session agent) | `LocalUserBrowser` when a debuggable Chrome is reachable | auto-detected; never launches Chrome; errors (no silent fallback) when none is reachable |
+
+`YAAR_BROWSER_PROVIDER` is **retired as the selector** and demoted to a single **force-headless
+opt-out** (`=headless`) for users who never want the agent near their real browser.
 
 ### Target addressing
 
@@ -225,13 +236,17 @@ surface is the same CDP target channel.)
    `isSelf` fields); `list_tabs` annotates YAAR's own tab with `isSelf`.
 4. **Companion extension.** ⬜ Productize `LocalUserBrowser` for non-dev users; make the Browser app a
    live-tab handle instead of a canvas screenshot (and render the `driving`/`isSelf` SSE fields).
-5. **Provider auto-selection.** ◐ Partial. `getBrowserProvider()` selects via
-   `YAAR_BROWSER_PROVIDER` today (dev opt-in). Still to do: environment auto-detection (local
-   desktop with a reachable browser vs. `REMOTE`/headless) wired next to the AI provider factory.
+5. **Provider auto-selection.** ✅ **Superseded & resolved** by
+   [`session_agent_browser_design.md`](./session_agent_browser_design.md) Phase 2. The single
+   env-keyed `getBrowserProvider()` singleton is gone, replaced by two doors:
+   `getHeadlessBrowser()` (`/api/browser`, hard-pinned) and `getLocalBrowser()`
+   (`yaar://session/browser`, session-agent only, auto-attaches to a reachable Chrome).
+   `YAAR_BROWSER_PROVIDER` is no longer a selector — only a force-headless opt-out. The "environment
+   → provider" idea is replaced by "principal/door + Chrome detection."
 
 Each phase is independently shippable and reversible; phase 1 was pure refactor. Phases 1–3 are
 implemented and covered by tests (`tests/browser-pool.test.ts`, `tests/local-user-browser.test.ts`,
-`tests/browser-guards.test.ts`).
+`tests/browser-guards.test.ts`, `tests/browser-doors.test.ts`).
 
 ---
 

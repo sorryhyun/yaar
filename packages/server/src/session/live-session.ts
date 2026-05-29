@@ -32,7 +32,7 @@ import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
-import { getBrowserProvider } from '../lib/browser/index.js';
+import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
@@ -402,6 +402,18 @@ export class LiveSession {
     switch (event.type) {
       case ClientEventType.USER_MESSAGE: {
         const monitorId = event.monitorId ?? '0';
+        // "Act as me" target (CLI-panel toggle): route to the session agent — the
+        // user's deputy, the one principal that can drive the real browser.
+        if (event.target === 'session') {
+          await this.pool?.handleSessionTask({
+            type: 'session',
+            messageId: event.messageId,
+            content: event.content,
+            interactions: event.interactions,
+            monitorId,
+          });
+          break;
+        }
         // Auto-create monitor agent if needed (max 4 monitors)
         if (monitorId !== '0' && this.pool && !this.pool.hasMonitorAgent(monitorId)) {
           if (this.pool.getMonitorAgentCount() >= 4) {
@@ -578,10 +590,14 @@ export class LiveSession {
                   type: 'window.close',
                   windowId: interaction.windowId,
                 });
-                // Close all browser sessions (including stale ones) when any browser window is closed
+                // Close all browser sessions (including stale ones) when any browser window is
+                // closed — both the headless sandbox and the user's real-Chrome (session) door.
                 if (interaction.windowId.startsWith('browser-')) {
-                  getBrowserProvider()
-                    ?.closeAll()
+                  getHeadlessBrowser()
+                    .closeAll()
+                    .catch(() => {});
+                  getLocalBrowser()
+                    .closeAll()
                     .catch(() => {});
                 }
               }
@@ -615,8 +631,11 @@ export class LiveSession {
           event.interactions.some((i) => i.type === 'window.close') &&
           this.windowState.listWindows().length === 0
         ) {
-          getBrowserProvider()
-            ?.closeAll()
+          getHeadlessBrowser()
+            .closeAll()
+            .catch(() => {});
+          getLocalBrowser()
+            .closeAll()
             .catch(() => {});
         }
 

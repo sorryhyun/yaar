@@ -2,16 +2,19 @@
  * Shared browser tool helpers — session resolution and page state formatting.
  */
 
-import { getBrowserProvider } from '../../lib/browser/index.js';
-import type { BrowserSession, PageState } from '../../lib/browser/index.js';
+import type { BrowserProvider, BrowserSession, PageState } from '../../lib/browser/index.js';
 
 /**
- * Resolve a browser session by browserId.
+ * Resolve a browser session by browserId on a specific provider.
  * If browserId is given, look up that specific browser.
  * If not given, use the only browser (or error if 0 or multiple).
+ *
+ * The provider is passed in (not the global singleton) so the same action
+ * layer can be driven against either door — headless (`/api/browser`) or the
+ * user's real Chrome (`yaar://session/browser`). See
+ * docs/session_agent_browser_design.md.
  */
-export function resolveSession(browserId?: string): BrowserSession {
-  const pool = getBrowserProvider();
+export function resolveSession(pool: BrowserProvider, browserId?: string): BrowserSession {
   if (browserId !== undefined) {
     const session = pool.getSession(browserId);
     if (!session) throw new Error(`No browser with ID ${browserId}. Use browser:open first.`);

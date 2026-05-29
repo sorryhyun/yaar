@@ -232,6 +232,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       const images = consumeAttachedImages();
       const messageId = generateMessageId();
       const monitorId = useDesktopStore.getState().activeMonitorId;
+      // CLI-panel "act as me" toggle — route to the session agent (the user's
+      // deputy) only while the CLI panel is open; the main palette stays on the
+      // monitor agent. See docs/session_agent_browser_design.md §6.
+      const { cliMode, cliTarget } = useDesktopStore.getState();
+      const target = cliMode && cliTarget === 'session' ? 'session' : undefined;
       trackMessage(messageId);
       addCliEntry({ type: 'user', content, monitorId });
 
@@ -251,6 +256,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         content,
         monitorId,
         interactions: interactions.length > 0 ? interactions : undefined,
+        target,
       });
     },
     [send],

@@ -11,7 +11,7 @@ import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
-import { isYaarOriginUrl } from './guards.js';
+import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guards.js';
 import { getAgentId, getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
@@ -202,7 +202,7 @@ export async function handleClick(
   browserId: string,
   p: Payload,
 ): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+  const session = resolveSession(pool, browserId);
   if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
     return error('Provide "selector", "text", or both "x" and "y".');
   }
@@ -224,31 +224,47 @@ export async function handleClick(
   return ok(formatPageState(state));
 }
 
-export async function handleType(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleType(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.selector) return error('"selector" is required for type.');
   if (!p.text) return error('"text" is required for type.');
   const state = await session.type(p.selector as string, p.text as string);
   return ok(`Typed into ${p.selector}\n\n${formatPageState(state)}`);
 }
 
-export async function handlePress(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handlePress(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.key) return error('"key" is required for press.');
   const state = await session.press(p.key as string, p.selector as string | undefined);
   return ok(formatPageState(state));
 }
 
-export async function handleScroll(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleScroll(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const dir = p.direction as string;
   if (dir !== 'up' && dir !== 'down') return error('"direction" must be "up" or "down".');
   const state = await session.scroll(dir);
   return ok(formatPageState(state));
 }
 
-export async function handleNavigate(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleNavigate(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
 
   // Navigate to a URL
   if (p.url) {
@@ -285,8 +301,12 @@ export async function handleNavigate(browserId: string, p: Payload): Promise<Ver
   return ok(formatPageState(state));
 }
 
-export async function handleHover(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleHover(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.selector && !p.text && (p.x === undefined || p.y === undefined)) {
     return error('Provide "selector", "text", or both "x" and "y".');
   }
@@ -294,8 +314,12 @@ export async function handleHover(browserId: string, p: Payload): Promise<VerbRe
   return ok(formatPageState(state));
 }
 
-export async function handleWaitFor(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleWaitFor(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.selector) return error('"selector" is required for wait_for.');
   const state = await session.waitForSelector(
     p.selector as string,
@@ -304,8 +328,12 @@ export async function handleWaitFor(browserId: string, p: Payload): Promise<Verb
   return ok(formatPageState(state));
 }
 
-export async function handleScreenshot(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleScreenshot(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const hasRegion =
     p.x0 !== undefined && p.y0 !== undefined && p.x1 !== undefined && p.y1 !== undefined;
   const clip = hasRegion
@@ -323,8 +351,12 @@ export async function handleScreenshot(browserId: string, p: Payload): Promise<V
   return okWithImages(label, [{ data: buffer.toString('base64'), mimeType: 'image/webp' }]);
 }
 
-export async function handleExtract(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleExtract(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const effectiveSelector =
     p.mainContentOnly && !p.selector
       ? await findMainContent(session)
@@ -360,8 +392,12 @@ export async function handleExtract(browserId: string, p: Payload): Promise<Verb
   return ok(result.trim());
 }
 
-export async function handleExtractImages(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleExtractImages(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const effectiveSelector =
     p.mainContentOnly && !p.selector
       ? await findMainContent(session)
@@ -422,15 +458,23 @@ export async function handleExtractImages(browserId: string, p: Payload): Promis
   };
 }
 
-export async function handleGetCookies(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleGetCookies(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const urls = p.urls as string[] | undefined;
   const cookies = await session.getCookies(urls);
   return okJson(cookies);
 }
 
-export async function handleSetCookie(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleSetCookie(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.name) return error('"name" is required for set_cookie.');
   if (p.value === undefined) return error('"value" is required for set_cookie.');
   const success = await session.setCookie({
@@ -447,8 +491,12 @@ export async function handleSetCookie(browserId: string, p: Payload): Promise<Ve
   return success ? ok('Cookie set.') : error('Failed to set cookie.');
 }
 
-export async function handleDeleteCookies(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleDeleteCookies(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.name) return error('"name" is required for delete_cookies.');
   await session.deleteCookies({
     name: p.name as string,
@@ -459,27 +507,131 @@ export async function handleDeleteCookies(browserId: string, p: Payload): Promis
   return ok(`Cookie "${p.name}" deleted.`);
 }
 
-export async function handleEvaluate(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleEvaluate(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   if (!p.expression) return error('"expression" is required for evaluate.');
   const result = await session.evaluate(p.expression as string);
   return okJson((result as object) ?? null);
 }
 
-export async function handleHtml(browserId: string, p: Payload): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleHtml(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const html = await session.getHtml(p.selector as string | undefined);
   return ok(html);
 }
 
-export async function handleAnnotate(browserId: string): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleAnnotate(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   const result = await session.annotateElements();
   return okJson(result);
 }
 
-export async function handleRemoveAnnotations(browserId: string): Promise<VerbResult> {
-  const session = resolveSession(browserId);
+export async function handleRemoveAnnotations(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
   await session.removeAnnotations();
   return ok('Annotations removed.');
+}
+
+/**
+ * Shared action dispatcher — the single switch table that both browser doors
+ * use. The caller passes the provider instance (headless for `/api/browser`,
+ * the user's real Chrome for `yaar://session/browser`) plus the parsed action
+ * payload. Consent / self-target guards and the "driving" indicator are applied
+ * by the caller around this switch (see `runGuardedBrowserAction`).
+ *
+ * See docs/session_agent_browser_design.md §5 ("one shared action layer, two
+ * doors bound to two instances").
+ */
+export async function runBrowserAction(
+  pool: BrowserProvider,
+  action: string,
+  browserId: string,
+  body: Payload,
+): Promise<VerbResult> {
+  switch (action) {
+    case 'create':
+      return handleCreate(pool, browserId, body);
+    case 'open':
+      return handleOpen(pool, browserId, body);
+    case 'click':
+      return handleClick(pool, browserId, body);
+    case 'type':
+      return handleType(pool, browserId, body);
+    case 'press':
+      return handlePress(pool, browserId, body);
+    case 'scroll':
+      return handleScroll(pool, browserId, body);
+    case 'navigate':
+      return handleNavigate(pool, browserId, body);
+    case 'hover':
+      return handleHover(pool, browserId, body);
+    case 'wait_for':
+      return handleWaitFor(pool, browserId, body);
+    case 'screenshot':
+      return handleScreenshot(pool, browserId, body);
+    case 'extract':
+      return handleExtract(pool, browserId, body);
+    case 'extract_images':
+      return handleExtractImages(pool, browserId, body);
+    case 'evaluate':
+      return handleEvaluate(pool, browserId, body);
+    case 'html':
+      return handleHtml(pool, browserId, body);
+    case 'annotate':
+      return handleAnnotate(pool, browserId);
+    case 'remove_annotations':
+      return handleRemoveAnnotations(pool, browserId);
+    case 'get_cookies':
+      return handleGetCookies(pool, browserId, body);
+    case 'set_cookie':
+      return handleSetCookie(pool, browserId, body);
+    case 'delete_cookies':
+      return handleDeleteCookies(pool, browserId, body);
+    case 'list_tabs':
+      return handleListTabs(pool);
+    case 'close_tab':
+      return handleCloseTab(pool, browserId);
+    default:
+      return error(`Unknown action "${action}".`);
+  }
+}
+
+/**
+ * Apply the Phase-3 consent + self-target guards and the "driving" indicator,
+ * then run the action against `pool`. Returns a `VerbResult` (guard denials
+ * surface as `isError`). Shared by `yaar://session/browser`; the HTTP route
+ * keeps its own wrapper so it can map a guard denial to HTTP 403.
+ */
+export async function runGuardedBrowserAction(
+  pool: BrowserProvider,
+  action: string,
+  body: Payload,
+  sessionId?: string,
+): Promise<VerbResult> {
+  const browserId = (body.browserId as string) ?? '0';
+  const session = pool.getSession(browserId);
+  const guard = await enforceBrowserGuards({ provider: pool, action, session, sessionId });
+  if (!guard.ok) return error(guard.error);
+
+  const driving = !!session && isMutatingAction(action);
+  if (driving) session!.setDriving(true);
+  try {
+    return await runBrowserAction(pool, action, browserId, body);
+  } finally {
+    if (driving) session!.setDriving(false);
+  }
 }

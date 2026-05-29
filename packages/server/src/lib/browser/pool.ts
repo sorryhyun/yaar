@@ -98,41 +98,69 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
 export const BrowserPool = HeadlessServerBrowser;
 export type BrowserPool = HeadlessServerBrowser;
 
-/** Singleton provider instance. */
-let provider: BrowserProvider | undefined;
+/**
+ * Two doors, two instances (Phase 2 — principal-routed browser access).
+ *
+ * The single env-switched singleton is gone. Instead there are two providers
+ * alive at once, each bound to one entry point:
+ *
+ *  - `getHeadlessBrowser()` → `HeadlessServerBrowser`, reached by apps / `yaar-web`
+ *    through `POST /api/browser`. A throwaway sandbox with no identity.
+ *  - `getLocalBrowser()` → `LocalUserBrowser`, reached *only* by the session agent
+ *    through `yaar://session/browser`. The user's real Chrome, real identity.
+ *
+ * The boundary is identity, not environment: lower agents physically reach a
+ * *different instance*, so the user's real browser can't leak out the sandbox
+ * door. See docs/session_agent_browser_design.md §5.
+ */
+let headlessProvider: HeadlessServerBrowser | undefined;
+let localProvider: LocalUserBrowser | undefined;
 
 /**
- * Get the active browser provider.
+ * The headless sandbox provider — backs `POST /api/browser` (apps, `yaar-web`).
+ * Hard-pinned to headless; it ignores `YAAR_BROWSER_PROVIDER` entirely (Q4).
+ */
+export function getHeadlessBrowser(): HeadlessServerBrowser {
+  if (!headlessProvider) headlessProvider = new HeadlessServerBrowser();
+  return headlessProvider;
+}
+
+/**
+ * The local provider — backs `yaar://session/browser` (session agent only).
+ * Auto-attaches to a debuggable Chrome whenever one is reachable; never launches
+ * or kills it (`ownsChrome = false`). Callers must check `isAvailable()` and
+ * error out when no local Chrome is reachable — never silently downgrade to
+ * headless (a silent sandbox would lie about identity). See design §5.
+ */
+export function getLocalBrowser(): LocalUserBrowser {
+  if (!localProvider) localProvider = new LocalUserBrowser();
+  return localProvider;
+}
+
+/**
+ * Force-headless opt-out: a user who never wants the agent near their real
+ * browser sets `YAAR_BROWSER_PROVIDER=headless`. The env var is no longer a
+ * *selector* (detection picks local automatically) — only this one kill-switch
+ * survives, and it makes even the session door use the headless sandbox.
+ */
+export function isForceHeadless(): boolean {
+  return process.env.YAAR_BROWSER_PROVIDER?.toLowerCase() === 'headless';
+}
+
+/**
+ * The active browser provider for back-compat callers (availability probe,
+ * lifecycle shutdown, the `yaar://` overview count, and the legacy
+ * `/api/browser` route helper). Always the headless sandbox now.
  *
- * Selection (Phase 2 — dev opt-in):
- *  - `YAAR_BROWSER_PROVIDER=local`    → `LocalUserBrowser` (attaches to the user's
- *    own Chrome started with `--remote-debugging-port`).
- *  - `YAAR_BROWSER_PROVIDER=headless` → `HeadlessServerBrowser` (explicit).
- *  - unset → `HeadlessServerBrowser` (the safe default everywhere).
- *
- * Full environment auto-detection (local desktop with a reachable browser vs.
- * REMOTE/headless) lands in a later phase next to the AI provider factory —
- * see docs/browser_substrate_proposal.md.
+ * @deprecated Prefer `getHeadlessBrowser()` / `getLocalBrowser()` by door.
  */
 export function getBrowserProvider(): BrowserProvider {
-  if (provider) return provider;
-  provider = createBrowserProvider();
-  return provider;
-}
-
-function createBrowserProvider(): BrowserProvider {
-  const choice = process.env.YAAR_BROWSER_PROVIDER?.toLowerCase();
-  if (choice === 'local') {
-    console.log('[browser] Using LocalUserBrowser (user Chrome via --remote-debugging-port)');
-    return new LocalUserBrowser();
-  }
-  return new HeadlessServerBrowser();
+  return getHeadlessBrowser();
 }
 
 /**
- * @deprecated Use `getBrowserProvider()`. Returns the active provider, which is
- * currently always a `HeadlessServerBrowser`.
+ * @deprecated Use `getHeadlessBrowser()`.
  */
 export function getBrowserPool(): BrowserProvider {
-  return getBrowserProvider();
+  return getHeadlessBrowser();
 }

@@ -12,7 +12,7 @@ import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { validateIframeToken } from '../iframe-tokens.js';
-import { getBrowserProvider } from '../../lib/browser/index.js';
+import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import {
   enforceBrowserGuards,
   isMutatingAction,
@@ -21,29 +21,7 @@ import {
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import {
-  handleCreate,
-  handleListTabs,
-  handleCloseTab,
-  handleOpen,
-  handleClick,
-  handleType,
-  handlePress,
-  handleScroll,
-  handleNavigate,
-  handleHover,
-  handleWaitFor,
-  handleScreenshot,
-  handleExtract,
-  handleExtractImages,
-  handleEvaluate,
-  handleHtml,
-  handleAnnotate,
-  handleRemoveAnnotations,
-  handleGetCookies,
-  handleSetCookie,
-  handleDeleteCookies,
-} from '../../features/browser/actions.js';
+import { runBrowserAction } from '../../features/browser/actions.js';
 import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -123,7 +101,9 @@ function requireAuth(req: Request): ReturnType<typeof validateIframeToken> | Res
 export async function handleBrowserRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/browser')) return null;
 
-  const pool = getBrowserProvider();
+  // The public HTTP door is hard-pinned to the headless sandbox (Q4). The user's
+  // real browser is reached only through `yaar://session/browser` (session agent).
+  const pool = getHeadlessBrowser();
 
   // GET /api/browser/sessions — list all open sessions
   if (url.pathname === '/api/browser/sessions' && req.method === 'GET') {
@@ -292,74 +272,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     if (driving) guardedSession!.setDriving(true);
 
     try {
-      let result;
-      switch (action) {
-        case 'create':
-          result = await handleCreate(pool, browserId, body);
-          break;
-        case 'open':
-          result = await handleOpen(pool, browserId, body);
-          break;
-        case 'click':
-          result = await handleClick(pool, browserId, body);
-          break;
-        case 'type':
-          result = await handleType(browserId, body);
-          break;
-        case 'press':
-          result = await handlePress(browserId, body);
-          break;
-        case 'scroll':
-          result = await handleScroll(browserId, body);
-          break;
-        case 'navigate':
-          result = await handleNavigate(browserId, body);
-          break;
-        case 'hover':
-          result = await handleHover(browserId, body);
-          break;
-        case 'wait_for':
-          result = await handleWaitFor(browserId, body);
-          break;
-        case 'screenshot':
-          result = await handleScreenshot(browserId, body);
-          break;
-        case 'extract':
-          result = await handleExtract(browserId, body);
-          break;
-        case 'extract_images':
-          result = await handleExtractImages(browserId, body);
-          break;
-        case 'evaluate':
-          result = await handleEvaluate(browserId, body);
-          break;
-        case 'html':
-          result = await handleHtml(browserId, body);
-          break;
-        case 'annotate':
-          result = await handleAnnotate(browserId);
-          break;
-        case 'remove_annotations':
-          result = await handleRemoveAnnotations(browserId);
-          break;
-        case 'get_cookies':
-          result = await handleGetCookies(browserId, body);
-          break;
-        case 'set_cookie':
-          result = await handleSetCookie(browserId, body);
-          break;
-        case 'delete_cookies':
-          result = await handleDeleteCookies(browserId, body);
-          break;
-        case 'list_tabs':
-          result = await handleListTabs(pool);
-          break;
-        case 'close_tab':
-          result = await handleCloseTab(pool, browserId);
-          break;
-        default:
-          return jsonResponse({ ok: false, error: `Unknown action "${action}"` }, 400);
-      }
+      const result = await runBrowserAction(pool, action, browserId, body);
       return verbResultToResponse(result);
     } catch (err) {
       return jsonResponse(

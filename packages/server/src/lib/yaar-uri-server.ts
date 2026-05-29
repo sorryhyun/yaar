@@ -157,7 +157,8 @@ export type SessionSubKind =
   | 'logs'
   | 'context'
   | 'transcript'
-  | 'messages';
+  | 'messages'
+  | 'browser';
 
 export interface ParsedSessionUri {
   subKind?: SessionSubKind;
@@ -175,6 +176,7 @@ const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
   'context',
   'transcript',
   'messages',
+  'browser',
 ]);
 
 /**

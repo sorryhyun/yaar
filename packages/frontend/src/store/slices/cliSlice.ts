@@ -10,6 +10,7 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
   cliMode: false,
   cliHistory: {},
   cliStreaming: {},
+  cliTarget: 'monitor',
 
   toggleCliMode: () =>
     set((state) => {
@@ -18,6 +19,11 @@ export const createCliSlice: SliceCreator<CliSlice> = (set, _get) => ({
       if (state.cliMode) {
         state.agentPanelOpen = true;
       }
+    }),
+
+  setCliTarget: (target) =>
+    set((state) => {
+      state.cliTarget = target;
     }),
 
   addCliEntry: (entry) =>

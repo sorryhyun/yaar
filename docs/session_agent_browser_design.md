@@ -245,15 +245,28 @@ single-agent, opt-in*.
    (§4b). Role is resolved from the pool (`AgentPool.getRoleForAgent` → `SessionHub.findRoleForAgent`)
    on the MCP path and from the per-turn role string (`principalRole()`) in-process. *(Pure security
    tightening; no new capability.)*
-2. **`yaar://session/browser` handler.** Thin facade over `features/browser/actions.ts` bound to a
-   `LocalUserBrowser` instance; `access: 'session-principal'`. Instantiate both providers; route by
-   door (§5).
-3. **CLI toggle.** `USER_MESSAGE.target`, `routeMessage` → session agent, panel-only UI (§6).
+2. **✅ DONE — `yaar://session/browser` handler + provider split.** `getBrowserProvider()`'s single
+   env-keyed singleton is replaced by two doors: `getHeadlessBrowser()` (pinned behind
+   `POST /api/browser`) and `getLocalBrowser()` (a `LocalUserBrowser` that auto-attaches to a
+   reachable Chrome). `features/browser/actions.ts` now threads the provider instance through every
+   handler and exposes a shared `runBrowserAction` switch + `runGuardedBrowserAction` (guards +
+   driving indicator); the HTTP route and the session door both dispatch into it.
+   `features/session/browser.ts` picks the provider (local, or headless under the force-headless
+   opt-out, or a clear "no local browser" error — never a silent downgrade) and is registered at
+   `yaar://session/browser` with `access: 'session-principal'`. `'browser'` added to the session
+   URI parser. Tested in `tests/browser-doors.test.ts`.
+3. **✅ DONE — CLI toggle.** `USER_MESSAGE.target?: 'monitor' | 'session'` added to the shared event;
+   `LiveSession.routeMessage()` routes `target === 'session'` to `ContextPool.handleSessionTask()`,
+   which wakes the lazy session agent and runs a `session-*` turn (the principal tier that unlocks
+   `yaar://session/browser`) with the session-agent profile prompt. Frontend: `cliTarget` in the cli
+   slice, a Monitor/Session toggle in `CliPanel`, and `sendMessage` attaching `target` only while the
+   CLI panel is open (§6).
 4. **Consent UX polish.** Make the "driving as you" indicator prominent; tighten per-origin grants
    for the local browser before exposing the toggle beyond the CLI panel.
 
-Each phase is independently shippable; phase 1 (a pure correctness fix that closed a real
-hole — monitor agents could hit `yaar://session/*`) has landed.
+Each phase is independently shippable; phases 1–3 have landed. Phase 1 was a pure correctness fix
+(monitor agents could hit `yaar://session/*`); phase 2 split one shared singleton into two
+door-bound instances; phase 3 added the opt-in, panel-only "act as me" route.
 
 ---
 
@@ -330,34 +343,31 @@ that was previously implicit. All of the edits below have landed:
 - ✅ **`docs/app-development.md`** — in the URI-verbs reference, noted **`yaar://session/*` is
   session-agent-only** (not reachable by apps via `/api/verb`).
 
-### Phase 2 — `yaar://session/browser` + provider split
+### Phase 2 — `yaar://session/browser` + provider split ✅ DONE
 
-- **`docs/browser_substrate_proposal.md`** — the heaviest reframe:
-  - L115–120 *"Invariant: `yaar-web` API does not change … byte-for-byte identical … only the backend
-    behind `POST /api/browser` swaps"* → no longer the whole story: `/api/browser` is **hard-pinned
-    to headless**; the user's real browser is reached through the *new* `yaar://session/browser`
-    door, not the swapped `/api/browser` backend.
-  - L138–141 provider-selection table (*environment → provider*) → **inverted**: selection is by
-    *door/principal* + Chrome **detection**, not by environment/env-var.
-  - L229–230 Phase 5 *"Provider auto-selection … `getBrowserProvider()` selects via
-    `YAAR_BROWSER_PROVIDER`"* → mark superseded; `YAAR_BROWSER_PROVIDER` is now a force-headless
-    opt-out, and auto-detection replaces it (link here).
-- **`packages/server/CLAUDE.md`** L20 — rewrite the `YAAR_BROWSER_PROVIDER` description: it is **no
-  longer a selector**; `/api/browser` is always headless; local is the session door's default
-  (detection); the var is a force-headless opt-out. Also extend the AgentPool session-agent line to
-  *"the only principal that drives the user's real browser."*
-- **root `CLAUDE.md`** — same `YAAR_BROWSER_PROVIDER` semantics fix in the Environment Variables list.
-- **`docs/app-development.md`** — add `yaar://session/browser` to the URI-verbs reference (session-only).
+- ✅ **`docs/browser_substrate_proposal.md`** — reframed: the "Invariant" block now carries a
+  *superseded-on-one-axis* note (`/api/browser` hard-pinned to headless; real browser via the new
+  `yaar://session/browser` door); the provider-selection table is replaced by a *door/principal +
+  Chrome detection* table; Phase 5 ("Provider auto-selection") marked superseded & resolved, with
+  `YAAR_BROWSER_PROVIDER` demoted to a force-headless opt-out. All link here.
+- ✅ **`packages/server/CLAUDE.md`** — `YAAR_BROWSER_PROVIDER` rewritten ("no longer a selector";
+  `/api/browser` always headless; local is the session door's auto-detected default; var = force-
+  headless opt-out). AgentPool session-agent line extended to *"the only principal that drives the
+  user's real browser via `yaar://session/browser`."*
+- N/A **root `CLAUDE.md`** — `YAAR_BROWSER_PROVIDER` was never in the root Environment-Variables list,
+  so there was nothing to fix there (semantics live in `packages/server/CLAUDE.md`).
+- ✅ **`docs/app-development.md`** — `yaar://session/browser` noted in the URI-verbs reference
+  (session-only; apps use `@bundled/yaar-web` → headless sandbox instead).
 
-### Phase 3 — CLI toggle
+### Phase 3 — CLI toggle ✅ DONE
 
-- **`packages/shared/CLAUDE.md`** — document `USER_MESSAGE.target?: 'monitor' | 'session'` in the
+- ✅ **`packages/shared/CLAUDE.md`** — documented `USER_MESSAGE.target?: 'monitor' | 'session'` in the
   WebSocket-events section (default `'monitor'`).
-- **`packages/frontend/CLAUDE.md`** — describe the CLI-panel Monitor/Session toggle in the
-  `DesktopSurface` / CLI-panel section.
-- **root `CLAUDE.md`** L48–57 (*"Running YAAR Headlessly"*) — the `press(key: "Shift+Tab")` note
-  *"open CLI panel to watch streaming"* should mention the panel now also carries the Monitor/Session
-  target toggle.
+- ✅ **`packages/frontend/CLAUDE.md`** — added a "CLI Panel" section describing the Monitor/Session
+  ("act as me") target toggle (`cliTarget`) and how `sendMessage` attaches `target` only while the
+  panel is open.
+- ✅ **root `CLAUDE.md`** — the `press(key: "Shift+Tab")` note now mentions the panel also carries the
+  Monitor/Session target toggle.
 
 ### Phase 4 — consent UX
 

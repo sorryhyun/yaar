@@ -25,7 +25,7 @@ import type {
  * A task to be processed by the pool.
  */
 export interface Task {
-  type: 'monitor' | 'app';
+  type: 'monitor' | 'app' | 'session';
   messageId: string;
   windowId?: string;
   content: string;

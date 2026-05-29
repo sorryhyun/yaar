@@ -340,10 +340,13 @@ export async function shutdown(server: Server<any>): Promise<void> {
       activeTunnel = null;
     }
 
-    // Close browser sessions
+    // Close browser sessions — both doors (headless sandbox + the user's real
+    // Chrome). The local provider never owns Chrome, so its shutdown only drops
+    // our CDP connection.
     try {
-      const { getBrowserProvider } = await import('./lib/browser/index.js');
-      await getBrowserProvider().shutdown();
+      const { getHeadlessBrowser, getLocalBrowser } = await import('./lib/browser/index.js');
+      await getHeadlessBrowser().shutdown();
+      await getLocalBrowser().shutdown();
     } catch {
       // Browser module not available — nothing to clean up
     }
