@@ -45,6 +45,8 @@ export interface BrowserSessionUpdate {
   url: string;
   title: string;
   version: number;
+  /** True while an agent is actively driving this tab (for the "agent is driving" indicator). */
+  driving?: boolean;
 }
 
 export interface BrowserSessionOptions {
@@ -61,6 +63,8 @@ export class BrowserSession extends EventEmitter {
   lastScreenshot: Buffer | null = null;
   lastActivity = Date.now();
   version = 0;
+  /** Whether an agent is currently driving this tab (Phase 3 "agent is driving" indicator). */
+  driving = false;
 
   private cdp: CDPClient;
   private closed = false;
@@ -130,6 +134,24 @@ export class BrowserSession extends EventEmitter {
       url: this.currentUrl,
       title: this.currentTitle,
       version: this.version,
+      driving: this.driving,
+    } satisfies BrowserSessionUpdate);
+  }
+
+  /**
+   * Flag whether an agent is actively driving this tab and emit a status
+   * 'updated' event (without bumping `version`, so it doesn't trigger a content
+   * reload — it's purely the "agent is driving this tab" indicator). Used by the
+   * local-browser consent layer; see docs/browser_substrate_proposal.md.
+   */
+  setDriving(on: boolean): void {
+    if (this.driving === on) return;
+    this.driving = on;
+    this.emit('updated', {
+      url: this.currentUrl,
+      title: this.currentTitle,
+      version: this.version,
+      driving: this.driving,
     } satisfies BrowserSessionUpdate);
   }
 

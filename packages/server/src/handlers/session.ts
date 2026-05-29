@@ -16,7 +16,7 @@ import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJsonResource, okLinks, error, getActiveSession } from './utils.js';
 import { getSessionId, getMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { getBrowserPool } from '../lib/browser/index.js';
+import { getBrowserProvider } from '../lib/browser/index.js';
 import {
   listMonitors,
   getMonitorStatus,
@@ -37,7 +37,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
       const pool = session?.getPool();
       const stats = pool?.getStats();
-      const browserPool = getBrowserPool();
+      const browserPool = getBrowserProvider();
 
       return okJsonResource('yaar://', {
         sessionId: sid ?? session?.sessionId ?? null,

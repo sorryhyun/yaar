@@ -5,12 +5,13 @@
  * `POST /api/browser` dispatch table.
  */
 
-import type { BrowserPool } from '../../lib/browser/index.js';
+import type { BrowserProvider } from '../../lib/browser/index.js';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
+import { isYaarOriginUrl } from './guards.js';
 import { getAgentId, getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
@@ -46,7 +47,7 @@ function emitBrowserWindowAction(action: OSAction, sessionId?: string): void {
 }
 
 export async function handleCreate(
-  pool: BrowserPool,
+  pool: BrowserProvider,
   browserId: string,
   p: Payload,
 ): Promise<VerbResult> {
@@ -90,7 +91,7 @@ export async function handleCreate(
   return ok(`[browser:${bid}${session.mobile ? ' mobile' : ''}] Created (about:blank)`);
 }
 
-export async function handleListTabs(pool: BrowserPool): Promise<VerbResult> {
+export async function handleListTabs(pool: BrowserProvider): Promise<VerbResult> {
   const browsers = pool.getAllSessions();
   if (browsers.size === 0) return okJson([]);
   const items = [...browsers.entries()].map(([bid, s]) => ({
@@ -99,11 +100,17 @@ export async function handleListTabs(pool: BrowserPool): Promise<VerbResult> {
     title: s.currentTitle || '(no title)',
     mobile: s.mobile,
     windowId: s.windowId,
+    // Flag YAAR's own tab — it's an addressed target like any other, but
+    // mutating it via raw automation is refused (use OS Actions instead).
+    ...(isYaarOriginUrl(s.currentUrl) ? { isSelf: true } : {}),
   }));
   return okJson(items);
 }
 
-export async function handleCloseTab(pool: BrowserPool, browserId: string): Promise<VerbResult> {
+export async function handleCloseTab(
+  pool: BrowserProvider,
+  browserId: string,
+): Promise<VerbResult> {
   const session = pool.getSession(browserId);
   if (!session) return error(`No browser with ID ${browserId}.`);
   if (session.windowId) {
@@ -116,7 +123,7 @@ export async function handleCloseTab(pool: BrowserPool, browserId: string): Prom
 }
 
 export async function handleOpen(
-  pool: BrowserPool,
+  pool: BrowserProvider,
   browserId: string,
   p: Payload,
 ): Promise<VerbResult> {
@@ -191,7 +198,7 @@ export async function handleOpen(
 }
 
 export async function handleClick(
-  pool: BrowserPool,
+  pool: BrowserProvider,
   browserId: string,
   p: Payload,
 ): Promise<VerbResult> {

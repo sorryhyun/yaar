@@ -32,7 +32,7 @@ import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
-import { getBrowserPool } from '../lib/browser/index.js';
+import { getBrowserProvider } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
@@ -580,7 +580,7 @@ export class LiveSession {
                 });
                 // Close all browser sessions (including stale ones) when any browser window is closed
                 if (interaction.windowId.startsWith('browser-')) {
-                  getBrowserPool()
+                  getBrowserProvider()
                     ?.closeAll()
                     .catch(() => {});
                 }
@@ -615,7 +615,7 @@ export class LiveSession {
           event.interactions.some((i) => i.type === 'window.close') &&
           this.windowState.listWindows().length === 0
         ) {
-          getBrowserPool()
+          getBrowserProvider()
             ?.closeAll()
             .catch(() => {});
         }

@@ -12,7 +12,14 @@ import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { validateIframeToken } from '../iframe-tokens.js';
-import { getBrowserPool } from '../../lib/browser/index.js';
+import { getBrowserProvider } from '../../lib/browser/index.js';
+import {
+  enforceBrowserGuards,
+  isMutatingAction,
+  isYaarOriginUrl,
+} from '../../features/browser/guards.js';
+import { getSessionId } from '../../agents/agent-context.js';
+import { getSessionHub } from '../../session/session-hub.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import {
   handleCreate,
@@ -116,7 +123,7 @@ function requireAuth(req: Request): ReturnType<typeof validateIframeToken> | Res
 export async function handleBrowserRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/browser')) return null;
 
-  const pool = getBrowserPool();
+  const pool = getBrowserProvider();
 
   // GET /api/browser/sessions — list all open sessions
   if (url.pathname === '/api/browser/sessions' && req.method === 'GET') {
@@ -197,6 +204,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             url: session.currentUrl,
             title: session.currentTitle,
             version: session.version,
+            driving: session.driving,
+            isSelf: isYaarOriginUrl(session.currentUrl),
           });
           write(`data: ${initial}\n\n`);
 
@@ -206,8 +215,15 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             session.off('closed', onClosed);
           };
 
-          const onUpdate = (update: { url: string; title: string; version: number }) => {
-            write(`data: ${JSON.stringify(update)}\n\n`);
+          const onUpdate = (update: {
+            url: string;
+            title: string;
+            version: number;
+            driving?: boolean;
+          }) => {
+            write(
+              `data: ${JSON.stringify({ ...update, isSelf: isYaarOriginUrl(update.url) })}\n\n`,
+            );
           };
           const onClosed = () => {
             cleanup();
@@ -259,6 +275,21 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     if (!action) return errorResponse('"action" is required', 400);
 
     const browserId = (body.browserId as string) ?? '0';
+
+    // Phase 3 consent + self-target guards (no-ops for sandboxed headless tabs).
+    const guardedSession = pool.getSession(browserId);
+    const sessionId = getSessionId() ?? getSessionHub().getDefault()?.sessionId;
+    const guard = await enforceBrowserGuards({
+      provider: pool,
+      action,
+      session: guardedSession,
+      sessionId,
+    });
+    if (!guard.ok) return jsonResponse({ ok: false, error: guard.error }, 403);
+
+    // "Agent is driving this tab" indicator — flag while a mutating action runs.
+    const driving = !!guardedSession && isMutatingAction(action);
+    if (driving) guardedSession!.setDriving(true);
 
     try {
       let result;
@@ -335,6 +366,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
         { ok: false, error: `Browser error: ${err instanceof Error ? err.message : String(err)}` },
         500,
       );
+    } finally {
+      if (driving) guardedSession!.setDriving(false);
     }
   }
 

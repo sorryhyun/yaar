@@ -333,8 +333,8 @@ export async function shutdown(server: Server<any>): Promise<void> {
 
     // Close browser sessions
     try {
-      const { getBrowserPool } = await import('./lib/browser/index.js');
-      await getBrowserPool().shutdown();
+      const { getBrowserProvider } = await import('./lib/browser/index.js');
+      await getBrowserProvider().shutdown();
     } catch {
       // Browser module not available — nothing to clean up
     }

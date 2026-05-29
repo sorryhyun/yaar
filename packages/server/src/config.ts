@@ -214,6 +214,14 @@ export function getCodexSpawnArgs(): string[] {
 /** Default port for the codex app-server WebSocket listener. */
 export const CODEX_WS_PORT = getEnvInt('CODEX_WS_PORT', 4510);
 
+/**
+ * DevTools debug port of the user's own Chrome, used by `LocalUserBrowser`
+ * (the local-browser BrowserProvider). The user launches Chrome with
+ * `--remote-debugging-port=<port>`; YAAR attaches to it over CDP instead of
+ * spawning a private headless Chrome. See docs/browser_substrate_proposal.md.
+ */
+export const CHROME_DEBUG_PORT = getEnvInt('CHROME_DEBUG_PORT', 9222);
+
 /** Get the codex app-server WebSocket port (env override or default). */
 export function getCodexWsPort(): number {
   return CODEX_WS_PORT;

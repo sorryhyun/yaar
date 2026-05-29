@@ -51,6 +51,7 @@ mock.module('../config.js', () => ({
   CODEX_WS_PORT: 4510,
   getCodexWsPort: () => 4510,
   getCodexAppServerArgs: () => [],
+  CHROME_DEBUG_PORT: 9222,
 }));
 mock.module('../agents/agent-context.js', () => ({
   getAgentId: () => undefined,

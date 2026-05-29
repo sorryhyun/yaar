@@ -2,7 +2,7 @@
  * Shared browser tool helpers — session resolution and page state formatting.
  */
 
-import { getBrowserPool } from '../../lib/browser/index.js';
+import { getBrowserProvider } from '../../lib/browser/index.js';
 import type { BrowserSession, PageState } from '../../lib/browser/index.js';
 
 /**
@@ -11,7 +11,7 @@ import type { BrowserSession, PageState } from '../../lib/browser/index.js';
  * If not given, use the only browser (or error if 0 or multiple).
  */
 export function resolveSession(browserId?: string): BrowserSession {
-  const pool = getBrowserPool();
+  const pool = getBrowserProvider();
   if (browserId !== undefined) {
     const session = pool.getSession(browserId);
     if (!session) throw new Error(`No browser with ID ${browserId}. Use browser:open first.`);

@@ -17,6 +17,8 @@ bun run build                  # Build for production
 - `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
 - `CODEX_WS_PORT` (default: 4510), `CHROME_PATH` (auto-detected), `MARKET_URL`
+- `YAAR_BROWSER_PROVIDER` - Browser backend behind `POST /api/browser`: `local` attaches to the user's own Chrome (`LocalUserBrowser`), `headless`/unset uses the private server-side Chrome (`HeadlessServerBrowser`, the default). See `docs/browser_substrate_proposal.md`.
+- `CHROME_DEBUG_PORT` (default: 9222) - DevTools port the `local` browser provider attaches to (user launches Chrome with `--remote-debugging-port`).
 
 ## Directory Structure
 
