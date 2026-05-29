@@ -8,6 +8,7 @@
 import { LiveSession, type LiveSessionOptions } from './live-session.js';
 import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
+import type { AgentRole } from '../agents/agent-context.js';
 
 export class SessionHub {
   private sessions = new Map<SessionId, LiveSession>();
@@ -98,6 +99,14 @@ export class SessionHub {
     for (const session of this.sessions.values()) {
       const windowId = session.getPool()?.findWindowForAgent(agentId);
       if (windowId) return windowId;
+    }
+    return undefined;
+  }
+
+  findRoleForAgent(agentId: string): AgentRole | undefined {
+    for (const session of this.sessions.values()) {
+      const role = session.getPool()?.agentPool?.getRoleForAgent(agentId);
+      if (role) return role;
     }
     return undefined;
   }

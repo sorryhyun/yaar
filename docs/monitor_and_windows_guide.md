@@ -122,12 +122,13 @@ Suspend/resume is implemented via `MonitorQueuePolicy.suspended` — when suspen
 
 ### Session agent
 
-A **session agent** is a lazy, on-demand AI supervisor that sits above monitor agents. It provides cross-monitor visibility and coordination — auditing monitor states, intervening when agents are stuck, and orchestrating cross-monitor workflows.
+A **session agent** is a lazy, on-demand AI supervisor that sits above monitor agents — and is the **session principal**, the one agent tier with access to `yaar://session/*`. It provides cross-monitor visibility and coordination — auditing monitor states, intervening when agents are stuck, and orchestrating cross-monitor workflows.
 
 - **Lazy singleton** — created on first invocation, not at session start. Keyed as `sessionAgent` in `AgentPool`.
 - **No monitor** — the session agent doesn't belong to any monitor. It uses verb tools to read monitor states and invoke control actions.
 - **No windows** — communicates via tool results and relay messages only.
 - **Verb tools only** — same 5 generic `yaar://` verbs as other agents, no WebSearch or Task.
+- **Privileged principal** — agents carry a `role` (`session` / `monitor` / `app`); only `role === 'session'` may reach `yaar://session/*`. Enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a `403`. See `docs/session_agent_browser_design.md`.
 
 Invoke via `yaar://session/agents/session`:
 

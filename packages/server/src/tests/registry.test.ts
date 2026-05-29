@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'bun:test';
-import { ResourceRegistry } from '../handlers/uri-registry.js';
+import { describe, it, expect, afterAll } from 'bun:test';
+import { ResourceRegistry, setAccessRoleResolver } from '../handlers/uri-registry.js';
 import type { ResourceHandler } from '../handlers/uri-registry.js';
+import type { AgentRole } from '../agents/agent-context.js';
 
 /** Extract text from first content item (all test results are text). */
 const text = (r: { content: Array<{ type: string; text?: string }> }) =>
@@ -152,6 +153,55 @@ describe('ResourceRegistry', () => {
 
       await reg.execute('invoke', 'yaar://config/settings', { theme: 'light' });
       expect(receivedPayload).toEqual({ theme: 'light' });
+    });
+  });
+
+  describe('session-principal access control', () => {
+    // Drive the injected resolver directly (production wires it to the ALS-backed
+    // getAgentRole; the gate just calls resolveAgentRole()).
+    let currentRole: AgentRole | undefined;
+    setAccessRoleResolver(() => currentRole);
+    afterAll(() => setAccessRoleResolver(() => undefined));
+
+    // Gate is handler-keyed (namespace-agnostic); use a resolvable URI.
+    const URI = 'yaar://config/settings';
+    function sessionReg() {
+      const reg = new ResourceRegistry();
+      reg.register(URI, mockHandler({ access: 'session-principal', description: 'session-only' }));
+      return reg;
+    }
+
+    it('denies callers with no role (default-deny)', async () => {
+      currentRole = undefined;
+      const r = await sessionReg().execute('read', URI);
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain('Access denied');
+    });
+
+    it('denies monitor- and app-tier callers', async () => {
+      const reg = sessionReg();
+      for (const role of ['monitor', 'app'] as const) {
+        currentRole = role;
+        const r = await reg.execute('read', URI);
+        expect(r.isError).toBe(true);
+        expect(text(r)).toContain('Access denied');
+      }
+    });
+
+    it('allows the session agent', async () => {
+      currentRole = 'session';
+      const r = await sessionReg().execute('read', URI);
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe('read-ok');
+    });
+
+    it('does not gate handlers without an access requirement', async () => {
+      currentRole = 'monitor';
+      const reg = new ResourceRegistry();
+      reg.register('yaar://config/settings', mockHandler());
+      const r = await reg.execute('read', 'yaar://config/settings');
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe('read-ok');
     });
   });
 });

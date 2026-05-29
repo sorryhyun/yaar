@@ -17,6 +17,7 @@ import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport } from '../providers/types.js';
+import type { AgentRole } from './agent-context.js';
 
 /**
  * Internal pooled agent representation.
@@ -371,6 +372,26 @@ export class AgentPool {
   findAppIdForAgent(agentId: string): string | undefined {
     for (const [appId, agent] of this.appAgents) {
       if (agent.instanceId === agentId) return appId;
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolve the principal tier of an agent from which collection it lives in.
+   * The session agent is the only privileged principal; monitor, ephemeral, and
+   * app agents are sandboxed workers. Returns undefined for unknown agents
+   * (treated as non-session by access control).
+   */
+  getRoleForAgent(agentId: string): AgentRole | undefined {
+    if (this.sessionAgent?.instanceId === agentId) return 'session';
+    for (const agent of this.monitorAgents.values()) {
+      if (agent.instanceId === agentId) return 'monitor';
+    }
+    for (const agent of this.appAgents.values()) {
+      if (agent.instanceId === agentId) return 'app';
+    }
+    for (const agent of this.ephemeralAgents) {
+      if (agent.instanceId === agentId) return 'monitor';
     }
     return undefined;
   }

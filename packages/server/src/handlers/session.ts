@@ -71,6 +71,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://session', {
     description: 'Current session. Read for system info, invoke to memorize notes.',
     verbs: ['describe', 'read', 'invoke'],
+    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
@@ -113,6 +114,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Active monitors in the current session. Read for list of monitor IDs and their status.',
     verbs: ['describe', 'read'],
+    access: 'session-principal',
 
     async read(): Promise<VerbResult> {
       const session = getActiveSession();
@@ -132,6 +134,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Individual monitor. Read for status, invoke to suspend/resume/interrupt, delete to dispose.',
     verbs: ['describe', 'read', 'invoke', 'delete'],
+    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
@@ -198,6 +201,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     description:
       'Current session context tape. Read for a summary of messages tracked by the context system.',
     verbs: ['describe', 'read'],
+    access: 'session-principal',
 
     async read(): Promise<VerbResult> {
       const session = getActiveSession();

@@ -255,6 +255,13 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Missing or invalid "uri" field', 400);
   }
 
+  // Non-self-grant: yaar://session/* is the session principal's private namespace
+  // and is never reachable by apps, regardless of what app.json declares. Apps
+  // cannot self-grant it. See docs/session_agent_browser_design.md §4b.
+  if (uri === 'yaar://session' || uri.startsWith('yaar://session/')) {
+    return errorResponse('yaar://session/* is restricted to the session agent', 403);
+  }
+
   // Validate iframe token (needed for both permission check and `self` resolution)
   const token = req.headers.get('X-Iframe-Token');
   const tokenEntry = token ? validateIframeToken(token) : null;

@@ -82,7 +82,7 @@ A temporary agent spawned by the monitor agent to handle delegated work. Forks t
 
 ### 5. Session Agent
 
-A lazy, on-demand supervisor for cross-monitor oversight and coordination. Singleton per session, created on first invocation via `yaar://session/agents/session`.
+A lazy, on-demand supervisor for cross-monitor oversight and coordination. Singleton per session, created on first invocation via `yaar://session/agents/session`. It is also the **exclusive principal for `yaar://session/*`** — the one agent tier allowed to read/invoke the session namespace (enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a `403`). See `docs/session_agent_browser_design.md`.
 
 - **Role**: `session-{action}-{timestamp}`
 - **Creation**: Lazy — created when first invoked (audit, coordinate, or query). Not present at session start.

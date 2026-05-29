@@ -22,7 +22,7 @@ import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
-import { runInAgentContext } from './agent-context.js';
+import { runInAgentContext, principalRole } from './agent-context.js';
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -334,6 +334,7 @@ export class AgentSession {
           sessionId: this.liveSessionId,
           monitorId: options.monitorId,
           windowId: options.windowId,
+          role: principalRole(role),
         },
         async () => {
           console.log(`[AgentSession] ${role} entered agentContext.run`);

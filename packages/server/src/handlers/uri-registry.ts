@@ -8,6 +8,21 @@
 
 import type { ResolvedUri } from './uri-resolve.js';
 import { resolveUri } from './uri-resolve.js';
+import type { AgentRole } from '../agents/agent-context.js';
+
+/**
+ * Injected resolver for the current caller's principal role. Decoupled from
+ * agent-context via dependency injection (rather than a direct import) because
+ * uri-registry sits inside a large import cycle; a runtime import of
+ * agent-context's getters from here mis-links under Bun's module loader.
+ * Wired in handlers/index.ts:initRegistry(). Defaults to "no role" → callers
+ * are treated as non-session until wired.
+ */
+let resolveAgentRole: () => AgentRole | undefined = () => undefined;
+
+export function setAccessRoleResolver(fn: () => AgentRole | undefined): void {
+  resolveAgentRole = fn;
+}
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 
@@ -60,6 +75,13 @@ export interface ResourceHandler {
   verbs: Verb[];
   /** Optional JSON schema for invoke payloads. */
   invokeSchema?: Record<string, unknown>;
+  /**
+   * Optional access requirement. When set to 'session-principal', only the
+   * session agent (the user's deputy) may invoke any verb on this resource;
+   * all other callers receive a 403-style error. Enforced centrally in
+   * ResourceRegistry.execute(). See docs/session_agent_browser_design.md.
+   */
+  access?: 'session-principal';
 
   /** Custom describe handler. When provided, called instead of auto-generation. */
   describe?(resolved: ResolvedUri): Promise<VerbResult>;
@@ -156,6 +178,21 @@ export class ResourceRegistry {
     if (!handler) {
       return {
         content: [{ type: 'text', text: `No handler registered for URI: ${uri}` }],
+        isError: true,
+      };
+    }
+
+    // Central access control: session-principal resources are reachable only by
+    // the session agent. Every other caller (monitor/app agents, apps via
+    // /api/verb, contexts with no role) is denied — default-deny.
+    if (handler.access === 'session-principal' && resolveAgentRole() !== 'session') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Access denied (403): ${uri} is restricted to the session agent (the user's deputy).`,
+          },
+        ],
         isError: true,
       };
     }

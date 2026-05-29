@@ -89,7 +89,7 @@ SessionHub (singleton registry)
     ├── ReloadCache                                 ← fingerprint-based action caching
     └── ContextPool (unified pool)
         ├── AgentPool
-        │   ├── Session Agent: PooledAgent | null            ← lazy singleton, cross-monitor oversight
+        │   ├── Session Agent: PooledAgent | null            ← lazy singleton; cross-monitor oversight + session principal (only tier with yaar://session/* access)
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
         │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app
@@ -158,6 +158,8 @@ Only the `system` and `verbs` namespaces are active. The `verbs` server exposes 
 | `mcp/system/` | system | reload_cached, list_reload_options |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
+
+**Access tiers (role-based URI access control):** every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A handler may declare `access: 'session-principal'`, and `ResourceRegistry.execute()` then rejects any caller whose role isn't `session` (default-deny — `undefined` role is non-session). `yaar://session` and all `yaar://session/*` resources are marked session-principal, so only the session agent can read/invoke them; monitor/app agents and apps (`POST /api/verb` also hard-refuses `yaar://session/*`) get a `403`. The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process. The gate's role resolver is injected via `setAccessRoleResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle. See `docs/session_agent_browser_design.md`.
 
 **App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
 

@@ -26,6 +26,8 @@ import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, IS_DEV, getPort } from './conf
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
+import { setAccessRoleResolver } from './handlers/uri-registry.js';
+import { getAgentRole } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import { loadTunnelConfig, SshTunnel } from './lib/tunnel/index.js';
 
@@ -43,6 +45,13 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   });
 
   initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
+
+  // Wire central URI access control: session-principal handlers are reachable
+  // only by the session agent (see docs/session_agent_browser_design.md §4a).
+  // Wired here (a non-cyclic boot module) rather than in handlers/index — a
+  // named import of agent-context's getters from inside the handlers/agents
+  // import cycle mis-links under Bun's module loader.
+  setAccessRoleResolver(getAgentRole);
 
   await ensureStorageDir();
 
