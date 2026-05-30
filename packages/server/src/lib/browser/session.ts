@@ -51,6 +51,13 @@ export interface BrowserSessionUpdate {
 
 export interface BrowserSessionOptions {
   mobile?: boolean;
+  /**
+   * Attach passively to a tab the user already had open: skip the viewport /
+   * touch / user-agent emulation overrides so the user's real tab is not
+   * resized or spoofed just because we're listing it. Used when adopting
+   * pre-existing targets (see `CdpBrowserProvider.syncExistingTabs`).
+   */
+  adopt?: boolean;
 }
 
 export class BrowserSession extends EventEmitter {
@@ -96,6 +103,12 @@ export class BrowserSession extends EventEmitter {
       console.log(`[browser] Auto-dismissing JS dialog: ${p.type} "${p.message}"`);
       cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
     });
+
+    // Passive adoption of the user's own tab: leave it exactly as-is — no
+    // viewport resize, no touch emulation, no UA spoof. Just CDP plumbing.
+    if (options?.adopt) {
+      return session;
+    }
 
     // Set viewport
     const width = mobile ? MOBILE_WIDTH : DESKTOP_WIDTH;

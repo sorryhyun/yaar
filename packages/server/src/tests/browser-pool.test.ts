@@ -212,6 +212,88 @@ describe('BrowserPool', () => {
     expect(mockCleanupStaleChrome).not.toHaveBeenCalled();
   });
 
+  it('syncExistingTabs is a no-op and never launches Chrome when none is running', async () => {
+    const freshPool = new BrowserPool();
+    await freshPool.syncExistingTabs();
+    expect(mockLaunchChrome).not.toHaveBeenCalled();
+    expect(freshPool.getAllSessions().size).toBe(0);
+    await freshPool.shutdown();
+  });
+
+  it('syncExistingTabs adopts new page targets, skipping known + internal ones', async () => {
+    const freshPool = new BrowserPool();
+    await freshPool.createSession(); // boots Chrome; knownTargetIds = {'tab-mock'}
+
+    // /json now reports three targets; /json/version keeps its single-object shape.
+    mockFetch.mockImplementation((input: unknown) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            String(input).endsWith('/json')
+              ? [
+                  // already known (created by YAAR) → skipped
+                  {
+                    id: 'tab-mock',
+                    type: 'page',
+                    url: 'about:blank',
+                    webSocketDebuggerUrl: 'ws://k',
+                  },
+                  // pre-existing user tab → adopted
+                  {
+                    id: 'existing-1',
+                    type: 'page',
+                    url: 'http://localhost:8000/',
+                    title: 'YAAR',
+                    webSocketDebuggerUrl: 'ws://e',
+                  },
+                  // internal devtools page → skipped
+                  {
+                    id: 'dt-1',
+                    type: 'page',
+                    url: 'devtools://devtools/x',
+                    webSocketDebuggerUrl: 'ws://d',
+                  },
+                  // not a page → skipped
+                  {
+                    id: 'sw-1',
+                    type: 'service_worker',
+                    url: 'http://x/sw.js',
+                    webSocketDebuggerUrl: 'ws://s',
+                  },
+                ]
+              : {
+                  id: 'tab-mock',
+                  webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/browser/abc',
+                },
+          ),
+      }),
+    );
+
+    await freshPool.syncExistingTabs();
+
+    const urls = [...freshPool.getAllSessions().values()].map(
+      (s) => (s as unknown as { currentUrl: string }).currentUrl,
+    );
+    expect(urls).toContain('http://localhost:8000/');
+    expect(urls).not.toContain('devtools://devtools/x');
+    // Only the original created tab + the one adopted page target.
+    expect(freshPool.getAllSessions().size).toBe(2);
+
+    await freshPool.shutdown();
+    // Restore the shared default fetch mock for the remaining tests.
+    mockFetch.mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: 'tab-mock',
+            webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/mock',
+          }),
+      }),
+    );
+  });
+
   it('idle cleanup removes stale sessions', async () => {
     const freshPool = new BrowserPool();
     const { session: s1 } = await freshPool.createSession();

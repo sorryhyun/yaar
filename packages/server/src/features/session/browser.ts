@@ -64,6 +64,9 @@ function resolveSessionId(): string | undefined {
 export async function sessionBrowserRead(): Promise<VerbResult> {
   const resolved = await resolveSessionProvider();
   if (!resolved.ok) return error(resolved.error);
+  // Pull in tabs the user already had open (incl. YAAR's own tab) before
+  // listing — otherwise the list only shows tabs YAAR itself opened.
+  await resolved.provider.syncExistingTabs();
   return handleListTabs(resolved.provider);
 }
 
@@ -82,6 +85,9 @@ export async function sessionBrowserInvoke(payload?: Record<string, unknown>): P
 
   const resolved = await resolveSessionProvider();
   if (!resolved.ok) return error(resolved.error);
+
+  // `list_tabs` should reflect the user's real tabs, not just YAAR-opened ones.
+  if (action === 'list_tabs') await resolved.provider.syncExistingTabs();
 
   return runGuardedBrowserAction(resolved.provider, action, payload ?? {}, resolveSessionId());
 }

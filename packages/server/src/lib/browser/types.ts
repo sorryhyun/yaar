@@ -64,6 +64,14 @@ export interface BrowserProvider {
   findByWindowId(windowId: string): BrowserSession | undefined;
   /** Drain tabs auto-adopted since the last call (e.g. popups). */
   consumeAdoptedTabs(): AdoptedTab[];
+  /**
+   * Adopt every already-open page target not yet in the session map, so a
+   * passive `list_tabs` reflects the browser's real tabs (including ones the
+   * user opened before the agent touched the browser, like YAAR's own tab) —
+   * not just the tabs YAAR created. A no-op when no endpoint is reachable;
+   * never launches Chrome. Attaches passively (no navigation, no resize).
+   */
+  syncExistingTabs(): Promise<void>;
   /** Tear everything down — called on server exit. */
   shutdown(): Promise<void>;
   /** Snapshot of provider state for introspection. */

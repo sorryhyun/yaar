@@ -87,6 +87,11 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
       console.log('[browser] Chrome process closed');
     }
   }
+
+  /** Only report a port when our private Chrome is already up — never launch it. */
+  protected async reachableChromePort(): Promise<number | null> {
+    return this.chrome ? this.chrome.port : null;
+  }
 }
 
 /**

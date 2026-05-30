@@ -82,4 +82,9 @@ export class LocalUserBrowser extends CdpBrowserProvider {
   protected async releaseProcess(): Promise<void> {
     this.connected = false;
   }
+
+  /** The user's debug port, but only when their Chrome is actually reachable. */
+  protected async reachableChromePort(): Promise<number | null> {
+    return (await this.isAvailable()) ? this.debugPort : null;
+  }
 }

@@ -66,6 +66,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   /** Tear down the Chrome process. No-op when the process isn't ours. */
   protected abstract releaseProcess(): Promise<void>;
 
+  /**
+   * The debug port of an *already-reachable* endpoint, or `null` if none is up.
+   * Must NOT launch Chrome — this gates passive operations (`syncExistingTabs`)
+   * that should never boot a browser just to read it.
+   */
+  protected abstract reachableChromePort(): Promise<number | null>;
+
   // ── Shared lifecycle ─────────────────────────────────────────────────────────
 
   protected startCleanup() {
@@ -194,6 +201,75 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       }
     } catch (err) {
       console.error('[browser] Failed to adopt target:', err);
+    }
+  }
+
+  /**
+   * Adopt every already-open page target we haven't seen yet.
+   *
+   * The `Target.targetCreated` discovery handler only fires for tabs created
+   * *after* discovery is enabled, so tabs the user already had open (notably
+   * YAAR's own tab) never enter the session map and a passive `list_tabs`
+   * misses them. This enumerates Chrome's current `/json` target list and
+   * attaches to anything new — passively (`adopt: true`): no navigation, no
+   * viewport resize, URL/title taken straight from the `/json` entry. Never
+   * launches Chrome (bails when no endpoint is reachable).
+   */
+  async syncExistingTabs(): Promise<void> {
+    const port = await this.reachableChromePort();
+    if (port == null) return;
+
+    // Wire up discovery too, so tabs opened *after* this point still auto-adopt.
+    await this.ensureDiscovery(port);
+
+    let targets: Array<{
+      id: string;
+      type?: string;
+      url?: string;
+      title?: string;
+      webSocketDebuggerUrl?: string;
+    }>;
+    try {
+      const resp = await fetch(`http://127.0.0.1:${port}/json`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      targets = (await resp.json()) as typeof targets;
+    } catch (err) {
+      console.error('[browser] Failed to enumerate existing targets:', err);
+      return;
+    }
+    if (!Array.isArray(targets)) return;
+
+    for (const t of targets) {
+      if (t.type !== 'page') continue;
+      if (!t.webSocketDebuggerUrl) continue; // not attachable (e.g. DevTools already open)
+      if (this.knownTargetIds.has(t.id) || this.adoptedTargets.has(t.id)) continue;
+      const url = t.url || '';
+      // Skip internal / scratch pages — nothing useful to address there.
+      if (/^(chrome|chrome-extension|devtools|about|edge):/.test(url)) continue;
+      if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) break;
+
+      this.adoptedTargets.add(t.id);
+      this.knownTargetIds.add(t.id);
+      const browserId = String(this.nextId++);
+      this.pendingSessions++;
+      try {
+        const session = await BrowserSession.create(browserId, t.webSocketDebuggerUrl, {
+          adopt: true,
+        });
+        session.currentUrl = url || 'about:blank';
+        session.currentTitle = t.title || '';
+        this.sessions.set(browserId, session);
+        console.log(
+          `[browser] Adopted existing tab [browser:${browserId}] → ${session.currentUrl}`,
+        );
+      } catch (err) {
+        this.adoptedTargets.delete(t.id);
+        this.knownTargetIds.delete(t.id);
+        console.error('[browser] Failed to adopt existing tab:', err);
+      } finally {
+        this.pendingSessions--;
+      }
     }
   }
 
