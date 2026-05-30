@@ -24,8 +24,10 @@ codex-windows:
 	@powershell -ExecutionPolicy Bypass -File scripts/dev-windows.ps1 -Provider codex
 
 # Run with Claude provider (dev mode - no MCP auth)
+# LAUNCH_CHROME=1 starts a local debuggable Chrome (dedicated profile) so the
+# session agent's real-browser door (yaar://session/browser) can attach.
 claude-dev:
-	@MCP_SKIP_AUTH=1 ./scripts/dev.sh claude
+	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev.sh claude
 
 # Run with Codex provider (dev mode - no MCP auth)
 codex-dev:

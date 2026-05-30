@@ -185,7 +185,7 @@ export class MonitorTaskProcessor {
       canonicalAgent: canonicalMonitor,
       resumeSessionId,
       monitorId,
-      model: 'claude-opus-4-7',
+      model: 'claude-opus-4-8',
       allowedTools: this.ctx.providerType === 'codex' ? undefined : getDeveloperAllowedTools(),
       onFinally: () => {
         agent.session.setOutputCallback(null);
