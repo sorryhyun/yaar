@@ -25,7 +25,7 @@ Test that `describe` returns valid schemas for key resources across multiple dom
 describe('yaar://config/settings')
 describe('yaar://storage')
 describe('yaar://session/monitors')
-describe('yaar://session/notifications')
+describe('yaar://user/notifications')
 describe('yaar://apps')
 describe('yaar://session/agents')
 describe('yaar://session')
@@ -360,7 +360,7 @@ read('yaar://session/agents/<first-agent-id>')
 Test notification lifecycle through verb layer:
 
 ```
-invoke('yaar://session/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
+invoke('yaar://user/notifications', { title: "Verb Test", body: "Self-inspection notification test", variant: "info" })
 ```
 
 **PASS** if notification is shown without error.

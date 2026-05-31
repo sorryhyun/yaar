@@ -150,9 +150,6 @@ export function buildConfigUri(section: ConfigSection, id?: string): string {
 
 export type SessionSubKind =
   | 'agents'
-  | 'notifications'
-  | 'prompts'
-  | 'clipboard'
   | 'monitors'
   | 'logs'
   | 'context'
@@ -168,9 +165,6 @@ export interface ParsedSessionUri {
 
 const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
   'agents',
-  'notifications',
-  'prompts',
-  'clipboard',
   'monitors',
   'logs',
   'context',
@@ -190,14 +184,6 @@ const SESSION_SUB_KINDS: ReadonlySet<string> = new Set([
  *     -> { subKind: 'agents', id: 'agent-123' }
  *   parseSessionUri('yaar://session/agents/agent-123/interrupt')
  *     -> { subKind: 'agents', id: 'agent-123', action: 'interrupt' }
- *   parseSessionUri('yaar://session/notifications')
- *     -> { subKind: 'notifications' }
- *   parseSessionUri('yaar://session/notifications/abc')
- *     -> { subKind: 'notifications', id: 'abc' }
- *   parseSessionUri('yaar://session/prompts')
- *     -> { subKind: 'prompts' }
- *   parseSessionUri('yaar://session/clipboard')
- *     -> { subKind: 'clipboard' }
  *   parseSessionUri('yaar://session/monitors/0')
  *     -> { subKind: 'monitors', id: '0' }
  */
@@ -233,7 +219,6 @@ export function parseSessionUri(uri: string): ParsedSessionUri | null {
  *   buildSessionUri('agents')                            -> 'yaar://session/agents'
  *   buildSessionUri('agents', 'agent-123')               -> 'yaar://session/agents/agent-123'
  *   buildSessionUri('agents', 'agent-123', 'interrupt')  -> 'yaar://session/agents/agent-123/interrupt'
- *   buildSessionUri('notifications')                     -> 'yaar://session/notifications'
  *   buildSessionUri('monitors', '0')                     -> 'yaar://session/monitors/0'
  */
 export function buildSessionUri(subKind?: SessionSubKind, id?: string, action?: string): string {
@@ -241,6 +226,66 @@ export function buildSessionUri(subKind?: SessionSubKind, id?: string, action?: 
   if (subKind) uri += subKind;
   if (id) uri += `/${id}`;
   if (action) uri += `/${action}`;
+  return uri;
+}
+
+// ============ User URIs ============
+
+export type UserSubKind = 'notifications' | 'prompts' | 'clipboard';
+
+export interface ParsedUserUri {
+  subKind?: UserSubKind;
+  id?: string;
+}
+
+const USER_SUB_KINDS: ReadonlySet<string> = new Set(['notifications', 'prompts', 'clipboard']);
+
+/**
+ * Parse a yaar://user/... URI.
+ *
+ * User-facing interactions, open to all agents (unlike privileged yaar://session/*).
+ *
+ *   parseUserUri('yaar://user/')
+ *     -> { }
+ *   parseUserUri('yaar://user/notifications')
+ *     -> { subKind: 'notifications' }
+ *   parseUserUri('yaar://user/notifications/abc')
+ *     -> { subKind: 'notifications', id: 'abc' }
+ *   parseUserUri('yaar://user/prompts')
+ *     -> { subKind: 'prompts' }
+ *   parseUserUri('yaar://user/clipboard')
+ *     -> { subKind: 'clipboard' }
+ */
+export function parseUserUri(uri: string): ParsedUserUri | null {
+  const parsed = parseYaarUri(uri);
+  if (!parsed || parsed.authority !== 'user') return null;
+
+  const segments = parsed.path.split('/').filter(Boolean);
+  const result: ParsedUserUri = {};
+
+  if (segments.length >= 1) {
+    if (!USER_SUB_KINDS.has(segments[0])) return null;
+    result.subKind = segments[0] as UserSubKind;
+  }
+
+  if (segments.length >= 2) {
+    result.id = segments[1];
+  }
+
+  return result;
+}
+
+/**
+ * Build a yaar://user/... URI.
+ *
+ *   buildUserUri()                          -> 'yaar://user/'
+ *   buildUserUri('notifications')           -> 'yaar://user/notifications'
+ *   buildUserUri('notifications', 'abc')    -> 'yaar://user/notifications/abc'
+ */
+export function buildUserUri(subKind?: UserSubKind, id?: string): string {
+  let uri = 'yaar://user/';
+  if (subKind) uri += subKind;
+  if (id) uri += `/${id}`;
   return uri;
 }
 

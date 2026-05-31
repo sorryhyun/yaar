@@ -6,6 +6,8 @@ import {
   buildConfigUri,
   parseSessionUri,
   buildSessionUri,
+  parseUserUri,
+  buildUserUri,
 } from '../lib/yaar-uri-server.js';
 
 // ============ Window Resource URIs ============
@@ -177,29 +179,11 @@ describe('parseSessionUri', () => {
     });
   });
 
-  it('parses notifications', () => {
-    expect(parseSessionUri('yaar://session/notifications')).toEqual({
-      subKind: 'notifications',
-    });
-  });
-
-  it('parses notification with ID', () => {
-    expect(parseSessionUri('yaar://session/notifications/abc')).toEqual({
-      subKind: 'notifications',
-      id: 'abc',
-    });
-  });
-
-  it('parses prompts', () => {
-    expect(parseSessionUri('yaar://session/prompts')).toEqual({
-      subKind: 'prompts',
-    });
-  });
-
-  it('parses clipboard', () => {
-    expect(parseSessionUri('yaar://session/clipboard')).toEqual({
-      subKind: 'clipboard',
-    });
+  it('rejects user-facing subKinds moved to yaar://user/', () => {
+    // notifications, prompts, and clipboard now live under yaar://user/
+    expect(parseSessionUri('yaar://session/notifications')).toBeNull();
+    expect(parseSessionUri('yaar://session/prompts')).toBeNull();
+    expect(parseSessionUri('yaar://session/clipboard')).toBeNull();
   });
 
   it('parses browser (session-agent browser door)', () => {
@@ -247,18 +231,6 @@ describe('buildSessionUri', () => {
     );
   });
 
-  it('builds notifications URI', () => {
-    expect(buildSessionUri('notifications')).toBe('yaar://session/notifications');
-  });
-
-  it('builds notification with ID URI', () => {
-    expect(buildSessionUri('notifications', 'abc')).toBe('yaar://session/notifications/abc');
-  });
-
-  it('builds clipboard URI', () => {
-    expect(buildSessionUri('clipboard')).toBe('yaar://session/clipboard');
-  });
-
   it('builds monitor URI', () => {
     expect(buildSessionUri('monitors', '0')).toBe('yaar://session/monitors/0');
   });
@@ -268,10 +240,62 @@ describe('buildSessionUri', () => {
     const parsed = parseSessionUri(uri);
     expect(parsed).toEqual({ subKind: 'agents', id: 'agent-1' });
   });
+});
 
-  it('roundtrips notifications with parseSessionUri', () => {
-    const uri = buildSessionUri('notifications', 'notif-42');
-    const parsed = parseSessionUri(uri);
-    expect(parsed).toEqual({ subKind: 'notifications', id: 'notif-42' });
+// ============ User URIs ============
+
+describe('parseUserUri', () => {
+  it('parses bare user URI', () => {
+    expect(parseUserUri('yaar://user/')).toEqual({});
+  });
+
+  it('parses notifications', () => {
+    expect(parseUserUri('yaar://user/notifications')).toEqual({ subKind: 'notifications' });
+  });
+
+  it('parses notification with ID', () => {
+    expect(parseUserUri('yaar://user/notifications/abc')).toEqual({
+      subKind: 'notifications',
+      id: 'abc',
+    });
+  });
+
+  it('parses prompts', () => {
+    expect(parseUserUri('yaar://user/prompts')).toEqual({ subKind: 'prompts' });
+  });
+
+  it('parses clipboard', () => {
+    expect(parseUserUri('yaar://user/clipboard')).toEqual({ subKind: 'clipboard' });
+  });
+
+  it('returns null for unknown subKind', () => {
+    expect(parseUserUri('yaar://user/unknown')).toBeNull();
+  });
+
+  it('returns null for non-user URI', () => {
+    expect(parseUserUri('yaar://session/notifications')).toBeNull();
+  });
+
+  it('returns null for non-yaar URI', () => {
+    expect(parseUserUri('https://example.com')).toBeNull();
+  });
+});
+
+describe('buildUserUri', () => {
+  it('builds bare user URI', () => {
+    expect(buildUserUri()).toBe('yaar://user/');
+  });
+
+  it('builds notifications URI', () => {
+    expect(buildUserUri('notifications')).toBe('yaar://user/notifications');
+  });
+
+  it('builds notification with ID URI', () => {
+    expect(buildUserUri('notifications', 'abc')).toBe('yaar://user/notifications/abc');
+  });
+
+  it('roundtrips notifications with parseUserUri', () => {
+    const uri = buildUserUri('notifications', 'notif-42');
+    expect(parseUserUri(uri)).toEqual({ subKind: 'notifications', id: 'notif-42' });
   });
 });

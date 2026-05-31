@@ -10,9 +10,11 @@ import { parseYaarUri, resolveContentUri, parseBareWindowUri } from '@yaar/share
 import {
   parseConfigUri,
   parseSessionUri,
+  parseUserUri,
   parseHistoryUri,
   type ParsedConfigUri,
   type SessionSubKind,
+  type UserSubKind,
   type HistorySubPath,
 } from '../lib/yaar-uri-server.js';
 import { safePath } from '../http/utils.js';
@@ -53,6 +55,13 @@ export interface ResolvedSession {
   sourceUri: string;
 }
 
+export interface ResolvedUser {
+  kind: 'user';
+  subKind?: UserSubKind;
+  id?: string;
+  sourceUri: string;
+}
+
 export interface ResolvedHistory {
   kind: 'history';
   sessionId?: string;
@@ -71,6 +80,7 @@ export type ResolvedUri =
   | ResolvedWindow
   | ResolvedConfig
   | ResolvedSession
+  | ResolvedUser
   | ResolvedHistory;
 
 export function resolveResourceUri(uri: string): ResolvedResource | null {
@@ -164,6 +174,16 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
+  const user = parseUserUri(uri);
+  if (user) {
+    return {
+      kind: 'user',
+      subKind: user.subKind,
+      id: user.id,
+      sourceUri: uri,
+    };
+  }
+
   const history = parseHistoryUri(uri);
   if (history) {
     return {
@@ -184,7 +204,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|windows|config|session|history|skills|http|mcp)$/,
+    /^yaar:\/\/(apps|storage|windows|config|session|user|history|skills|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

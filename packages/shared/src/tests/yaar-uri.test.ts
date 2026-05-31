@@ -93,8 +93,15 @@ describe('parseYaarUri with session', () => {
     expect(parseYaarUri('yaar://agents/agent-123')).toBeNull();
   });
 
-  it('returns null for removed user authority', () => {
-    expect(parseYaarUri('yaar://user/notifications')).toBeNull();
+  it('parses user URIs (user-facing namespace, open to all agents)', () => {
+    expect(parseYaarUri('yaar://user/notifications')).toEqual({
+      authority: 'user',
+      path: 'notifications',
+    });
+    expect(parseYaarUri('yaar://user/prompts')).toEqual({
+      authority: 'user',
+      path: 'prompts',
+    });
   });
 
   it('returns null for removed monitors authority', () => {

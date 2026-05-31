@@ -53,13 +53,18 @@ All session-scoped resources live under this namespace. Agents, notifications, p
 | `yaar://session` | Current session info (platform, uptime, stats) |
 | `yaar://session/agents` | All active agents (list) |
 | `yaar://session/agents/{agentId}` | Agent by instance ID (read info, invoke with `{ action: 'interrupt' }`) |
-| `yaar://session/notifications` | Show notification (invoke with `{ id, title, body }`) |
-| `yaar://session/notifications/{id}` | Dismiss notification (delete) |
-| `yaar://session/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
-| `yaar://session/clipboard` | Clipboard contents |
 | `yaar://session/monitors/{monitorId}` | Monitor status (monitor agent, window list, queue stats) |
 | `yaar://session/logs` | Session logs |
 | `yaar://session/context` | Context state |
+
+`yaar://session/*` is session-principal (the user's deputy only). User-facing interactions live under the open `yaar://user/` namespace, callable by every agent:
+
+| URI | Description |
+|-----|-------------|
+| `yaar://user/notifications` | Show notification (invoke with `{ id, title, body }`) |
+| `yaar://user/notifications/{id}` | Dismiss notification (delete) |
+| `yaar://user/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
+| `yaar://user/clipboard` | Clipboard contents |
 
 ---
 
@@ -94,10 +99,10 @@ delete('yaar://windows/win-1')                          -> close window
 list('yaar://session/agents')                  -> active agents
 invoke('yaar://session/agents/agent-1', { action: 'interrupt' })
 
-read('yaar://session/clipboard')               -> clipboard contents
-invoke('yaar://session/notifications', { id: 'n1', title: '...', body: '...' })
-delete('yaar://session/notifications/n1')      -> dismiss notification
-invoke('yaar://session/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
+read('yaar://user/clipboard')                  -> clipboard contents
+invoke('yaar://user/notifications', { id: 'n1', title: '...', body: '...' })
+delete('yaar://user/notifications/n1')         -> dismiss notification
+invoke('yaar://user/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
 
 read('yaar://session/monitors/0')              -> monitor status
 read('yaar://session')                         -> session info

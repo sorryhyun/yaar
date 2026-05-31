@@ -63,6 +63,11 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         { uri: 'yaar://windows/', name: 'windows', description: 'Open windows' },
         { uri: 'yaar://config/', name: 'config', description: 'Configuration' },
         { uri: 'yaar://session/', name: 'session', description: 'Current session & monitors' },
+        {
+          uri: 'yaar://user/',
+          name: 'user',
+          description: 'User-facing interactions (notifications, prompts)',
+        },
         { uri: 'yaar://history/', name: 'history', description: 'Past session logs' },
       ]);
     },

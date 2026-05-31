@@ -54,7 +54,7 @@ describe('ContextAssemblyPolicy', () => {
         id: 'w-2',
         title: 'Chat',
         content: { renderer: 'iframe', data: '' },
-        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        bounds: { x: 500, y: 0, w: 400, h: 300 },
         locked: false,
         createdAt: 0,
         updatedAt: 0,
@@ -63,6 +63,49 @@ describe('ContextAssemblyPolicy', () => {
     expect(windows).toContain('yaar://windows/w-1 — Notes');
     expect(windows).toContain('yaar://windows/w-2 — Chat');
     expect(windows).toContain('<open_windows>');
+    // Exact geometry replaces fuzzy position labels.
+    expect(windows).toContain('400×300 at (0,0)');
+    expect(windows).toContain('400×300 at (500,0)');
+    // Non-overlapping windows produce no overlap note.
+    expect(windows).not.toContain('overlaps');
+  });
+
+  it('reports rectangle overlap, minimized, and locked facts', () => {
+    const policy = new ContextAssemblyPolicy();
+    const windows = policy.formatOpenWindows([
+      {
+        id: 'a',
+        title: 'A',
+        content: { renderer: 'markdown', data: '' },
+        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        locked: false,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'b',
+        title: 'B',
+        content: { renderer: 'markdown', data: '' },
+        bounds: { x: 100, y: 100, w: 400, h: 300 },
+        locked: true,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'c',
+        title: 'C',
+        content: { renderer: 'markdown', data: '' },
+        bounds: { x: 0, y: 0, w: 400, h: 300 },
+        locked: false,
+        minimized: true,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]);
+    expect(windows).toContain('yaar://windows/a — A · 400×300 at (0,0) · overlaps b');
+    expect(windows).toContain('locked');
+    // Minimized windows report no geometry/overlap.
+    expect(windows).toContain('yaar://windows/c — C · minimized');
   });
 
   it('includes monitor and current window in open_windows header', () => {

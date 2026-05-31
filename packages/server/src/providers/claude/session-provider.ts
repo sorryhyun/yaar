@@ -123,6 +123,10 @@ export class ClaudeSessionProvider extends BaseTransport {
       cwd: getStorageDir(),
       tools: builtinTools,
       allowedTools: effectiveAllowed,
+      // YAAR provides no LSP integration, but the spawned `claude` CLI ships an
+      // `LSP` tool by default and agents reach for it. Strip it from context so
+      // they don't waste turns calling a tool that can't do anything here.
+      disallowedTools: ['LSP'],
       mcpServers: mcpServerConfigs,
       includePartialMessages: true,
       permissionMode: 'bypassPermissions',
@@ -130,9 +134,11 @@ export class ClaudeSessionProvider extends BaseTransport {
       env: {
         ...cleanEnv,
         MAX_MCP_OUTPUT_TOKENS: '131072',
-        CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: 'true',
-        CLAUDE_CODE_DISABLE_AUTO_MEMORY: 'true',
+        CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
         ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
+        CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
+        CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1'
       },
     };
   }

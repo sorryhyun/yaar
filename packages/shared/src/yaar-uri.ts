@@ -12,13 +12,16 @@
  *   yaar://windows/{windowId}/state/{key}       → window state (app-protocol)
  *   yaar://windows/{windowId}/commands/{key}    → window command (app-protocol)
  *
- * Session-scoped resources (yaar://session/...):
+ * Session-scoped resources (yaar://session/...) — session-principal only:
  *   yaar://session/agents/{id}              → agent by ID
  *   yaar://session/agents/{id}/interrupt     → agent action
- *   yaar://session/notifications/{id}        → notification by ID
- *   yaar://session/prompts                   → user prompts
- *   yaar://session/clipboard                 → clipboard
  *   yaar://session/monitors/{monitorId}      → monitor by ID
+ *
+ * User-facing interactions (yaar://user/...) — open to all agents:
+ *   yaar://user/notifications                → show a notification
+ *   yaar://user/notifications/{id}           → notification by ID (dismiss)
+ *   yaar://user/prompts                      → ask/request user input
+ *   yaar://user/clipboard                    → clipboard
  */
 
 export type YaarAuthority =
@@ -28,6 +31,7 @@ export type YaarAuthority =
   | 'config'
   | 'browser'
   | 'session'
+  | 'user'
   | 'history'
   | 'skills'
   | 'mcp';
@@ -37,7 +41,8 @@ export interface ParsedYaarUri {
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|windows|config|browser|session|history|skills|mcp)\/(.*)$/;
+const YAAR_RE =
+  /^yaar:\/\/(apps|storage|windows|config|browser|session|user|history|skills|mcp)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -75,6 +80,7 @@ export function resolveContentUri(uri: string): string | null {
     case 'config':
     case 'browser':
     case 'session':
+    case 'user':
     case 'history':
     case 'skills':
     case 'mcp':

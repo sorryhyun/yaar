@@ -1,12 +1,14 @@
 /**
  * User domain handlers for the verb layer.
  *
- * Maps user-facing operations to the verb layer:
+ * Maps user-facing operations to the verb layer. Unlike yaar://session/*
+ * (session-principal only), these are open to every agent — any agent can
+ * notify or ask the user.
  *
- *   invoke('yaar://session/notifications', { title, body, ... })  → show notification
- *   delete('yaar://session/notifications/{id}')                   → dismiss notification
- *   invoke('yaar://session/prompts', { action: 'ask', ... })      → ask user a question
- *   invoke('yaar://session/prompts', { action: 'request', ... })  → request user action
+ *   invoke('yaar://user/notifications', { title, body, ... })  → show notification
+ *   delete('yaar://user/notifications/{id}')                   → dismiss notification
+ *   invoke('yaar://user/prompts', { action: 'ask', ... })      → ask user a question
+ *   invoke('yaar://user/prompts', { action: 'request', ... })  → request user action
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
@@ -16,8 +18,8 @@ import { showNotification, dismissNotification } from '../features/user/notifica
 import { askUser, requestUserInput } from '../features/user/prompts.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
-  // ── yaar://session/notifications — show/manage notifications ──
-  registry.register('yaar://session/notifications', {
+  // ── yaar://user/notifications — show/manage notifications ──
+  registry.register('yaar://user/notifications', {
     description: 'Notifications. Invoke to show a new notification.',
     verbs: ['describe', 'invoke'],
     invokeSchema: {
@@ -46,21 +48,21 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://session/notifications/{id} — dismiss a specific notification ──
-  registry.register('yaar://session/notifications/*', {
+  // ── yaar://user/notifications/{id} — dismiss a specific notification ──
+  registry.register('yaar://user/notifications/*', {
     description: 'A specific notification. Delete to dismiss.',
     verbs: ['describe', 'delete'],
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
-      assertUri(resolved, 'session');
+      assertUri(resolved, 'user');
       if (!resolved.id) return error('Notification ID required.');
       dismissNotification(resolved.id);
       return ok(`Dismissed notification "${resolved.id}"`);
     },
   });
 
-  // ── yaar://session/prompts — ask/request user interaction ──
-  registry.register('yaar://session/prompts', {
+  // ── yaar://user/prompts — ask/request user interaction ──
+  registry.register('yaar://user/prompts', {
     description:
       'User prompts. Invoke with action "ask" for multiple-choice questions, or "request" for freeform text input.',
     verbs: ['describe', 'invoke'],

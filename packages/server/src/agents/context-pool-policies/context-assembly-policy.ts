@@ -1,10 +1,15 @@
-import type { UserInteraction, WindowState } from '@yaar/shared';
+import type { UserInteraction, WindowBounds, WindowState } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
 
 export interface MonitorPromptContext {
   prompt: string;
   contextContent: string;
+}
+
+/** True when two window rectangles intersect (touching edges don't count). */
+function rectsOverlap(a: WindowBounds, b: WindowBounds): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
 export class ContextAssemblyPolicy {
@@ -33,7 +38,24 @@ export class ContextAssemblyPolicy {
       const label = w.title || w.content.renderer;
       const current = options?.currentWindowId === w.id ? ' (you)' : '';
       const rawId = getRaw(w.id);
-      return `  yaar://windows/${rawId} — ${label}${current}`;
+
+      const { x, y, w: width, h } = w.bounds;
+      const facts: string[] = [];
+      if (w.minimized) {
+        facts.push('minimized');
+      } else {
+        facts.push(`${width}×${h} at (${x},${y})`);
+        // Rectangle overlap is factual regardless of z-order (which we don't track),
+        // so report intersections without claiming which window is on top.
+        const overlapping = windows
+          .filter((o) => o !== w && !o.minimized && rectsOverlap(w.bounds, o.bounds))
+          .map((o) => getRaw(o.id));
+        if (overlapping.length > 0) facts.push(`overlaps ${overlapping.join(', ')}`);
+      }
+      if (w.locked) facts.push('locked');
+      if (w.appId) facts.push(`app:${w.appId}`);
+
+      return `  yaar://windows/${rawId} — ${label}${current} · ${facts.join(' · ')}`;
     });
     const monitor = options?.monitorId ? ` monitor="${options.monitorId}"` : '';
     return `<open_windows${monitor}>\n${lines.join('\n')}\n</open_windows>\n\n`;
