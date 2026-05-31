@@ -22,6 +22,15 @@ mock.module('../features/config/domains.js', () => ({
   isAllDomainsAllowed: mock(async () => allowAll),
   isDomainAllowed: mock(async (d: string) => allowedDomains.has(d)),
   addAllowedDomain: mockAddAllowedDomain,
+  // Re-export the remaining real members so the mock is a complete stand-in.
+  // Bun's mock.module replaces the module process-wide; if any export is
+  // omitted, other modules importing it (http/routes/settings.ts,
+  // handlers/config.ts) fail to link with "Export named X not found".
+  readAllowedDomains: mock(async () => [...allowedDomains]),
+  setAllowAllDomains: mock(async (v: boolean) => {
+    allowAll = v;
+    return true;
+  }),
   extractDomain: (url: string) => {
     try {
       return new URL(url).hostname;
