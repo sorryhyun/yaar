@@ -120,7 +120,11 @@ export class AppTaskProcessor {
         fp,
         windowId,
         monitorId: task.monitorId,
-        allowedTools: [...APP_AGENT_TOOL_NAMES],
+        // Codex: pass undefined so the thread falls back to the process-level
+        // server set (system+verbs+app) instead of a per-thread mcp_servers
+        // override, which Codex doesn't reliably honor — leaving the app agent
+        // with no tools. Mirrors the monitor/session agents' Codex handling.
+        allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
         model: profile.model,
         onAssistantResponse: (text) => {
