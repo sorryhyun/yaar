@@ -5,20 +5,23 @@ import type { CollaborationMode } from "../CollaborationMode.js";
 import type { Personality } from "../Personality.js";
 import type { ReasoningEffort } from "../ReasoningEffort.js";
 import type { ReasoningSummary } from "../ReasoningSummary.js";
-import type { ServiceTier } from "../ServiceTier.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
+import type { AdditionalContextEntry } from "./AdditionalContextEntry.js";
 import type { ApprovalsReviewer } from "./ApprovalsReviewer.js";
 import type { AskForApproval } from "./AskForApproval.js";
-import type { PermissionProfile } from "./PermissionProfile.js";
 import type { SandboxPolicy } from "./SandboxPolicy.js";
 import type { TurnEnvironmentParams } from "./TurnEnvironmentParams.js";
 import type { UserInput } from "./UserInput.js";
 
-export type TurnStartParams = { threadId: string, input: Array<UserInput>,
+export type TurnStartParams = { threadId: string, clientUserMessageId?: string | null, input: Array<UserInput>,
 /**
  * Optional turn-scoped Responses API client metadata.
  */
 responsesapiClientMetadata?: { [key in string]?: string } | null,
+/**
+ * Optional client-provided context fragments keyed by an opaque source identifier.
+ */
+additionalContext?: { [key in string]?: AdditionalContextEntry } | null,
 /**
  * Optional turn-scoped environments.
  *
@@ -31,6 +34,12 @@ environments?: Array<TurnEnvironmentParams> | null,
  * Override the working directory for this turn and subsequent turns.
  */
 cwd?: string | null,
+/**
+ * Replace the thread's runtime workspace roots for this turn and
+ * subsequent turns. Relative paths are resolved against the effective
+ * cwd for the turn.
+ */
+runtimeWorkspaceRoots?: Array<string> | null,
 /**
  * Override the approval policy for this turn and subsequent turns.
  */
@@ -45,10 +54,10 @@ approvalsReviewer?: ApprovalsReviewer | null,
  */
 sandboxPolicy?: SandboxPolicy | null,
 /**
- * Override the full permissions profile for this turn and subsequent
+ * Select a named permissions profile id for this turn and subsequent
  * turns. Cannot be combined with `sandboxPolicy`.
  */
-permissionProfile?: PermissionProfile | null,
+permissions?: string | null,
 /**
  * Override the model for this turn and subsequent turns.
  */
@@ -56,7 +65,7 @@ model?: string | null,
 /**
  * Override the service tier for this turn and subsequent turns.
  */
-serviceTier?: ServiceTier | null | null,
+serviceTier?: string | null | null,
 /**
  * Override the reasoning effort for this turn and subsequent turns.
  */

@@ -263,6 +263,10 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
     'approval_policy=on-request',
     '-c',
     'project_doc_max_bytes=0',
+    // Enable web search (mirrors Claude's WebSearch builtin tool). The Codex
+    // message-mapper already maps webSearch items; this turns the tool on.
+    '-c',
+    'web_search=live',
   );
 
   return args;

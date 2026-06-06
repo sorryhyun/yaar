@@ -19,6 +19,8 @@ import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
 import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { getActiveServers } from '../../mcp/index.js';
+import { getPort } from '../../config.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
@@ -42,7 +44,14 @@ import type {
 interface ThreadSession {
   threadId: string;
   systemPrompt: string;
+  /** Model this thread was started with (undefined = app-server default). */
+  model?: string;
+  /** Sorted MCP namespaces this thread was scoped to (undefined = unrestricted). */
+  mcpScope?: string;
 }
+
+/** Per-thread MCP server override map: namespace → server config. */
+type McpServerOverride = Record<string, { url: string; bearer_token_env_var: string }>;
 
 export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
@@ -371,17 +380,58 @@ export class CodexProvider extends BaseTransport {
    * Handles three cases: fork from parent, start new, or reuse existing.
    * Returns true if a new thread was created (caller should yield sessionId).
    */
+  /**
+   * Build a per-thread `mcp_servers` override that exposes only the namespaces
+   * referenced by `allowedTools` (parsed from `mcp__<server>__*` names). This
+   * mirrors Claude's per-agent MCP server selection: an app-role thread sees
+   * only the `app` server, a monitor thread only `system`+`verbs`, etc.
+   *
+   * Returns null when unrestricted (no allowedTools), so the thread falls back
+   * to the process-level server set.
+   */
+  private buildMcpScope(allowedTools?: string[]): {
+    servers: McpServerOverride;
+    signature: string;
+  } | null {
+    if (!allowedTools) return null;
+
+    const active = new Set(getActiveServers());
+    const needed = new Set<string>();
+    for (const tool of allowedTools) {
+      const m = tool.match(/^mcp__(\w+)__/);
+      if (m && active.has(m[1] as ReturnType<typeof getActiveServers>[number])) {
+        needed.add(m[1]);
+      }
+    }
+    if (needed.size === 0) return null;
+
+    const servers: McpServerOverride = {};
+    for (const ns of needed) {
+      servers[ns] = {
+        url: `http://127.0.0.1:${getPort()}/mcp/${ns}`,
+        bearer_token_env_var: 'YAAR_MCP_TOKEN',
+      };
+    }
+    return { servers, signature: [...needed].sort().join(',') };
+  }
+
   private async ensureThread(options: TransportOptions): Promise<boolean> {
     const client = this.client!;
+
+    // Per-role MCP server scoping (mirrors Claude's per-agent server selection).
+    const scope = this.buildMcpScope(options.allowedTools);
+    const mcpConfig = scope ? { mcp_servers: scope.servers } : undefined;
+    const mcpScope = scope?.signature;
 
     // Case 1: Fork from parent session
     if (options.forkSession && options.sessionId) {
       console.log(`[codex] Forking thread from parent ${options.sessionId}`);
       try {
         const fullParams: ThreadForkParams = {
-          persistExtendedHistory: false,
           threadId: options.sessionId,
           baseInstructions: options.systemPrompt,
+          ...(options.model ? { model: options.model } : {}),
+          ...(mcpConfig ? { config: mcpConfig } : {}),
         };
         const result = await client.request<ThreadForkParams, ThreadForkResponse>(
           'thread/fork',
@@ -390,6 +440,8 @@ export class CodexProvider extends BaseTransport {
         this.currentSession = {
           threadId: result.thread.id,
           systemPrompt: options.systemPrompt,
+          model: options.model,
+          mcpScope,
         };
         return true;
       } catch (err) {
@@ -402,7 +454,6 @@ export class CodexProvider extends BaseTransport {
       console.log(`[codex] Resuming thread ${options.sessionId}`);
       try {
         const fullParams: ThreadResumeParams = {
-          persistExtendedHistory: false,
           threadId: options.sessionId,
         };
         const result = await client.request<ThreadResumeParams, ThreadResumeResponse>(
@@ -415,6 +466,8 @@ export class CodexProvider extends BaseTransport {
           this.currentSession = {
             threadId: options.sessionId,
             systemPrompt: options.systemPrompt,
+            model: options.model,
+            mcpScope,
           };
           return true;
         }
@@ -423,15 +476,19 @@ export class CodexProvider extends BaseTransport {
       }
     }
 
-    // Case 3: Need new thread (no session or system prompt changed)
+    // Case 3: Need new thread (no session, system prompt, model, or MCP scope changed)
     const needsNewThread =
-      !this.currentSession || this.currentSession.systemPrompt !== options.systemPrompt;
+      !this.currentSession ||
+      this.currentSession.systemPrompt !== options.systemPrompt ||
+      this.currentSession.model !== options.model ||
+      this.currentSession.mcpScope !== mcpScope;
 
     if (needsNewThread) {
       const fullParams: ThreadStartParams = {
         experimentalRawEvents: false,
-        persistExtendedHistory: false,
         baseInstructions: options.systemPrompt,
+        ...(options.model ? { model: options.model } : {}),
+        ...(mcpConfig ? { config: mcpConfig } : {}),
       };
       const result = await client.request<ThreadStartParams, ThreadStartResponse>(
         'thread/start',
@@ -440,11 +497,13 @@ export class CodexProvider extends BaseTransport {
       this.currentSession = {
         threadId: result.thread.id,
         systemPrompt: options.systemPrompt,
+        model: options.model,
+        mcpScope,
       };
       return true;
     }
 
-    // Case 4: Reuse existing thread (same system prompt, continuing conversation)
+    // Case 4: Reuse existing thread (same system prompt + model + MCP scope, continuing)
     return false;
   }
 }

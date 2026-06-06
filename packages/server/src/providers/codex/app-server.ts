@@ -97,7 +97,7 @@ export class AppServer {
   private get initializeParams(): InitializeParams {
     return {
       clientInfo: { name: 'yaar', title: 'YAAR Desktop', version: '1.0.0' },
-      capabilities: { experimentalApi: true },
+      capabilities: { experimentalApi: true, requestAttestation: false },
     };
   }
 

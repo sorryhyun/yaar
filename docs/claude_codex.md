@@ -204,9 +204,9 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 
 | Setting | Claude | Codex |
 |---------|--------|-------|
-| Model | `claude-sonnet-4-6` | Uses Codex default model |
+| Model | `claude-sonnet-4-6` | `gpt-5.5` default; per-query `options.model` honored via `thread/start`/`thread/fork` |
 | Thinking | Enabled, 4096 max tokens | Medium reasoning effort |
-| Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Not available |
+| Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Enabled (`-c web_search=live`) |
 | Shell tool | N/A (MCP tools only) | Explicitly disabled |
 | Sandbox | N/A | `danger-full-access` |
 | Personality | Default | `none` |
