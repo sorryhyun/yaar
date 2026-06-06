@@ -31,7 +31,7 @@ claude-dev:
 
 # Run with Codex provider (dev mode - no MCP auth)
 codex-dev:
-	@MCP_SKIP_AUTH=1 ./scripts/dev.sh codex
+	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev.sh codex
 
 # Run server only (also serves frontend in dev mode)
 server:

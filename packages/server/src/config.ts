@@ -238,6 +238,11 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   args.push('-c', 'features.shell_tool=false');
   args.push('-c', 'features.apply_patch_freeform=false');
   args.push('-c', 'features.multi_agent=true');
+  // Disable native memory: it injects a large `## Memory` developer message
+  // (the full MEMORY_SUMMARY + lookup instructions from ~/.codex/memories) into
+  // every thread. That cross-project history is irrelevant noise for YAAR's
+  // short-lived, app-scoped agents.
+  args.push('-c', 'features.memories=false');
   // Enable native collaboration/subagent system for task delegation
   args.push('-c', 'features.collaboration_modes=true');
 
