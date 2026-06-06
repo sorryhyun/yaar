@@ -250,7 +250,7 @@ codex app-server \
   -c 'personality=none' \
   # Execution
   -c 'sandbox_mode=danger-full-access' \
-  -c 'approval_policy=on-request' \
+  -c 'approval_policy=never' \
   -c 'project_doc_max_bytes=0'
 ```
 
@@ -278,7 +278,7 @@ YAAR is a desktop agent interface, not an IDE. Several Codex defaults work again
 | Feature | Config | Why Disabled |
 |---------|--------|-------------|
 | Shell tool | `features.shell_tool=false` | YAAR controls execution via MCP tools |
-| Approval policy | `approval_policy=on-request` | Routed through YAAR's permission dialog |
+| Approval policy | `approval_policy=never` | Auto-run (mirrors Claude `bypassPermissions`); only first-party MCP tools are callable |
 | Web search | (default off with shell disabled) | YAAR controls HTTP access via MCP tools |
 | View image | (default off) | YAAR handles images directly |
 | Skills | Isolated temp dir | Auto-injected prompts contaminate agent personality |
@@ -350,8 +350,8 @@ codex app-server \
 
 | Policy | Behavior |
 |--------|----------|
-| `"never"` | Never ask for approval |
-| `"on-request"` | Ask on request; routed through YAAR's permission dialog (current) |
+| `"never"` | Never ask for approval (current — YAAR auto-runs; shell/apply_patch are disabled so only first-party MCP tools are callable) |
+| `"on-request"` | Ask on request; would route through YAAR's permission dialog, but the MCP-tool approval method is unhandled so codex declines the call |
 | `"always"` | Ask before every tool execution |
 | `"on-failure"` | Ask only after a command fails |
 

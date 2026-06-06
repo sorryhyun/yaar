@@ -132,6 +132,15 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * The fallback agent ID set by header-less providers (Codex) before a turn.
+   * Used by the MCP HTTP handler to restore agent context when the inbound
+   * request carries no X-Agent-Id header.
+   */
+  getCurrentAgentId(): string | undefined {
+    return this.currentAgentId;
+  }
+
+  /**
    * Generate a unique request ID.
    */
   private generateRequestId(): string {

@@ -210,7 +210,7 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 | Shell tool | N/A (MCP tools only) | Explicitly disabled |
 | Sandbox | N/A | `danger-full-access` |
 | Personality | Default | `none` |
-| Permissions | `bypassPermissions` | `approval_policy = "on-request"` |
+| Permissions | `bypassPermissions` | `approval_policy = "never"` |
 | Multi-agent | Task tool (profile-based delegation) | `features.collaboration_modes=true` |
 
 ## Image Handling

@@ -238,6 +238,10 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   args.push('-c', 'features.shell_tool=false');
   args.push('-c', 'features.apply_patch_freeform=false');
   args.push('-c', 'features.multi_agent=true');
+  args.push('-c', 'features.personality=false');
+  args.push('-c', 'features.fast_mode=false');
+  args.push('-c', 'features.skill_mcp_dependency_install=false');
+  args.push('-c', 'apps._default.enabled=false');
   // Disable native memory: it injects a large `## Memory` developer message
   // (the full MEMORY_SUMMARY + lookup instructions from ~/.codex/memories) into
   // every thread. That cross-project history is irrelevant noise for YAAR's
@@ -265,7 +269,12 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
     '-c',
     'sandbox_mode=danger-full-access',
     '-c',
-    'approval_policy=on-request',
+    // YAAR auto-runs agents (mirrors Claude's bypassPermissions). With
+    // shell_tool/apply_patch disabled, codex can only call YAAR's first-party
+    // MCP tools (app/verbs/system) — those must never prompt. `on-request`
+    // instead gated MCP calls through an approval the provider doesn't handle,
+    // so codex declined them ("user rejected MCP tool call").
+    'approval_policy=never',
     '-c',
     'project_doc_max_bytes=0',
     // Enable web search (mirrors Claude's WebSearch builtin tool). The Codex

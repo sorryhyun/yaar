@@ -14,6 +14,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext, getSessionId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
+import { actionEmitter } from '../session/action-emitter.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
@@ -160,9 +161,13 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
     }
   }
 
-  // Restore agent context so tools can resolve the active session.
-  // X-Agent-Id is set by the Claude provider; Codex calls omit it.
-  const agentId = req.headers.get('x-agent-id') ?? 'unknown';
+  // Restore agent context so tools can resolve the active session/window.
+  // Claude sets X-Agent-Id per MCP request; Codex's app-server cannot, so we
+  // fall back to the agent the active Codex turn stamped on the emitter (the
+  // same fallback used for outbound action routing). Without this, app-agent
+  // tools (app:command/query) can't resolve their window → "no active window
+  // context".
+  const agentId = req.headers.get('x-agent-id') ?? actionEmitter.getCurrentAgentId() ?? 'unknown';
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);

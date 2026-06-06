@@ -126,7 +126,11 @@ export class AppTaskProcessor {
         // with no tools. Mirrors the monitor/session agents' Codex handling.
         allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
-        model: profile.model,
+        // Codex has no Claude models — passing e.g. 'claude-opus-4-8' (from the
+        // app's agentType) makes the openai provider reject the turn with a 400.
+        // Leave undefined so Codex uses its configured default model. Mirrors the
+        // allowedTools handling above and the monitor agent's Codex guard.
+        model: this.ctx.providerType === 'codex' ? undefined : profile.model,
         onAssistantResponse: (text) => {
           appResponseText = text;
         },
