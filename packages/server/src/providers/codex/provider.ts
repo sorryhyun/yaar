@@ -51,7 +51,10 @@ interface ThreadSession {
 }
 
 /** Per-thread MCP server override map: namespace → server config. */
-type McpServerOverride = Record<string, { url: string; bearer_token_env_var: string }>;
+type McpServerOverride = Record<
+  string,
+  { url: string; bearer_token_env_var: string; http_headers?: Record<string, string> }
+>;
 
 export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
@@ -381,45 +384,55 @@ export class CodexProvider extends BaseTransport {
    * Returns true if a new thread was created (caller should yield sessionId).
    */
   /**
-   * Build a per-thread `mcp_servers` override that exposes only the namespaces
-   * referenced by `allowedTools` (parsed from `mcp__<server>__*` names). This
-   * mirrors Claude's per-agent MCP server selection: an app-role thread sees
-   * only the `app` server, a monitor thread only `system`+`verbs`, etc.
+   * Build a per-thread `mcp_servers` override that pins the caller's `agentId`
+   * onto every YAAR MCP server as an `x-agent-id` HTTP header. The shared MCP
+   * server reads that header (mcp/server.ts) to resolve the calling agent's
+   * session/monitor/window/role context.
    *
-   * Returns null when unrestricted (no allowedTools), so the thread falls back
-   * to the process-level server set.
+   * Why this is required for Codex: all agents share one app-server process and
+   * one HTTP MCP server, so a tool call arriving over HTTP carries no inherent
+   * agent identity. Without the header the server falls back to a single
+   * process-global "current agent" (actionEmitter.getCurrentAgentId), which
+   * races whenever two Codex turns overlap — e.g. a monitor agent spawns an app
+   * agent (fire-and-forget). The app agent then resolves the wrong/empty window
+   * and its `app:command`/`app:query` fail with "no active window context".
+   * Stamping identity per-thread eliminates the race at its root.
+   *
+   * We expose the FULL active server set (system+verbs+app) — same as the
+   * process-level config — so this override never narrows the agent's tools; the
+   * only thing it adds over the process-level set is the header.
+   *
+   * Returns null when there is no agentId to attach, so the thread falls back to
+   * the process-level server set (and the legacy global fallback).
    */
-  private buildMcpScope(allowedTools?: string[]): {
+  private buildMcpScope(agentId?: string): {
     servers: McpServerOverride;
     signature: string;
   } | null {
-    if (!allowedTools) return null;
+    if (!agentId) return null;
 
-    const active = new Set(getActiveServers());
-    const needed = new Set<string>();
-    for (const tool of allowedTools) {
-      const m = tool.match(/^mcp__(\w+)__/);
-      if (m && active.has(m[1] as ReturnType<typeof getActiveServers>[number])) {
-        needed.add(m[1]);
-      }
-    }
-    if (needed.size === 0) return null;
-
+    const namespaces = getActiveServers();
     const servers: McpServerOverride = {};
-    for (const ns of needed) {
+    for (const ns of namespaces) {
       servers[ns] = {
         url: `http://127.0.0.1:${getPort()}/mcp/${ns}`,
         bearer_token_env_var: 'YAAR_MCP_TOKEN',
+        http_headers: { 'x-agent-id': agentId },
       };
     }
-    return { servers, signature: [...needed].sort().join(',') };
+    // agentId is stable for a given provider instance, so this signature is
+    // constant across that agent's turns → no needless thread churn. Including
+    // it still forces a fresh thread if the provider is ever rebound to another
+    // agent, keeping the header correct.
+    return { servers, signature: `${agentId}:${[...namespaces].sort().join(',')}` };
   }
 
   private async ensureThread(options: TransportOptions): Promise<boolean> {
     const client = this.client!;
 
-    // Per-role MCP server scoping (mirrors Claude's per-agent server selection).
-    const scope = this.buildMcpScope(options.allowedTools);
+    // Stamp the agent's identity onto the thread's MCP servers so its tool calls
+    // self-identify to the shared MCP server (see buildMcpScope).
+    const scope = this.buildMcpScope(options.agentId);
     const mcpConfig = scope ? { mcp_servers: scope.servers } : undefined;
     const mcpScope = scope?.signature;
 

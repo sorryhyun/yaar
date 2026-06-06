@@ -120,10 +120,10 @@ export class AppTaskProcessor {
         fp,
         windowId,
         monitorId: task.monitorId,
-        // Codex: pass undefined so the thread falls back to the process-level
-        // server set (system+verbs+app) instead of a per-thread mcp_servers
-        // override, which Codex doesn't reliably honor — leaving the app agent
-        // with no tools. Mirrors the monitor/session agents' Codex handling.
+        // Codex doesn't filter tools per-thread via allowedTools (its per-thread
+        // mcp_servers override carries the full active set + agent identity; see
+        // CodexProvider.buildMcpScope), so pass undefined and let it use all
+        // tools. Mirrors the monitor/session agents' Codex handling.
         allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
         // Codex has no Claude models — passing e.g. 'claude-opus-4-8' (from the

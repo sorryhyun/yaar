@@ -12,6 +12,7 @@
  */
 
 import type { Subprocess } from 'bun';
+import { existsSync } from 'fs';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -58,6 +59,24 @@ export interface AppServerEvents {
 }
 
 /**
+ * Resolve `setsid`, used to launch the app-server as its own
+ * process-group / session leader. When available, the whole codex process tree
+ * (app-server + any grandchildren it spawns — model runners, MCP servers, turn
+ * processes) shares one PGID, so shutdown can reap it with a single negative-PID
+ * signal instead of leaking orphans. Returns the binary path, or null on Windows
+ * (no setsid; the process-tree is force-killed via taskkill /T elsewhere) or
+ * platforms where it isn't installed (e.g. stock macOS) — there we fall back to
+ * single-PID kill. Cached after the first probe.
+ */
+let setsidPathCache: string | null | undefined;
+function getSetsidPath(): string | null {
+  if (setsidPathCache === undefined) {
+    setsidPathCache = process.platform === 'win32' ? null : (Bun.which('setsid') ?? null);
+  }
+  return setsidPathCache;
+}
+
+/**
  * Manages a codex app-server child process with WebSocket transport.
  *
  * @example
@@ -75,6 +94,12 @@ export interface AppServerEvents {
  */
 export class AppServer {
   private process: Subprocess | null = null;
+  /**
+   * True when `process` was launched via `setsid` and is therefore the leader
+   * of its own process group (PGID === process.pid). Lets `stop()` signal the
+   * whole codex subtree with `process.kill(-pid, …)` instead of just the leader.
+   */
+  private ownsProcessGroup = false;
   private controlClient: JsonRpcWsClient | null = null;
   private tempDir: string | null = null;
   private readonly config: AppServerConfig;
@@ -218,31 +243,42 @@ export class AppServer {
       }
     }
 
-    const spawnArgs = [...getCodexSpawnArgs(), ...args];
-    try {
-      this.process = Bun.spawn(spawnArgs, {
-        cwd: STORAGE_DIR,
-        stdio: ['ignore', 'ignore', 'pipe'],
-        env: {
-          ...process.env,
-          CI: '1',
-          YAAR_MCP_TOKEN: getMcpToken(),
-        },
-      });
-    } catch (err: unknown) {
-      const isNotFound =
-        err instanceof Error &&
-        ('code' in err
-          ? (err as NodeJS.ErrnoException).code === 'ENOENT'
-          : err.message.includes('ENOENT'));
-      if (isNotFound) {
-        throw new Error(
-          `Codex CLI not found (tried: ${spawnArgs[0]}). ` +
-            `Install it (npm install -g @openai/codex) or place the codex binary next to the executable.`,
-        );
-      }
-      throw err;
+    const codexArgs = [...getCodexSpawnArgs(), ...args];
+    const codexBin = codexArgs[0];
+
+    // Resolve the codex binary up front. We can't rely on Bun.spawn's ENOENT
+    // anymore: when we wrap the launch in `setsid` (below) a missing codex no
+    // longer surfaces as a spawn failure — setsid spawns fine and only fails to
+    // exec codex afterwards, which would degrade into an opaque connect timeout.
+    const codexFound =
+      codexBin.includes('/') || codexBin.includes('\\')
+        ? existsSync(codexBin)
+        : Bun.which(codexBin) !== null;
+    if (!codexFound) {
+      throw new Error(
+        `Codex CLI not found (tried: ${codexBin}). ` +
+          `Install it (npm install -g @openai/codex) or place the codex binary next to the executable.`,
+      );
     }
+
+    // Launch as a process-group / session leader when `setsid` is available, so
+    // shutdown can reap the entire codex subtree with one negative-PID signal.
+    // `setsid -w` keeps the leader alive for codex's lifetime and propagates its
+    // exit code, so `process.exited` and stderr piping still work; the leader's
+    // PID equals the new PGID.
+    const setsidPath = getSetsidPath();
+    const spawnArgs = setsidPath ? [setsidPath, '-w', ...codexArgs] : codexArgs;
+    this.ownsProcessGroup = setsidPath !== null;
+
+    this.process = Bun.spawn(spawnArgs, {
+      cwd: STORAGE_DIR,
+      stdio: ['ignore', 'ignore', 'pipe'],
+      env: {
+        ...process.env,
+        CI: '1',
+        YAAR_MCP_TOKEN: getMcpToken(),
+      },
+    });
 
     // Log stderr for debugging (async, runs in background)
     const stderrStream = this.process.stderr as ReadableStream<Uint8Array>;
@@ -266,6 +302,7 @@ export class AppServer {
     // Handle process exit (async, runs in background)
     this.process.exited.then((code) => {
       this.process = null;
+      this.ownsProcessGroup = false;
       this.controlClient?.close();
       this.controlClient = null;
 
@@ -374,27 +411,31 @@ export class AppServer {
     if (this.process) {
       const pid = this.process.pid;
 
-      // Kill the process
-      this.process.kill();
+      // Target the whole process group (negative PID) when we own it, so codex's
+      // children die with it; the `setsid` leader doesn't forward signals, so
+      // signaling just the leader PID would orphan the rest of the tree.
+      const target = this.ownsProcessGroup ? -pid : pid;
+      const signal = (sig: NodeJS.Signals) => {
+        try {
+          process.kill(target, sig);
+        } catch {
+          // Already dead / no such process group
+        }
+      };
 
-      // Wait for the process to exit (with timeout)
+      // Graceful first, then force-kill if it's still alive after a timeout.
+      signal('SIGTERM');
       const exitPromise = this.process.exited;
       const timeoutPromise = new Promise<void>((resolve) => {
         setTimeout(() => {
-          // Force kill if still alive
-          if (pid) {
-            try {
-              process.kill(pid, 'SIGKILL');
-            } catch {
-              // Already dead
-            }
-          }
+          signal('SIGKILL');
           resolve();
         }, 5000);
       });
       await Promise.race([exitPromise, timeoutPromise]);
 
       this.process = null;
+      this.ownsProcessGroup = false;
     }
 
     // Clean up temp directory
