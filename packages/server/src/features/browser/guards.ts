@@ -10,7 +10,9 @@
  *     Reading YAAR's tab (screenshot / extract / introspection) is fine; changing
  *     it must go through OS Actions / the `yaar://` protocol so state stays
  *     coherent. Applies to every provider (headless tabs never show YAAR's
- *     origin, so it's a no-op there).
+ *     origin, so it's a no-op there). **Exception:** the session-agent door
+ *     (`yaar://session/browser`) passes `allowSelfTarget` — as the user's deputy
+ *     it may drive YAAR's own tab, the same way the user can.
  *
  *  2. **Tab-control consent** — when the provider drives the *user's own* browser
  *     (`controlsUserBrowser`), mutating a real logged-in tab requires a per-origin
@@ -90,15 +92,27 @@ export async function enforceBrowserGuards(opts: {
   action: string;
   session: BrowserSession | undefined;
   sessionId: string | undefined;
+  /**
+   * Allow raw-DOM mutation of YAAR's own tab. Only the session agent's door
+   * (`yaar://session/browser`, session-principal gated) sets this — as the
+   * user's deputy it may drive YAAR's own tab the way the user would. The
+   * `/api/browser` path (frontend / bundled tools / headless sandbox) leaves
+   * this unset, so self-target mutation stays refused there.
+   */
+  allowSelfTarget?: boolean;
 }): Promise<GuardResult> {
-  const { provider, action, session, sessionId } = opts;
+  const { provider, action, session, sessionId, allowSelfTarget } = opts;
 
   // No session yet (e.g. create/open of a fresh tab) → nothing to guard here.
   if (!session) return OK;
   if (!isMutatingAction(action)) return OK;
 
-  // 1. Self-target: refuse raw-DOM mutation of YAAR's own tab.
+  // 1. Self-target: YAAR's own tab.
   if (isYaarOriginUrl(session.currentUrl)) {
+    // The session agent (user's deputy) may drive YAAR's own tab. It's our own
+    // origin, not a third-party login, so no tab-control consent is needed —
+    // allow it outright before the consent guard below would prompt.
+    if (allowSelfTarget) return OK;
     return {
       ok: false,
       error:

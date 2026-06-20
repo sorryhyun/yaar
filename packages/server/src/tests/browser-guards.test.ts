@@ -116,6 +116,19 @@ describe('browser guards', () => {
     expect(mockDialog).not.toHaveBeenCalled();
   });
 
+  it('allows self-target mutation when allowSelfTarget is set (session-agent door)', async () => {
+    const r = await enforceBrowserGuards({
+      provider: local,
+      action: 'click',
+      session: sessionAt('http://localhost:8000/desktop'),
+      sessionId: 's1',
+      allowSelfTarget: true,
+    });
+    // YAAR's own tab is not a user-login origin, so no consent dialog either.
+    expect(r.ok).toBe(true);
+    expect(mockDialog).not.toHaveBeenCalled();
+  });
+
   it('headless provider needs no tab-control consent for sibling tabs', async () => {
     const r = await enforceBrowserGuards({
       provider: headless,

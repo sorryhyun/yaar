@@ -339,6 +339,9 @@ export class ContextPool implements PoolContext {
         systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
         allowedTools:
           this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.allowedTools,
+        // Codex has no Claude models — passing 'claude-opus-4-8' makes the openai
+        // provider reject the turn. Leave undefined so Codex uses its default.
+        model: this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.model,
       });
     } finally {
       this.inflightExit();

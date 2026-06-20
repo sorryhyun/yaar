@@ -89,5 +89,14 @@ export async function sessionBrowserInvoke(payload?: Record<string, unknown>): P
   // `list_tabs` should reflect the user's real tabs, not just YAAR-opened ones.
   if (action === 'list_tabs') await resolved.provider.syncExistingTabs();
 
-  return runGuardedBrowserAction(resolved.provider, action, payload ?? {}, resolveSessionId());
+  // The session agent is the user's deputy: allow it to drive YAAR's own tab
+  // (self-target), unlike the `/api/browser` path. Access to this door is
+  // already session-principal gated, so only the session agent reaches here.
+  return runGuardedBrowserAction(
+    resolved.provider,
+    action,
+    payload ?? {},
+    resolveSessionId(),
+    /* allowSelfTarget */ true,
+  );
 }

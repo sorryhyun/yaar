@@ -43,6 +43,9 @@ with their cookies and logins. This is "the same as what the user does," so trea
 
 - Use it for tasks that need the user's identity (logged-in sites, their sessions). Generic public
   browsing should go to a monitor/Browser-app sandbox instead.
+- You are also allowed to drive **YAAR's own tab** through this door (other principals are refused).
+  Prefer OS Actions / the \`yaar://\` protocol for changing YAAR's UI when one exists; reach for raw
+  browser control of the YAAR tab only when there's no OS Action for what you need.
 - Each mutating action surfaces a "driving as you" indicator and may prompt for per-origin consent.
 - If it reports "no local browser available," the user is on a cloud/headless run — say so plainly;
   there is no silent fallback.
@@ -61,4 +64,8 @@ export const SESSION_AGENT_PROFILE: AgentProfile = {
   description: 'Session controller — cross-monitor oversight and coordination',
   systemPrompt: SYSTEM_PROMPT,
   allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
+  // Opus for the deputy — it oversees/coordinates across monitors and acts as
+  // the user. Mirrors the monitor agent's model choice. Claude-only; Codex has
+  // no Claude models, so the call site guards on providerType.
+  model: 'claude-opus-4-8',
 };

@@ -615,16 +615,26 @@ export async function runBrowserAction(
  * then run the action against `pool`. Returns a `VerbResult` (guard denials
  * surface as `isError`). Shared by `yaar://session/browser`; the HTTP route
  * keeps its own wrapper so it can map a guard denial to HTTP 403.
+ *
+ * `allowSelfTarget` lets the session-agent door drive YAAR's own tab (it's the
+ * user's deputy); the HTTP route never sets it, so self-target stays refused.
  */
 export async function runGuardedBrowserAction(
   pool: BrowserProvider,
   action: string,
   body: Payload,
   sessionId?: string,
+  allowSelfTarget?: boolean,
 ): Promise<VerbResult> {
   const browserId = (body.browserId as string) ?? '0';
   const session = pool.getSession(browserId);
-  const guard = await enforceBrowserGuards({ provider: pool, action, session, sessionId });
+  const guard = await enforceBrowserGuards({
+    provider: pool,
+    action,
+    session,
+    sessionId,
+    allowSelfTarget,
+  });
   if (!guard.ok) return error(guard.error);
 
   const driving = !!session && isMutatingAction(action);

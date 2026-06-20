@@ -62,6 +62,11 @@ export interface HandleMessageOptions {
  * Build a scope context section so the agent knows its place in the hierarchy.
  * - Monitor agents: scoped to a monitor, use bare window IDs
  * - Window agents: scoped to a specific window within a monitor
+ *
+ * Session agents (`session-*`) and app agents (`app-*`) carry a full profile
+ * system prompt that already defines their identity, so they get no generic
+ * scope section — appending the monitor scope here would otherwise tell them
+ * "You are the monitor agent" and clobber their actual role.
  */
 function buildScopeSection(role: string, monitorId?: string): string {
   // Window agent: role is "window-{windowId}" or "window-{windowId}/{actionId}"
@@ -69,6 +74,11 @@ function buildScopeSection(role: string, monitorId?: string): string {
   if (windowMatch) {
     const windowId = windowMatch[1];
     return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`. Your actions are limited to this window. Use \`yaar://windows/${windowId}\` to address it.`;
+  }
+
+  // Profile-driven agents define their own identity — no generic scope.
+  if (role.startsWith('session-') || role.startsWith('app-')) {
+    return '';
   }
 
   // Monitor/ephemeral agent with monitorId
