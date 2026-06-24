@@ -532,12 +532,19 @@ export class LiveSession {
         break;
 
       case ClientEventType.APP_PROTOCOL_READY: {
-        const wasReady = this.windowState.getWindow(event.windowId)?.appProtocol ?? false;
-        this.windowState.setAppProtocol(event.windowId);
-        actionEmitter.notifyAppReady(event.windowId);
+        // The frontend reports the monitor-scoped key (e.g. "0/ai-chat", from the window
+        // element's data-window-id). Normalize to the raw AI-facing id ("ai-chat") so the
+        // readiness signal matches what app_query/app_command wait on. waitForAppReady() and
+        // setAppProtocol resolve by the raw id; a scoped key would silently never match,
+        // leaving the window perpetually "not ready" (e.g. devtools preview windows created
+        // via the iframe-SDK proxy, which are stored under their raw id).
+        const rawWindowId = this.windowState.handleMap.getRawWindowId(event.windowId);
+        const wasReady = this.windowState.getWindow(rawWindowId)?.appProtocol ?? false;
+        this.windowState.setAppProtocol(rawWindowId);
+        actionEmitter.notifyAppReady(rawWindowId);
         // Replay stored commands only on re-registration (reload/remount), not first time
         if (wasReady) {
-          this.replayAppCommands(event.windowId);
+          this.replayAppCommands(rawWindowId);
         }
         break;
       }

@@ -29,7 +29,7 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   // Log important message types (skip noisy stream_event)
   const msgType = (msg as { type: string; subtype?: string }).type;
   const msgSubtype = (msg as { subtype?: string }).subtype;
-  if (msgType !== 'stream_event') {
+  if (msgType !== 'stream_event' && msgSubtype !== 'thinking_tokens') {
     const subtypeStr = msgSubtype ? `, subtype=${msgSubtype}` : '';
     console.log(`[message-mapper] ${msgType}${subtypeStr}`);
   }

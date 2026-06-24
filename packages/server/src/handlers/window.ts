@@ -28,7 +28,7 @@ import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
 import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
-import { getMonitorId } from '../agents/agent-context.js';
+import { getMonitorId, getAgentId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
@@ -190,8 +190,15 @@ export function registerWindowHandlers(
         ...formatWindowFlags(win),
       };
 
-      // For iframe windows, capture a screenshot so the agent can see what's rendered
-      if (win.content.renderer === 'iframe') {
+      // For iframe windows, capture a screenshot so the agent can see what's rendered.
+      // Skip it for iframe-SDK proxy reads (agentId `iframe:*`, e.g. devtools' viewPreview):
+      // those run via POST /api/verb without a monitor-scoped context, so the capture action's
+      // feedback never round-trips and we'd block the full timeout. The screenshot can't be
+      // delivered through the app-protocol command response in that path anyway — the SDK
+      // returns it as JSON-stringified base64. Return metadata only, promptly, so the calling
+      // app command stays well within its own timeout budget.
+      const isIframeProxy = getAgentId()?.startsWith('iframe:') ?? false;
+      if (win.content.renderer === 'iframe' && !isIframeProxy) {
         const feedback = await actionEmitter.emitActionWithFeedback(
           { type: 'window.capture', windowId: resolved.windowId },
           5000,
