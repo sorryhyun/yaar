@@ -1,5 +1,12 @@
 import { state, setState, settings, updatePosts } from './store';
-import { fetchPosts, fetchPostDetail, fetchPostBodyFast, fetchTopPostsForAnalysis } from './fetcher';
+import {
+  fetchPosts,
+  fetchPostDetail,
+  fetchPostBody,
+  fetchPostComments,
+  fetchTopPostsForAnalysis,
+  inlineRemoteImages,
+} from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { POST_TAB } from './browser';
@@ -118,47 +125,43 @@ export async function selectPost(post: Post): Promise<void> {
     commentText: '',
   });
 
-  // ——— Fast HTTP path: race a plain GET against the browser load ———
-  // Body usually arrives in <1 s via HTTP. We surface it the moment it's ready
-  // so the user sees the post text immediately. Comments + image-converted
-  // body are still produced by the slower browser path below and overwrite
-  // the fast result when ready.
-  fetchPostBodyFast(post)
-    .then((fastContent) => {
-      if (!fastContent) return;
-      if (version !== fetchVersion) return;
-      // Only apply the fast preview if the browser path hasn't already finished
-      if (!state.postContent && state.postLoading) {
-        setState({ postContent: fastContent, postLoading: false });
-      }
-    })
-    .catch(() => {});
+  // ——— Body: HTTP path (server-side proxy, images inlined). Primary + fast. ———
+  const bodyPromise = fetchPostBody(post).catch(() => null);
+
+  // ——— Comments: browser (the only read that needs JS/AJAX). Also returns a
+  // raw body snapshot, used only as a fallback if the HTTP body fails. Hard-
+  // capped so a hung headless tab can't leave the UI spinning forever. ———
+  const browserPromise = Promise.race([
+    fetchPostComments(post),
+    new Promise<{ comments: Comment[]; bodyHtmlRaw: string }>((resolve) =>
+      setTimeout(() => resolve({ comments: [], bodyHtmlRaw: '' }), 20000),
+    ),
+  ]).catch(() => ({ comments: [] as Comment[], bodyHtmlRaw: '' }));
+
+  // Render the body the moment HTTP returns it — don't wait on the browser.
+  bodyPromise.then((body) => {
+    if (version !== fetchVersion) return;
+    if (body && state.postLoading) setState({ postContent: body, postLoading: false });
+  });
 
   try {
-    // The browser path (openOrNavigate / web.html) has no internal timeout, so
-    // a hung headless tab could otherwise leave commentsLoading stuck forever.
-    // Race against a hard ceiling so loading state always resolves.
-    const detail = await Promise.race([
-      fetchPostDetail(post),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000)),
-    ]);
+    const [body, browser] = await Promise.all([bodyPromise, browserPromise]);
     if (version !== fetchVersion) return;
-    if (detail) {
-      cacheSet(post.id, detail.content, detail.comments);
-      setState({ postContent: detail.content, comments: detail.comments });
-    } else if (!state.postContent) {
-      // Timed out and the fast path produced nothing — surface a soft error
-      // instead of an endless spinner.
-      setState(
-        'postContent',
-        '<p style="color:var(--yaar-error)">게시물을 불러오는 데 시간이 너무 오래 걸렸습니다. 다시 시도해주세요.</p>',
-      );
+
+    let content = body;
+    if (!content && browser.bodyHtmlRaw) {
+      content = await inlineRemoteImages(browser.bodyHtmlRaw);
     }
+    if (!content) {
+      content =
+        '<p style="color:var(--yaar-error)">게시물을 불러오는 데 실패했습니다. 다시 시도해주세요.</p>';
+    }
+
+    setState({ postContent: content, comments: browser.comments });
+    cacheSet(post.id, content, browser.comments);
   } catch (e: unknown) {
     if (version !== fetchVersion) return;
     const msg = e instanceof Error ? e.message : String(e);
-    // If the fast path already populated something, leave it alone — don't
-    // overwrite a partially-rendered body with an error.
     if (!state.postContent) {
       setState(
         'postContent',

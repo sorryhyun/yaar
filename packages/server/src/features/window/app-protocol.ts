@@ -10,7 +10,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
-const MAX_TEXT_BYTES = 40_000;
+const MAX_TEXT_BYTES = 400_000;
 
 /** Truncate text to MAX_TEXT_BYTES, appending a note if truncated. */
 function truncateText(text: string): string {

@@ -426,88 +426,6 @@ function extractContentFromDoc(doc: Document, post: Post): string {
   return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
 }
 
-/**
- * JavaScript to run inside the browser tab via web.evaluate().
- * Converts all <img> src URLs in the post content and comment areas
- * to base64 data URIs using fetch() with same-origin cookies.
- * This bypasses DC's viewimage.php referrer/cookie checks because
- * fetch() runs within the DC page context.
- */
-const IMAGE_TO_DATA_URI_SCRIPT = `
-(async function() {
-  var sels = ['.thum-txtin','.thum-txt','.write_div','.view_content_wrap','.gallview_contents','.gallview-content','.gall-detail-content','.gall-content','#readBody','.con-body'];
-  var container = null;
-  for (var i = 0; i < sels.length; i++) {
-    container = document.querySelector(sels[i]);
-    if (container) break;
-  }
-  var commentBox = document.querySelector('#comment_box');
-  var allImgs = [];
-  if (container) allImgs = allImgs.concat(Array.from(container.querySelectorAll('img')));
-  if (commentBox) allImgs = allImgs.concat(Array.from(commentBox.querySelectorAll('img')));
-  if (allImgs.length === 0) return 0;
-
-  // DCinside mobile lazy-loads images: the real URL lives in a data-* attribute
-  // while src is empty or a placeholder. Resolve the real URL before fetching,
-  // otherwise we'd convert the placeholder and the image never appears.
-  var lazyAttrs = ['data-original','data-src','data-lazy-src','data-lazy','data-echo','data-url','egjs-data-original'];
-  function isPlaceholder(s) {
-    if (!s) return true;
-    if (s.indexOf('about:') === 0 || s.indexOf('blob:') === 0) return true;
-    if (/^data:image\\/(gif|png);base64,(R0lGOD|iVBORw0KGgo)/.test(s) && s.length < 200) return true;
-    if (/blank\\.(gif|png)/i.test(s)) return true;
-    if (/(spacer|loading|placeholder|1x1|transparent)\\.(gif|png|svg)/i.test(s)) return true;
-    return false;
-  }
-  function realUrl(img) {
-    for (var k = 0; k < lazyAttrs.length; k++) {
-      var v = (img.getAttribute(lazyAttrs[k]) || '').trim();
-      if (v && v.indexOf('data:') !== 0) return v;
-    }
-    var ss = (img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').trim();
-    if (ss) {
-      var first = (ss.split(',')[0] || '').trim().split(/\\s+/)[0];
-      if (first && first.indexOf('data:') !== 0) return first;
-    }
-    var cur = (img.getAttribute('src') || '').trim();
-    if (cur && cur.indexOf('data:') === 0) return cur; // already a real data URI
-    if (cur && !isPlaceholder(cur)) return cur;
-    return '';
-  }
-
-  var converted = 0;
-  await Promise.allSettled(allImgs.map(function(img) {
-    var url = realUrl(img);
-    if (!url || url.indexOf('data:') === 0) return Promise.resolve();
-    try { url = new URL(url, document.baseURI).href; } catch (e) {}
-    return fetch(url, { credentials: 'include' })
-      .then(function(resp) {
-        if (!resp.ok) throw new Error(resp.status);
-        return resp.blob();
-      })
-      .then(function(blob) {
-        return new Promise(function(resolve, reject) {
-          var reader = new FileReader();
-          reader.onloadend = function() { resolve(reader.result); };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      })
-      .then(function(dataUrl) {
-        img.src = dataUrl;
-        // Strip lazy attributes + classes so DC's lazy-load JS can't re-blank src.
-        for (var k = 0; k < lazyAttrs.length; k++) img.removeAttribute(lazyAttrs[k]);
-        img.removeAttribute('data-srcset');
-        img.removeAttribute('srcset');
-        img.removeAttribute('class');
-        converted++;
-      })
-      .catch(function() {});
-  }));
-  return converted;
-})()
-`;
-
 /** Referer DC's hotlink protection accepts (mobile gallery origin). */
 const DC_REFERER = 'https://m.dcinside.com/';
 
@@ -519,8 +437,8 @@ let imgProxyShapeLogged = false;
  * base64 `data:` URI.
  *
  * Why proxy instead of loading the URL directly in an <img>?
- *  - In-browser fetch() (the IMAGE_TO_DATA_URI_SCRIPT path) is CORS-blocked for
- *    DC's cross-origin image hosts (dcimg*.dcinside.*) — they send no ACAO.
+ *  - In-browser fetch() is CORS-blocked for DC's cross-origin image hosts
+ *    (dcimg*.dcinside.*) — they send no ACAO header.
  *  - Plain remote <img> loads are unreliable due to Referer hotlink protection.
  * Server-side fetch (yaar://http) is NOT subject to CORS and lets us send a DC
  * Referer header so hotlink protection allows the request.
@@ -610,7 +528,7 @@ async function fetchImageAsDataUri(url: string): Promise<string | null> {
  * see fetchImageAsDataUri for why direct/in-browser loading fails. Images that
  * are already inlined (data:) or have no usable URL are left untouched.
  */
-async function inlineRemoteImages(htmlStr: string): Promise<string> {
+export async function inlineRemoteImages(htmlStr: string): Promise<string> {
   if (!htmlStr || !htmlStr.includes('<img')) return htmlStr;
   const doc = new DOMParser().parseFromString(
     `<div id="__inline_root">${htmlStr}</div>`,
@@ -647,108 +565,148 @@ async function inlineRemoteImages(htmlStr: string): Promise<string> {
   return root.innerHTML;
 }
 
+/** Parse a raw HTML document string and extract the post body markup. */
+function extractBodyFromHtml(html: string, post: Post): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
+  return extractContentFromDoc(doc, post);
+}
+
+/** Shared headers for the server-side (yaar://http) mobile DC fetches. */
+const DC_HTTP_HEADERS = {
+  'User-Agent': MOBILE_UA,
+  Accept: 'text/html,application/xhtml+xml',
+  'Accept-Language': 'ko-KR,ko;q=0.9',
+} as const;
+
 /**
- * Fast HTTP-only body fetch.
+ * Fetch a post's body over plain HTTP (server-side `yaar://http` proxy) and
+ * inline its images.
  *
- * The mobile DC post page renders the body in the initial HTML response, so
- * a plain GET (no browser tab, no JS) returns the body in ~300–800 ms vs.
- * 2–6 s for the browser path. Comments are AJAX-loaded so are NOT included
- * here; this is purely a fast-path for body text/markup.
+ * This is the primary body path. The mobile DC post page renders the body in
+ * the initial HTML response, so a proxied GET returns it in ~300–800 ms with no
+ * browser tab and no CORS. Remote images are inlined as base64 data URIs via the
+ * server proxy (with a DC Referer) — see fetchImageAsDataUri. Comments are
+ * AJAX-injected after render and are therefore NOT included here; they come from
+ * fetchPostComments (the browser read path).
  *
- * Caveat: images point at viewimage.php which needs the DC cookie + referrer.
- * Many will fail to load directly; helpers.processImages() shows a graceful
- * placeholder for those, and the browser path will replace this content with
- * a fully image-converted version a moment later.
+ * Returns null when the body can't be fetched/parsed so the caller can fall
+ * back to the browser snapshot.
  */
-export async function fetchPostBodyFast(post: Post): Promise<string | null> {
+export async function fetchPostBody(post: Post): Promise<string | null> {
   try {
     const res = (await invoke('yaar://http', {
       url: post.url,
       method: 'GET',
-      headers: {
-        'User-Agent': MOBILE_UA,
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-      },
+      headers: { ...DC_HTTP_HEADERS },
     })) as { ok: boolean; status?: number; body?: string };
     if (!res?.ok || !res.body) return null;
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(res.body, 'text/html');
-    doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
-    const content = extractContentFromDoc(doc, post);
+    const content = extractBodyFromHtml(res.body, post);
     // If we hit the "불러올 수 없습니다" fallback, treat as no result so the caller
-    // waits for the browser path instead of flashing the error message.
+    // falls back to the browser snapshot instead of flashing the error message.
     if (content.includes('본문을 불러올 수 없습니다')) return null;
-    return content;
+    return await inlineRemoteImages(content);
   } catch {
     return null;
   }
 }
 
 /**
- * Fetch post body and comments in a single browser load.
+ * Browser read path — the ONLY part of reading that still needs a real browser.
  *
- * DC injects comments via an AJAX call after the initial page render.
- * We wait for the `#comment_box li.comment` selector to appear (up to 4 s)
- * so that both the post body and the AJAX-loaded comments are captured in
- * one HTML snapshot. This is simpler and more reliable than calling the
- * comment AJAX endpoint separately, because that endpoint requires a valid
- * CSRF token and Referer header that change across sessions.
+ * DC injects comments via an AJAX call after the initial page render, so a plain
+ * HTTP GET never sees them. We open a headless tab, wait for the comment DOM to
+ * appear, and scrape it. We also return the raw (non-inlined) body markup from
+ * the same snapshot so callers can use it as a fallback when the HTTP body path
+ * (fetchPostBody) fails — no extra load required.
  *
- * After comments load, we convert images to base64 data URIs inside the
- * browser context (which has DC cookies/session) so that images display
- * correctly in our sandboxed iframe.
+ * Image inlining is intentionally NOT done here: it is handled server-side by
+ * fetchPostBody / inlineRemoteImages, which has no CORS or referer constraints.
+ */
+export async function fetchPostComments(
+  post: Post,
+  tabId?: string,
+): Promise<{ comments: Comment[]; bodyHtmlRaw: string }> {
+  tabId ??= POST_TAB;
+  await openOrNavigate(post.url, tabId, { visible: false, mobile: true });
+
+  // Wait for AJAX-loaded comments. A single waitFor covers the comment AJAX;
+  // no networkidle needed (the body is already in the initial HTML).
+  await web
+    .waitFor({ selector: '#comment_box li.comment', timeout: 3500, browserId: tabId })
+    .catch(() => {});
+
+  const rawHtml = (await web.html({ browserId: tabId })) as { ok: boolean; data?: string };
+  const html = rawHtml?.data ?? '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
+
+  return { comments: parseComments(doc), bodyHtmlRaw: extractContentFromDoc(doc, post) };
+}
+
+/**
+ * Fetch a post's body and comments together.
+ *
+ * Body comes from the HTTP path (fetchPostBody); comments from the browser
+ * (fetchPostComments). Both run concurrently. If the HTTP body fails, the body
+ * markup captured by the browser snapshot is inlined and used as a fallback so
+ * one bad path never blanks the post.
  */
 export async function fetchPostDetail(
   post: Post,
   tabId?: string,
 ): Promise<{ content: string; comments: Comment[] }> {
-  tabId ??= POST_TAB;
-  await openOrNavigate(post.url, tabId, {
-    visible: false,
-    mobile: true,
-  });
+  const [httpBody, browser] = await Promise.all([
+    fetchPostBody(post),
+    fetchPostComments(post, tabId).catch(() => ({
+      comments: [] as Comment[],
+      bodyHtmlRaw: '',
+    })),
+  ]);
 
-  // Wait for AJAX-loaded comments (post body is in the initial HTML).
-  // No need for networkidle — this single waitFor covers the comment AJAX.
-  await web
-    .waitFor({
-      selector: '#comment_box li.comment',
-      timeout: 3500,
-      browserId: tabId,
-    })
-    .catch(() => {});
+  let content = httpBody;
+  if (!content && browser.bodyHtmlRaw) {
+    content = await inlineRemoteImages(browser.bodyHtmlRaw);
+  }
+  if (!content) {
+    const safeUrl = post.url.replace(/"/g, '&quot;');
+    content = `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
+  }
 
-  // Convert images to base64 data URIs inside the browser tab.
-  // The browser has DC's cookies/session so fetch() can access viewimage.php.
-  // Race with a timeout to avoid hanging on slow/large images. 6s is plenty
-  // for typical posts; oversized albums can finish converting later — we'll
-  // still display whatever was converted before the deadline.
-  await Promise.race([
-    web.evaluate({ expression: IMAGE_TO_DATA_URI_SCRIPT, browserId: tabId }),
-    new Promise((resolve) => setTimeout(resolve, 6000)),
-  ]).catch(() => {});
+  return { content, comments: browser.comments };
+}
 
-  const rawHtml = (await web.html({ browserId: tabId })) as { ok: boolean; data?: string };
-  const html = rawHtml?.data ?? '';
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
-
-  const comments = parseComments(doc);
-  let content = extractContentFromDoc(doc, post);
-
-  // The in-page fetch above is CORS-blocked for DC's cross-origin image hosts,
-  // so body images often remain as remote URLs. Inline them reliably via the
-  // server-side proxy (with a DC Referer) so they display in our sandbox.
-  content = await inlineRemoteImages(content);
-
-  return { content, comments };
+/**
+ * Fetch a single post's body as plain text over HTTP (no browser). Used for AI
+ * analysis where only the text matters.
+ */
+async function fetchPostText(post: Post): Promise<string> {
+  try {
+    const res = (await invoke('yaar://http', {
+      url: post.url,
+      method: 'GET',
+      headers: { ...DC_HTTP_HEADERS },
+    })) as { ok: boolean; body?: string };
+    if (!res?.ok || !res.body) return '';
+    const doc = new DOMParser().parseFromString(res.body, 'text/html');
+    doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
+    const el =
+      doc.querySelector('.write_div') ??
+      doc.querySelector('.thum-txtin') ??
+      doc.querySelector('.thum-txt') ??
+      doc.querySelector('.view_content_wrap');
+    const text = el ? (el.textContent ?? '').replace(/\s+/g, ' ').trim() : '';
+    return text.slice(0, 600);
+  } catch {
+    return '';
+  }
 }
 
 /**
  * Fetch top N posts by recommend count for AI analysis.
- * Staggers requests 1 s apart to avoid rate limiting.
+ *
+ * HTTP fetches go through the server proxy (no shared browser tab to serialize
+ * on), so we run them concurrently — no 1 s stagger needed.
  */
 export async function fetchTopPostsForAnalysis(
   allPosts: Post[],
@@ -758,32 +716,5 @@ export async function fetchTopPostsForAnalysis(
     .sort((a, b) => (parseInt(b.recommend) || 0) - (parseInt(a.recommend) || 0))
     .slice(0, count);
 
-  const results = await Promise.all(
-    candidates.map(
-      (post, i) =>
-        new Promise<{ post: Post; text: string }>((resolve) => {
-          setTimeout(async () => {
-            try {
-              const tabId = `analysis-${i % 3}`;
-              const rawHtml = await browseUrl(post.url, tabId, true);
-              const parser = new DOMParser();
-              const doc = parser.parseFromString(rawHtml, 'text/html');
-              doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
-
-              const el =
-                doc.querySelector('.write_div') ??
-                doc.querySelector('.thum-txt') ??
-                doc.querySelector('.view_content_wrap');
-
-              const text = el ? (el.textContent ?? '').replace(/\s+/g, ' ').trim() : '';
-              resolve({ post, text: text.slice(0, 600) });
-            } catch {
-              resolve({ post, text: '' });
-            }
-          }, i * 1000);
-        }),
-    ),
-  );
-
-  return results;
+  return Promise.all(candidates.map(async (post) => ({ post, text: await fetchPostText(post) })));
 }
