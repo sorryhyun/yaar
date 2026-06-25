@@ -87,10 +87,23 @@ export const LAZY_IMAGE_ATTRS = LAZY_ATTRS;
  * - Resolves lazy-load attributes into a usable `src`
  * - Removes tracking pixels (1x1) and truly-empty images
  * - Adds referrerpolicy + onerror fallback for non-data-URI images
+ *
+ * Progressive loading: the first `eagerCount` images keep their real `src` and
+ * load immediately. Every image after that is *deferred* — its real URL is
+ * stashed in `data-deferred-src`, `src` is set to a 1x1 transparent placeholder,
+ * and it gets the `deferred-img` class. The caller (DetailPanel) wires an
+ * IntersectionObserver that swaps `data-deferred-src` -> `src` as each image
+ * scrolls into view, so image-heavy posts no longer decode/paint everything at
+ * once. This matters even for inlined base64 data URIs, whose simultaneous
+ * decode is the main source of the slow open.
  */
-export function processImages(htmlStr: string): string {
+const TRANSPARENT_PX =
+  'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
+export function processImages(htmlStr: string, eagerCount = 2): string {
   const div = document.createElement('div');
   div.innerHTML = htmlStr;
+  let kept = 0;
   div.querySelectorAll('img').forEach((img) => {
     const w = img.getAttribute('width');
     const h = img.getAttribute('height');
@@ -155,6 +168,17 @@ export function processImages(htmlStr: string): string {
           "font-size:0.8em;color:var(--yaar-text-muted,#888);margin:2px';" +
           'this.replaceWith(s)',
       );
+    }
+
+    // Progressive loading: only the first `eagerCount` images load immediately.
+    // The rest are deferred and swapped in by an IntersectionObserver as they
+    // scroll into view (see DetailPanel). `loading="lazy"` alone does NOT defer
+    // inlined base64 data URIs, so we move the real URL out of `src`.
+    kept += 1;
+    if (kept > eagerCount) {
+      img.setAttribute('data-deferred-src', src);
+      img.setAttribute('src', TRANSPARENT_PX);
+      img.classList.add('deferred-img');
     }
   });
   return div.innerHTML;

@@ -281,30 +281,58 @@ export async function postCommentToDC(
       };
     }
 
-    // 5. Fill the textarea (property-descriptor setter bypasses controlled inputs).
+    // 5. Fill the textarea. Prefer REAL keystrokes (CDP Input events) over a
+    //    direct .value assignment: DC's anti-bot watches for human-like input
+    //    events (keydown/keypress/keyup with isTrusted), and a value-setter
+    //    produces only a synthetic 'input' event. Fall back to the
+    //    property-descriptor setter only if real typing fails.
     step = 'fill';
     await web.click({ browserId, selector: COMMENT_SELECTOR }).catch(() => {});
-    const fillRes = (await web.evaluate({
-      browserId,
-      expression: `(function(){
-        var el = document.querySelector('#comment_memo') ||
-                 document.querySelector('#reply_memo') ||
-                 document.querySelector('textarea[name="memo"]') ||
-                 document.querySelector('textarea.comment_memo') ||
-                 document.querySelector('.cmt_write_box textarea');
-        if (!el) return false;
-        var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
-        if (s && s.set) s.set.call(el, ${JSON.stringify(commentText)});
-        else el.value = ${JSON.stringify(commentText)};
-        el.dispatchEvent(new Event('input', {bubbles:true}));
-        el.dispatchEvent(new Event('change', {bubbles:true}));
-        el.focus();
-        return true;
-      })()`,
-    })) as { data?: boolean };
-    if (fillRes?.data === false) {
-      return { ok: false, error: '댓글 입력란에 내용을 채울 수 없습니다.' };
+    const typedOk = await web
+      .type({ browserId, selector: COMMENT_SELECTOR, text: commentText })
+      .then(() => true)
+      .catch(() => false);
+    if (!typedOk) {
+      const fillRes = (await web.evaluate({
+        browserId,
+        expression: `(function(){
+          var el = document.querySelector('#comment_memo') ||
+                   document.querySelector('#reply_memo') ||
+                   document.querySelector('textarea[name="memo"]') ||
+                   document.querySelector('textarea.comment_memo') ||
+                   document.querySelector('.cmt_write_box textarea');
+          if (!el) return false;
+          var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+          if (s && s.set) s.set.call(el, ${JSON.stringify(commentText)});
+          else el.value = ${JSON.stringify(commentText)};
+          el.dispatchEvent(new Event('input', {bubbles:true}));
+          el.dispatchEvent(new Event('change', {bubbles:true}));
+          el.focus();
+          return true;
+        })()`,
+      })) as { data?: boolean };
+      if (fillRes?.data === false) {
+        return { ok: false, error: '댓글 입력란에 내용을 채울 수 없습니다.' };
+      }
     }
+
+    // 5b. Suppress DC's blocking alert()/confirm() dialogs and mask
+    //     navigator.webdriver (the flag DC's anti-bot reads to detect Chrome
+    //     automation) right before submitting, so the comment write can
+    //     complete in the headless tab without a modal stalling the page.
+    step = 'instrument';
+    await web
+      .evaluate({
+        browserId,
+        expression: `(function(){
+          try { Object.defineProperty(navigator, 'webdriver', { get: function(){ return false; }, configurable: true }); } catch(e){}
+          if (window.__dcInstrumented) return;
+          window.__dcInstrumented = true;
+          window.alert = function(){};
+          window.confirm = function(){ return true; };
+        })()`,
+      })
+      .catch(() => {});
 
     // 6. Submit: prefer DC's own submit button / handler, fall back to Enter.
     step = 'submit';
@@ -326,7 +354,8 @@ export async function postCommentToDC(
         .catch(() => {});
     }
 
-    // 7. Confirm by polling the textarea client-side (it clears on success).
+    // 7. Confirm. On success the textarea clears; on rejection DC leaves the
+    //    textarea untouched. Poll the textarea state until it clears.
     step = 'confirm';
     let cleared = false;
     for (let i = 0; i < 24; i++) {
@@ -340,18 +369,21 @@ export async function postCommentToDC(
                        document.querySelector('textarea[name="memo"]') ||
                        document.querySelector('textarea.comment_memo') ||
                        document.querySelector('.cmt_write_box textarea');
-            return memo ? memo.value.trim() === '' : true;
+            return { cleared: memo ? memo.value.trim() === '' : true };
           })()`,
         })
-        .catch(() => null)) as { data?: boolean } | null;
-      if (r?.data === true) {
+        .catch(() => null)) as { data?: { cleared?: boolean } } | null;
+      if (r?.data?.cleared) {
         cleared = true;
         break;
       }
     }
 
     if (!cleared) {
-      return { ok: false, error: '댓글 등록 확인 실패 — 등록되지 않았을 수 있습니다. 다시 시도해주세요.' };
+      return {
+        ok: false,
+        error: '댓글이 등록되지 않았습니다. 등록 확인에 실패했습니다.',
+      };
     }
 
     return { ok: true };

@@ -571,6 +571,30 @@
   margin: 8px 0;
 }
 
+/* Deferred (lazy) images: reserve space + subtle shimmer until swapped in. */
+.detail-content img.deferred-img {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  background: linear-gradient(
+    90deg,
+    var(--yaar-bg-surface) 25%,
+    var(--yaar-border) 37%,
+    var(--yaar-bg-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: deferred-img-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes deferred-img-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
 .detail-content p {
   margin-bottom: 8px;
 }

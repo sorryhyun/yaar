@@ -1,4 +1,4 @@
-import { createSignal, createEffect } from '@bundled/solid-js';
+import { createSignal, createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state, setState } from '../store';
 import { takeScreenshot } from '../actions';
@@ -9,12 +9,68 @@ export function DetailPanel() {
   // ref 시그널: createEffect가 할당 시점을 추적할 수 있도록 signal로 관리
   const [contentBodyEl, setContentBodyEl] = createSignal<HTMLDivElement | null>(null);
 
+  // Progressive image loader. processImages() marks every image past the first
+  // two with class "deferred-img" and stashes the real URL in data-deferred-src.
+  // Here we swap data-deferred-src -> src as each image scrolls into view so
+  // image-heavy posts don't decode/paint everything at once.
+  let observer: IntersectionObserver | null = null;
+
+  const loadImg = (img: HTMLImageElement) => {
+    const real = img.getAttribute('data-deferred-src');
+    if (real) img.setAttribute('src', real);
+    img.removeAttribute('data-deferred-src');
+    img.classList.remove('deferred-img');
+  };
+
+  const setupLazyImages = (el: HTMLElement) => {
+    observer?.disconnect();
+    observer = null;
+    const deferred = Array.from(
+      el.querySelectorAll('img.deferred-img'),
+    ) as HTMLImageElement[];
+    if (deferred.length === 0) return;
+
+    // Fallback: no IntersectionObserver support -> load everything.
+    if (typeof IntersectionObserver === 'undefined') {
+      deferred.forEach(loadImg);
+      return;
+    }
+
+    observer = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          loadImg(entry.target as HTMLImageElement);
+          obs.unobserve(entry.target);
+        }
+      },
+      {
+        // The scroll container is .detail-content; preload a screen ahead so
+        // the next image is ready by the time the user reaches it.
+        root: el.closest('.detail-content'),
+        rootMargin: '600px 0px',
+        threshold: 0.01,
+      },
+    );
+    deferred.forEach((img) => observer!.observe(img));
+  };
+
   // postContent 또는 contentBodyEl()이 변경될 때마다 innerHTML 갱신
   createEffect(() => {
     const el = contentBodyEl();
-    if (!el) return;
+    if (!el) {
+      observer?.disconnect();
+      observer = null;
+      return;
+    }
     const content = state.postContent;
     el.innerHTML = content ? processImages(content) : '';
+    setupLazyImages(el);
+  });
+
+  onCleanup(() => {
+    observer?.disconnect();
+    observer = null;
   });
 
   return html`
