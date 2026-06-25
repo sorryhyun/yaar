@@ -37,6 +37,13 @@ export const [state, setState] = createStore({
   commentSubmitting: false,
   commentText: '',
 
+  // Post write (new post)
+  showWrite: false,
+  writeTitle: '',
+  writeContent: '',
+  writeCategory: null as string | null,
+  writeSubmitting: false,
+
   // AI recommendation
   recommendation: null as Recommendation | null,
   recLoading: false,

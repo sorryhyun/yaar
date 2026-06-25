@@ -10,6 +10,7 @@ import { registerProtocol } from './protocol';
 import { Header } from './ui/Header';
 import { SettingsPanel } from './ui/SettingsPanel';
 import { LoginPanel } from './ui/LoginPanel';
+import { WritePanel } from './ui/WritePanel';
 import { RecommendPanel } from './ui/RecommendPanel';
 import { PostList } from './ui/PostList';
 import { DetailPanel } from './ui/DetailPanel';
@@ -38,6 +39,7 @@ function App() {
       <${Header} />
       ${() => (state.showSettings ? html`<${SettingsPanel} />` : null)}
       ${() => (state.showLogin ? html`<${LoginPanel} />` : null)}
+      ${() => (state.showWrite ? html`<${WritePanel} />` : null)}
       ${() => (state.showRec ? html`<${RecommendPanel} />` : null)}
       <div class="main-layout">
         <${PostList} />

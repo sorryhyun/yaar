@@ -13,6 +13,9 @@ export const MAIN_TAB = 'main';
 /** Single reusable tab for post detail views */
 export const POST_TAB = 'post';
 
+/** Single reusable tab for the new-post write flow */
+export const WRITE_TAB = 'write';
+
 const initialized = new Set<string>();
 
 /** Has the given tab been opened (and thus is reusable via web.navigate)? */

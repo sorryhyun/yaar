@@ -19,6 +19,12 @@ import type { Post } from './types';
 
 const SESSION_PATH = 'auth/session.json';
 
+const GALLERY_ID = 'thesingularity';
+/** Mobile DC new-post write page for the gallery. */
+const DC_WRITE_URL = `https://m.dcinside.com/write/${GALLERY_ID}`;
+/** Pattern a successful write redirects to: the created post's detail page. */
+const POST_DETAIL_RE = new RegExp(`/board/${GALLERY_ID}/(\\d+)`);
+
 const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dcinside.com%2Fboard%2Fthesingularity';
 // Use mobile gallery URL for verification — the tab is opened with mobile UA,
 // so a desktop URL forces an extra redirect / longer render wait.
@@ -392,6 +398,258 @@ export async function postCommentToDC(
     // Surface exactly which browser step failed (the /api/browser 500 source).
     console.error(`[postCommentToDC] step="${step}" failed:`, msg, e);
     return { ok: false, error: `댓글 작성 실패 (단계: ${step}): ${msg}` };
+  }
+}
+
+// ============================================================
+// New-post writing (mobile DC)
+// ============================================================
+
+/** Title <input> selector variants across mobile DC write versions. */
+const WRITE_TITLE_SELECTOR =
+  '#subject, input[name="subject"], input#subjcet, .write_subject input, input.write_subject, input[placeholder*="제목"]';
+
+/** Content editor selector variants (textarea OR contenteditable). */
+const WRITE_CONTENT_SELECTOR =
+  '#memo, textarea[name="memo"], #contents, textarea[name="contents"], .write_editor [contenteditable="true"], [contenteditable="true"].note-editable, .note-editable, #contentLayout [contenteditable="true"], [contenteditable="true"]';
+
+function readLocationHref(browserId: string): Promise<string> {
+  return web
+    .evaluate({ browserId, expression: 'window.location.href' })
+    .then((r) => {
+      const data = (r as { data?: unknown })?.data;
+      return typeof data === 'string' ? data : '';
+    })
+    .catch(() => '');
+}
+
+/**
+ * Create a new post in the gallery via browser automation.
+ *
+ * Mirrors postCommentToDC's pattern: open the write tab, apply login cookies,
+ * reload so they take effect, fill the title / 말머리(category) / content, then
+ * submit (DC's own write button / handler). Success is confirmed when the page
+ * redirects to the freshly-created post's detail URL (/board/{gallery}/{num}).
+ *
+ * Every browser step is tagged so a backend 500 surfaces which call failed.
+ */
+export async function postNewPostToDC(
+  input: { title: string; content: string; category?: string },
+  browserId: string,
+): Promise<{ ok: boolean; error?: string; postNum?: string }> {
+  const session = await loadSession();
+  if (!session?.dcPaPP) {
+    return { ok: false, error: '로그인이 필요합니다.' };
+  }
+
+  const title = input.title.trim();
+  const content = input.content.trim();
+  if (!title) return { ok: false, error: '제목이 비어 있습니다.' };
+  if (!content) return { ok: false, error: '본문이 비어 있습니다.' };
+
+  let step = 'init';
+  try {
+    // 1. Open / navigate the write tab.
+    step = 'open-tab';
+    await openOrNavigate(DC_WRITE_URL, browserId, { visible: false, mobile: true });
+
+    // 2. Authenticate the tab (cookies from MAIN_TAB if live, else persisted).
+    step = 'apply-cookies';
+    if (isTabInitialized(MAIN_TAB)) {
+      await syncCookiesToTab(browserId);
+    } else {
+      await applySessionCookiesToTab(browserId);
+    }
+
+    // 3. Reload so the freshly-set cookies are sent with the page request.
+    step = 'reload';
+    await web.navigate(DC_WRITE_URL, browserId);
+
+    // 4. Wait for the title input. If absent, the user is likely not logged in
+    //    (DC redirects anonymous users to login / shows the guest form).
+    step = 'wait-form';
+    const formFound = await web
+      .waitFor({ browserId, selector: WRITE_TITLE_SELECTOR, timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!formFound) {
+      const href = await readLocationHref(browserId);
+      if (/login|msign|sign\.dcinside/.test(href)) {
+        return { ok: false, error: '로그인이 만료되었습니다. 다시 로그인해주세요.' };
+      }
+      return { ok: false, error: '글쓰기 폼을 찾지 못했습니다. 로그인 상태를 확인해주세요.' };
+    }
+
+    // 5. Suppress blocking dialogs and mask navigator.webdriver before interacting
+    //    (same anti-bot mitigation as the comment flow).
+    step = 'instrument';
+    await web
+      .evaluate({
+        browserId,
+        expression: `(function(){
+          try { Object.defineProperty(navigator, 'webdriver', { get: function(){ return false; }, configurable: true }); } catch(e){}
+          if (window.__dcWriteInstrumented) return;
+          window.__dcWriteInstrumented = true;
+          window.alert = function(){};
+          window.confirm = function(){ return true; };
+        })()`,
+      })
+      .catch(() => {});
+
+    // 6. Select 말머리(category) if requested. Mobile DC renders headtext either
+    //    as a <select> or as a button/anchor list whose choice fills a hidden
+    //    input (name="headtext"/"headnum"). Match by visible label text.
+    if (input.category && input.category.trim()) {
+      step = 'category';
+      const catJson = JSON.stringify(input.category.trim());
+      await web
+        .evaluate({
+          browserId,
+          expression: `(function(){
+            var want = ${catJson};
+            var norm = function(s){ return (s||'').replace(/\\s+/g,'').trim(); };
+            // (a) native <select>
+            var sel = document.querySelector('select[name="headtext"], select#headtext, select.subject, select[name="headnum"]');
+            if (sel) {
+              for (var i=0;i<sel.options.length;i++){
+                if (norm(sel.options[i].textContent) === norm(want)) {
+                  sel.selectedIndex = i;
+                  sel.dispatchEvent(new Event('change', {bubbles:true}));
+                  return 'select';
+                }
+              }
+            }
+            // (b) button / anchor list
+            var nodes = document.querySelectorAll('.subject_list a, .subject_list button, .subject-list a, .subject-list button, ul.subject li a, .write_subject_list a, [class*="headtext"] a, [class*="headtext"] button');
+            for (var j=0;j<nodes.length;j++){
+              if (norm(nodes[j].textContent) === norm(want)) {
+                nodes[j].click();
+                return 'list';
+              }
+            }
+            return 'none';
+          })()`,
+        })
+        .catch(() => {});
+    }
+
+    // 7. Fill the title. Prefer real keystrokes; fall back to value-setter.
+    step = 'fill-title';
+    await web.click({ browserId, selector: WRITE_TITLE_SELECTOR }).catch(() => {});
+    const titleTyped = await web
+      .type({ browserId, selector: WRITE_TITLE_SELECTOR, text: title })
+      .then(() => true)
+      .catch(() => false);
+    if (!titleTyped) {
+      await web
+        .evaluate({
+          browserId,
+          expression: `(function(){
+            var el = document.querySelector(${JSON.stringify(WRITE_TITLE_SELECTOR)});
+            if (!el) return false;
+            var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+            if (s && s.set) s.set.call(el, ${JSON.stringify(title)}); else el.value = ${JSON.stringify(title)};
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+            el.dispatchEvent(new Event('change', {bubbles:true}));
+            return true;
+          })()`,
+        })
+        .catch(() => {});
+    }
+
+    // 8. Fill the content. Works for both <textarea> and contenteditable: click
+    //    to focus, type real keystrokes, then verify/fallback via evaluate.
+    step = 'fill-content';
+    await web.click({ browserId, selector: WRITE_CONTENT_SELECTOR }).catch(() => {});
+    const contentTyped = await web
+      .type({ browserId, selector: WRITE_CONTENT_SELECTOR, text: content })
+      .then(() => true)
+      .catch(() => false);
+    const contentOk = (await web
+      .evaluate({
+        browserId,
+        expression: `(function(){
+          var el = document.querySelector(${JSON.stringify(WRITE_CONTENT_SELECTOR)});
+          if (!el) return false;
+          var isCE = el.getAttribute && el.getAttribute('contenteditable') === 'true';
+          var cur = isCE ? (el.innerText || el.textContent || '') : (el.value || '');
+          if (cur && cur.trim().length > 0) return true;
+          // Fallback fill when real typing did not land.
+          if (isCE) {
+            el.focus();
+            el.innerHTML = '';
+            el.innerText = ${JSON.stringify(content)};
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+            el.dispatchEvent(new Event('keyup', {bubbles:true}));
+          } else {
+            var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+            if (s && s.set) s.set.call(el, ${JSON.stringify(content)}); else el.value = ${JSON.stringify(content)};
+            el.dispatchEvent(new Event('input', {bubbles:true}));
+            el.dispatchEvent(new Event('change', {bubbles:true}));
+          }
+          var after = isCE ? (el.innerText || el.textContent || '') : (el.value || '');
+          return after.trim().length > 0;
+        })()`,
+      })
+      .then((r) => (r as { data?: boolean })?.data === true)
+      .catch(() => false));
+    if (!contentTyped && !contentOk) {
+      return { ok: false, error: '본문 입력란에 내용을 채울 수 없습니다.' };
+    }
+
+    // 9. Submit: prefer DC's own write button / handler.
+    step = 'submit';
+    const urlBefore = await readLocationHref(browserId);
+    await web
+      .evaluate({
+        browserId,
+        expression: `(function(){
+          var btn = document.querySelector('.btn_write, button.btn_write, .write_btn, button.write_btn, #btn_write, a.btn_write, button[onclick*="write"], .submit_btn, button[type="submit"]');
+          if (btn) { btn.click(); return 'button'; }
+          var fns = ['write_ok','writeOk','submitWrite','goWrite','board_write','articleWrite'];
+          for (var i=0;i<fns.length;i++){ if (typeof window[fns[i]] === 'function'){ try { window[fns[i]](); return 'fn:'+fns[i]; } catch(e){} } }
+          var form = document.querySelector('#writeForm, form[name="writeForm"], form[name="write"], form#write');
+          if (form) { form.submit(); return 'form'; }
+          return 'none';
+        })()`,
+      })
+      .catch(() => {});
+
+    // 10. Confirm: a successful write redirects to the new post's detail page.
+    step = 'confirm';
+    let postNum: string | undefined;
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      const href = await readLocationHref(browserId);
+      if (!href) continue;
+      const m = href.match(POST_DETAIL_RE);
+      if (m && href !== urlBefore) {
+        postNum = m[1];
+        break;
+      }
+      // Some flows land on the list page (write succeeded, no detail redirect).
+      if (
+        href.includes(`/board/${GALLERY_ID}`) &&
+        href !== urlBefore &&
+        !href.includes('/write/')
+      ) {
+        break;
+      }
+    }
+
+    const finalHref = await readLocationHref(browserId);
+    if (/\/write\//.test(finalHref) && !postNum) {
+      return {
+        ok: false,
+        error: '게시물이 등록되지 않았습니다. 등록 확인에 실패했습니다 (제목/본문/말머리를 확인해주세요).',
+      };
+    }
+
+    return { ok: true, postNum };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[postNewPostToDC] step="${step}" failed:`, msg, e);
+    return { ok: false, error: `게시물 작성 실패 (단계: ${step}): ${msg}` };
   }
 }
 

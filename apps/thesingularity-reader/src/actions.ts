@@ -9,13 +9,14 @@ import {
 } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { POST_TAB } from './browser';
+import { POST_TAB, WRITE_TAB } from './browser';
 import type { Post, Comment } from './types';
 import {
   loginToDC,
   logoutFromDC,
   checkLoginStatus,
   postCommentToDC,
+  postNewPostToDC,
   loadSession,
 } from './auth';
 
@@ -323,5 +324,50 @@ export async function submitComment(): Promise<void> {
     showToast(errMsg(e), 'error');
   } finally {
     setState('commentSubmitting', false);
+  }
+}
+
+export async function submitPost(): Promise<void> {
+  const title = state.writeTitle.trim();
+  const content = state.writeContent.trim();
+  if (!state.isLoggedIn) {
+    showToast('로그인이 필요합니다', 'error');
+    return;
+  }
+  if (!title) {
+    showToast('제목을 입력해주세요', 'error');
+    return;
+  }
+  if (!content) {
+    showToast('본문을 입력해주세요', 'error');
+    return;
+  }
+
+  setState('writeSubmitting', true);
+  try {
+    const result = await postNewPostToDC(
+      { title, content, category: state.writeCategory ?? undefined },
+      WRITE_TAB,
+    );
+    if (result.ok) {
+      showToast('✏️ 게시물이 등록되었습니다!', 'success');
+      setState({
+        showWrite: false,
+        writeTitle: '',
+        writeContent: '',
+        writeCategory: null,
+      });
+      // Jump to first page and refresh so the new post appears at the top.
+      setState('page', 1);
+      await doRefresh();
+    } else {
+      console.error('[submitPost] failed:', result.error);
+      showToast(result.error ?? '게시물 등록 실패', 'error');
+    }
+  } catch (e: unknown) {
+    console.error('[submitPost] unexpected error:', e);
+    showToast(errMsg(e), 'error');
+  } finally {
+    setState('writeSubmitting', false);
   }
 }

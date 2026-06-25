@@ -1181,3 +1181,25 @@
   color: var(--yaar-text-muted);
   text-align: center;
 }
+
+/* Write (new post) panel */
+.write-overlay {
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+}
+.write-content-textarea {
+  min-height: 160px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.write-cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.write-form .category-tab {
+  font-size: 12px;
+}

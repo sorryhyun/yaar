@@ -1,7 +1,7 @@
 import { state, setState } from './store';
 import { app, AppCommandError } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
-import { submitComment } from './actions';
+import { submitComment, submitPost } from './actions';
 
 export function registerProtocol() {
   if (!app) return;
@@ -105,6 +105,37 @@ export function registerProtocol() {
             postNum: state.selectedPost.num,
             commentCount: state.comments.length,
           };
+        },
+      },
+      submitPost: {
+        description:
+          '새 게시물을 작성합니다. 로그인이 필요합니다. title(제목)과 content(본문)은 필수, category(말머리: 예) 일반/정보/활용)는 선택입니다. 등록 성공 시 폼을 닫고 목록을 새로고침합니다.',
+        params: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: '게시물 제목' },
+            content: { type: 'string', description: '게시물 본문' },
+            category: { type: 'string', description: '말머리/카테고리 (선택)' },
+          },
+          required: ['title', 'content'],
+        },
+        handler: async (p: Record<string, unknown>) => {
+          if (!state.isLoggedIn) throw new AppCommandError('로그인이 필요합니다');
+          const title = typeof p.title === 'string' ? p.title.trim() : '';
+          const content = typeof p.content === 'string' ? p.content.trim() : '';
+          if (!title) throw new AppCommandError('제목이 비어 있습니다');
+          if (!content) throw new AppCommandError('본문이 비어 있습니다');
+          setState({
+            writeTitle: title,
+            writeContent: content,
+            writeCategory: typeof p.category === 'string' && p.category.trim() ? p.category : null,
+          });
+          await submitPost();
+          // submitPost clears writeTitle on success; a non-empty value means it failed.
+          if (state.writeTitle.trim()) {
+            throw new AppCommandError('게시물 작성에 실패했습니다');
+          }
+          return { ok: true };
         },
       },
       setRecommendations: {

@@ -24,6 +24,29 @@ export function Header() {
       <div class="header-actions">
         <span class="countdown">${() => formatCountdown(state.countdown)}</span>
         <button
+          class=${() => {
+            if (state.showWrite) return 'y-btn y-btn-sm rec-btn-active';
+            return 'y-btn y-btn-sm ' + (state.isLoggedIn ? 'y-btn-primary' : 'y-btn-ghost');
+          }}
+          onClick=${() => {
+            if (!state.isLoggedIn) {
+              setState('showLogin', true);
+              setState('showSettings', false);
+              return;
+            }
+            const next = !state.showWrite;
+            setState('showWrite', next);
+            if (next) {
+              setState('showLogin', false);
+              setState('showSettings', false);
+            }
+          }}
+          disabled=${() => state.loginLoading}
+          title=${() => state.isLoggedIn ? '글쓰기' : '로그인 후 글쓰기 가능'}
+        >
+          ${() => state.isLoggedIn ? '✏️ 글쓰기' : '✏️'}
+        </button>
+        <button
           class=${() => 'y-btn y-btn-sm ' + (state.showRec ? 'rec-btn-active' : 'y-btn-ghost')}
           onClick=${() => {
             const willShow = !state.showRec;
