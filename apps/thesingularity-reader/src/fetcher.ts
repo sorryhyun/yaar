@@ -13,6 +13,7 @@ import type { Post, Comment } from './types';
 import * as web from '@bundled/yaar-web';
 import { invoke } from '@bundled/yaar';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
+import { extractRealImageUrl, LAZY_IMAGE_ATTRS } from './helpers';
 
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
@@ -446,13 +447,40 @@ const IMAGE_TO_DATA_URI_SCRIPT = `
   if (commentBox) allImgs = allImgs.concat(Array.from(commentBox.querySelectorAll('img')));
   if (allImgs.length === 0) return 0;
 
+  // DCinside mobile lazy-loads images: the real URL lives in a data-* attribute
+  // while src is empty or a placeholder. Resolve the real URL before fetching,
+  // otherwise we'd convert the placeholder and the image never appears.
+  var lazyAttrs = ['data-original','data-src','data-lazy-src','data-lazy','data-echo','data-url','egjs-data-original'];
+  function isPlaceholder(s) {
+    if (!s) return true;
+    if (s.indexOf('about:') === 0 || s.indexOf('blob:') === 0) return true;
+    if (/^data:image\\/(gif|png);base64,(R0lGOD|iVBORw0KGgo)/.test(s) && s.length < 200) return true;
+    if (/blank\\.(gif|png)/i.test(s)) return true;
+    if (/(spacer|loading|placeholder|1x1|transparent)\\.(gif|png|svg)/i.test(s)) return true;
+    return false;
+  }
+  function realUrl(img) {
+    for (var k = 0; k < lazyAttrs.length; k++) {
+      var v = (img.getAttribute(lazyAttrs[k]) || '').trim();
+      if (v && v.indexOf('data:') !== 0) return v;
+    }
+    var ss = (img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').trim();
+    if (ss) {
+      var first = (ss.split(',')[0] || '').trim().split(/\\s+/)[0];
+      if (first && first.indexOf('data:') !== 0) return first;
+    }
+    var cur = (img.getAttribute('src') || '').trim();
+    if (cur && cur.indexOf('data:') === 0) return cur; // already a real data URI
+    if (cur && !isPlaceholder(cur)) return cur;
+    return '';
+  }
+
   var converted = 0;
   await Promise.allSettled(allImgs.map(function(img) {
-    var src = img.src;
-    if (!src || src.startsWith('data:') || src.startsWith('about:') || src.startsWith('blob:')) {
-      return Promise.resolve();
-    }
-    return fetch(src, { credentials: 'include' })
+    var url = realUrl(img);
+    if (!url || url.indexOf('data:') === 0) return Promise.resolve();
+    try { url = new URL(url, document.baseURI).href; } catch (e) {}
+    return fetch(url, { credentials: 'include' })
       .then(function(resp) {
         if (!resp.ok) throw new Error(resp.status);
         return resp.blob();
@@ -467,6 +495,11 @@ const IMAGE_TO_DATA_URI_SCRIPT = `
       })
       .then(function(dataUrl) {
         img.src = dataUrl;
+        // Strip lazy attributes + classes so DC's lazy-load JS can't re-blank src.
+        for (var k = 0; k < lazyAttrs.length; k++) img.removeAttribute(lazyAttrs[k]);
+        img.removeAttribute('data-srcset');
+        img.removeAttribute('srcset');
+        img.removeAttribute('class');
         converted++;
       })
       .catch(function() {});
@@ -474,6 +507,145 @@ const IMAGE_TO_DATA_URI_SCRIPT = `
   return converted;
 })()
 `;
+
+/** Referer DC's hotlink protection accepts (mobile gallery origin). */
+const DC_REFERER = 'https://m.dcinside.com/';
+
+/** Log the proxy response shape only once per session (diagnostic). */
+let imgProxyShapeLogged = false;
+
+/**
+ * Fetch a single image via the server-side HTTP proxy and return it as a
+ * base64 `data:` URI.
+ *
+ * Why proxy instead of loading the URL directly in an <img>?
+ *  - In-browser fetch() (the IMAGE_TO_DATA_URI_SCRIPT path) is CORS-blocked for
+ *    DC's cross-origin image hosts (dcimg*.dcinside.*) — they send no ACAO.
+ *  - Plain remote <img> loads are unreliable due to Referer hotlink protection.
+ * Server-side fetch (yaar://http) is NOT subject to CORS and lets us send a DC
+ * Referer header so hotlink protection allows the request.
+ *
+ * Returns null on any failure; the caller keeps the original src.
+ */
+async function fetchImageAsDataUri(url: string): Promise<string | null> {
+  try {
+    const res = (await invoke('yaar://http', {
+      url,
+      method: 'GET',
+      headers: {
+        'User-Agent': MOBILE_UA,
+        Referer: DC_REFERER,
+        Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      },
+    })) as {
+      ok?: boolean;
+      status?: number;
+      headers?: Record<string, string>;
+      body?: string;
+      base64?: string;
+      bodyBase64?: string;
+      data?: string;
+      contentType?: string;
+      mimeType?: string;
+    };
+    // One-time diagnostic: log the response shape so we can confirm the proxy's
+    // binary encoding (keys present, body type/length) without dumping payloads.
+    if (!imgProxyShapeLogged) {
+      imgProxyShapeLogged = true;
+      try {
+        const keys = res && typeof res === 'object' ? Object.keys(res) : [];
+        console.log('[dc-img-proxy] response shape', {
+          url: url.slice(0, 80),
+          keys,
+          ok: res?.ok,
+          status: res?.status,
+          bodyType: typeof res?.body,
+          bodyLen: typeof res?.body === 'string' ? res.body.length : undefined,
+          bodyHead: typeof res?.body === 'string' ? res.body.slice(0, 24) : undefined,
+          hasBase64: typeof res?.base64 === 'string',
+          contentType: (res?.headers ?? {})['content-type'] ?? res?.contentType ?? res?.mimeType,
+        });
+      } catch {
+        /* ignore logging errors */
+      }
+    }
+
+    if (!res || res.ok === false) return null;
+    if (typeof res.status === 'number' && res.status >= 400) return null;
+
+    // Resolve mime type from headers/fields; default to jpeg.
+    const h = res.headers ?? {};
+    const ctRaw =
+      h['content-type'] ?? h['Content-Type'] ?? res.contentType ?? res.mimeType ?? '';
+    let mime = String(ctRaw).split(';')[0].trim();
+    if (!mime || !mime.startsWith('image/')) mime = 'image/jpeg';
+
+    // Locate the base64 payload across possible proxy response shapes.
+    let b64: string | null = null;
+    if (typeof res.base64 === 'string') b64 = res.base64;
+    else if (typeof res.bodyBase64 === 'string') b64 = res.bodyBase64;
+    else if (typeof res.data === 'string' && res.data) b64 = res.data;
+    else if (typeof res.body === 'string') {
+      if (res.body.startsWith('data:')) return res.body;
+      b64 = res.body;
+    }
+    if (!b64) return null;
+
+    // Strip an existing data-uri prefix if the proxy returned one.
+    const m = b64.match(/^data:[^;,]+;base64,([\s\S]*)$/);
+    if (m) b64 = m[1];
+    b64 = b64.trim();
+    if (!b64) return null;
+
+    return `data:${mime};base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Inline all remote <img> sources in a post-body HTML string as base64 data
+ * URIs by proxying them through yaar://http. This is the reliable image path —
+ * see fetchImageAsDataUri for why direct/in-browser loading fails. Images that
+ * are already inlined (data:) or have no usable URL are left untouched.
+ */
+async function inlineRemoteImages(htmlStr: string): Promise<string> {
+  if (!htmlStr || !htmlStr.includes('<img')) return htmlStr;
+  const doc = new DOMParser().parseFromString(
+    `<div id="__inline_root">${htmlStr}</div>`,
+    'text/html',
+  );
+  const root = doc.getElementById('__inline_root');
+  if (!root) return htmlStr;
+
+  const imgs = Array.from(root.querySelectorAll('img')) as HTMLImageElement[];
+  if (imgs.length === 0) return htmlStr;
+
+  await Promise.allSettled(
+    imgs.map(async (img) => {
+      const url = extractRealImageUrl(img);
+      if (!url) return; // placeholder/blank — processImages will drop it
+      if (url.startsWith('data:')) {
+        img.setAttribute('src', url);
+        return;
+      }
+      const dataUri = await fetchImageAsDataUri(url);
+      // Promote the resolved URL into src either way; if proxying succeeded use
+      // the data URI, otherwise leave the real URL so the no-referrer <img>
+      // load can still try it.
+      img.setAttribute('src', dataUri ?? url);
+      if (dataUri) {
+        for (const a of LAZY_IMAGE_ATTRS) img.removeAttribute(a);
+        img.removeAttribute('data-srcset');
+        img.removeAttribute('srcset');
+        img.removeAttribute('class');
+      }
+    }),
+  );
+
+  return root.innerHTML;
+}
 
 /**
  * Fast HTTP-only body fetch.
@@ -564,7 +736,12 @@ export async function fetchPostDetail(
   doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
 
   const comments = parseComments(doc);
-  const content = extractContentFromDoc(doc, post);
+  let content = extractContentFromDoc(doc, post);
+
+  // The in-page fetch above is CORS-blocked for DC's cross-origin image hosts,
+  // so body images often remain as remote URLs. Inline them reliably via the
+  // server-side proxy (with a DC Referer) so they display in our sandbox.
+  content = await inlineRemoteImages(content);
 
   return { content, comments };
 }
