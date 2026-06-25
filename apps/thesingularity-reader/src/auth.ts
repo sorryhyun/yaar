@@ -14,7 +14,7 @@
  */
 import { invoke, appStorage } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { openOrNavigate, isTabInitialized, MAIN_TAB, DC_COOKIE_URLS } from './browser';
+import { openOrNavigate, isTabInitialized, syncCookiesToTab, MAIN_TAB, DC_COOKIE_URLS } from './browser';
 import type { Post } from './types';
 
 const SESSION_PATH = 'auth/session.json';
@@ -188,12 +188,54 @@ export async function checkLoginStatus(): Promise<boolean> {
   }
 }
 
+/** Cookie textarea/selector variants seen across mobile DC versions. */
+const COMMENT_SELECTOR =
+  '#comment_memo, #reply_memo, textarea[name="memo"], textarea.comment_memo, .cmt_write_box textarea';
+
 /**
- * Post a comment from the post's browser tab.
- * Caller must syncCookiesToTab() first so the tab has login cookies.
+ * Apply the stored session cookie header (dcPaPP) into an arbitrary tab.
+ *
+ * Used when the MAIN_TAB has not been opened in this app session (e.g. the user
+ * was auto-logged-in from a persisted HTTP session, so no browser login flow
+ * ran). Each cookie is set independently so one malformed entry cannot 500 the
+ * whole flow.
+ */
+export async function applySessionCookiesToTab(browserId: string): Promise<number> {
+  const session = await loadSession();
+  if (!session?.dcPaPP) return 0;
+
+  const pairs = session.dcPaPP.split(';').map((s) => s.trim()).filter(Boolean);
+  let okCount = 0;
+  for (const pair of pairs) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (!name) continue;
+    try {
+      await web.setCookie({ browserId, name, value, domain: '.dcinside.com', path: '/' });
+      okCount++;
+    } catch (e) {
+      console.warn(`[applySessionCookiesToTab] setCookie failed for "${name}":`, e instanceof Error ? e.message : e);
+    }
+  }
+  console.log(`[applySessionCookiesToTab] applied ${okCount}/${pairs.length} cookies to "${browserId}"`);
+  return okCount;
+}
+
+/**
+ * Post a comment into the given post's browser tab.
+ *
+ * Self-contained: opens/navigates the tab, applies login cookies (from MAIN_TAB
+ * if it's live, otherwise from the persisted session header), reloads so cookies
+ * take effect, fills the textarea, submits, and confirms by polling the textarea
+ * client-side (NOT via an in-page Promise, which the browser backend may refuse
+ * to serialize and answer with a 500).
+ *
+ * Every browser step is tagged so a 500 surfaces *which* call failed.
  */
 export async function postCommentToDC(
-  _post: Post,
+  post: Post,
   commentText: string,
   browserId: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -202,70 +244,122 @@ export async function postCommentToDC(
     return { ok: false, error: '로그인이 필요합니다.' };
   }
 
+  let step = 'init';
   try {
+    // 1. Ensure the tab exists and is on the post URL. (The post tab may never
+    //    have been opened — e.g. the body came from the fast HTTP path — in
+    //    which case calling web.* on a non-existent 'post' tab 500s.)
+    step = 'open-tab';
+    await openOrNavigate(post.url, browserId, { visible: false, mobile: true });
 
-    await web.scroll({ direction: 'down', browserId });
-    await web.scroll({ direction: 'down', browserId });
+    // 2. Make the tab authenticated.
+    step = 'apply-cookies';
+    if (isTabInitialized(MAIN_TAB)) {
+      await syncCookiesToTab(browserId);
+    } else {
+      await applySessionCookiesToTab(browserId);
+    }
 
-    await web.waitFor({
+    // 3. Reload so the freshly-set cookies are sent with the page request.
+    step = 'reload';
+    await web.navigate(post.url, browserId);
+
+    // 4. Bring the comment form into view and wait for the textarea.
+    step = 'scroll';
+    await web.scroll({ direction: 'down', browserId }).catch(() => {});
+    await web.scroll({ direction: 'down', browserId }).catch(() => {});
+
+    step = 'wait-textarea';
+    const found = await web
+      .waitFor({ browserId, selector: COMMENT_SELECTOR, timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!found) {
+      return {
+        ok: false,
+        error: '댓글 입력란을 찾지 못했습니다. 로그인 상태이거나 게시물이 댓글을 허용하지 않을 수 있습니다.',
+      };
+    }
+
+    // 5. Fill the textarea (property-descriptor setter bypasses controlled inputs).
+    step = 'fill';
+    await web.click({ browserId, selector: COMMENT_SELECTOR }).catch(() => {});
+    const fillRes = (await web.evaluate({
       browserId,
-      selector: '#comment_memo, #reply_memo, textarea[name="memo"]',
-      timeout: 8000,
-    });
+      expression: `(function(){
+        var el = document.querySelector('#comment_memo') ||
+                 document.querySelector('#reply_memo') ||
+                 document.querySelector('textarea[name="memo"]') ||
+                 document.querySelector('textarea.comment_memo') ||
+                 document.querySelector('.cmt_write_box textarea');
+        if (!el) return false;
+        var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+        if (s && s.set) s.set.call(el, ${JSON.stringify(commentText)});
+        else el.value = ${JSON.stringify(commentText)};
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        el.focus();
+        return true;
+      })()`,
+    })) as { data?: boolean };
+    if (fillRes?.data === false) {
+      return { ok: false, error: '댓글 입력란에 내용을 채울 수 없습니다.' };
+    }
 
-    // Click textarea to ensure focus
-    await web.click({ browserId, selector: '#comment_memo, #reply_memo, textarea[name="memo"]' });
+    // 6. Submit: prefer DC's own submit button / handler, fall back to Enter.
+    step = 'submit';
+    const submitMethod = (await web.evaluate({
+      browserId,
+      expression: `(function(){
+        var btn = document.querySelector('button.btn_cmt_write') ||
+                  document.querySelector('.cmt_write_box button[type="submit"]') ||
+                  document.querySelector('#comment_write button[type="submit"]') ||
+                  document.querySelector('button[onclick*="comment"]');
+        if (btn) { btn.click(); return 'button'; }
+        if (typeof comment_write_ok === 'function') { try { comment_write_ok(); return 'fn'; } catch(e){} }
+        return 'none';
+      })()`,
+    }).catch(() => ({ data: 'error' }))) as { data?: string };
+    if (submitMethod?.data === 'none') {
+      await web
+        .press({ browserId, key: 'Enter', selector: COMMENT_SELECTOR })
+        .catch(() => {});
+    }
 
-    // Set textarea value via property descriptor (bypasses framework controls)
-    await web.evaluate({ browserId, expression: `(function(){
-      var el = document.querySelector('#comment_memo') ||
-               document.querySelector('#reply_memo') ||
-               document.querySelector('textarea[name="memo"]');
-      if (!el) return false;
-      var s = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
-      if (s && s.set) s.set.call(el, ${JSON.stringify(commentText)});
-      else el.value = ${JSON.stringify(commentText)};
-      el.dispatchEvent(new Event('input', {bubbles:true}));
-      el.dispatchEvent(new Event('change', {bubbles:true}));
-      return true;
-    })()` });
+    // 7. Confirm by polling the textarea client-side (it clears on success).
+    step = 'confirm';
+    let cleared = false;
+    for (let i = 0; i < 24; i++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const r = (await web
+        .evaluate({
+          browserId,
+          expression: `(function(){
+            var memo = document.getElementById('comment_memo') ||
+                       document.getElementById('reply_memo') ||
+                       document.querySelector('textarea[name="memo"]') ||
+                       document.querySelector('textarea.comment_memo') ||
+                       document.querySelector('.cmt_write_box textarea');
+            return memo ? memo.value.trim() === '' : true;
+          })()`,
+        })
+        .catch(() => null)) as { data?: boolean } | null;
+      if (r?.data === true) {
+        cleared = true;
+        break;
+      }
+    }
 
-    // Set CSRF token if present
-    await web.evaluate({ browserId, expression: `(function(){
-      var csrf = document.querySelector('meta[name="csrf-token"]');
-      var token = csrf ? csrf.getAttribute('content') : '';
-      var tokenField = document.querySelector('#comment_write input[name="_token"]');
-      if (tokenField) tokenField.value = token;
-    })()` });
-
-    // Press Enter to submit
-    await web.press({ browserId, key: 'Enter', selector: '#comment_memo, #reply_memo, textarea[name="memo"]' });
-
-    // Wait for AJAX completion — textarea clears on success
-    const submitted = await web.evaluate({ browserId, expression: `new Promise(function(resolve) {
-      var attempts = 0;
-      var check = setInterval(function() {
-        var memo = document.getElementById('comment_memo') ||
-                   document.querySelector('textarea[name="memo"]');
-        attempts++;
-        if (memo && memo.value.trim() === '') {
-          clearInterval(check);
-          resolve(true);
-        } else if (attempts > 200) {
-          clearInterval(check);
-          resolve(false);
-        }
-      }, 300);
-    })` }) as { data?: boolean };
-
-    if (submitted?.data === false) {
-      return { ok: false, error: '댓글 등록 시간 초과 — 다시 시도해주세요.' };
+    if (!cleared) {
+      return { ok: false, error: '댓글 등록 확인 실패 — 등록되지 않았을 수 있습니다. 다시 시도해주세요.' };
     }
 
     return { ok: true };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `댓글 작성 오류: ${msg}` };
+    // Surface exactly which browser step failed (the /api/browser 500 source).
+    console.error(`[postCommentToDC] step="${step}" failed:`, msg, e);
+    return { ok: false, error: `댓글 작성 실패 (단계: ${step}): ${msg}` };
   }
 }
 

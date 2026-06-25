@@ -1,6 +1,7 @@
 import { state, setState } from './store';
 import { app, AppCommandError } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
+import { submitComment } from './actions';
 
 export function registerProtocol() {
   if (!app) return;
@@ -15,6 +16,39 @@ export function registerProtocol() {
           state.savedCredentials
             ? { username: state.savedCredentials.username, savedAt: state.savedCredentials.savedAt }
             : null,
+      },
+      loginStatus: {
+        description: '현재 로그인 여부와 사용자명.',
+        handler: () => ({
+          isLoggedIn: state.isLoggedIn,
+          username: state.savedCredentials?.username ?? null,
+        }),
+      },
+      selectedPost: {
+        description: '현재 선택된 게시물 (없으면 null).',
+        handler: () =>
+          state.selectedPost
+            ? {
+                num: state.selectedPost.num,
+                title: state.selectedPost.title,
+                url: state.selectedPost.url,
+              }
+            : null,
+      },
+      comments: {
+        description: '현재 선택된 게시물의 댓글 목록. commentsLoading이 true면 아직 로딩 중.',
+        handler: () => ({
+          loading: state.commentsLoading,
+          count: state.comments.length,
+          items: state.comments.map((c) => ({
+            author: c.author,
+            text: c.text,
+            date: c.date,
+            recommend: c.recommend,
+            isBest: c.isBest,
+            isReply: c.isReply,
+          })),
+        }),
       },
     },
     commands: {
@@ -42,6 +76,35 @@ export function registerProtocol() {
           if (!creds) throw new AppCommandError('저장된 자격증명 없음');
           setState('savedCredentials', creds);
           return { username: creds.username, savedAt: creds.savedAt };
+        },
+      },
+      submitComment: {
+        description:
+          '현재 선택된 게시물에 댓글을 작성합니다. 로그인과 게시물 선택이 필요합니다. text를 주면 해당 내용으로, 없으면 현재 입력창의 내용으로 작성합니다.',
+        params: {
+          type: 'object',
+          properties: {
+            text: { type: 'string', description: '작성할 댓글 내용' },
+          },
+        },
+        handler: async (p: Record<string, unknown>) => {
+          if (!state.isLoggedIn) throw new AppCommandError('로그인이 필요합니다');
+          if (!state.selectedPost) throw new AppCommandError('선택된 게시물이 없습니다');
+          if (typeof p.text === 'string' && p.text.trim()) {
+            setState('commentText', p.text);
+          }
+          if (!state.commentText.trim()) throw new AppCommandError('댓글 내용이 비어 있습니다');
+          await submitComment();
+          if (state.commentText.trim()) {
+            // submitComment clears commentText on success; a non-empty value here
+            // means the post failed.
+            throw new AppCommandError('댓글 작성에 실패했습니다');
+          }
+          return {
+            ok: true,
+            postNum: state.selectedPost.num,
+            commentCount: state.comments.length,
+          };
         },
       },
       setRecommendations: {

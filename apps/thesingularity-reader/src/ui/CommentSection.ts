@@ -1,6 +1,7 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state, setState } from '../store';
+import { submitComment } from '../actions';
 import type { Comment } from '../types';
 
 function NickBadge(props: { nickType?: Comment['nickType'] }) {
@@ -39,12 +40,50 @@ function CommentItem(props: { comment: Comment }) {
 }
 
 function CommentWriteForm() {
+  const charCount = () => state.commentText.length;
+  const canSubmit = () => !state.commentSubmitting && state.commentText.trim().length > 0;
+
   return html`
     <div class="comment-write-wrap">
-      <div class="comment-login-prompt">
-        <span class="comment-login-icon">🚧</span>
-        <span class="comment-login-text">댓글 작성 기능은 준비 중입니다</span>
-      </div>
+      ${() => !state.isLoggedIn
+        ? html`
+          <div class="comment-login-prompt">
+            <span class="comment-login-icon">🔒</span>
+            <span class="comment-login-text">로그인하면 댓글을 작성할 수 있습니다</span>
+          </div>
+        `
+        : html`
+          <div class="comment-write-form">
+            <div class="comment-write-user">
+              <span class="comment-write-nick">${() => state.savedCredentials?.username ?? '나'}</span>
+              <span class="comment-login-text">님으로 작성</span>
+            </div>
+            <textarea
+              class="comment-write-textarea"
+              placeholder="댓글을 입력하세요... (Ctrl+Enter로 등록)"
+              value=${() => state.commentText}
+              onInput=${(e: Event) => setState('commentText', (e.currentTarget as HTMLTextAreaElement).value)}
+              onKeyDown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  if (canSubmit()) submitComment();
+                }
+              }}
+              disabled=${() => state.commentSubmitting}
+            ></textarea>
+            <div class="comment-write-actions">
+              <span class="comment-write-count">${charCount}자</span>
+              <button
+                class="y-btn y-btn-primary y-btn-sm comment-submit-btn"
+                onClick=${() => { if (canSubmit()) submitComment(); }}
+                disabled=${() => !canSubmit()}
+              >
+                ${() => state.commentSubmitting ? '등록 중...' : '등록'}
+              </button>
+            </div>
+          </div>
+        `
+      }
     </div>
   `;
 }

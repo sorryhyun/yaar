@@ -2,7 +2,7 @@ import { state, setState, settings, updatePosts } from './store';
 import { fetchPosts, fetchPostDetail, fetchPostBodyFast, fetchTopPostsForAnalysis } from './fetcher';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-import { POST_TAB, syncCookiesToTab } from './browser';
+import { POST_TAB } from './browser';
 import type { Post, Comment } from './types';
 import {
   loginToDC,
@@ -135,10 +135,25 @@ export async function selectPost(post: Post): Promise<void> {
     .catch(() => {});
 
   try {
-    const { content, comments } = await fetchPostDetail(post);
+    // The browser path (openOrNavigate / web.html) has no internal timeout, so
+    // a hung headless tab could otherwise leave commentsLoading stuck forever.
+    // Race against a hard ceiling so loading state always resolves.
+    const detail = await Promise.race([
+      fetchPostDetail(post),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 20000)),
+    ]);
     if (version !== fetchVersion) return;
-    cacheSet(post.id, content, comments);
-    setState({ postContent: content, comments });
+    if (detail) {
+      cacheSet(post.id, detail.content, detail.comments);
+      setState({ postContent: detail.content, comments: detail.comments });
+    } else if (!state.postContent) {
+      // Timed out and the fast path produced nothing — surface a soft error
+      // instead of an endless spinner.
+      setState(
+        'postContent',
+        '<p style="color:var(--yaar-error)">게시물을 불러오는 데 시간이 너무 오래 걸렸습니다. 다시 시도해주세요.</p>',
+      );
+    }
   } catch (e: unknown) {
     if (version !== fetchVersion) return;
     const msg = e instanceof Error ? e.message : String(e);
@@ -283,7 +298,8 @@ export async function submitComment(): Promise<void> {
 
   setState('commentSubmitting', true);
   try {
-    await syncCookiesToTab(POST_TAB);
+    // postCommentToDC is self-contained: it ensures the post tab exists,
+    // applies login cookies, reloads, fills and submits.
     const result = await postCommentToDC(post, text, POST_TAB);
     if (result.ok) {
       setState('commentText', '');
@@ -296,9 +312,11 @@ export async function submitComment(): Promise<void> {
         setState({ comments, postContent: content });
       } catch { /* 실패해도 무시 */ }
     } else {
+      console.error('[submitComment] failed:', result.error);
       showToast(result.error ?? '댓글 작성 실패', 'error');
     }
   } catch (e: unknown) {
+    console.error('[submitComment] unexpected error:', e);
     showToast(errMsg(e), 'error');
   } finally {
     setState('commentSubmitting', false);

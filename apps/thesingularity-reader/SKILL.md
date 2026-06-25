@@ -14,6 +14,15 @@ invoke('yaar://windows/thesingularity-reader', {
 })
 ```
 
+## App protocol (query / command)
+
+**Queries** (`app_query`): `credentials`, `loginStatus`, `selectedPost`, `comments`.
+
+**Commands** (`app_command`):
+- `saveCredentials` / `loadCredentials` — 자격증명 관리
+- `setRecommendations` — AI 분석 결과 반영
+- `submitComment` `{ text? }` — 현재 선택된 게시물에 댓글을 작성. 로그인 + 게시물 선택 필요. `text`를 주면 해당 내용으로, 생략하면 입력창의 현재 내용으로 제출됩니다. 성공 시 댓글 목록을 자동 재조회합니다.
+
 ## Architecture decisions
 
 ### Why browser automation (yaar-web) for fetching

@@ -72,15 +72,25 @@ export async function syncCookiesToTab(targetTabId: string): Promise<void> {
   const raw = await web.getCookies({ browserId: MAIN_TAB, urls: DC_COOKIE_URLS });
   const cookies = parseCookies(raw);
 
+  let okCount = 0;
   for (const c of cookies) {
-    await web.setCookie({
-      browserId: targetTabId,
-      name: c.name,
-      value: c.value,
-      domain: c.domain,
-      path: c.path ?? '/',
-    });
+    // A single malformed cookie (empty domain, odd value) can make the browser
+    // backend return 500. Isolate each one so one bad cookie can't abort the
+    // whole sync (which would silently leave the tab unauthenticated).
+    try {
+      await web.setCookie({
+        browserId: targetTabId,
+        name: c.name,
+        value: c.value,
+        domain: c.domain,
+        path: c.path ?? '/',
+      });
+      okCount++;
+    } catch (e) {
+      console.warn(`[syncCookiesToTab] setCookie failed for "${c.name}":`, e instanceof Error ? e.message : e);
+    }
   }
+  console.log(`[syncCookiesToTab] synced ${okCount}/${cookies.length} cookies to "${targetTabId}"`);
 }
 
 /**
