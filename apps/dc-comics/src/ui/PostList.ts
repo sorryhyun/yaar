@@ -3,6 +3,7 @@ import html from '@bundled/solid-js/html';
 import { state } from '../store';
 import { selectPost, setPage } from '../actions';
 import { PostItem } from './PostItem';
+import type { Post } from '../types';
 
 export function PostList() {
   return html`
@@ -22,14 +23,18 @@ export function PostList() {
 
       ${() => !state.loading || state.posts.length > 0
         ? html`
-          <div class="post-list-scroll">
+          <div
+            class="post-list-scroll"
+            onClick=${(e: MouseEvent) => {
+              const el = (e.target as HTMLElement).closest('[data-post-num]') as HTMLElement | null;
+              if (!el) return;
+              const num = el.dataset.postNum;
+              const post = state.posts.find((p) => p.num === num);
+              if (post) selectPost(post);
+            }}
+          >
             <${For} each=${() => state.posts}>
-              ${(post: any) => html`
-                <${PostItem}
-                  post=${post}
-                  selected=${() => state.selectedPost?.id === post.id}
-                  onClick=${() => selectPost(post)}
-                />`}
+              ${(post: Post) => html`<${PostItem} post=${post} />`}
             </${For}>
             ${() => state.posts.length === 0 && !state.loading
               ? html`<div class="empty-state">

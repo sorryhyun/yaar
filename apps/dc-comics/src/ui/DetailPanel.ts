@@ -1,8 +1,9 @@
-import { createSignal } from '@bundled/solid-js';
+import { createSignal, createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state } from '../store';
 import { CommentSection } from './CommentSection';
 import { subscribeSeries, unsubscribeSeries } from '../actions';
+import { processImages } from '../helpers';
 import type { SeriesLink } from '../types';
 
 function fmtNum(n: string): string {
@@ -12,15 +13,18 @@ function fmtNum(n: string): string {
   return String(num);
 }
 
-function extractSeriesLinks(html: string): SeriesLink[] {
+function extractSeriesLinks(htmlStr: string): SeriesLink[] {
   try {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const links = Array.from(doc.querySelectorAll('a[href*="s_type=series"], a[href*="gall.dcinside.com/board/lists"]'));
+    const doc = parser.parseFromString(htmlStr, 'text/html');
+    const links = Array.from(
+      doc.querySelectorAll('a[href*="s_type=series"], a[href*="gall.dcinside.com/board/lists"]'),
+    );
     const seen = new Set<string>();
     const result: SeriesLink[] = [];
     for (const a of links) {
-      const href = (a as HTMLAnchorElement).href || (a as HTMLAnchorElement).getAttribute('href') || '';
+      const href =
+        (a as HTMLAnchorElement).href || (a as HTMLAnchorElement).getAttribute('href') || '';
       if (!href || seen.has(href)) continue;
       seen.add(href);
       const title = (a.textContent ?? '').trim() || '시리즈 보기';
@@ -57,13 +61,16 @@ function SubscribeButton(props: { link: SeriesLink }) {
 
   return html`
     <button
-      class=${() => isSub() ? 'subscribe-btn subscribe-btn-active' : 'subscribe-btn'}
+      class=${() => (isSub() ? 'subscribe-btn subscribe-btn-active' : 'subscribe-btn')}
       onclick=${handleClick}
       disabled=${loading}
     >
-      ${() => loading()
-        ? html`<span class="y-spinner" style="width:10px;height:10px"></span>`
-        : isSub() ? '구독 중 ✓' : '+ 구독'}
+      ${() =>
+        loading()
+          ? html`<span class="y-spinner" style="width:10px;height:10px"></span>`
+          : isSub()
+            ? '구독 중 ✓'
+            : '+ 구독'}
     </button>
   `;
 }
@@ -72,72 +79,158 @@ function EmptyState() {
   return html`
     <div class="detail-empty y-flex-col y-items-center y-justify-center">
       <div class="detail-empty-icon">📚</div>
-      <p style="color:var(--yaar-text-muted);font-size:13px;margin-top:8px">글을 선택하마세요</p>
+      <p style="color:var(--yaar-text-muted);font-size:13px;margin-top:8px">글을 선택하세요</p>
     </div>
   `;
 }
 
 export function DetailPanel() {
+  // ref signal so createEffect can track when the body element mounts/remounts.
+  const [contentBodyEl, setContentBodyEl] = createSignal<HTMLDivElement | null>(null);
+
+  // Progressive image loader. processImages() marks every image past the first
+  // two with class "deferred-img" and stashes the real URL in data-deferred-src.
+  // We swap data-deferred-src -> src as each image scrolls into view so
+  // image-heavy posts don't decode/paint everything at once.
+  let observer: IntersectionObserver | null = null;
+
+  const loadImg = (img: HTMLImageElement) => {
+    const real = img.getAttribute('data-deferred-src');
+    if (real) img.setAttribute('src', real);
+    img.removeAttribute('data-deferred-src');
+    img.classList.remove('deferred-img');
+  };
+
+  const setupLazyImages = (el: HTMLElement) => {
+    observer?.disconnect();
+    observer = null;
+    const deferred = Array.from(el.querySelectorAll('img.deferred-img')) as HTMLImageElement[];
+    if (deferred.length === 0) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      deferred.forEach(loadImg);
+      return;
+    }
+
+    observer = new IntersectionObserver(
+      (entries, obs) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          loadImg(entry.target as HTMLImageElement);
+          obs.unobserve(entry.target);
+        }
+      },
+      {
+        root: el.closest('.detail-content'),
+        rootMargin: '600px 0px',
+        threshold: 0.01,
+      },
+    );
+    deferred.forEach((img) => observer!.observe(img));
+  };
+
+  // Re-render body innerHTML whenever postContent or the mounted element changes.
+  createEffect(() => {
+    const el = contentBodyEl();
+    if (!el) {
+      observer?.disconnect();
+      observer = null;
+      return;
+    }
+    const content = state.postContent;
+    el.innerHTML = content && !state.postLoading ? processImages(content) : '';
+    setupLazyImages(el);
+  });
+
+  onCleanup(() => {
+    observer?.disconnect();
+    observer = null;
+  });
+
   return html`
     <div class="detail-panel">
-      ${() => !state.selectedPost ? EmptyState() : html`
-        <div class="detail-header">
-          <div class="detail-title">
-            ${() => state.selectedPost!.category
-              ? html`<span class="post-category" style="margin-right:6px">${() => state.selectedPost!.category}</span>`
-              : null}
-            ${() => state.selectedPost!.title}
-          </div>
-          <div class="detail-meta">
-            <span>✍️ ${() => state.selectedPost!.author}</span>
-            <span class="divider">·</span>
-            <span>${() => state.selectedPost!.date}</span>
-            <span class="divider">·</span>
-            <span>👁 ${() => fmtNum(state.selectedPost!.views)}</span>
-            <span>❤ ${() => fmtNum(state.selectedPost!.recommend)}</span>
-            <a
-              class="detail-open-link"
-              href=${() => state.selectedPost!.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >DC에서 보기 ↗</a>
-          </div>
-        </div>
+      ${() =>
+        !state.selectedPost
+          ? EmptyState()
+          : html`
+              <div class="detail-header">
+                <div class="detail-title">
+                  ${() =>
+                    state.selectedPost!.category
+                      ? html`<span class="post-category" style="margin-right:6px"
+                          >${() => state.selectedPost!.category}</span
+                        >`
+                      : null}
+                  ${() => state.selectedPost!.title}
+                </div>
+                <div class="detail-meta">
+                  <span>✍️ ${() => state.selectedPost!.author}</span>
+                  <span class="divider">·</span>
+                  <span>${() => state.selectedPost!.date}</span>
+                  <span class="divider">·</span>
+                  <span>👁 ${() => fmtNum(state.selectedPost!.views)}</span>
+                  <span>❤ ${() => fmtNum(state.selectedPost!.recommend)}</span>
+                  <a
+                    class="detail-open-link"
+                    href=${() => state.selectedPost!.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >DC에서 보기 ↗</a
+                  >
+                </div>
+              </div>
 
-        <div class="detail-content">
-          ${() => state.postLoading
-            ? html`<div class="loading-center"><div class="y-spinner"></div><span>불러오는 중...</span></div>`
-            : null}
-          ${() => state.postError
-            ? html`<div class="error-center">
-                <div class="error-icon">⚠️</div>
-                <div class="error-msg">${() => state.postError}</div>
-              </div>`
-            : null}
-          ${() => state.postContent && !state.postLoading
-            ? html`
-              <div class="post-body" innerHTML=${() => state.postContent!}></div>
-              ${() => {
-                const links = extractSeriesLinks(state.postContent!);
-                return links.length > 0
-                  ? html`
-                    <div class="series-link-section">
-                      <span class="y-label" style="padding:0 12px">시리즈</span>
-                      ${links.map((link) => html`
-                        <div class="series-link-row">
-                          <a class="series-link-title" href=${link.url} target="_blank" rel="noopener noreferrer">${link.title}</a>
-                          <${SubscribeButton} link=${link} />
+              <div class="detail-content">
+                ${() =>
+                  state.postLoading
+                    ? html`<div class="loading-center">
+                        <div class="y-spinner"></div>
+                        <span>불러오는 중...</span>
+                      </div>`
+                    : null}
+                ${() =>
+                  state.postError
+                    ? html`<div class="error-center">
+                        <div class="error-icon">⚠️</div>
+                        <div class="error-msg">${() => state.postError}</div>
+                      </div>`
+                    : null}
+
+                <div
+                  class="post-body post-content-body"
+                  style=${() => (state.postLoading || state.postError ? 'display:none' : '')}
+                  ref=${(el: HTMLDivElement) => setContentBodyEl(el)}
+                ></div>
+
+                ${() => {
+                  if (state.postLoading || !state.postContent) return null;
+                  const links = extractSeriesLinks(state.postContent);
+                  return links.length > 0
+                    ? html`
+                        <div class="series-link-section">
+                          <span class="y-label" style="padding:0 12px">시리즈</span>
+                          ${links.map(
+                            (link) => html`
+                              <div class="series-link-row">
+                                <a
+                                  class="series-link-title"
+                                  href=${link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  >${link.title}</a
+                                >
+                                <${SubscribeButton} link=${link} />
+                              </div>
+                            `,
+                          )}
                         </div>
-                      `)}
-                    </div>`
-                  : null;
-              }}
-            `
-            : null}
+                      `
+                    : null;
+                }}
 
-          ${() => !state.postLoading ? html`<${CommentSection} />` : null}
-        </div>
-      `}
+                ${() => (!state.postLoading ? html`<${CommentSection} />` : null)}
+              </div>
+            `}
     </div>
   `;
 }

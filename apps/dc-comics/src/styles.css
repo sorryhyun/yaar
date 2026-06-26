@@ -741,3 +741,113 @@
   color: var(--yaar-text-muted);
   flex-shrink: 0;
 }
+
+/* ===== New-post badge + countdown (header) ===== */
+.new-badge {
+  background: var(--yaar-accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  animation: pulse 0.5s ease;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.countdown {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Active toggle button (settings open, etc.) */
+.rec-btn-active {
+  background: rgba(88, 166, 255, 0.12) !important;
+  border: 1px solid rgba(88, 166, 255, 0.35) !important;
+  color: var(--yaar-accent) !important;
+}
+
+/* ===== Settings overlay ===== */
+.settings-overlay {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  width: 260px;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-3);
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: var(--yaar-sp-2);
+  color: var(--yaar-text);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+  font-size: 13px;
+  color: var(--yaar-text-muted);
+  margin-bottom: var(--yaar-sp-2);
+}
+
+.settings-select {
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  color: var(--yaar-text);
+  border-radius: var(--yaar-radius);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ===== Deferred (progressive) images ===== */
+.post-body img,
+.post-content-body img {
+  max-width: 100%;
+  border-radius: var(--yaar-radius);
+  margin: 8px 0;
+}
+
+.post-body img.deferred-img,
+.post-content-body img.deferred-img {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  background: linear-gradient(
+    90deg,
+    var(--yaar-bg-surface) 25%,
+    var(--yaar-border) 37%,
+    var(--yaar-bg-surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: deferred-img-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes deferred-img-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}

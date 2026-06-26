@@ -1,4 +1,6 @@
+import { createMemo } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { state } from '../store';
 import type { Post } from '../types';
 
 function fmtNum(n: string): string {
@@ -8,16 +10,22 @@ function fmtNum(n: string): string {
   return String(num);
 }
 
-export function PostItem(props: { post: Post; selected: boolean; onClick: () => void }) {
-  const isHot = () => parseInt(props.post.recommend) >= 20;
+// PostItem takes only `post`. Click handling is delegated to the parent
+// container in PostList (which reads data-post-num) — passing a handler as a
+// component prop makes solid-js/html evaluate the thunk during render
+// (auto-opening posts) and mis-bind delegated events.
+export function PostItem(props: { post: Post }) {
+  const isSelected = createMemo(() => state.selectedPost?.id === props.post.id);
+  const isHot = createMemo(() => parseInt(props.post.recommend) >= 20);
 
   return html`
     <button
-      class=${() => `post-item${props.selected ? ' selected' : ''}${isHot() ? ' hot' : ''}`}
-      onclick=${props.onClick}
+      class=${() =>
+        `post-item${isSelected() ? ' selected' : ''}${isHot() ? ' hot' : ''}`}
+      data-post-num=${props.post.num}
     >
       <div class="post-title-row">
-        ${() => props.post.category ? html`<span class="post-category">${props.post.category}</span>` : null}
+        ${() => props.post.category ? html`<span class="post-category">${() => props.post.category}</span>` : null}
         ${() => props.post.hasImage ? html`<span class="post-img-icon">🖼️</span>` : null}
         <span class="post-title">${() => props.post.title}</span>
       </div>

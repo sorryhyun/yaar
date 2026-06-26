@@ -213,22 +213,13 @@ const REMOVE_INSIDE = [
   '.bottom_nav', '.comment_wrap', '.reply_wrap', '.ad', '.adsbygoogle', '.float_ad',
 ].join(', ');
 
-function fixImages(el: HTMLElement): void {
-  el.querySelectorAll('img').forEach((img) => {
-    // Fix lazy-loaded images
-    const dataSrc = img.getAttribute('data-src') ?? img.getAttribute('data-lazy-src');
-    if (dataSrc && !img.src) img.src = dataSrc;
-    img.removeAttribute('loading');
-    img.style.maxWidth = '100%';
-  });
-}
-
 function extractContentFromDoc(doc: Document, post: Post): string {
   for (const sel of CONTENT_SELECTORS) {
     const el = doc.querySelector(sel) as HTMLElement | null;
     if (!el) continue;
     el.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
-    fixImages(el);
+    // Lazy-load resolution + progressive deferral happens in DetailPanel via
+    // processImages() on the returned HTML; no need to touch <img> here.
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (textContent.length > 20) return el.innerHTML.trim();
   }

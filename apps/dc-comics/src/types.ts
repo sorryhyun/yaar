@@ -1,5 +1,9 @@
 export type TabMode = 'all' | 'recommend';
 
+export type AppSettings = {
+  refreshInterval: number; // in seconds
+};
+
 export type Post = {
   id: string;
   num: string;
