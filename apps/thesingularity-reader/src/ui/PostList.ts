@@ -4,6 +4,7 @@ import type { Post } from '../types';
 import { state, setState, toggleHideSpammer } from '../store';
 import { selectPost, doRefresh, goToPage } from '../actions';
 import { PostItem } from './PostItem';
+import { SearchBar } from './SearchBar';
 
 export function PostList() {
   // 현재 포스트 목록에서 동적으로 카테고리 추출
@@ -35,6 +36,7 @@ export function PostList() {
 
   return html`
     <div class="post-list-panel">
+      <${SearchBar} />
       ${() => {
         const cats = availableCategories();
         if (cats.length === 0) return null;
@@ -103,13 +105,17 @@ export function PostList() {
               <${PostItem} post=${post} />
             `}</${For}>
             ${() =>
-              filteredPosts().length === 0 && (state.filterKeyword || state.selectedCategory)
+              filteredPosts().length === 0 &&
+              (state.searchActive || state.filterKeyword || state.selectedCategory)
                 ? html`
                     <div
                       class="loading-center"
                       style="padding:var(--yaar-sp-4);color:var(--yaar-text-muted);font-size:13px"
                     >
-                      검색 결과 없음
+                      ${() =>
+                        state.searchActive
+                          ? `'${state.searchKeyword}' 검색 결과가 없습니다`
+                          : '검색 결과 없음'}
                     </div>
                   `
                 : null}

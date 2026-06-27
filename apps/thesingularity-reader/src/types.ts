@@ -11,6 +11,14 @@ export type Post = {
   isNotice: boolean;
 };
 
+/**
+ * DCinside 갤러리 내 검색 대상.
+ * 모바일 m.dcinside.com 검색 폼의 s_type 값을 그대로 사용한다
+ * (데스크톱의 search_subject_memo 형식과 다름 — 모바일은 짧은 값을 쓴다).
+ *   subject_m=제목+내용 | subject=제목 | memo=내용 | name=글쓴이 | comment=댓글
+ */
+export type SearchType = 'subject_m' | 'subject' | 'memo' | 'name' | 'comment';
+
 export type Comment = {
   id: string;
   author: string;

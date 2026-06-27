@@ -9,7 +9,7 @@
  * than relying on evaluate() — this keeps scraping logic testable and avoids
  * CSP issues inside the target page.
  */
-import type { Post, Comment } from './types';
+import type { Post, Comment, SearchType } from './types';
 import * as web from '@bundled/yaar-web';
 import { invoke } from '@bundled/yaar';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
@@ -65,9 +65,8 @@ const META_SELECTORS = [
   '[class*="num"]',
 ].join(', ');
 
-export async function fetchPosts(page = 1): Promise<Post[]> {
-  const url = page > 1 ? `${GALLERY_URL}?page=${page}` : GALLERY_URL;
-  const html = await browseUrl(url, MAIN_TAB);
+/** Parse a mobile DC gallery list page (or search result page) into Post[]. */
+function parsePostList(html: string): Post[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
@@ -246,27 +245,86 @@ export async function fetchPosts(page = 1): Promise<Post[]> {
   return posts;
 }
 
+export async function fetchPosts(page = 1): Promise<Post[]> {
+  const url = page > 1 ? `${GALLERY_URL}?page=${page}` : GALLERY_URL;
+  const html = await browseUrl(url, MAIN_TAB);
+  return parsePostList(html);
+}
+
+/**
+ * Search within the gallery using mobile DC's in-board search.
+ * URL pattern: m.dcinside.com/board/{id}?s_type={type}&serval={keyword}&page={n}
+ *   s_type (mobile values — NOT the desktop search_subject_memo form):
+ *     subject_m(제목+내용) | subject(제목) | memo(내용) | name(글쓴이) | comment(댓글)
+ * NOTE: passing the desktop values (search_subject_memo, …) makes DC silently
+ * ignore the filter and return the full gallery list. The mobile search form
+ * (m.dcinside.com) uses these short values via input name="serval".
+ * Results use the same `ul.gall-detail-lst` markup as the normal list, so we
+ * reuse parsePostList().
+ */
+export async function fetchSearchResults(
+  keyword: string,
+  sType: SearchType = 'subject_m',
+  page = 1,
+): Promise<Post[]> {
+  const kw = keyword.trim();
+  if (!kw) return [];
+  const params = new URLSearchParams({ s_type: sType, serval: kw });
+  if (page > 1) params.set('page', String(page));
+  const url = `${GALLERY_URL}?${params.toString()}`;
+  // networkidle: search results render after an XHR on some responses.
+  const html = await browseUrl(url, MAIN_TAB, true);
+  return parsePostList(html);
+}
+
 // ============================================================
 // Comment parsing (mobile DC)
 // ============================================================
+
+// A DCCon (디시콘) sticker <img> inside a comment. Mobile DC lazy-loads these:
+// `src` is often a loading placeholder while the real URL sits in
+// data-original/data-src — so we must match on class and lazy attrs, not just src.
+const DCCON_IMG_SELECTOR =
+  'img.written_dccon, img.dccon, img[class*="dccon"], img[src*="dccon"], img[src*="dcimg"], img[data-original*="dccon"], img[data-src*="dccon"], img[data-original*="dcimg"], img[data-src*="dcimg"]';
+
+/** Resolve a DCCon <img>'s real URL, accounting for lazy-load placeholders. */
+function resolveDcconUrl(img: HTMLImageElement): string | undefined {
+  const real = extractRealImageUrl(img);
+  if (real) return real;
+  for (const a of ['data-original', 'data-src', 'src']) {
+    const v = (img.getAttribute(a) ?? '').trim();
+    if (v && !v.startsWith('data:')) return v;
+  }
+  return undefined;
+}
 
 function parseCommentItem(li: Element, idx: number, isBest: boolean): Comment | null {
   let dcconSrc: string | undefined;
   let text = '';
 
-  // Mobile DC: p.txt contains either text or a DCCon <img>
+  // Mobile DC: p.txt contains either text or a DCCon <img>.
   const txtEl = li.querySelector('p.txt');
   if (txtEl) {
-    const imgInTxt = txtEl.querySelector('img.written_dccon, img[src*="dccon"], img[src*="dcimg"]');
+    const imgInTxt = txtEl.querySelector(DCCON_IMG_SELECTOR) as HTMLImageElement | null;
     if (imgInTxt) {
-      dcconSrc = imgInTxt.getAttribute('src') ?? undefined;
-      text = '[이모티콘]';
+      dcconSrc = resolveDcconUrl(imgInTxt);
+      text = '[디시콘]';
     } else {
       text = (txtEl.textContent ?? '').trim();
     }
   }
 
-  if (!text && dcconSrc) text = '[이모티콘]';
+  // A DCCon may live outside p.txt (or p.txt may be absent for image-only
+  // comments) — scan the whole item so sticker comments are never dropped.
+  if (!dcconSrc) {
+    const anyDccon = li.querySelector(DCCON_IMG_SELECTOR) as HTMLImageElement | null;
+    if (anyDccon) {
+      dcconSrc = resolveDcconUrl(anyDccon);
+      if (!text) text = '[디시콘]';
+    }
+  }
+
+  if (!text && dcconSrc) text = '[디시콘]';
 
   // Fallback: strip known metadata elements and use remaining text
   if (!text) {
@@ -378,6 +436,27 @@ const REMOVE_INSIDE = [
  * pick the one with the most text content or images. Mobile DC sometimes ships
  * bespoke markup we don't have a selector for; this rescues the body in that case.
  */
+// Phrases that ONLY appear in DC's page chrome (settings dropdown, header menu,
+// external-link warning layer). If a fallback candidate's text contains any of
+// these it is page chrome, not the post body — reject it. This is what caused
+// empty/title-only posts to render the settings menu as the body.
+const CHROME_KEYWORDS = [
+  '차단 설정',
+  '머리말',
+  '꼬리말',
+  '이용자 메모',
+  '자동 짤방',
+  'AI 이미지 간편 등록',
+  '외부 링크 이동',
+  '신뢰할 수 있는 사이트',
+];
+
+// Selectors whose presence INSIDE a candidate marks it as a page wrapper that
+// merely contains the body (plus header/nav/comments) rather than the body
+// itself. The greedy text-length score would otherwise always favour these.
+const CHROME_WRAPPER_SELECTORS =
+  '#comment_box, .comment_wrap, .reply_wrap, header, nav, footer, .gnb_wrap, .h_top, .top_wrap, .gallview-tit-wrap, .gallview-head';
+
 function findContentFallback(doc: Document): HTMLElement | null {
   const candidates = Array.from(doc.querySelectorAll('div, section, article')) as HTMLElement[];
   let best: HTMLElement | null = null;
@@ -388,9 +467,15 @@ function findContentFallback(doc: Document): HTMLElement | null {
     if (el.closest('#comment_box, .comment_wrap, .reply_wrap, header, nav, footer, .gallview-tit-wrap, .gallview-head, .gnb_wrap, .h_top, .top_wrap')) continue;
     // Skip if it itself is excluded
     const cls = el.className || '';
-    if (typeof cls === 'string' && /(comment|reply|gnb|footer|header|banner|adsbygoogle|aside)/i.test(cls)) continue;
+    if (typeof cls === 'string' && /(comment|reply|gnb|footer|header|banner|adsbygoogle|aside|setting|layer|popup|lnb|menu|search)/i.test(cls)) continue;
+    // Skip page-chrome WRAPPERS: a real post body never contains the site
+    // header/nav/gnb/comment region. Such a candidate is an outer wrapper.
+    if (el.querySelector(CHROME_WRAPPER_SELECTORS)) continue;
 
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    // Reject containers dominated by settings/menu chrome keywords.
+    if (CHROME_KEYWORDS.some((k) => text.includes(k))) continue;
+
     const imgCount = el.querySelectorAll('img').length;
     const score = text.length + imgCount * 50;
     if (score > bestScore && (text.length > 30 || imgCount > 0)) {
@@ -403,19 +488,38 @@ function findContentFallback(doc: Document): HTMLElement | null {
 }
 
 function extractContentFromDoc(doc: Document, post: Post): string {
+  // 1. Try the known body containers in order. The FIRST one that exists is the
+  //    standard mobile-DC body container; remember it even when it's (near-)
+  //    empty so we can tell "empty post" apart from "unknown markup".
+  let knownEmptyEl: HTMLElement | null = null;
   for (const sel of CONTENT_SELECTORS) {
     const el = doc.querySelector(sel) as HTMLElement | null;
     if (!el) continue;
     el.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
+    // Trim + collapse whitespace so whitespace-only counts as empty. Any
+    // remaining non-whitespace character means this is a real (if short) body —
+    // e.g. 'ㅇㅇ', a one-liner, an emoji, or a short URL.
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    const hasImages = el.querySelector('img') !== null;
-    // Accept content if it has meaningful text OR contains images
-    if (textContent.length > 10 || hasImages) {
+    // Treat embedded media (images, video, iframes) as real content too — a
+    // post can be media-only with no text.
+    const hasMedia = el.querySelector('img, video, iframe, embed') !== null;
+    if (textContent.length > 0 || hasMedia) {
       return el.innerHTML.trim();
     }
+    // Container exists but is truly empty (no text, no media). Remember it so we
+    // can show '(본문 없음)' rather than scraping page chrome.
+    if (!knownEmptyEl) knownEmptyEl = el;
   }
 
-  // Robust fallback when none of the known selectors matched.
+  // 2. A standard body container existed but is empty — this is a genuinely
+  //    body-less post (e.g. a title-only question). Do NOT fall through to the
+  //    heuristic scan, which would scrape the page's settings/nav chrome.
+  if (knownEmptyEl) {
+    return '<p style="color:#8b949e">(본문 없음)</p>';
+  }
+
+  // 3. No known container matched at all — the markup is unfamiliar. Resort to
+  //    the heuristic scan, which now rejects page chrome (see findContentFallback).
   const fallback = findContentFallback(doc);
   if (fallback) {
     fallback.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
@@ -641,7 +745,20 @@ export async function fetchPostComments(
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
 
-  return { comments: parseComments(doc), bodyHtmlRaw: extractContentFromDoc(doc, post) };
+  const comments = parseComments(doc);
+  // Inline DCCon sticker images as base64 data URIs via the server proxy (with a
+  // DC Referer) so they display reliably — comment images face the same CORS /
+  // hotlink protection as body images and aren't inlined anywhere else.
+  await Promise.allSettled(
+    comments.map(async (c) => {
+      if (c.dcconSrc && !c.dcconSrc.startsWith('data:')) {
+        const inlined = await fetchImageAsDataUri(c.dcconSrc);
+        if (inlined) c.dcconSrc = inlined;
+      }
+    }),
+  );
+
+  return { comments, bodyHtmlRaw: extractContentFromDoc(doc, post) };
 }
 
 /**

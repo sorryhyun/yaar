@@ -1,7 +1,8 @@
 import { state, setState } from './store';
 import { app, AppCommandError } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
-import { submitComment, submitPost } from './actions';
+import { submitComment, submitPost, doSearch, clearSearch } from './actions';
+import type { SearchType } from './types';
 
 export function registerProtocol() {
   if (!app) return;
@@ -50,8 +51,57 @@ export function registerProtocol() {
           })),
         }),
       },
+      search: {
+        description: '현재 검색 상태. searchActive가 true면 검색 결과를 보고 있음.',
+        handler: () => ({
+          active: state.searchActive,
+          keyword: state.searchKeyword,
+          type: state.searchType,
+          page: state.page,
+          resultCount: state.posts.length,
+        }),
+      },
     },
     commands: {
+      search: {
+        description:
+          '갤러리 내 검색을 실행합니다. keyword는 검색어, type은 검색 대상(subject_m=제목+내용, subject=제목, memo=내용, name=글쓴이, comment=댓글). keyword가 비어 있으면 검색을 해제하고 전체 목록으로 돌아갑니다.',
+        params: {
+          type: 'object',
+          properties: {
+            keyword: { type: 'string', description: '검색어' },
+            type: {
+              type: 'string',
+              enum: ['subject_m', 'subject', 'memo', 'name', 'comment'],
+              description: '검색 대상 (기본값: subject_m)',
+            },
+          },
+        },
+        handler: async (p: Record<string, unknown>) => {
+          const keyword = typeof p.keyword === 'string' ? p.keyword : '';
+          const type =
+            typeof p.type === 'string' ? (p.type as SearchType) : undefined;
+          if (!keyword.trim()) {
+            await clearSearch();
+            return { active: false, resultCount: state.posts.length };
+          }
+          await doSearch(keyword, type);
+          return {
+            active: state.searchActive,
+            keyword: state.searchKeyword,
+            type: state.searchType,
+            resultCount: state.posts.length,
+          };
+        },
+      },
+      clearSearch: {
+        description: '검색을 해제하고 전체 갤러리 목록으로 돌아갑니다.',
+        params: { type: 'object', properties: {} },
+        handler: async () => {
+          await clearSearch();
+          return { active: false, resultCount: state.posts.length };
+        },
+      },
       saveCredentials: {
         description: '아이디/비밀번호를 앱 스토리지(auth/credentials.json)에 저장합니다.',
         params: {

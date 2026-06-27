@@ -1,12 +1,14 @@
 import { state, setState, settings, updatePosts } from './store';
 import {
   fetchPosts,
+  fetchSearchResults,
   fetchPostDetail,
   fetchPostBody,
   fetchPostComments,
   fetchTopPostsForAnalysis,
   inlineRemoteImages,
 } from './fetcher';
+import type { SearchType } from './types';
 import { app, withLoading, showToast, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { POST_TAB, WRITE_TAB } from './browser';
@@ -62,12 +64,47 @@ export async function doRefresh(): Promise<void> {
   await withLoading(
     (v: boolean) => setState('loading', v),
     async () => {
-      const newPosts = await fetchPosts(state.page);
-      updatePosts(newPosts);
+      if (state.searchActive) {
+        const results = await fetchSearchResults(
+          state.searchKeyword,
+          state.searchType,
+          state.page,
+        );
+        // Search results bypass new-post tracking.
+        setState({ posts: results, newPostCount: 0, lastUpdated: new Date() });
+      } else {
+        const newPosts = await fetchPosts(state.page);
+        updatePosts(newPosts);
+      }
       setState('countdown', settings().refreshInterval);
     },
     (msg) => setState('error', msg || '불러오기 실패'),
   );
+}
+
+/** Run an in-gallery search. Empty keyword falls back to the normal list. */
+export async function doSearch(keyword?: string, sType?: SearchType): Promise<void> {
+  const kw = (keyword ?? state.searchKeyword).trim();
+  if (sType) setState('searchType', sType);
+  if (!kw) {
+    await clearSearch();
+    return;
+  }
+  setState({
+    searchKeyword: kw,
+    searchActive: true,
+    page: 1,
+    posts: [],
+    selectedCategory: null,
+    filterKeyword: null,
+  });
+  await doRefresh();
+}
+
+/** Exit search mode and return to the normal gallery list. */
+export async function clearSearch(): Promise<void> {
+  setState({ searchActive: false, searchKeyword: '', page: 1 });
+  await doRefresh();
 }
 
 export async function goToPage(page: number): Promise<void> {

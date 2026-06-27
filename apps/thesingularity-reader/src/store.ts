@@ -1,7 +1,7 @@
 import { createEffect } from '@bundled/solid-js';
 import { createStore } from '@bundled/solid-js/store';
 import { createPersistedSignal } from '@bundled/yaar';
-import type { Post, AppSettings, Recommendation, Comment, Credentials } from './types';
+import type { Post, AppSettings, Recommendation, Comment, Credentials, SearchType } from './types';
 
 const DEFAULT_SETTINGS: AppSettings = { refreshInterval: 300 };
 export const [settings, setSettings] = createPersistedSignal<AppSettings>('settings.json', DEFAULT_SETTINGS);
@@ -55,6 +55,11 @@ export const [state, setState] = createStore({
   hideSpammer: localStorage.getItem(HIDE_SPAMMER_KEY) !== 'false',
   filterKeyword: null as string | null,
   selectedCategory: null as string | null,
+
+  // Search (DCinside in-gallery search)
+  searchActive: false,
+  searchKeyword: '',
+  searchType: 'subject_m' as SearchType,
 
   // Auth
   savedCredentials: null as Credentials | null,
