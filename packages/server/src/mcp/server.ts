@@ -22,9 +22,10 @@ import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 import { registerAppAgentTools } from './app-agent/index.js';
+import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.js';
 
 /** Core MCP servers (always active). */
-export const CORE_SERVERS = ['system', 'verbs', 'app'] as const;
+export const CORE_SERVERS = ['system', 'verbs', 'app', 'messaging'] as const;
 export type McpServerName = (typeof CORE_SERVERS)[number];
 
 /**
@@ -112,6 +113,9 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
       break;
     case 'app':
       registerAppAgentTools(server);
+      break;
+    case 'messaging':
+      registerMessagingTools(server);
       break;
   }
 
@@ -295,5 +299,5 @@ export function getActiveServers(): McpServerName[] {
  * Get the list of MCP tool names for YAAR.
  */
 export function getToolNames(): string[] {
-  return ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES];
+  return ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES, ...MESSAGING_TOOL_NAMES];
 }

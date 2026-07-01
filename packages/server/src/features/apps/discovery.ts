@@ -233,6 +233,7 @@ export async function getAppMeta(appId: string): Promise<{
   hasProtocol?: boolean;
   defaultWidth?: number;
   defaultHeight?: number;
+  messaging?: 'all';
 } | null> {
   try {
     const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
@@ -246,7 +247,9 @@ export async function getAppMeta(appId: string): Promise<{
       hasProtocol?: boolean;
       defaultWidth?: number;
       defaultHeight?: number;
+      messaging?: 'all';
     } = {};
+    if (meta.messaging === 'all') result.messaging = 'all';
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
     if (meta.frameless === true) result.frameless = true;

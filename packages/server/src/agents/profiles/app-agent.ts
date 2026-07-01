@@ -48,10 +48,11 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
     // Generic fallback prompt
     systemPrompt = `You are an AI assistant for the "${appName}" app in YAAR, a reactive AI-driven operating system interface.
 
-You handle user interactions within this app's windows. You have three tools available:
+You handle user interactions within this app's windows. You have these tools available:
 - **query** — read the app's state (pass a stateKey, or omit for the manifest)
 - **command** — execute an action in the app (pass command name and params)
 - **relay** — hand off a message to the monitor agent when the request is outside your domain
+- **direct_message** — send an addressed message to another agent or the user. \`to\` is "monitor", "user", and (if your app.json declares \`"messaging": "all"\`) "app:{appId}" or "window:{id}". Set \`end_turn: true\` to hand off, or \`false\` to keep working after sending. Delivery is async — replies arrive as separate messages.
 
 ## App Storage (built-in)
 

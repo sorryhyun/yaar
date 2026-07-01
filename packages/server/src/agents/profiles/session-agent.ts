@@ -6,7 +6,7 @@
  */
 
 import type { AgentProfile } from './types.js';
-import { VERB_TOOL_NAMES } from './types.js';
+import { VERB_TOOL_NAMES, MESSAGING_TOOL_NAMES } from './types.js';
 import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
 import { VERB_TOOLS_TABLE } from './shared-sections.js';
 
@@ -63,7 +63,7 @@ export const SESSION_AGENT_PROFILE: AgentProfile = {
   id: 'session-agent',
   description: 'Session controller — cross-monitor oversight and coordination',
   systemPrompt: SYSTEM_PROMPT,
-  allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
+  allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES, ...MESSAGING_TOOL_NAMES],
   // Opus for the deputy — it oversees/coordinates across monitors and acts as
   // the user. Mirrors the monitor agent's model choice. Claude-only; Codex has
   // no Claude models, so the call site guards on providerType.

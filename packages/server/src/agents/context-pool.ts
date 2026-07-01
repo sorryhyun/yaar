@@ -412,6 +412,11 @@ export class ContextPool implements PoolContext {
     return undefined;
   }
 
+  /** Resolve the most recently active window for an app (used by DirectMessage routing). */
+  getActiveAppWindow(appId: string): string | undefined {
+    return this.appProcessor.getActiveWindowId(appId);
+  }
+
   recordMonitorAction(monitorId: string): void {
     this.monitorProcessor.recordMonitorAction(monitorId);
   }

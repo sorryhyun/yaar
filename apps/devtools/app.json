@@ -8,6 +8,7 @@
   "bundles": [
     "yaar-dev"
   ],
+  "messaging": "all",
   "permissions": [
     "yaar://storage/",
     "yaar://apps/",

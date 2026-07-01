@@ -5,12 +5,17 @@
  */
 
 import type { AgentProfile } from './types.js';
-import { VERB_TOOL_NAMES } from './types.js';
+import { VERB_TOOL_NAMES, MESSAGING_TOOL_NAMES } from './types.js';
 import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
 
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
-export { VERB_TOOL_NAMES, VERB_TOOLS, APP_AGENT_TOOL_NAMES } from './types.js';
+export {
+  VERB_TOOL_NAMES,
+  VERB_TOOLS,
+  APP_AGENT_TOOL_NAMES,
+  MESSAGING_TOOL_NAMES,
+} from './types.js';
 
 // App agent profile builder
 export { buildAppAgentProfile } from './app-agent.js';
@@ -31,7 +36,7 @@ export const DEVELOPER_PROFILE: AgentProfile = {
   id: 'developer',
   description: 'Developer agent — acts directly, delegates browser tasks to browser app',
   systemPrompt: '',
-  allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES],
+  allowedTools: [...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES, ...MESSAGING_TOOL_NAMES],
 };
 
 /**

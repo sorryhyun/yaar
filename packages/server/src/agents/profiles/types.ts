@@ -24,8 +24,12 @@ export const VERB_TOOL_NAMES = [
 
 export const VERB_TOOLS = ['WebSearch', ...SYSTEM_TOOL_NAMES, ...VERB_TOOL_NAMES] as const;
 
+// Inlined (mirrors VERB_TOOL_NAMES above) to avoid a circular dependency with mcp/messaging.
+export const MESSAGING_TOOL_NAMES = ['mcp__messaging__direct_message'] as const;
+
 export const APP_AGENT_TOOL_NAMES = [
   'mcp__app__query',
   'mcp__app__command',
   'mcp__app__relay',
+  ...MESSAGING_TOOL_NAMES,
 ] as const;
