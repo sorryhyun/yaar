@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs (including compiled apps — rebuilt on server start)
 dist/
+dist.staging/
 
 # Environment variables
 .env

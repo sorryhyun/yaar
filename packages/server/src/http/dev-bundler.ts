@@ -6,13 +6,16 @@
  */
 
 import { join, relative } from 'path';
-import { cpSync, mkdirSync, rmSync, watch } from 'fs';
+import { cpSync, mkdirSync, renameSync, rmSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
 import { registerDevReloadHandler } from './server.js';
 
 const FRONTEND_ROOT = join(PROJECT_ROOT, 'packages', 'frontend');
 const FRONTEND_SRC = join(FRONTEND_ROOT, 'src');
 const FRONTEND_PUBLIC = join(FRONTEND_ROOT, 'public');
+// Sibling of FRONTEND_DIST (same volume, so renameSync is atomic) where each
+// build is staged before being swapped into place. Git-ignored.
+const FRONTEND_STAGE = FRONTEND_DIST + '.staging';
 
 type SSEController = ReadableStreamDefaultController<Uint8Array>;
 const sseClients = new Set<SSEController>();
@@ -83,15 +86,51 @@ async function resolveFile(basePath: string): Promise<string> {
   return basePath;
 }
 
-async function buildFrontend(): Promise<void> {
+/**
+ * Build the frontend, tolerating transient failures.
+ *
+ * `Bun.build()` runs in-process, in the same process `bun --watch` uses to hot-
+ * reload the server's own modules. When a rebuild fires while the watch loader
+ * is mid-reload, Bun's bundler cache can momentarily read the wrong bytes for a
+ * module and throw `AggregateError: Bundle failed` (often with a nonsensical
+ * position such as `zod/index.js:16`). This is transient — the next build with a
+ * quiescent loader succeeds.
+ *
+ * A dev-only hot-reload rebuild must never take the server down. Since the top-
+ * level `unhandledRejection` handler in main.ts triggers a full shutdown, we
+ * MUST NOT let this promise reject. Swallow the error, log it, and retry once
+ * after a short delay so live reload recovers on its own.
+ */
+async function buildFrontend(retry = true): Promise<void> {
+  try {
+    await buildFrontendInner();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[dev] Frontend rebuild failed (${msg}) — server stays up${retry ? ', retrying…' : ''}`,
+    );
+    rmSync(FRONTEND_STAGE, { recursive: true, force: true });
+    if (retry) {
+      // Give bun --watch a moment to settle, then rebuild with a clean cache.
+      setTimeout(() => {
+        void buildFrontend(false);
+      }, 300);
+    }
+  }
+}
+async function buildFrontendInner(): Promise<void> {
   const start = performance.now();
 
-  rmSync(FRONTEND_DIST, { recursive: true, force: true });
-  mkdirSync(FRONTEND_DIST, { recursive: true });
+  // Build into a fresh temp dir and only swap it into place on success, so a
+  // failed rebuild (including a transient `bun --watch` bundler-cache throw)
+  // leaves the last good build serving instead of an empty dist.
+  const stageDir = FRONTEND_STAGE;
+  rmSync(stageDir, { recursive: true, force: true });
+  mkdirSync(stageDir, { recursive: true });
 
   const result = await Bun.build({
     entrypoints: [join(FRONTEND_SRC, 'main.tsx')],
-    outdir: FRONTEND_DIST,
+    outdir: stageDir,
     target: 'browser',
     splitting: true,
     sourcemap: 'linked',
@@ -104,23 +143,29 @@ async function buildFrontend(): Promise<void> {
     for (const log of result.logs) {
       console.error(log);
     }
+    rmSync(stageDir, { recursive: true, force: true });
     return;
   }
 
   // Copy public files (fonts)
-  cpSync(FRONTEND_PUBLIC, FRONTEND_DIST, { recursive: true });
+  cpSync(FRONTEND_PUBLIC, stageDir, { recursive: true });
 
-  // Generate index.html with live-reload script
+  // Generate index.html with live-reload script. Output URLs are relative to the
+  // dist root, so compute them against stageDir (same layout once swapped).
   const jsFiles = result.outputs
     .filter((o) => o.kind === 'entry-point' && o.path.endsWith('.js'))
-    .map((o) => '/' + relative(FRONTEND_DIST, o.path));
+    .map((o) => '/' + relative(stageDir, o.path));
 
   const cssFiles = result.outputs
     .filter((o) => o.path.endsWith('.css'))
-    .map((o) => '/' + relative(FRONTEND_DIST, o.path));
+    .map((o) => '/' + relative(stageDir, o.path));
 
   const html = generateDevHtml(jsFiles, cssFiles);
-  await Bun.write(join(FRONTEND_DIST, 'index.html'), html);
+  await Bun.write(join(stageDir, 'index.html'), html);
+
+  // Atomically swap the freshly built dist into place.
+  rmSync(FRONTEND_DIST, { recursive: true, force: true });
+  renameSync(stageDir, FRONTEND_DIST);
 
   const elapsed = (performance.now() - start).toFixed(0);
   console.log(`[dev] Frontend built in ${elapsed}ms (${result.outputs.length} files)`);

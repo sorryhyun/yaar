@@ -29,11 +29,26 @@ CHROME_PID=""
 launch_chrome_when_ready() {
   [ "${LAUNCH_CHROME:-0}" = "1" ] || return 0
 
+  # Look on PATH first (Linux), then fall back to the standard macOS app-bundle
+  # locations — on macOS Chrome lives inside /Applications and is not on PATH.
   local bin
   bin="$(command -v google-chrome || command -v google-chrome-stable \
     || command -v chromium-browser || command -v chromium || true)"
   if [ -z "$bin" ]; then
-    echo "[chrome] No Chrome/Chromium on PATH — skipping local browser launch"
+    for candidate in \
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      "$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      "/Applications/Chromium.app/Contents/MacOS/Chromium" \
+      "$HOME/Applications/Chromium.app/Contents/MacOS/Chromium" \
+      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"; do
+      if [ -x "$candidate" ]; then
+        bin="$candidate"
+        break
+      fi
+    done
+  fi
+  if [ -z "$bin" ]; then
+    echo "[chrome] No Chrome/Chromium found — skipping local browser launch"
     return 0
   fi
 
