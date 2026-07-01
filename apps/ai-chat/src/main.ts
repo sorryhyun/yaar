@@ -46,7 +46,11 @@ function sendMessage() {
     content: text,
     msgId,
     instructions:
-      'Reply to the user message above. Use app_command addMessage to display your response in this chat window.',
+      'Reply to the user message above. Call app_command addMessage EXACTLY ONCE with your full response, ' +
+      `and include replyTo: "${msgId}" in its params. ` +
+      'Do NOT call addMessage more than once and do NOT send any extra confirmation, acknowledgement, or ' +
+      '"done" message afterwards — a single addMessage call fully completes this turn. ' +
+      'Your plain-text response is ignored by the chat UI; only addMessage renders a bubble.',
   });
 }
 

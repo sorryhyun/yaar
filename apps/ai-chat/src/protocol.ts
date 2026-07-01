@@ -20,19 +20,27 @@ export function registerProtocol() {
     },
     commands: {
       addMessage: {
-        description: 'Add an AI response message to the chat',
+        description:
+          'Add an AI response message to the chat. Call this EXACTLY ONCE per user message. ' +
+          'Pass `replyTo` set to the msgId from the user_message interaction so repeated/trailing ' +
+          'emits for the same turn are ignored.',
         aliases: ['sendMessage', 'postMessage', 'appendMessage'],
         params: {
           type: 'object',
           properties: {
             content: { type: 'string' },
             id: { type: 'string' },
+            replyTo: {
+              type: 'string',
+              description: 'The msgId of the user message being answered (for de-duplication).',
+            },
           },
           required: ['content'],
         },
         handler: (p: Record<string, unknown>) => {
           finishWithMessage(
             makeMessage('assistant', p.content as string, 'done', p.id as string | undefined),
+            p.replyTo as string | undefined,
           );
         },
       },
@@ -41,12 +49,19 @@ export function registerProtocol() {
         aliases: ['showError', 'displayError', 'addError'],
         params: {
           type: 'object',
-          properties: { content: { type: 'string' } },
+          properties: {
+            content: { type: 'string' },
+            replyTo: {
+              type: 'string',
+              description: 'The msgId of the user message being answered (for de-duplication).',
+            },
+          },
           required: ['content'],
         },
         handler: (p: Record<string, unknown>) => {
           finishWithMessage(
             makeMessage('assistant', p.content as string, 'error'),
+            p.replyTo as string | undefined,
           );
         },
       },
