@@ -3,7 +3,7 @@
   "name": "Real Tabs",
   "run": "dist/index.html",
   "permissions": [
-    "yaar://browser/tabs"
+    "yaar://browser/tabs/"
   ],
   "version": "0.1.0",
   "author": "YAAR",

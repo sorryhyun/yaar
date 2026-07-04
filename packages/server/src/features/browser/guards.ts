@@ -57,6 +57,18 @@ export function isMutatingAction(action: string): boolean {
   return MUTATING_ACTIONS.has(action);
 }
 
+/**
+ * T2 tab-management actions (over the YAAR Bridge) that change tab/group state and therefore
+ * need the same per-origin consent as raw-DOM mutation. `focus` is deliberately excluded — it
+ * only brings a tab forward, exactly what the user does by clicking a tab, and exposes nothing.
+ * `track` (a cosmetic observation cue) is likewise not a mutation.
+ */
+const MUTATING_TAB_ACTIONS = new Set(['close', 'group', 'move']);
+
+export function isMutatingTabAction(action: string): boolean {
+  return MUTATING_TAB_ACTIONS.has(action);
+}
+
 /** Whether a URL points at YAAR's own origin (any localhost/loopback host + our port). */
 export function isYaarOriginUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -133,6 +145,41 @@ export async function enforceBrowserGuards(opts: {
 }
 
 /**
+ * The T2 (Manage) twin of `enforceBrowserGuards`, for the YAAR Bridge tab surface
+ * (`invoke('yaar://browser/tabs/{id}', ...)`). The target is a real, logged-in tab in the user's
+ * everyday browser, so the same two protections apply — expressed over a `BridgeTab` (url + isSelf)
+ * instead of a CDP `BrowserSession`:
+ *
+ *  1. **Self-target** — never `close`/`group`/`move` YAAR's own tab. YAAR's UI is the addressed
+ *     meta-level; it's managed through OS Actions / windows, not by rearranging its browser tab.
+ *     (There is no `allowSelfTarget` escape here: the tab surface is not the session-agent door.)
+ *  2. **Per-origin consent** — the same allowlist + dialog that gates outbound navigation.
+ *
+ * `focus` and `track` are not mutations (see `MUTATING_TAB_ACTIONS`), so they sail through — a
+ * bare `{ ok: true }`, no dialog. See `0607plan.md` §2.2 and docs/extension_bridge_proposal.md §3.
+ */
+export async function enforceTabControlGuard(opts: {
+  tab: { url: string; isSelf?: boolean };
+  action: string;
+  sessionId: string | undefined;
+}): Promise<GuardResult> {
+  const { tab, action, sessionId } = opts;
+  if (!isMutatingTabAction(action)) return OK;
+
+  if (tab.isSelf || isYaarOriginUrl(tab.url)) {
+    return {
+      ok: false,
+      error:
+        `Refusing to "${action}" YAAR's own tab. YAAR's UI is the addressed meta-level — ` +
+        `manage it through OS Actions / windows (window.* actions, invoke('yaar://windows/...')), ` +
+        `not by closing or moving its browser tab. Focusing it is allowed.`,
+    };
+  }
+
+  return ensureTabControlConsentForUrl(tab.url, sessionId);
+}
+
+/**
  * Ensure the agent is allowed to control the user's tab at its current origin.
  * Reuses the outbound-HTTP allowlist + permission dialog. Self-targets are
  * handled earlier and never reach here.
@@ -141,9 +188,20 @@ async function ensureTabControlConsent(
   session: BrowserSession,
   sessionId: string | undefined,
 ): Promise<GuardResult> {
+  return ensureTabControlConsentForUrl(session.currentUrl, sessionId);
+}
+
+/**
+ * Origin-based twin of `ensureTabControlConsent` — used by the Bridge T2 path, where the target
+ * is a `BridgeTab` (a URL + id), not a CDP `BrowserSession`. Same allowlist + dialog.
+ */
+async function ensureTabControlConsentForUrl(
+  url: string | undefined,
+  sessionId: string | undefined,
+): Promise<GuardResult> {
   if (await isAllDomainsAllowed()) return OK;
 
-  const domain = extractDomain(session.currentUrl);
+  const domain = extractDomain(url ?? '');
   // Blank / about: pages carry no logged-in state — nothing to protect yet.
   if (!domain) return OK;
   if (await isDomainAllowed(domain)) return OK;

@@ -8,11 +8,23 @@ keeps retrying.
 Spec: [`../docs/extension_bridge_proposal.md`](../docs/extension_bridge_proposal.md).
 Build plan: [`../0607plan.md`](../0607plan.md).
 
-## Status: Slice 0 — bare transport
+## Status: Slice 2 — T2 Manage
 
-This build only proves the cable is stable. It sends a versioned `hello` and the tab count/list; the
-server logs the connection. **No page-content access, no tab management, no actuation yet** — those
-are Slices 1 and 2.
+The extension now both **feeds** tabs (T1 Observe) and **acts** on them (T2 Manage). It sends a
+versioned `hello` + live tab snapshots, and it receives:
+
+- `command` — focus / close / group / move a real tab (`chrome.tabs` / `chrome.tabGroups` glue),
+  answered with a correlated `command-result`. Every mutation is gated **server-side** by per-origin
+  consent + a self-target refusal (YAAR's own tab can't be closed/moved).
+- `activity` — a "YAAR is touching your browser" cue: a transient pulsing pill overlay is injected
+  into the target tab (and the toolbar badge flashes) so you can *see* the OS reach into your
+  browser. Purely cosmetic; never reads page content.
+
+**Still no page-content access** — that boundary (T3 Act-in-page) is a later slice.
+
+New permissions in this build: `tabGroups`, `scripting`, and `<all_urls>` host access (needed only
+to paint the cursor overlay on whatever tab YAAR is acting on). After pulling this update, reload the
+extension from `chrome://extensions` so Chrome re-grants them.
 
 ## Load it (unpacked, no build step)
 
@@ -37,7 +49,10 @@ The one genuinely risky part of any MV3 bridge is the service worker sleeping. T
   (Chrome ≥ 116). The `chrome.alarms` heartbeat reconnects if the socket ever drops.
 - Inspect the worker via `chrome://extensions` → YAAR Bridge → **service worker** (Inspect) to watch
   the `[yaar-bridge]` console logs.
-- Restart the YAAR server; the extension should reconnect within the backoff window (≤ 30s).
+- Restart the YAAR server; the extension reconnects on its own — instantly on any tab activity
+  (open/switch/close a tab), or within the `chrome.alarms` heartbeat (≤ 30s) if the browser is idle.
+  You should **not** need to reload the extension. If it ever looks stuck, click the YAAR Bridge
+  toolbar icon to force an immediate reconnect.
 
 ## Notes / TODO
 

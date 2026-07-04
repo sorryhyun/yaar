@@ -3,8 +3,9 @@
  *
  * The companion browser extension (see `extension/`) dials OUT to `ws://localhost:{PORT}/bridge`
  * whenever a YAAR server is up. These handlers validate its frames and feed them into `BridgeHub`,
- * which backs the read-only `yaar://browser/*` verb surface (T1 Observe). No page-content access,
- * no tab management yet — those are Slice 2. See `0607plan.md`.
+ * which backs the `yaar://browser/*` verb surface. T1 (Observe) reads `hello`/`tabs`; T2 (Manage)
+ * additionally correlates `command-result` frames back to in-flight `sendCommand` calls. Still no
+ * page-content access — that boundary is T3. See `0607plan.md`.
  *
  * Dispatched from `createWsHandlers` in `server.ts` when `ws.data.kind === 'bridge'`.
  */
@@ -44,7 +45,8 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
             `server v${BRIDGE_PROTOCOL_VERSION} (${name} ${version}) — accepting; may misbehave`,
         );
       }
-      hub.setConnection({ browser: msg.browser, protocolVersion: msg.protocolVersion });
+      // Pass the socket so the hub can send T2 commands / activity cues back down it (Slice 2).
+      hub.setConnection({ browser: msg.browser, protocolVersion: msg.protocolVersion }, ws);
       console.log(
         `[bridge] hello from ${name} ${version} — protocol v${msg.protocolVersion}, ${msg.tabCount} tabs`,
       );
@@ -53,6 +55,10 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
     case 'tabs': {
       hub.updateTabs(msg.tabs);
       console.log(`[bridge] tabs update: ${msg.tabs.length} tabs`);
+      return;
+    }
+    case 'command-result': {
+      hub.resolveCommand(msg);
       return;
     }
   }

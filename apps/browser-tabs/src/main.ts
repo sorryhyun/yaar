@@ -2,7 +2,7 @@ export {};
 import { createSignal, For, Show, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { read, subscribe } from '@bundled/yaar';
+import { read, subscribe, invoke } from '@bundled/yaar';
 
 const TABS_URI = 'yaar://browser/tabs';
 
@@ -53,7 +53,22 @@ function faviconHost(url: string): string {
   }
 }
 
+/** Fire a T2 verb at a tab. Server-side guards handle consent / self-target refusal. */
+async function act(tab: Tab, action: 'focus' | 'close' | 'track') {
+  try {
+    await invoke(`${TABS_URI}/${tab.id}`, { action });
+    // On close, the live tab feed will push an update and re-render; nothing to do here.
+  } catch (err) {
+    console.error(`[real-tabs] ${action} failed`, err);
+  }
+}
+
 function TabRow(tab: Tab) {
+  // Handlers bound once here (outside the reactive template) — Solid re-fires event props
+  // passed reactively, so keep these stable per row.
+  const onFocus = () => act(tab, 'focus');
+  const onTrack = () => act(tab, 'track');
+  const onClose = () => act(tab, 'close');
   return html`
     <div class="y-list-item" style="display:flex; align-items:center; gap:var(--yaar-sp-2);">
       <div style="flex:1; min-width:0;">
@@ -65,6 +80,14 @@ function TabRow(tab: Tab) {
       ${() => (tab.active ? html`<span class="y-badge">active</span>` : null)}
       ${() => (tab.audible ? html`<span class="y-badge">🔊</span>` : null)}
       ${() => (tab.isSelf ? html`<span class="y-badge">self</span>` : null)}
+      <div class="y-flex" style="gap:var(--yaar-sp-1); flex:0 0 auto;">
+        <button class="y-btn y-btn-ghost" title="Show a tracking cursor on this tab" onClick=${onTrack}>👁</button>
+        <button class="y-btn y-btn-ghost" title="Focus this tab" onClick=${onFocus}>Focus</button>
+        ${() =>
+          tab.isSelf
+            ? null
+            : html`<button class="y-btn y-btn-danger" title="Close this tab" onClick=${onClose}>✕</button>`}
+      </div>
     </div>
   `;
 }

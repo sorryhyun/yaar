@@ -25,6 +25,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 | \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
 | \`yaar://session/\` | \`yaar://session\`, \`yaar://session/agents\`, \`yaar://session/monitors\`, \`yaar://session/context\` | read, invoke, list, delete |
+| \`yaar://browser/\` | \`yaar://browser/tabs\`, \`yaar://browser/tabs/{id}\`, \`yaar://browser/presence\` | read, list, invoke (focus/close/group/move/track a real tab) |
 | \`yaar://user/\` | \`yaar://user/notifications\`, \`yaar://user/prompts\`, \`yaar://user/clipboard\` | invoke, delete |
 | \`yaar://skills/\` | \`yaar://skills/components\`, \`yaar://skills/config\` | list, read |
 | \`yaar://http\` | \`yaar://http\` | invoke ({ url, method?, headers?, body? }) |
