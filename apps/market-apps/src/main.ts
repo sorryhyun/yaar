@@ -22,6 +22,8 @@ export type InstalledApp = {
   id: string;
   name: string;
   hasSkill?: boolean;
+  /** 'system' apps are built-in and cannot be uninstalled. */
+  kind?: string;
 };
 
 type ApiPayload = {
@@ -72,8 +74,8 @@ function parseMarket(payload: ApiPayload): ListedApp[] {
   return Array.isArray(payload.marketApps)
     ? payload.marketApps
     : Array.isArray(payload.apps)
-    ? payload.apps
-    : [];
+      ? payload.apps
+      : [];
 }
 
 function parseInstalledText(text: string): InstalledApp[] {
@@ -97,7 +99,8 @@ function coerceInstalledApp(input: unknown): InstalledApp | null {
   }
   if (!id) return null;
   const name = firstString(obj.name, obj.title) ?? id;
-  return { id, name };
+  const kind = firstString(obj.kind);
+  return { id, name, ...(kind ? { kind } : {}) };
 }
 
 /** Map a raw array to valid InstalledApp entries, dropping nulls. */
@@ -112,11 +115,13 @@ function parseInstalledAny(input: unknown): InstalledApp[] {
 
   if (input && typeof input === 'object') {
     const obj = input as Record<string, unknown>;
-    const candidate =
-      Array.isArray(obj.apps) ? obj.apps
-      : Array.isArray(obj.installed) ? obj.installed
-      : Array.isArray(obj.installedApps) ? obj.installedApps
-      : [];
+    const candidate = Array.isArray(obj.apps)
+      ? obj.apps
+      : Array.isArray(obj.installed)
+        ? obj.installed
+        : Array.isArray(obj.installedApps)
+          ? obj.installedApps
+          : [];
 
     if (candidate.length) {
       const parsed = parseInstalledList(candidate);
@@ -147,6 +152,12 @@ export function setStatus(next: string, stamp = true): void {
 function hasInstalled(appId: string): boolean {
   const target = normalizeId(appId);
   return installedApps().some((a) => normalizeId(a.id) === target);
+}
+
+/** Whether an installed app is a built-in system app (protected from uninstall). */
+function isSystem(appId: string): boolean {
+  const target = normalizeId(appId);
+  return installedApps().some((a) => normalizeId(a.id) === target && a.kind === 'system');
 }
 
 function markInstalledSignal(app: { id: string; name: string }, installed: boolean): void {
@@ -231,37 +242,49 @@ export async function refreshData(): Promise<void> {
     setStatus('No domain configured. Use App Protocol command setDomain.', true);
     return;
   }
-  await runAction('Refreshing\u2026', async () => {
-    const marketPayload = await apiGet<ApiPayload>('/api/apps/');
-    const apps = parseMarket(marketPayload);
+  await runAction(
+    'Refreshing\u2026',
+    async () => {
+      const marketPayload = await apiGet<ApiPayload>('/api/apps/');
+      const apps = parseMarket(marketPayload);
 
-    try {
-      const localInstalled = await hostListInstalled();
-      setInstalledApps(localInstalled);
-      setStatus(`Loaded ${apps.length} market / ${localInstalled.length} installed apps`);
-    } catch {
-      setInstalledApps([]);
-      setStatus(`Loaded ${apps.length} market apps (installed list unavailable)`);
-    }
+      try {
+        const localInstalled = await hostListInstalled();
+        setInstalledApps(localInstalled);
+        setStatus(`Loaded ${apps.length} market / ${localInstalled.length} installed apps`);
+      } catch {
+        setInstalledApps([]);
+        setStatus(`Loaded ${apps.length} market apps (installed list unavailable)`);
+      }
 
-    setMarketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
-  }, 'Refresh failed');
+      setMarketApps(apps.map((m) => ({ ...m, installed: hasInstalled(m.id) })));
+    },
+    'Refresh failed',
+  );
 }
 
 async function installApp(app: ListedApp): Promise<void> {
-  await runAction(`Installing ${app.name}\u2026`, async () => {
-    await hostInstall(app);
-    markInstalledSignal(app, true);
-    setStatus(`Installed ${app.name}`);
-  }, 'Install failed');
+  await runAction(
+    `Installing ${app.name}\u2026`,
+    async () => {
+      await hostInstall(app);
+      markInstalledSignal(app, true);
+      setStatus(`Installed ${app.name}`);
+    },
+    'Install failed',
+  );
 }
 
 async function uninstallApp(app: { id: string; name: string }): Promise<void> {
-  await runAction(`Uninstalling ${app.name}\u2026`, async () => {
-    await hostDelete(app);
-    markInstalledSignal(app, false);
-    setStatus(`Uninstalled ${app.name}`);
-  }, 'Uninstall failed');
+  await runAction(
+    `Uninstalling ${app.name}\u2026`,
+    async () => {
+      await hostDelete(app);
+      markInstalledSignal(app, false);
+      setStatus(`Uninstalled ${app.name}`);
+    },
+    'Uninstall failed',
+  );
 }
 
 // ── UI components ─────────────────────────────────────────────────────────────
@@ -281,14 +304,19 @@ function marketCard(app: ListedApp) {
       <div class="app-actions">
         ${() => {
           const installed = app.installed || hasInstalled(app.id);
+          if (installed && isSystem(app.id)) {
+            return html`<span class="installed-badge">✓ Built-in</span>`;
+          }
           if (installed) {
             return html`
-              <span class="installed-badge">\u2713 Installed</span>
+              <span class="installed-badge">✓ Installed</span>
               <button
                 class="y-btn y-btn-sm y-btn-danger uninstall-btn"
                 disabled=${loading()}
                 onClick=${() => void uninstallApp(app)}
-              >Uninstall</button>
+              >
+                Uninstall
+              </button>
             `;
           }
           return html`
@@ -296,7 +324,9 @@ function marketCard(app: ListedApp) {
               class="y-btn y-btn-sm y-btn-primary"
               disabled=${loading()}
               onClick=${() => void installApp(app)}
-            >Install</button>
+            >
+              Install
+            </button>
           `;
         }}
       </div>
@@ -306,74 +336,77 @@ function marketCard(app: ListedApp) {
 
 // ── Mount reactive UI ────────────────────────────────────────────────────────
 
-render(() => html`
-  <div class="y-app">
-
-    <!-- Header -->
-    <div class="header-bar y-surface">
-      <div class="header-left">
-        <div class="header-title">\uD83D\uDED2 Market Apps</div>
-        <div class="header-status y-text-muted">
-          ${() => statusText()}${() => lastUpdated() ? ` \u2022 ${lastUpdated()}` : ''}
+render(
+  () => html`
+    <div class="y-app">
+      <!-- Header -->
+      <div class="header-bar y-surface">
+        <div class="header-left">
+          <div class="header-title">🛒 Market Apps</div>
+          <div class="header-status y-text-muted">
+            ${() => statusText()}${() => (lastUpdated() ? ` \u2022 ${lastUpdated()}` : '')}
+          </div>
+          <div class="header-domain y-text-dim">
+            ${() => (apiBase() ? `Domain: ${apiBase()}` : 'Domain: (not set)')}
+          </div>
         </div>
-        <div class="header-domain y-text-dim">
-          ${() => apiBase() ? `Domain: ${apiBase()}` : 'Domain: (not set)'}
-        </div>
+        <button
+          class="y-btn y-btn-primary refresh-btn"
+          disabled=${() => loading()}
+          onClick=${() => void refreshData()}
+        >
+          ${() => (loading() ? 'Refreshing\u2026' : '\u21BB Refresh')}
+        </button>
       </div>
-      <button
-        class="y-btn y-btn-primary refresh-btn"
-        disabled=${() => loading()}
-        onClick=${() => void refreshData()}
-      >${() => loading() ? 'Refreshing\u2026' : '\u21BB Refresh'}</button>
-    </div>
 
-    <!-- Filter bar -->
-    <div class="filter-bar y-surface">
-      <label class="filter-toggle">
-        <input
-          type="checkbox"
-          checked=${() => hideInstalled()}
-          onChange=${(e: Event) => setHideInstalled((e.target as HTMLInputElement).checked)}
-        />
-        Hide installed apps
-      </label>
-      <span class="filter-count y-text-muted">
+      <!-- Filter bar -->
+      <div class="filter-bar y-surface">
+        <label class="filter-toggle">
+          <input
+            type="checkbox"
+            checked=${() => hideInstalled()}
+            onChange=${(e: Event) => setHideInstalled((e.target as HTMLInputElement).checked)}
+          />
+          Hide installed apps
+        </label>
+        <span class="filter-count y-text-muted">
+          ${() => {
+            const total = marketApps().length;
+            const visible = visibleApps().length;
+            const installed = installedApps().length;
+            if (!total) return 'No apps loaded';
+            return hideInstalled()
+              ? `${visible} of ${total} apps \u2022 ${installed} installed`
+              : `${total} apps \u2022 ${installed} installed`;
+          }}
+        </span>
+      </div>
+
+      <!-- App list -->
+      <div class="y-scroll list-grid">
         ${() => {
-          const total = marketApps().length;
-          const visible = visibleApps().length;
-          const installed = installedApps().length;
-          if (!total) return 'No apps loaded';
-          return hideInstalled()
-            ? `${visible} of ${total} apps \u2022 ${installed} installed`
-            : `${total} apps \u2022 ${installed} installed`;
+          const apps = visibleApps();
+          if (!apps.length) {
+            const msg = marketApps().length
+              ? 'All apps are already installed.'
+              : 'No marketplace apps loaded.';
+            return html`<div class="empty-msg y-text-muted">${msg}</div>`;
+          }
+          return apps.map((app) => marketCard(app));
         }}
-      </span>
+      </div>
     </div>
-
-    <!-- App list -->
-    <div class="y-scroll list-grid">
-      ${() => {
-        const apps = visibleApps();
-        if (!apps.length) {
-          const msg = marketApps().length
-            ? 'All apps are already installed.'
-            : 'No marketplace apps loaded.';
-          return html`<div class="empty-msg y-text-muted">${msg}</div>`;
-        }
-        return apps.map((app) => marketCard(app));
-      }}
-    </div>
-
-  </div>
-`, document.getElementById('app')!);
+  `,
+  document.getElementById('app')!,
+);
 
 // ── Async initialization ─────────────────────────────────────────────────────
 
 onMount(async () => {
   let domain = normalizeDomain(
-    new URLSearchParams(window.location.search).get('domain')
-    || (window as any).__MARKET_APPS_DOMAIN__ as string | undefined
-    || ''
+    new URLSearchParams(window.location.search).get('domain') ||
+      ((window as any).__MARKET_APPS_DOMAIN__ as string | undefined) ||
+      '',
   );
 
   if (!domain) {

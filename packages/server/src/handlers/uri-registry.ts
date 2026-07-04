@@ -39,6 +39,8 @@ export interface ResourceLinkBlock {
   name: string;
   description?: string;
   mimeType?: string;
+  /** Optional resource-specific hint (e.g. app `kind: 'system' | 'app'`). */
+  kind?: string;
 }
 
 export interface VerbResult {

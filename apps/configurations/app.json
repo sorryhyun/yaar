@@ -7,5 +7,6 @@
   ],
   "version": "1.0.0",
   "author": "YAAR",
-  "description": "No description"
+  "description": "No description",
+  "kind": "system"
 }

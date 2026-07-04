@@ -8,9 +8,8 @@
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { compileTypeScript, isAppStale } from '@yaar/compiler';
-import { PROJECT_ROOT } from '../../config.js';
+import { APP_ROOTS } from './roots.js';
 
-const APPS_DIR = join(PROJECT_ROOT, 'apps');
 const CONCURRENCY = 4;
 
 interface AutoCompileResult {
@@ -35,24 +34,28 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number)
 export async function autoCompileApps(): Promise<AutoCompileResult> {
   const result: AutoCompileResult = { compiled: [], skipped: [], failed: [] };
 
-  let dirNames: string[];
-  try {
-    dirNames = await readdir(APPS_DIR);
-  } catch {
-    return result; // apps/ doesn't exist
-  }
-
-  // Find apps with src/main.ts
+  // Find apps with src/main.ts across all roots (bundled wins on id collision).
   const appDirs: { appId: string; appPath: string }[] = [];
-  for (const name of dirNames) {
-    const appPath = join(APPS_DIR, name);
+  const seen = new Set<string>();
+  for (const root of APP_ROOTS) {
+    let dirNames: string[];
     try {
-      const s = await stat(appPath);
-      if (!s.isDirectory()) continue;
-      await stat(join(appPath, 'src', 'main.ts'));
-      appDirs.push({ appId: name, appPath });
+      dirNames = await readdir(root);
     } catch {
-      // Not a directory or no src/main.ts
+      continue; // root doesn't exist
+    }
+    for (const name of dirNames) {
+      if (seen.has(name)) continue;
+      const appPath = join(root, name);
+      try {
+        const s = await stat(appPath);
+        if (!s.isDirectory()) continue;
+        await stat(join(appPath, 'src', 'main.ts'));
+        seen.add(name);
+        appDirs.push({ appId: name, appPath });
+      } catch {
+        // Not a directory or no src/main.ts
+      }
     }
   }
 

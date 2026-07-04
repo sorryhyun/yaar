@@ -13,7 +13,10 @@
   "variant": "panel",
   "dockEdge": "top",
   "capture": "dom",
-  "permissions": ["yaar://http"],
+  "permissions": [
+    "yaar://http"
+  ],
   "version": "1.0.1",
-  "author": "YAAR"
+  "author": "YAAR",
+  "kind": "system"
 }

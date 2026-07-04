@@ -4,14 +4,12 @@
 
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { PROJECT_ROOT } from '../../config.js';
 import { hasConfig } from './config.js';
+import { APP_ROOTS, resolveAppDir, type AppSource } from './roots.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/routes/verb.js';
 import type { Verb } from '../../handlers/uri-registry.js';
-
-const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
@@ -42,9 +40,19 @@ function parsePermissions(raw: unknown[]): PermissionEntry[] {
 export type WindowVariantType = 'standard' | 'widget' | 'panel';
 export type DockEdgeType = 'top' | 'bottom';
 
+/**
+ * App criticality. `system` apps are core to the desktop: protected from
+ * uninstall and auto-trusted (no permission prompt). Everything else is `app`.
+ */
+export type AppKind = 'system' | 'app';
+
 export interface AppInfo {
   id: string;
   name: string;
+  /** Criticality — `system` apps are protected and auto-trusted. Defaults to `app`. */
+  kind: AppKind;
+  /** Whether the app ships with the repo (`bundled`) or was installed (`user`). */
+  source: AppSource;
   description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
@@ -65,160 +73,176 @@ export interface AppInfo {
   agentType?: string;
 }
 
+/** Build an AppInfo for a single app directory under `root`. */
+async function readAppInfo(root: string, appId: string, source: AppSource): Promise<AppInfo> {
+  const appPath = join(root, appId);
+
+  // Check for SKILL.md
+  let hasSkill = false;
+  try {
+    await stat(join(appPath, 'SKILL.md'));
+    hasSkill = true;
+  } catch {
+    // File doesn't exist
+  }
+
+  // Check for credentials (in either location)
+  const appHasConfig = await hasConfig(appId);
+
+  // Check for compiled app (index.html)
+  let isCompiled = false;
+  try {
+    await stat(join(appPath, 'dist', 'index.html'));
+    isCompiled = true;
+  } catch {
+    // File doesn't exist
+  }
+
+  // Check for app.json metadata
+  let icon: string | undefined;
+  let iconType: 'emoji' | 'image' | undefined;
+  let displayName: string | undefined;
+  let description: string | undefined;
+  let version: string | undefined;
+  let author: string | undefined;
+  let createShortcut: boolean | undefined;
+  let run: string | undefined;
+  let kind: AppKind = 'app';
+  let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
+  let fileAssociations: FileAssociation[] | undefined;
+  let variant: WindowVariantType | undefined;
+  let dockEdge: DockEdgeType | undefined;
+  let frameless: boolean | undefined;
+  let windowStyle: Record<string, string | number> | undefined;
+  let defaultWidth: number | undefined;
+  let defaultHeight: number | undefined;
+  let permissions: PermissionEntry[] | undefined;
+  let agentType: string | undefined;
+  try {
+    const metaContent = await Bun.file(join(appPath, 'app.json')).text();
+    const meta = JSON.parse(metaContent);
+    icon = meta.icon;
+    if (icon) iconType = 'emoji';
+    displayName = meta.name;
+    if (meta.description) description = meta.description;
+    if (typeof meta.version === 'string') version = meta.version;
+    if (typeof meta.author === 'string') author = meta.author;
+    if (meta.createShortcut === false || meta.hidden === true) createShortcut = false;
+    if (typeof meta.run === 'string') run = meta.run;
+    if (meta.kind === 'system') kind = 'system';
+    if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
+    if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
+    if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
+    if (meta.frameless === true) frameless = true;
+    if (meta.windowStyle && typeof meta.windowStyle === 'object') windowStyle = meta.windowStyle;
+    if (typeof meta.defaultWidth === 'number') defaultWidth = meta.defaultWidth;
+    if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
+    if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
+    if (typeof meta.agentType === 'string') agentType = meta.agentType;
+  } catch {
+    // No metadata or invalid JSON
+  }
+
+  // Only bundled apps may declare themselves `system` — an installed app cannot
+  // claim protected/auto-trusted status by shipping kind:"system" in its manifest.
+  if (kind === 'system' && source !== 'bundled') kind = 'app';
+
+  // Load dist/protocol.json (implies appProtocol support)
+  try {
+    const protocolContent = await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
+    protocol = JSON.parse(protocolContent);
+  } catch {
+    // No protocol.json
+  }
+
+  // Check for icon image file (takes priority over emoji)
+  try {
+    const files = await readdir(appPath);
+    for (const file of files) {
+      const lower = file.toLowerCase();
+      const dotIdx = lower.lastIndexOf('.');
+      if (dotIdx === -1) continue;
+      const baseName = lower.slice(0, dotIdx);
+      const ext = lower.slice(dotIdx);
+      if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.includes(ext)) {
+        icon = `/api/apps/${appId}/${file}`;
+        iconType = 'image';
+        break;
+      }
+    }
+  } catch {
+    // Could not read directory
+  }
+
+  // Convert kebab-case or snake_case to Title Case (fallback)
+  const name =
+    displayName ??
+    appId
+      .split(/[-_]/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+  // Resolve run URL as yaar:// URI
+  let resolvedRun: string | undefined;
+  if (run) {
+    // Absolute paths stay as-is (not a yaar:// URI)
+    resolvedRun = run.startsWith('/') ? run : buildYaarUri('apps', `${appId}/${run}`);
+  } else if (isCompiled) {
+    resolvedRun = buildYaarUri('apps', appId);
+  }
+
+  return {
+    id: appId,
+    name,
+    kind,
+    source,
+    ...(description && { description }),
+    icon,
+    iconType,
+    ...(version && { version }),
+    ...(author && { author }),
+    hasSkill,
+    hasConfig: appHasConfig,
+    ...(createShortcut === false && { createShortcut: false }),
+    ...(resolvedRun && { run: resolvedRun }),
+    isCompiled,
+    ...(protocol && { protocol }),
+    ...(fileAssociations && { fileAssociations }),
+    ...(variant && { variant }),
+    ...(dockEdge && { dockEdge }),
+    ...(frameless && { frameless }),
+    ...(windowStyle && { windowStyle }),
+    ...(defaultWidth && { defaultWidth }),
+    ...(defaultHeight && { defaultHeight }),
+    ...(permissions && { permissions }),
+    ...(agentType && { agentType }),
+  };
+}
+
 /**
- * List all apps in the apps/ directory.
+ * List all apps across both roots. On an id collision the bundled app wins
+ * (a user-installed app cannot shadow a shipped one).
  */
 export async function listApps(): Promise<AppInfo[]> {
-  try {
-    const entries = await readdir(APPS_DIR, { withFileTypes: true });
-    const apps: AppInfo[] = [];
+  const byId = new Map<string, AppInfo>();
 
+  for (const root of APP_ROOTS) {
+    const source: AppSource = root === APP_ROOTS[0] ? 'bundled' : 'user';
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue; // root doesn't exist
+    }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-
-      const appId = entry.name;
-      const appPath = join(APPS_DIR, appId);
-
-      // Check for SKILL.md
-      let hasSkill = false;
-      try {
-        await stat(join(appPath, 'SKILL.md'));
-        hasSkill = true;
-      } catch {
-        // File doesn't exist
-      }
-
-      // Check for credentials (in either location)
-      const appHasConfig = await hasConfig(appId);
-
-      // Check for compiled app (index.html)
-      let isCompiled = false;
-      try {
-        await stat(join(appPath, 'dist', 'index.html'));
-        isCompiled = true;
-      } catch {
-        // File doesn't exist
-      }
-
-      // Check for app.json metadata
-      let icon: string | undefined;
-      let iconType: 'emoji' | 'image' | undefined;
-      let displayName: string | undefined;
-      let description: string | undefined;
-      let version: string | undefined;
-      let author: string | undefined;
-      let createShortcut: boolean | undefined;
-      let run: string | undefined;
-      let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
-      let fileAssociations: FileAssociation[] | undefined;
-      let variant: WindowVariantType | undefined;
-      let dockEdge: DockEdgeType | undefined;
-      let frameless: boolean | undefined;
-      let windowStyle: Record<string, string | number> | undefined;
-      let defaultWidth: number | undefined;
-      let defaultHeight: number | undefined;
-      let permissions: PermissionEntry[] | undefined;
-      let agentType: string | undefined;
-      try {
-        const metaContent = await Bun.file(join(appPath, 'app.json')).text();
-        const meta = JSON.parse(metaContent);
-        icon = meta.icon;
-        if (icon) iconType = 'emoji';
-        displayName = meta.name;
-        if (meta.description) description = meta.description;
-        if (typeof meta.version === 'string') version = meta.version;
-        if (typeof meta.author === 'string') author = meta.author;
-        if (meta.createShortcut === false || meta.hidden === true) createShortcut = false;
-        if (typeof meta.run === 'string') run = meta.run;
-        if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
-        if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
-        if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
-        if (meta.frameless === true) frameless = true;
-        if (meta.windowStyle && typeof meta.windowStyle === 'object')
-          windowStyle = meta.windowStyle;
-        if (typeof meta.defaultWidth === 'number') defaultWidth = meta.defaultWidth;
-        if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
-        if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
-        if (typeof meta.agentType === 'string') agentType = meta.agentType;
-      } catch {
-        // No metadata or invalid JSON
-      }
-
-      // Load dist/protocol.json (implies appProtocol support)
-      try {
-        const protocolContent = await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
-        protocol = JSON.parse(protocolContent);
-      } catch {
-        // No protocol.json
-      }
-
-      // Check for icon image file (takes priority over emoji)
-      try {
-        const files = await readdir(appPath);
-        for (const file of files) {
-          const lower = file.toLowerCase();
-          const dotIdx = lower.lastIndexOf('.');
-          if (dotIdx === -1) continue;
-          const baseName = lower.slice(0, dotIdx);
-          const ext = lower.slice(dotIdx);
-          if (baseName === 'icon' && ICON_IMAGE_EXTENSIONS.includes(ext)) {
-            icon = `/api/apps/${appId}/${file}`;
-            iconType = 'image';
-            break;
-          }
-        }
-      } catch {
-        // Could not read directory
-      }
-
-      // Convert kebab-case or snake_case to Title Case (fallback)
-      const name =
-        displayName ??
-        appId
-          .split(/[-_]/)
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-
-      // Resolve run URL as yaar:// URI
-      let resolvedRun: string | undefined;
-      if (run) {
-        // Absolute paths stay as-is (not a yaar:// URI)
-        resolvedRun = run.startsWith('/') ? run : buildYaarUri('apps', `${appId}/${run}`);
-      } else if (isCompiled) {
-        resolvedRun = buildYaarUri('apps', appId);
-      }
-
-      apps.push({
-        id: appId,
-        name,
-        ...(description && { description }),
-        icon,
-        iconType,
-        ...(version && { version }),
-        ...(author && { author }),
-        hasSkill,
-        hasConfig: appHasConfig,
-        ...(createShortcut === false && { createShortcut: false }),
-        ...(resolvedRun && { run: resolvedRun }),
-        isCompiled,
-        ...(protocol && { protocol }),
-        ...(fileAssociations && { fileAssociations }),
-        ...(variant && { variant }),
-        ...(dockEdge && { dockEdge }),
-        ...(frameless && { frameless }),
-        ...(windowStyle && { windowStyle }),
-        ...(defaultWidth && { defaultWidth }),
-        ...(defaultHeight && { defaultHeight }),
-        ...(permissions && { permissions }),
-        ...(agentType && { agentType }),
-      });
+      // First root (bundled) wins on id collision.
+      if (byId.has(entry.name)) continue;
+      byId.set(entry.name, await readAppInfo(root, entry.name, source));
     }
-
-    return apps;
-  } catch {
-    // apps/ directory doesn't exist
-    return [];
   }
+
+  return [...byId.values()];
 }
 
 /**
@@ -235,8 +259,10 @@ export async function getAppMeta(appId: string): Promise<{
   defaultHeight?: number;
   messaging?: 'all';
 } | null> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return null;
   try {
-    const metaContent = await Bun.file(join(APPS_DIR, appId, 'app.json')).text();
+    const metaContent = await Bun.file(join(appDir, 'app.json')).text();
     const meta = JSON.parse(metaContent);
     const result: {
       variant?: WindowVariantType;
@@ -260,7 +286,7 @@ export async function getAppMeta(appId: string): Promise<{
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
     // Check for dist/protocol.json to determine appProtocol support
     try {
-      await Bun.file(join(APPS_DIR, appId, 'dist', 'protocol.json')).text();
+      await Bun.file(join(appDir, 'dist', 'protocol.json')).text();
       result.hasProtocol = true;
     } catch {
       // No dist/protocol.json
@@ -275,9 +301,10 @@ export async function getAppMeta(appId: string): Promise<{
  * Load SKILL.md for a specific app.
  */
 export async function loadAppSkill(appId: string): Promise<string | null> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return null;
   try {
-    const skillPath = join(APPS_DIR, appId, 'SKILL.md');
-    const content = await Bun.file(skillPath).text();
+    const content = await Bun.file(join(appDir, 'SKILL.md')).text();
     return content;
   } catch {
     return null;
@@ -290,9 +317,10 @@ export async function loadAppSkill(appId: string): Promise<string | null> {
  * so the orchestrator knows when/how to use the app.
  */
 export async function loadAppHint(appId: string): Promise<string | null> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return null;
   try {
-    const hintPath = join(APPS_DIR, appId, 'HINT.md');
-    const content = await Bun.file(hintPath).text();
+    const content = await Bun.file(join(appDir, 'HINT.md')).text();
     return content;
   } catch {
     return null;
@@ -303,21 +331,26 @@ export async function loadAppHint(appId: string): Promise<string | null> {
  * Load all app hints for injection into the monitor prompt.
  */
 export async function loadAllAppHints(): Promise<{ appId: string; hint: string }[]> {
-  try {
-    const entries = await readdir(APPS_DIR, { withFileTypes: true });
-    const results: { appId: string; hint: string }[] = [];
+  const results: { appId: string; hint: string }[] = [];
+  const seen = new Set<string>();
+  for (const root of APP_ROOTS) {
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
     await Promise.all(
       entries
-        .filter((e) => e.isDirectory())
+        .filter((e) => e.isDirectory() && !seen.has(e.name))
         .map(async (e) => {
+          seen.add(e.name);
           const hint = await loadAppHint(e.name);
           if (hint) results.push({ appId: e.name, hint });
         }),
     );
-    return results;
-  } catch {
-    return [];
   }
+  return results;
 }
 
 /**
@@ -325,9 +358,10 @@ export async function loadAllAppHints(): Promise<{ appId: string; hint: string }
  * When present, this replaces the generic app agent system prompt.
  */
 export async function loadAppAgentDoc(appId: string): Promise<string | null> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return null;
   try {
-    const agentPath = join(APPS_DIR, appId, 'AGENTS.md');
-    const content = await Bun.file(agentPath).text();
+    const content = await Bun.file(join(appDir, 'AGENTS.md')).text();
     return content;
   } catch {
     return null;

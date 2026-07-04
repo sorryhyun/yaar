@@ -5,13 +5,11 @@
 import { mkdir, cp, readdir, stat, rm, unlink } from 'fs/promises';
 import { join } from 'path';
 import { compileTypeScript, getSandboxPath, extractProtocolFromSource } from '@yaar/compiler';
-import { PROJECT_ROOT } from '../../config.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-
-const APPS_DIR = join(PROJECT_ROOT, 'apps');
+import { INSTALL_ROOT, resolveAppDir } from '../apps/roots.js';
 
 /**
  * Sync a source directory to a destination, only writing files whose content changed.
@@ -108,7 +106,9 @@ export async function doDeploy(
   }
 
   const sandboxPath = args.sourcePath ?? getSandboxPath(sandboxId);
-  const appPath = join(APPS_DIR, appId);
+  // Update an existing app in place; newly deployed apps go to the user-apps
+  // root (git-ignored) rather than the tracked bundled tree.
+  const appPath = resolveAppDir(appId) ?? join(INSTALL_ROOT, appId);
 
   try {
     await stat(sandboxPath);

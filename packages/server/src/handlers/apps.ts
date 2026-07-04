@@ -71,6 +71,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           uri: `yaar://apps/${app.id}`,
           name: app.name,
           description: app.description,
+          kind: app.kind,
         })),
       );
     },

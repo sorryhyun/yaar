@@ -17,7 +17,7 @@ import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { PROJECT_ROOT } from '../../config.js';
+import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { formatWindowRef, deriveWindowId, getAppMetaOverrides } from './helpers.js';
 
 /** Cascade offset per window (px). */
@@ -70,7 +70,13 @@ export async function handleCreate(
       const pathErr = validateRelativePath(filePath);
       if (pathErr) return error(pathErr);
 
-      const fullPath = join(PROJECT_ROOT, 'apps', filePath);
+      // Resolve the owning app's root (bundled or user-apps) from the leading
+      // path segment; fall back to the bundled root.
+      const appRoot = resolveAppDir(filePath.split('/')[0]);
+      const fullPath =
+        appRoot && filePath.includes('/')
+          ? join(appRoot, filePath.split('/').slice(1).join('/'))
+          : join(APPS_DIR, filePath);
       try {
         const raw = await Bun.file(fullPath).text();
         const parsed = JSON.parse(raw);

@@ -38,6 +38,10 @@ bundled/*.css
 # App credentials (sensitive data)
 apps/*/credentials.json
 
+# User-installed apps (marketplace installs + runtime-deployed apps live here,
+# separate from the git-tracked bundled apps/ tree)
+/user-apps/
+
 # Sandbox (temporary app development)
 /sandbox/
 

@@ -77,7 +77,13 @@ export const okJsonResource = (uri: string, data: object): VerbResult =>
 
 /** Create a successful result with resource_link blocks for navigable lists. */
 export const okLinks = (
-  links: Array<{ uri: string; name?: string; description?: string; mimeType?: string }>,
+  links: Array<{
+    uri: string;
+    name?: string;
+    description?: string;
+    mimeType?: string;
+    kind?: string;
+  }>,
 ): VerbResult => ({
   content:
     links.length === 0
@@ -88,6 +94,7 @@ export const okLinks = (
           name: link.name ?? link.uri,
           ...(link.description ? { description: link.description } : {}),
           ...(link.mimeType ? { mimeType: link.mimeType } : {}),
+          ...(link.kind ? { kind: link.kind } : {}),
         })),
 });
 

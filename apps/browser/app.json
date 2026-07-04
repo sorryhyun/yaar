@@ -14,5 +14,6 @@
     "yaar://windows/"
   ],
   "version": "1.0.0",
-  "author": "YAAR"
+  "author": "YAAR",
+  "kind": "system"
 }

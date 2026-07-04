@@ -234,8 +234,12 @@ surface is the same CDP target channel.)
    `curl_allowed_domains.yaml` allowlist + permission dialog. The "agent is driving this tab"
    indicator is plumbed via `BrowserSession.setDriving()` → the SSE `updated` stream (`driving` +
    `isSelf` fields); `list_tabs` annotates YAAR's own tab with `isSelf`.
-4. **Companion extension.** ⬜ Productize `LocalUserBrowser` for non-dev users; make the Browser app a
-   live-tab handle instead of a canvas screenshot (and render the `driving`/`isSelf` SSE fields).
+4. **Companion extension.** ⬜ Specified in its own proposal:
+   [`extension_bridge_proposal.md`](./extension_bridge_proposal.md) ("YAAR Bridge") — pulled forward
+   and expanded beyond productizing `LocalUserBrowser`: the extension reaches the user's *default
+   profile* (which CDP cannot, post-Chrome-136) and adds tiered observe/manage/act capabilities. A
+   zero-setup read-only floor is specified separately in
+   [`os_presence_bridge_proposal.md`](./os_presence_bridge_proposal.md).
 5. **Provider auto-selection.** ✅ **Superseded & resolved** by
    [`session_agent_browser_design.md`](./session_agent_browser_design.md) Phase 2. The single
    env-keyed `getBrowserProvider()` singleton is gone, replaced by two doors:

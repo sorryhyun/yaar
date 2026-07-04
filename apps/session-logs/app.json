@@ -5,10 +5,14 @@
   "permissions": [
     {
       "uri": "yaar://history/",
-      "verbs": ["list", "read"]
+      "verbs": [
+        "list",
+        "read"
+      ]
     }
   ],
   "version": "1.1.0",
   "author": "YAAR",
-  "description": "Browse and audit session logs — analyze workflows, tool usage, and suggest improvements"
+  "description": "Browse and audit session logs — analyze workflows, tool usage, and suggest improvements",
+  "kind": "system"
 }

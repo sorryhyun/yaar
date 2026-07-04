@@ -4,7 +4,7 @@
 
 import { readdir } from 'fs/promises';
 import { join } from 'path';
-import { PROJECT_ROOT } from '../../config.js';
+import { resolveAppDir } from '../apps/roots.js';
 
 interface CloneResult {
   success: boolean;
@@ -14,7 +14,8 @@ interface CloneResult {
 }
 
 export async function cloneAppSource(appId: string): Promise<CloneResult> {
-  const appDir = join(PROJECT_ROOT, 'apps', appId);
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return { success: false, error: `App "${appId}" not found.` };
   const srcDir = join(appDir, 'src');
 
   try {

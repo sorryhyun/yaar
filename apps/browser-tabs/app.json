@@ -2,8 +2,11 @@
   "icon": "🗂️",
   "name": "Real Tabs",
   "run": "dist/index.html",
-  "permissions": ["yaar://browser/tabs"],
+  "permissions": [
+    "yaar://browser/tabs"
+  ],
   "version": "0.1.0",
   "author": "YAAR",
-  "description": "Live list of your real browser tabs via the YAAR Bridge extension."
+  "description": "Live list of your real browser tabs via the YAAR Bridge extension.",
+  "kind": "system"
 }

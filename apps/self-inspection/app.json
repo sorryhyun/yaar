@@ -1,5 +1,6 @@
 {
   "name": "Self Inspection",
   "description": "Diagnostic suite that tests all URI domains using the 5 generic verbs",
-  "icon": "\ud83d\udd2c"
+  "icon": "🔬",
+  "kind": "system"
 }

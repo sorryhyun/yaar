@@ -2,12 +2,13 @@
  * File-serving routes — PDF render, app static, storage files.
  */
 
-import { join, extname } from 'path';
+import { extname } from 'path';
 import { renderPdfPage } from '../../lib/pdf/index.js';
-import { PROJECT_ROOT, MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
+import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
+import { resolveAppDir } from '../../features/apps/roots.js';
 import { parseContentPath, type ParsedContentPath } from '../../lib/yaar-uri-server.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 
@@ -138,8 +139,9 @@ async function handleApps(
 ): Promise<Response | null> {
   if (req.method !== 'GET') return null;
 
-  const appsDir = join(PROJECT_ROOT, 'apps', parsed.appId);
-  const normalizedPath = await safePathAsync(appsDir, parsed.path);
+  const appDir = resolveAppDir(parsed.appId);
+  if (!appDir) return errorResponse('Not found', 404);
+  const normalizedPath = await safePathAsync(appDir, parsed.path);
   if (!normalizedPath) return errorResponse('Access denied', 403);
 
   return serveStaticFile(req, normalizedPath, parsed.path);

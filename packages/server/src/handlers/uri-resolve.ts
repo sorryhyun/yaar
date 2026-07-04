@@ -19,7 +19,7 @@ import {
 } from '../lib/yaar-uri-server.js';
 import { safePath } from '../http/utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
-import { PROJECT_ROOT } from '../config.js';
+import { APPS_DIR, resolveAppDir } from '../features/apps/roots.js';
 
 export type ResourceKind = 'app-static' | 'storage';
 
@@ -95,7 +95,7 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
       const slashIdx = parsed.path.indexOf('/');
       const appId = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
       const subpath = slashIdx === -1 ? 'dist/index.html' : parsed.path.slice(slashIdx + 1);
-      const base = join(PROJECT_ROOT, 'apps', appId);
+      const base = resolveAppDir(appId) ?? join(APPS_DIR, appId);
       const absolutePath = safePath(base, subpath);
       if (!absolutePath) return null;
       return {

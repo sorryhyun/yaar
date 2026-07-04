@@ -11,6 +11,7 @@ import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { listApps } from './discovery.js';
+import { INSTALL_ROOT, resolveAppDir } from './roots.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
@@ -64,9 +65,22 @@ async function readAppPermissions(appDir: string): Promise<PermissionEntry[] | n
 }
 
 export async function installApp(appId: string): Promise<VerbResult> {
-  const appsDir = join(PROJECT_ROOT, 'apps');
-  const appDir = join(appsDir, appId);
-  const isUpdate = existsSync(appDir);
+  // Update an existing app in place; fresh installs land in the user-apps root
+  // (git-ignored) so they never pollute the tracked bundled tree.
+  const existingDir = resolveAppDir(appId);
+  const isUpdate = existingDir !== null;
+  const appDir = existingDir ?? join(INSTALL_ROOT, appId);
+
+  // Protect system apps: they ship with the release and can't be replaced from
+  // the marketplace.
+  if (isUpdate) {
+    const existing = (await listApps()).find((a) => a.id === appId);
+    if (existing?.kind === 'system') {
+      return error(
+        `"${appId}" is a protected system app and cannot be replaced from the marketplace.`,
+      );
+    }
+  }
 
   const res = await fetch(`${MARKET_URL}/api/apps/${appId}/download`);
   if (!res.ok) {
@@ -182,8 +196,14 @@ export async function installApp(appId: string): Promise<VerbResult> {
 }
 
 export async function uninstallApp(appId: string): Promise<VerbResult> {
-  const appDir = join(PROJECT_ROOT, 'apps', appId);
-  if (!existsSync(appDir)) return error(`App "${appId}" is not installed.`);
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return error(`App "${appId}" is not installed.`);
+
+  // System apps are core to the desktop — refuse to delete them.
+  const app = (await listApps()).find((a) => a.id === appId);
+  if (app?.kind === 'system') {
+    return error(`"${appId}" is a protected system app and cannot be uninstalled.`);
+  }
 
   await rm(appDir, { recursive: true, force: true });
 
