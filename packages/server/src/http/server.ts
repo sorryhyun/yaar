@@ -16,8 +16,9 @@ let _devReloadHandler: (() => Response) | null = null;
 export function registerDevReloadHandler(handler: () => Response): void {
   _devReloadHandler = handler;
 }
-import { checkHttpAuth } from './auth.js';
+import { checkHttpAuth, checkWsAuth } from './auth.js';
 import { prepareWsData, type WsData } from '../websocket/server.js';
+import { generateConnectionId } from '../session/broadcast-center.js';
 import {
   handleApiRoutes,
   handleBrowserRoutes,
@@ -96,6 +97,22 @@ export function createFetchHandler() {
       const success = server.upgrade(req, { data });
       if (success) return undefined; // Bun handles the rest
       return new Response('WebSocket upgrade failed', { status: 500 });
+    }
+
+    // YAAR Bridge WebSocket — the companion extension dials out to here (see extension/).
+    if (url.pathname === '/bridge') {
+      if (!checkWsAuth(url)) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      const data: WsData = {
+        kind: 'bridge',
+        connectionId: generateConnectionId(),
+        sessionId: null,
+        monitorId: null,
+      };
+      const success = server.upgrade(req, { data });
+      if (success) return undefined;
+      return new Response('Bridge upgrade failed', { status: 500 });
     }
 
     // CORS headers

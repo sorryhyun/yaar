@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "YAAR Bridge",
+  "version": "0.0.1",
+  "description": "Connects your everyday Chrome to a running YAAR server, making real tabs part of the YAAR OS.",
+  "permissions": ["tabs", "alarms"],
+  "host_permissions": ["ws://localhost/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "YAAR Bridge"
+  }
+}

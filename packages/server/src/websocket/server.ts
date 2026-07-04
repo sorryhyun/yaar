@@ -19,6 +19,7 @@ import {
 import type { ContextMessage } from '../agents/context.js';
 import type { SessionLogger } from '../logging/session-logger.js';
 import { checkWsAuth } from '../http/auth.js';
+import { handleBridgeOpen, handleBridgeMessage, handleBridgeClose } from './bridge-handlers.js';
 
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
@@ -29,6 +30,8 @@ export interface WebSocketServerOptions {
 }
 
 export interface WsData {
+  /** Which WebSocket protocol this connection speaks. Defaults to 'frontend' (the /ws path). */
+  kind: 'frontend' | 'bridge';
   connectionId: string;
   sessionId: string | null;
   monitorId: string | null;
@@ -37,6 +40,7 @@ export interface WsData {
 export function createWsHandlers(options: WebSocketServerOptions) {
   return {
     async open(ws: ServerWebSocket<WsData>) {
+      if (ws.data.kind === 'bridge') return handleBridgeOpen(ws);
       const { connectionId } = ws.data;
       const broadcastCenter = getBroadcastCenter();
 
@@ -100,6 +104,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     },
 
     async message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
+      if (ws.data.kind === 'bridge') return handleBridgeMessage(ws, data);
       const { connectionId, sessionId } = ws.data;
       try {
         const event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
@@ -114,6 +119,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     },
 
     close(ws: ServerWebSocket<WsData>) {
+      if (ws.data.kind === 'bridge') return handleBridgeClose(ws);
       const { connectionId, sessionId } = ws.data;
       console.log(`WebSocket client disconnected: ${connectionId}`);
 
@@ -139,13 +145,14 @@ export function prepareWsData(url: URL): { authorized: boolean; data: WsData } {
   if (!checkWsAuth(url)) {
     return {
       authorized: false,
-      data: { connectionId: '', sessionId: null, monitorId: null },
+      data: { kind: 'frontend', connectionId: '', sessionId: null, monitorId: null },
     };
   }
 
   return {
     authorized: true,
     data: {
+      kind: 'frontend',
       connectionId: generateConnectionId(),
       sessionId: url.searchParams.get('sessionId'),
       monitorId: url.searchParams.get('monitorId'),

@@ -2,6 +2,7 @@ export * from './actions.js';
 export * from './events.js';
 export * from './components.js';
 export * from './app-protocol.js';
+export * from './bridge.js';
 
 /** Unique session identifier. */
 export type SessionId = string;
