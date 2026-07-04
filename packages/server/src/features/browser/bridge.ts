@@ -16,7 +16,7 @@ import type {
   BridgeCommandResult,
   BridgeActivity,
 } from '@yaar/shared';
-import { BRIDGE_COMMAND_MIN_VERSION } from '@yaar/shared';
+import { BRIDGE_COMMAND_MIN_VERSION, BRIDGE_CONTENT_MIN_VERSION } from '@yaar/shared';
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { isYaarOriginUrl } from './guards.js';
 
@@ -131,12 +131,16 @@ class BridgeHub {
         error: 'YAAR Bridge is not connected — no real browser to manage. Enable the extension.',
       });
     }
-    if (conn.protocolVersion < BRIDGE_COMMAND_MIN_VERSION) {
+    // `extract` (content access) needs a newer extension than the T2 manage verbs.
+    const minVersion =
+      cmd.action === 'extract' ? BRIDGE_CONTENT_MIN_VERSION : BRIDGE_COMMAND_MIN_VERSION;
+    if (conn.protocolVersion < minVersion) {
+      const capability = cmd.action === 'extract' ? 'reading tab content' : 'tab management';
       return Promise.resolve({
         ok: false,
         error:
           `The connected YAAR Bridge extension is too old (protocol v${conn.protocolVersion}); ` +
-          `tab management needs v${BRIDGE_COMMAND_MIN_VERSION}. Update the extension and reload it.`,
+          `${capability} needs v${minVersion}. Update the extension and reload it.`,
       });
     }
 

@@ -17,7 +17,8 @@
 
 const PORT = 8000; // TODO(Slice: productization): make configurable via the extension popup.
 const BRIDGE_URL = `ws://localhost:${PORT}/bridge`;
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
+const CONTENT_MAX_CHARS = 100000; // fallback cap when the server doesn't send maxChars
 
 let socket = null;
 let reconnectDelayMs = 1000; // grows to a cap on repeated failures
@@ -106,6 +107,18 @@ async function handleCommand(cmd) {
         const moveProps = { index: typeof cmd.index === 'number' ? cmd.index : -1 };
         if (typeof cmd.windowId === 'number') moveProps.windowId = cmd.windowId;
         await chrome.tabs.move(tabId, moveProps);
+        break;
+      }
+      case 'extract': {
+        // T3-lite: inject a self-contained extractor and read back the page text. Server-side
+        // consent has already been granted by the time this frame arrives.
+        const max = typeof cmd.maxChars === 'number' ? cmd.maxChars : CONTENT_MAX_CHARS;
+        const [injection] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: yaarExtractContent,
+          args: [max],
+        });
+        data = injection && injection.result ? injection.result : { text: '', truncated: false };
         break;
       }
       default:
@@ -219,6 +232,23 @@ function yaarCursorOverlay(label, kind) {
     },
     kind === 'observe' ? 2600 : 1800,
   );
+}
+
+/**
+ * Runs IN the target page (injected via chrome.scripting). Must be fully self-contained — no
+ * closure references. Returns the page's visible text (capped), plus url/title, for the server's
+ * `read` command. Read-only: touches nothing on the page.
+ */
+function yaarExtractContent(maxChars) {
+  const cap = typeof maxChars === 'number' && maxChars > 0 ? maxChars : 100000;
+  const raw = (document.body && document.body.innerText) || '';
+  const text = raw.length > cap ? raw.slice(0, cap) : raw;
+  return {
+    url: location.href,
+    title: document.title || '',
+    text,
+    truncated: raw.length > cap,
+  };
 }
 
 function connect() {

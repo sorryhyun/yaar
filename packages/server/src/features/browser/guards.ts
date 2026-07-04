@@ -180,6 +180,66 @@ export async function enforceTabControlGuard(opts: {
 }
 
 /**
+ * Content-read guard (T3-lite), for `invoke('yaar://browser/tabs/{id}', { action: 'read' })`.
+ *
+ * Reading a real, logged-in page's text is materially more sensitive than the T2 manage verbs —
+ * it crosses the tab-metadata boundary that keeps T1/T2 safe — so it gets its OWN per-origin grant
+ * (`browser_content_read`), distinct from tab-control's navigation allowlist. Granting tab control
+ * on a domain does NOT grant content read there, and vice-versa.
+ *
+ * Reading YAAR's own tab is allowed (mirrors the self-target rule: reads of self are fine,
+ * only mutations are refused); it carries no third-party login to protect.
+ */
+export async function enforceContentReadGuard(opts: {
+  tab: { url: string; isSelf?: boolean };
+  sessionId: string | undefined;
+}): Promise<GuardResult> {
+  const { tab, sessionId } = opts;
+  // Reading our own origin exposes no third-party session — allow without a prompt.
+  if (tab.isSelf || isYaarOriginUrl(tab.url)) return OK;
+  return ensureContentReadConsent(tab.url, sessionId);
+}
+
+/**
+ * Ensure the agent is allowed to read page content at this origin. A dedicated grant keyed under
+ * the `browser_content_read` tool (persisted as `browser_content_read:{domain}`), separate from the
+ * tab-control / navigation allowlist — so content read is its own explicit, revocable decision.
+ */
+async function ensureContentReadConsent(
+  url: string | undefined,
+  sessionId: string | undefined,
+): Promise<GuardResult> {
+  const domain = extractDomain(url ?? '');
+  // Blank / about: pages carry no logged-in content — nothing to protect yet.
+  if (!domain) return OK;
+
+  if (!sessionId) {
+    return {
+      ok: false,
+      error:
+        `Reading page content on "${domain}" needs your consent, but there's no active session ` +
+        `to ask. Open the tab's page in a YAAR session and retry.`,
+    };
+  }
+
+  // `showPermissionDialogToSession` checks the saved `browser_content_read:{domain}` decision first
+  // and, if the user picks "remember", persists it — so a granted domain won't prompt again.
+  const confirmed = await actionEmitter.showPermissionDialogToSession(
+    sessionId,
+    'Allow Reading Page Content',
+    `The agent wants to read the full text of your open tab on "${domain}".\n\n` +
+      `This is a real, logged-in page — its content may include private information. ` +
+      `Allow the agent to read the page content on "${domain}"?`,
+    'browser_content_read',
+    domain,
+  );
+  if (!confirmed) {
+    return { ok: false, error: `User denied reading page content on "${domain}".` };
+  }
+  return OK;
+}
+
+/**
  * Ensure the agent is allowed to control the user's tab at its current origin.
  * Reuses the outbound-HTTP allowlist + permission dialog. Self-targets are
  * handled earlier and never reach here.

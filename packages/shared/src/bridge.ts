@@ -8,18 +8,30 @@
  * Slice 1 covers T1 (Observe): `hello` + `tabs` (extension → server).
  * Slice 2 adds T2 (Manage): `command` + `activity` (server → extension) and `command-result`
  * (extension → server). See `0607plan.md` and `docs/extension_bridge_proposal.md`.
+ * Slice 3 adds T3-lite content read: the `extract` command action returns the target tab's page
+ * text (via `chrome.scripting`), carried back in `command-result.data`. This is the first frame
+ * that crosses the tab-metadata boundary, so it is gated by a distinct per-origin content consent
+ * on the server (see `features/browser/guards.ts` `enforceContentReadGuard`). It is named `extract`
+ * (matching the CDP `yaar://session/browser` vocabulary) so it never collides with the `read` verb.
  */
 
 import { z } from 'zod';
 
 /** Bumped whenever the message shape changes. Server warns on read mismatch, refuses commands. */
-export const BRIDGE_PROTOCOL_VERSION = 2;
+export const BRIDGE_PROTOCOL_VERSION = 3;
 
 /**
  * Minimum extension protocol version that can execute T2 commands (focus/close/group/move).
  * A v1 extension still feeds tabs fine (T1), but can't act — `sendCommand` refuses below this.
  */
 export const BRIDGE_COMMAND_MIN_VERSION = 2;
+
+/**
+ * Minimum extension protocol version that can read page content (the `read` action). Higher than
+ * the manage floor because content read needs the `scripting` injection path the older extension
+ * lacks; `sendCommand` refuses a `read` below this with a clean "update the extension" message.
+ */
+export const BRIDGE_CONTENT_MIN_VERSION = 3;
 
 /** Tab-level metadata only — never page content (that boundary is what keeps T1 safe). */
 export const bridgeTabSchema = z.object({
@@ -53,14 +65,17 @@ export type BridgeTabs = z.infer<typeof bridgeTabsSchema>;
 
 // ── T2 (Manage): command frames flow server → extension, results flow back ──
 
-/** The window-manager verbs YAAR can invoke on a real tab. */
-export const bridgeCommandActionSchema = z.enum(['focus', 'close', 'group', 'move']);
+/**
+ * The verbs YAAR can invoke on a real tab. `focus/close/group/move` are T2 window-manager verbs;
+ * `extract` (T3-lite) returns the tab's page content and is separately consent-gated on the server.
+ */
+export const bridgeCommandActionSchema = z.enum(['focus', 'close', 'group', 'move', 'extract']);
 export type BridgeCommandAction = z.infer<typeof bridgeCommandActionSchema>;
 
 /**
  * A command from the server for the extension to execute against a real tab.
  * `requestId` correlates the eventual `command-result`. Extra fields are action-specific:
- * `tabIds`/`groupTitle` for `group`, `index`/`windowId` for `move`.
+ * `tabIds`/`groupTitle` for `group`, `index`/`windowId` for `move`, `maxChars` for `extract`.
  */
 export const bridgeCommandSchema = z.object({
   type: z.literal('command'),
@@ -71,8 +86,24 @@ export const bridgeCommandSchema = z.object({
   groupTitle: z.string().optional().describe('group: optional label for the new tab group'),
   index: z.number().optional().describe('move: destination index within the window'),
   windowId: z.number().optional().describe('move: destination window id'),
+  maxChars: z
+    .number()
+    .optional()
+    .describe('extract: cap on returned page text length (extension truncates and flags it)'),
 });
 export type BridgeCommand = z.infer<typeof bridgeCommandSchema>;
+
+/** Default cap on `extract`-returned page text; the extension truncates and sets `truncated`. */
+export const BRIDGE_CONTENT_MAX_CHARS = 100_000;
+
+/** The `data` payload an `extract` command-result carries back (page content of the target tab). */
+export const bridgeContentSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  text: z.string().describe('document.body.innerText of the target tab, possibly truncated'),
+  truncated: z.boolean(),
+});
+export type BridgeContent = z.infer<typeof bridgeContentSchema>;
 
 /** The extension's reply to a `command`, correlated by `requestId`. */
 export const bridgeCommandResultSchema = z.object({

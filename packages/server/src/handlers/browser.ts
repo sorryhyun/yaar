@@ -1,18 +1,21 @@
 /**
- * Browser domain handlers for the verb layer (T1 Observe + T2 Manage).
+ * Browser domain handlers for the verb layer (T1 Observe + T2 Manage + T3-lite content read).
  *
  * Surfaces the user's real browser tabs (via the YAAR Bridge extension) as a live feed, and lets
- * an agent manage them like OS windows:
+ * an agent manage them like OS windows and read a page's text:
  *
- *   read('yaar://browser')                       → connection + fidelity overview
- *   read('yaar://browser/tabs')                  → all open tabs (title/url/active/isSelf)
- *   list('yaar://browser/tabs')                  → navigable links to each tab
- *   read('yaar://browser/tabs/{id}')             → a single tab
- *   invoke('yaar://browser/tabs/{id}', {action}) → focus/close/group/move it, or 'track' (T2)
- *   read('yaar://browser/presence')              → { fidelity, connected, tabCount, activeTab }
+ *   read('yaar://browser')                          → connection + fidelity overview
+ *   read('yaar://browser/tabs')                     → all open tabs (title/url/active/isSelf)
+ *   list('yaar://browser/tabs')                     → navigable links to each tab
+ *   read('yaar://browser/tabs/{id}')                → a single tab's METADATA (+ a hint to extract)
+ *   invoke('yaar://browser/tabs/{id}', {action})    → focus/close/group/move/track (T2), or
+ *                                                     'extract' → the page's TEXT CONTENT (T3-lite)
+ *   read('yaar://browser/presence')                 → { fidelity, connected, tabCount, activeTab }
  *
- * Still tab-metadata only — never page content (that boundary is T3). T2 mutations route through
- * `enforceTabControlGuard` (per-origin consent + self-target refusal) and are transported over the
+ * IMPORTANT: the `read` VERB returns only tab metadata; the page's actual content comes from the
+ * `extract` ACTION (invoke), so the two never collide. T2 mutations route through
+ * `enforceTabControlGuard` (per-origin consent + self-target refusal); `extract` routes through
+ * `enforceContentReadGuard` (a distinct per-origin content grant). Both are transported over the
  * bridge socket by `BridgeHub.sendCommand`; a cursor/tracking overlay is pushed via `sendActivity`.
  * Reads/invokes are available to monitor agents and to apps that declare `yaar://browser/tabs/` in
  * `app.json` `permissions`. See `0607plan.md` and `docs/extension_bridge_proposal.md`.
@@ -21,11 +24,17 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { ok, okJsonResource, okLinks, error } from './utils.js';
+import { BRIDGE_CONTENT_MAX_CHARS } from '@yaar/shared';
 import { getBridgeHub, type BrowserTab } from '../features/browser/bridge.js';
-import { enforceTabControlGuard } from '../features/browser/guards.js';
+import { enforceTabControlGuard, enforceContentReadGuard } from '../features/browser/guards.js';
 
-/** The verbs `invoke('yaar://browser/tabs/{id}')` accepts (T2 Manage). */
-const TAB_ACTIONS = ['focus', 'close', 'group', 'move', 'track'] as const;
+/**
+ * The verbs `invoke('yaar://browser/tabs/{id}')` accepts. `focus/close/group/move` are T2 Manage;
+ * `track` is a cosmetic cue; `extract` (T3-lite) returns the tab's page text, separately gated.
+ * Note `extract`, not `read`: the `read` *verb* returns tab metadata, so the content *action*
+ * must have a distinct name or the two collide and agents get metadata when they wanted content.
+ */
+const TAB_ACTIONS = ['focus', 'close', 'group', 'move', 'track', 'extract'] as const;
 type TabAction = (typeof TAB_ACTIONS)[number];
 
 /** A short, human-readable name for a tab, for overlay/log labels. */
@@ -40,7 +49,7 @@ function tabName(t: BrowserTab): string {
 
 /** The label the extension paints on its cursor/tracking overlay for a given action. */
 function activityLabel(action: string, t: BrowserTab): string {
-  const verb = action === 'track' ? 'watching' : action;
+  const verb = action === 'track' ? 'watching' : action === 'extract' ? 'reading' : action;
   return `YAAR · ${verb} · ${tabName(t)}`;
 }
 
@@ -93,8 +102,11 @@ export function registerBrowserHandlers(registry: ResourceRegistry): void {
     description:
       "The user's open browser tabs, live. Read for the full list; read yaar://browser/tabs/{id} " +
       'for one tab. Manage a tab with invoke(yaar://browser/tabs/{id}, { action }): ' +
-      "focus/close/group/move the real tab, or 'track' to flash a cursor on it. Mutating a " +
-      "logged-in tab asks per-origin consent; YAAR's own tab can't be closed/moved. " +
+      "focus/close/group/move the real tab, 'track' to flash a cursor on it, or 'extract' to get " +
+      "the page's TEXT CONTENT. (Note: the plain read verb on this URI returns only tab metadata — " +
+      "use invoke {action:'extract'} for the actual page content.) Mutating a logged-in tab asks " +
+      'per-origin consent; extracting its content asks a separate content-read consent; ' +
+      "YAAR's own tab can't be closed/moved. " +
       'Requires the YAAR Bridge extension to be connected.',
     verbs: ['describe', 'read', 'list', 'invoke'],
     invokeSchema: {
@@ -104,8 +116,9 @@ export function registerBrowserHandlers(registry: ResourceRegistry): void {
           type: 'string',
           enum: [...TAB_ACTIONS],
           description:
-            'focus (bring the tab forward), close, group (with tabIds), move (to index), or ' +
-            "'track' (flash a cursor/tracking cue on the tab without changing anything).",
+            'focus (bring the tab forward), close, group (with tabIds), move (to index), ' +
+            "'track' (flash a cursor/tracking cue without changing anything), or 'extract' (return " +
+            "the tab's page TEXT CONTENT — asks per-origin content consent).",
         },
         tabIds: {
           type: 'array',
@@ -115,6 +128,10 @@ export function registerBrowserHandlers(registry: ResourceRegistry): void {
         groupTitle: { type: 'string', description: 'group: optional label for the new group.' },
         index: { type: 'number', description: 'move: destination index within the window.' },
         windowId: { type: 'number', description: 'move: destination window id.' },
+        maxChars: {
+          type: 'number',
+          description: `extract: cap on returned page text length (default ${BRIDGE_CONTENT_MAX_CHARS}).`,
+        },
       },
       required: ['action'],
     },
@@ -125,7 +142,12 @@ export function registerBrowserHandlers(registry: ResourceRegistry): void {
       if (id !== null) {
         const tab = hub.getTab(id);
         if (!tab) return error(`No tab with id ${id}. It may have been closed.`);
-        return okJsonResource(resolved.sourceUri, tab);
+        // Nudge: this URI's `read` verb is metadata only. Point the agent at the content path
+        // right where it looked, so "read the tab" doesn't dead-end at title/url.
+        return okJsonResource(resolved.sourceUri, {
+          ...tab,
+          hint: `This is tab metadata only. To read the page's actual text content, call invoke('${resolved.sourceUri}', { action: 'extract' }).`,
+        });
       }
       if (!hub.isConnected()) {
         return ok(
@@ -173,6 +195,35 @@ export function registerBrowserHandlers(registry: ResourceRegistry): void {
       if (action === 'track') {
         hub.sendActivity({ kind: 'observe', tabId: id, action, label: activityLabel(action, tab) });
         return ok(`Showing a tracking cursor on "${tabName(tab)}".`);
+      }
+
+      // 'extract' (T3-lite) — return the tab's page text. Not a mutation, but it crosses the
+      // tab-metadata boundary, so it has its OWN per-origin consent (distinct from tab control).
+      if (action === 'extract') {
+        const { getSessionId } = await import('../agents/agent-context.js');
+        const guard = await enforceContentReadGuard({ tab, sessionId: getSessionId() });
+        if (!guard.ok) return error(guard.error);
+
+        // An 'observe' cue (blue) — YAAR is watching/reading, not acting on, the tab.
+        hub.sendActivity({ kind: 'observe', tabId: id, action, label: activityLabel(action, tab) });
+
+        const maxChars =
+          typeof payload?.maxChars === 'number' ? payload.maxChars : BRIDGE_CONTENT_MAX_CHARS;
+        const outcome = await hub.sendCommand({ action: 'extract', tabId: id, maxChars });
+        if (!outcome.ok) return error(outcome.error);
+        const content = (outcome.data ?? {}) as {
+          url?: string;
+          title?: string;
+          text?: string;
+          truncated?: boolean;
+        };
+        return okJsonResource(resolved.sourceUri, {
+          id,
+          url: content.url ?? tab.url,
+          title: content.title ?? tab.title,
+          truncated: !!content.truncated,
+          text: content.text ?? '',
+        });
       }
 
       // Consent + self-target guard (per-origin grant for close/group/move; focus is free).

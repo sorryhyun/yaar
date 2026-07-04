@@ -10,11 +10,17 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   bridgeMessageSchema,
   bridgeServerMessageSchema,
+  bridgeContentSchema,
   BRIDGE_PROTOCOL_VERSION,
   BRIDGE_COMMAND_MIN_VERSION,
+  BRIDGE_CONTENT_MIN_VERSION,
 } from '@yaar/shared';
 import { getBridgeHub, type BridgeSocket } from '../features/browser/bridge.js';
-import { enforceTabControlGuard, isMutatingTabAction } from '../features/browser/guards.js';
+import {
+  enforceTabControlGuard,
+  enforceContentReadGuard,
+  isMutatingTabAction,
+} from '../features/browser/guards.js';
 import { ResourceRegistry } from '../handlers/uri-registry.js';
 import { registerBrowserHandlers } from '../handlers/browser.js';
 import { getPort } from '../config.js';
@@ -79,6 +85,24 @@ describe('bridge message schema', () => {
       tabs: [{ id: 'not-a-number', url: 'x', title: 'y', active: true }],
     });
     expect(parsed.success).toBe(false);
+  });
+
+  it('round-trips a read command frame and its content payload', () => {
+    const cmd = bridgeServerMessageSchema.safeParse({
+      type: 'command',
+      requestId: 1,
+      action: 'extract',
+      tabId: 5,
+      maxChars: 200,
+    });
+    expect(cmd.success).toBe(true);
+    const content = bridgeContentSchema.safeParse({
+      url: 'https://a.com',
+      title: 'A',
+      text: 'body text',
+      truncated: false,
+    });
+    expect(content.success).toBe(true);
   });
 });
 
@@ -298,6 +322,37 @@ describe('BridgeHub.sendCommand', () => {
     const outcome = await p;
     expect(outcome.ok).toBe(false);
   });
+
+  it('refuses a read from an extension older than the content floor', async () => {
+    const { hub } = connectWithTab(BRIDGE_CONTENT_MIN_VERSION - 1);
+    const outcome = await hub.sendCommand({ action: 'extract', tabId: 5, maxChars: 100 });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.error).toContain('reading tab content');
+  });
+
+  it('routes a read command and returns the page content in data', async () => {
+    const { hub, sent } = connectWithTab();
+    const p = hub.sendCommand({ action: 'extract', tabId: 5, maxChars: 50 });
+    const frame = sent.find((f) => f.type === 'command');
+    expect(frame.action).toBe('extract');
+    expect(frame.maxChars).toBe(50);
+    const data = { url: 'https://a.com', title: 'A', text: 'hello', truncated: false };
+    hub.resolveCommand({ type: 'command-result', requestId: frame.requestId, ok: true, data });
+    expect(await p).toEqual({ ok: true, data });
+  });
+});
+
+describe('enforceContentReadGuard', () => {
+  it("allows reading YAAR's own tab without a prompt", async () => {
+    const selfTab = { url: `http://localhost:${getPort()}/`, isSelf: true };
+    expect((await enforceContentReadGuard({ tab: selfTab, sessionId: undefined })).ok).toBe(true);
+  });
+
+  it('refuses reading a third-party tab when there is no session to consent', async () => {
+    const tab = { url: 'https://a.com/page' };
+    const r = await enforceContentReadGuard({ tab, sessionId: undefined });
+    expect(r.ok).toBe(false);
+  });
 });
 
 describe('enforceTabControlGuard', () => {
@@ -364,6 +419,38 @@ describe('yaar://browser/tabs invoke (T2)', () => {
   it('errors on an unknown action', async () => {
     connectWithTab();
     const res = await registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'explode' });
+    expect(res.isError).toBe(true);
+  });
+
+  it("read on YAAR's own tab flows guard → observe cue → command → page text", async () => {
+    const hub = getBridgeHub();
+    const { socket, sent } = fakeSocket();
+    hub.setConnection({ browser: { name: 'Chrome', version: '3' }, protocolVersion: 3 }, socket);
+    // A self tab (YAAR's origin) reads without a consent prompt.
+    hub.updateTabs([{ id: 7, url: `http://localhost:${getPort()}/`, title: 'YAAR', active: true }]);
+    const exec = registry.execute('invoke', 'yaar://browser/tabs/7', { action: 'extract' });
+    const frame = await waitFor(() => sent.find((f) => f.type === 'command'));
+    expect(frame.action).toBe('extract');
+    expect(sent.find((f) => f.type === 'activity' && f.kind === 'observe')).toBeTruthy();
+    hub.resolveCommand({
+      type: 'command-result',
+      requestId: frame.requestId,
+      ok: true,
+      data: {
+        url: `http://localhost:${getPort()}/`,
+        title: 'YAAR',
+        text: 'page body',
+        truncated: false,
+      },
+    });
+    const res = await exec;
+    expect(res.isError).toBeUndefined();
+    expect(jsonBody(res).text).toBe('page body');
+  });
+
+  it('refuses reading a third-party tab with no session to consent', async () => {
+    connectWithTab(); // tab 5 → https://a.com, not self
+    const res = await registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'extract' });
     expect(res.isError).toBe(true);
   });
 });
