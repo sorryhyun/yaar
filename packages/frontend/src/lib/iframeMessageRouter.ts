@@ -70,7 +70,8 @@ export type YaarMessageType =
   | 'yaar:keydown'
   // IFRAME_APP_PROTOCOL_SCRIPT (app-protocol.ts)
   | 'yaar:app-ready'
-  | 'yaar:app-interaction';
+  | 'yaar:app-interaction'
+  | 'yaar:app-event';
 
 // ─── Router singleton ──────────────────────────────────────────────────
 

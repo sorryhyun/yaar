@@ -8,6 +8,7 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
   pendingFeedback: [],
   pendingAppProtocolResponses: [],
   pendingAppInteractions: [],
+  pendingAppEvents: [],
 
   addRenderingFeedback: (feedback) =>
     set((state) => {
@@ -34,4 +35,11 @@ export const createFeedbackSlice: SliceCreator<FeedbackSlice> = (set, get) => ({
     }),
 
   consumePendingAppInteractions: createConsumeQueue(get, set, 'pendingAppInteractions'),
+
+  addPendingAppEvent: (item) =>
+    set((state) => {
+      state.pendingAppEvents.push(item);
+    }),
+
+  consumePendingAppEvents: createConsumeQueue(get, set, 'pendingAppEvents'),
 });

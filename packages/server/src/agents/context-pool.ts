@@ -37,6 +37,10 @@ import {
   WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
+
+/** Per-window app-event rate cap: emits beyond this within the window are dropped. */
+const APP_EVENT_RATE_LIMIT = 20;
+const APP_EVENT_RATE_WINDOW_MS = 1000;
 import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
 import type { PoolContext, Task } from './pool-types.js';
@@ -75,6 +79,8 @@ export class ContextPool implements PoolContext {
   private resetting = false;
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
+  /** Per-window app-event rate tracking: windowId → { count, windowStart }. */
+  private appEventRate = new Map<string, { count: number; windowStart: number }>();
 
   // ── Processors ────────────────────────────────────────────────────
   private monitorProcessor: MonitorTaskProcessor;
@@ -434,10 +440,60 @@ export class ContextPool implements PoolContext {
     });
   }
 
+  /**
+   * Deliver an app event (`app.emit(channel, payload)`) to subscribed agents.
+   *
+   * Matches channel subscribers and either wakes them (`wake` mode → task) or
+   * buffers the framed event into their next turn (`buffer` mode → timeline).
+   * Rate-capped per window; emits with no subscribers are dropped silently.
+   */
+  notifyAppChannel(
+    windowId: string,
+    channel: string,
+    payload: unknown,
+    sourceAgentKey?: string,
+  ): void {
+    if (this.isAppEventRateLimited(windowId)) {
+      console.warn(
+        `[ContextPool] App event rate limit hit for window "${windowId}" (channel "${channel}") — dropped.`,
+      );
+      return;
+    }
+
+    this.windowSubscriptionPolicy.notifyChannel(
+      windowId,
+      channel,
+      payload,
+      sourceAgentKey,
+      (task) => {
+        this.handleTask(task).catch((err) => {
+          console.error('[ContextPool] Error delivering app event notification:', err);
+        });
+      },
+      (_sub, framedContent) => {
+        // Buffer mode: drain into the agent's next turn without waking it.
+        this.timeline.pushRaw(framedContent);
+      },
+    );
+  }
+
+  /** True when the window has exceeded its app-event rate cap in the current window. */
+  private isAppEventRateLimited(windowId: string): boolean {
+    const now = Date.now();
+    const entry = this.appEventRate.get(windowId);
+    if (!entry || now - entry.windowStart >= APP_EVENT_RATE_WINDOW_MS) {
+      this.appEventRate.set(windowId, { count: 1, windowStart: now });
+      return false;
+    }
+    entry.count++;
+    return entry.count > APP_EVENT_RATE_LIMIT;
+  }
+
   handleWindowClose(windowId: string, appId?: string): void {
     // Clean up subscriptions and prune context for this window
     this.windowSubscriptionPolicy.clearForWindow(windowId);
     this.contextTape.pruneWindow(windowId);
+    this.appEventRate.delete(windowId);
 
     // If this window belongs to an app, interrupt the running agent and clear its queue
     if (appId) {
@@ -585,6 +641,7 @@ export class ContextPool implements PoolContext {
     this.contextTape.clear();
     this.timeline.clear();
     this.windowSubscriptionPolicy.clear();
+    this.appEventRate.clear();
     this.appProcessor.disposeAll();
     if (closeWindows) {
       this.windowState.clear();

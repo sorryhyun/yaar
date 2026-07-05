@@ -310,6 +310,17 @@ export function initIframeMessageHandlers() {
     });
   });
 
+  iframeMessages.on('yaar:app-event', (ctx) => {
+    if (!ctx.source) return;
+    const channel = ctx.data.channel;
+    if (typeof channel !== 'string' || !channel) return;
+    useDesktopStore.getState().addPendingAppEvent({
+      windowId: ctx.source.windowId,
+      channel,
+      payload: ctx.data.payload,
+    });
+  });
+
   // yaar:click — no-op (context menu removed)
 
   iframeMessages.on('yaar:drag-start', (ctx) => {

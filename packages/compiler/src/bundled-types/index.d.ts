@@ -188,11 +188,18 @@ interface YaarAppCommandDescriptor<P = unknown, R = unknown> {
   returns?: object;
 }
 
+interface YaarAppEventDescriptor {
+  /** Human-readable description of when this channel fires (shown to the agent). */
+  description: string;
+}
+
 interface YaarAppRegistration {
   appId: string;
   name: string;
   state: Record<string, YaarAppStateDescriptor>;
   commands: Record<string, YaarAppCommandDescriptor>;
+  /** Declared event channels this app may emit via `app.emit(channel, payload)`. */
+  events?: Record<string, YaarAppEventDescriptor>;
   /** Fire-and-forget callback invoked when the app window is closed. */
   onClose?: () => void;
 }
@@ -204,6 +211,11 @@ interface YaarApp {
       | string
       | (Record<string, unknown> & { instructions?: string; toMonitor?: boolean }),
   ): void;
+  /**
+   * Emit a fire-and-forget event on a declared channel. Delivered only to
+   * agents that subscribed to this channel (undeclared channels are dropped).
+   */
+  emit(channel: string, payload?: unknown): void;
 }
 
 // -- Storage SDK --

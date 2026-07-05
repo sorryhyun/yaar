@@ -212,10 +212,17 @@ export interface AppInteractionItem {
   toMonitor?: boolean;
 }
 
+export interface AppEventItem {
+  windowId: string;
+  channel: string;
+  payload: unknown;
+}
+
 export interface FeedbackSliceState {
   pendingFeedback: RenderingFeedback[];
   pendingAppProtocolResponses: AppProtocolResponseItem[];
   pendingAppInteractions: AppInteractionItem[];
+  pendingAppEvents: AppEventItem[];
 }
 
 export interface FeedbackSliceActions {
@@ -226,6 +233,8 @@ export interface FeedbackSliceActions {
   consumePendingAppProtocolResponses: () => AppProtocolResponseItem[];
   addPendingAppInteraction: (item: AppInteractionItem) => void;
   consumePendingAppInteractions: () => AppInteractionItem[];
+  addPendingAppEvent: (item: AppEventItem) => void;
+  consumePendingAppEvents: () => AppEventItem[];
 }
 
 export type FeedbackSlice = FeedbackSliceState & FeedbackSliceActions;

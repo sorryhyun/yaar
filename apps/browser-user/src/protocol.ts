@@ -76,6 +76,16 @@ export function registerBrowserUserProtocol(): void {
   app.register({
     appId: 'browser-user',
     name: 'Real Browser',
+    events: {
+      dialog: {
+        description:
+          'A native alert/confirm/prompt fired on a driven tab. Payload: { kind, message, tabId? }.',
+      },
+      navigated: {
+        description:
+          'A driven tab finished loading a new URL. Payload: { tabId, url, title? }.',
+      },
+    },
     state: {
       manifest: {
         description: 'App capabilities',

@@ -9,7 +9,7 @@
 
 import type { AppManifest } from '@yaar/shared';
 
-type Protocol = Pick<AppManifest, 'state' | 'commands'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
 
 /**
  * Find the matching closing brace for an opening brace at `start`.
@@ -294,9 +294,10 @@ export function extractProtocolFromSource(source: string): Protocol | null {
     const configBody = extractBlock(source, configStart);
     if (!configBody) return null;
 
-    // Extract state and commands sections
+    // Extract state, commands, and events sections
     const stateBody = findPropertyBlock(configBody, 'state');
     const commandsBody = findPropertyBlock(configBody, 'commands');
+    const eventsBody = findPropertyBlock(configBody, 'events');
 
     const protocol: Protocol = { state: {}, commands: {} };
 
@@ -329,7 +330,21 @@ export function extractProtocolFromSource(source: string): Protocol | null {
       }
     }
 
-    if (Object.keys(protocol.state).length === 0 && Object.keys(protocol.commands).length === 0) {
+    // Parse event channel descriptors
+    if (eventsBody) {
+      const events: NonNullable<Protocol['events']> = {};
+      for (const [key, block] of iterateTopLevelKeys(eventsBody)) {
+        const description = extractStringProp(block, 'description');
+        if (description) events[key] = { description };
+      }
+      if (Object.keys(events).length > 0) protocol.events = events;
+    }
+
+    if (
+      Object.keys(protocol.state).length === 0 &&
+      Object.keys(protocol.commands).length === 0 &&
+      !protocol.events
+    ) {
       return null;
     }
 

@@ -53,6 +53,16 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         instructions: instructions,
         toMonitor: !!toMonitor
       }, '*');
+    },
+    emit: function(channel, payload) {
+      // Fire-and-forget event on a declared channel. Delivered only to agents
+      // that subscribed to this channel; undeclared channels are dropped server-side.
+      if (typeof channel !== 'string' || !channel) return;
+      window.parent.postMessage({
+        type: 'yaar:app-event',
+        channel: channel,
+        payload: payload
+      }, '*');
     }
   };
 
@@ -85,6 +95,12 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         state: {},
         commands: {}
       };
+      if (registration.events) {
+        manifest.events = {};
+        for (var evKey in registration.events) {
+          manifest.events[evKey] = { description: registration.events[evKey].description };
+        }
+      }
       if (registration.state) {
         for (var key in registration.state) {
           var s = registration.state[key];

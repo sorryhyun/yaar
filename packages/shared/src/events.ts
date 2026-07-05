@@ -45,6 +45,7 @@ export const ClientEventType = {
   USER_INTERACTION: 'USER_INTERACTION',
   APP_PROTOCOL_RESPONSE: 'APP_PROTOCOL_RESPONSE',
   APP_PROTOCOL_READY: 'APP_PROTOCOL_READY',
+  APP_EVENT: 'APP_EVENT',
   SUBSCRIBE_MONITOR: 'SUBSCRIBE_MONITOR',
   REMOVE_MONITOR: 'REMOVE_MONITOR',
 } as const;
@@ -186,6 +187,19 @@ export interface AppProtocolReadyEvent {
   windowId: string;
 }
 
+/**
+ * Client → Server: an app emitted on a declared event channel (`app.emit(...)`).
+ * The server matches subscribers and either wakes the subscribing agent or
+ * buffers the event into its next turn. See docs/app_events_subscribe_proposal.md.
+ */
+export interface AppEventEvent {
+  type: typeof ClientEventType.APP_EVENT;
+  windowId: string;
+  channel: string;
+  payload: unknown;
+  messageId: string;
+}
+
 export interface SubscribeMonitorEvent {
   type: typeof ClientEventType.SUBSCRIBE_MONITOR;
   monitorId: string;
@@ -213,6 +227,7 @@ export type ClientEvent =
   | UserInteractionEvent
   | AppProtocolResponseEvent
   | AppProtocolReadyEvent
+  | AppEventEvent
   | SubscribeMonitorEvent
   | RemoveMonitorEvent;
 

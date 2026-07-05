@@ -12,6 +12,7 @@ import { getActivePool } from '../../handlers/utils.js';
 import { WINDOW_CHANGE_EVENTS, type WindowChangeEvent } from '@yaar/shared';
 import { requireWindowExists } from './helpers.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
+import type { SubscriptionMode } from '../../agents/context-pool-policies/index.js';
 
 export function handleSubscribe(
   windowState: WindowStateRegistry,
@@ -63,6 +64,64 @@ export function handleSubscribe(
   });
 
   return okJson({ subscriptionId, targetWindowId: windowId, events });
+}
+
+/**
+ * Subscribe an agent to an app's declared event channels (`app.emit`).
+ *
+ * `channels`: array of channel names, or `['*']` (default) for all declared
+ * channels. `mode`: `'wake'` (default — deliver a task when an event fires) or
+ * `'buffer'` (fold the event into the agent's next turn without waking it).
+ */
+export function handleAppSubscribe(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  payload: Record<string, unknown>,
+): VerbResult {
+  const exists = requireWindowExists(windowState, windowId);
+  if (exists) return exists;
+
+  const pool = getActivePool();
+  if (!pool) return error('Session not initialized.');
+
+  const agentId = getAgentId();
+  const monitorId = getMonitorId() ?? '0';
+  if (!agentId) return error('No agent context — app_subscribe must be called from an agent.');
+
+  // Monitor agent only for now (app-agent subscribe is a later add).
+  const subscriberType = 'monitor';
+  const subscriberAgentKey = `monitor-${monitorId}`;
+
+  // Parse channels: array, single string, or default to all ('*').
+  const rawChannels = payload.channels;
+  let channels: string[];
+  if (Array.isArray(rawChannels)) {
+    channels = rawChannels.filter((c): c is string => typeof c === 'string' && c.length > 0);
+  } else if (typeof rawChannels === 'string' && rawChannels) {
+    channels = [rawChannels];
+  } else {
+    channels = ['*'];
+  }
+  if (channels.length === 0) return error('No valid channels specified.');
+
+  const mode: SubscriptionMode = payload.mode === 'buffer' ? 'buffer' : 'wake';
+
+  const debounceMs =
+    typeof payload.debounceMs === 'number'
+      ? Math.max(100, Math.min(5000, payload.debounceMs))
+      : undefined;
+
+  const subscriptionId = pool.windowSubscriptionPolicy.subscribeChannels({
+    subscriberAgentKey,
+    subscriberType,
+    subscriberMonitorId: monitorId,
+    targetWindowId: windowId,
+    channels,
+    mode,
+    debounceMs,
+  });
+
+  return okJson({ subscriptionId, targetWindowId: windowId, channels, mode });
 }
 
 export function handleUnsubscribe(payload: Record<string, unknown>): VerbResult {

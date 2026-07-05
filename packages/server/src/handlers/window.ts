@@ -27,7 +27,11 @@ import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
-import { handleSubscribe, handleUnsubscribe } from '../features/window/subscribe.js';
+import {
+  handleSubscribe,
+  handleUnsubscribe,
+  handleAppSubscribe,
+} from '../features/window/subscribe.js';
 import { getMonitorId, getAgentId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
@@ -89,6 +93,8 @@ export function registerWindowHandlers(
             'message',
             'subscribe',
             'unsubscribe',
+            'app_subscribe',
+            'app_unsubscribe',
           ],
         },
         // create fields
@@ -131,6 +137,19 @@ export function registerWindowHandlers(
         },
         debounceMs: { type: 'number', description: 'Debounce interval in ms (default: 500).' },
         subscriptionId: { type: 'string', description: 'Subscription ID for unsubscribe.' },
+        // app_subscribe fields (declarative app event channels)
+        channels: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'App event channels to subscribe to (app_subscribe). Use ["*"] for all declared channels. Discover channels via app_query manifest "events".',
+        },
+        mode: {
+          type: 'string',
+          enum: ['wake', 'buffer'],
+          description:
+            'app_subscribe delivery: "wake" (default, notify agent when event fires) or "buffer" (fold into next turn).',
+        },
         hook: {
           type: 'string',
           enum: ['response'],
@@ -292,6 +311,10 @@ export function registerWindowHandlers(
         case 'subscribe':
           return handleSubscribe(getWindowState(), windowId, p);
         case 'unsubscribe':
+          return handleUnsubscribe(p);
+        case 'app_subscribe':
+          return handleAppSubscribe(getWindowState(), windowId, p);
+        case 'app_unsubscribe':
           return handleUnsubscribe(p);
         default:
           return error(`Unknown action "${action}".`);

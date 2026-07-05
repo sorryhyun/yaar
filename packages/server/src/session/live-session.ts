@@ -549,6 +549,15 @@ export class LiveSession {
         break;
       }
 
+      case ClientEventType.APP_EVENT: {
+        // An app emitted on a declared channel. Normalize the monitor-scoped
+        // window key (from the iframe element's data-window-id) to the raw
+        // AI-facing id so it matches what agents subscribed against.
+        const rawWindowId = this.windowState.handleMap.getRawWindowId(event.windowId);
+        this.pool?.notifyAppChannel(rawWindowId, event.channel, event.payload);
+        break;
+      }
+
       case ClientEventType.TOAST_ACTION:
         this.reloadCache.markFailed(event.eventId);
         console.log(

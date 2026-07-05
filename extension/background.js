@@ -168,12 +168,16 @@ async function handleCommand(cmd) {
         // T3 drive: inject a self-contained interactor that synthesizes DOM events on the page.
         // Server-side tab-control consent has already been granted by the time this frame arrives.
         const func = action === 'click' ? yaarClick : action === 'type' ? yaarType : yaarScroll;
-        const args =
+        const rawArgs =
           action === 'click'
             ? [cmd.selector]
             : action === 'type'
               ? [cmd.selector, cmd.text, !!cmd.submit]
               : [cmd.selector, cmd.deltaY, cmd.top];
+        // executeScript args must be JSON-serializable; `undefined` throws "Value is
+        // unserializable" (e.g. a scroll-by-deltaY call leaves selector/top undefined). The injected
+        // funcs treat null the same as undefined, so coerce it away.
+        const args = rawArgs.map((a) => (a === undefined ? null : a));
         const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
         const result = injection && injection.result;
         if (result && result.ok === false) throw new Error(result.error || `${action} failed`);
@@ -407,20 +411,56 @@ function yaarType(selector, text, submit) {
 
 /**
  * Runs IN the target page (injected via chrome.scripting). Must be fully self-contained.
- * Scrolls the page: with `selector`, scrolls that element into view; with `top`, jumps the window
- * to that absolute position; otherwise scrolls by `deltaY` pixels (default 600). Returns the
- * resulting `scrollY` so the caller can tell whether it reached the bottom.
+ * Scrolls the page: with `selector`, scrolls that element into view; with `top`, jumps to that
+ * absolute position; otherwise scrolls by `deltaY` pixels (default 600).
+ *
+ * The window isn't always what scrolls — plenty of sites scroll an inner container while
+ * `document.documentElement` stays put, which made the old `window.scrollBy` a silent no-op. So we
+ * locate the element that actually scrolls, drive it directly (setting `.scrollTop`, which is
+ * instant and ignores CSS `scroll-behavior: smooth`), and report before/after so the caller can
+ * tell whether anything moved and whether it hit the bottom.
  */
 function yaarScroll(selector, deltaY, top) {
+  // The scroller: the root document if it overflows, else the tallest scrollable descendant.
+  function findScroller() {
+    const root = document.scrollingElement || document.documentElement;
+    if (root && root.scrollHeight > root.clientHeight + 4) return root;
+    let best = root,
+      bestOverflow = 0;
+    for (const el of document.querySelectorAll('*')) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 4) {
+        const overflow = el.scrollHeight - el.clientHeight;
+        if (overflow > bestOverflow) {
+          bestOverflow = overflow;
+          best = el;
+        }
+      }
+    }
+    return best;
+  }
+
   if (selector) {
     const el = document.querySelector(selector);
     if (!el) return { ok: false, error: 'No element matches selector: ' + selector };
     el.scrollIntoView({ block: 'center', inline: 'center' });
     return { ok: true, scrollY: window.scrollY };
   }
-  if (typeof top === 'number') window.scrollTo({ top: top });
-  else window.scrollBy({ top: typeof deltaY === 'number' ? deltaY : 600 });
-  return { ok: true, scrollY: window.scrollY };
+
+  const sc = findScroller();
+  const before = sc.scrollTop;
+  const target =
+    typeof top === 'number' ? top : before + (typeof deltaY === 'number' ? deltaY : 600);
+  sc.scrollTop = target;
+  const after = sc.scrollTop; // clamped by the browser to the valid range
+  return {
+    ok: true,
+    scrolled: after - before, // 0 ⇒ nothing moved (already at the target edge, or page not tall enough)
+    scrollTop: after,
+    scrollHeight: sc.scrollHeight,
+    clientHeight: sc.clientHeight,
+    atBottom: after + sc.clientHeight >= sc.scrollHeight - 2,
+  };
 }
 
 function connect() {

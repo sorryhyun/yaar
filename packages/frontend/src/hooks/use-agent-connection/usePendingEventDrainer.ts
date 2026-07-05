@@ -39,6 +39,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
     consumePendingFeedback,
     consumePendingAppProtocolResponses,
     consumePendingAppInteractions,
+    consumePendingAppEvents,
     consumePendingInteractions,
     consumeGestureMessages,
   } = useDesktopStore.getState();
@@ -53,6 +54,7 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
         state.pendingFeedback.length === 0 &&
         state.pendingAppProtocolResponses.length === 0 &&
         state.pendingAppInteractions.length === 0 &&
+        state.pendingAppEvents.length === 0 &&
         state.pendingInteractions.length === 0 &&
         state.pendingGestureMessages.length === 0
       )
@@ -100,6 +102,18 @@ export function usePendingEventDrainer({ send, sendComponentAction, addCliEntry 
               content,
             });
           }
+        }
+      });
+
+      drainQueue(state.pendingAppEvents, consumePendingAppEvents, (items) => {
+        for (const item of items) {
+          send({
+            type: ClientEventType.APP_EVENT,
+            messageId: generateMessageId(),
+            windowId: item.windowId,
+            channel: item.channel,
+            payload: item.payload,
+          });
         }
       });
 

@@ -3,6 +3,10 @@ import { MonitorQueuePolicy } from '../agents/context-pool-policies/monitor-queu
 import { WindowQueuePolicy } from '../agents/context-pool-policies/window-queue-policy.js';
 import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-policy.js';
+import {
+  WindowSubscriptionPolicy,
+  frameAppEvent,
+} from '../agents/context-pool-policies/window-subscription-policy.js';
 import { ContextTape, monitorSource } from '../agents/context.js';
 import type { Task } from '../agents/pool-types.js';
 
@@ -199,5 +203,161 @@ describe('ReloadCachePolicy', () => {
         content: 'click button "Save" now',
       }),
     ).toBe('Click "Save"');
+  });
+});
+
+describe('WindowSubscriptionPolicy — app event channels', () => {
+  function subOpts(
+    over: Partial<Parameters<WindowSubscriptionPolicy['subscribeChannels']>[0]> = {},
+  ) {
+    return {
+      subscriberAgentKey: 'monitor-0',
+      subscriberType: 'monitor' as const,
+      subscriberMonitorId: '0',
+      targetWindowId: 'browser-user',
+      channels: ['dialog'],
+      debounceMs: 10,
+      ...over,
+    };
+  }
+
+  it('wakes a wake-mode subscriber with framed <app:event> content', async () => {
+    const policy = new WindowSubscriptionPolicy();
+    policy.subscribeChannels(subOpts({ mode: 'wake' }));
+
+    const delivered: Task[] = [];
+    const matched = policy.notifyChannel(
+      'browser-user',
+      'dialog',
+      { kind: 'alert', message: 'hi' },
+      undefined,
+      (t) => delivered.push(t),
+      () => {},
+    );
+
+    expect(matched).toBe(1);
+    // Debounced — nothing delivered synchronously.
+    expect(delivered.length).toBe(0);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(delivered.length).toBe(1);
+    expect(delivered[0].content).toContain('<app:event window="browser-user" channel="dialog">');
+    expect(delivered[0].content).toContain('"message":"hi"');
+    expect(delivered[0].monitorId).toBe('0');
+  });
+
+  it('buffers a buffer-mode subscriber immediately without a task', () => {
+    const policy = new WindowSubscriptionPolicy();
+    policy.subscribeChannels(subOpts({ mode: 'buffer' }));
+
+    const delivered: Task[] = [];
+    const buffered: string[] = [];
+    policy.notifyChannel(
+      'browser-user',
+      'dialog',
+      { kind: 'confirm' },
+      undefined,
+      (t) => delivered.push(t),
+      (_sub, content) => buffered.push(content),
+    );
+
+    expect(delivered.length).toBe(0);
+    expect(buffered.length).toBe(1);
+    expect(buffered[0]).toContain('channel="dialog"');
+  });
+
+  it('matches "*" wildcard channels and filters others', async () => {
+    const policy = new WindowSubscriptionPolicy();
+    policy.subscribeChannels(subOpts({ channels: ['*'], mode: 'wake' }));
+
+    const delivered: Task[] = [];
+    const deliver = (t: Task) => delivered.push(t);
+    expect(
+      policy.notifyChannel('browser-user', 'navigated', {}, undefined, deliver, () => {}),
+    ).toBe(1);
+    // Different window — no match.
+    expect(
+      policy.notifyChannel('other-window', 'navigated', {}, undefined, deliver, () => {}),
+    ).toBe(0);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(delivered.length).toBe(1);
+  });
+
+  it('skips self-notification from the same agent', () => {
+    const policy = new WindowSubscriptionPolicy();
+    policy.subscribeChannels(subOpts({ mode: 'wake' }));
+
+    const matched = policy.notifyChannel(
+      'browser-user',
+      'dialog',
+      {},
+      'monitor-0', // same as subscriberAgentKey
+      () => {},
+      () => {},
+    );
+    expect(matched).toBe(0);
+  });
+
+  it('stops delivering after unsubscribe and window teardown', async () => {
+    const policy = new WindowSubscriptionPolicy();
+    const id = policy.subscribeChannels(subOpts({ mode: 'wake' }));
+
+    const delivered: Task[] = [];
+    policy.notifyChannel(
+      'browser-user',
+      'dialog',
+      {},
+      undefined,
+      (t) => delivered.push(t),
+      () => {},
+    );
+    // Unsubscribe cancels the pending debounced delivery.
+    expect(policy.unsubscribe(id)).toBe(true);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(delivered.length).toBe(0);
+
+    // A fresh sub cleared by clearForWindow also stops matching.
+    policy.subscribeChannels(subOpts({ mode: 'wake' }));
+    policy.clearForWindow('browser-user');
+    expect(
+      policy.notifyChannel(
+        'browser-user',
+        'dialog',
+        {},
+        undefined,
+        () => {},
+        () => {},
+      ),
+    ).toBe(0);
+  });
+
+  it('does not cross-fire between window-change and channel subscriptions', () => {
+    const policy = new WindowSubscriptionPolicy();
+    // A window-change subscription on the same window must not receive channel events.
+    policy.subscribe({
+      subscriberAgentKey: 'monitor-0',
+      subscriberType: 'monitor',
+      subscriberMonitorId: '0',
+      targetWindowId: 'browser-user',
+      events: ['content'],
+    });
+    expect(
+      policy.notifyChannel(
+        'browser-user',
+        'dialog',
+        {},
+        undefined,
+        () => {},
+        () => {},
+      ),
+    ).toBe(0);
+  });
+
+  it('truncates oversized payloads in the framed event', () => {
+    const big = 'x'.repeat(5000);
+    // Plain strings pass through without JSON quoting → body length 5000.
+    const framed = frameAppEvent('w', 'dialog', big);
+    expect(framed).toContain('[truncated, 5000 chars]');
+    // Body capped at 4096 + truncation note; frame stays well under the raw 5000.
+    expect(framed.length).toBeLessThan(4200);
   });
 });

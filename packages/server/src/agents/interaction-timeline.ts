@@ -10,7 +10,7 @@ import type { OSAction, UserInteraction } from '@yaar/shared';
 import { formatCompactInteraction } from '../lib/format-interaction.js';
 
 interface TimelineEntry {
-  type: 'user' | 'AI';
+  type: 'user' | 'AI' | 'raw';
   content: string;
   agent?: string;
   timestamp: number;
@@ -79,6 +79,15 @@ export class InteractionTimeline {
   }
 
   /**
+   * Push a pre-framed block (e.g. `<app:event …>`) verbatim into the timeline.
+   * Used for buffer-mode app event delivery — drained into the agent's next
+   * turn without waking it. See docs/app_events_subscribe_proposal.md.
+   */
+  pushRaw(content: string): void {
+    this.entries.push({ type: 'raw', content, timestamp: Date.now() });
+  }
+
+  /**
    * Format all pending entries as an XML block for prompt injection.
    * Returns empty string if no entries are pending.
    */
@@ -133,6 +142,9 @@ export class InteractionTimeline {
    * AI entries: <ai agent="role">summary</ai>
    */
   private formatEntry(e: TimelineEntry): string {
+    if (e.type === 'raw') {
+      return e.content;
+    }
     if (e.type === 'user') {
       const colonIdx = e.content.indexOf(':');
       const verb = colonIdx >= 0 ? e.content.slice(0, colonIdx) : e.content;
