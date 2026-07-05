@@ -13,12 +13,17 @@
  * that crosses the tab-metadata boundary, so it is gated by a distinct per-origin content consent
  * on the server (see `features/browser/guards.ts` `enforceContentReadGuard`). It is named `extract`
  * (matching the CDP `yaar://session/browser` vocabulary) so it never collides with the `read` verb.
+ * Slice 5 adds T3 interaction: `click/type/scroll/navigate` *drive* the page (synthetic DOM events
+ * via injection, or a tab-URL update for `navigate`) and share the tab-control consent gate; and
+ * `screenshot` captures the visible tab as a PNG (content-consent-gated like `extract`). These make
+ * the Real Browser app a full driving surface, not just an observe/manage one — still fully
+ * app-mediated (never a raw `yaar://browser` verb). See `docs/extension_bridge_proposal.md`.
  */
 
 import { z } from 'zod';
 
 /** Bumped whenever the message shape changes. Server warns on read mismatch, refuses commands. */
-export const BRIDGE_PROTOCOL_VERSION = 3;
+export const BRIDGE_PROTOCOL_VERSION = 4;
 
 /**
  * Minimum extension protocol version that can execute T2 commands (focus/close/group/move).
@@ -32,6 +37,14 @@ export const BRIDGE_COMMAND_MIN_VERSION = 2;
  * lacks; `sendCommand` refuses a `read` below this with a clean "update the extension" message.
  */
 export const BRIDGE_CONTENT_MIN_VERSION = 3;
+
+/**
+ * Minimum extension protocol version that can *drive* a page — the T3 interaction verbs
+ * (`click`/`type`/`scroll`/`navigate`/`screenshot`). These synthesize DOM events / capture the tab
+ * via `chrome.scripting` + `chrome.tabs`, which older extensions don't implement; `sendCommand`
+ * refuses them below this with a clean "update the extension" message.
+ */
+export const BRIDGE_INTERACT_MIN_VERSION = 4;
 
 /** Tab-level metadata only — never page content (that boundary is what keeps T1 safe). */
 export const bridgeTabSchema = z.object({
@@ -66,16 +79,33 @@ export type BridgeTabs = z.infer<typeof bridgeTabsSchema>;
 // ── T2 (Manage): command frames flow server → extension, results flow back ──
 
 /**
- * The verbs YAAR can invoke on a real tab. `focus/close/group/move` are T2 window-manager verbs;
- * `extract` (T3-lite) returns the tab's page content and is separately consent-gated on the server.
+ * The verbs YAAR can invoke on a real tab.
+ *  - `focus/close/group/move` — T2 window-manager verbs.
+ *  - `extract` (T3-lite) — returns the tab's page content; separately content-consent-gated.
+ *  - `click/type/scroll/navigate` (T3) — *drive* the page (synthetic DOM events via injection, or a
+ *    tab-URL update for `navigate`); each is a mutation and shares the tab-control consent gate.
+ *  - `screenshot` (T3) — captures the visible tab as a PNG data URL; content-consent-gated like `extract`.
  */
-export const bridgeCommandActionSchema = z.enum(['focus', 'close', 'group', 'move', 'extract']);
+export const bridgeCommandActionSchema = z.enum([
+  'focus',
+  'close',
+  'group',
+  'move',
+  'extract',
+  'click',
+  'type',
+  'scroll',
+  'navigate',
+  'screenshot',
+]);
 export type BridgeCommandAction = z.infer<typeof bridgeCommandActionSchema>;
 
 /**
  * A command from the server for the extension to execute against a real tab.
  * `requestId` correlates the eventual `command-result`. Extra fields are action-specific:
- * `tabIds`/`groupTitle` for `group`, `index`/`windowId` for `move`, `maxChars` for `extract`.
+ * `tabIds`/`groupTitle` for `group`, `index`/`windowId` for `move`, `maxChars` for `extract`,
+ * `selector` for `click`/`type`/`scroll`, `text`/`submit` for `type`, `deltaY`/`top` for `scroll`,
+ * `url` for `navigate`.
  */
 export const bridgeCommandSchema = z.object({
   type: z.literal('command'),
@@ -90,6 +120,21 @@ export const bridgeCommandSchema = z.object({
     .number()
     .optional()
     .describe('extract: cap on returned page text length (extension truncates and flags it)'),
+  selector: z
+    .string()
+    .optional()
+    .describe('click/type/scroll: CSS selector for the target element'),
+  text: z.string().optional().describe('type: text to enter into the selected field'),
+  submit: z
+    .boolean()
+    .optional()
+    .describe("type: after entering text, press Enter / submit the field's form"),
+  deltaY: z
+    .number()
+    .optional()
+    .describe('scroll: pixels to scroll the window vertically (default 600)'),
+  top: z.number().optional().describe('scroll: absolute vertical position to scroll the window to'),
+  url: z.string().optional().describe('navigate: destination URL to load in the tab'),
 });
 export type BridgeCommand = z.infer<typeof bridgeCommandSchema>;
 

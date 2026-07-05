@@ -18,6 +18,8 @@ export interface Tab {
   active?: boolean;
   audible?: boolean;
   isSelf?: boolean;
+  /** True when the agent is already granted full use (control + read) of this tab's origin. */
+  allowed?: boolean;
 }
 
 /** Standard JSON envelope returned by every `/api/bridge` action. */
@@ -48,6 +50,14 @@ export interface ExtractData {
   text: string;
 }
 
+export interface ScreenshotData {
+  id: number;
+  url: string;
+  title: string;
+  /** PNG data URL of the visible tab. */
+  dataUrl: string;
+}
+
 interface BridgeRequest {
   action: string;
   tabId?: number;
@@ -56,6 +66,12 @@ interface BridgeRequest {
   index?: number;
   windowId?: number;
   maxChars?: number;
+  selector?: string;
+  text?: string;
+  submit?: boolean;
+  deltaY?: number;
+  top?: number;
+  url?: string;
 }
 
 function bridgeHeaders(): Record<string, string> {
@@ -125,7 +141,48 @@ export function track(tabId: number): Promise<BridgeEnvelope<string>> {
   return bridgePost<string>({ action: 'track', tabId });
 }
 
+/**
+ * Grant the agent full use (view / scroll / click / read) of a tab's origin. A user consent act —
+ * proactively grants tab-control + content-read for that origin so the agent needs no further prompts.
+ */
+export function allow(tabId: number): Promise<BridgeEnvelope<string>> {
+  return bridgePost<string>({ action: 'allow', tabId });
+}
+
 /** Extract page text from a tab. May prompt per-origin consent. */
 export function extract(tabId: number, maxChars?: number): Promise<BridgeEnvelope<ExtractData>> {
   return bridgePost<ExtractData>({ action: 'extract', tabId, maxChars });
+}
+
+/** Capture a PNG of the visible tab. Content-consent-gated; the tab must be focused. */
+export function screenshot(tabId: number): Promise<BridgeEnvelope<ScreenshotData>> {
+  return bridgePost<ScreenshotData>({ action: 'screenshot', tabId });
+}
+
+/** Click the element matching `selector`. Tab-control consent-gated (a page mutation). */
+export function click(tabId: number, selector: string): Promise<BridgeEnvelope<unknown>> {
+  return bridgePost<unknown>({ action: 'click', tabId, selector });
+}
+
+/** Type `text` into the field matching `selector`, optionally submitting. Tab-control consent-gated. */
+export function typeText(
+  tabId: number,
+  selector: string,
+  text: string,
+  submit?: boolean,
+): Promise<BridgeEnvelope<unknown>> {
+  return bridgePost<unknown>({ action: 'type', tabId, selector, text, submit });
+}
+
+/** Scroll the page — into view of `selector`, to absolute `top`, or by `deltaY` px. Tab-control gated. */
+export function scroll(
+  tabId: number,
+  opts?: { selector?: string; deltaY?: number; top?: number },
+): Promise<BridgeEnvelope<unknown>> {
+  return bridgePost<unknown>({ action: 'scroll', tabId, ...opts });
+}
+
+/** Load `url` in the tab. Tab-control consent-gated (a navigation). */
+export function navigate(tabId: number, url: string): Promise<BridgeEnvelope<unknown>> {
+  return bridgePost<unknown>({ action: 'navigate', tabId, url });
 }

@@ -8,23 +8,31 @@ keeps retrying.
 Spec: [`../docs/extension_bridge_proposal.md`](../docs/extension_bridge_proposal.md).
 Build plan: [`../0607plan.md`](../0607plan.md).
 
-## Status: Slice 2 — T2 Manage
+## Status: Slice 5 — T3 Drive (protocol v4)
 
-The extension now both **feeds** tabs (T1 Observe) and **acts** on them (T2 Manage). It sends a
-versioned `hello` + live tab snapshots, and it receives:
+The extension **feeds** tabs (T1 Observe), **manages** them (T2 Manage), and now **reads and drives**
+them (T3). It sends a versioned `hello` + live tab snapshots, and it receives:
 
-- `command` — focus / close / group / move a real tab (`chrome.tabs` / `chrome.tabGroups` glue),
-  answered with a correlated `command-result`. Every mutation is gated **server-side** by per-origin
-  consent + a self-target refusal (YAAR's own tab can't be closed/moved).
+- `command` — answered with a correlated `command-result`:
+  - _manage_: `focus` / `close` / `group` / `move` (`chrome.tabs` / `chrome.tabGroups` glue),
+  - _read_: `extract` (page text) / `screenshot` (PNG of the visible tab, via `chrome.scripting` /
+    `chrome.tabs.captureVisibleTab`),
+  - _drive_: `click` / `type` / `scroll` / `navigate` — synthetic DOM events injected via
+    `chrome.scripting` (and a `chrome.tabs` URL update for `navigate`).
 - `activity` — a "YAAR is touching your browser" cue: a transient pulsing pill overlay is injected
   into the target tab (and the toolbar badge flashes) so you can *see* the OS reach into your
-  browser. Purely cosmetic; never reads page content.
+  browser. Purely cosmetic.
 
-**Still no page-content access** — that boundary (T3 Act-in-page) is a later slice.
+Every mutation and every content read is gated **server-side** by per-origin consent, plus a
+self-target refusal (YAAR's own tab can't be closed/moved). The user grants a tab in one click via
+the Real Browser app's **"Allow use"** button. Nothing here is a raw agent capability — control of
+your real browser is always mediated through that visible app window.
 
-New permissions in this build: `tabGroups`, `scripting`, and `<all_urls>` host access (needed only
-to paint the cursor overlay on whatever tab YAAR is acting on). After pulling this update, reload the
-extension from `chrome://extensions` so Chrome re-grants them.
+Permissions used: `tabs`, `tabGroups`, `alarms`, `scripting`, and `<all_urls>` host access (the
+overlay + the read/drive injections run on whatever tab YAAR is acting on). After pulling this
+update, reload the extension from `chrome://extensions` so Chrome re-grants them and picks up
+protocol v4 — an older-version extension keeps working for observe/manage but the server will refuse
+the read/drive verbs with a "please update the extension" message.
 
 ## Load it (unpacked, no build step)
 

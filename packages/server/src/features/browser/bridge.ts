@@ -17,7 +17,11 @@ import type {
   BridgeCommandResult,
   BridgeActivity,
 } from '@yaar/shared';
-import { BRIDGE_COMMAND_MIN_VERSION, BRIDGE_CONTENT_MIN_VERSION } from '@yaar/shared';
+import {
+  BRIDGE_COMMAND_MIN_VERSION,
+  BRIDGE_CONTENT_MIN_VERSION,
+  BRIDGE_INTERACT_MIN_VERSION,
+} from '@yaar/shared';
 import { isYaarOriginUrl } from './guards.js';
 
 /** Minimal socket surface the hub needs — just enough to write frames back to the extension. */
@@ -126,11 +130,27 @@ class BridgeHub {
         error: 'YAAR Bridge is not connected — no real browser to manage. Enable the extension.',
       });
     }
-    // `extract` (content access) needs a newer extension than the T2 manage verbs.
+    // Newer verbs need newer extensions: `extract` needs content read; the T3 drive/view verbs
+    // (click/type/scroll/navigate/screenshot) need the interaction floor above the T2 manage floor.
+    const isInteract =
+      cmd.action === 'click' ||
+      cmd.action === 'type' ||
+      cmd.action === 'scroll' ||
+      cmd.action === 'navigate' ||
+      cmd.action === 'screenshot';
     const minVersion =
-      cmd.action === 'extract' ? BRIDGE_CONTENT_MIN_VERSION : BRIDGE_COMMAND_MIN_VERSION;
+      cmd.action === 'extract'
+        ? BRIDGE_CONTENT_MIN_VERSION
+        : isInteract
+          ? BRIDGE_INTERACT_MIN_VERSION
+          : BRIDGE_COMMAND_MIN_VERSION;
     if (conn.protocolVersion < minVersion) {
-      const capability = cmd.action === 'extract' ? 'reading tab content' : 'tab management';
+      const capability =
+        cmd.action === 'extract'
+          ? 'reading tab content'
+          : isInteract
+            ? 'driving the page'
+            : 'tab management';
       return Promise.resolve({
         ok: false,
         error:

@@ -30,6 +30,7 @@ import {
   addAllowedDomain,
   isAllDomainsAllowed,
 } from '../config/domains.js';
+import { savePermission, checkPermission } from '../../storage/permissions.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 
 /**
@@ -58,12 +59,22 @@ export function isMutatingAction(action: string): boolean {
 }
 
 /**
- * T2 tab-management actions (over the YAAR Bridge) that change tab/group state and therefore
- * need the same per-origin consent as raw-DOM mutation. `focus` is deliberately excluded — it
+ * Tab actions (over the YAAR Bridge) that change tab/group/page state and therefore need the same
+ * per-origin consent as raw-DOM mutation. Covers the T2 window-manager verbs (`close/group/move`)
+ * and the T3 page-drive verbs (`click/type/scroll/navigate`). `focus` is deliberately excluded — it
  * only brings a tab forward, exactly what the user does by clicking a tab, and exposes nothing.
- * `track` (a cosmetic observation cue) is likewise not a mutation.
+ * `track` (a cosmetic observation cue) is likewise not a mutation, and `extract`/`screenshot` are
+ * reads gated by the separate content-read guard.
  */
-const MUTATING_TAB_ACTIONS = new Set(['close', 'group', 'move']);
+const MUTATING_TAB_ACTIONS = new Set([
+  'close',
+  'group',
+  'move',
+  'click',
+  'type',
+  'scroll',
+  'navigate',
+]);
 
 export function isMutatingTabAction(action: string): boolean {
   return MUTATING_TAB_ACTIONS.has(action);
@@ -290,4 +301,40 @@ async function ensureTabControlConsentForUrl(
   }
   await addAllowedDomain(domain);
   return OK;
+}
+
+/**
+ * Proactively grant the agent full *use* of a tab's origin — the "Allow use" button in the
+ * Real Browser app. Where {@link enforceTabControlGuard} / {@link enforceContentReadGuard} prompt
+ * lazily on first action, this grants both up-front so the agent can view, scroll, click, and read
+ * that origin without any further dialogs:
+ *   1. tab-control (the `http_domain` allowlist that gates click/type/scroll/navigate), and
+ *   2. content-read (the `browser_content_read:{domain}` grant that gates reading page text).
+ *
+ * It's a *user*-initiated consent act (the iframe calls `/api/bridge`), never something the agent
+ * can trigger for itself. Refuses on origin-less pages (about:blank etc.), which carry nothing to grant.
+ */
+export async function grantTabUse(
+  url: string | undefined,
+): Promise<{ ok: true; domain: string } | { ok: false; error: string }> {
+  const domain = extractDomain(url ?? '');
+  if (!domain) {
+    return { ok: false, error: 'This tab has no addressable origin (e.g. a blank/internal page).' };
+  }
+  await addAllowedDomain(domain);
+  await savePermission('browser_content_read', 'allow', domain);
+  return { ok: true, domain };
+}
+
+/**
+ * Whether a tab's origin is already fully granted for agent use — i.e. both the tab-control
+ * allowlist and the content-read grant are in place. Lets the UI show a tab as "in use" and hide
+ * its "Allow use" button. Origin-less pages are never "in use".
+ */
+export async function isTabUseAllowed(url: string | undefined): Promise<boolean> {
+  const domain = extractDomain(url ?? '');
+  if (!domain) return false;
+  const controlled = await isDomainAllowed(domain); // also true when allow_all_domains is set
+  const readable = (await checkPermission('browser_content_read', domain)) === 'allow';
+  return controlled && readable;
 }

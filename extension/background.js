@@ -17,7 +17,7 @@
 
 const PORT = 8000; // TODO(Slice: productization): make configurable via the extension popup.
 const BRIDGE_URL = `ws://localhost:${PORT}/bridge`;
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 const CONTENT_MAX_CHARS = 100000; // fallback cap when the server doesn't send maxChars
 
 let socket = null;
@@ -121,6 +121,44 @@ async function handleCommand(cmd) {
         data = injection && injection.result ? injection.result : { text: '', truncated: false };
         break;
       }
+      case 'navigate': {
+        // T3 drive: point the tab at a new URL. Tab-control consent has already been granted.
+        if (!cmd.url) throw new Error('navigate requires a url');
+        await chrome.tabs.update(tabId, { url: cmd.url });
+        data = { url: cmd.url };
+        break;
+      }
+      case 'click':
+      case 'type':
+      case 'scroll': {
+        // T3 drive: inject a self-contained interactor that synthesizes DOM events on the page.
+        // Server-side tab-control consent has already been granted by the time this frame arrives.
+        const func = action === 'click' ? yaarClick : action === 'type' ? yaarType : yaarScroll;
+        const args =
+          action === 'click'
+            ? [cmd.selector]
+            : action === 'type'
+              ? [cmd.selector, cmd.text, !!cmd.submit]
+              : [cmd.selector, cmd.deltaY, cmd.top];
+        const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
+        const result = injection && injection.result;
+        if (result && result.ok === false) throw new Error(result.error || `${action} failed`);
+        data = result || { ok: true };
+        break;
+      }
+      case 'screenshot': {
+        // T3 view: capture the tab as a PNG. `captureVisibleTab` can only grab the window's active
+        // tab, so require the target to be focused (the agent has `focus` to bring it forward).
+        const tab = await chrome.tabs.get(tabId);
+        if (!tab.active) {
+          throw new Error(
+            'Focus the tab first — screenshot can only capture the visible (active) tab.',
+          );
+        }
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        data = { dataUrl };
+        break;
+      }
       default:
         throw new Error(`unknown action "${action}"`);
     }
@@ -218,7 +256,10 @@ function yaarCursorOverlay(label, kind) {
   const color = kind === 'observe' ? '#60a5fa' : '#4ade80';
   txt.textContent = label;
   dot.style.background = color;
-  dot.style.setProperty('--yaar-glow', kind === 'observe' ? 'rgba(96,165,250,.7)' : 'rgba(74,222,128,.7)');
+  dot.style.setProperty(
+    '--yaar-glow',
+    kind === 'observe' ? 'rgba(96,165,250,.7)' : 'rgba(74,222,128,.7)',
+  );
   dot.style.animation = '__yaar_pulse__ 1.4s ease-out infinite';
   requestAnimationFrame(() => {
     el.style.opacity = '1';
@@ -251,8 +292,105 @@ function yaarExtractContent(maxChars) {
   };
 }
 
+/**
+ * Runs IN the target page (injected via chrome.scripting). Must be fully self-contained.
+ * Synthesizes a click on the first element matching `selector`: scrolls it into view, fires a
+ * mousedown/mouseup pair at its centre, then a native `.click()` (single click, no double-fire).
+ * Returns `{ ok:false, error }` if nothing matches — the extension turns that into a command error.
+ */
+function yaarClick(selector) {
+  const el = selector && document.querySelector(selector);
+  if (!el) return { ok: false, error: 'No element matches selector: ' + selector };
+  el.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = el.getBoundingClientRect();
+  const o = {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: r.left + r.width / 2,
+    clientY: r.top + r.height / 2,
+  };
+  el.dispatchEvent(new MouseEvent('mousedown', o));
+  el.dispatchEvent(new MouseEvent('mouseup', o));
+  if (typeof el.click === 'function') el.click();
+  else el.dispatchEvent(new MouseEvent('click', o));
+  const label = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + '')
+    .trim()
+    .slice(0, 80);
+  return { ok: true, tag: (el.tagName || '').toLowerCase(), text: label };
+}
+
+/**
+ * Runs IN the target page (injected via chrome.scripting). Must be fully self-contained.
+ * Types `text` into the field matching `selector`: focuses it, sets the value through the native
+ * input/textarea setter (so frameworks like React see the change), fires input+change, and — when
+ * `submit` — presses Enter and requests the field's form submit.
+ */
+function yaarType(selector, text, submit) {
+  const el = selector && document.querySelector(selector);
+  if (!el) return { ok: false, error: 'No element matches selector: ' + selector };
+  el.scrollIntoView({ block: 'center' });
+  if (typeof el.focus === 'function') el.focus();
+  const val = text == null ? '' : String(text);
+  const proto =
+    typeof HTMLTextAreaElement !== 'undefined' && el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : typeof HTMLInputElement !== 'undefined' && el instanceof HTMLInputElement
+        ? HTMLInputElement.prototype
+        : null;
+  const desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+  if (desc && desc.set) desc.set.call(el, val);
+  else if ('value' in el) el.value = val;
+  else el.textContent = val; // contenteditable and friends
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  if (submit) {
+    const k = {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+    };
+    el.dispatchEvent(new KeyboardEvent('keydown', k));
+    el.dispatchEvent(new KeyboardEvent('keyup', k));
+    const form = el.form;
+    if (form) {
+      try {
+        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+        else form.submit();
+      } catch (e) {
+        /* submission blocked by the page — the Enter keydown above may still have handled it */
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Runs IN the target page (injected via chrome.scripting). Must be fully self-contained.
+ * Scrolls the page: with `selector`, scrolls that element into view; with `top`, jumps the window
+ * to that absolute position; otherwise scrolls by `deltaY` pixels (default 600). Returns the
+ * resulting `scrollY` so the caller can tell whether it reached the bottom.
+ */
+function yaarScroll(selector, deltaY, top) {
+  if (selector) {
+    const el = document.querySelector(selector);
+    if (!el) return { ok: false, error: 'No element matches selector: ' + selector };
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    return { ok: true, scrollY: window.scrollY };
+  }
+  if (typeof top === 'number') window.scrollTo({ top: top });
+  else window.scrollBy({ top: typeof deltaY === 'number' ? deltaY : 600 });
+  return { ok: true, scrollY: window.scrollY };
+}
+
 function connect() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+  ) {
     return;
   }
   log('connecting to', BRIDGE_URL);

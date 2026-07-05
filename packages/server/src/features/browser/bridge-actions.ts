@@ -12,12 +12,34 @@
 
 import { BRIDGE_CONTENT_MAX_CHARS } from '@yaar/shared';
 import { getBridgeHub, type BrowserTab } from './bridge.js';
-import { enforceTabControlGuard, enforceContentReadGuard } from './guards.js';
+import {
+  enforceTabControlGuard,
+  enforceContentReadGuard,
+  grantTabUse,
+  isTabUseAllowed,
+} from './guards.js';
 
 /** Tab-targeted actions. `focus/close/group/move` manage a tab; `track` is a cosmetic cue;
- *  `extract` returns the tab's page text (separately consent-gated). */
-const TAB_ACTIONS = ['focus', 'close', 'group', 'move', 'track', 'extract'] as const;
+ *  `extract`/`screenshot` read the tab (separately consent-gated); `click/type/scroll/navigate`
+ *  drive the page (tab-control consent-gated). */
+const TAB_ACTIONS = [
+  'focus',
+  'close',
+  'group',
+  'move',
+  'track',
+  'extract',
+  'click',
+  'type',
+  'scroll',
+  'navigate',
+  'screenshot',
+] as const;
 type TabAction = (typeof TAB_ACTIONS)[number];
+
+/** Tab-targeted actions that need a `tabId` + tab lookup but aren't extension commands.
+ *  `allow` is a user-only consent grant (the "Allow use" button), handled entirely server-side. */
+const EXTRA_TAB_ACTIONS = ['allow'] as const;
 
 export interface BridgeActionResult {
   ok: boolean;
@@ -39,18 +61,33 @@ function tabName(t: BrowserTab): string {
 
 /** The label the extension paints on its cursor/tracking overlay for a given action. */
 function activityLabel(action: string, t: BrowserTab): string {
-  const verb = action === 'track' ? 'watching' : action === 'extract' ? 'reading' : action;
-  return `YAAR · ${verb} · ${tabName(t)}`;
+  const VERBS: Record<string, string> = {
+    track: 'watching',
+    extract: 'reading',
+    screenshot: 'viewing',
+    allow: 'enabling',
+    click: 'clicking',
+    type: 'typing',
+    scroll: 'scrolling',
+    navigate: 'navigating',
+  };
+  return `YAAR · ${VERBS[action] ?? action} · ${tabName(t)}`;
 }
 
 /**
  * Dispatch a bridge action. `params` is the raw request body (minus `action`).
  *
- *   listTabs                          → { fidelity, connected, tabs }
- *   presence                          → { fidelity, connected, tabCount, activeTab }
- *   focus/close/group/move (tabId)    → a confirmation string (mutations ask per-origin consent)
- *   track (tabId)                     → flashes a tracking cursor, mutates nothing
- *   extract (tabId, maxChars?)        → { id, url, title, truncated, text } (separate content consent)
+ *   listTabs                             → { fidelity, connected, tabs }
+ *   presence                             → { fidelity, connected, tabCount, activeTab }
+ *   focus/close/group/move (tabId)       → a confirmation string (mutations ask per-origin consent)
+ *   track (tabId)                        → flashes a tracking cursor, mutates nothing
+ *   allow (tabId)                        → grants full agent use of the tab's origin (user consent act)
+ *   extract (tabId, maxChars?)           → { id, url, title, truncated, text } (separate content consent)
+ *   screenshot (tabId)                   → { dataUrl } PNG of the visible tab (content consent; tab must be focused)
+ *   click (tabId, selector)              → drive: synthesize a click (tab-control consent)
+ *   type (tabId, selector, text, submit?)→ drive: enter text, optionally submit (tab-control consent)
+ *   scroll (tabId, selector?|deltaY?|top?)→ drive: scroll the page (tab-control consent)
+ *   navigate (tabId, url)                → drive: load a URL in the tab (tab-control consent)
  */
 export async function runBridgeAction(
   action: string,
@@ -60,9 +97,14 @@ export async function runBridgeAction(
   const hub = getBridgeHub();
 
   if (action === 'listTabs') {
+    // Annotate each tab with whether the agent is already fully granted to use it, so the app can
+    // show an "in use" badge and hide the tab's "Allow use" button.
+    const tabs = await Promise.all(
+      hub.getTabs().map(async (t) => ({ ...t, allowed: await isTabUseAllowed(t.url) })),
+    );
     return {
       ok: true,
-      data: { fidelity: hub.getFidelity(), connected: hub.isConnected(), tabs: hub.getTabs() },
+      data: { fidelity: hub.getFidelity(), connected: hub.isConnected(), tabs },
     };
   }
 
@@ -79,10 +121,13 @@ export async function runBridgeAction(
     };
   }
 
-  if (!TAB_ACTIONS.includes(action as TabAction)) {
+  const isTabTargeted =
+    TAB_ACTIONS.includes(action as TabAction) ||
+    (EXTRA_TAB_ACTIONS as readonly string[]).includes(action);
+  if (!isTabTargeted) {
     return {
       ok: false,
-      error: `Unknown action "${action}". Use one of: listTabs, presence, ${TAB_ACTIONS.join(', ')}.`,
+      error: `Unknown action "${action}". Use one of: listTabs, presence, ${TAB_ACTIONS.join(', ')}, ${EXTRA_TAB_ACTIONS.join(', ')}.`,
       status: 400,
     };
   }
@@ -109,6 +154,26 @@ export async function runBridgeAction(
   if (action === 'track') {
     hub.sendActivity({ kind: 'observe', tabId, action, label: activityLabel(action, tab) });
     return { ok: true, data: `Showing a tracking cursor on "${tabName(tab)}".` };
+  }
+
+  // 'allow' — the "Allow use" button: grant the agent full use (control + content read) of this
+  // tab's origin up-front, so it can view, scroll, click, and read without further prompts. This is
+  // a user consent act (the iframe posts it); the agent has no `allow` command of its own.
+  if (action === 'allow') {
+    if (tab.isSelf) {
+      return {
+        ok: false,
+        error: "YAAR's own tab is always usable — no grant needed.",
+        status: 400,
+      };
+    }
+    const granted = await grantTabUse(tab.url);
+    if (!granted.ok) return { ok: false, error: granted.error, status: 400 };
+    hub.sendActivity({ kind: 'observe', tabId, action, label: activityLabel(action, tab) });
+    return {
+      ok: true,
+      data: `Agent can now use "${tabName(tab)}" — view, scroll, click, and read on ${granted.domain}.`,
+    };
   }
 
   // 'extract' (T3-lite) — return the tab's page text. Not a mutation, but it crosses the
@@ -141,7 +206,39 @@ export async function runBridgeAction(
     };
   }
 
-  // focus / close / group / move — consent + self-target guard (focus is free; the rest are gated).
+  // 'screenshot' (T3 view) — a PNG of the visible tab. Like `extract` it reveals page content, so
+  // it shares the content-read consent (not tab-control). The extension requires the tab to be
+  // focused (captureVisibleTab only grabs the active tab); it returns a clean error otherwise.
+  if (action === 'screenshot') {
+    const guard = await enforceContentReadGuard({ tab, sessionId });
+    if (!guard.ok) return { ok: false, error: guard.error, status: 403 };
+
+    hub.sendActivity({ kind: 'observe', tabId, action, label: activityLabel(action, tab) });
+
+    const outcome = await hub.sendCommand({ action: 'screenshot', tabId });
+    if (!outcome.ok) return { ok: false, error: outcome.error };
+    const shot = (outcome.data ?? {}) as { dataUrl?: string };
+    return {
+      ok: true,
+      data: { id: tabId, url: tab.url, title: tab.title, dataUrl: shot.dataUrl ?? '' },
+    };
+  }
+
+  // focus / close / group / move / click / type / scroll / navigate — consent + self-target guard
+  // (focus is free; the mutating drive/manage verbs are gated by per-origin tab-control consent).
+
+  // Validate required drive params up-front, so we never prompt the user for consent on a call that
+  // was malformed to begin with.
+  if (action === 'navigate' && typeof params.url !== 'string') {
+    return { ok: false, error: 'navigate requires a "url" string.', status: 400 };
+  }
+  if ((action === 'click' || action === 'type') && typeof params.selector !== 'string') {
+    return { ok: false, error: `${action} requires a CSS "selector" string.`, status: 400 };
+  }
+  if (action === 'type' && typeof params.text !== 'string') {
+    return { ok: false, error: 'type requires a "text" string.', status: 400 };
+  }
+
   const guard = await enforceTabControlGuard({ tab, action, sessionId });
   if (!guard.ok) return { ok: false, error: guard.error, status: 403 };
 
@@ -160,9 +257,28 @@ export async function runBridgeAction(
   } else if (action === 'move') {
     if (typeof params.index === 'number') cmd.index = params.index;
     if (typeof params.windowId === 'number') cmd.windowId = params.windowId;
+  } else if (action === 'navigate') {
+    if (typeof params.url === 'string') cmd.url = params.url;
+  } else if (action === 'click') {
+    if (typeof params.selector === 'string') cmd.selector = params.selector;
+  } else if (action === 'type') {
+    if (typeof params.selector === 'string') cmd.selector = params.selector;
+    if (typeof params.text === 'string') cmd.text = params.text;
+    if (typeof params.submit === 'boolean') cmd.submit = params.submit;
+  } else if (action === 'scroll') {
+    if (typeof params.selector === 'string') cmd.selector = params.selector;
+    if (typeof params.deltaY === 'number') cmd.deltaY = params.deltaY;
+    if (typeof params.top === 'number') cmd.top = params.top;
   }
 
   const outcome = await hub.sendCommand(cmd);
   if (!outcome.ok) return { ok: false, error: outcome.error };
+  // The drive verbs carry back useful detail (matched element text, resulting scrollY, loaded url);
+  // surface it to the agent. The manage verbs keep their compact confirmation string.
+  const isDrive =
+    action === 'click' || action === 'type' || action === 'scroll' || action === 'navigate';
+  if (isDrive && outcome.data && Object.keys(outcome.data).length > 0) {
+    return { ok: true, data: { action, tabId, ...outcome.data } };
+  }
   return { ok: true, data: `${action} → "${tabName(tab)}" (tab ${tabId}) ✓` };
 }
