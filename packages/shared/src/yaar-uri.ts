@@ -29,7 +29,6 @@ export type YaarAuthority =
   | 'storage'
   | 'windows'
   | 'config'
-  | 'browser'
   | 'session'
   | 'user'
   | 'history'
@@ -41,8 +40,7 @@ export interface ParsedYaarUri {
   path: string;
 }
 
-const YAAR_RE =
-  /^yaar:\/\/(apps|storage|windows|config|browser|session|user|history|skills|mcp)\/(.*)$/;
+const YAAR_RE = /^yaar:\/\/(apps|storage|windows|config|session|user|history|skills|mcp)\/(.*)$/;
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -78,7 +76,6 @@ export function resolveContentUri(uri: string): string | null {
       return `/api/storage/${parsed.path}`;
     case 'windows':
     case 'config':
-    case 'browser':
     case 'session':
     case 'user':
     case 'history':

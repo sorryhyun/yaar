@@ -3,7 +3,8 @@
  *
  * The companion browser extension (see `extension/`) dials OUT to `ws://localhost:{PORT}/bridge`
  * whenever a YAAR server is up. These handlers validate its frames and feed them into `BridgeHub`,
- * which backs the `yaar://browser/*` verb surface. T1 (Observe) reads `hello`/`tabs`; T2 (Manage)
+ * which backs the `/api/bridge` surface (driven by the `browser-user` app). T1 (Observe) reads
+ * `hello`/`tabs`; T2 (Manage)
  * additionally correlates `command-result` frames back to in-flight `sendCommand` calls. Still no
  * page-content access — that boundary is T3. See `0607plan.md`.
  *

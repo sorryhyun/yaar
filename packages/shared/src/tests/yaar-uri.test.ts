@@ -42,7 +42,7 @@ describe('isBareWindowsAuthority', () => {
 
 // ============ parseYaarUri with authorities ============
 
-describe('parseYaarUri with config/browser', () => {
+describe('parseYaarUri with config', () => {
   it('parses config URIs', () => {
     expect(parseYaarUri('yaar://config/settings')).toEqual({
       authority: 'config',
@@ -50,11 +50,10 @@ describe('parseYaarUri with config/browser', () => {
     });
   });
 
-  it('parses browser URIs', () => {
-    expect(parseYaarUri('yaar://browser/0')).toEqual({
-      authority: 'browser',
-      path: '0',
-    });
+  it('rejects the retired top-level browser authority', () => {
+    // The `yaar://browser/*` verb namespace was removed; the real browser is now driven
+    // through the `browser-user` app + POST /api/bridge, not a URI authority.
+    expect(parseYaarUri('yaar://browser/0')).toBeNull();
   });
 });
 

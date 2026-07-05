@@ -1,49 +1,18 @@
 export {};
-import { createSignal, For, Show, onCleanup } from '@bundled/solid-js';
+import { For, Show, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { read, subscribe, invoke } from '@bundled/yaar';
+import * as bridge from './bridge';
+import type { Tab } from './bridge';
+import { tabs, connected, loaded, pollOnce } from './store';
+import { registerBrowserUserProtocol } from './protocol';
 
-const TABS_URI = 'yaar://browser/tabs';
+const POLL_INTERVAL_MS = 1200;
 
-interface Tab {
-  id: number;
-  url: string;
-  title: string;
-  active?: boolean;
-  audible?: boolean;
-  isSelf?: boolean;
-}
-
-const [tabs, setTabs] = createSignal<Tab[]>([]);
-const [connected, setConnected] = createSignal(false);
-const [loaded, setLoaded] = createSignal(false);
-
-async function refresh() {
-  try {
-    const raw = await read<unknown>(TABS_URI);
-    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    // The handler returns either { fidelity, tabs } (connected) or a plain
-    // "not connected" text string (which JSON.parse throws on → caught below).
-    if (data && Array.isArray(data.tabs)) {
-      setTabs(data.tabs as Tab[]);
-      setConnected(true);
-    } else {
-      setTabs([]);
-      setConnected(false);
-    }
-  } catch {
-    // Non-JSON text ("Bridge is not connected …")
-    setTabs([]);
-    setConnected(false);
-  } finally {
-    setLoaded(true);
-  }
-}
-
-// Initial load + live updates whenever the Bridge pushes a change.
-refresh();
-subscribe(TABS_URI, () => refresh()).then((unsub) => onCleanup(unsub));
+// Initial load + live polling of the real tab feed.
+pollOnce();
+const timer = setInterval(() => pollOnce(), POLL_INTERVAL_MS);
+onCleanup(() => clearInterval(timer));
 
 function faviconHost(url: string): string {
   try {
@@ -53,11 +22,14 @@ function faviconHost(url: string): string {
   }
 }
 
-/** Fire a T2 verb at a tab. Server-side guards handle consent / self-target refusal. */
+/** Fire a Bridge action at a tab. Server-side guards handle consent / self-target refusal. */
 async function act(tab: Tab, action: 'focus' | 'close' | 'track') {
   try {
-    await invoke(`${TABS_URI}/${tab.id}`, { action });
-    // On close, the live tab feed will push an update and re-render; nothing to do here.
+    if (action === 'focus') await bridge.focus(tab.id);
+    else if (action === 'close') await bridge.close(tab.id);
+    else await bridge.track(tab.id);
+    // Trigger an immediate refresh so the list reflects the change without waiting a full tick.
+    pollOnce();
   } catch (err) {
     console.error(`[real-tabs] ${action} failed`, err);
   }
@@ -136,3 +108,6 @@ function App() {
 
 const root = document.getElementById('app') ?? document.body;
 render(App, root);
+
+// ── App Protocol ─────────────────────────────────────────────────────────
+registerBrowserUserProtocol();

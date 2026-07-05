@@ -194,18 +194,18 @@ export function resolveUri(uri: string): ResolvedUri | null {
     };
   }
 
-  // Fallback: collection-level URIs or verb-layer-only authorities (skills, browser).
+  // Fallback: collection-level URIs or verb-layer-only authorities (skills, mcp).
   // These have a valid authority but no dedicated parser — resolve as root kind; the
-  // handler parses any subpath from `sourceUri` itself (see handlers/browser.ts).
+  // handler parses any subpath from `sourceUri` itself.
   const parsed = parseYaarUri(uri);
   const auth = parsed?.authority as string | undefined;
-  if (parsed && (!parsed.path || auth === 'skills' || auth === 'mcp' || auth === 'browser')) {
+  if (parsed && (!parsed.path || auth === 'skills' || auth === 'mcp')) {
     return { kind: 'root', sourceUri: uri };
   }
 
   // Bare authority URIs without trailing slash (e.g. yaar://apps, yaar://config)
   const bareMatch = uri.match(
-    /^yaar:\/\/(apps|storage|windows|config|session|user|history|skills|http|mcp|browser)$/,
+    /^yaar:\/\/(apps|storage|windows|config|session|user|history|skills|http|mcp)$/,
   );
   if (bareMatch) {
     return { kind: 'root', sourceUri: uri };

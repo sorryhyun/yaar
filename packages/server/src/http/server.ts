@@ -21,6 +21,7 @@ import { prepareWsData, type WsData } from '../websocket/server.js';
 import { generateConnectionId } from '../session/broadcast-center.js';
 import {
   handleApiRoutes,
+  handleBridgeRoutes,
   handleBrowserRoutes,
   handleDevRoutes,
   handleFileRoutes,
@@ -33,6 +34,7 @@ import {
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
+import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
 import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from './routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
@@ -55,6 +57,7 @@ interface PublicRoute {
 function buildPublicRoutes(): PublicRoute[] {
   const all = [
     ...API_PUBLIC,
+    ...BRIDGE_PUBLIC,
     ...BROWSER_PUBLIC,
     ...DEV_PUBLIC,
     ...FILES_PUBLIC,
@@ -213,6 +216,9 @@ export function createFetchHandler() {
 
     const proxyResponse = await handleProxyRoutes(req, url);
     if (proxyResponse) return withCors(proxyResponse, corsHeaders);
+
+    const bridgeResponse = await handleBridgeRoutes(req, url);
+    if (bridgeResponse) return withCors(bridgeResponse, corsHeaders);
 
     const browserResponse = await handleBrowserRoutes(req, url);
     if (browserResponse) return withCors(browserResponse, corsHeaders);

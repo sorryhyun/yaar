@@ -21,7 +21,6 @@ import { registerAgentsHandlers } from './agents.js';
 import { registerSkillsHandlers } from './skills.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
-import { registerBrowserHandlers } from './browser.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 
@@ -57,7 +56,6 @@ export function initRegistry(): ResourceRegistry {
   registerSkillsHandlers(registry);
   registerHttpHandlers(registry);
   registerMcpGatewayHandlers(registry);
-  registerBrowserHandlers(registry);
 
   return registry;
 }

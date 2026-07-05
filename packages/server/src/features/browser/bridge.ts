@@ -2,11 +2,12 @@
  * BridgeHub — the authoritative in-memory model of the connected YAAR Bridge extension.
  *
  * The `/bridge` WebSocket handlers (websocket/bridge-handlers.ts) WRITE this state; the
- * `yaar://browser/*` verb handlers (handlers/browser.ts) READ it. It is deliberately NOT a
- * `BrowserProvider` — Slice 1 (T1 Observe) only surfaces tab metadata; the provider that can
- * actuate tabs arrives in Slice 2. See `0607plan.md`.
+ * `/api/bridge` dispatch layer (`features/browser/bridge-actions.ts`, driven by the `browser-user`
+ * app) READS it. It is deliberately NOT a `BrowserProvider` — it traffics in tab metadata + a
+ * correlated command socket, not CDP sessions. See `0607plan.md`.
  *
- * On every change the hub notifies `subscriptionRegistry` so subscribed apps re-read the feed.
+ * The `browser-user` app polls `/api/bridge` for the live feed, so the hub holds state only — it
+ * does not push change notifications.
  */
 
 import type {
@@ -17,7 +18,6 @@ import type {
   BridgeActivity,
 } from '@yaar/shared';
 import { BRIDGE_COMMAND_MIN_VERSION, BRIDGE_CONTENT_MIN_VERSION } from '@yaar/shared';
-import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { isYaarOriginUrl } from './guards.js';
 
 /** Minimal socket surface the hub needs — just enough to write frames back to the extension. */
@@ -33,7 +33,7 @@ export type CommandOutcome =
 /** How long to wait for a `command-result` before giving up on a bridge command. */
 const COMMAND_TIMEOUT_MS = 10_000;
 
-/** A tab as exposed on the `yaar://browser/*` surface — bridge tab + YAAR-specific annotation. */
+/** A tab as exposed on the `/api/bridge` surface — bridge tab + YAAR-specific annotation. */
 export interface BrowserTab extends BridgeTab {
   /** True when this tab is YAAR's own tab (annotated, never hidden or blocked). */
   isSelf?: boolean;
@@ -43,8 +43,6 @@ export interface BridgeConnectionInfo {
   browser: { name: string; version: string };
   protocolVersion: number;
 }
-
-const CHANGED_URIS = ['yaar://browser', 'yaar://browser/tabs', 'yaar://browser/presence'] as const;
 
 interface PendingCommand {
   resolve: (outcome: CommandOutcome) => void;
@@ -64,7 +62,6 @@ class BridgeHub {
   setConnection(info: BridgeConnectionInfo, socket: BridgeSocket): void {
     this.connection = info;
     this.socket = socket;
-    this.notify();
   }
 
   /** Called by the WS `close` path — the feed downgrades to disconnected. */
@@ -78,7 +75,6 @@ class BridgeHub {
       p.resolve({ ok: false, error: 'YAAR Bridge disconnected before the command completed.' });
     }
     this.pending.clear();
-    this.notify();
   }
 
   isConnected(): boolean {
@@ -94,14 +90,13 @@ class BridgeHub {
     return this.connection ? 'bridge' : 'os-signals';
   }
 
-  /** Replace the tab snapshot. Annotates YAAR's own tab; notifies on change. */
+  /** Replace the tab snapshot. Annotates YAAR's own tab. */
   updateTabs(tabs: BridgeTab[]): void {
     const annotated: BrowserTab[] = tabs.map((t) =>
       isYaarOriginUrl(t.url) ? { ...t, isSelf: true } : t,
     );
     if (!tabsEqual(this.tabs, annotated)) {
       this.tabs = annotated;
-      this.notify();
     }
   }
 
@@ -186,10 +181,6 @@ class BridgeHub {
     } catch {
       // Cosmetic only — never let a failed cue break the actual command path.
     }
-  }
-
-  private notify(): void {
-    for (const uri of CHANGED_URIS) subscriptionRegistry.notifyChange(uri);
   }
 }
 

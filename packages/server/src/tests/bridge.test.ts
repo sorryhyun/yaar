@@ -1,10 +1,10 @@
 /**
- * Tests for the YAAR Bridge T1 (Observe) + T2 (Manage) surfaces:
+ * Tests for the YAAR Bridge T1 (Observe) + T2 (Manage) + T3-lite (Read) surfaces:
  *  - BridgeHub state transitions + isSelf annotation
  *  - shared message schema round-trip + version constants
- *  - the yaar://browser/* verb handlers resolve, read, and invoke
+ *  - the /api/bridge dispatch layer (`runBridgeAction`): observe (listTabs/presence) + manage
  *  - T2 command transport (requestId correlation, old-extension + disconnect refusal)
- *  - the tab-control guard (self-target refusal, focus/track are free)
+ *  - the tab-control + content-read guards (self-target refusal, focus/track are free)
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
@@ -21,8 +21,7 @@ import {
   enforceContentReadGuard,
   isMutatingTabAction,
 } from '../features/browser/guards.js';
-import { ResourceRegistry } from '../handlers/uri-registry.js';
-import { registerBrowserHandlers } from '../handlers/browser.js';
+import { runBridgeAction } from '../features/browser/bridge-actions.js';
 import { getPort } from '../config.js';
 
 /** A fake extension socket that records every frame the hub sends. */
@@ -48,16 +47,6 @@ function connectWithTab(protocolVersion = BRIDGE_PROTOCOL_VERSION) {
   hub.setConnection({ browser: { name: 'Chrome', version: '2' }, protocolVersion }, socket);
   hub.updateTabs([{ id: 5, url: 'https://a.com', title: 'A', active: true }]);
   return { hub, sent };
-}
-
-const text = (r: {
-  content: Array<{ type: string; text?: string; resource?: { text?: string } }>;
-}) => r.content[0] as { type: string; text?: string; resource?: { text?: string } };
-
-/** Pull the JSON body out of an okJsonResource result. */
-function jsonBody(r: { content: Array<{ type: string; resource?: { text?: string } }> }): any {
-  const block = r.content.find((c) => c.type === 'resource');
-  return block?.resource?.text ? JSON.parse(block.resource.text) : null;
 }
 
 describe('bridge message schema', () => {
@@ -162,16 +151,10 @@ describe('BridgeHub', () => {
   });
 });
 
-describe('yaar://browser/* handlers', () => {
-  let registry: ResourceRegistry;
+describe('runBridgeAction — observe (listTabs / presence)', () => {
+  beforeEach(() => getBridgeHub().clearConnection());
 
-  beforeEach(() => {
-    getBridgeHub().clearConnection();
-    registry = new ResourceRegistry();
-    registerBrowserHandlers(registry);
-  });
-
-  it('reads the tab list once connected (guards the resolveUri fix)', async () => {
+  it('lists tabs once connected', async () => {
     const hub = getBridgeHub();
     hub.setConnection(
       { browser: { name: 'Chrome', version: '1' }, protocolVersion: 1 },
@@ -179,30 +162,21 @@ describe('yaar://browser/* handlers', () => {
     );
     hub.updateTabs([{ id: 7, url: 'https://a.com', title: 'A', active: true }]);
 
-    const res = await registry.execute('read', 'yaar://browser/tabs');
-    expect(res.isError).toBeUndefined();
-    const body = jsonBody(res);
-    expect(body.fidelity).toBe('bridge');
-    expect(body.tabs).toHaveLength(1);
-    expect(body.tabs[0].id).toBe(7);
+    const res = await runBridgeAction('listTabs', {}, undefined);
+    expect(res.ok).toBe(true);
+    const data = res.data as { fidelity: string; connected: boolean; tabs: Array<{ id: number }> };
+    expect(data.fidelity).toBe('bridge');
+    expect(data.connected).toBe(true);
+    expect(data.tabs).toHaveLength(1);
+    expect(data.tabs[0].id).toBe(7);
   });
 
-  it('reads a single tab by id', async () => {
-    getBridgeHub().updateTabs([{ id: 42, url: 'https://a.com', title: 'A', active: true }]);
-    const res = await registry.execute('read', 'yaar://browser/tabs/42');
-    expect(res.isError).toBeUndefined();
-    expect(jsonBody(res).id).toBe(42);
-  });
-
-  it('errors on a missing tab id', async () => {
-    const res = await registry.execute('read', 'yaar://browser/tabs/999');
-    expect(res.isError).toBe(true);
-  });
-
-  it('gives a friendly message when disconnected', async () => {
-    const res = await registry.execute('read', 'yaar://browser/tabs');
-    expect(res.isError).toBeUndefined();
-    expect(text(res).text).toContain('not connected');
+  it('reports disconnected + empty tabs with no extension', async () => {
+    const res = await runBridgeAction('listTabs', {}, undefined);
+    expect(res.ok).toBe(true);
+    const data = res.data as { connected: boolean; tabs: unknown[] };
+    expect(data.connected).toBe(false);
+    expect(data.tabs).toEqual([]);
   });
 
   it('reads the presence summary', async () => {
@@ -212,21 +186,17 @@ describe('yaar://browser/* handlers', () => {
       { send() {} },
     );
     hub.updateTabs([{ id: 1, url: 'https://a.com', title: 'A', active: true }]);
-    const res = await registry.execute('read', 'yaar://browser/presence');
-    const body = jsonBody(res);
-    expect(body.fidelity).toBe('bridge');
-    expect(body.tabCount).toBe(1);
-    expect(body.activeTab.id).toBe(1);
+    const res = await runBridgeAction('presence', {}, undefined);
+    const data = res.data as { fidelity: string; tabCount: number; activeTab: { id: number } };
+    expect(data.fidelity).toBe('bridge');
+    expect(data.tabCount).toBe(1);
+    expect(data.activeTab.id).toBe(1);
   });
 
-  it('lists tabs as navigable links', async () => {
-    getBridgeHub().updateTabs([
-      { id: 1, url: 'https://a.com', title: 'A', active: true },
-      { id: 2, url: 'https://b.com', title: 'B', active: false },
-    ]);
-    const res = await registry.execute('list', 'yaar://browser/tabs');
-    const links = res.content.filter((c) => c.type === 'resource_link');
-    expect(links).toHaveLength(2);
+  it('rejects an unknown action', async () => {
+    const res = await runBridgeAction('explode', {}, undefined);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(400);
   });
 });
 
@@ -375,23 +345,13 @@ describe('enforceTabControlGuard', () => {
   });
 });
 
-describe('yaar://browser/tabs invoke (T2)', () => {
-  let registry: ResourceRegistry;
-  beforeEach(() => {
-    getBridgeHub().clearConnection();
-    registry = new ResourceRegistry();
-    registerBrowserHandlers(registry);
-  });
+describe('runBridgeAction — manage (focus/close/track/extract)', () => {
+  beforeEach(() => getBridgeHub().clearConnection());
 
-  it('exposes invoke in the tab handler verbs', async () => {
-    const res = await registry.execute('describe', 'yaar://browser/tabs');
-    expect(text(res).text).toContain('invoke');
-  });
-
-  it("'track' pushes an observe activity cue without a command", async () => {
+  it("'track' pushes an observe cue without a command", async () => {
     const { sent } = connectWithTab();
-    const res = await registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'track' });
-    expect(res.isError).toBeUndefined();
+    const res = await runBridgeAction('track', { tabId: 5 }, undefined);
+    expect(res.ok).toBe(true);
     const cue = sent.find((f) => f.type === 'activity');
     expect(cue.kind).toBe('observe');
     expect(sent.find((f) => f.type === 'command')).toBeUndefined();
@@ -399,36 +359,36 @@ describe('yaar://browser/tabs invoke (T2)', () => {
 
   it('focus flows guard → activity cue → command → result', async () => {
     const { hub, sent } = connectWithTab();
-    const exec = registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'focus' });
-    // The handler defers guard/agent-context via dynamic import, so let a few ticks flush
-    // before the command frame lands.
+    const exec = runBridgeAction('focus', { tabId: 5 }, undefined);
     const frame = await waitFor(() => sent.find((f) => f.type === 'command'));
     expect(frame.action).toBe('focus');
     expect(sent.find((f) => f.type === 'activity' && f.kind === 'act')).toBeTruthy();
     hub.resolveCommand({ type: 'command-result', requestId: frame.requestId, ok: true });
     const res = await exec;
-    expect(res.isError).toBeUndefined();
+    expect(res.ok).toBe(true);
   });
 
-  it('errors invoking a closed/unknown tab id', async () => {
+  it('errors on a closed/unknown tab id', async () => {
     connectWithTab();
-    const res = await registry.execute('invoke', 'yaar://browser/tabs/999', { action: 'focus' });
-    expect(res.isError).toBe(true);
+    const res = await runBridgeAction('focus', { tabId: 999 }, undefined);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(404);
   });
 
-  it('errors on an unknown action', async () => {
+  it('errors on a missing tabId', async () => {
     connectWithTab();
-    const res = await registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'explode' });
-    expect(res.isError).toBe(true);
+    const res = await runBridgeAction('focus', {}, undefined);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(400);
   });
 
-  it("read on YAAR's own tab flows guard → observe cue → command → page text", async () => {
+  it("extract on YAAR's own tab flows guard → observe cue → command → page text", async () => {
     const hub = getBridgeHub();
     const { socket, sent } = fakeSocket();
     hub.setConnection({ browser: { name: 'Chrome', version: '3' }, protocolVersion: 3 }, socket);
     // A self tab (YAAR's origin) reads without a consent prompt.
     hub.updateTabs([{ id: 7, url: `http://localhost:${getPort()}/`, title: 'YAAR', active: true }]);
-    const exec = registry.execute('invoke', 'yaar://browser/tabs/7', { action: 'extract' });
+    const exec = runBridgeAction('extract', { tabId: 7 }, undefined);
     const frame = await waitFor(() => sent.find((f) => f.type === 'command'));
     expect(frame.action).toBe('extract');
     expect(sent.find((f) => f.type === 'activity' && f.kind === 'observe')).toBeTruthy();
@@ -444,13 +404,14 @@ describe('yaar://browser/tabs invoke (T2)', () => {
       },
     });
     const res = await exec;
-    expect(res.isError).toBeUndefined();
-    expect(jsonBody(res).text).toBe('page body');
+    expect(res.ok).toBe(true);
+    expect((res.data as { text: string }).text).toBe('page body');
   });
 
   it('refuses reading a third-party tab with no session to consent', async () => {
     connectWithTab(); // tab 5 → https://a.com, not self
-    const res = await registry.execute('invoke', 'yaar://browser/tabs/5', { action: 'extract' });
-    expect(res.isError).toBe(true);
+    const res = await runBridgeAction('extract', { tabId: 5 }, undefined);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(403);
   });
 });

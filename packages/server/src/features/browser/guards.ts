@@ -146,7 +146,8 @@ export async function enforceBrowserGuards(opts: {
 
 /**
  * The T2 (Manage) twin of `enforceBrowserGuards`, for the YAAR Bridge tab surface
- * (`invoke('yaar://browser/tabs/{id}', ...)`). The target is a real, logged-in tab in the user's
+ * (the `focus`/`close`/`group`/`move` bridge actions on `POST /api/bridge`). The target is a real,
+ * logged-in tab in the user's
  * everyday browser, so the same two protections apply — expressed over a `BridgeTab` (url + isSelf)
  * instead of a CDP `BrowserSession`:
  *
@@ -180,7 +181,7 @@ export async function enforceTabControlGuard(opts: {
 }
 
 /**
- * Content-read guard (T3-lite), for `invoke('yaar://browser/tabs/{id}', { action: 'read' })`.
+ * Content-read guard (T3-lite), for the `extract` bridge action (`POST /api/bridge`).
  *
  * Reading a real, logged-in page's text is materially more sensitive than the T2 manage verbs —
  * it crosses the tab-metadata boundary that keeps T1/T2 safe — so it gets its OWN per-origin grant
