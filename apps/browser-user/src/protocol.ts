@@ -4,12 +4,25 @@
  * Lets a monitor agent observe and drive the user's REAL Chrome tabs via
  * `app_query` (tabs / activeTab / connected) and `app_command`
  * (focus / close / group / move / track / extract / refresh). Every command
- * delegates to the matching `./bridge.ts` helper and returns its envelope so
- * the result (including consent refusals) flows straight back to the agent.
+ * delegates to the matching `./bridge.ts` helper and unwraps its envelope, so
+ * the agent receives the bare payload (e.g. the extracted `{ url, title, text }`)
+ * instead of a `{ ok, data }` wrapper. Consent refusals / failures throw, which
+ * the App Protocol surfaces to the agent as a clean command error.
  */
 import { app } from '@bundled/yaar';
 import { tabs, connected, activeTab, pollOnce } from './store';
 import * as bridge from './bridge';
+
+/**
+ * Unwrap a Bridge envelope for an app command: return its `data` on success,
+ * or throw its `error` so the App Protocol reports a proper command failure
+ * (rather than stringifying a `{ ok: false, error }` object as a "successful" result).
+ */
+async function unwrap<T>(p: Promise<bridge.BridgeEnvelope<T>>): Promise<T> {
+  const res = await p;
+  if (!res.ok) throw new Error(res.error || 'Bridge command failed.');
+  return res.data as T;
+}
 
 export function registerBrowserUserProtocol(): void {
   if (!app) return;
@@ -46,7 +59,7 @@ export function registerBrowserUserProtocol(): void {
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => bridge.focus(p.tabId),
+        handler: (p: { tabId: number }) => unwrap(bridge.focus(p.tabId)),
       },
       close: {
         description:
@@ -56,7 +69,7 @@ export function registerBrowserUserProtocol(): void {
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => bridge.close(p.tabId),
+        handler: (p: { tabId: number }) => unwrap(bridge.close(p.tabId)),
       },
       group: {
         description:
@@ -71,7 +84,7 @@ export function registerBrowserUserProtocol(): void {
           required: ['tabId'],
         },
         handler: (p: { tabId: number; tabIds?: number[]; groupTitle?: string }) =>
-          bridge.group(p.tabId, p.tabIds, p.groupTitle),
+          unwrap(bridge.group(p.tabId, p.tabIds, p.groupTitle)),
       },
       move: {
         description:
@@ -86,7 +99,7 @@ export function registerBrowserUserProtocol(): void {
           required: ['tabId'],
         },
         handler: (p: { tabId: number; index?: number; windowId?: number }) =>
-          bridge.move(p.tabId, p.index, p.windowId),
+          unwrap(bridge.move(p.tabId, p.index, p.windowId)),
       },
       track: {
         description: 'Show a tracking cursor / highlight on a real browser tab',
@@ -95,7 +108,7 @@ export function registerBrowserUserProtocol(): void {
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => bridge.track(p.tabId),
+        handler: (p: { tabId: number }) => unwrap(bridge.track(p.tabId)),
       },
       extract: {
         description:
@@ -108,7 +121,8 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number; maxChars?: number }) => bridge.extract(p.tabId, p.maxChars),
+        handler: (p: { tabId: number; maxChars?: number }) =>
+          unwrap(bridge.extract(p.tabId, p.maxChars)),
       },
       refresh: {
         description: 'Force an immediate re-poll of the real tab list and return it',
