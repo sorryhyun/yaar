@@ -34,6 +34,40 @@ function isOpen() {
   return socket && socket.readyState === WebSocket.OPEN;
 }
 
+/** Base64-encode bytes in chunks (btoa can't take a huge apply() spread at once). */
+function bytesToBase64(bytes) {
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+/**
+ * Transcode a data-URL image to WebP via an OffscreenCanvas (MV3 service-worker safe).
+ * WebP is ~3–5× smaller than the PNG `captureVisibleTab` produces, which matters because the
+ * screenshot is delivered to the agent as image bytes. Falls back to the original data URL if the
+ * encoder isn't available or anything throws — a slightly larger screenshot beats no screenshot.
+ */
+async function toWebp(dataUrl, quality = 0.8) {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const webp = await canvas.convertToBlob({ type: 'image/webp', quality });
+    if (webp.type !== 'image/webp') return dataUrl; // encoder declined → keep the PNG
+    const buf = await webp.arrayBuffer();
+    return 'data:image/webp;base64,' + bytesToBase64(new Uint8Array(buf));
+  } catch (err) {
+    log('webp transcode failed, sending PNG:', err && err.message ? err.message : String(err));
+    return dataUrl;
+  }
+}
+
 async function collectTabs() {
   const tabs = await chrome.tabs.query({});
   return tabs.map((t) => ({
@@ -147,15 +181,18 @@ async function handleCommand(cmd) {
         break;
       }
       case 'screenshot': {
-        // T3 view: capture the tab as a PNG. `captureVisibleTab` can only grab the window's active
-        // tab, so require the target to be focused (the agent has `focus` to bring it forward).
+        // T3 view: capture the tab. `captureVisibleTab` can only grab the window's active tab, so
+        // require the target to be focused (the agent has `focus` to bring it forward).
         const tab = await chrome.tabs.get(tabId);
         if (!tab.active) {
           throw new Error(
             'Focus the tab first — screenshot can only capture the visible (active) tab.',
           );
         }
-        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        // captureVisibleTab only emits png/jpeg. Grab a lossless PNG, then transcode to WebP so the
+        // payload that reaches the agent (and every hop on the way) is a fraction of the PNG size.
+        const pngUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+        const dataUrl = await toWebp(pngUrl);
         data = { dataUrl };
         break;
       }

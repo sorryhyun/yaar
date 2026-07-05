@@ -83,7 +83,7 @@ function activityLabel(action: string, t: BrowserTab): string {
  *   track (tabId)                        → flashes a tracking cursor, mutates nothing
  *   allow (tabId)                        → grants full agent use of the tab's origin (user consent act)
  *   extract (tabId, maxChars?)           → { id, url, title, truncated, text } (separate content consent)
- *   screenshot (tabId)                   → { dataUrl } PNG of the visible tab (content consent; tab must be focused)
+ *   screenshot (tabId)                   → { dataUrl } WebP of the visible tab (content consent; tab must be focused)
  *   click (tabId, selector)              → drive: synthesize a click (tab-control consent)
  *   type (tabId, selector, text, submit?)→ drive: enter text, optionally submit (tab-control consent)
  *   scroll (tabId, selector?|deltaY?|top?)→ drive: scroll the page (tab-control consent)
@@ -206,7 +206,7 @@ export async function runBridgeAction(
     };
   }
 
-  // 'screenshot' (T3 view) — a PNG of the visible tab. Like `extract` it reveals page content, so
+  // 'screenshot' (T3 view) — a WebP of the visible tab. Like `extract` it reveals page content, so
   // it shares the content-read consent (not tab-control). The extension requires the tab to be
   // focused (captureVisibleTab only grabs the active tab); it returns a clean error otherwise.
   if (action === 'screenshot') {

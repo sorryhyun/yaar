@@ -54,7 +54,7 @@ export interface ScreenshotData {
   id: number;
   url: string;
   title: string;
-  /** PNG data URL of the visible tab. */
+  /** WebP data URL of the visible tab (transcoded from PNG in the extension). */
   dataUrl: string;
 }
 

@@ -4,7 +4,7 @@
  * Lets a monitor agent observe AND drive the user's REAL Chrome tabs via
  * `app_query` (tabs / activeTab / connected) and `app_command`:
  *   - manage:  focus / close / group / move / track / refresh
- *   - read:    extract (page text) / screenshot (PNG of the visible tab)
+ *   - read:    extract (page text) / screenshot (WebP image of the visible tab)
  *   - drive:   click / type / scroll / navigate (synthetic DOM events over the Bridge)
  * Every command delegates to the matching `./bridge.ts` helper and unwraps its envelope, so the
  * agent receives the bare payload (e.g. the extracted `{ url, title, text }`) instead of a
@@ -26,6 +26,48 @@ async function unwrap<T>(p: Promise<bridge.BridgeEnvelope<T>>): Promise<T> {
   const res = await p;
   if (!res.ok) throw new Error(res.error || 'Bridge command failed.');
   return res.data as T;
+}
+
+/** MCP content blocks a command handler can return; image blocks are shown to the agent via vision. */
+type Block = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+
+/** Turn a screenshot payload into a caption + image content block (throws if it carries no image). */
+function shotToBlocks(shot: bridge.ScreenshotData, caption: string): Block[] {
+  const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(shot.dataUrl || '');
+  if (!m) throw new Error('Screenshot returned no image data.');
+  return [
+    { type: 'text', text: caption },
+    { type: 'image', data: m[2], mimeType: m[1] },
+  ];
+}
+
+/** How long to let the page settle (paint + async DOM updates) before a post-action screenshot. */
+const SETTLE_MS = 400;
+const settle = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run a drive verb, then — when the caller passes `screenshot: true` — snapshot the tab so the agent
+ * sees the result of its action in the SAME turn, instead of a separate focus+screenshot round trip.
+ * The shot is best-effort: the drive already succeeded, so if the capture fails (tab not focused,
+ * content consent declined) we return the drive summary with a short note rather than erroring out.
+ */
+async function withOptionalShot(
+  tabId: number,
+  wantShot: boolean | undefined,
+  driveResult: unknown,
+): Promise<unknown> {
+  if (!wantShot) return driveResult;
+  const summary =
+    typeof driveResult === 'string' ? driveResult : JSON.stringify(driveResult ?? { ok: true });
+  await settle(SETTLE_MS);
+  try {
+    return shotToBlocks(await unwrap(bridge.screenshot(tabId)), summary);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    return [
+      { type: 'text', text: `${summary}\n(screenshot unavailable: ${why})` },
+    ] satisfies Block[];
+  }
 }
 
 export function registerBrowserUserProtocol(): void {
@@ -145,30 +187,42 @@ export function registerBrowserUserProtocol(): void {
       },
       screenshot: {
         description:
-          'Capture a PNG (data URL) of a real tab. The tab must be focused first (see `focus`). ' +
-          'May prompt per-origin content consent.',
+          'Capture a WebP screenshot of a real tab and return it as an image the agent can see. ' +
+          'The tab must be focused first (see `focus`). May prompt per-origin content consent.',
         params: {
           type: 'object',
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => unwrap(bridge.screenshot(p.tabId)),
+        // Return an MCP image content block (not the raw data-URL object) so the agent actually
+        // *sees* the pixels via vision, instead of receiving a giant opaque base64 string as text.
+        handler: async (p: { tabId: number }) => {
+          const shot = await unwrap(bridge.screenshot(p.tabId));
+          return shotToBlocks(shot, `Screenshot of "${shot.title}" — ${shot.url}`);
+        },
       },
       click: {
         description:
-          'Click the element matching a CSS selector in a real tab. May prompt per-origin tab-control consent.',
+          'Click the element matching a CSS selector in a real tab. Set screenshot=true to get an ' +
+          'image of the resulting page back (best-effort; the tab must be focused). May prompt ' +
+          'per-origin tab-control consent.',
         params: {
           type: 'object',
-          properties: { tabId: { type: 'number' }, selector: { type: 'string' } },
+          properties: {
+            tabId: { type: 'number' },
+            selector: { type: 'string' },
+            screenshot: { type: 'boolean' },
+          },
           required: ['tabId', 'selector'],
         },
-        handler: (p: { tabId: number; selector: string }) =>
-          unwrap(bridge.click(p.tabId, p.selector)),
+        handler: async (p: { tabId: number; selector: string; screenshot?: boolean }) =>
+          withOptionalShot(p.tabId, p.screenshot, await unwrap(bridge.click(p.tabId, p.selector))),
       },
       type: {
         description:
           'Type text into the field matching a CSS selector in a real tab; set submit=true to press ' +
-          'Enter / submit the form. May prompt per-origin tab-control consent.',
+          'Enter / submit the form. Set screenshot=true to get an image of the result back ' +
+          '(best-effort). May prompt per-origin tab-control consent.',
         params: {
           type: 'object',
           properties: {
@@ -176,16 +230,28 @@ export function registerBrowserUserProtocol(): void {
             selector: { type: 'string' },
             text: { type: 'string' },
             submit: { type: 'boolean' },
+            screenshot: { type: 'boolean' },
           },
           required: ['tabId', 'selector', 'text'],
         },
-        handler: (p: { tabId: number; selector: string; text: string; submit?: boolean }) =>
-          unwrap(bridge.typeText(p.tabId, p.selector, p.text, p.submit)),
+        handler: async (p: {
+          tabId: number;
+          selector: string;
+          text: string;
+          submit?: boolean;
+          screenshot?: boolean;
+        }) =>
+          withOptionalShot(
+            p.tabId,
+            p.screenshot,
+            await unwrap(bridge.typeText(p.tabId, p.selector, p.text, p.submit)),
+          ),
       },
       scroll: {
         description:
           'Scroll a real tab — into view of `selector`, to absolute `top`, or by `deltaY` pixels ' +
-          '(default 600). May prompt per-origin tab-control consent.',
+          '(default 600). Set screenshot=true to get an image of the result back (best-effort). ' +
+          'May prompt per-origin tab-control consent.',
         params: {
           type: 'object',
           properties: {
@@ -193,11 +259,24 @@ export function registerBrowserUserProtocol(): void {
             selector: { type: 'string' },
             deltaY: { type: 'number' },
             top: { type: 'number' },
+            screenshot: { type: 'boolean' },
           },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number; selector?: string; deltaY?: number; top?: number }) =>
-          unwrap(bridge.scroll(p.tabId, { selector: p.selector, deltaY: p.deltaY, top: p.top })),
+        handler: async (p: {
+          tabId: number;
+          selector?: string;
+          deltaY?: number;
+          top?: number;
+          screenshot?: boolean;
+        }) =>
+          withOptionalShot(
+            p.tabId,
+            p.screenshot,
+            await unwrap(
+              bridge.scroll(p.tabId, { selector: p.selector, deltaY: p.deltaY, top: p.top }),
+            ),
+          ),
       },
       navigate: {
         description:
