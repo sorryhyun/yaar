@@ -9,7 +9,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-import { INSTALL_ROOT, resolveAppDir } from '../apps/roots.js';
+import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 
 /**
  * Sync a source directory to a destination, only writing files whose content changed.
@@ -106,9 +106,9 @@ export async function doDeploy(
   }
 
   const sandboxPath = args.sourcePath ?? getSandboxPath(sandboxId);
-  // Update an existing app in place; newly deployed apps go to the user-apps
-  // root (git-ignored) rather than the tracked bundled tree.
-  const appPath = resolveAppDir(appId) ?? join(INSTALL_ROOT, appId);
+  // Update an existing app in place; newly deployed apps go to the bundled
+  // `apps/` tree.
+  const appPath = resolveAppDir(appId) ?? join(APPS_DIR, appId);
 
   try {
     await stat(sandboxPath);
