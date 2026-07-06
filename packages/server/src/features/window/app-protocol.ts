@@ -108,10 +108,15 @@ export async function handleAppQuery(
   if (!win) return error(`Window "${windowId}" not found.`);
   if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
 
-  const readyErr = await requireAppReady(windowState, windowId);
-  if (readyErr) return readyErr;
-
   const stateKey = (payload.stateKey as string) || 'manifest';
+
+  // '__console' is a built-in state key answered by the injected app-protocol
+  // script (reads the console-capture buffer) — it works even when the app
+  // never called app.register(), so don't wait for app-ready.
+  if (stateKey !== '__console') {
+    const readyErr = await requireAppReady(windowState, windowId);
+    if (readyErr) return readyErr;
+  }
 
   if (stateKey === 'manifest') {
     const response = await actionEmitter.emitAppProtocolRequest(

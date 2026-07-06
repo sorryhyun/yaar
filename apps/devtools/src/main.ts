@@ -10,7 +10,6 @@ import {
   statusText,
   previewUrl,
   openTabs,
-  previewIframeUrl,
   loadProjects,
   loadBundledLibraries,
   createProject,
@@ -18,6 +17,7 @@ import {
   closeTab,
   compile,
   typecheck,
+  startConsolePolling,
 } from './project';
 import { FileTree } from './file-tree';
 import { Editor } from './editor';
@@ -141,11 +141,6 @@ const App = () => html`
       <//>
     </div>
   </div>
-
-  <iframe
-    src=${() => previewIframeUrl() ?? 'about:blank'}
-    style="display:none;width:0;height:0;border:none"
-  ></iframe>
 `;
 
 render(App, document.getElementById('app')!);
@@ -156,3 +151,4 @@ import { render } from '@bundled/solid-js/web';
 registerProtocol();
 loadProjects();
 loadBundledLibraries();
+startConsolePolling();

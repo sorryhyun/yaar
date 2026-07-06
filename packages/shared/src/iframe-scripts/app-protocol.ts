@@ -126,6 +126,17 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     }
 
     if (msg.type === 'yaar:app-query-request') {
+      // Reserved built-in state key: expose the console-capture buffer without
+      // requiring app.register(). Lets tooling (e.g. devtools) read a preview
+      // app's console output over the app protocol.
+      if (msg.stateKey === '__console') {
+        window.parent.postMessage({
+          type: 'yaar:app-query-response',
+          requestId: requestId,
+          data: window.__YAAR_CONSOLE || []
+        }, '*');
+        return;
+      }
       if (!registration || !registration.state || !registration.state[msg.stateKey]) {
         window.parent.postMessage({
           type: 'yaar:app-query-response',

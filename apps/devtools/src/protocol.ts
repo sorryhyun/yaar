@@ -101,7 +101,24 @@ export function registerProtocol() {
       },
       consoleLogs: {
         description: 'Console output from preview app',
-        handler: () => [...consoleLogs()],
+        handler: async () => {
+          // Pull the live console buffer straight from the preview window over
+          // the app protocol. The preview runs as its own registered window
+          // (where verb calls work), so its console-capture buffer is the
+          // source of truth — the local signal is only a display cache updated
+          // by the poll in project.ts.
+          const wid = previewWindowId();
+          if (!wid) return [...consoleLogs()];
+          try {
+            const entries = await invoke(`yaar://windows/${wid}`, {
+              action: 'app_query',
+              stateKey: '__console',
+            });
+            return Array.isArray(entries) ? entries : [...consoleLogs()];
+          } catch {
+            return [...consoleLogs()];
+          }
+        },
       },
     },
     commands: {
