@@ -9,59 +9,58 @@ The App Protocol enables bidirectional communication between AI agents and ifram
 ## Overview
 
 ```
-Agent calls MCP tool (app_query / app_command)
+Agent calls invoke(window, { action: 'app_query' | 'app_command' }) or a scoped app-agent tool
   → ActionEmitter → WebSocket → Frontend
   → postMessage → Iframe App
   → postMessage response → Frontend
   → WebSocket → ActionEmitter resolves
-  → MCP tool returns result to agent
+  → tool returns result to agent
 ```
 
 An app opts in by setting `"appProtocol": true` in its `app.json` and calling `app.register()` (imported from `@bundled/yaar`) inside the iframe.
 
 ---
 
-## MCP Tools
+## Invocation
 
-**Source:** `packages/server/src/mcp/window/app-protocol.ts`
+The core logic (`handleAppQuery` / `handleAppCommand`) is shared by two entry points that differ by _which_ agent is calling and _what surface_ it sees:
 
-### `app_query`
+- **Monitor/session agent** — an app is just another window. It reaches apps through the same generic `invoke` verb it uses for every window, targeting the window URI explicitly. No app is privileged; it can query/command any open app window.
+- **Persistent app agent** (one per `appId`) — gets a narrow, dedicated tool surface scoped to _its own_ app by default. Reaching another app requires that app's `app.json` `controls` permission (cross-app control).
 
-Read state from an iframe app or discover its capabilities.
+Both paths converge on the same executor below, so app-side behavior (readiness wait, command replay, storage interception) is identical regardless of caller.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `uri` | `string` | yes | Window URI (`yaar://windows/{windowId}`) for manifest, or resource URI (`yaar://windows/{windowId}/state/{key}`) for a specific state key. |
+**Source:** `packages/server/src/features/window/app-protocol.ts`
 
-**Behavior:**
+### Generic verb (monitor/session agents)
+
+Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`), alongside the window's other actions (`create`, `update`, `close`, `lock`, `unlock`, `message`, `subscribe`, `unsubscribe`, `app_subscribe`, `app_unsubscribe`):
+
+| Call | Description |
+|------|-------------|
+| `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). |
+| `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params? })` | Execute a command. |
+
+### Scoped tools (app agents)
+
+Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. These tools:
+- Default to the agent's own window; pass `appId` to target another app permitted via that app's `app.json` `controls` list (see root `CLAUDE.md` "Cross-app control").
+- Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
+
+`query`/`command`/`describe` are the app agent's app-protocol tools. Its remaining tools — `relay` (hand a request to the monitor agent) and `direct_message` (message another app's agent, when `app.json` sets `"messaging": "all"`) — are _not_ app-protocol calls and don't touch the executor below; see `agents/profiles/app-agent.ts`.
+
+**Behavior (both entry points):**
 1. Validates the window exists and uses the `iframe` renderer.
-2. Waits up to 5 s for the app to send `yaar:app-ready` (skipped if already registered).
-3. Sends the request through the protocol pipeline.
-4. Returns the JSON response or an error string.
-
-**Returns (manifest):** JSON-stringified `AppManifest` describing available state keys and commands.
-**Returns (state key):** JSON-stringified value from the app's state handler.
-
-### `app_command`
-
-Execute a command on an iframe app.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `uri` | `string` | yes | Command resource URI (`yaar://windows/{windowId}/commands/{name}`) |
-| `params` | `Record<string, unknown>` | no | Parameters as described in the manifest |
-
-**Behavior:**
-1. Same validation and readiness check as `app_query`.
-2. Sends the command through the protocol pipeline.
-3. Records the command via `WindowStateRegistry.recordAppCommand()` for replay on reload.
-4. Returns the JSON result or an error string.
+2. Waits up to 5 s for the app to send `yaar:app-ready` (skipped if already registered — cached on `WindowState.appProtocol`).
+3. Sends the request through the protocol pipeline (`ActionEmitter.emitAppProtocolRequest`).
+4. For `app_command`, records the command via `WindowStateRegistry.recordAppCommand()` for replay on reload.
+5. Returns the JSON response (manifest responses are enriched with resource `uri` hints per state/command key) or an error string. Large text/resource results are truncated to ~400KB.
 
 ---
 
 ## Manifest
 
-An `AppManifest` describes what the app can do. The agent retrieves it by calling `app_query` with a bare window URI (e.g., `yaar://windows/win-sheet`).
+An `AppManifest` describes what the app can do. The agent retrieves it via `app_query` (omit `stateKey`, or pass `"manifest"`) on a bare window URI (e.g., `yaar://windows/win-sheet`).
 
 ```typescript
 interface AppManifest {
@@ -69,6 +68,7 @@ interface AppManifest {
   name: string;
   state: Record<string, AppStateDescriptor>;
   commands: Record<string, AppCommandDescriptor>;
+  events?: Record<string, AppEventDescriptor>;  // declared app.emit() channels (optional)
 }
 
 interface AppStateDescriptor {
@@ -78,8 +78,13 @@ interface AppStateDescriptor {
 
 interface AppCommandDescriptor {
   description: string;
+  aliases?: string[];     // alternate names the agent may call this command by (optional)
   params?: object;        // JSON Schema for parameters (optional)
   returns?: object;       // JSON Schema for return value (optional)
+}
+
+interface AppEventDescriptor {
+  description: string;
 }
 ```
 
@@ -132,9 +137,29 @@ These messages are exchanged between the frontend (parent window) and the iframe
 }
 ```
 
+If `command` matches a declared `aliases` entry, the SDK resolves it to the canonical command name before dispatching.
+
 **Response** (iframe → parent):
 ```json
 { "type": "yaar:app-command-response", "requestId": "req-...", "result": { "ok": true }, "error": null }
+```
+
+### Close
+
+Fire-and-forget, sent right before the window is destroyed (no response expected). The SDK invokes the app's `onClose()` handler (from `app.register()`), if any.
+
+**Notification** (parent → iframe):
+```json
+{ "type": "yaar:app-close" }
+```
+
+### Event
+
+Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, payload)`. Delivered only to agents subscribed to the channel (`app_subscribe`); undeclared/unsubscribed channels are dropped server-side.
+
+**Notification** (iframe → parent):
+```json
+{ "type": "yaar:app-event", "channel": "cell-changed", "payload": { "address": "A1" } }
 ```
 
 ---
@@ -181,11 +206,25 @@ Sent when an iframe app calls `app.register()` (from `@bundled/yaar`).
 }
 ```
 
+### Client → Server: `APP_EVENT`
+
+Sent when an app emits on a declared channel via `app.emit(channel, payload)`. The server matches subscribers (`app_subscribe`) and either wakes the subscribing agent or buffers the event into its next turn.
+
+```typescript
+{
+  type: 'APP_EVENT';
+  windowId: string;
+  channel: string;
+  payload: unknown;
+  messageId: string;
+}
+```
+
 ---
 
 ## Iframe SDK
 
-The SDK is available via `@bundled/yaar`. Import `app` and call `app.register()` / `app.sendInteraction()`. Under the hood, the protocol script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component.
+The SDK is available via `@bundled/yaar`. Import `app` and call `app.register()` / `app.sendInteraction()` / `app.emit()`. Under the hood, the protocol script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/iframe-scripts/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component.
 
 ### `app.register(config)`
 
@@ -211,6 +250,7 @@ app.register({
   commands: {
     addItem: {
       description: 'Add a new item',
+      aliases: ['add-item'],  // optional alternate names the agent may call this by
       params: {
         type: 'object',
         properties: { text: { type: 'string' } },
@@ -223,6 +263,14 @@ app.register({
       },
     },
   },
+
+  events: {
+    'item-added': { description: 'Fires when an item is added' },  // optional, declares an app.emit() channel
+  },
+
+  onClose: () => {
+    // optional — called when the window is about to be destroyed
+  },
 });
 ```
 
@@ -230,15 +278,26 @@ On registration the SDK sends `{ type: 'yaar:app-ready', appId }` to the parent 
 
 ### `app.sendInteraction(description)`
 
-Send a free-form interaction message from the app to the AI agent. Useful for notifying the agent about user actions inside the iframe.
+Send a free-form interaction message from the app to the AI agent. Useful for notifying the agent about user actions inside the iframe. Accepts a string, or an object with `instructions` and `toMonitor` plus arbitrary payload fields (JSON-stringified into `content`).
 
 ```typescript
 import { app } from '@bundled/yaar';
 
 app.sendInteraction('User clicked the save button');
+app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: 'some text' });
 ```
 
-This posts a `{ type: 'yaar:app-interaction', content: "..." }` message to the parent, which routes it to the window's agent.
+This posts a `{ type: 'yaar:app-interaction', content, instructions?, toMonitor }` message to the parent, which routes it to the window's agent (or the monitor agent if `toMonitor` is set).
+
+### `app.emit(channel, payload)`
+
+Fire-and-forget event on a declared channel (see `events` in `app.register()`). Delivered only to agents that subscribed via `app_subscribe`; undeclared/unsubscribed channels are dropped server-side.
+
+```typescript
+import { app } from '@bundled/yaar';
+
+app.emit('item-added', { text: 'Buy milk' });
+```
 
 ---
 
@@ -263,7 +322,7 @@ interface FileAssociation {
 }
 ```
 
-When a user opens a file with a matching extension, the agent sends an `app_command` with the specified `command` and the file content in the `paramKey` parameter.
+When a user opens a file with a matching extension, the agent invokes `app_command` with the specified `command` and the file content in the `paramKey` parameter.
 
 ---
 
@@ -271,7 +330,7 @@ When a user opens a file with a matching extension, the agent sends an `app_comm
 
 ### ActionEmitter
 
-**Source:** `packages/server/src/mcp/action-emitter.ts`
+**Source:** `packages/server/src/session/action-emitter.ts`
 
 | Method | Description |
 |--------|-------------|
@@ -282,14 +341,14 @@ When a user opens a file with a matching extension, the agent sends an `app_comm
 
 ### WindowStateRegistry
 
-**Source:** `packages/server/src/mcp/window-state.ts`
+**Source:** `packages/server/src/session/window-state.ts`
 
 Tracks per-window protocol state:
 
 | Field | Description |
 |-------|-------------|
-| `appProtocol?: boolean` | Set to `true` once `APP_PROTOCOL_READY` is received. Cached to skip `waitForAppReady()` on subsequent calls. |
-| `appCommands?: AppProtocolRequest[]` | All commands executed on the app. Replayed if the app reloads. |
+| `WindowState.appProtocol?: boolean` | Set to `true` once `APP_PROTOCOL_READY` is received (`setAppProtocol()`). Cached to skip `waitForAppReady()` on subsequent calls. |
+| internal `appCommands: Map<windowId, AppProtocolRequest[]>` | All commands executed on the app (via `recordAppCommand()` / `getAppCommands()`). Replayed if the app reloads. |
 
 ### Command Replay
 
@@ -338,7 +397,7 @@ app.register({
 Agent interaction:
 
 ```
-app_query({ uri: "yaar://windows/sheet" })                          → discover capabilities (manifest)
-app_query({ uri: "yaar://windows/sheet/state/cells" })              → read current state
-app_command({ uri: "yaar://windows/sheet/commands/setCells", params: { cells: { "A1": "100" } } })
+invoke('yaar://windows/sheet', { action: 'app_query' })                                    → discover capabilities (manifest)
+invoke('yaar://windows/sheet', { action: 'app_query', stateKey: 'cells' })                  → read current state
+invoke('yaar://windows/sheet', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "100" } } })
 ```

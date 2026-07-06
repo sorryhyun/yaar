@@ -19,7 +19,8 @@ PROJECT_ROOT/
     ├── permissions.json         # Saved permission decisions
     ├── settings.json            # User settings
     ├── shortcuts.json           # Desktop shortcuts
-    └── hooks.json               # Event-driven hooks
+    ├── hooks.json               # Event-driven hooks
+    └── mcp-servers.json         # MCP server configuration
 ```
 
 Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environment variable.
@@ -28,9 +29,9 @@ Default base: `PROJECT_ROOT/storage`. Override with the `YAAR_STORAGE` environme
 
 ## MCP Tools
 
-File I/O is handled by the 5 generic verb tools (`read`, `list`, `invoke`, `delete`, `describe`) with `yaar://storage/` URIs.
+File I/O is handled by the 5 generic verb tools (`describe`, `read`, `list`, `invoke`, `delete`) with `yaar://storage/` URIs. `write`, `edit`, and `grep` are not separate tools — they're `invoke` actions (dispatched via `payload.action`).
 
-**Source:** `packages/server/src/handlers/basic.ts`
+**Source:** `packages/server/src/handlers/index.ts`, `packages/server/src/handlers/storage.ts`
 
 ### `read`
 
@@ -39,9 +40,11 @@ Read a file by URI.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/readme.txt`) |
-| `lineNumbers` | `boolean` | no | Prepend line numbers to each line (default: `false`) |
+| `lines` | `string` | no | Line range to read, 1-based inclusive (e.g. `"10-20"`, `"50"`, `"100-"`) |
+| `pattern` | `string` | no | Regex — returns only matching lines, with line numbers |
+| `context` | `number` | no | Context lines around pattern matches (default: `0`) |
 
-**Returns (text files):** File content, optionally with line numbers. When `lineNumbers=true`, output matches `read` format used by `edit` in line mode.
+**Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
 
 **Returns (PDF files):** A summary string plus base64 PNG images of up to 3 pages. Includes a hint to display the PDF via an iframe window with `yaar://storage/` protocol.
 
@@ -49,20 +52,7 @@ Read a file by URI.
 
 **Returns (binary files):** A message explaining the file can't be read as text, with a pointer to the REST API.
 
-**Errors:** Path traversal detected, file not found, cannot read a directory.
-
-### `write`
-
-Write a file by URI.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/file.txt`) |
-| `content` | `string` | yes | Content to write |
-
-Parent directories are created automatically. Overwrites existing files. Fails on read-only mounts.
-
-**Returns:** `"Written to yaar://storage/{path}"`
+**Errors:** Path traversal detected, file not found. Reading a directory falls back to `list` with a note.
 
 ### `list`
 
@@ -72,29 +62,27 @@ List directory contents by URI.
 |-----------|------|----------|-------------|
 | `uri` | `string` | yes | Directory URI (e.g. `yaar://storage/`, `yaar://storage/docs`) |
 
-Returns emoji-prefixed listing (📁 directories, 📄 files). Directories sorted first, then alphabetically. Mounted directories appear as virtual entries under `yaar://storage/mounts/`.
+Returns `resource_link` entries, directories first then alphabetically. Mounted directories appear as virtual entries under `yaar://storage/mounts/`. Listing a file path falls back to `read` with a note.
 
-**Returns:** Formatted list or `"Directory is empty"`.
+**Returns:** Resource links, or `"(empty)"` if the directory has no entries.
 
-### `delete`
+### `invoke` — write / edit / grep
 
-Delete a single file by URI.
+Dispatches on `payload.action`.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/draft.txt`) |
-
-Does not support recursive directory deletion. Fails on read-only mounts.
-
-**Returns:** `"Deleted yaar://storage/{path}"`
-
-### `edit`
-
-Apply an edit to a file by URI. Two modes:
+**`write`** — write a file:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/readme.txt`) |
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/file.txt`) |
+| `content` | `string` | yes | Content to write |
+
+Parent directories are created automatically. Overwrites existing files. Fails on read-only mounts. **Returns:** `"Written to yaar://storage/{path}"`
+
+**`edit`** — apply an edit to a file. Two modes:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
 | `old_string` | `string` | no | Exact text to find (must be unique). Omit to use line mode. |
 | `new_string` | `string` | yes | Replacement text |
 | `start_line` | `number` | no | First line to replace (1-based). Requires line mode. |
@@ -102,24 +90,43 @@ Apply an edit to a file by URI. Two modes:
 
 **String mode** (`old_string` + `new_string`): Finds the exact match and replaces it. The match must be unique in the file.
 
-**Line mode** (`start_line` + `new_string`): Replaces lines `start_line..end_line`. Line numbers are 1-based, matching the output of `read` with `lineNumbers=true`.
+**Line mode** (`start_line` + `new_string`): Replaces lines `start_line..end_line`. Line numbers are 1-based, matching `read` output.
 
-Cannot mix both modes.
+Cannot mix both modes. **Returns:** `"Edited yaar://storage/{path}"`
 
-**Returns:** `"Edited yaar://storage/{path}"`
+**`grep`** — search text files under a directory URI:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pattern` | `string` | yes | Regex pattern |
+| `glob` | `string` | no | Glob to filter files searched |
+
+Searches recursively through known text file extensions. Returns up to 100 matches as JSON: `{ matches: [{ file, line, content }], truncated }`.
+
+### `delete`
+
+Delete a file (or directory, recursively) by URI.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/draft.txt`) |
+
+Fails on read-only mounts.
+
+**Returns:** `"Deleted yaar://storage/{path}"`
 
 ---
 
 ## Mount System
 
-Host directories can be mounted at `yaar://storage/mounts/{alias}/` via the `system` MCP config tools.
+Host directories can be mounted at `yaar://storage/mounts/{alias}/` via the `yaar://config/mounts` resource (part of the generic verb tools).
 
-**Source:** `packages/server/src/storage/mounts.ts`, `packages/server/src/mcp/system/config-mounts.ts`
+**Source:** `packages/server/src/storage/mounts.ts`, `packages/server/src/features/config/mounts.ts`
 
 ### Mount a directory
 
 ```
-set_config(section: "mounts", content: { alias, hostPath, readOnly? })
+invoke('yaar://config/mounts', { alias, hostPath, readOnly? })
 ```
 
 | Field | Type | Description |
@@ -133,7 +140,7 @@ Requires user permission dialog. Config persisted in `config/mounts.json`.
 ### List mounts
 
 ```
-get_config(section: "mounts")
+read('yaar://config/mounts')
 ```
 
 Returns `{ mounts: MountEntry[] }`.
@@ -141,7 +148,7 @@ Returns `{ mounts: MountEntry[] }`.
 ### Unmount
 
 ```
-remove_config(section: "mounts", id: "{alias}")
+delete('yaar://config/mounts/{alias}')
 ```
 
 ### Mount behavior
@@ -263,6 +270,19 @@ interface StorageDeleteResult {
   error?: string;
 }
 
+interface StorageGrepMatch {
+  file: string;
+  line: number;
+  content: string;
+}
+
+interface StorageGrepResult {
+  success: boolean;
+  matches?: StorageGrepMatch[];
+  truncated?: boolean;
+  error?: string;
+}
+
 interface StorageImageContent {
   type: 'image';
   data: string;          // Base64 encoded
@@ -296,9 +316,11 @@ Core functions used by both MCP tools and REST routes:
 | `storageRead` | `(filePath: string) → Promise<StorageReadResult>` | Read file; converts PDFs to images (max 3 pages), images to base64, text with line numbers |
 | `storageWrite` | `(filePath: string, content: string \| Buffer) → Promise<StorageWriteResult>` | Write file; creates parent dirs; respects read-only mounts |
 | `storageList` | `(dirPath?: string) → Promise<StorageListResult>` | List directory; injects virtual `mounts/` entry at root |
-| `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete single file; respects read-only mounts |
+| `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete file or directory (recursively); respects read-only mounts |
+| `storageGrep` | `(dirPath: string, pattern: string, glob?: string) → Promise<StorageGrepResult>` | Regex search across text files under a directory; max 100 matches |
 | `ensureStorageDir` | `() → Promise<void>` | Create `storage/` if missing |
 | `resolvePath` | `(filePath: string) → ResolvedPath \| null` | Resolve storage-relative path; checks mounts first, then default storage dir |
+| `resolvePathAsync` | `(filePath: string) → Promise<ResolvedPath \| null>` | Same as `resolvePath` but resolves symlinks before the containment check |
 | `configRead` | `(filePath: string) → Promise<StorageReadResult>` | Read from `config/` directory |
 | `configWrite` | `(filePath: string, content: string) → Promise<StorageWriteResult>` | Write to `config/` directory |
 
@@ -375,7 +397,7 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 ### Iframe SDK
 
-**Source:** `packages/shared/src/capture-helper.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
+**Source:** `packages/shared/src/iframe-scripts/storage-sdk.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
 Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `storage` for raw). The underlying SDK is injected automatically:
 
@@ -402,14 +424,24 @@ Stored at `config/settings.json`.
 ```typescript
 interface Settings {
   onboardingCompleted: boolean;
+  userName: string;
   language: string;
+  provider: 'auto' | 'claude' | 'codex';
+  wallpaper: string;
+  accentColor: string;
+  iconSize: 'small' | 'medium' | 'large';
+  allowAllApps: boolean;
 }
 ```
 
 | Function | Description |
 |----------|-------------|
-| `readSettings()` | Read current settings |
-| `updateSettings(partial)` | Merge partial updates |
+| `readSettings()` | Read current settings (merged with defaults) |
+| `updateSettings(partial)` | Merge partial updates and persist |
+| `getLanguageLabel(code)` | Human-readable label for a language code |
+| `LANGUAGE_CODES` | Supported language code list |
+
+Updated via `invoke('yaar://config/settings', { ... })`.
 
 ### Permissions
 
@@ -421,10 +453,12 @@ Stored at `config/permissions.json`. Records "allow" / "deny" decisions for MCP 
 |----------|-------------|
 | `checkPermission(toolName, context?)` | Look up a saved decision |
 | `savePermission(toolName, decision, context?)` | Persist a decision |
+| `clearPermission(toolName, context?)` | Remove a saved decision |
+| `clearAllPermissions()` | Remove all saved decisions |
 
 ### App Config
 
-Stored at `config/{appId}.json`. Managed via verb tools: `invoke('yaar://config/app/{appId}', { config })`, `read('yaar://config/app/{appId}')`, `delete('yaar://config/app/{appId}')`. Legacy: `set_config(section: "app")`, `get_config(section: "app")`, `remove_config` (deprecated).
+Stored at `config/{appId}.json`. Managed via verb tools: `read('yaar://config/app')` (all apps) or `read('yaar://config/app/{appId}')` (one app), `invoke('yaar://config/app/{appId}', { config })` to merge config, `delete('yaar://config/app/{appId}')` to remove.
 
 ---
 

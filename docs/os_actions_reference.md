@@ -19,12 +19,14 @@ Create a new window on the desktop.
 | `title` | `string` | yes | Title displayed in the titlebar |
 | `bounds` | `WindowBounds` | yes | Position and size: `{ x, y, w, h }` |
 | `content` | `WindowContent` | yes | Content payload: `{ renderer, data }` |
+| `requestId` | `string` | no | Tracking ID for iframe load feedback |
+| `appId` | `string` | no | App this window belongs to |
 | `variant` | `'standard' \| 'widget' \| 'panel'` | no | Window layer (default: `'standard'`). Widgets sit below standard windows; panels are fixed-position. |
 | `dockEdge` | `'top' \| 'bottom'` | no | Dock edge for panel variant |
 | `frameless` | `boolean` | no | Hide the titlebar |
 | `windowStyle` | `Record<string, string \| number>` | no | Custom CSS styles on the window element |
 | `minimized` | `boolean` | no | Create in minimized state |
-| `requestId` | `string` | no | Tracking ID for iframe load feedback |
+| `iframeToken` | `string` | no | Token for iframe route restriction |
 
 **Behavior:**
 - Bounds are clamped to the viewport.
@@ -149,9 +151,9 @@ Incrementally update window content with a diff operation.
 
 | `op` | Fields | Valid renderers | Description |
 |------|--------|-----------------|-------------|
-| `'append'` | `data: string` | markdown, html, text | Append text to content |
-| `'prepend'` | `data: string` | markdown, html, text | Prepend text to content |
-| `'insertAt'` | `data: string`, `position: number` | markdown, html, text | Insert text at character position |
+| `'append'` | `data: unknown` | markdown, html, text | Append text to content (requires string data) |
+| `'prepend'` | `data: unknown` | markdown, html, text | Prepend text to content (requires string data) |
+| `'insertAt'` | `data: unknown`, `position: number` | markdown, html, text | Insert text at character position (requires string data) |
 | `'replace'` | `data: unknown` | all | Replace entire content data |
 | `'clear'` | — | all | Reset content to empty |
 
@@ -320,9 +322,10 @@ Add a shortcut to the desktop.
 | `label` | `string` | Display name |
 | `icon` | `string` | Emoji or image path |
 | `iconType` | `'emoji' \| 'image'` | Icon kind (optional) |
-| `type` | `'file' \| 'url' \| 'action'` | What the shortcut opens |
-| `target` | `string` | Storage path, URL, or action ID |
+| `target` | `string` | URI target: `yaar://apps/{id}`, `yaar://storage/{path}`, `https://...`, or legacy app ID |
 | `osActions` | `OSAction[]` | Optional client-side actions to execute on click (bypasses AI round-trip) |
+| `skill` | `string` | Optional inline skill instructions sent to AI when clicked |
+| `folderId` | `string` | If set, this shortcut belongs to a folder |
 | `createdAt` | `number` | Creation timestamp |
 
 ### `desktop.removeShortcut`
@@ -343,6 +346,25 @@ Update fields on an existing shortcut.
 | `type` | `'desktop.updateShortcut'` | yes | |
 | `shortcutId` | `string` | yes | |
 | `updates` | `Partial<DesktopShortcut>` | yes | Partial fields to merge (excludes `id` and `createdAt`) |
+
+### `desktop.updateSettings`
+
+Update desktop-wide settings.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `'desktop.updateSettings'` | yes |
+| `settings` | `DesktopSettings` | yes |
+
+**DesktopSettings:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `userName` | `string` | Optional display name |
+| `language` | `string` | Optional UI language |
+| `wallpaper` | `string` | Optional wallpaper path/URL |
+| `accentColor` | `string` | Optional accent color |
+| `iconSize` | `'small' \| 'medium' \| 'large'` | Optional desktop icon size |
 
 ---
 
@@ -525,6 +547,7 @@ type OSAction =
 | `isComponentLayout(value)` | Checks for `{ components: [...] }` shape |
 | `isWindowContentData(renderer, value)` | Validates data matches the renderer type |
 | `isContentUpdateOperationValid(renderer, op)` | Validates an update operation is legal for the renderer |
+| `applyContentOperation(currentData, op)` | Applies a content update operation to existing data (shared by live window state and session restore) |
 
 ---
 

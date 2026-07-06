@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so doc-freshness can compare commit timestamps
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -29,3 +31,10 @@ jobs:
 
       - name: Test
         run: bun run --filter '*' test
+
+      # Fails when a reference doc's **Source:** file changed after the doc's last
+      # update, or when a **Source:** pointer references a file that no longer exists.
+      # Update the doc (or move the pointer if code moved) to clear it. Run locally
+      # with `bun run check:docs`.
+      - name: Check doc freshness
+        run: bun run check:docs
